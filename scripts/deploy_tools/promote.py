@@ -70,10 +70,12 @@ OUTPUT. One line on stdout, `trigger=<sha> verdict=<verdict> target=<sha or empt
 verdict's reason on stderr. `$GITHUB_OUTPUT` gets `verdict`, `target`, `digest`; `prior` and
 `prior_digest`, which `tag` re-reads before it moves anything; `reset_digest`; `seed`, `true`
 when `tag` tags `prior_digest` `last-good` first; `clears_hold`; `no_reset` and `stateful`,
-under which `settle` holds without a reset; `suspended_hold`; and `lost_settle` and
-`lost_settle_digest`, `prod`'s commit and digest when the run that moved it ended without its
-`settle`, on which the `reconcile` job runs. On that path `no_reset` and `stateful` name what
-`prod` changes against `last-good`, the hold form `reconcile` falls back to.
+the forward-only tags and snapshot roles T changes; `hold_form`, the hold they make
+`verdict-status` record and `settle` write (`Decision.hold_form`); `suspended_hold`; and
+`lost_settle` and `lost_settle_digest`, `prod`'s commit and digest when the run that moved it
+ended without its `settle`, on which the `reconcile` job runs. On that path `no_reset`,
+`stateful` and `hold_form` read what `prod` changes against `last-good`, and `hold_form` is
+the hold form `reconcile` falls back to.
 
 THE OTHER SUBCOMMANDS, each stated in its module's docstring:
   prune        deletes old artifact versions, daily from prune-artifacts.yml (`prune.py`).
@@ -323,7 +325,7 @@ def decide(
                     supersedes=(prod or "") if flight else "",
                     hold_read=hold_read,
                 )
-                if not flight or not (decision.no_reset or decision.stateful):
+                if not flight or decision.hold_form == "reset":
                     return decision
                 why = "T names a forward-only tag or a snapshot role"
             print(
@@ -395,6 +397,7 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"clears_hold={str(decision.clears_hold).lower()}\n"
                 f"no_reset={','.join(decision.no_reset)}\n"
                 f"stateful={','.join(decision.stateful)}\n"
+                f"hold_form={decision.hold_form}\n"
                 f"supersedes={decision.supersedes}\n"
                 f"hold_read={decision.hold_read}\n"
                 f"lost_settle={decision.lost_settle}\n"

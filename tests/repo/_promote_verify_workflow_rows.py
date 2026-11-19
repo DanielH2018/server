@@ -30,6 +30,8 @@ TOKENS = ("secrets.PROMOTE_TOKEN", "github.token", "secrets.GITHUB_TOKEN")
 # GitHub stops a job on a hosted runner after 6 hours.
 HOSTED_JOB_LIMIT_MINUTES = 360
 SUSPENDED_HOLD = "${{ steps.decide.outputs.suspended_hold }}"
+# The jobs that write or record the hold `decide`'s `hold_form` names.
+HOLD_FORM_READERS = ("verdict-status", "settle", "reconcile")
 
 
 def _minutes(wf: dict, name: str) -> int:
@@ -55,7 +57,7 @@ def _concurrency_problems(wf: dict) -> list[str]:
 
 def _tag_compare_problems(wf: dict) -> list[str]:
     move = next((s for s in steps(job(wf, "tag")) if s.get("id") == "move"), {})
-    if PRIOR_DIGEST not in str(move.get("env")) or "manifests/prod" not in str(
+    if PRIOR_DIGEST not in str(move.get("env")) or "live_tag prod" not in str(
         move.get("run")
     ):
         return ["tag: does not compare prod's live digest with decide's before moving"]
@@ -72,21 +74,22 @@ def _verify_input_problems(wf: dict) -> list[str]:
     return found
 
 
-def _settle_input(key: str, env: str):
-    def rule(wf: dict) -> list[str]:
-        found = []
-        if job(wf, "promote").get("outputs", {}).get(key) != (
-            f"${{{{ steps.decide.outputs.{key} }}}}"
-        ):
-            found.append(f"promote: output {key} does not come from the decide step")
+def _hold_form_problems(wf: dict) -> list[str]:
+    found = []
+    if job(wf, "promote").get("outputs", {}).get("hold_form") != (
+        "${{ steps.decide.outputs.hold_form }}"
+    ):
+        found.append("promote: output hold_form does not come from the decide step")
+    for name in HOLD_FORM_READERS:
         if not any(
-            s.get("env", {}).get(env) == f"${{{{ needs.promote.outputs.{key} }}}}"
-            for s in steps(job(wf, "settle"))
+            s.get("env", {}).get("HOLD_FORM")
+            == "${{ needs.promote.outputs.hold_form }}"
+            for s in steps(job(wf, name))
         ):
-            found.append(f"settle: no step takes {env} from promote's {key} output")
-        return found
-
-    return rule
+            found.append(
+                f"{name}: no step takes HOLD_FORM from promote's hold_form output"
+            )
+    return found
 
 
 def _post_hold_problems(wf: dict) -> list[str]:
@@ -242,40 +245,24 @@ PROMOTE_VERIFY_ROWS = (
     ),
     Census(
         **promote_row(
-            name="promote-hands-no-reset-to-settle",
+            name="promote-hands-hold-form-to-its-readers",
             reason=(
-                "Without `no_reset` reaching settle's NO_RESET, a failed forward-only revision "
-                "resets `prod` to `last-good`, the downgrade the hold without a reset exists "
-                "to prevent."
+                "`decide` alone computes the hold form. Without `hold_form` reaching each "
+                "reader's HOLD_FORM, `settle` and `reconcile` write no hold and "
+                "`verdict-status` posts no status, so a failed revision stops no promotion."
             ),
-            offence=judge(_settle_input("no_reset", "NO_RESET")),
+            offence=judge(_hold_form_problems),
             red=mutants(
                 PROMOTE,
-                settle_reads_a_misspelt_no_reset=lambda wf: _settle_step(wf)[
+                settle_reads_a_misspelt_hold_form=lambda wf: _settle_step(wf)[
                     "env"
-                ].update(NO_RESET="${{ needs.promote.outputs.noreset }}"),
-                promote_without_the_no_reset_output=lambda wf: wf["jobs"]["promote"][
+                ].update(HOLD_FORM="${{ needs.promote.outputs.holdform }}"),
+                reconcile_without_hold_form=lambda wf: step_by(
+                    wf, "reconcile", id="apply"
+                )["env"].pop("HOLD_FORM"),
+                promote_without_the_hold_form_output=lambda wf: wf["jobs"]["promote"][
                     "outputs"
-                ].pop("no_reset"),
-            ),
-        )
-    ),
-    Census(
-        **promote_row(
-            name="promote-hands-stateful-to-settle",
-            reason=(
-                "Without `stateful` reaching STATEFUL, a failed snapshot-role revision resets "
-                "onto data it may have migrated."
-            ),
-            offence=judge(_settle_input("stateful", "STATEFUL")),
-            red=mutants(
-                PROMOTE,
-                settle_reads_a_misspelt_stateful=lambda wf: _settle_step(wf)[
-                    "env"
-                ].update(STATEFUL="${{ needs.promote.outputs.statefull }}"),
-                promote_without_the_stateful_output=lambda wf: wf["jobs"]["promote"][
-                    "outputs"
-                ].pop("stateful"),
+                ].pop("hold_form"),
             ),
         )
     ),
