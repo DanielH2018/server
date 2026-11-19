@@ -14,7 +14,7 @@ Three reads, in order:
 red checks that fire nothing, because a streak holds them, a gate skips them or no rule pages.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path; pyproject's `pythonpath` is a pytest setting. This has to sit
@@ -69,6 +69,27 @@ def alertmanager_only(result, held):
     ]
 
 
+def _collapse(entries):
+    """Sorted lines for (service, alert, origin) entries, each reason printed once. Pure.
+
+    An alert on one service reads `  service: alert`. An alert on several reads
+    `  alert: service-a, service-b`, and a service repeated reads `service x4`.
+    """
+    by_alert = defaultdict(Counter)
+    for service, alert, origin in entries:
+        by_alert[alert, origin][service] += 1
+    lines = []
+    for (alert, origin), services in by_alert.items():
+        parts = [f"{svc} x{n}" if n > 1 else svc for svc, n in sorted(services.items())]
+        if len(services) == 1:
+            (service,) = services
+            repeat = f" x{services[service]}" if services[service] > 1 else ""
+            lines.append(f"  {service}: {alert}{origin}{repeat}")
+        else:
+            lines.append(f"  {alert}{origin}: {', '.join(parts)}")
+    return sorted(lines)
+
+
 def format_alerts(data, held):
     """(lines, exit code) for the firing-alert rollup. Pure.
 
@@ -94,23 +115,23 @@ def format_alerts(data, held):
         service = labels.get("service", "?")
         severity = labels.get("severity", "?")
         name = labels.get("alertname", "?")
-        line = f"  {service}: {name}{{severity={severity}}}{origin}"
+        with_severity = f"{name}{{severity={severity}}}"
         if labels.get("shadow") == "true":
-            shadow.append(line)
+            shadow.append((service, with_severity, origin))
         elif severity in PAGING_SEVERITIES:
-            paging[severity].append(f"  {service}: {name}{origin}")
+            paging[severity].append((service, name, origin))
         else:
-            notes.append(line)
+            notes.append((service, with_severity, origin))
     count = sum(len(v) for v in paging.values())
     lines = [f"{count} paging alert(s) firing"]
     for severity in PAGING_SEVERITIES:
         if paging[severity]:
-            lines += [f"{severity}:", *sorted(paging[severity])]
+            lines += [f"{severity}:", *_collapse(paging[severity])]
     if notes:
-        lines += ["notes (not paging):", *sorted(notes)]
+        lines += ["notes (not paging):", *_collapse(notes)]
     if shadow:
         lines += ["shadow rules firing (not counted):"]
-        lines += sorted(shadow)
+        lines += _collapse(shadow)
     if not watchdog:
         lines.insert(
             0,

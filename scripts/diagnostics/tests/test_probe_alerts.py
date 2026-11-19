@@ -238,13 +238,32 @@ def test_the_pi_jobs_include_the_published_port_probes():
 
 
 def test_no_episode_renders_an_all_clear_naming_the_window():
-    assert alerts.format_alert_episodes([], 3, 60) == "no firing alerts in the last 3d"
+    assert (
+        alerts.format_alert_episodes([], 3, 60, NOW)
+        == "no firing alerts in the last 3d"
+    )
 
 
 def test_a_shadow_episode_is_marked():
     series = _series("EvalSweepFailed", "daniel-box", [NOW], "warning", shadow="true")
-    text = alerts.format_alert_episodes(alerts.alert_episodes([series], 60), 1, 60)
+    episodes = alerts.alert_episodes([series], 60)
+    text = alerts.format_alert_episodes(episodes, 1, 60, NOW, show_all=True)
     assert text.splitlines()[-1].endswith("daniel-box/EvalSweepFailed  warning shadow")
+
+
+def test_episodes_group_by_alert_with_the_still_firing_group_first():
+    old = _series("Old", "svc-a", [NOW - 7200, NOW - 7140, NOW - 3600])
+    live = _series("Live", "svc-b", [NOW - 120, NOW - 60, NOW])
+    episodes = alerts.alert_episodes([old, live], 60)
+    text = alerts.format_alert_episodes(episodes, 1, 60, NOW)
+    head, _, *rows = text.splitlines()
+    assert head.startswith(
+        "3 firing episode(s) of 2 alert(s) (1 firing now, 1 cleared)"
+    )
+    assert head.endswith("--all to list every episode")
+    assert [r.split()[0] for r in rows] == ["svc-b/Live", "svc-a/Old"]
+    assert rows[1].split()[1] == "2x"
+    assert "->" not in text
 
 
 def _fetch_returns(monkeypatch, reply, held_s=None):
@@ -279,6 +298,19 @@ def test_alerts_prints_the_episodes_it_read(monkeypatch, capsys):
     ns = cli_parser._build_parser().parse_args(["alerts", "--days", "1"])
     assert alerts.run_alerts(ns, now=NOW) == 0
     assert "daniel-pi/PiHostDown" in capsys.readouterr().out
+
+
+def test_alerts_all_lists_every_episode(monkeypatch, capsys):
+    body = {
+        "status": "success",
+        "data": {"result": [_series("PiHostDown", "daniel-pi", [NOW - 3600, NOW])]},
+    }
+    _fetch_returns(monkeypatch, body)
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "1", "--all"])
+    assert alerts.run_alerts(ns, now=NOW) == 0
+    out = capsys.readouterr().out
+    assert out.count("daniel-pi/PiHostDown") == 2
+    assert "--all" not in out
 
 
 def test_alerts_that_cannot_read_prometheus_is_unreadable_not_an_all_clear(

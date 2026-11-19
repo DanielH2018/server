@@ -693,6 +693,8 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         for line in held_back:
             sys.stderr.write(line + "\n")
         return 0
+    for line in held_back:
+        print(line)
     for r in rows:
         # A stale claim does not withhold the issue, so say who holds it and what clears it.
         # `claim` reaps it on the way past; `reap` is how the operator clears the register.
@@ -712,8 +714,6 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     if not rows:
         print("nothing to pick up")
-    for line in held_back:
-        print(line)
     return 0
 
 

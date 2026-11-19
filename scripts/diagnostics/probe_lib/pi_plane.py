@@ -113,7 +113,7 @@ def format_pi_targets(declared, active_targets):
 
 
 def format_targets(active, scaled_to_zero=frozenset()):
-    """(text, exit code) for every scrape target: one line per down target, then the count.
+    """(text, exit code) for every scrape target: the count, then one line per down target.
 
     A down target whose job is in `scaled_to_zero` prints as `scaled to 0` and does not fail.
     """
@@ -131,8 +131,7 @@ def format_targets(active, scaled_to_zero=frozenset()):
     count = f"{len(active) - len(down)}/{len(active)} targets up"
     if len(down) > failed:
         count += f", {len(down) - failed} scaled to 0"
-    lines.append(count)
-    return "\n".join(lines), 1 if failed else 0
+    return "\n".join([count, *lines]), 1 if failed else 0
 
 
 def scaled_to_zero_deployments(cluster, read=kubectl_json):

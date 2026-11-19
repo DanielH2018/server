@@ -137,7 +137,7 @@ def test_next_withholds_a_deferred_issue_and_names_it(capsys, make_tools):
     out = capsys.readouterr().out
     assert "#1140" in out
     assert "deferred: #1288 until 2099-01-01  needs seven days of metric" in out
-    assert out.index("#1140") < out.index("deferred:")
+    assert out.index("deferred:") < out.index("#1140")
 
 
 def test_next_offers_nothing_when_the_field_read_is_refused(capsys, make_tools):
@@ -165,7 +165,7 @@ def test_next_counts_the_waiting_issues_and_names_the_flag_that_lists_them(
     )
     assert findings.main(["next"], tools) == 0
     out = capsys.readouterr().out
-    assert "1 waiting (1 deferred); --waiting to list" in out
+    assert out.splitlines()[0] == "1 waiting (1 deferred); --waiting to list"
     assert "#1288" not in out
 
 

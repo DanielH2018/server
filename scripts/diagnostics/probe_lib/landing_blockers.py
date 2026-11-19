@@ -397,32 +397,43 @@ def format_text(snap: dict) -> str:
     def known(value, render):
         return "unknown" if value is None else render(value)
 
-    lines = ["Landing blockers:"]
-    lines += [f"  ✗ {b}" for b in snap["blockers"]] or ["  none"]
-    lines += ["", *hold_lines(snap)]
-    lines += [
-        "master CI: " + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip()),
+    sections = [
+        [f"{len(snap['blockers'])} landing blocker(s)"]
+        + [f"  ✗ {b}" for b in snap["blockers"]]
     ]
+    state = [
+        line
+        for line in hold_lines(snap)
+        if line.startswith("prod:") or not line.endswith(": none")
+    ]
+    if snap["ci"] is None or snap["ci"]["state"] != "green":
+        state.append(
+            "master CI: "
+            + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip())
+        )
+    sections.append(state)
     if snap["runs"]:
-        lines += ["", "In flight:"]
+        in_flight = ["In flight:"]
         for r in snap["runs"]:
             what = f"PR {r['pr']}" if r["pr"] else r["tag"][:60]
-            lines.append(
+            in_flight.append(
                 f"  {r['kind']} {what} {r['elapsed_s']}s  {r['verdict'] or ''}".rstrip()
             )
+        sections.append(in_flight)
     if snap["last_verdict"]:
-        lines += [
-            "",
-            f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}",
-        ]
-    if snap["worktrees"]:
-        lines += ["", *worktree_lines(snap["worktrees"], bool(snap["blockers"]))]
-    for c in unmatched_claims(snap):
-        lines.append(
-            f"Claim no worktree here works: #{c['number']} {c['reason']}".rstrip()
+        sections.append(
+            [f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}"]
         )
-    lines += [f"error: {e}" for e in snap["errors"]]
-    return "\n".join(lines)
+    if snap["worktrees"]:
+        sections.append(worktree_lines(snap["worktrees"], bool(snap["blockers"])))
+    tail = [
+        f"Claim no worktree here works: #{c['number']} {c['reason']}".rstrip()
+        for c in unmatched_claims(snap)
+    ]
+    tail += [f"error: {e}" for e in snap["errors"]]
+    if tail:
+        sections.append(tail)
+    return "\n\n".join("\n".join(section) for section in sections if section)
 
 
 def run_landing(ns) -> int:
