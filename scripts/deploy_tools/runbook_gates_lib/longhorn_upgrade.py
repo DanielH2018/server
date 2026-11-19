@@ -63,10 +63,11 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, Tools, kubectl
-from lib.repo_paths import HOST_LIB_FILES, K3S_HOST_CHECKS_DEFAULTS
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 # The backup target names, shared with the backup-health cron; it imports host_lib.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
+
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps

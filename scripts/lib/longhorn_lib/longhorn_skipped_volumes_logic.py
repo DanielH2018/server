@@ -20,14 +20,13 @@ import re
 import sys as _sys
 from pathlib import Path as _Path
 
-# In the checkout, `hosts/lib` holds host_lib.py and `scripts/lib` holds this package. On a
-# host both sit beside the reader, whose directory is already on sys.path, so these inserts
-# name directories that do not exist there and change nothing.
+# In the checkout, `hosts/lib` holds host_lib.py. On a host it sits beside the reader, whose
+# directory is already on sys.path, so this insert names a directory that does not exist there.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from host_lib import rfc3339_to_epoch
-from longhorn_lib import longhorn_backups as backups
+
+from . import longhorn_backups as backups
 
 # One line of `kubectl logs --prefix`: `[pod/<pod>/<container>] time="..." level=warning
 # msg="Cannot create job for <vol> volume in state <state>" ...`. The container is named for the

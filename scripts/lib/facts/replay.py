@@ -9,10 +9,7 @@ graded row in five is a false alarm (``docs/target-architecture/docs-guard/g7-re
 from datetime import datetime
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git
 
 from .notice import Tree

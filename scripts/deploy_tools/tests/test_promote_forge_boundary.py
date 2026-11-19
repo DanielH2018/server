@@ -71,6 +71,7 @@ ALLOWED_LIB = frozenset(
         "lib.cli_help",
         "lib.exit_codes",
         "lib.git",
+        "lib.host_modules",
         "lib.progress",
         "lib.removes_object",
         "lib.repo_paths",
