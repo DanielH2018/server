@@ -30,8 +30,9 @@ airflow_k8s_node: daniel-server
 airflow_k8s_uid: 50000
 airflow_k8s_postgres_uid: 70
 
-# Per-component caps. The idle footprint the plan budgets is ~1 GiB for the whole stack; the
-# api-server and dag-processor each hold a full Airflow import (~250-350 MiB resident).
+# Per-component caps. Each request sits above that component's idle working set, measured on
+# 2026-11-19 with the first DAG loaded: api-server 253Mi, scheduler 447Mi, dag-processor
+# 162Mi, Postgres 50Mi, about 0.9 GiB for the stack.
 airflow_k8s_api_cpu_limit: "1"
 airflow_k8s_api_mem_limit: 1Gi
 airflow_k8s_api_cpu_request: "50m"
@@ -39,7 +40,7 @@ airflow_k8s_api_mem_request: 384Mi
 airflow_k8s_scheduler_cpu_limit: "1"
 airflow_k8s_scheduler_mem_limit: 768Mi
 airflow_k8s_scheduler_cpu_request: "50m"
-airflow_k8s_scheduler_mem_request: 256Mi
+airflow_k8s_scheduler_mem_request: 512Mi
 airflow_k8s_dag_processor_cpu_limit: "1"
 airflow_k8s_dag_processor_mem_limit: 768Mi
 airflow_k8s_dag_processor_cpu_request: "25m"
