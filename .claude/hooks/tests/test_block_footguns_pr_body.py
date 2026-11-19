@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _hook_common import parse_payload
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block-footguns.py"
@@ -157,7 +158,8 @@ def test_a_repo_with_no_template_is_clean(tmp_path):
 
 def test_the_payload_cwd_reaches_the_rule(repo):
     payload = {
+        "tool_name": "Bash",
         "tool_input": {"command": "gh pr create --title t --body-file partial.md"},
         "cwd": str(repo),
     }
-    assert _mod.decision(payload)[0] == "deny"
+    assert _mod.decision(parse_payload(payload).bash())[0] == "deny"

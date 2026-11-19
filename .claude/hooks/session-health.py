@@ -540,14 +540,15 @@ def main(
     machine's worktrees, `.claude/fanout`) that would make an assertion depend on the host.
     `deadline` is the seconds all of them together may take; a test passes a short one.
     """
-    payload = read_payload() or {}
-    compact = payload.get("source") == "compact"
+    event = read_payload()
+    compact = event is not None and event.raw.get("source") == "compact"
     try:
         # Imported here so a broken module costs these rows, never the banner. A compaction
         # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too.
         from hooklib.instruction_rows import log_unevented_loads
 
-        log_unevented_loads(payload, "compact" if compact else "session_start")
+        if event is not None:
+            log_unevented_loads(event, "compact" if compact else "session_start")
     except Exception:  # noqa: S110 -- a failed row must never cost the banner
         pass
     # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.

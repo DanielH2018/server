@@ -65,13 +65,14 @@ reports clean verdicts is the failure this file is most able to hide (#2394).
 Run standalone: `uv run --no-sync python .claude/hooks/bash-pretool.py < payload.json`.
 """
 
+import dataclasses
 import importlib.util
 import json
 import os
 import sys
 import traceback
 
-from _hook_common import read_payload, tagged
+from _hook_common import BashCall, read_payload, tagged
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -136,13 +137,13 @@ def _report(arm_name, exc):
 
 
 def collect(
-    payload,
+    call: BashCall,
     arms=_DECISION_ARMS,
     context_arm=_CONTEXT_ARM,
     load=load_arm,
     rewrite_arms=_REWRITE_ARMS,
 ):
-    """Every arm's output for `payload`: the verdicts, the context text and the rewrite.
+    """Every arm's output for `call`: the verdicts, the context text and the rewrite.
 
     Each reason carries its arm's name as a `[<arm>] ` prefix, so the merged verdict still
     says which arm decided: the OTEL `tool_decision` stream names `run-hook.sh bash-pretool`
@@ -151,14 +152,14 @@ def collect(
     An arm with no opinion contributes nothing and is silent.
 
     Args:
-        payload: the hook JSON, already parsed.
+        call: the parsed Bash call.
         arms: the (filename, module name) pairs to ask for a decision, in precedence order.
         context_arm: the one pair asked for injectable context instead.
         load: how to turn a pair into a module. The tests hand one that raises, or one that
             returns a real arm with its temp paths redirected, because each arm is loaded
             fresh here and so cannot be monkeypatched from outside.
         rewrite_arms: the pairs asked for a rewritten command, in order. Each reads the text
-            the previous one produced, and an arm that raises or returns None leaves that text
+            the previous one produced, through `dataclasses.replace`, and an arm that raises or returns None leaves that text
             as it was. Asked after the decision arms so they judge the command as typed. In
             auto mode an arm in `_SKIPPED_IN_AUTO_MODE` is not asked, and the text the others
             produced becomes a `deny` verdict naming it, attributed to the last arm that
@@ -173,7 +174,7 @@ def collect(
     failures = []
     for filename, module_name in arms:
         try:
-            verdict = load(filename, module_name).decision(payload)
+            verdict = load(filename, module_name).decision(call)
         except Exception as exc:  # Blind on purpose: one arm must not silence the rest.
             failures.append(_report(filename, exc))
             continue
@@ -182,21 +183,18 @@ def collect(
             verdicts.append((decision, tagged(filename, reason)))
     context = None
     try:
-        context = load(*context_arm).context(payload)
+        context = load(*context_arm).context(call)
     except Exception as exc:
         failures.append(_report(context_arm[0], exc))
-    auto_mode = payload.get("permission_mode") == "auto"
+    auto_mode = call.permission_mode == "auto"
     command = None
     rewriter = ""
     for filename, module_name in rewrite_arms:
         if auto_mode and filename in _SKIPPED_IN_AUTO_MODE:
             continue
-        current = payload
-        if command is not None:
-            current = {
-                **payload,
-                "tool_input": {**(payload.get("tool_input") or {}), "command": command},
-            }
+        current = (
+            call if command is None else dataclasses.replace(call, command=command)
+        )
         try:
             rewritten = load(filename, module_name).rewrite(current)
         except Exception as exc:
@@ -260,19 +258,13 @@ def main(load=load_arm):
     `load` is `collect`'s loader, threaded through so the tests can drive a stub arm from
     the real entry point rather than from a re-implementation of it.
     """
-    payload = read_payload()
-    if payload is None:  # An unreadable payload is one no arm could have judged.
+    event = read_payload()
+    call = event.bash() if event else None
+    if call is None:  # A call with no command is one no arm could have judged.
         return 0
-    verdicts, context, command = collect(payload, load=load)
+    verdicts, context, command = collect(call, load=load)
     decision, reason = merge(verdicts)
-    tool_input = payload.get("tool_input")
-    emit(
-        decision,
-        reason,
-        context,
-        command,
-        tool_input if isinstance(tool_input, dict) else None,
-    )
+    emit(decision, reason, context, command, call.tool_input)
     return 0
 
 
