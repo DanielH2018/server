@@ -204,9 +204,9 @@ def test_every_ci_prek_sweep_skipping_the_hook_is_clean():
 
 
 def test_a_ci_prek_sweep_without_the_skip_is_flagged():
-    workflow = "        run: prek run --all-files --skip validate-k8s-manifests --color always\n"
+    workflow = "        run: prek run --all-files --skip gitleaks --color always\n"
     assert _unskipped(_sweeps(workflow)) == [
-        "run: prek run --all-files --skip validate-k8s-manifests --color always"
+        "run: prek run --all-files --skip gitleaks --color always"
     ]
 
 
