@@ -184,7 +184,8 @@ CI-fix phases that resume its session. The reviewer stays on Opus at
 and `stats`.
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
-note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
+note, the landing path or the stop-at-PR rule, the list of what a change must not add
+(`scripts/dev/fanout_lib/brief.py:DESIGN_RULES`), and the session-health lines of the placed host
 that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session, plus the call to `scripts/dev/repo_guards.py`, which runs the
@@ -224,7 +225,9 @@ daniel-server the pipeline marks the PR ready after the review and its fix round
 once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
 PR is marked ready as on daniel-server.
 A fresh reviewer then reads only the issue text and the diff, and returns findings with
-a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
+a severity and a confidence. A `design` finding names code the change added that the repo
+would not miss, and its fix only takes code out
+([ADR-0038](../../../docs/adr/0038-design-is-checked-where-code-is-written.md)). A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
