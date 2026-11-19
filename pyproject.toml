@@ -9,8 +9,17 @@ dependencies = [
   "jinja2>=3",
 ]
 
+[build-system]
+requires = ["uv_build>=0.13,<0.15"]
+build-backend = "uv_build"
+
 [tool.uv]
-package = false                      # virtual project: manage deps/lock, do not build the repo
+# `scripts/` is installed in place as the one import root: the editable install's `.pth` puts it
+# on sys.path (docs/adr/0039-scripts-is-installed-in-place.md).
+package = true
+# The same range as `uv_build` above, so every uv that syncs uses its bundled backend rather than
+# fetching one. CI's setup-uv reads this too.
+required-version = ">=0.13,<0.15"
 default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops only `dev`
 # DECIDED: no `compile-bytecode` here. uv applies it to the sync inside every `uv run`, which
 # then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit
@@ -23,6 +32,27 @@ default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops o
 # Forcing the extension makes that build fail instead; the hosts and CI install libyaml-dev.
 [tool.uv.extra-build-variables]
 pyyaml = { PYYAML_FORCE_LIBYAML = "1" }
+
+# Each area under `scripts/` is a PEP 420 namespace package with no `__init__.py`, imported from
+# the root as `lib.x`, `dev.x`, `renderer.x`.
+[tool.uv.build-backend]
+module-root = "scripts"
+namespace = true
+module-name = [
+  "backup",
+  "deploy_tools",
+  "dev",
+  "diagnostics",
+  "docs",
+  "freshrss",
+  "grafana",
+  "home_assistant",
+  "infra_map",
+  "lib",
+  "renderer",
+  "secrets_mgmt",
+  "validate",
+]
 
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
@@ -452,8 +482,8 @@ ignore_names = [
 
 [tool.ty.environment]
 python-version = "3.15"
-# This repo has no `__init__.py` files and no installed package: a script reaches a sibling
-# directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
+# This repo has no `__init__.py` files. `scripts/` is installed in place, but a script still reaches
+# a sibling directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
 # test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
 # it reports import-not-found for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
