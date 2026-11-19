@@ -448,8 +448,8 @@ rows and env keys are gone. The numbers those groups carry are pinned in
 `k8s/roles/observability/files/rules/log-pipeline.yaml`.
 TLS Cert Expiry, Traefik 5xx, Traefik Latency, Traefik 404 Flood and Traefik 421 (M6 batch A4)
 retired into the `edge` rule group in observability, and their tiles, rows and env keys are
-gone. Each threshold that group carries has its `DECIDED:` marker on its rule in
-`k8s/roles/observability/files/rules/edge.yaml`, and no test pins the number. The markers at
+gone. The thresholds a literal test once pinned carry `DECIDED:` markers on their rules in
+`k8s/roles/observability/files/rules/edge.yaml`. The markers at
 `TraefikBackendSlow` cover the exempt stream services, bazarr and prowlarr staying measured,
 jellyfin staying measured (#6649) and the 5-of-10-minute latency count.
 k3s Container Restarts, k3s Container OOM and k3s CPU Throttling (M6 batch A2) retired into the
@@ -460,8 +460,9 @@ smoothing, whose reasoning is at `ContainerCPUThrottled` in
 `k8s/roles/observability/files/rules/container-checks.yaml`.
 Longhorn Volume Redundancy, k3s PVC Fullness, Longhorn Snapshot Headroom, Kubelet CSI Mount
 Read-Only and etcd DB Size (M6 batch A5) retired into the `storage` rule group in
-observability, and their tiles, rows and env keys are gone. Each threshold those rules carry
-has its `DECIDED:` marker on its rule in `storage.yaml`, the 3 GiB free-bytes floor among them.
+observability, and their tiles, rows and env keys are gone. The thresholds a literal test once
+pinned carry `DECIDED:` markers on their rules in `storage.yaml`, the 3 GiB free-bytes floor
+among them.
 `tests/services/test_storage_rule_literals.py` holds `PVCBelowFreeFloor` to the transient
 valheim declares, `LonghornSnapshotNearCap` to the jellyfin snapshot cap, and
 `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
@@ -471,8 +472,8 @@ quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` l
 `ScrapeTargetDown`'s) is in `k8s/roles/observability/files/rules/storage.yaml`.
 Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired into the
 `hosts` rule group in observability, and their tiles, rows, check bodies, verdicts and env keys
-are gone. Each threshold and floor those rules carry has its `DECIDED:` marker on its rule
-in `hosts.yaml`, as do the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
+are gone. The thresholds and floors a literal test once pinned carry `DECIDED:` markers on
+their rules in `hosts.yaml`, as do the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
 maximum junction temperature, the nut-only UPS source and the retired-uid note.
 `tests/services/test_host_check_rule_literals.py` holds the `ClaudeCgroupNotReporting` host
 and cgroup pairs to the inventory, and

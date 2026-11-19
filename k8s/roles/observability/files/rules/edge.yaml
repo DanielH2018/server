@@ -5,8 +5,8 @@
 # The scrape job sets no `service`, and Traefik's own `service` label names a backend, so every
 # rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to
 # `backend` first with label_replace, because the literal replaces the series label of the same
-# name. Each threshold carries the value of the monitor-bridge check it ports, and its
-# `DECIDED:` marker on the rule is what a retune is reviewed against: no test pins the number.
+# name. Each threshold carries the value of the monitor-bridge check it ports. A ported
+# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against.
 #
 # The volume floor (0.05 rps) is an `and` clause in each ratio rule: a single error
 # on a near-idle route is not a 100% error ratio.
@@ -15,8 +15,7 @@ groups:
     rules:
       # monitor-bridge's `cert` row. The series carry `cn`, `sans` and `serial`, so the alert
       # names every breaching certificate.
-      # DECIDED: 14 days, the bridge's floor kept as is. It is critical, so it mails: two weeks
-      # leaves time to repair a failed ACME renewal by hand before a browser refuses the name.
+      # DECIDED: 14 days, the bridge's floor kept as is.
       - alert: CertExpiringSoon
         expr: (traefik_tls_certs_not_after{job="traefik-k8s"} - time()) / 86400 < 14
         for: 10m
@@ -137,8 +136,7 @@ groups:
             configuration.
       # `traefik_404`: over 90% of ENTRYPOINT traffic is 404. The entrypoint
       # counter survives a total-404 edge, which erases the per-service series.
-      # DECIDED: 90%, the bridge's value kept as is. A healthy edge 404s scanners and stale
-      # links, never nine requests in ten; a lost router set 404s everything.
+      # DECIDED: 90%, the bridge's value kept as is.
       - alert: TraefikEntrypoint404Flood
         expr: >-
           sum(rate(traefik_entrypoint_requests_total{job="traefik-k8s", code="404"}[5m]))

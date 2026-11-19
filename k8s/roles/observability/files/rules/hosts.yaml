@@ -43,8 +43,8 @@
 # `for:` IS N x 300s for a bridge streak of N cycles: host coverage (3) is 15m,
 # temperature coverage (5) is 25m, temperature (12) is 1h, thermal throttling (3) is 15m, and
 # the UPS and Claude cgroup streaks (2) are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
-# no `for:`. The numeric literals are the retired bridge env keys' values, and each rule's
-# `DECIDED:` marker is what a retune is reviewed against: no test pins the number.
+# no `for:`. The numeric literals are the retired bridge env keys' values. A ported
+# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against.
 #
 # DROPPED ON PURPOSE. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
 # DECIDED: a Claude Code process running as a retired uid never pages. As an arm it held the
@@ -56,8 +56,7 @@ groups:
     rules:
       # The bridge's check_disk for daniel-box: any of /, /boot and /boot/efi over DISK_MAX_PCT
       # (90). Percentage per series, so avail and size come from the same device.
-      # DECIDED: over 90% of /, /boot or /boot/efi, the bridge's value kept as is, and critical:
-      # a full root stops the node's writers.
+      # DECIDED: over 90% of /, /boot or /boot/efi, the bridge's value kept as is.
       - alert: HostDiskFull
         expr: |
           max by (origin, job, instance, mountpoint) (
@@ -530,8 +529,7 @@ groups:
       # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
       # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
       # as well as through ScrapeTargetDown, the safe direction.
-      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is: two hosts
-      # publish each family, so one host going blind already breaches it.
+      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is.
       - alert: HostCoverageShortfall
         expr: |
           label_replace(
@@ -565,8 +563,7 @@ groups:
             idle. Read the node scrape targets on Prometheus.
       # A floor of 3 hosts over the series that survive the nvme_ exclusion, with `for: 25m` for
       # the bridge's 5-cycle streak x 300s.
-      # DECIDED: a floor of 3 hosts, the bridge's value kept as is: every host publishes a
-      # non-nvme hwmon sensor, so any one going blind breaches it.
+      # DECIDED: a floor of 3 hosts, the bridge's value kept as is.
       - alert: HostTemperatureCoverageShortfall
         expr: |
           label_replace(
