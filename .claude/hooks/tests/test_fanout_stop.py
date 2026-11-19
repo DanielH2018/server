@@ -13,6 +13,7 @@ import io
 import json
 import os
 
+from _hook_common import parse_payload
 from fanout_lib import status
 from fanout_lib.brief import Issue, render_brief
 
@@ -41,7 +42,9 @@ def _fanout_tree(tmp_path, brief="# Fan-out batch\n"):
 
 
 def _stop(cwd, message):
-    return _mod.decide({"cwd": str(cwd), "last_assistant_message": message})
+    return _mod.decide(
+        parse_payload({"cwd": str(cwd), "last_assistant_message": message})
+    )
 
 
 def test_a_progress_report_in_a_fanout_tree_is_blocked_and_the_reason_names_the_open_item(

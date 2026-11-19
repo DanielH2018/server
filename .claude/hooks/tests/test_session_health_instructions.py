@@ -26,7 +26,7 @@ from lib.git_testing import git, init_repo
 _HOOKS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_HOOKS))
 
-from _hook_common import INSTRUCTIONS_LOG_ENV, primary_checkout  # noqa: E402
+from _hook_common import INSTRUCTIONS_LOG_ENV, parse_payload, primary_checkout  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "session_health_instructions", _HOOKS / "session-health.py"
@@ -85,7 +85,7 @@ def _session(
     payload = {"source": source, "session_id": _SESSION, "cwd": cwd}
     assert (
         _mod.main(
-            read_payload=lambda: payload,
+            read_payload=lambda: parse_payload(payload),
             target_problems=lambda: [],
             master_moved_problems=lambda: [],
             dirty_primary_problems=lambda: [],

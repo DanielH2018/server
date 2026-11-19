@@ -99,11 +99,11 @@ def output_style_path(cwd):
     return None
 
 
-def log_unevented_loads(payload, reason="session_start"):
+def log_unevented_loads(event, reason="session_start"):
     """Row `MEMORY.md` and the output style in the instructions log, each with `bytes=`.
 
-    `payload` is the SessionStart hook payload; its `session_id` keys the rows and its `cwd`
-    picks the checkout. A payload with no session id writes nothing, and neither does a
+    `event` is the SessionStart `HookEvent`; its `session_id` keys the rows and its `cwd`
+    picks the checkout. An event with no session id writes nothing, and neither does a
     file that does not exist.
 
     `reason` is the row's load reason. A `compact` call rows `MEMORY.md` only. Claude Code
@@ -112,10 +112,10 @@ def log_unevented_loads(payload, reason="session_start"):
     `load_reason=compact` for all of them except `MEMORY.md`. The output style is part of
     the system prompt rather than that list, so a compaction does not re-inject it.
     """
-    session = payload.get("session_id")
+    session = event.session_id
     if not session:
         return
-    cwd = payload.get("cwd") or os.getcwd()
+    cwd = str(event.cwd)
     loads = [("AutoMem", memory_md_path(cwd))]
     if reason != "compact":
         loads.append(("Style", output_style_path(cwd)))

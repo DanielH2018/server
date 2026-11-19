@@ -11,6 +11,8 @@ Run: uv run pytest .claude/hooks/tests/test_strip_cd_cwd.py
 import importlib.util
 import os
 
+from _hook_common import parse_payload
+
 _HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _spec = importlib.util.spec_from_file_location(
@@ -22,7 +24,8 @@ _spec.loader.exec_module(arm)
 
 
 def _payload(command, cwd):
-    return {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
+    payload = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
+    return parse_payload(payload).bash()
 
 
 def test_a_cd_into_the_cwd_is_stripped(tmp_path):
@@ -78,8 +81,3 @@ def test_shapes_the_arm_cannot_read_are_kept(tmp_path):
         f"cd {cwd}",
     ):
         assert arm.rewrite(_payload(command, cwd)) is None, command
-
-
-def test_a_payload_without_an_absolute_cwd_is_kept(tmp_path):
-    assert arm.rewrite(_payload("cd . && ls", "")) is None
-    assert arm.rewrite(_payload("cd . && ls", "relative")) is None

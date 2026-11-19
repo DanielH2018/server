@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 
 from _hook_common import (
+    BashCall,
     Unsplittable,
     emit_pretooluse_decision,
     read_payload,
@@ -173,20 +174,19 @@ def problem(command: str, cwd: Path) -> str | None:
     return None
 
 
-def decision(payload) -> tuple[str, str] | None:
-    """The `(decision, reason)` pair for this payload, or None. The `bash-pretool.py` entry point."""
-    command = (payload.get("tool_input") or {}).get("command", "")
-    cwd = payload.get("cwd")
-    if not command or not in_batch(cwd, os.environ.get("CLAUDE_PROJECT_DIR")):
+def decision(call: BashCall) -> tuple[str, str] | None:
+    """The `(decision, reason)` pair for this call, or None. The `bash-pretool.py` entry point."""
+    if not in_batch(str(call.cwd), os.environ.get("CLAUDE_PROJECT_DIR")):
         return None
-    found = problem(command, Path(cwd or Path.cwd()))
+    found = problem(call.command, call.cwd)
     return ("deny", found) if found else None
 
 
 def main() -> int:
     """Read the hook payload from stdin and emit the decision `decision` returns."""
-    payload = read_payload()
-    verdict = decision(payload) if payload else None
+    event = read_payload()
+    call = event.bash() if event else None
+    verdict = decision(call) if call else None
     if verdict:
         emit_pretooluse_decision("block-batch-full-suite", *verdict)
     return 0

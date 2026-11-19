@@ -13,6 +13,8 @@ import threading
 import types
 from pathlib import Path
 
+from _hook_common import parse_payload
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
 )
@@ -24,7 +26,7 @@ _spec.loader.exec_module(_mod)
 
 def _probes(**overrides):
     probes = {
-        "read_payload": lambda: {"source": "startup"},
+        "read_payload": lambda: parse_payload({"source": "startup"}),
         "target_problems": lambda: [],
         "master_moved_problems": lambda: [],
         "dirty_primary_problems": lambda: [],

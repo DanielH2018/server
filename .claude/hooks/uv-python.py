@@ -60,6 +60,8 @@ the offsets.
 
 import re
 
+from _hook_common import BashCall
+
 # The programs that must not run on the system interpreter. `*.py` covers a script invoked by
 # its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so would
 # otherwise slip past every python-named pattern here. The path excludes `=`: a word like
@@ -253,11 +255,6 @@ def rewrite_command(cmd):
     return updated if updated != cmd else None
 
 
-def rewrite(payload):
-    """The rewritten Bash command for `payload`, or None to leave the call as typed."""
-    if payload.get("tool_name") != "Bash":
-        return None
-    cmd = (payload.get("tool_input") or {}).get("command") or ""
-    if not cmd:
-        return None
-    return rewrite_command(cmd)
+def rewrite(call: BashCall):
+    """The rewritten command of `call`, or None to leave the call as typed."""
+    return rewrite_command(call.command)
