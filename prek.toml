@@ -113,8 +113,10 @@ id = "validate-render-templates"
 name = "Validate rendered compose, shell, unit and host component templates"
 entry = "uv run --frozen python scripts/validate/render_templates.py"
 language = "system"
-pass_filenames = false
-# Everything a family renders or reads: every file under hosts/, because the units family
+# The entry point runs only the families whose `files` pattern in its FAMILIES table matches a
+# passed file. Serial, so a full sweep is one invocation and not one per argv batch.
+require_serial = true
+# The union of the families' patterns: every file under hosts/, because the units family
 # renders every host package and a package unit may be a static file; the inventory the renders
 # layer in; secret_rotation.yml, the plaintext census of SOPS names
 # (never values) the setup family allows; and the render's import closure.
