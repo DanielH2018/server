@@ -162,7 +162,10 @@ for the `cluster-vars` Kustomization and every Kustomization that depends on it
 
 Every `deploy-failed`, and every give-up
 (`merge-timeout`, `ci-red`, `ci-timeout`, `merge-conflict`, `pr-ci-red`), deployed
-nothing and re-runs safely.
+nothing and re-runs safely. To find why CI went red after `ci-red` or `pr-ci-red`, run
+`ghread run failures --pr <n>` or `ghread run failures <run-id>` first. It prints each failed
+job's test IDs and error lines in about 1 KB, where `ghread run logs --failed` prints 40 KB
+to 380 KB.
 
 **If the task comes back "stopped because the system is running low on memory", the landing was
 reaped, not failed.** Re-run the same command.

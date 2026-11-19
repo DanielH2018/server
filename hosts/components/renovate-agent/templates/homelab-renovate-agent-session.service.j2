@@ -79,5 +79,9 @@ ReadWritePaths={{ pins.exchange_dir }}/requests {{ pins.exchange_dir }}/out
 MemoryMax={{ pins.memory_max }}
 MemorySwapMax=0
 TasksMax={{ pins.tasks_max }}
+{% if t2_egress_enabled | default(false) %}
+# No session starts unfenced: the check refuses unless the egress table holds this uid's rules.
+ExecStartPre=+/usr/lib/homelab/t2-egress/t2-egress-check {{ pins.session_uid }}
+{% endif %}
 ExecStart={{ pins.tools_dir }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_session.py

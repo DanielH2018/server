@@ -120,6 +120,41 @@ loki.process "pods" {
     }
   }
 
+  // Drop the Flux controllers' routine success lines, 94% of their volume measured 2026-11-19.
+  // Only info lines go: a warning, an error, an apply that changed an object and a dispatched
+  // failure event still ship. A stuck dependency stays visible through `probe.py flux`.
+  // `--log-level=error` would hide the warnings too, so the cut is here.
+  stage.match {
+    selector = "{namespace=\"flux-system\", container=\"manager\"}"
+    stage.drop {
+      expression          = "^\\{\"level\":\"info\",[^}]*\"msg\":\"(?:Reconciliation finished in [^\"]*|artifact up-to-date with remote revision: [^\"]*|All dependencies are ready, proceeding with reconciliation|Dependencies do not meet ready condition, retrying in [^\"]*|event dropped for commit status providers due to missing commit metadata key)\""
+      drop_counter_reason = "flux_routine_reconcile"
+    }
+    stage.drop {
+      expression          = "^\\{\"level\":\"info\",.*\"msg\":\"dispatching event\",.*\"message\":\"(?:Reconciliation finished in [^\"]*|Dependencies do not meet ready condition, retrying in [^\"]*)\"\\}$"
+      drop_counter_reason = "flux_routine_event"
+    }
+    stage.drop {
+      expression          = "^\\{\"level\":\"info\",.*\"msg\":\"server-side apply completed\",.*\"output\":\\{(?:\"[^\"]+\":\"unchanged\",?)+\\}"
+      drop_counter_reason = "flux_unchanged_apply"
+    }
+  }
+
+  // Drop the CrowdSec LAPI's routine info lines, 91% of its volume measured 2026-11-19: the
+  // AppSec allowlist skips and the 2xx access lines of agent and bouncer calls. A global
+  // warn level would also hide the ban and `WAF block:` lines, which log at info.
+  stage.match {
+    selector = "{namespace=\"{{ k8s_namespace }}\", container=\"crowdsec\"}"
+    stage.drop {
+      expression          = "^time=\"[^\"]*\" level=info msg=\"[^\"]* is allowlisted by [^\"]*, skipping WAF processing\" module=acquisition[.]appsec "
+      drop_counter_reason = "crowdsec_allowlisted_waf_skip"
+    }
+    stage.drop {
+      expression          = "^time=\"[^\"]*\" level=info msg=\"[^ ]+ - \\[[^\\]]*\\] \\\\\"[A-Z]+ /v1/[^ ]* HTTP/1[.]1 2[0-9][0-9] .*\" module=lapi$"
+      drop_counter_reason = "crowdsec_lapi_routine_access"
+    }
+  }
+
   // Redact the Google Cast user's refresh_token out of Home Assistant's lines (issue #3015).
   // HA formats the `cast_show_view` signal args into the message whenever a cast fails in
   // `_handle_signal_show_view`, and those args carry the cast system user's refresh_token in

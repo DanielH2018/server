@@ -36,24 +36,27 @@
 # fires only while the scrape succeeds and the series is absent, so a dead exporter pages
 # once through ScrapeTargetDown and these arms stay silent. Each `for:` is at least
 # ScrapeTargetDown's 10m anyway. The per-host coverage floors are stricter than the bridge's
-# cross-host floors (HOST_ORIGINS_MIN and its siblings): one host going quiet does not hide
+# cross-host floors: one host going quiet does not hide
 # behind another host's answer. A vanished scrape target, with no `up` series at all, is A3's
 # census.
 #
-# `for:` IS N x 300s for a bridge streak of N cycles: HOST_ORIGINS_CONSECUTIVE (3) is 15m,
-# HWMON_TEMP_ORIGINS_CONSECUTIVE (5) is 25m, HWMON_TEMP_CONSECUTIVE (12) is 1h,
-# THERMAL_THROTTLE_CONSECUTIVE (3) is 15m, UPS_CONSECUTIVE (2) and CLAUDE_CGROUP_CONSECUTIVE (2)
-# are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
-# no `for:`. The numeric literals equal the retired bridge env keys, which
-# tests/services/test_host_check_rule_literals.py holds as RETIRED_ENV.
+# `for:` IS N x 300s for a bridge streak of N cycles: host coverage (3) is 15m,
+# temperature coverage (5) is 25m, temperature (12) is 1h, thermal throttling (3) is 15m, and
+# the UPS and Claude cgroup streaks (2) are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
+# no `for:`. The numeric literals are the retired bridge env keys' values. A ported
+# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against.
 #
-# DROPPED ON PURPOSE. The retired-uid note on the Memory tile never paged, so it has no
-# rule. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
+# DROPPED ON PURPOSE. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
+# DECIDED: a Claude Code process running as a retired uid never pages. As an arm it held the
+# Memory tile DOWN near-continuously, because background jobs and fan-out still started as the
+# operator's uid, and it masked any real memory page, so no rule here reads it.
+# `claude_uid_processes` is still written, and `test_claude_cgroup_metrics.py` holds the writer.
 groups:
   - name: hosts
     rules:
       # The bridge's check_disk for daniel-box: any of /, /boot and /boot/efi over DISK_MAX_PCT
       # (90). Percentage per series, so avail and size come from the same device.
+      # DECIDED: over 90% of /, /boot or /boot/efi, the bridge's value kept as is.
       - alert: HostDiskFull
         expr: |
           max by (origin, job, instance, mountpoint) (
@@ -94,8 +97,9 @@ groups:
             {{ $labels.origin }} has its {{ $labels.mountpoint }} filesystem over 90% full. Longhorn
             stops scheduling replicas on a node at 75%. Read `df -h` on the host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
-      # The bridge's check_mem host arm: MemAvailable under 100 - MEM_MAX_PCT (90) percent of
+      # The bridge's check_mem host arm: MemAvailable under 100 - 90 percent of
       # MemTotal.
+      # DECIDED: 90% used, the bridge's value kept as is, and a warning.
       - alert: HostMemoryHigh
         expr: |
           100 * (
@@ -197,9 +201,8 @@ groups:
             The PSI `full` stall rate of {{ $labels.origin }}/{{ $labels.cgroup }} is over 10% of
             the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which
             is the 2026-09-05 shape (#1243) while it is still only a stall.
-      # Arm 3: an expected cgroup is missing for its host, per (origin, cgroup) as in
-      # CLAUDE_CGROUP_EXPECTED. tests/services/test_host_check_rule_literals.py
-      # holds the pairs equal to that env key. `max_over_time(...[5m:1m])` holds the arm true
+      # Arm 3: an expected cgroup is missing for its host, per (origin, cgroup).
+      # tests/services/test_host_check_rule_literals.py holds the pairs to the inventory. `max_over_time(...[5m:1m])` holds the arm true
       # through a crash-looping unit's brief reappearances, which reset a bare `for:` while the
       # bridge's two sampled cycles still page. A gap under 5m stays quiet.
       - alert: ClaudeCgroupNotReporting
@@ -247,13 +250,34 @@ groups:
             $labels.cgroup }}, so that cgroup is not being checked. Read /var/lib/node-exporter-
             textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host.
       # The bridge's check_host_temp temperature arm (hwmon_temp_limits). A sensor's limit is
-      # HWMON_TEMP_RATIO (0.90) of its first plausible source, in order:
+      # 0.90 of its first plausible source, in order:
       # node_hwmon_temp_max_celsius, node_hwmon_temp_crit_celsius, then the part's rating
-      # (HWMON_TEMP_RATED_MAX_C, daniel-box's k10temp/Tctl at 100). A value outside
-      # (HWMON_TEMP_MIN_PLAUSIBLE_C 20, HWMON_TEMP_MAX_PLAUSIBLE_C 150] is no declaration, which
-      # drops the 65261.85 sentinel. A sensor with none takes HWMON_TEMP_FALLBACK_C (85) raw. Every
+      # (daniel-box's k10temp/Tctl at 100). A value outside
+      # (20, 150] is no declaration, which
+      # drops the 65261.85 sentinel. A sensor with none takes a flat 85 raw. Every
       # series of one sensor shares one label set, so `or` keeps the first source that answers.
-      # Chips matching nvme_ are Scrutiny's. `for: 1h` is HWMON_TEMP_CONSECUTIVE (12) x 300s.
+      # Chips matching nvme_ are Scrutiny's. `for: 1h` is the bridge's 12-cycle streak x 300s.
+      # DECIDED: HostTemperatureHot holds for 1h (12 x 300s), not the 15 minutes (3 cycles) the
+      # bridge shipped with. daniel-box's k10temp/Tctl boosts into the low 90s as ordinary
+      # workload. Measured over a true 7 days (a [30d] query here truncates to about 11.4) at the
+      # 5-minute loop cadence: 12.0% of samples above the 90C limit, p95 93.1C, max 93.75C against
+      # AMD's rated 100C, in 115 excursions. Run lengths in cycles were 66x1, 23x2, 12x3, 5x4,
+      # 2x5, 3x6, 3x7, 1x8, then ONE of 18 (90 minutes). Nothing sits between 9 and 17 cycles, so
+      # 12 is 1.5x the largest ordinary excursion and half the outlier. Pages per week by
+      # threshold were 3 -> 26, 5 -> 10, 8 -> 2, 12 -> 1, 19 -> 0. Twelve keeps the one 90-minute
+      # excursion paging on purpose: 90 minutes pinned above 90C is the shape of a cooling fault,
+      # and a threshold fitted to silence it would leave no margin to detect one.
+      # DECIDED: a declared hwmon max or crit is sanity-bounded (20..150C), not trusted. Three of
+      # the ten max-declaring sensors declare 65261.85, a 0xFFFF sentinel encoded as a number, and
+      # a ratio of it is unreachable, so those sensors would read green through a fire. Such a
+      # value is read as undeclared and falls through to crit, then the flat 85C fallback.
+      # DECIDED: daniel-box's k10temp/Tctl takes its limit from AMD's published Tjmax of 100C (the
+      # Ryzen 7 8845HS page, `Max. Operating Temperature (Tjmax)`), so it lands on 90C, the same
+      # effective limit daniel-server's coretemp carries from its own declared max. k10temp
+      # subtracts no Tctl offset on this CPU (the driver's `tctl_offset_table` holds six
+      # family-0x17 SKUs), so Tctl is the junction temperature. amd.com answers a plain fetch
+      # only with a browser User-Agent.
+      # DECIDED: `for: 1h`, the 12-cycle hold the first marker above measures.
       - alert: HostTemperatureHot
         expr: |
           node_hwmon_temp_celsius{origin="daniel-box", chip!~".*nvme_.*"}
@@ -323,8 +347,9 @@ groups:
             crit, else its rated maximum, else a flat 85C. Read the sensor's chip on
             Infrastructure/hardware-thermal.
       # The bridge's empty-vector and per-host coverage arm of check_host_temp
-      # (HWMON_TEMP_ORIGINS_MIN 3, over the series that survive the nvme_ exclusion). `for: 25m` is
-      # HWMON_TEMP_ORIGINS_CONSECUTIVE (5) x 300s.
+      # (3 hosts, over the series that survive the nvme_ exclusion). `for: 25m` is the bridge's
+      # 5-cycle streak x 300s.
+      # DECIDED: `for: 25m`, the bridge's 5-cycle streak kept as is.
       - alert: HostTemperatureNotReporting
         expr: |
           up{job="node", origin="daniel-box"} == 1
@@ -371,7 +396,8 @@ groups:
             node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its
             temperature. Read the hwmon collector on the host.
       # The bridge's thermal-throttle arm of check_host_temp. `for: 15m` is
-      # THERMAL_THROTTLE_CONSECUTIVE (3) x 300s. daniel-pi publishes no Processor cooling device.
+      # the bridge's 3-cycle streak x 300s. daniel-pi publishes no Processor cooling device.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle streak kept as is.
       - alert: CPUThermalThrottled
         expr: |
           max by (origin, job, instance) (
@@ -501,11 +527,12 @@ groups:
             collector on the host.
       # The bridge's estate-wide floors (_host_origin_shortfall), and the zero-series case: a
       # vanished scrape target leaves every per-host arm above with nothing to read, and `or
-      # vector(0)` turns an empty count into 0 < 2. HOST_ORIGINS_MIN is 2 for disk and memory, which
-      # exclude daniel-pi by name, and THERMAL_THROTTLE_ORIGINS_MIN is 2 because the Pi publishes no
+      # vector(0)` turns an empty count into 0 < 2. The floor is 2 for disk and memory, which
+      # exclude daniel-pi by name, and 2 for thermal throttling because the Pi publishes no
       # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
       # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
       # as well as through ScrapeTargetDown, the safe direction.
+      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is.
       - alert: HostCoverageShortfall
         expr: |
           label_replace(
@@ -537,8 +564,9 @@ groups:
             The {{ $labels.arm }} check reads one series family from every node-exporter and needs
             two hosts answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not
             idle. Read the node scrape targets on Prometheus.
-      # HWMON_TEMP_ORIGINS_MIN (3) over the series that survive the nvme_ exclusion, with `for: 25m`
-      # for HWMON_TEMP_ORIGINS_CONSECUTIVE (5) x 300s.
+      # A floor of 3 hosts over the series that survive the nvme_ exclusion, with `for: 25m` for
+      # the bridge's 5-cycle streak x 300s.
+      # DECIDED: a floor of 3 hosts, the bridge's value kept as is.
       - alert: HostTemperatureCoverageShortfall
         expr: |
           label_replace(
@@ -633,6 +661,7 @@ groups:
             below its critical threshold, which corrupts SD cards and stalls USB devices. Check the
             power supply and cable. A clean reading later does not undo the damage.
       # The Prometheus half of the pi_pressure check: load5 per core over 1.5.
+      # DECIDED: load5 over 1.5 per core, the bridge's value kept as is.
       - alert: PiLoadHigh
         expr: |
           node_load5{origin="daniel-pi"}
@@ -648,6 +677,7 @@ groups:
             daniel-pi has a 5-minute load average of {{ $value | printf "%.2f" }} per core, over
             1.5. Read `top` on the host for the process behind it.
       # Available memory under 50 MB.
+      # DECIDED: 50 MB available, the bridge's value kept as is.
       - alert: PiMemoryLow
         expr: |
           node_memory_MemAvailable_bytes{origin="daniel-pi"} < 50 * 1048576
@@ -661,6 +691,7 @@ groups:
             when that runs out. Read `free -m` and `docker stats` on the host.
       # Fullness per block device, not per mount: the SD card is mounted twice. tmpfs is out,
       # because log2ram's /var/log fills and flushes by design.
+      # DECIDED: over 90% of a block device, the bridge's value kept as is.
       - alert: PiDiskFull
         expr: |
           max by (origin, job, instance, device) (
@@ -762,8 +793,13 @@ groups:
             hwmon collector on the host.
       # The bridge's check_ups, mains-loss arm. It is judged first and alone: while it is red the
       # charge, runtime and replace-battery rules below stay silent through `unless`, because they
-      # read the runway and a runway arm adds nothing to an outage. `for: 10m` is UPS_CONSECUTIVE
-      # (2) x 300s. One UPS, so `max by (job, instance)` equals the bridge's bare max.
+      # read the runway and a runway arm adds nothing to an outage. `for: 10m` is the bridge's
+      # 2-cycle streak x 300s. One UPS, so `max by (job, instance)` equals the bridge's bare max.
+      # DECIDED: every UPS arm reads nut-exporter alone. The Home Assistant re-export of the same
+      # UPS read the same upsd, so it covered only nut-exporter dying while upsd lived, which
+      # `ScrapeTargetDown{job="nut"}` already pages. Units are nut's own: charge in percent,
+      # runtime in seconds.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSOnBattery
         expr: |
           max by (job, instance) (network_ups_tools_ups_status{flag="OB"}) > 0.5
@@ -779,6 +815,8 @@ groups:
             the load. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       # Charge under UPS_CHARGE_MIN_PCT (50), strict as the bridge's `<`.
+      # DECIDED: under 50% charge on mains, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSBatteryLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_charge) < 50
@@ -795,6 +833,8 @@ groups:
             minutes. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       # Estimated runtime under UPS_RUNTIME_MIN_S (300).
+      # DECIDED: under 300s of runtime, the bridge's value kept as is.
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSRuntimeLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_runtime) < 300
@@ -811,6 +851,7 @@ groups:
             10 minutes. The battery has aged. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
       # The UPS's own replace-battery verdict (the NUT RB flag).
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSReplaceBattery
         expr: |
           max by (job, instance) (network_ups_tools_ups_status{flag="RB"}) > 0.5

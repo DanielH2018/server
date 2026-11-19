@@ -36,6 +36,9 @@ token, in its own clone, inside `homelab-renovate-agent-session.service`. The ru
 `renovate-agent-ctl`, which alone holds the write token and may start the session and lander
 units; it starts the session and waits for it (`files/renovate_session.py`). It closes, comments on or re-runs a PR only by writing a request file,
 which the runner carries out with its own token after the session ends (`files/run_requests.py`).
+It reaches the network only through the T2 egress proxy, `hosts/components/t2-egress/`: the
+nftables fence refuses every other connection its uid opens, squid admits only the hosts its
+config lists, and the session unit refuses to start unless the fence holds its uid's rules.
 It lands nothing: it nominates a PR with a `land` request, and after the session ends the
 runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.

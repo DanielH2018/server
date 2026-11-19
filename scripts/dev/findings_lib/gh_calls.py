@@ -13,6 +13,7 @@ calling `run` instead.
 """
 
 import json
+from collections.abc import Mapping
 import sys
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -27,6 +28,7 @@ from dev.findings_lib.issue_model import (
     PR_REPO,
     REGISTER_AUTHOR,
     comment_cap_warning,
+    field_value,
     find_by_fingerprint,
     issue_author,
     pr_refs,
@@ -117,33 +119,40 @@ def attach_fields(issues: list[dict], tools: FindingsTools) -> list[dict]:
 
 def set_fields(
     number: int | str,
-    values: dict[str, str | None],
+    values: Mapping[str, str | None],
     tools: FindingsTools,
     dry_run: bool,
+    *,
+    issue_type: str | None = None,
 ) -> None:
-    """Sets each issue field in ``values`` on issue ``number``; None clears that field.
+    """Sets each issue field in ``values``, and ``issue_type`` if given, on issue ``number``.
 
-    ``number`` is a string only under ``dry_run``, where `open` names an issue not yet made.
+    A None value clears that field. ``number`` is a string only under ``dry_run``, where
+    `open` names an issue not yet made.
 
-    A single-select value is the option's name. Raises LookupError naming a field or an
-    option the account lacks, so the caller fails rather than silently dropping the value.
+    A single-select value is the option's name, and ``issue_type`` is the type's name. Raises
+    LookupError naming a field, an option or a type the account lacks, so the caller fails
+    rather than silently dropping the value. Both writes go in one mutation document.
     """
     if dry_run:
         for name, value in values.items():
             print(
                 f"gh api graphql setIssueFieldValue #{number} {name}={value or '<clear>'}"
             )
+        if issue_type:
+            print(f"gh api graphql updateIssue #{number} issueType={issue_type}")
         return
     query = (
         "query($owner: String!, $name: String!) {\n"
         " repository(owner: $owner, name: $name) {\n"
         f"  issue(number: {number}) {{ id }}\n"
+        "  issueTypes(first: 30) { nodes { id name } }\n"
         "  issueFields(first: 30) { nodes {\n"
         "   ... on IssueFieldSingleSelect { id name options { id name } }\n"
         "   ... on IssueFieldDate { id name } } }\n }\n}"
     )
     repository = as_object(_graphql(tools, query).get("repository"), "repository")
-    issue_id = as_object(repository.get("issue"), f"issue #{number}")["id"]
+    issue_id = json.dumps(as_object(repository.get("issue"), f"issue #{number}")["id"])
     defs = {f.get("name"): f for f in _nodes(repository, "issueFields")}
     entries = []
     for name, value in values.items():
@@ -167,11 +176,52 @@ def set_fields(
             entries.append(
                 f"{{fieldId: {json.dumps(field['id'])}, dateValue: {json.dumps(value)}}}"
             )
-    mutation = (
-        f"mutation {{ setIssueFieldValue(input: {{issueId: {json.dumps(issue_id)}, "
-        f"issueFields: [{', '.join(entries)}]}}) {{ issue {{ id }} }} }}"
-    )
-    tools.gh_json("api", "graphql", "-f", f"query={mutation}", timeout=REST_TIMEOUT)
+    writes = []
+    if entries:
+        writes.append(
+            f"setIssueFieldValue(input: {{issueId: {issue_id}, "
+            f"issueFields: [{', '.join(entries)}]}}) {{ issue {{ id }} }}"
+        )
+    if issue_type:
+        types = {t.get("name"): t["id"] for t in _nodes(repository, "issueTypes")}
+        if issue_type not in types:
+            raise LookupError(
+                f'no "{issue_type}" issue type; add it under Settings > Planning > Issue types'
+            )
+        writes.append(
+            f"updateIssue(input: {{id: {issue_id}, "
+            f"issueTypeId: {json.dumps(types[issue_type])}}}) {{ issue {{ id }} }}"
+        )
+    if writes:
+        mutation = (
+            "mutation { " + " ".join(f"w{i}: {w}" for i, w in enumerate(writes)) + " }"
+        )
+        tools.gh_json("api", "graphql", "-f", f"query={mutation}", timeout=REST_TIMEOUT)
+
+
+def fill_missing(
+    issue: dict,
+    values: dict[str, str],
+    issue_type: str,
+    tools: FindingsTools,
+    dry_run: bool,
+) -> None:
+    """Sets each of ``values`` and ``issue_type`` that ``issue`` does not hold yet.
+
+    The repair for an `open` whose second write failed after `gh issue create`: re-running
+    the same `open` fills only what that write left unset, and never overwrites a value
+    set since.
+    """
+    missing = {name: v for name, v in values.items() if not field_value(issue, name)}
+    held_type = (issue.get("issueType") or {}).get("name")
+    if missing or not held_type:
+        set_fields(
+            issue["number"],
+            missing,
+            tools,
+            dry_run,
+            issue_type=None if held_type else issue_type,
+        )
 
 
 def _operator_issues(issues: list[dict]) -> list[dict]:
@@ -467,6 +517,7 @@ def threaded_issues(raw: list[dict], tools: FindingsTools) -> list[dict]:
                 "title": i.get("title") or "",
                 "state": "OPEN",
                 "labels": [{"name": lab["name"]} for lab in i.get("labels") or []],
+                "issueType": i.get("type"),
                 "body": i.get("body") or "",
                 "createdAt": i.get("created_at") or "",
                 "url": i.get("html_url") or "",

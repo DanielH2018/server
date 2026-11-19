@@ -520,10 +520,13 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   and reads the clone and its toolchain read-only
   (`hosts/tests/test_claude_triage.py::test_the_session_shares_only_read_access_with_the_controller`).
   Neither is `claude` (dotfiles#967's I1).
-  The session reaches the network through the T2 egress proxy, `hosts/components/t2-egress/`,
-  and its kubeconfig names the API at the host's LAN address, so that request goes through the
-  proxy too
+  The session reaches the network only through the T2 egress proxy,
+  `hosts/components/t2-egress/`, whose nftables fence refuses every other connection its uid
+  opens, and whose squid admits only the hosts its config lists. Its kubeconfig names the API
+  at the host's LAN address, so that request goes through the proxy too
   (`hosts/lib/tests/test_t2_egress_component.py::test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address`).
+  The session unit refuses to start unless the fence holds its uid's rules
+  (`hosts/lib/tests/test_t2_egress_component.py::test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_triage_enabled`, false
   by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.

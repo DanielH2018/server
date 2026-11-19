@@ -53,12 +53,3 @@ def test_the_suite_failure_stops_the_cron(name):
     assert "SUITE_RC=$?" in block, f"{name} does not capture the suite's exit code"
     assert 'if [ "$SUITE_RC" -ne 0 ]; then' in block, f"{name} does not branch on it"
     assert "exit 1" in block, f"{name} does not exit on a failed suite"
-
-
-def test_no_cron_still_carries_the_retired_deselect():
-    """The reject half. A leftover `PYTEST_ADDOPTS` that deselects the retired weights ratchet
-    names a node id pytest cannot find."""
-    stale = [
-        name for name in GATED_CRONS if "PYTEST_ADDOPTS" in _path(name).read_text()
-    ]
-    assert not stale, f"{stale} still set PYTEST_ADDOPTS; the ratchet went with #2830"

@@ -10,13 +10,14 @@ Run: uv run pytest scripts/dev/tests/test_findings_open.py
 import subprocess
 
 import pytest
-from _findings_fakes import Fakes, aimed_at, build_tools
+from _findings_fakes import Fakes, aimed_at, build_tools, make_issue
 from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
     claim_comment,
     fingerprint,
+    kind,
     parse_verify_by,
 )
 from dev.findings_lib.plans import plan_open
@@ -250,6 +251,62 @@ def test_open_cli_prints_the_created_number(tmp_path, capsys, make_tools):
     assert "#42 created" in capsys.readouterr().out
 
 
+# --- the kind is the issue type -------------------------------------------------------------
+
+
+def _mutations(calls) -> list[str]:
+    return [
+        c[3]
+        for c in calls.gh_json
+        if c[:2] == ["api", "graphql"] and c[3].startswith("query=mutation")
+    ]
+
+
+def test_the_issue_type_outranks_a_kind_label():
+    issue = {**make_issue(1, labels=["kind/improvement"]), "issueType": {"name": "Gap"}}
+    assert kind(issue) == "gap"
+
+
+def test_an_addition_label_from_a_pre_type_session_reads_as_feature():
+    assert kind(make_issue(1, labels=["kind/addition"])) == "feature"
+
+
+def test_open_cli_types_the_new_issue_and_labels_no_kind(tmp_path, make_tools):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools()
+    assert findings.main(_open_argv(body), tools) == 0
+    create = next(c for c in calls.gh if c[:2] == ["issue", "create"])
+    assert not any(a.startswith("kind/") for a in create)
+    [write] = _mutations(calls)
+    assert 'issueTypeId: "IT_Gap"' in write and '"o_Low"' in write
+
+
+def test_open_cli_fills_the_type_and_severity_a_matched_issue_lacks(
+    tmp_path, make_tools
+):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    matched = make_issue(3, fp=fingerprint("T", None))
+    tools, calls = make_tools(Fakes(issues=[matched], view=matched))
+    assert findings.main(_open_argv(body), tools) == 0
+    [write] = _mutations(calls)
+    assert 'issueTypeId: "IT_Gap"' in write and '"o_Low"' in write
+
+
+def test_open_cli_leaves_a_matched_issue_that_holds_both_alone(tmp_path, make_tools):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    matched = {
+        **make_issue(3, fp=fingerprint("T", None)),
+        "fields": {"Severity": "High"},
+        "issueType": {"name": "Improvement"},
+    }
+    tools, calls = make_tools(Fakes(issues=[matched], view=matched))
+    assert findings.main(_open_argv(body), tools) == 0
+    assert _mutations(calls) == []
+
+
 # --- --repo: filing into another repo's register ----------------------------------------
 
 _OTHER = "DanielH2018/dotfiles"
@@ -265,7 +322,7 @@ def test_open_cli_with_repo_aims_every_read_and_write_there(tmp_path, make_tools
     finding on every run, so the reads carry the flag as well as the writes."""
     body = tmp_path / "b.md"
     body.write_text("B")
-    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"kind/gap"}))
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"claude"}))
     assert findings.main([*_open_argv(body), "--repo", _OTHER], tools) == 0
     assert {"label list", "issue list", "label create", "issue create"} <= _commands(
         calls
@@ -335,9 +392,9 @@ def test_open_propagates_a_create_failure(tmp_path, make_tools):
 def test_open_creates_a_missing_label_before_the_issue(tmp_path, make_tools):
     body = tmp_path / "b.md"
     body.write_text("B")
-    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"kind/gap"}))
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"claude"}))
     assert findings.main(_open_argv(body), tools) == 0
-    assert calls.gh[0][:3] == ["label", "create", "kind/gap"]
+    assert calls.gh[0][:3] == ["label", "create", "claude"]
     assert calls.gh[1][:2] == ["issue", "create"]
 
 

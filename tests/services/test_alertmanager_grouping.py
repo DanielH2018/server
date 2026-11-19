@@ -13,7 +13,7 @@ from lib.inventory_lists import host_names
 from test_alertmanager_routing import (
     DEPLOY_HOLD,
     PAGING,
-    host_sets,
+    rule_sets,
     inherited,
     route_tree,
 )
@@ -63,7 +63,7 @@ def test_a_hold_by_design_without_its_daily_route_is_flagged():
     assert inherited("repeat_interval", scan, tree) == ["6h"]
 
 
-@pytest.mark.parametrize("name", sorted(host_sets(shadow=False)))
+@pytest.mark.parametrize("name", sorted(rule_sets("host-checks.yaml", shadow=False)))
 def test_a_host_plane_alert_groups_by_alertname_alone(name):
     # fact: k8s/roles/observability/CLAUDE.md#Alert plane
     labels, receivers = PAGING[name]

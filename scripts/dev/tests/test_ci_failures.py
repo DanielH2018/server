@@ -109,12 +109,14 @@ def _pytest_job(job_id: int, *modules: str, job: str = "pytest") -> dict:
     )
 
 
-def _survey(tmp_path: Path, *runs: dict) -> subprocess.CompletedProcess[str]:
+def _survey(
+    tmp_path: Path, *runs: dict, flags: tuple[str, ...] = ()
+) -> subprocess.CompletedProcess[str]:
     """Run the survey over the week the issue names, against a fake GitHub holding `runs`."""
     fake = f"#!{sys.executable} -IS\n{FAKE_GITHUB.read_text()}"
     stubs = fake_bin(tmp_path / "bin", gh=fake, ghread=fake)
     (stubs / "world.json").write_text(json.dumps(runs))
-    argv = [sys.executable, str(SCRIPT), "--since", SINCE, "--until", UNTIL]
+    argv = [sys.executable, str(SCRIPT), "--since", SINCE, "--until", UNTIL, *flags]
     done = run(argv, cwd=REPO, stub_bin=stubs)
     assert done.returncode == 0, (
         f"ci_failures.py exited {done.returncode}: {done.stderr}"
@@ -143,7 +145,7 @@ def _rerun_green_on_master() -> dict:
 
 
 def test_run_green_on_rerun_is_reported_red_on_attempt_1(tmp_path):
-    out = _survey(tmp_path, _rerun_green_on_master()).stdout
+    out = _survey(tmp_path, _rerun_green_on_master(), flags=("--all",)).stdout
     lines = [line for line in out.splitlines() if "42041106424" in line]
     assert lines, f"run 42041106424 is missing from the survey:\n{out}"
     attempts = {
@@ -330,7 +332,7 @@ def test_each_red_attempt_names_its_failed_steps(tmp_path):
         created="2026-11-05T15:00:00Z",
         event="pull_request",
     )
-    out = _survey(tmp_path, _rerun_green_on_master(), other).stdout
+    out = _survey(tmp_path, _rerun_green_on_master(), other, flags=("--all",)).stdout
     section = out.partition("\nred attempts\n")[2]
     blocks = re.split(r"\n(?=run \d+)", section.strip())
     by_run = {block.split()[1]: block for block in blocks}
@@ -343,3 +345,31 @@ def test_each_red_attempt_names_its_failed_steps(tmp_path):
     assert (
         "pytest / Run the suite / tests/repo/test_named.py" in (by_run["47000000001"])
     ), section
+
+
+def test_an_empty_flaky_tally_is_one_line(tmp_path):
+    still_red = _run(48000000001, _attempt(_pytest_job(98000000001, "test_broken")))
+    out = _survey(tmp_path, still_red).stdout
+    lines = out.splitlines()
+    flaky = [n for n, line in enumerate(lines) if re.match(r"\d+ flaky", line)]
+    assert len(flaky) == 1, f"want one flaky line:\n{out}"
+    assert lines[flaky[0]].startswith("0 flaky"), out
+    assert not lines[flaky[0] + 1].startswith("count"), (
+        f"an empty tally kept its header:\n{out}"
+    )
+
+
+def test_each_red_attempt_is_listed_only_under_all(tmp_path):
+    red = _run(48000000002, _attempt(_pytest_job(98000000002, "test_listed")))
+    out = _survey(tmp_path, red).stdout
+    assert "run 48000000002" not in out, f"an attempt row printed without --all:\n{out}"
+    assert "--all to list" in out.splitlines()[0], out
+    listed = _survey(tmp_path, red, flags=("--all",)).stdout
+    assert "run 48000000002 attempt 1" in listed, listed
+    assert "--all to list" not in listed.splitlines()[0], listed
+
+
+def test_the_last_line_counts_red_and_flaky_attempts(tmp_path):
+    still_red = _run(48000000003, _attempt(_pytest_job(98000000003, "test_broken")))
+    out = _survey(tmp_path, _rerun_green_on_master(), still_red).stdout
+    assert out.splitlines()[-1] == "CI-FAILURES: red=2 flaky=1", out

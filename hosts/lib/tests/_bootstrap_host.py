@@ -17,13 +17,16 @@ from pathlib import Path
 
 from lib.proc_testing import write_exec
 from lib.repo_paths import REPO
+from validate.validate_lib.bootstrap_plan import kit_pins
 
 SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
 KEYRING = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 INSTALLED_KEYRING = "usr/share/keyrings/homelab-archive-keyring.gpg"
 SOURCES = "etc/apt/sources.list.d/homelab.sources"
 AGE_KEY = "etc/homelab/age.key"
-NFPM_ARCHIVE = "nfpm_2.48.0_Linux_x86_64.tar.gz"
+NFPM_ARCHIVE = next(
+    name for name in kit_pins(SCRIPT.read_text()) if name.startswith("nfpm_")
+)
 UV_ARCHIVE = "uv-x86_64-unknown-linux-gnu.tar.gz"
 
 AGENT_ENV = {
