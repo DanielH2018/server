@@ -14,7 +14,7 @@ from typing import ClassVar
 
 import homelab_tool_fetch
 import pytest
-from lib import proc_testing
+from lib import proc_testing, yaml_fast
 from lib.repo_paths import REPO
 from validate import host_packages
 
@@ -208,6 +208,15 @@ def test_the_same_tree_renders_the_same_fixture(tmp_path):
 
 def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
     assert host_packages.fixture_changed(tmp_path, REPO)
+
+
+def test_every_case_job_is_a_job_of_the_ci_workflow():
+    """A renamed job reads as None on both sides, so the jobs arm would never fire for it."""
+    jobs = yaml_fast.safe_load((REPO / host_packages.CI_WORKFLOW).read_text())["jobs"]
+    missing = [job for job in host_packages.CASE_JOBS if job not in jobs]
+    assert not missing, (
+        f"CASE_JOBS names {missing}, which {host_packages.CI_WORKFLOW} lacks"
+    )
 
 
 _CASE_INPUTS = ["hosts/lib/tests/container/", "scripts/validate/host_package_cases.py"]
