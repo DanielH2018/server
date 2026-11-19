@@ -3,9 +3,16 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_launch_gates.py
 """
 
+import dataclasses
 import json
+import os
 import socket
+import threading
+from concurrent.futures import ThreadPoolExecutor, wait
 
+import pytest
+
+from fanout_lib import launch_lock
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main
@@ -225,3 +232,136 @@ def test_a_live_batch_in_another_repo_does_not_hold_the_same_issue_number(tmp_pa
     save(Manifest("20260101T000010Z", "o", [live]), root=tmp_path)
     tools, _ = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1,2") == 0
+
+
+def test_two_interleaved_launches_cannot_both_pass_the_live_batch_cap(tmp_path):
+    """The second launch starts while the first is between its gates and its manifest save.
+
+    daniel-box holds 5 of its 6, so each launch alone fits and the two together do not.
+    """
+    reply = _running(tmp_path, "daniel-box", 5)
+    placing, release = threading.Event(), threading.Event()
+    tools, run = fake_tools(answers={"daniel-box": reply}, issues=CLAIMED)
+
+    def stopped_at_the_launch_call(host, command, timeout, stdin=None):
+        if "worktree add" in command:
+            placing.set()
+            assert release.wait(30)
+        return run(host, command, timeout, stdin)
+
+    first_tools = dataclasses.replace(tools, run=stopped_at_the_launch_call)
+    pinned = ("--host", "daniel-box", "--batch")
+    with ThreadPoolExecutor(2) as pool:
+        first = pool.submit(_launch, first_tools, tmp_path, *pinned, "1")
+        assert placing.wait(30)
+        second_tools, _ = fake_tools(answers={"daniel-box": reply}, issues=CLAIMED)
+        second = pool.submit(_launch, second_tools, tmp_path, *pinned, "2")
+        # Long enough for an unserialised second launch to run every gate and return.
+        wait([second], timeout=1)
+        release.set()
+    assert (first.result(), second.result()) == (0, 3)
+
+
+def test_a_launch_that_cannot_take_the_lock_exits_8_naming_the_holder(tmp_path, capsys):
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
+    with launch_lock.held(tmp_path, lambda: "20260101T000010Z"):
+        code = _launch(tools, tmp_path, "--batch", "1", "--lock-wait", "0.05")
+    assert code == 8
+    holder = f"launch lock held by pid {os.getpid()} (run 20260101T000010Z)"
+    assert holder in capsys.readouterr().err
+    assert not run.calls and not run.issue_fetches
+
+
+ALERTS = "scripts/diagnostics/probe_lib/alerts.py"
+SOPS = "secrets/secrets.yml"
+HELD_BRANCH = "worktree-fanout-91"
+
+
+def _held_elsewhere(tmp_path, cited):
+    """Batch 91, uncleaned, in a run another coordinator launched on daniel-box."""
+    held = Batch(
+        "91", "daniel-box", "/w", HELD_BRANCH, "fanout-91", [91], "t", cited_paths=cited
+    )
+    save(Manifest("20260101T000010Z", "worktree-project-a", [held]), root=tmp_path)
+
+
+def _citing(path):
+    """Issue 1 for the new batch and issue 91 for the held one, both citing `path`."""
+    return [Issue(n, "t", f"`{path}` drops a row", ("claude",)) for n in (1, 91)]
+
+
+@pytest.mark.parametrize("recorded", [(ALERTS,), None], ids=["recorded", "legacy"])
+def test_launch_refuses_a_file_a_batch_with_an_open_pr_in_another_run_cites(
+    tmp_path, capsys, recorded
+):
+    """A batch saved before `cited_paths` existed is read from its issue bodies instead."""
+    _held_elsewhere(tmp_path, recorded)
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=_citing(ALERTS),
+        open_prs={HELD_BRANCH},
+    )
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 1
+    assert not run.calls
+    err = capsys.readouterr().err
+    assert (
+        f"{ALERTS}: batch 1 cites it; batch 91 holds it with an open PR "
+        "(run 20260101T000010Z, orchestrator branch `worktree-project-a`)"
+    ) in err
+
+
+def test_a_standing_batch_with_a_stopped_unit_and_no_open_pr_holds_no_file(tmp_path):
+    _held_elsewhere(tmp_path, (ALERTS,))
+    reply = _headroom_with(_unit_state("91", running=False))
+    tools, _ = fake_tools(answers={"daniel-box": reply}, issues=_citing(ALERTS))
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 0
+
+
+def test_a_batch_whose_agent_still_runs_holds_its_files_before_it_opens_a_pr(
+    tmp_path, capsys
+):
+    _held_elsewhere(tmp_path, (ALERTS,))
+    reply = _headroom_with(_unit_state("91", running=True))
+    tools, _ = fake_tools(answers={"daniel-box": reply}, issues=_citing(ALERTS))
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 1
+    assert f"{ALERTS}: batch 1 cites it; batch 91 holds it" in capsys.readouterr().err
+
+
+def test_open_prs_that_cannot_be_read_refuse_the_launch(tmp_path, capsys):
+    _held_elsewhere(tmp_path, (ALERTS,))
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)}, issues=_citing(ALERTS), open_prs=None
+    )
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 1
+    assert not run.calls
+    assert "could not read the open PRs" in capsys.readouterr().err
+
+
+def test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds(
+    tmp_path, capsys
+):
+    # fact: .claude/skills/issue-fanout/SKILL.md#1. Triage
+    _held_elsewhere(tmp_path, (SOPS,))
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=_citing(SOPS),
+        open_prs={HELD_BRANCH},
+    )
+    argv = ("--host", "daniel-box", "--batch", "1", "--allow-shared-file", SOPS)
+    assert _launch(tools, tmp_path, *argv) == 1
+    assert not run.calls
+    assert "--allow-shared-file cannot excuse this path" in capsys.readouterr().err
+
+
+def test_an_excused_file_is_recorded_on_the_batch_that_was_let_through(tmp_path):
+    _held_elsewhere(tmp_path, (ALERTS,))
+    tools, _ = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=_citing(ALERTS),
+        open_prs={HELD_BRANCH},
+    )
+    argv = ("--host", "daniel-box", "--batch", "1", "--allow-shared-file", ALERTS)
+    assert _launch(tools, tmp_path, *argv) == 0
+    new_run = max(tmp_path.glob("*.json"))
+    (batch,) = json.loads(new_run.read_text())["batches"]
+    assert (batch["cited_paths"], batch["excused_paths"]) == ([ALERTS], [ALERTS])
