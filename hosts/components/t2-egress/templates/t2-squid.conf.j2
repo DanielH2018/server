@@ -1,11 +1,24 @@
 # Shipped by daniel-box's package (the t2-egress component): the T2 sessions' egress proxy
 # (dotfiles#967 I5). Each session unit points HTTPS_PROXY and HTTP_PROXY at t2_egress_proxy.
 #
+{#- The in-cluster reads: each host's GET paths, the ones probe.py builds. -#}
+{% set reads = [
+  {"name": "prom", "host": "prometheus.local." ~ domain, "paths": "^/api/v1/(query|query_range|targets)(\\?|$)"},
+  {"name": "am", "host": "alertmanager.local." ~ domain, "paths": "^/api/v2/(alerts|silences)(\\?|$)"},
+  {"name": "loki", "host": "loki-homelab.local." ~ domain, "paths": "^/loki/api/v1/(labels|query_range)(\\?|$)"},
+] -%}
 # The fence in t2-egress.nft lets the session uids reach this port and nothing else, so this
-# allowlist is everything a session can reach. It admits a CONNECT from loopback to a listed
-# host and port, and refuses the rest with a 403, which the access log records. The hosts are
-# literals here, not inventory values, so no host_vars entry widens the list. They are what the
-# B3-1 shadow run measured on 2026-11-19, and the operator ruled the last two in.
+# allowlist is everything a session can reach. Anything it does not admit gets a 403, which the
+# access log records. The hosts are literals here, not inventory values, so no host_vars entry
+# widens the list. They are what the B3-1 shadow run measured on 2026-11-19, as the operator ruled.
+#
+# Two kinds of request pass:
+# - A CONNECT to an outside host on its port. squid cannot see inside the tunnel.
+# - A plain-HTTP GET to an in-cluster read host, on that host's paths. squid itself opens the TLS
+#   connection to Traefik, with the host's own name as SNI and Host, so the session cannot pick
+#   another route behind the same VIP. No `.local` name is ever a CONNECT destination, because
+#   a tunnel to Traefik's VIP would let the session choose any route inside it.
+# The observability Loki, which holds the T1 transcripts, is on neither list.
 #
 # Its logs go to files under /var/log/squid only. Alloy ships none of them, and the unit's drop-in
 # starts squid without -s, so no request text a session shaped reaches syslog or loki-homelab (I6).
@@ -18,21 +31,41 @@ http_access deny to_linklocal
 
 acl loopback src 127.0.0.0/8 ::1
 acl CONNECT method CONNECT
+acl read_method method GET HEAD
 acl https_port port 443
 acl k3s_port port 6443
 acl t2_https dstdomain api.anthropic.com
 acl t2_https dstdomain api.github.com
-acl t2_https dstdomain prometheus.local.daniel-hunter.com
-acl t2_https dstdomain alertmanager.local.daniel-hunter.com
 acl t2_https dstdomain results-receiver.actions.githubusercontent.com
 # TODO: https://github.com/DanielH2018/server/issues/9181 - name the caller of cafe.github.com.
 acl t2_https dstdomain cafe.github.com
 # The triage session's kubeconfig names the k3s API by daniel-box's LAN address.
 acl t2_k3s dst {{ server_ip }}
+{% for read in reads %}
+acl {{ read.name }}_host dstdomain {{ read.host }}
+acl {{ read.name }}_paths urlpath_regex {{ read.paths }}
+{% endfor %}
 
 http_access allow loopback CONNECT https_port t2_https
 http_access allow loopback CONNECT k3s_port t2_k3s
+{% for read in reads %}
+http_access allow loopback read_method {{ read.name }}_host {{ read.name }}_paths
+{% endfor %}
 http_access deny all
+
+# Each read host goes to its own peer over TLS, which sends the peer's name as SNI and verifies
+# Traefik's certificate. forceddomain rewrites the Host header to the peer's name, so a session's
+# own Host header cannot steer Traefik to another route. The OpenSSL build is required: the
+# GnuTLS one sends no SNI to a peer, and Traefik answers 421.
+# All three peers share Traefik's VIP, and squid pools server connections by address, so a
+# kept connection opened for one host would carry another host's request: none is kept.
+server_persistent_connections off
+{% for read in reads %}
+cache_peer {{ read.host }} parent 443 0 originserver no-query no-digest tls forceddomain={{ read.host }} name={{ read.name }}
+cache_peer_access {{ read.name }} allow {{ read.name }}_host
+cache_peer_access {{ read.name }} deny all
+never_direct allow {{ read.name }}_host
+{% endfor %}
 
 # A proxy, not a cache: nothing a session fetched is kept for a later run (I2).
 cache deny all
