@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-16 18:17 UTC
-generated_sha: 17f361985
+generated_at: 2026-11-19 06:17 UTC
+generated_sha: 74a6a49d0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,13 +12,13 @@ generated_sha: 17f361985
 
 # Networking
 
-37 routed k8s service(s).
+38 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
-11 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
+12 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
 
 
 ## Routes
@@ -60,6 +60,7 @@ generated_sha: 17f361985
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
+| vaultwarden | daniel-box | <span class="fqdn" data-host="vaultwarden.local">vaultwarden.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | zigbee2mqtt | daniel-box | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 

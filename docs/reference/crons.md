@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-15 20:19 UTC
-generated_sha: e20234d40
+generated_at: 2026-11-19 06:17 UTC
+generated_sha: 74a6a49d0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: e20234d40
 
 # Scheduled jobs
 
-61 job(s) scheduled by the host packages' timers.
+62 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -59,6 +59,7 @@ generated_sha: e20234d40
 | homelab-github-ruleset-drift.timer | `OnCalendar=*-*-* 06:40:00` | daniel-box | `root` | read the script | `hosts/components/github-checks/units/homelab-github-ruleset-drift.timer.j2` |
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
+| homelab-kubelet-shutdown-lock.timer | `OnCalendar=*:0/5` | daniel-server | `root` | read the script | `hosts/components/k3s-agent/units/homelab-kubelet-shutdown-lock.timer` |
 | homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
 | homelab-mkv-attachment-repair.timer | `OnCalendar=*:0/15:00` | daniel-box | `ubuntu` | read the script | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.timer.j2` |
