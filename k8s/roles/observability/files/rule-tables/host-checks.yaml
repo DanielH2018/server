@@ -755,9 +755,10 @@ groups:
       # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
       # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
       # timer that stopped firing, which pages nothing else. Not shadow, because no other
-      # check watches these timers. One rule per host whose host_vars arm the timer. Setting the
-      # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
-      # same PR. Each deadline is the one the service renders through
+      # check watches these timers. Each selector names the hosts whose inventory arms the timer,
+      # and hosts/tests/test_claude_timer_rule_literals.py fails a selector that takes a host the
+      # inventory does not arm. Setting the timer's flag false stops it, and the rule then fires
+      # on purpose: narrow the selector in the same PR. Each deadline is the one the service renders through
       # hosts/components/claude-code/templates/timer-textfile.j2, and
       # hosts/tests/test_claude_timer_rule_literals.py pins both literals to it.
       - alert: ClaudeCloneSyncNotReporting

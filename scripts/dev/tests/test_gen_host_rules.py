@@ -140,18 +140,13 @@ def test_a_rule_that_cannot_render_is_flagged(rule, message):
         g.expand([rule], FACTS)
 
 
-def test_every_inventory_and_armed_host_is_in_the_host_table_is_clean():
+def test_every_inventory_host_is_in_the_host_table_is_clean():
     inventory = g.host_names()
     assert FLEET <= set(inventory)
-    armed = g.armed_hosts(inventory)
-    assert FLEET <= armed
-    assert g.untabled_hosts(g.expected_hosts(), inventory, armed) == []
+    assert g.untabled_hosts(g.expected_hosts(), inventory) == []
 
 
-def test_a_host_missing_from_the_host_table_is_flagged():
-    table = {"daniel-box": {}}
-    assert g.untabled_hosts(table, ("daniel-box", "daniel-new"), {"daniel-armed"}) == [
-        "daniel-new is an inventory host and observability_expected_hosts does not list it",
-        "daniel-armed enables homelab-updater.timer and observability_expected_hosts does not "
-        "list it",
+def test_an_inventory_host_missing_from_the_host_table_is_flagged():
+    assert g.untabled_hosts({"daniel-box": {}}, ("daniel-box", "daniel-new")) == [
+        "daniel-new is an inventory host and observability_expected_hosts does not list it"
     ]

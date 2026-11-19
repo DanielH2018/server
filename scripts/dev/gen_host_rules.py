@@ -15,8 +15,7 @@ differs from the render; the `gen-host-rules` prek hook and
 THE HOST TABLE is `observability_expected_hosts` in the role's defaults: each host's scrape `job`
 and its `limit_seconds` for `HostUpdateStale`. A new host is one entry there. Every rule whose
 selector takes it gains a copy at the next render. The script refuses to render while an
-inventory host, or a host whose package enables `homelab-updater.timer`, has no entry, so every
-host gets its reconcile and update pages.
+inventory host has no entry, so every host gets its reconcile and update pages.
 
 A SELECTOR picks hosts from the host table:
 
@@ -78,35 +77,12 @@ def expected_hosts(role: Path = ROLE) -> dict[str, dict]:
     return _load(role / "defaults" / "main.yml")["observability_expected_hosts"]
 
 
-def armed_hosts(hosts: Iterable[str], repo: Path = REPO) -> set[str]:
-    """The hosts in `hosts` whose package enables `homelab-updater.timer`."""
-    return {
-        host
-        for host in hosts
-        if "homelab-updater.timer"
-        in (_load(repo / "hosts" / host / "package.yml").get("enable") or {})
-    }
-
-
-def untabled_hosts(
-    table: dict[str, dict], inventory: Iterable[str], armed: set[str]
-) -> list[str]:
-    """Each host the host table must list and does not, as a message, or nothing.
-
-    Args:
-        table: The host table, `observability_expected_hosts`.
-        inventory: The inventory's hosts.
-        armed: The hosts whose package enables `homelab-updater.timer`.
-    """
-    problems = [
+def untabled_hosts(table: dict[str, dict], inventory: Iterable[str]) -> list[str]:
+    """Each inventory host the host table does not list, as a message, or nothing."""
+    return [
         f"{host} is an inventory host and observability_expected_hosts does not list it"
         for host in sorted(set(inventory) - table.keys())
     ]
-    problems += [
-        f"{host} enables homelab-updater.timer and observability_expected_hosts does not list it"
-        for host in sorted(armed - table.keys() - set(inventory))
-    ]
-    return problems
 
 
 def host_facts(
@@ -257,7 +233,7 @@ def main(argv: list[str] | None = None, role: Path = ROLE) -> int:
     args = parser.parse_args(argv)
     table = expected_hosts(role)
     inventory = host_names()
-    missing = untabled_hosts(table, inventory, armed_hosts(inventory))
+    missing = untabled_hosts(table, inventory)
     if missing:
         print("\n".join(missing), file=sys.stderr)
         return 1

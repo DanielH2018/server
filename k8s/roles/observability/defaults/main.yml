@@ -333,8 +333,8 @@ observability_rule_groups:
 # The host table: every host, each with the scrape job that reads its node exporter and the age
 # in seconds past which its last successful update pages. scripts/dev/gen_host_rules.py renders
 # the host-checks and hosts rule groups from files/rule-tables/ over these hosts, one literal
-# copy per host a rule's selector takes, and refuses to render while an inventory host or a host
-# whose package enables homelab-updater.timer is missing here.
+# copy per host a rule's selector takes, and refuses to render while an inventory host is
+# missing here.
 # scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
 # longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
 # from the rendered timer and its drop-in. A host that ships homelab-docker-engine.timer also
