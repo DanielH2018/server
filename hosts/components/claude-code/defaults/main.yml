@@ -121,12 +121,12 @@ claude_code_fleet_memory_high: 20G
 # plane keeps three quarters. Same not-zero reasoning as the per-plane cap below.
 claude_code_fleet_swap_max: 2G
 
-# The fleet's CPU weight, against its root-cgroup siblings system.slice (100, where k3s runs)
-# and kubepods.slice (625, which kubelet sets). Range 1-10000. A weight only divides CPU under
-# contention, so an idle box still gives the fleet every core. At systemd's default of 100 the
-# fleet's test runs starve etcd until kube-controller-manager loses its lease and k3s exits.
-# 20 gives system.slice five times the fleet's share. No CPUQuota: a cap would idle cores the
-# homelab plane is not using.
+# The fleet's CPU weight, against its root-cgroup siblings system.slice (where k3s runs, at
+# k3s_system_slice_cpu_weight in hosts/components/k3s-server) and kubepods.slice (625 on
+# daniel-box, which kubelet sets). Range 1-10000. A weight only divides CPU under contention, so
+# an idle box still gives the fleet every core. At systemd's default of 100 the fleet's test runs
+# starve etcd until kube-controller-manager loses its lease and k3s exits. 20 ranks the fleet
+# below both siblings. No CPUQuota: a cap would idle cores the homelab plane is not using.
 claude_code_fleet_cpu_weight: 20
 
 # One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
@@ -501,7 +501,7 @@ claude_code_stop_alert_enabled: true
 # heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
 #
 # DECIDED: a key pair held equal by a test, not one shared key in group_vars/all.yml. A shared
-# key routes as a deploy-plane change only (docs/target-architecture/host/h2-shrink-host-plane.md).
+# key routes as a deploy-plane change only (docs/archive/host/h2-shrink-host-plane.md).
 # Each name below that has a twin in a k8s role is held equal to it by
 # hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both.
 #

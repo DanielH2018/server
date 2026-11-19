@@ -2,8 +2,8 @@ name: promote
 
 # Publishes each green master commit as an OCI artifact, signs it, and moves the `prod` tag
 # that Flux follows to the newest published master commit. The plan and the reasons for every
-# guard below are in docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*), and
-# docs/target-architecture/contracts.md C2 is the contract. The operator's view is
+# guard below are in docs/archive/deploy/d1-flux-installed.md (*Decisions*), and
+# docs/archive/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
 # Thirteen jobs, so code that runs during a render or a decision never holds a token that can
@@ -69,7 +69,8 @@ name: promote
 # Every commit merged in the window was published by its own run, so this one skips render,
 # images and publish and starts at `promote`.
 #
-# tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
+# The promote rows of tests/repo/test_census_rows_workflows.py hold every guard, permission and
+# handoff here.
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
@@ -110,12 +111,17 @@ permissions: {}
 # `publish` and `reset-move` check out nothing, so no script or local action can reach them.
 # Each step that calls them opens with `eval "$RETRY_FUNCTIONS"`. `retry` prints only the stdout
 # of the try that succeeded, so a capture never holds a failed try's error body.
-# prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
+# GitHub prints every env value in each step's header, so a helper that emits a workflow
+# command calls `annotate <level> <message>`, which builds the `::` prefix at run time. A
+# literal `::error::` here would show in every step's log, and test_promote_workflow_retry.py
+# fails one.
+# prune-artifacts.yml carries a copy, and the `prune-retry-helper-equals-promotes` row of
+# tests/repo/test_census_rows_workflows.py holds the two equal.
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
   # groups, so an unreachable tool download (actionlint-py's build) cannot block a
-  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow_uv_groups.py fails a workflow
-  # without them.
+  # promotion. UV_NO_DEV drops only `dev`. The promote-env-installs-no-default-group row
+  # of tests/repo/test_census_rows_workflows.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
   # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
@@ -131,6 +137,7 @@ env:
   COSIGN_VERSION: v3.1.4
   COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
   RETRY_FUNCTIONS: |
+    annotate() { printf '::%s::%s\n' "$1" "$2"; }
     retry() {
       local try out status
       for try in 1 2 3; do
@@ -140,7 +147,7 @@ env:
         else
           status=$?
         fi
-        echo "::warning::$1 failed on try $try of 3 with exit code $status" >&2
+        annotate warning "$1 failed on try $try of 3 with exit code $status" >&2
         [ "$try" = 3 ] || sleep 10
       done
       return "$status"
@@ -164,13 +171,13 @@ env:
     dispatch_newer_green() {
       local commit=$1 green newest
       printf '%s' "$commit" | grep -Eqx '[0-9a-f]{40}' \
-        || { echo "::error::the settled commit '$commit' is not 40 lowercase hex"; return 1; }
+        || { annotate error "the settled commit '$commit' is not 40 lowercase hex"; return 1; }
       green="$(retry gh api \
         "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=master&event=push&status=success&per_page=100" \
         --jq '.workflow_runs[].head_sha')" || return 1
       newest="${green%%$'\n'*}"
       if ! printf '%s' "$newest" | grep -Eqx '[0-9a-f]{40}'; then
-        echo "::error::CI's newest green push run on master names '$newest', not a 40-hex commit"
+        annotate error "CI's newest green push run on master names '$newest', not a 40-hex commit"
         return 1
       fi
       if [ "$newest" = "$commit" ]; then
@@ -180,7 +187,7 @@ env:
       # A here-string, not a pipe: `grep -q` exiting early would SIGPIPE a writer, and
       # pipefail would read the match as a miss.
       if ! grep -qx "$commit" <<< "$green"; then
-        echo "::warning::$commit has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
+        annotate warning "$commit has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
         return 0
       fi
       # A retry after a 5xx that did create the dispatch starts a second run for the same
@@ -273,9 +280,11 @@ jobs:
       # renders every tag. The bundle then holds the shared kinds and a root listing them, so
       # the first decryption of the cluster file gets a revision of its own (D3.3a).
       # A --role render writes only the named tags' image contexts, and --shared-only writes
-      # none, so both branches pass --all-images: the `images` job builds and pushes all ten
+      # none, so both branches pass --all-images: the `images` job builds and pushes every image
       # from out/images/ and refuses a render without tags.json.
-      # tests/repo/test_promote_workflow_bundle.py fails either branch without it.
+      # The promote-render-no-tag-branch-renders-the-shared-kinds and
+      # promote-render-tag-branch-writes-every-image-context rows of
+      # tests/repo/test_census_rows_workflows.py fail either branch without it.
       - name: Build the bundle
         id: build
         run: |
@@ -360,7 +369,7 @@ jobs:
   # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
   # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
   # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
-  # docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+  # docs/archive/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
   #
   # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
   # is success and is never rebuilt, because the push-once rule is what makes a content tag

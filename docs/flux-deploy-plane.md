@@ -3,7 +3,7 @@
 Flux's source controller, Kustomize controller and notification controller run in the
 `flux-system` namespace. They follow the promoted artifact, and Flux applies every k8s service
 from it, Flux itself included (D5 step 29). No other path deploys a workload
-on the cluster. The plans are [slice D1](target-architecture/deploy/d1-flux-installed.md) and
+on the cluster. The plans are [slice D1](archive/deploy/d1-flux-installed.md) and
 the slices after it, and the decision is
 [ADR-0020](adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md). A rebuilt cluster
 gets Flux from *Bootstrapping Flux on a rebuilt cluster* below, and a broken Flux is
@@ -72,7 +72,7 @@ Two sources put Flux in the metrics plane, both in `k8s/roles/observability/`.
   `OCIRepository`, with the labels `name`, `exported_namespace`, `ready`, `suspended` and
   `revision`, and on a Kustomization `content_digest` too. The controllers do not export this series themselves. A Kustomization's
   `revision` reads `status.lastAppliedOriginRevision`, so it carries `master@sha1:<sha>`, the
-  field [contracts.md C6](target-architecture/contracts.md) names. An `OCIRepository`'s `revision` reads
+  field [contracts.md C6](archive/contracts.md) names. An `OCIRepository`'s `revision` reads
   `status.artifact.revision`, the digest form. A Kustomization's `content_digest` reads the
   `homelab/content-digest` annotation, which the renderer stamps on each Kustomization `<tag>`
   with the tag's `own` digest from `digests.json`. A master commit that leaves the tag's
@@ -194,7 +194,7 @@ M1's Alertmanager. Every rule carries `service="flux"`.
     - A broad revision fills the workers for hours while it progresses. The rule therefore
       reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
       the promotion soak, which reads only alerts carrying `severity="critical"` or
-      `verify="true"` ([contracts.md C7](target-architecture/contracts.md)), never reads it.
+      `verify="true"` ([contracts.md C7](archive/contracts.md)), never reads it.
     - **The gap `verify`'s timeout cannot see.** A revision queues a reconcile of every
       Kustomization on the source, changed or not. An unchanged Kustomization that is
       unhealthy holds a worker for its whole `timeout`, retries after its `retryInterval`,
@@ -415,7 +415,7 @@ Three things hold the ruling on the tree:
   `land.sh` gates the tags a PR changed.
 
 D6's plan,
-[*The deletion policy, and the end of the handback*](target-architecture/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
+[*The deletion policy, and the end of the handback*](archive/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
 explains why the handback cannot work under either deletion policy.
 
 ## Reading Flux objects
@@ -646,8 +646,8 @@ to fetch the commit that fixes it. In this order:
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 
-`tests/repo/test_flux_recovery_runbook.py` fails this section on a suspend or a resume
-without `--field-manager=homelab-operator`, on a server-side apply without
+The `recovery-*` rows of `tests/repo/test_runbook_rules.py` fail this section on a suspend
+or a resume without `--field-manager=homelab-operator`, on a server-side apply without
 `--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
 
 ## Bootstrapping Flux on a rebuilt cluster
@@ -810,12 +810,12 @@ Every hand apply in steps 3, 5, 6 and 9 is
 file. That is the root's own field manager, so the root and the `flux` tag adopt each object
 without a conflict.
 
-`tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
-comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
-and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
-It also runs R4's PR 7b `awk` program over this file and fails unless the program exits 0 with
-empty output. The program refuses an Ansible deploy, a hand suspend of the root and the
-`flux_sync_suspend` key set to `true`.
+The `bootstrap-*` rows of `tests/repo/test_runbook_rules.py` fail this section when the
+root's apply comes before the restore step, when a hand apply lacks
+`--field-manager=kustomize-controller`, and when a step names `reset_to_last_good` without its
+condition and the recorded exception. They also refuse, on any line of the section, fenced
+lines included, the forms R4's PR 7b refused: a local or Ansible deploy, a hand suspend of the
+root and the `flux_sync_suspend` key set to `true`.
 
 ### Why the root is withheld, not suspended
 
@@ -831,7 +831,7 @@ apply is the resume.
 `flux_suspend: true` in a flux-owned role's `defaults/main.yml` stops all reconciliation of
 that role. `k8s_autodeploy: false` is a different lever: it stops Renovate merging the
 role's image bumps. The plan is
-`docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
+`docs/archive/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
 to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
 three checks hold it there (D5.1d):
 
@@ -996,7 +996,7 @@ notification-controller posts on T:
   a `failed` verdict. When `prod` names another digest, a later run moved it past T, and
   `verify` prints `superseded` and exits 0. A failed read keeps the wait going and never reads
   as superseded. A run is superseded only while `promote.SUPERSEDE` is on
-  (`docs/target-architecture/deploy/d7-superseding-promotions.md`).
+  (`docs/archive/deploy/d7-superseding-promotions.md`).
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.
@@ -1094,7 +1094,7 @@ dispatches nothing. A failed read applies the verdict as before. `tag` reads `DE
 again just before it moves `prod`, and moves nothing unless it still reads the value `decide`
 read: `none`, or the `failed=` hold the revert rule passed. A superseding `tag` also moves
 nothing once `last-good` has moved since `decide` read it (D7.7). A run is superseded only
-while `SUPERSEDE` is on (`docs/target-architecture/deploy/d7-superseding-promotions.md`),
+while `SUPERSEDE` is on (`docs/archive/deploy/d7-superseding-promotions.md`),
 and otherwise both reads are inert
 until then. `scripts/deploy_tools/tests/test_promote_settle_owner.py` runs both steps against fake
 binaries.
@@ -1178,7 +1178,7 @@ Longhorn supports no downgrade, and MetalLB's CRDs carry a conversion webhook, s
 `prod` after a failed bump would re-apply the older version over upgraded objects. A k8s role
 whose `defaults/main.yml` sets `flux_forward_only: true` is a forward-only tag. Three rules in
 `scripts/deploy_tools/promote_lib/forward_only.py` follow from it. The plan is
-`docs/target-architecture/host/h1-cluster-config-to-flux.md`, *Forward-only tags and the
+`docs/archive/host/h1-cluster-config-to-flux.md`, *Forward-only tags and the
 promote rule*.
 
 - **A hold without a reset.** `decide` names, in its `no_reset` output, each forward-only tag
@@ -1208,7 +1208,7 @@ the hold names, then clear the hold. For a failed Longhorn bump, the recovery is
 apply the old image onto data the failed image may have migrated, the state `volume-snapshot`
 exists to prevent. So a failed revision that changes a snapshot role holds without a reset.
 `scripts/deploy_tools/promote_lib/stateful.py` holds the rules, and the plan is
-`docs/target-architecture/deploy/d5-bulk-move.md`, *The stateful hold, its post, and the reset
+`docs/archive/deploy/d5-bulk-move.md`, *The stateful hold, its post, and the reset
 input*.
 
 - **Which revisions.** `decide` names, in its `stateful` output, each snapshot role whose
@@ -1329,7 +1329,7 @@ only after its dependencies finish, so the wait sums four terms, with the soak b
   greedy list scheduling: the other names' `timeout`s summed, divided by `--concurrent` and
   rounded up, plus the largest. The first is the smaller for equal `timeout`s. The second is
   the smaller when one long `timeout` sits among short ones, which the first would charge in
-  every round (#5482). `docs/target-architecture/deploy/d4-ordering.md` has the proof. A Kustomization that
+  every round (#5482). `docs/archive/deploy/d4-ordering.md` has the proof. A Kustomization that
   waits on health holds one of the Kustomize controller's workers, so a revision that changes more
   names than `--concurrent` queues behind the workers. The flux role sets `--concurrent` to
   `k8s_rollout_batch_width`, 5, the width the deploy play rolls workloads at, plus one worker
@@ -1353,8 +1353,8 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `verify` job that its own `timeout-minutes` stops leaves no verdict, and `settle` writes
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
-are sized from the cap, and `tests/repo/test_promote_workflow_verify.py` holds them
-against each other:
+are sized from the cap, and the `promote-verify-*` and `promote-job-timeout-*` rows of
+`tests/repo/test_census_rows_workflows.py` hold them against each other:
 
 | Limit | Value | Why |
 |---|---|---|
@@ -1415,7 +1415,8 @@ without `--role` renders every tag. That bundle holds the shared kinds and a roo
 and no tag, so the first decryption of the cluster file gets a revision of its own. Both
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
-`tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
+The `promote-render-no-tag-branch-renders-the-shared-kinds` row of
+`tests/repo/test_census_rows_workflows.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on
@@ -1433,7 +1434,7 @@ The bundle holds:
   The default policy follows `prune`, so deleting the Kustomization deletes the objects it
   applied. A tag's `-snapshot` and `-prepull` take the default policy too. `flux` and every
   other Kustomization in the bundle set `deletionPolicy: Orphan`
-  (`docs/target-architecture/contracts.md`, *Deletion policy*).
+  (`docs/archive/contracts.md`, *Deletion policy*).
   A role's `defaults/main.yml` changes two of those fields. `flux_prune: false` renders
   `prune: false`, and `manifests_rollout_timeout` replaces the default `timeout`. Each must
   be a literal, and `scripts/lib/k8s_roles.py:role_fields` refuses a Jinja expression.
@@ -1532,7 +1533,7 @@ render publishes, and the publish job renders every published tag. The edges are
 `dependsOn` lists the names in sorted order. A cycle among the edges refuses the render, since
 Flux would hold every Kustomization on it at `DependencyNotReady`. An edge governs from the
 revision after the one that adds it, so a PR that adds an edge does not also change the
-dependent's render. The plan is `docs/target-architecture/deploy/d4-ordering.md`, and
+dependent's render. The plan is `docs/archive/deploy/d4-ordering.md`, and
 `scripts/renderer/renderer_lib/ordering.py` derives the edges, and
 `scripts/renderer/tests/test_renderer_bundle_ordering.py` holds the rules.
 
@@ -1636,7 +1637,7 @@ The job runs on a PR that touches the flux pin, the SOPS pin, the registry image
 `.github/workflows/ci.yml`. If its green
 half ever shows a changed value, the remedy is D3's fallback. `write` would emit the value
 under `data:`, base64-encoded, and `check`'s structure assertion would compare data-key names
-across `data` and `stringData`. `docs/target-architecture/deploy/d3-secrets.md` (D3.3d) gives
+across `data` and `stringData`. `docs/archive/deploy/d3-secrets.md` (D3.3d) gives
 the reason.
 
 ### Shared kinds and reserved names
@@ -1707,7 +1708,7 @@ A published tag's object also holds two fields (D5.1a2):
 path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
 list. `land.sh`'s wait reads `footprint` through `scripts/deploy_tools/changed_set.py`, and a
 change under `_unclassified` counts as every name changed. D6's *What a footprint counts* in
-`docs/target-architecture/deploy/d6-delete-old-path.md` defines the classification.
+`docs/archive/deploy/d6-delete-old-path.md` defines the classification.
 
 ### The publish census
 
@@ -1749,7 +1750,7 @@ refuses the publish when:
 - `flux` is missing, whatever `prod` holds;
 - a tag at `prod` is missing and its render there holds a PersistentVolume, whether or not its
   role directory stays. C3 gives PersistentVolumes no prune exemption
-  (`docs/target-architecture/contracts.md`, *Wider prune exemptions*), so media-volume cannot
+  (`docs/archive/contracts.md`, *Wider prune exemptions*), so media-volume cannot
   be renamed or retired while it renders `media-data`;
 - the pull of `prod` fails.
 

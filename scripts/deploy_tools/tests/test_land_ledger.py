@@ -108,7 +108,10 @@ def test_the_result_line_counts_tags_and_fills_unreached_fields():
     line = result_line(_filled(), Outcome(1, "x", verdict="deploy-failed"))
     assert line == (
         "LAND-RESULT: verdict=deploy-failed cause=tag-miss exit=1 pr=1031 "
-        "sha=01234567 tags=2"
+        f"sha=01234567 tags=2 hold_sha=- hold_owner=- merge={SHA}"
     )
     bare = result_line(Ledger(pr="7", t_start=0.0), Outcome(64, "x"))
-    assert bare == "LAND-RESULT: verdict=- cause=- exit=64 pr=7 sha=- tags=0"
+    assert bare == (
+        "LAND-RESULT: verdict=- cause=- exit=64 pr=7 sha=- tags=0 "
+        "hold_sha=- hold_owner=- merge=-"
+    )

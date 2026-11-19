@@ -44,9 +44,8 @@ def in_size_band(rel, policy) -> bool:
 
 
 def quality_rank(rel) -> int:
-    q = (rel.get("quality") or {}).get("quality") or {}
     qw = rel.get("qualityWeight")
-    return int(qw if qw is not None else (q.get("id") or 0))
+    return int(qw if qw is not None else (frl.Quality.of(rel).id or 0))
 
 
 def select_replacement(candidates, policy):
@@ -137,10 +136,6 @@ def plan_searches(ledger, policy):
     ]
 
 
-def _queue_quality_name(item):
-    return ((item.get("quality") or {}).get("quality") or {}).get("name")
-
-
 def adopt_in_flight(ledger, queue_by_episode, now):
     """Idempotency guard against a duplicate grab.
 
@@ -168,7 +163,7 @@ def adopt_in_flight(ledger, queue_by_episode, now):
                 "guid": None,
                 "indexerId": None,
                 "title": item.get("title"),
-                "quality": _queue_quality_name(item),
+                "quality": frl.Quality.of(item).name,
             },
             lastAction=now,
         )

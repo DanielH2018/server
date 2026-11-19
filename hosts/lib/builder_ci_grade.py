@@ -1,23 +1,16 @@
-"""Grade a commit's CI check runs the way `ci_verdict.py` does, for the builder.
+"""The CI settings and the paged check-runs read that the builder and checkout-sync share.
 
-Split from host_package_builder.py, which imports it. The
-builder ships stdlib-only modules, so this module carries its own copy of `ci_verdict` and the
-two conclusion sets, and a test holds the copy equal to `hosts/lib/ci_verdict.py`.
-Stdlib only, because the builder ships beside it with nothing else. checkout_sync.py imports
-its `read_check_pages` and `token_refused`, and the `checkout-sync` component ships it too.
+Split from host_package_builder.py, which imports it. The grading itself is
+`ci_verdict.ci_verdict`, which both components ship beside this module. Stdlib only, because
+the builder ships beside it with nothing else. checkout_sync.py imports `CiSettings`,
+`read_check_pages` and `token_refused`, and the `checkout-sync` component ships it too.
 """
 
 from __future__ import annotations
 
 import urllib.error
-from collections.abc import Callable
-
-# ci_verdict.py's two conclusion sets, which `ci_verdict` below grades by.
-# test_builder_ci_grading.py holds the two copies equal.
-_CI_PASS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
-_CI_NO_VERDICT_CONCLUSIONS = frozenset(
-    {"cancelled", "stale", "skipped_by_concurrency", None}
-)
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 
 # The page size and page cap for a check-runs listing, which `read_check_pages` below walks
@@ -25,31 +18,35 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 _CHECK_PAGE_SIZE, _CHECK_PAGES_MAX = 100, 20
 
 
-def ci_verdict(check_runs: list[dict], required: frozenset[str]) -> str:
-    """`pass`, `pending` or `fail` for one commit, graded as `ci_verdict.ci_verdict` grades.
+@dataclass(frozen=True)
+class CiSettings:
+    """The CI gate a component grades a commit by, parsed from its settings file.
 
-    One difference: the caller refuses an empty `required` before it asks (builder step 4),
-    so this never meets the empty set that disarms `ci_verdict.ci_verdict`.
+    Attributes:
+        contexts: the check-run names that must be green; never empty.
+        walk_max: the most commits one run grades, the tip included; always positive.
     """
-    states: dict[str, set[str]] = {}
-    for run in check_runs:
-        name = run.get("name")
-        if name not in required:
-            continue
-        if run.get("status") != "completed":
-            state = "pending"
-        elif run.get("conclusion") in _CI_PASS_CONCLUSIONS:
-            state = "pass"
-        elif run.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS:
-            state = "pending"
-        else:
-            state = "fail"
-        states.setdefault(name, set()).add(state)
-    if any("fail" in s for s in states.values()):
-        return "fail"
-    if any("pending" in states.get(name, {"pending"}) for name in required):
-        return "pending"
-    return "pass"
+
+    contexts: frozenset[str]
+    walk_max: int
+
+    @classmethod
+    def parse(cls, env: Mapping[str, str]) -> CiSettings:
+        """`CI_CONTEXTS`, a comma-separated list, and `CI_ANCESTOR_WALK_MAX` from `env`.
+
+        Raises:
+            ValueError: the context list is empty, which `ci_verdict` would read as a disarmed
+                gate that grades every commit green, or the walk bound is not a positive integer.
+        """
+        contexts = frozenset(
+            c.strip() for c in env.get("CI_CONTEXTS", "").split(",") if c.strip()
+        )
+        walk = env.get("CI_ANCESTOR_WALK_MAX", "").strip()
+        if not contexts:
+            raise ValueError("CI_CONTEXTS is empty")
+        if not walk.isdigit() or int(walk) <= 0:
+            raise ValueError(f"CI_ANCESTOR_WALK_MAX={walk!r} is not a positive integer")
+        return cls(contexts, int(walk))
 
 
 def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict]:

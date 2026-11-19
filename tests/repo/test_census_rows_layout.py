@@ -8,6 +8,7 @@ Run: uv run pytest tests/repo/test_census_rows_layout.py
 """
 
 import ast
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from functools import cache
@@ -164,6 +165,47 @@ def _fixture(key: str, **members: str) -> Family:
     )
 
 
+# ── Cross-directory imports ───────────────────────────────────────────────────────────
+
+_IMPORT = re.compile(r"^(?:from|import) (\w+)(?:[ .]|$)", re.MULTILINE)
+_BOOTSTRAP = re.compile(r"sys\.path\.insert\(")
+
+
+@cache
+def _script_dirs() -> frozenset[str]:
+    return frozenset(
+        rel.split("/")[1] for rel in tracked("scripts/*") if rel.count("/") >= 2
+    )
+
+
+def _script_modules() -> list[str]:
+    """Each module in a `scripts/` subdirectory, outside any `tests/` directory."""
+    return [
+        rel
+        for rel in tracked("scripts/*.py")
+        if rel.count("/") >= 2 and "/tests/" not in rel
+    ]
+
+
+def _cross_imports(subject: Subject) -> list[int]:
+    """Where `subject` imports a `scripts/` directory other than its own."""
+    own = PurePosixPath(subject.rel).parent.name
+    return [
+        m.start()
+        for m in _IMPORT.finditer(subject.text)
+        if m.group(1) in _script_dirs() and m.group(1) != own
+    ]
+
+
+def _unbootstrapped_import(subject: Subject) -> list[str]:
+    if not (cross := _cross_imports(subject)):
+        return []
+    boot = _BOOTSTRAP.search(subject.text)
+    if boot is None or boot.start() > min(cross):
+        return ["imports another scripts/ directory with no sys.path.insert( above it"]
+    return []
+
+
 ROWS = (
     Census(
         name="module-families-live-in-a-package",
@@ -204,13 +246,38 @@ ROWS = (
         ),
         # Four groups; the deployer's `gitops_*` family is not one.
         min_matches=4,
-        must_find=frozenset({"scripts/validate/*_templates.py"}),
-        allow={
-            "scripts/validate/*_templates.py": (
-                "each is the entry of its own prek hook, which runs it under its own `files` "
-                "filter in prek.toml"
+    ),
+    Census(
+        name="cross-directory-importer-bootstraps-sys-path",
+        reason=(
+            "A directly-invoked script gets its own directory on sys.path and nothing else, "
+            "and `pythonpath` in pyproject.toml is a pytest setting. So `from lib import "
+            "yaml_fast` in scripts/docs/build_docs.py resolves under pytest and raises "
+            "ModuleNotFoundError under the cron or prek hook that runs it. Copy the aliased "
+            "`_sys.path.insert(0, ...)` from a sibling, above the import. A test module "
+            "reaches its subject through `pythonpath`, so tests/ directories are out of scope."
+        ),
+        files=_script_modules,
+        offence=_unbootstrapped_import,
+        count=lambda s: int(bool(_cross_imports(s))),
+        red=(
+            Subject(
+                "scripts/docs/x.py",
+                "from lib import y\nimport sys\nsys.path.insert(0, 'x')\n",
             ),
-        },
+            Subject("scripts/docs/x.py", "from lib import y\n"),
+        ),
+        green=(
+            Subject(
+                "scripts/docs/x.py",
+                "import sys\nsys.path.insert(0, 'x')\nfrom lib import y\n",
+            ),
+            Subject("scripts/docs/x.py", "from docs import y\nimport os\n"),
+        ),
+        min_matches=300,
+        must_find=frozenset(
+            {"scripts/docs/build_docs.py", "scripts/validate/k8s_manifests.py"}
+        ),
     ),
 )
 _IDS = [row.name for row in ROWS]

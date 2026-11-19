@@ -26,7 +26,8 @@ before each batch's agent starts; `claim` takes the same claims and launches not
 Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' tiers 5, 1, 75, 0:
 - 0: every batch launched with every issue claimed; `status`: none needs a hand.
 - 1: `launch` refused before placing, or a batch failed to launch. `status`: a batch reads
-  `needs-input`, `no-pr`, `no-verdict` (land.sh printed no VERDICT) or `no-report`.
+  `parked` (its landing waits on a hold or rule that is not its own), `needs-input`,
+  `no-pr`, `no-verdict` (land.sh printed no VERDICT) or `no-report`.
 - 3: `launch` placed nothing: no host had headroom, a `fanout_lib.launch_gates` cap refused
   (the per-host ssh budget, or the live-batch memory cap across runs), or every claim was.
 - 4: no host readable.
@@ -59,7 +60,6 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
-import dataclasses
 import json
 import subprocess
 import sys
@@ -384,13 +384,15 @@ def cmd_runs(args, tools: Tools) -> int:
         if not args.orchestrator or r.orchestrator_branch == args.orchestrator
     ]
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in runs]))
+        print(json.dumps([r.to_json() for r in runs]))
         return 0
     if not runs:
         whose = f" for {args.orchestrator}" if args.orchestrator else ""
         print(f"no fan-out runs{whose} under {args.manifest_root}")
         return 0
-    print("\n".join(runs_lines(runs, args.all)))
+    standing = [b for r in runs for b in r.batches if not b.removed_at]
+    parked = status_mod.parked_batches(standing, tools)
+    print("\n".join(runs_lines(runs, args.all, parked, one_line)))
     return 0
 
 

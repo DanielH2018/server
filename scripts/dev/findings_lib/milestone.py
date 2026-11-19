@@ -17,6 +17,13 @@ The workflow closes a milestone when a PR or issue in it closes and nothing in i
 open. `reap` closes one whose branch no worktree on either host holds any more, and
 `milestone close` abandons one by hand.
 
+A PROJECT is a session milestone that also holds a backlog. `milestone start --project`
+writes the second description form, and `is_project` reads it. `milestone add` files
+unclaimed issues under a project and `milestone remove` takes them out. `release`, `reap` and
+`manual` leave an issue in a project, so a batch that fails returns its issue to the
+backlog, and a claim by another branch does not move it. Everything else above holds for both
+forms. `held_issues` is the `--milestone` filter of `next`, `list` and `new-issues`.
+
 The tools own only a milestone whose description `branch_of` can parse. An operator's own
 milestone is never reopened, closed or emptied.
 
@@ -43,24 +50,42 @@ from lib.gh import gh as real_gh, gh_json as real_gh_json
 from lib.json_types import JsonValue, as_list, as_object, as_object_list
 
 _DESCRIPTION_RE = re.compile(
-    r"^Claude session milestone \(findings\.py\) for branch `([^`]+)`\.$"
+    r"^Claude (session|project) milestone \(findings\.py\) for branch `([^`]+)`\.$"
 )
+
+# `--milestone none`: the issues no open milestone holds.
+NO_MILESTONE = "none"
 
 GhJson = Callable[..., JsonValue]
 Gh = Callable[..., subprocess.CompletedProcess[str]]
 
 
-def description_for(branch: str) -> str:
-    """The description that marks a milestone as ``branch``'s session milestone."""
-    return f"Claude session milestone (findings.py) for branch `{branch}`."
+class UnknownMilestone(ValueError):
+    """`--milestone` named a title no milestone in the repo has."""
+
+
+def description_for(branch: str, *, project: bool = False) -> str:
+    """The description that marks a milestone as ``branch``'s session or project milestone."""
+    form = "project" if project else "session"
+    return f"Claude {form} milestone (findings.py) for branch `{branch}`."
+
+
+def _owned(milestone: object) -> re.Match[str] | None:
+    if not isinstance(milestone, dict):
+        return None
+    return _DESCRIPTION_RE.match(str(milestone.get("description") or ""))
 
 
 def branch_of(milestone: object) -> str | None:
     """The branch owning ``milestone``, or None when these tools did not make it."""
-    if not isinstance(milestone, dict):
-        return None
-    match = _DESCRIPTION_RE.match(str(milestone.get("description") or ""))
-    return match.group(1) if match else None
+    match = _owned(milestone)
+    return match.group(2) if match else None
+
+
+def is_project(milestone: object) -> bool:
+    """Whether ``milestone`` is a project: a session milestone that holds a backlog."""
+    match = _owned(milestone)
+    return match is not None and match.group(1) == "project"
 
 
 def _milestones(repo: str, state: str, gh_json: GhJson) -> list[dict]:
@@ -133,18 +158,19 @@ def start(
     repo: str,
     *,
     dry_run: bool,
+    project: bool = False,
     gh_json: GhJson = real_gh_json,
     gh: Gh = real_gh,
 ) -> None:
-    """Opens ``branch``'s session milestone titled ``title``.
+    """Opens ``branch``'s milestone titled ``title``, as a project when ``project``.
 
     Starting the title the branch already has open does nothing. A closed milestone of
     this branch and title is reopened.
 
     Raises:
-        ValueError: the branch already has an open milestone of another title, or another
-            branch or the operator has a milestone of this title. GitHub titles are
-            unique per repo.
+        ValueError: the branch already has an open milestone of another title, another
+            branch or the operator has a milestone of this title, or the branch's
+            milestone of this title has the other form. GitHub titles are unique per repo.
         subprocess.CalledProcessError: a gh call failed.
     """
     # DECIDED: only `start` makes a milestone, so a session without focused work gets none;
@@ -152,6 +178,7 @@ def start(
     current = for_branch(branch, repo, gh_json=gh_json)
     if current and current["state"] == "open":
         if current["title"] == title:
+            _refuse_other_form(current, project)
             return
         raise ValueError(
             f"`{branch}` already has the open milestone `{current['title']}`; "
@@ -163,6 +190,7 @@ def start(
                 continue
             owner = branch_of(m)
             if owner == branch:
+                _refuse_other_form(m, project)
                 _set_state(repo, m["number"], "open", dry_run, gh)
                 return
             raise ValueError(
@@ -177,12 +205,62 @@ def start(
         "-f",
         f"title={title}",
         "-f",
-        f"description={description_for(branch)}",
+        f"description={description_for(branch, project=project)}",
     ]
     if dry_run:
         print("gh " + " ".join(argv))
     else:
         gh(*argv)
+
+
+def _refuse_other_form(milestone: dict, project: bool) -> None:
+    # DECIDED: no command converts a milestone between the two forms. A session milestone
+    # made a project would hold claims its owner expects `release` to take out, and a
+    # project made a session milestone would keep a backlog nothing lists (2026-11-19).
+    if is_project(milestone) != project:
+        form = "project" if is_project(milestone) else "session"
+        raise ValueError(
+            f"`{milestone['title']}` is a {form} milestone; `milestone close` it and "
+            "start the other form under a new title"
+        )
+
+
+def held_issues(
+    issues: list[dict],
+    title: str | None,
+    repo: str,
+    *,
+    gh_json: GhJson = real_gh_json,
+) -> list[dict]:
+    """The members of ``issues`` the milestone titled ``title`` holds.
+
+    Args:
+        issues: issues in gh's JSON shape, each with its `milestone` object or None.
+        title: a milestone's title; `NO_MILESTONE` for the issues no open milestone
+            holds, which includes one left in a closed milestone; None for every issue,
+            which reads nothing.
+        repo: OWNER/NAME.
+        gh_json: the read boundary, for tests.
+
+    Raises:
+        UnknownMilestone: no milestone, open or closed, has this title. An empty answer
+            would read as a project with nothing to pick up.
+    """
+    if title is None:
+        return issues
+    open_now = _milestones(repo, "open", gh_json)
+    if title == NO_MILESTONE:
+        numbers = {m["number"] for m in open_now}
+        return [
+            i for i in issues if (i.get("milestone") or {}).get("number") not in numbers
+        ]
+    if not any(
+        m["title"] == title
+        for known in (open_now, _milestones(repo, "closed", gh_json))
+        for m in known
+    ):
+        raise UnknownMilestone(f"no milestone is titled `{title}`")
+    return [i for i in issues if (i.get("milestone") or {}).get("title") == title]
 
 
 def close(

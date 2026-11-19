@@ -9,10 +9,10 @@
 # directory until the operator's cleanup removes it.
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
-  - {name: renovate-agent, uid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
+  - {name: renovate-agent, uid: 901, gid: 986, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
   # The controller: runs the runner, owns its state and the write token, and
   # alone may start the session and lander units. No login.
-  - {name: renovate-agent-ctl, uid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
+  - {name: renovate-agent-ctl, uid: 905, gid: 905, home: /var/lib/renovate-agent-ctl, shell: /usr/sbin/nologin, comment: Renovate agent controller}
 units:
   homelab-renovate-agent.service: {policy: manual}
   homelab-renovate-agent-session.service: {policy: manual}
@@ -57,6 +57,7 @@ files:
   - {src: files/renovate_floor.py, dst: /usr/lib/homelab/renovate-agent/renovate_floor.py}
   - {src: files/t2-approval-floor, dst: /usr/lib/homelab/t2-approval-floor}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
+  - {lib: renovate_identity.py, dst: /usr/lib/homelab/renovate-agent/renovate_identity.py}
   - {lib: claude_config_lock.py, dst: /usr/lib/homelab/renovate-agent/claude_config_lock.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
   - {src: templates/session.conf.j2, dst: /usr/lib/homelab/renovate-agent/session.conf}

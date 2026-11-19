@@ -22,7 +22,9 @@ description: >-
 # "ref is missing" and then skips checking the caller's `with:` keys against the inputs below
 # (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release
 # accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and
-# its test.
+# its test. The pin costs every job a download of this repository's tarball during `Set up
+# job`, a median 2.3s on pytest legs (0.9s to 2.7s), accepted on 2026-11-15; a `./` reference
+# reads the job's checkout and downloads nothing.
 #
 # DECIDED: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`
 # `.github/workflows/actions.lock` pins each one under every workflow that calls this
@@ -51,13 +53,16 @@ runs:
   using: composite
   steps:
     # apt reads every pocket through mirror+file:/etc/apt/apt-mirrors.txt and tries each listed
-    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all.
+    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all. A runner
+    # that refuses sudo, such as a pod under `restricted`, keeps its list and gets a notice.
     - name: Add a non-ubuntu.com apt mirror as the last fallback
       shell: bash
+      env:
+        MIRRORS: /etc/apt/apt-mirrors.txt
       run: |
-        mirrors=/etc/apt/apt-mirrors.txt
-        if [[ -f "$mirrors" ]] && ! grep -q mirrors.edge.kernel.org "$mirrors"; then
-          sudo sed -i '$a https://mirrors.edge.kernel.org/ubuntu/' "$mirrors"
+        if [[ -f "$MIRRORS" ]] && ! grep -q mirrors.edge.kernel.org "$MIRRORS"; then
+          sudo -n sed -i '$a https://mirrors.edge.kernel.org/ubuntu/' "$MIRRORS" \
+            || echo "::notice::no sudo here, so $MIRRORS keeps its ubuntu.com hosts only"
         fi
 
     - if: inputs.python == 'true'

@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO
-from test_promote_workflow import WORKFLOW, _load, _steps
+from _workflow_rows import PROMOTE, load, steps
 
 PYPROJECT = REPO / "pyproject.toml"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
@@ -77,9 +77,9 @@ def no_dev_jobs(workflow: dict) -> dict[str, dict]:
 def no_dev_entries() -> set[str]:
     """Every repo script a `run:` step of a UV_NO_DEV job invokes through `python`."""
     found = set()
-    for path in (WORKFLOW, CI_WORKFLOW):
-        for job in no_dev_jobs(_load(path)).values():
-            for step in _steps(job):
+    for path in (PROMOTE, CI_WORKFLOW):
+        for job in no_dev_jobs(load(path)).values():
+            for step in steps(job):
                 found.update(SCRIPT.findall(str(step.get("run", ""))))
     for entry in list(found):
         found.update(CHILD_ENTRIES.get(entry, ()))
@@ -149,7 +149,7 @@ def test_the_census_finds_the_known_scripts(entries):
 
 
 def test_the_validator_jobs_skip_the_dev_group():
-    jobs = set(no_dev_jobs(_load(CI_WORKFLOW)))
+    jobs = set(no_dev_jobs(load(CI_WORKFLOW)))
     assert KNOWN_NO_DEV_JOBS <= jobs, f"{sorted(KNOWN_NO_DEV_JOBS - jobs)} install dev"
 
 

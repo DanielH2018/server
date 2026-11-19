@@ -21,6 +21,7 @@ from fanout_lib.transport import REPO, Tools
 # pins for session-health so this reading is taken by the same interpreter a real session would use.
 HEALTH_CMD = (
     f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
+    f"PYTHONPATH={REPO}/scripts "
     "uv run --no-project --no-python-downloads --python 3.15.2 .claude/hooks/session-health.py"
 )
 

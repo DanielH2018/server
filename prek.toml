@@ -10,7 +10,7 @@
 # default_stages does NOT reach a hook whose upstream manifest declares `stages` itself, and
 # pre-commit-hooks v6.0.0 lists `[pre-commit, pre-push, manual]` on three of ours. So every hook
 # from a remote repo repeats `stages = ["pre-commit"]`, which also covers a manifest that gains
-# `stages` on a Renovate bump. ENFORCED: tests/repo/test_prek_hooks_run_only_at_commit.py
+# `stages` on a Renovate bump. ENFORCED: the `every-remote-prek-hook-pins-the-commit-stage` row in tests/repo/_config_rows.py
 default_stages = ["pre-commit"]
 
 # `prek install` writes a shim per type listed here. Without `commit-msg` in the list, the
@@ -61,8 +61,11 @@ id = "check-merge-conflict"
 stages = ["pre-commit"]
 
 [[repos.hooks]]
+# The M6 plan grew past the 500 KB cap through edits, which this hook never sees; only its
+# move into the archive reads as an add. It is history, so nothing grows it further.
 id = "check-added-large-files"
 stages = ["pre-commit"]
+exclude = "^docs/archive/monitoring/m6-retire-kuma\\.md$"
 
 [[repos.hooks]]
 id = "mixed-line-ending"
@@ -94,19 +97,28 @@ rev = "v0.11.0.1"
 id = "shellcheck"
 stages = ["pre-commit"]
 
-# Render container docker-compose.yml.j2 templates with stubbed vars and assert
-# the output is valid YAML — catches broken indentation / label-macro edits that
-# check-yaml misses (it doesn't render .j2 files).
+# Render every non-k8s template family with stubbed vars and check the output with the tool that
+# reads it: the Pi's compose files as YAML plus their hardening rules, every *.sh.j2 with bash -n
+# and shellcheck, every systemd unit (templates and the host packages' units) with
+# systemd-analyze verify and the polkit rules with node --check, and every other host component
+# template for a variable nothing defines. check-yaml, shellcheck and bash-syntax-check never see
+# a `.j2`, so without this hook a broken render first fails on a host. shellcheck comes via the
+# `shellcheck-py` dev dependency, and the run fails closed when shellcheck or systemd-analyze is
+# missing. `scripts/validate/render_templates.py` names the families and their modules.
 [[repos]]
 repo = "local"
 
 [[repos.hooks]]
-id = "validate-compose-templates"
-name = "Validate rendered docker-compose templates"
-entry = "uv run --frozen python scripts/validate/compose_templates.py"
+id = "validate-render-templates"
+name = "Validate rendered compose, shell, unit and host component templates"
+entry = "uv run --frozen python scripts/validate/render_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|k8s/templates/[^/]+\\.yml\\.j2|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/guard_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+# Everything a family renders or reads: every file under hosts/, because the units family
+# renders every host package and a package unit may be a static file; the inventory the renders
+# layer in; secret_rotation.yml, the plaintext census of SOPS names
+# (never values) the setup family allows; and the render's import closure.
+files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint)\\.py|scripts/validate/(render_templates|render_lib/(compose|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.(sh|service|timer|socket|rules)\\.j2|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -159,7 +171,7 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
-# Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
+# Same render-then-parse guard as validate-render-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
 # static config and Authelia's configuration.yml is trivially valid whatever those opaque block
 # scalars contain, so an outer-only check would miss the indentation bugs that matter most. A
@@ -180,54 +192,6 @@ pass_filenames = false
 # covers less is exactly what a pattern here would hide next
 # time, since a rename makes an alternation fail loudly and a pattern match nothing.
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|scripts/validate/validate_lib/ok_lines\\.py|k8s/roles/.*\\.j2|k8s/templates/ingressroute\\.yml\\.j2|inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/k8s_manifests\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/(k8s_net_rules|k8s_schema)\\.py|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/renderer/template_filters/[^/]+\\.py)$"
-
-# Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
-# (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
-# validate-k8s-manifests, but for shell instead of YAML. identify tags a `.sh.j2` file as
-# {jinja, text}, never `shell`, so the bash-syntax-check / shellcheck hooks above never see these
-# templates no matter how broken the rendered script is. shellcheck comes via the `shellcheck-py`
-# dev dependency (pyproject.toml) so `uv run` can reach it; the script fails closed (not skips) if
-# shellcheck isn't on PATH, so this can't silently degrade to bash -n alone.
-[[repos.hooks]]
-id = "validate-shell-templates"
-name = "Validate rendered shell templates (bash -n + shellcheck)"
-entry = "uv run --frozen python scripts/validate/shell_templates.py"
-language = "system"
-pass_filenames = false
-# group_vars/all.yml is in scope because the validator renders with it (ALL_VARS) — an
-# edit there can change what the rendered scripts contain. The five library modules are
-# where the render, the lint and the two cron rules actually live; naming only the entry point
-# would leave the hook's selector matching a thin facade while its subject sat elsewhere.
-# A host component's templates are in scope, with its component.yml, whose
-# defaults the render reads, and each host's package.yml, which names the host it renders for.
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|k8s/roles/.*\\.sh\\.j2|inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/shell_lint\\.py|scripts/renderer/template_filters/[^/]+\\.py)$"
-
-# Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
-# owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither
-# validate-shell-templates (*.sh.j2) nor validate-k8s-manifests (k8s/roles/*/templates/*.j2)
-# covers these — without this hook a typo'd directive key reaches a live host with systemd
-# loading the unit anyway and only a journal warning to show for it. systemd-analyze's own exit
-# status is ignored — it reads 0 on a typo'd key on at least one measured host — so the verdict
-# comes from scanning stderr for a diagnostic attributed to the rendered unit's own path. Also
-# renders every polkit rule beside these units (*.rules.j2, JavaScript, not a service/timer) and
-# `node --check`s each — the sibling gap: content-checked by the roles' tests, but their JS
-# syntax nowhere.
-[[repos.hooks]]
-id = "validate-unit-templates"
-name = "Validate rendered systemd unit templates (systemd-analyze verify)"
-entry = "uv run --frozen python scripts/validate/unit_templates.py"
-language = "system"
-pass_filenames = false
-# Every setup role's defaults/main.yml is in scope because the validator layers the OWNING
-# role's real defaults onto the render context — a schedule/timeout default moving there can
-# change whether the rendered unit still parses (e.g. renovate_agent_oncalendar).
-# group_vars/all.yml is in scope for the same reason
-# validate-shell-templates includes it: host_python_version and the other cross-role fallbacks
-# it carries feed every unit's render. The polkit rules are a third suffix in the first
-# alternative. Every file under hosts/ and the host renderer's modules are in scope because the
-# validator renders every host package through that renderer; a package unit may be a
-# static file, so no suffix narrows the hosts/ alternative.
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|k8s/roles/.*\\.(service|timer|socket|rules)\\.j2|inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/guard_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -257,25 +221,6 @@ entry = "uv run --frozen python scripts/validate/root_ignored_files.py"
 language = "system"
 pass_filenames = false
 always_run = true
-
-# Render every host component template and fail on a variable nothing defines. The guards above
-# stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a component template
-# with an undefined variable, a Jinja syntax error, or a rename its consumer missed would pass
-# the whole gate green. A name may be undefined only when it is Ansible-supplied, a SOPS secret
-# in the plaintext rotation registry, supplied by a component spec, or defined in the inventory
-# — derived from the tree, so a producer renamed without its consumer is exactly what stops
-# matching. The YAML templates are additionally parsed.
-[[repos.hooks]]
-id = "validate-setup-templates"
-name = "Render host component templates and check every variable resolves"
-entry = "uv run --frozen python scripts/validate/setup_templates.py"
-language = "system"
-pass_filenames = false
-# The component specs are in scope, not just their templates: a spec's `defaults:` supplies
-# names, so a rename there changes the verdict for a template the same commit may not touch.
-# secret_rotation.yml is in scope for the same reason — it is the plaintext census of SOPS names (never values), and a
-# secret renamed there without its template is the shape this guard exists to catch.
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/.*\\.(j2|yml)|inventory/(group_vars/all|host_vars/[^/]+)\\.yml|secrets/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/guard_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing else checks that a job's `needs:` names a job that exists, that a `${{ }}`
@@ -567,7 +512,7 @@ files = "(^|/)CLAUDE\\.md$|^\\.claude/(rules|agents)/[^/]+\\.md$|^\\.claude/skil
 # The non-Markdown paths the docs-refresh and eval-run crons commit. Neither cron can edit a
 # CLAUDE.md, so a finding there would only park its publish, which the docs-refresh contract's
 # next-run review says to check before a hook gains one of its staged paths.
-exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|evals/history\\.json$)"
+exclude = "^(docs/assets/generated/|evals/history\\.json$)"
 
 # Static test modules that turn more PRs red than any other test the author's own code did not
 # break. Each failure names its own repair, so finding it at commit time saves a CI round trip
@@ -604,7 +549,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # The `static-ratchet-tests-*` siblings below carry further modules.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master. docs-refresh
-# stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
+# stages scripts/dev/pytest_shard_runner_weights.json, so this fires on that cron's commit, which
 # runs the whole suite green first. eval-run stages nothing this matches. To commit past it, `SKIP=static-ratchet-tests git commit`.
 # The shell, `hosts/` and wait-source paths are the scripts the shimmed-path census row reads.
 [[repos.hooks]]
@@ -613,7 +558,7 @@ name = "Static ratchet tests (module length, section lint, shard partition, doc 
 entry = "uv run --frozen pytest -q -p no:cacheprovider tests/repo/test_module_length_ratchet.py tests/repo/test_every_section_lints_clean.py tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py tests/repo/test_role_claude_md.py tests/repo/test_census_rows_python.py tests/repo/test_census_rows_suite.py tests/repo/test_census_rows_roles.py tests/repo/test_census_rows_text.py tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_runner_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the
@@ -757,10 +702,10 @@ files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.p
 [[repos.hooks]]
 id = "static-ratchet-tests-units"
 name = "Every known unit template is still discovered"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_render_units.py::test_discover_templates_finds_the_known_set"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|(k8s/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|(k8s/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(render_lib/units|tests/test_render_units)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
@@ -777,6 +722,18 @@ entry = "uv run --frozen python scripts/dev/gen_hook_settings.py --check"
 language = "system"
 pass_filenames = false
 files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
+
+# observability's host-checks and hosts rule groups are rendered from files/rule-tables/ and the
+# host table, observability_expected_hosts (scripts/dev/gen_host_rules.py). `--check` fails on a
+# rule file edited by hand, a table edit committed without its render, and an inventory host the
+# host table does not list. Run the generator without `--check` and commit what it writes.
+[[repos.hooks]]
+id = "gen-host-rules"
+name = "The host rule groups match their tables"
+entry = "uv run --frozen python scripts/dev/gen_host_rules.py --check"
+language = "system"
+pass_filenames = false
+files = "^(k8s/roles/observability/(files/rule-tables/.*|files/rules/(host-checks|hosts)\\.yaml|defaults/main\\.yml)|hosts/[^/]+/package\\.yml|inventory/host_vars/[^/]+\\.yml|scripts/dev/gen_host_rules\\.py|scripts/lib/(cli_help|exit_codes|inventory_lists|repo_paths|yaml_fast)\\.py)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]). ruff is pinned in uv.lock (lint group) so the gate is

@@ -63,7 +63,7 @@ ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
     "tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
     "scripts/validate/tests/test_validate_alert_rules.py": "k8s/roles/observability/files/rules/ingress-probes.yaml",
-    "scripts/validate/tests/test_validate_unit_templates.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
+    "scripts/validate/tests/test_render_units.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
 }
 
 NUMBER_WORDS = {
@@ -118,7 +118,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/fact_status.py",
         "CLAUDE.md",
         "k8s/roles/traefik/CLAUDE.md",
-        "scripts/dev/pytest_shard_weights.json",
+        "scripts/dev/pytest_shard_runner_weights.json",
         "tests/repo/module_length_allowlist.txt",
         "k8s/roles/traefik/defaults/main.yml",
         "inventory/host_vars/daniel-box.yml",
@@ -448,7 +448,7 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
     census's shared pass runs before its tests, so no weight carries it and it is added here.
     """
     weights = xdist_width.load_weights(REPO)
-    assert weights, "scripts/dev/pytest_shard_weights.json did not load"
+    assert weights, "scripts/dev/pytest_shard_runner_weights.json did not load"
     main = sorted(_modules(_hook()))
     seconds = xdist_width.module_seconds([REPO / m for m in main], REPO, weights)
     moved = xdist_width.module_seconds(

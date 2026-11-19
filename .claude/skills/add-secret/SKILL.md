@@ -19,7 +19,7 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 ## Which stores the secret touches
 
 What reads the secret decides which stores it touches. Each store has its own writer
-(`docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*):
+(`docs/archive/deploy/d3-secrets.md`, *What one secret costs*):
 
 - **`secrets/secrets.yml`** holds every secret. You write it in step 3.
 - **`secrets/cluster-vars.sops.env`** holds each value a cluster render substitutes.

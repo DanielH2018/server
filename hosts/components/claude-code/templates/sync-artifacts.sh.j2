@@ -25,7 +25,7 @@ done
 
 # Destination paths are written out per host below rather than through a shared variable:
 # the peer list can be empty, and an unused variable is a shellcheck failure in the rendered
-# script (validate/shell_templates.py renders with the loop unrolled to nothing).
+# script (validate/render_lib/shell.py renders with the loop unrolled to nothing).
 
 # The lock and the per-peer failure counters. The override exists so the tests can run the
 # rendered script against a temporary directory; the unit passes nothing and gets /tmp, where a

@@ -8,9 +8,6 @@ module is the census of every regenerate-then-commit path, each with a ruling.
 A path deadlocks only when its precondition is evaluated BEFORE the repair writes and the
 guard reads the pre-repair state. Every other order is safe.
 
-- `scripts/dev/pytest_shard.py --record`. Runs the full serial suite and writes the weights
-  only if it passed. No test in the suite reads the weights table for staleness, so the
-  precondition cannot refuse to clear itself. Not deadlocked.
 - `scripts/docs/gen_doc_fragments.py`. Writes unconditionally, under `--fix` too. Its guard,
   `test_every_committed_fragment_matches_what_the_generator_writes_now`, runs at commit time
   over the regenerated output — the `regen-doc-fragments` prek hook sits above
@@ -38,8 +35,8 @@ guard reads the pre-repair state. Every other order is safe.
 The guard: a first-party script that runs pytest as a subprocess must appear in `RULINGS`
 above-by-name, so a NEW repair command cannot land without someone writing down why it cannot
 deadlock. Found by AST rather than by text, so a `subprocess.run([...])` spread over lines
-still counts and a docstring mentioning pytest does not. The census is its own non-vacuity
-floor: `RULINGS` names `pytest_shard.py`, and a walk that read nothing would not find it.
+still counts and a docstring mentioning pytest does not. No script in the tree runs the suite,
+so `RULINGS` is empty and the non-vacuity floor is the walk: it must reach `KNOWN_SCRIPTS`.
 
 Run: uv run pytest tests/repo/test_repair_commands_cannot_deadlock_on_their_own_guard.py
 """
@@ -54,12 +51,9 @@ _SUBPROCESS_CALLS = frozenset({"run", "call", "check_call", "check_output", "Pop
 
 # Every first-party script that runs the suite as a subprocess, against the reason it cannot
 # deadlock. The docstring above carries the full ruling for each.
-RULINGS = {
-    "scripts/dev/pytest_shard.py": (
-        "writes the weights only on a green run, and since #2830 no test reads the weights "
-        "table, so the precondition cannot be red because the write has not happened"
-    ),
-}
+RULINGS: dict[str, str] = {}
+# One script under each of two roots, which a walk that reads the tree must reach.
+KNOWN_SCRIPTS = frozenset({"scripts/dev/pytest_shard.py", "evals/ablate.py"})
 
 
 def _string_constants(node: ast.AST) -> set[str]:
@@ -112,8 +106,10 @@ def _suite_invokers() -> set[str]:
     }
 
 
-def test_the_census_finds_the_invoker_it_must_find():
+def test_the_census_walks_the_scripts_it_must_read():
     """Non-vacuity. A broken walk finds nothing, and the ruling check below passes over it."""
+    walked = {str(path.relative_to(REPO)) for path in _first_party_scripts()}
+    assert KNOWN_SCRIPTS <= walked, f"not walked: {sorted(KNOWN_SCRIPTS - walked)}"
     assert set(RULINGS) <= _suite_invokers(), (
         f"missing: {sorted(set(RULINGS) - _suite_invokers())}"
     )

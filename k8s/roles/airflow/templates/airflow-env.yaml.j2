@@ -1,0 +1,108 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{#
+  The env every Airflow container shares, as macros the four workload templates import. It
+  renders no document, and `manifests_exclude_files` keeps it out of the file list.
+
+  airflow_env(platform)  The env list at container depth (10 spaces). `platform=true` adds the
+                         metadata database, as the `airflow` superuser, and the JWT secret,
+                         which the api-server, scheduler and dag-processor need. `false` adds
+                         the `warehouse` connection, as `warehouse_writer`, for a task pod,
+                         which holds neither: Airflow 3 runs a task through the execution API.
+#}
+{% macro airflow_env(platform) %}
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: KubernetesExecutor
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/dags
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+{# A new DAG starts its catchup on deploy instead of waiting for a click. #}
+            - name: AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION
+              value: "False"
+            - name: AIRFLOW__CORE__DEFAULT_TIMEZONE
+              value: utc
+            - name: AIRFLOW__CORE__PARALLELISM
+              value: "{{ airflow_k8s_parallelism }}"
+{# Unset, Airflow derives it from AIRFLOW__API__BASE_URL, the public name behind Authelia,
+   which no task pod can pass. #}
+            - name: AIRFLOW__CORE__EXECUTION_API_SERVER_URL
+              value: "http://airflow.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}/execution/"
+{# Authelia two_factor is the login; Airflow's own simple auth manager makes every
+               user that reaches it an admin, so there is no second password to hold. #}
+            - name: AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS
+              value: "True"
+            - name: AIRFLOW__API__EXPOSE_CONFIG
+              value: "False"
+            - name: AIRFLOW__API__BASE_URL
+              value: "https://{{ container_item.hostname }}.{{ domain }}"
+            - name: AIRFLOW__KUBERNETES_EXECUTOR__NAMESPACE
+              value: {{ k8s_namespace }}
+            - name: AIRFLOW__KUBERNETES_EXECUTOR__POD_TEMPLATE_FILE
+              value: /opt/airflow-pod-template/pod-template.yaml
+{# A failed task's pod stays for `kubectl logs`; its log file dies with the pod. #}
+            - name: AIRFLOW__KUBERNETES_EXECUTOR__DELETE_WORKER_PODS_ON_FAILURE
+              value: "False"
+{% if platform %}
+            - name: AIRFLOW_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: AIRFLOW_POSTGRES_PASSWORD
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: "postgresql+psycopg2://airflow:$(AIRFLOW_POSTGRES_PASSWORD)@airflow-postgres.{{ k8s_namespace }}.svc.cluster.local:5432/airflow"
+            - name: AIRFLOW__API_AUTH__JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: AIRFLOW__API_AUTH__JWT_SECRET
+{% else %}
+            - name: WAREHOUSE_WRITER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: WAREHOUSE_WRITER_PASSWORD
+            - name: AIRFLOW_CONN_WAREHOUSE
+              value: "postgresql://warehouse_writer:$(WAREHOUSE_WRITER_PASSWORD)@airflow-postgres.{{ k8s_namespace }}.svc.cluster.local:5432/warehouse"
+{% endif %}
+{%- endmacro %}
+
+{#
+  The volumes every Airflow platform container mounts: AIRFLOW_HOME, where Airflow writes its
+  generated airflow.cfg and log files, kept off the read-only root, and the pod template the
+  KubernetesExecutor reads.
+#}
+{% macro airflow_mounts() %}
+            - name: airflow-home
+              mountPath: /opt/airflow
+            - name: airflow-tmp
+              mountPath: /tmp
+            - name: airflow-pod-template
+              mountPath: /opt/airflow-pod-template
+              readOnly: true
+{%- endmacro %}
+
+{% macro airflow_volumes() %}
+        - name: airflow-home
+          emptyDir: {}
+        - name: airflow-tmp
+          emptyDir: {}
+        - name: airflow-pod-template
+          configMap:
+            name: airflow-pod-template
+{%- endmacro %}
+
+{# The wait every platform container but the scheduler runs first: the scheduler's init
+   container owns `airflow db migrate`, and the others start only on a migrated schema. #}
+{% macro wait_for_migrations() %}
+        - name: airflow-wait-for-migrations
+          image: {{ airflow_k8s_image }}
+          imagePullPolicy: Always
+          args: ["airflow", "db", "check-migrations", "--migration-wait-timeout", "600"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+{{ airflow_env(true) }}
+          volumeMounts:
+{{ airflow_mounts() }}
+{{ container_resources(cpu_limit='500m', mem_limit='512Mi', cpu_request='25m', mem_request='192Mi') }}
+{%- endmacro %}

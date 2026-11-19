@@ -169,7 +169,17 @@ A claim is reclaimable when either holds:
 
 - the worktree it names is absent from `git worktree list`, or
 - `lib.worktrees.classify` already judges that worktree REMOVABLE — merged into `origin/master`,
-  clean, and holding no live session lock.
+  clean, and holding no live session lock — and no live process works in it.
+
+The last condition covers a session the Claude desktop app starts. The app creates the
+session's worktree itself, unlocked, on a `claude/<name>` branch. Between a clean commit and
+the next edit that tree reads merged, clean and unlocked. So `claim_is_live` in
+`scripts/dev/findings_lib/claim.py` also holds a tree that a process this user can read has
+as its cwd or `CLAUDE_PROJECT_DIR`, through `lib.worktrees.held_by_readable_process`. An
+unreadable process counts for nothing there, unlike in `remove`, because a hold with no
+evidence would stop `reap` releasing any claim. The main worktree is never held this way:
+every session tree sits under it, sessions also run in it, and its branch is `master`, which
+no claim may name.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
@@ -224,6 +234,59 @@ Four design rules hold across the subcommands, and no docstring states them:
   `next` read only open issues, so a claim stranded on a closed issue leaves every view at once.
   A PR body's `Closes #<n>` posts no release, and the next re-observation that reopens the issue
   would otherwise bring the claim back live.
+
+## Session milestones and project milestones
+
+A session milestone is a GitHub milestone that groups one branch's focused work.
+`findings.py milestone start "<title>" --worktree <branch>` opens it, and nothing else makes
+one. `claim` files the branch's issues under it. The `session-milestone` workflow files the
+branch's PR, and files a fan-out batch's PR under the milestone of the issue that PR closes.
+The workflow closes the milestone once nothing in it is open, and a later claim or PR
+reopens it. The milestone's description names its branch, and the tools touch only a
+milestone whose description they can parse. `scripts/dev/findings_lib/milestone.py` owns the
+scheme.
+
+A session milestone holds only claimed issues: `release`, `reap` and `manual` take an issue
+back out. So it cannot hold work nobody has started.
+
+A project milestone is a session milestone that also holds a backlog.
+`milestone start --project "<title>" --worktree <branch>` opens one, and its description
+says `project` where a session milestone's says `session`. One sub-coordinator session owns
+one project: the project is that session's milestone, and the session runs `issue-fanout`
+over the project's backlog. A project differs from a session milestone in four ways:
+
+- `milestone add <n...>` files unclaimed issues in the backlog. It refuses a closed issue,
+  a claimed issue, and an issue that another milestone holds.
+- `release`, `reap` and `manual` leave the issue in the project. A batch that fails and
+  releases its issue returns that issue to the backlog.
+- A claim by another branch leaves the issue in the project. A hand-steered worker that has
+  a session milestone of its own does not take the issue out of the backlog.
+- `next --milestone "<title>"` lists the project's free issues, and `list` and `new-issues`
+  take the same flag. `--milestone none` selects the issues that no open milestone holds,
+  which is the pool a root session assigns from. A title that no milestone has exits 64
+  rather than printing an empty list. `cc-wait findings --milestone "<title>"` waits on one
+  project, and ends only on an issue filed after the wait began: an older issue that
+  `milestone add` files later does not end it.
+
+Claim filing, PR joining, the close at zero open items and `reap` treat both forms alike. A
+project with issues in its backlog has open items, so it stays open while its backlog lasts.
+
+Each way in has a way out:
+
+- `milestone add` is reversed by `milestone remove <n...>`, which refuses a claimed issue.
+  To take a claimed issue out, `release` it first.
+- `milestone start` is reversed by `milestone close`, and `start` with the same title
+  reopens the closed milestone. `milestone status` prints the form and the counts.
+- No command converts a milestone between the two forms. `start` refuses a title the branch
+  already holds in the other form. To change form, close the milestone and start the other
+  form under another title.
+
+The operator decided on 2026-11-19 that a project is the sub-coordinator's session
+milestone, not a second kind of milestone. The rejected alternative was a milestone the
+operator makes by hand, with no owning branch. The tools never touch a milestone whose
+description names no branch, so they could not file a claim under one, close it when its
+work finished, or reopen it. A project with an owning branch gets all of that from the code
+that serves a session milestone.
 
 ## What a fan-out agent may not do
 
@@ -330,6 +393,12 @@ not land its PR, because only daniel-box runs deploys. The manifest under
 `remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
 live worktrees on the other host.
 
+A reader keeps the batch keys it does not know. `Batch.from_json` in
+`scripts/dev/fanout_lib/manifest.py` holds them in `Batch.extra`, and `Batch.to_json` writes
+them back beside the fields, so a `clean` run by one build does not erase what another build
+recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
+key to the `Batch` constructor skips the whole run on a key it has no field for.
+
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
 a transient user service. It reads both and takes the smaller headroom, so the tighter cap
@@ -350,6 +419,53 @@ already removed is skipped without an ssh call, `status` reports it as `cleaned`
 reading a host whose report file went with the worktree. Once every batch is removed, the
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
+
+### A parked batch
+
+A review batch lands its own PR with `land.sh`. Another PR's failed promotion sets
+`DEPLOY_HOLD`, and that hold stops this batch's landing in one of two ways. The batch then
+ends `parked`: it is neither resumed nor reported as `needs-input`, because the hold is not
+its to fix and no person has a question to answer.
+`scripts/dev/fanout_lib/land_result.py:park_line` decides from the landing's `LAND-RESULT:` line
+(`docs/landing.md`, *The `LAND-RESULT:` line*), never from a sentence in the log.
+
+- **Refused before merge.** `land.sh` exits 75 with `verdict=refused` and merges nothing. The
+  batch's final line is `parked: refused before merge (<why>); re-land with land.sh --pr N
+  --arm-merge --await-merge --detach && cc-wait land N`. Any rule in *Rules that refuse a
+  merge* parks the same way, not only the hold.
+- **Merged, then held.** The landing ends `deploy-failed`, cause `promote-held`, with
+  `hold_owner=other`. The final line is `parked: merged, unverified behind DEPLOY_HOLD <sha>;
+  re-land after cc-wait landing-clear`.
+- **Merged, then held, with no owner.** `hold_owner=unattributed` parks with the same line
+  and `unattributed, so the root coordinator triages the hold` after it. The hold names no
+  failed service, or the PR has none, so nobody can say from the hold whose it is.
+
+`hold_owner=own` does not park. The hold names one of the PR's own services, so the pipeline
+resumes the implementer with the landing's log, as it does for `unhealthy`.
+
+**A parked batch never waits in its unit for the hold to clear.** A wait there spends the
+unit's run time, keeps its 2 GiB reservation and counts as a live batch against the width.
+The unit ends, and the sub-coordinator that owns the batch re-lands it: it runs `cc-wait
+landing-clear`, then the `land.sh` command for the PR. For a PR that merged, the re-run
+skips the merge and waits on the next promotion (`docs/landing.md`, *A PR that merged behind
+a hold*). Clearing the hold stays the operator's decision.
+
+`place status`, `place runs` and `cc-wait fanout` count a `parked` batch and list it with its
+reason, as a batch that needs attention (exit tier 1). The unit's stop does not page for it
+(`fanout_lib/notify.py:PAGED_STATES`).
+
+A daniel-server batch that stops at its PR is landed by the server lander, whose logs are on
+daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the newest
+`land<pr>-*.log` there and reports the batch `landed`, `parked` by the same rule, or
+`needs-input` naming the verdict. With no result yet the batch stays `done (awaiting the
+server lander)`. That directory belongs to the user the lander runs as, so a session of
+another user reads none and reports `done`.
+
+**`clean` keeps a parked batch whose PR has not merged.** A claim expires with its worktree,
+and the open PR still holds the edits, so removing the tree would free the issues for a
+second batch to work. `clean_one` prints `kept: … parked with its PR unmerged` and names the
+re-land. A batch parked after its merge is cleaned like any merged batch. To give up on a
+parked batch, run `abandon`.
 
 `launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
 signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset

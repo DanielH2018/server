@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from typing import Any
 
 from deploy_tools.land_lib.health_gate import GateResult
@@ -145,6 +145,8 @@ class Fakes:
     in_window: bool = False
     # The core quota's `(remaining, reset epoch)` as `gh api rate_limit` answers it.
     core_quota: tuple[int, int] = (5000, 0)
+    # The stderr of a `gh` call that `gh_merge_rc` fails.
+    gh_stderr: str = "boom"
     # What each operation on the line for the turn answers (`tools.line`), one entry a call.
     # Only `join` and `stand` return theirs. An exception is raised in place of an answer.
     line: list[str | Exception] = field(default_factory=lambda: [""])
@@ -173,7 +175,11 @@ class Fakes:
     land_wait: list[WaitResult] = field(
         default_factory=lambda: [
             WaitResult(
-                verdict="settled", cause="", detail="1 applied", revision="", widened=""
+                verdict=WaitVerdict.SETTLED,
+                cause="",
+                detail="1 applied",
+                revision="",
+                widened="",
             )
         ]
     )
@@ -289,7 +295,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def gh_run(*args, **kwargs):
         rc = gh_rc(*args, **kwargs)
         if rc:
-            raise subprocess.CalledProcessError(rc, args, stderr="boom")
+            raise subprocess.CalledProcessError(rc, args, stderr=f.gh_stderr)
         return _cp()
 
     def git_run(*args, cwd=None, check=True, **kwargs):

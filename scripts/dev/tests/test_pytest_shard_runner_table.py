@@ -14,6 +14,7 @@ import pytest
 import pytest_shard
 import shard_prebuild
 import shard_weight_gate
+import tested_tree
 from lib.git import git
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
@@ -44,32 +45,42 @@ def test_the_runner_table_keeps_only_the_census_and_refuses_an_empty_record(tmp_
         shard_weight_gate.write_runner_weights(["no durations here"], keep, table)
 
 
-def test_the_split_packs_runner_seconds_and_scales_the_unmeasured_rest():
-    """The recorded weights pack the runner-heavy pair a, b into one shard of two; the runner
-    seconds split them, and a module the runner table lacks scales by the median ratio."""
-    a, b, c, d, e = FILES[:5]
-    recorded = {a: 1.0, b: 1.0, c: 1.5, d: 0.5, e: 2.0}
-    runner = {a: 9.0, b: 9.0, c: 1.0, d: 1.0}
-    assert (
-        len(set(pytest_shard.assign([a, b, c, d], 2, recorded)[f] for f in (a, b))) == 1
-    )
-    weights = shard_weight_gate.packing_weights(recorded, runner)
-    # The ratios are 9, 9, 0.67 and 2, so their median is 5.5.
-    assert weights == runner | {e: 11.0}
-    assert (
-        len(set(pytest_shard.assign([a, b, c, d], 2, weights)[f] for f in (a, b))) == 2
-    )
+def test_a_module_the_table_lacks_is_packed_at_its_directorys_median():
+    """A heavy directory's new module is packed heavy and a light one's light. A module in a
+    directory with no row takes the median of every row."""
+    weights = {
+        "heavy/tests/test_a.py": 8.0,
+        "heavy/tests/test_b.py": 10.0,
+        "heavy/tests/test_c.py": 30.0,
+        "light/tests/test_d.py": 0.1,
+    }
+    new = ["heavy/tests/test_new.py", "light/tests/test_new.py", "fresh/test_new.py"]
+    packed = pytest_shard.packing_seconds([*weights, *new], weights)
+    assert packed == weights | dict(zip(new, (10.0, 0.1, 9.0), strict=True))
 
 
 def test_the_committed_runner_table_is_populated():
-    """Non-vacuity: an empty or unreadable table would pack every module on scaled weights.
+    """Non-vacuity: an empty or unreadable table would pack every module at one guess.
 
     No named module and no value bound. The docs-refresh cron rewrites this table and runs
     the suite before it commits, so a test an honest refresh can break would park the cron
     on its own output. No census check either: an entry for a deleted module is ignored, so
-    a PR deleting a test module need not touch the table (the weight table has the
-    same trap)."""
+    a PR deleting a test module need not touch the table."""
     assert len(shard_weight_gate.load_runner_weights()) >= 100
+
+
+@pytest.mark.parametrize(
+    ("recorded", "measured", "expected"),
+    [
+        pytest.param(7.31, 12.16, True, id="grew-past-the-band"),
+        pytest.param(12.0, 4.0, True, id="shrank-past-the-band"),
+        pytest.param(7.31, 10.5, False, id="inside-the-band"),
+        pytest.param(0.02, 0.05, False, id="under-the-floor"),
+        pytest.param(0.0, 0.8, True, id="free-entry-past-the-floor"),
+    ],
+)
+def test_drift_is_a_ratio_past_a_floor(recorded, measured, expected):
+    assert shard_weight_gate.drifted(recorded, measured) is expected
 
 
 def test_a_shard_reading_no_render_is_charged_nothing_and_a_k8s_reader_the_k8s_render(
@@ -175,68 +186,144 @@ def test_the_leg_spread_refuses_a_leg_with_no_pytest_summary():
         shard_weight_gate.leg_spread({})
 
 
-def _fake_gh(runs: dict[int, list[tuple[str, str]]]):
-    """A `lib.gh.gh` stand-in: `runs` maps a run id to its jobs' (name, conclusion)."""
+_LEG = [("pytest (shard 1 of 2)", "success")]
+_SKIPPED = [("pytest (shard ${{ matrix.shard }} of 2)", "skipped")]
+
+
+def _oid(number: int) -> str:
+    return f"{number:040x}"
+
+
+def _leg_report(job: int) -> str:
+    return f"1.00s call t/test_{job}.py::t\n"
+
+
+def _fake_gh(
+    master: list[int],
+    jobs: dict[int, list[tuple[str, str]]],
+    tested: dict[int, int] | None = None,
+    silent: frozenset[int] = frozenset(),
+):
+    """A `lib.gh.gh` stand-in for the calls `fetch_runner_logs` makes.
+
+    Args:
+        master: the green master runs, newest first.
+        jobs: each run's jobs as (name, conclusion). A job's id is its run's id times ten,
+            plus its position.
+        tested: a master run mapped to the run that recorded its tree on its PR's head.
+        silent: the runs whose leg logs hold no durations line.
+    """
+    tested = tested or {}
     calls = []
 
     def gh(*args, cwd=None):
         calls.append(args)
-        if args[:2] == ("run", "list"):
-            out = json.dumps([{"databaseId": run} for run in runs])
-        elif args[:2] == ("run", "view"):
-            jobs = runs[int(args[2])]
-            out = json.dumps(
+        path = args[-1] if args[0] == "api" else args[1]
+        if "/workflows/" in path:
+            rows = [
                 {
-                    "jobs": [
-                        {
-                            "databaseId": int(args[2]) * 10 + i,
-                            "name": n,
-                            "conclusion": c,
-                        }
-                        for i, (n, c) in enumerate(jobs)
-                    ]
+                    "id": r,
+                    "head_sha": _oid(r),
+                    "head_commit": {"tree_id": _oid(r + 1000)},
+                    "repository": {"full_name": "o/r"},
                 }
-            )
+                for r in master
+            ]
+            out = json.dumps({"workflow_runs": rows})
+        elif args[:2] == ("run", "view"):
+            run = int(args[2])
+            listed = [
+                {"databaseId": run * 10 + i, "name": n, "conclusion": c}
+                for i, (n, c) in enumerate(jobs[run])
+            ]
+            out = json.dumps({"jobs": listed})
+        elif path.endswith("/pulls"):
+            run = int(path.split("/")[-2], 16)
+            head = {"sha": _oid(run + 2000)}
+            merged = [{"merge_commit_sha": _oid(run), "head": head}]
+            out = json.dumps(merged if run in tested else [])
+        elif "/statuses" in path:
+            run = int(path.split("/")[-2], 16) - 2000
+            status = {
+                "context": tested_tree.CONTEXT,
+                "state": "success",
+                "description": _oid(run + 1000),
+                "creator": {"login": tested_tree.CREATOR},
+                "target_url": f"https://github.com/o/r/actions/runs/{tested[run]}",
+            }
+            out = json.dumps([status])
         else:
-            out = f"log of {args[-1]}"
+            job = int(path.split("/")[-2])
+            out = "no durations\n" if job // 10 in silent else _leg_report(job)
         return subprocess.CompletedProcess(args, 0, out, "")
 
     return gh, calls
 
 
 def test_the_runner_fetch_reads_green_pytest_legs_of_the_newest_runs_that_ran_them():
-    """Run 6 skipped its matrix, as a push outside its paths does; run 9 is past the two."""
+    """Run 6 skipped its matrix and no run recorded its tree; run 9 is past the two."""
     gh, calls = _fake_gh(
+        [7, 6, 8, 9],
         {
-            7: [("pytest (shard 1 of 2)", "success"), ("prek", "success")],
-            6: [("pytest (shard ${{ matrix.shard }} of 2)", "skipped")],
+            7: [*_LEG, ("prek", "success")],
+            6: _SKIPPED,
             8: [
                 ("pytest (shard 2 of 2)", "success"),
                 ("pytest (shard 1 of 2)", "skipped"),
             ],
-            9: [("pytest (shard 1 of 2)", "success")],
-        }
+            9: _LEG,
+        },
     )
     assert shard_weight_gate.fetch_runner_logs(2, gh) == [
-        "log of repos/{owner}/{repo}/actions/jobs/70/logs",
-        "log of repos/{owner}/{repo}/actions/jobs/80/logs",
+        _leg_report(70),
+        _leg_report(80),
     ]
     listing = " ".join(calls[0])
     for wanted in (
-        "--workflow ci.yml",
-        "--branch master",
-        "--event push",
-        "--status success",
+        "workflows/ci.yml/runs",
+        "branch=master",
+        "event=push",
+        "status=success",
     ):
         assert wanted in listing
 
 
-def test_the_runner_fetch_refuses_fewer_runs_than_asked():
-    """One run is one noisy reading per module; the merge must never see it alone."""
+def test_a_master_run_that_skipped_pytest_is_read_through_the_run_that_tested_its_tree():
+    """A push whose tree a pull-request run already tested runs no leg of its own."""
     gh, _ = _fake_gh(
-        {7: [("pytest (shard 1 of 2)", "success")], 8: [("prek", "success")]}
+        [7, 6],
+        {7: _SKIPPED, 6: _SKIPPED, 41: _LEG, 42: _LEG},
+        tested={7: 41, 6: 42},
     )
-    with pytest.raises(RuntimeError, match="logs in 1 of the newest 2 green master"):
+    assert shard_weight_gate.fetch_runner_logs(2, gh) == [
+        _leg_report(410),
+        _leg_report(420),
+    ]
+
+
+def test_a_run_that_tested_several_master_commits_counts_once():
+    """A landing batch's run stands behind up to four commits and is still one reading."""
+    gh, _ = _fake_gh(
+        [7, 6, 5],
+        {7: _SKIPPED, 6: _SKIPPED, 5: _SKIPPED, 41: _LEG},
+        tested={7: 41, 6: 41, 5: 41},
+    )
+    with pytest.raises(RuntimeError, match=r"from 1 run\(s\) behind the newest 3"):
+        shard_weight_gate.fetch_runner_logs(2, gh)
+
+
+def test_the_runner_fetch_refuses_fewer_runs_than_asked():
+    """One run is one noisy reading per module; the merge must never see it alone.
+
+    Run 9's leg passed and measured nothing, as a selection of no module does, so it is no
+    reading.
+    """
+    gh, _ = _fake_gh(
+        [7, 8, 9],
+        {7: _LEG, 8: [("prek", "success")], 9: _LEG},
+        silent=frozenset({9}),
+    )
+    with pytest.raises(RuntimeError, match=r"from 1 run\(s\) behind the newest 3"):
         shard_weight_gate.fetch_runner_logs(2, gh)
 
 

@@ -8,9 +8,20 @@ that holds the one write to a SOPS file.
 Run: uv run pytest scripts/secrets_mgmt/tests/test_rotation_tools.py
 """
 
+import datetime as dt
+from pathlib import Path
+
+import pytest
+
 from secrets_mgmt import secret_rotation as sr
 from secrets_mgmt import sops_io
-from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_registry
+from secrets_mgmt.rotation_tools import (
+    REGISTRY_FILE,
+    RotationTools,
+    load_registry,
+    save_registry,
+)
+from secrets_mgmt.secrets_lib.registry_model import Entry, Registry, RegistryError
 
 
 # The registry is the single plaintext source of names/tiers/dates. A save/load
@@ -18,30 +29,62 @@ from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_regis
 # round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
 # (sort_keys=True keeps the committed file diff-stable as secrets are added).
 def test_registry_round_trips_losslessly(tmp_path):
-    reg = {
-        "entries": {
-            "b_token": {"tier": "external", "last_rotated": "2026-06-01"},
-            "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
+    reg = Registry(
+        {
+            "b_token": Entry("external", dt.date(2026, 6, 1), "record"),
+            "a_token": Entry("assisted", dt.date(2026, 5, 15)),
+            "c_user": Entry("ignore", None),
         }
-    }
+    )
     path = str(tmp_path / "reg.yml")
     save_registry(reg, path)
     assert load_registry(path) == reg
 
 
+def test_the_committed_registry_saves_back_byte_for_byte(tmp_path):
+    """A load and save of the live file changes nothing, so `sync` and `record` diff cleanly."""
+    path = tmp_path / "reg.yml"
+    save_registry(load_registry(REGISTRY_FILE), str(path))
+    assert path.read_text() == Path(REGISTRY_FILE).read_text()
+
+
 def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
     path = str(tmp_path / "reg.yml")
-    save_registry(
-        {"entries": {"z_tok": {"tier": "pinned"}, "a_tok": {"tier": "pinned"}}}, path
-    )
+    save_registry(Registry({"z_tok": Entry("pinned"), "a_tok": Entry("pinned")}), path)
     text = (tmp_path / "reg.yml").read_text()
     assert text.startswith("# Secret rotation registry — MANAGED")
     assert text.index("\n  a_tok:") < text.index("\n  z_tok:")  # sort_keys=True
 
 
-def test_load_registry_missing_file_returns_empty_skeleton(tmp_path):
+def test_load_registry_missing_file_returns_an_empty_registry(tmp_path):
     missing = str(tmp_path / "does-not-exist.yml")
-    assert load_registry(missing) == {"entries": {}}
+    assert load_registry(missing) == Registry()
+
+
+def test_load_parses_dates_and_defaults_a_missing_tier(tmp_path):
+    path = tmp_path / "reg.yml"
+    path.write_text("entries:\n  tok: {last_rotated: '2026-03-13'}\n")
+    assert load_registry(str(path)).entries["tok"] == Entry(
+        "assisted", dt.date(2026, 3, 13)
+    )
+
+
+@pytest.mark.parametrize(
+    ("row", "named"),
+    [
+        ("{tier: assisted, last_rotated: '2026-13-01'}", "last_rotated"),
+        ("{tier: assisted, last_rotated: 'soon'}", "last_rotated"),
+        ("{tier: assisted, rotated: '2026-01-01'}", "unknown field(s) rotated"),
+        ("{tier: 365}", "tier"),
+        ("assisted", "a row is a mapping"),
+    ],
+)
+def test_a_malformed_row_fails_at_load_naming_the_row(tmp_path, row, named):
+    path = tmp_path / "reg.yml"
+    path.write_text(f"entries:\n  bad_tok: {row}\n")
+    with pytest.raises(RegistryError, match=r"^bad_tok: .*") as raised:
+        load_registry(str(path))
+    assert named in str(raised.value)
 
 
 def test_the_default_tier_table_is_the_one_secret_rotation_assigns():

@@ -3,8 +3,17 @@
 import json
 from datetime import date
 
+import pytest
 
-from _findings_fakes import Fakes, build_tools, facts, make_issue, operator_comment
+
+from _findings_fakes import (
+    Fakes,
+    build_tools,
+    facts,
+    live_worktree,
+    make_issue,
+    operator_comment,
+)
 
 from dev.findings import main
 from dev.findings_lib.solo_only import solo_only_reasons, fanout_tooling_paths
@@ -378,3 +387,48 @@ def test_next_with_no_limit_returns_every_pickable_issue(capsys):
     tools, _ = build_tools(Fakes(issues=issues, worktree_facts=facts()))
     assert main(["next", "--json"], tools) == 0
     assert len(json.loads(capsys.readouterr().out)) == 11
+
+
+MILESTONES = "repos/DanielH2018/server/milestones"
+BACKUPS = {"title": "Backups", "number": 9, "state": "open"}
+SHIPPED = {"title": "Shipped", "number": 4, "state": "closed"}
+
+
+def _next_in(milestone, capsys):
+    """The numbers `next --milestone <milestone> --json` lists from a four-issue register."""
+    claim = claim_comment(WT, None, "2026-09-10T00:00:00Z")
+    issues = [
+        {**make_issue(1), "milestone": BACKUPS},
+        {**make_issue(2, comments=[claim]), "milestone": BACKUPS},
+        {**make_issue(3), "milestone": None},
+        {**make_issue(4), "milestone": SHIPPED},
+    ]
+    tools, _ = build_tools(
+        Fakes(
+            issues=issues,
+            worktree_facts=live_worktree(WT),
+            api={MILESTONES: [[BACKUPS, SHIPPED]]},
+        )
+    )
+    code = main(["next", "--json", "--milestone", milestone], tools)
+    return code, capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    ("milestone", "offered"),
+    [("Backups", [1]), ("Shipped", [4]), ("none", [3, 4])],
+    ids=["its-free-issues-only", "a-closed-milestone", "none-is-no-open-milestone"],
+)
+def test_next_milestone_lists_what_that_milestone_holds(milestone, offered, capsys):
+    code, captured = _next_in(milestone, capsys)
+    assert code == 0
+    assert sorted(r["number"] for r in json.loads(captured.out)) == offered
+
+
+def test_next_milestone_refuses_a_title_no_milestone_has(capsys):
+    with pytest.raises(SystemExit) as refused:
+        _next_in("Backup", capsys)
+    assert refused.value.code == 64
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "no milestone is titled `Backup`" in captured.err

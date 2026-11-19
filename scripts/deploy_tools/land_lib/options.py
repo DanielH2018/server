@@ -8,6 +8,7 @@ shim as a process has no other way to aim a landing away from the live checkout.
 
 import argparse
 import os
+import re
 import sys as _sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,8 @@ WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 # A landing that takes the turn with a draft tests the drafts in the line with its own
 # (`batch.py`); `0` turns that off.
 BATCH_ENV = "LAND_BATCH"
+_SHA = re.compile(r"[0-9a-f]{40}")
+
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
 # landing it was written for.
@@ -86,6 +89,18 @@ def _require_author_from_env() -> str:
     return os.environ.get(REQUIRE_AUTHOR_ENV) or ""
 
 
+def _require_head_from_env(parser: argparse.ArgumentParser) -> str | None:
+    """`LAND_REQUIRE_HEAD`: the head SHA the caller checked, or None when unset or empty.
+
+    Refuses through `parser.error` a value that is not 40 lowercase hex, because the policy
+    compares it whole against GitHub's `headRefOid`.
+    """
+    head = os.environ.get(REQUIRE_HEAD_ENV) or None
+    if head is not None and not _SHA.fullmatch(head):
+        parser.error(f"{REQUIRE_HEAD_ENV} must be a 40-hex commit SHA, not {head!r}")
+    return head
+
+
 @dataclass(frozen=True)
 class Options:
     """The landing's parameters. Budgets are fields so a test sets them without an env knob.
@@ -108,8 +123,8 @@ class Options:
     approval_paths: str = ""
     # The login whose approval of the head lifts the approval-path refusal; "" never does.
     approver: str = ""
-    # The head SHA the landing must find, or "" for whatever the PR's head is.
-    require_head: str = ""
+    # The head SHA the landing must find, or None for whatever the PR's head is.
+    require_head: str | None = None
     # Whether the landing needs the approver's approval of the head whatever paths it changes.
     require_approval: bool = False
     # `LAND_DEADLINE`, in seconds after the landing starts, or 0 for none.
@@ -145,7 +160,7 @@ class Options:
         return bool(
             self.require_branch_prefix
             or self.approval_paths
-            or self.require_head
+            or self.require_head is not None
             or self.require_approval
         )
 
@@ -242,7 +257,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         require_branch_prefix=os.environ.get(REQUIRE_BRANCH_PREFIX_ENV) or "",
         approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
         approver=os.environ.get(APPROVER_ENV) or "",
-        require_head=os.environ.get(REQUIRE_HEAD_ENV) or "",
+        require_head=_require_head_from_env(parser),
         require_approval=bool(os.environ.get(REQUIRE_APPROVAL_ENV)),
         deadline=int(os.environ.get(DEADLINE_ENV) or 0),
         window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),

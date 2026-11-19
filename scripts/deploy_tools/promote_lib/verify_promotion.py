@@ -7,7 +7,7 @@ to `sha-<T>`, and a failed one writes `<T> failed=<names>` to DEPLOY_HOLD, then 
 to `last-good`. When `decide` named forward-only tags T changes (its `no_reset` output), a
 failed one writes T's SHA alone in place of that value, tags T's digest `held` and leaves
 `prod` on T (H1.1b, `forward_only.py`). The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*, and the
+docs/archive/deploy/d2-first-leaf.md, *Publication and verification*, and the
 operator's view is docs/flux-deploy-plane.md.
 
 WHAT `verify` EXPECTS. `flux/homelab` plus `flux/<name>` for every name in T's changed set,
@@ -78,7 +78,9 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 import yaml
 
@@ -98,6 +100,12 @@ from changed_set import ROOT, changed_set, footprints, suspended_tags
 from chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
 from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
+from deploy_tools.promote_lib.flux_status import (
+    FAILED_STATES,
+    STATUS_PREFIX,
+    StatusState,
+    flux_states,
+)
 from deploy_tools.promote_lib.verify_handoff import read_handoff, read_recorded
 
 # Re-exported, as `verify.write_handoff`, for `promote.py`'s `hand_off`.
@@ -106,8 +114,6 @@ from renderer.renderer_lib.ordering import split_kind
 
 DIGESTS_FILE = "digests.json"
 KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
-STATUS_PREFIX = "flux/"
-FAILED_STATES = frozenset({"failure", "error"})
 _SHA = re.compile(r"[0-9a-f]{40}")
 
 # How far before `--moved-at` a status on T still counts, for clock skew between the runner
@@ -140,7 +146,8 @@ POLL_S = 30
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
-# (tests/repo/test_promote_workflow_verify.py). `verify`'s limit sits just above
+# (the `promote-verify-and-settle-fit-inside-decides-wait` row of
+# tests/repo/test_census_rows_workflows.py). `verify`'s limit sits just above
 # `chained_timeout.VERIFY_CAP_S`, so this is 335 + 5 + 10 minutes, and the `promote` job that holds it fits
 # inside GitHub's 6-hour job limit with 10 minutes to spare.
 IN_FLIGHT_WAIT_S = 350 * 60
@@ -269,7 +276,7 @@ def prior_statuses(
     target: dict[str, bytes],
     prod: dict[str, bytes],
     read: Callable[[], dict[str, str]],
-) -> dict[str, str]:
+) -> dict[str, StatusState]:
     """`decide`'s record: the newest status on `prod`'s commit for each name in the changed set.
 
     `read` returns the newest status per context on `prod`'s commit. It is called once, and
@@ -289,12 +296,8 @@ def prior_statuses(
     )
     if not found.names - found.direct:
         return {}
-    states = read()
-    return {
-        name: states[STATUS_PREFIX + name]
-        for name in sorted(found.names)
-        if STATUS_PREFIX + name in states
-    }
+    states = flux_states(read())
+    return {name: states[name] for name in sorted(found.names) if name in states}
 
 
 # -- the wait --------------------------------------------------------------------------------
@@ -319,20 +322,32 @@ class StatusReads:
     prod: Callable[[], str | None] | None = None
 
 
+class VerifyVerdict(StrEnum):
+    """How `verify` ended, as its `verdict=` step output, which `settle` and `hold` read."""
+
+    GOOD = "good"
+    FAILED = "failed"
+    SUPERSEDED = "superseded"
+
+
 @dataclass(frozen=True)
 class Verdict:
     """How `verify` ended.
 
     Attributes:
-        verdict: `good`, `failed` or `superseded`.
+        verdict: the outcome.
         failed: the names `settle` writes into `<T> failed=<names>`, sorted.
         excused: the dependents left out because their recorded status on `prod`'s commit
             read `failure`.
     """
 
-    verdict: str
+    verdict: VerifyVerdict
     failed: tuple[str, ...] = ()
     excused: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Raises ValueError on a value outside VerifyVerdict, where the verdict is built.
+        object.__setattr__(self, "verdict", VerifyVerdict(self.verdict))
 
 
 def already_failing(
@@ -342,7 +357,9 @@ def already_failing(
 
     Only `failure` excuses. An `error`, a `success` or no record keeps the dependent expected.
     """
-    return frozenset(name for name in dependents if recorded.get(name) == "failure")
+    return frozenset(
+        name for name in dependents if recorded.get(name) == StatusState.FAILURE
+    )
 
 
 def verify(
@@ -384,7 +401,7 @@ def verify(
         flush=True,
     )
     started = reads.clock()
-    states: dict[str, str] = {}
+    states: dict[str, StatusState] = {}
     last = ""
     controller = controller_rollout.Window()
     window = storage_rollout.Window(
@@ -394,36 +411,34 @@ def verify(
     def moved_past() -> Verdict | None:
         if superseded.moved_past(reads.prod, digest) is None:
             return None
-        return Verdict("superseded", excused=tuple(sorted(excused)))
+        return Verdict(VerifyVerdict.SUPERSEDED, excused=tuple(sorted(excused)))
 
     while True:
         if moved := moved_past():
             return moved
         try:
-            states = reads.statuses(target, since)
-            line = ", ".join(
-                f"{n}={states.get(STATUS_PREFIX + n, 'none')}" for n in names
-            )
+            states = flux_states(reads.statuses(target, since))
+            line = ", ".join(f"{n}={states.get(n, 'none')}" for n in names)
         except forge.ForgeError as err:
             line = f"the statuses could not be read: {err}"
-        failed = [n for n in names if states.get(STATUS_PREFIX + n) in FAILED_STATES]
+        failed = [n for n in names if states.get(n) in FAILED_STATES]
         rolling = controller.provisional(names, failed, reads.clock())
         final = [n for n in failed if n not in rolling]
         if final and not window.provisional(final, states, reads.clock()):
             return moved_past() or Verdict(
-                "failed", tuple(failed), tuple(sorted(excused))
+                VerifyVerdict.FAILED, tuple(failed), tuple(sorted(excused))
             )
         if failed:
             line += window.note() if final else controller.note()
-        if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
-            return Verdict("good", excused=tuple(sorted(excused)))
+        if all(states.get(n) == StatusState.SUCCESS for n in names):
+            return Verdict(VerifyVerdict.GOOD, excused=tuple(sorted(excused)))
         if line != last:
             print(f"  verify: {line}", flush=True)
             last = line
         if reads.clock() - started >= expected.timeout_s:
-            missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
+            missing = [n for n in names if states.get(n) != StatusState.SUCCESS]
             return moved_past() or Verdict(
-                "failed", tuple(missing), tuple(sorted(excused))
+                VerifyVerdict.FAILED, tuple(missing), tuple(sorted(excused))
             )
         reads.sleep(poll_s)
 
@@ -439,7 +454,13 @@ def report(target: str, verdict: Verdict, github_output: str | None) -> int:
     if github_output:
         with open(github_output, "a", encoding="utf-8") as out:
             out.write(f"verdict={verdict.verdict}\nfailed={failed}\n")
-    return OK if verdict.verdict in ("good", "superseded") else FAILED
+    match verdict.verdict:
+        case VerifyVerdict.GOOD | VerifyVerdict.SUPERSEDED:
+            return OK
+        case VerifyVerdict.FAILED:
+            return FAILED
+        case unknown:
+            assert_never(unknown)
 
 
 def add_parser(commands) -> None:

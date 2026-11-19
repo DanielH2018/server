@@ -266,12 +266,11 @@ def test_the_alert_template_pages_with_the_instance_name_and_a_credential(packag
     assert got["SyslogLevel"] == ["notice"]
 
 
-def test_users_are_declared_by_uid_alone(package):
-    assert {u["name"]: u["uid"] for u in package.users} == {
-        "homelab-builder": 902,
-        "homelab-signer": 903,
+def test_users_are_declared_with_their_live_uids_and_gids(package):
+    assert {u["name"]: (u["uid"], u["gid"]) for u in package.users} == {
+        "homelab-builder": (902, 983),
+        "homelab-signer": (903, 982),
     }
-    assert all("gid" not in u for u in package.users)
 
 
 def test_each_ansible_era_ufw_rule_is_replaced_by_a_declared_rule(package):

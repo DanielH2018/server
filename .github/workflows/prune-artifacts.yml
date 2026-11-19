@@ -5,12 +5,12 @@ name: prune-artifacts
 # and no promotion or rollback can reach it, together with the signatures of the digests it
 # deletes. It then runs `cosign verify` on `prod`'s digest, and on `last-good`'s, so a wrong
 # selection shows as a red run on the day it happens. The plan is
-# docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
+# docs/archive/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
 # pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
 #
-# tests/repo/test_prune_artifacts_workflow.py holds this file's guard, permissions and
-# concurrency group, and holds its cosign pin, its cosign fetch steps and RETRY_FUNCTIONS equal
-# to promote.yml's.
+# The `prune-*` rows of tests/repo/test_census_rows_workflows.py hold this file's guard,
+# permissions and concurrency group, and hold its cosign pin, its cosign fetch steps and
+# RETRY_FUNCTIONS equal to promote.yml's.
 
 on:
   schedule:
@@ -25,6 +25,7 @@ env:
   COSIGN_VERSION: v3.1.4
   COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
   RETRY_FUNCTIONS: |
+    annotate() { printf '::%s::%s\n' "$1" "$2"; }
     retry() {
       local try out status
       for try in 1 2 3; do
@@ -34,7 +35,7 @@ env:
         else
           status=$?
         fi
-        echo "::warning::$1 failed on try $try of 3 with exit code $status" >&2
+        annotate warning "$1 failed on try $try of 3 with exit code $status" >&2
         [ "$try" = 3 ] || sleep 10
       done
       return "$status"

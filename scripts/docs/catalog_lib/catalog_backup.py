@@ -472,7 +472,7 @@ def owner_stance(tags: str = "") -> str:
     """What applies a k8s service, as one clause.
 
     The glance and the catalogue print it in place of the deploy tag, because no Ansible path deploys such a tag. The plan is
-    docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point does with a tag
+    docs/archive/deploy/d2-first-leaf.md, *What each entry point does with a tag
     that is not Ansible-owned*.
 
     Args:

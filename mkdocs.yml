@@ -113,9 +113,9 @@ exclude_docs: |
 # links it. Declaring it here is what separates "decided to leave unlinked" from "nobody
 # noticed", which is the distinction the nav coverage test now enforces.
 #
-# `target-architecture/` holds the migration plans, archived in place: hundreds of files link
-# into those paths, so they stay built. what-the-migration-built.md links the design, the
-# contracts and the docs-guard handoff, and each plan links its siblings.
+# `target-architecture/` holds the docs-guard slices, which are still in progress, and one
+# stub per archived plan that a rendered comment still cites. A stub goes once no rendered
+# comment cites its path. what-the-migration-built.md links the docs-guard handoff.
 #
 # DECIDED: docs/archive stays; size was never the concern, and a PR number is not greppable
 # offline the way the linked record is.
@@ -197,6 +197,7 @@ nav:
       - "ADR-0035 The skeptic and implementer agents carry no turn cap": adr/0035-skeptic-and-implementer-carry-no-maxturns.md
       - "ADR-0036 A selected run proves its tree, and a nightly sweep is the net": adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md
       - "ADR-0037 The renderer keeps Jinja after Ansible": adr/0037-the-renderer-keeps-jinja-after-ansible.md
+      - "ADR-0038 Design is checked where code is written": adr/0038-design-is-checked-where-code-is-written.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -232,8 +233,6 @@ nav:
       - CI and the repo:
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
-          # One coverage run with per-test contexts: deletion candidates, not a gate.
-          - Test coverage snapshot: test-coverage-snapshot.md
           # What exhausts the shared GitHub API quota, and the per-session budget ADR-0034 chose.
           - GitHub API quota: github-quota.md
           - Python code organization: python-code-organization.md
@@ -298,6 +297,7 @@ nav:
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
           - Ubuntu 26.04 upgrade plan: ubuntu-26.04-upgrade-plan.md
+          - Airflow warehouse plan: airflow-warehouse-plan.md
           - Longhorn disaster recovery: longhorn-disaster-recovery.md
           - k3s etcd restore: k3s-etcd-restore.md
           - Registry push store collection: registry-push-store-gc.md

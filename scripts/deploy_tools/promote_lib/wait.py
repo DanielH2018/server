@@ -2,8 +2,8 @@
 
 `land.sh` runs it after merging M for every PR that may move the bundle. It waits until a
 promotion covers M, never on one `promote` run, because GitHub may evict a queued run and a run
-may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first-leaf.md,
-*How `land.sh` waits*, and contract C6 in docs/target-architecture/contracts.md.
+may promote a newer commit. The plan is docs/archive/deploy/d2-first-leaf.md,
+*How `land.sh` waits*, and contract C6 in docs/archive/contracts.md.
 
 - It waits on `homelab` and M's changed set (`changed_set.py`), taken between M's
   `digests.json` and the one on the newest published ancestor of M's first parent. A file that
@@ -13,7 +13,7 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
 - The deploy tags of that changed set, joined with `--services`, are the PR's tags: the
   annotation names them, and `WaitResult.tags` hands them to the landing's health gate.
   `land.sh` derives no k8s tag from paths since D6.12, so the changed set alone names them
-  (docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*).
+  (docs/archive/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*).
   D3.4's `--also` went in the same PR: a `cluster-vars` change moves the footprint of every
   substituting tag, so the changed set already holds them.
 - It polls every POLL_S seconds until one of four outcomes:
@@ -67,7 +67,9 @@ Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> [--services <
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -207,12 +209,21 @@ class WaitReads:
     clock: Callable[[], float]
 
 
+class WaitVerdict(StrEnum):
+    """How `land_wait` ended, as the `verdict=` field of `report_wait`'s last line."""
+
+    SETTLED = "settled"
+    DEPLOY_FAILED = "deploy-failed"
+    GAVE_UP = "gave-up"
+    SUSPENDED = "suspended"
+
+
 @dataclass(frozen=True)
 class WaitResult:
     """How `land_wait` ended.
 
     Attributes:
-        verdict: `settled`, `deploy-failed`, `gave-up` or `suspended`.
+        verdict: how the wait ended.
         cause: HOLD_CAUSE or SOAK_CAUSE beside `deploy-failed`, TIMEOUT_CAUSE or
             UNREADABLE_CAUSE beside `gave-up`, SUSPENDED_CAUSE beside `suspended`, "" beside
             `settled`.
@@ -222,15 +233,23 @@ class WaitResult:
         suspended: the PR's tags suspended at M, which the wait left out.
         tags: the PR's tags, `services` joined with the changed set's own (`changed_tags`),
             as the last poll read them. Every flux-owned tag when the set widened.
+        hold_sha: the SHA DEPLOY_HOLD held, beside HOLD_CAUSE; "" otherwise.
+        hold_owner: `hold_owner`'s answer for that hold, beside HOLD_CAUSE; "" otherwise.
     """
 
-    verdict: str
+    verdict: WaitVerdict
     cause: str = ""
     detail: str = ""
     revision: str = ""
     widened: str = ""
     suspended: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    hold_sha: str = ""
+    hold_owner: str = ""
+
+    def __post_init__(self) -> None:
+        # Raises ValueError on a value outside WaitVerdict, where the result is built.
+        object.__setattr__(self, "verdict", WaitVerdict(self.verdict))
 
 
 # The changed-set names that are no deploy tag: the root, the shared kinds, and Flux's own
@@ -243,6 +262,51 @@ def changed_tags(names) -> set[str]:
     return {tag for name in names if (tag := split_kind(name)[0]) not in _NOT_A_TAG}
 
 
+HOLD_OWN = "own"
+HOLD_OTHER = "other"
+HOLD_UNATTRIBUTED = "unattributed"
+
+
+@dataclass(frozen=True)
+class _Hold:
+    """A DEPLOY_HOLD value, split and read against one landing's own services.
+
+    Attributes:
+        sha: the held SHA, the value's first word.
+        rest: what follows the SHA, "" for a bare one.
+        failed: the names of a `failed=` hold, empty for every other form.
+        own: the failed names that belong to one of the landing's services, sorted.
+    """
+
+    sha: str
+    rest: str
+    failed: tuple[str, ...]
+    own: tuple[str, ...]
+
+
+def _read_hold(hold: str, services: list[str] | None) -> _Hold:
+    sha, _, rest = hold.partition(" ")
+    failed: tuple[str, ...] = ()
+    if rest.startswith("failed="):
+        failed = tuple(rest.removeprefix("failed=").split(","))
+    own = sorted(n for n in failed if split_kind(n)[0] in (services or ()))
+    return _Hold(sha, rest, failed, tuple(own))
+
+
+def hold_owner(hold: str, services: list[str] | None = None) -> str:
+    """Whose failure a DEPLOY_HOLD value records, for the landing that names `services`.
+
+    Returns:
+        HOLD_OWN when a failed name is one of `services`, and HOLD_OTHER when the hold names
+        failures and none is. HOLD_UNATTRIBUTED when the hold names no failure or the
+        landing names no service, so nothing ties the hold to this PR or clears the PR of it.
+    """
+    read = _read_hold(hold, services)
+    if not read.failed or not services:
+        return HOLD_UNATTRIBUTED
+    return HOLD_OWN if read.own else HOLD_OTHER
+
+
 def hold_detail(hold: str, services: list[str] | None = None) -> str:
     """What a DEPLOY_HOLD value says: the held SHA and, for a `failed=` hold, its names.
 
@@ -252,21 +316,19 @@ def hold_detail(hold: str, services: list[str] | None = None) -> str:
     that run's commit too (D7). So a hold naming none of this PR's services was most likely
     caused by another merge in the same promotion.
     """
-    held, _, rest = hold.partition(" ")
-    detail = f"{HOLD_VARIABLE} holds {held}"
-    if rest.startswith("failed="):
-        names = rest.removeprefix("failed=").split(",")
-        detail += f", and these failed: {','.join(names)}"
+    read = _read_hold(hold, services)
+    detail = f"{HOLD_VARIABLE} holds {read.sha}"
+    if read.failed:
+        detail += f", and these failed: {','.join(read.failed)}"
         if services:
-            own = sorted(n for n in names if split_kind(n)[0] in services)
             detail += (
-                f". This PR's {', '.join(own)} failed"
-                if own
+                f". This PR's {', '.join(read.own)} failed"
+                if read.own
                 else f". None is this PR's ({', '.join(sorted(services))}), so another "
                 "merge in the same promotion, or a run it superseded, most likely caused it"
             )
-    elif rest:
-        detail += f" ({rest})"
+    elif read.rest:
+        detail += f" ({read.rest})"
     return (
         f"{detail}. That SHA may contain this merge or predate it. Clearing the hold is "
         f"the operator's decision, and an agent's clear asks them first: `gh variable set {HOLD_VARIABLE} --body none -R {forge.REPOSITORY}`"
@@ -400,7 +462,7 @@ def land_wait(
             items = reads.kustomizations()
         except KubectlSetupError as err:
             return WaitResult(
-                "gave-up",
+                WaitVerdict.GAVE_UP,
                 UNREADABLE_CAUSE,
                 f"this host cannot read the cluster, and no retry fixes that: {err}. "
                 "Give the landing user a readable kubeconfig, then re-run land.sh",
@@ -440,7 +502,7 @@ def land_wait(
                     )
                 elif soak in SOAK_FAILED_STATES:
                     return WaitResult(
-                        "deploy-failed",
+                        WaitVerdict.DEPLOY_FAILED,
                         SOAK_CAUSE,
                         f"{SOAK_CONTEXT} reads {soak} on {revision[:8]}. The soak Job "
                         f"names the services it failed: `{SOAK_READ}`",
@@ -455,7 +517,7 @@ def land_wait(
                 if tags:
                     annotate_promotion(reads.annotate, tags, revision)
                 return WaitResult(
-                    "settled",
+                    WaitVerdict.SETTLED,
                     detail=f"{len(names)} Kustomizations applied {revision[:8]}",
                     revision=revision,
                     widened=widened,
@@ -471,15 +533,17 @@ def land_wait(
             hold, line = "", f"{line}; {HOLD_VARIABLE} could not be read: {err}"
         if hold and hold != "none":
             return WaitResult(
-                "deploy-failed",
+                WaitVerdict.DEPLOY_FAILED,
                 HOLD_CAUSE,
                 hold_detail(hold, own),
                 widened=widened,
                 tags=tuple(tags),
+                hold_sha=hold.partition(" ")[0],
+                hold_owner=hold_owner(hold, own),
             )
         if all_paused:
             return WaitResult(
-                "suspended",
+                WaitVerdict.SUSPENDED,
                 SUSPENDED_CAUSE,
                 f"{', '.join(paused)} is suspended at {merge[:8]}, so Flux applies "
                 "nothing for it until a PR removes its flux_suspend",
@@ -506,7 +570,7 @@ def land_wait(
         progress(line)
         if now >= deadline or (cap_end is not None and now >= cap_end):
             return WaitResult(
-                "gave-up",
+                WaitVerdict.GAVE_UP,
                 TIMEOUT_CAUSE,
                 f"no promotion covered {merge[:8]} within {int(now - started)}s. Look first "
                 "at the `promote` workflow's failed `publish` jobs: a publish refusal leaves "
@@ -604,9 +668,15 @@ def report_wait(merge: str, result: WaitResult) -> int:
         f"verdict={result.verdict} cause={result.cause} merge={merge} "
         f"revision={result.revision} widened={result.widened}"
     )
-    if result.verdict == "settled":
-        return OK
-    return LAND_GAVE_UP if result.verdict == "gave-up" else FAILED
+    match result.verdict:
+        case WaitVerdict.SETTLED:
+            return OK
+        case WaitVerdict.GAVE_UP:
+            return LAND_GAVE_UP
+        case WaitVerdict.DEPLOY_FAILED | WaitVerdict.SUSPENDED:
+            return FAILED
+        case unknown:
+            assert_never(unknown)
 
 
 def add_parser(commands, repo: Path) -> None:

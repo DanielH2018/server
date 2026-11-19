@@ -58,8 +58,8 @@ from renovate_floor import (
     read_floor,
     soak_problem,
 )
+from renovate_identity import GH_AUTHOR, is_renovate
 
-AUTHOR = "app/renovate"
 # The login whose approval of the head lets land.sh land a PR the floor check flags.
 APPROVER = "DanielH2018"
 BASE = "master"
@@ -117,8 +117,8 @@ def denied_roles(output: str) -> frozenset[str] | None:
 def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
     """Every reason `pr` may not be landed unattended. An empty list means land it."""
     reasons = []
-    if (pr.get("author") or {}).get("login") != AUTHOR:
-        reasons.append(f"its author is not {AUTHOR}")
+    if not is_renovate(pr.get("author")):
+        reasons.append(f"its author is not {GH_AUTHOR}")
     if pr.get("isCrossRepository") is not False:
         reasons.append("its head branch is not in this repository")
     if pr.get("baseRefName") != BASE:

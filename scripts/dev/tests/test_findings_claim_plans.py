@@ -12,6 +12,7 @@ from dev.findings_lib.milestone import description_for
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
+    plan_milestone_add,
     plan_release,
     plan_release_held,
 )
@@ -20,6 +21,12 @@ WT = "worktree-issue-1132"
 TODAY = date(2026, 9, 11)
 FOCUS = "Opt-in milestones"
 SESSION_MILESTONE = {"title": FOCUS, "description": description_for(WT)}
+PROJECT = "Backup hardening"
+LEAD = "worktree-backup-lead"
+PROJECT_MILESTONE = {
+    "title": PROJECT,
+    "description": description_for(LEAD, project=True),
+}
 
 
 def _issue(number=1132, labels=(), comments=(), milestone=None):
@@ -126,6 +133,58 @@ def test_releasing_takes_the_issue_out_of_its_session_milestone():
     issue = _issue(comments=[claim_comment(WT, None, "t")], milestone=SESSION_MILESTONE)
     plans = plan_release(issue, worktree=WT, when="t", reason=None)
     assert plans[1] == ["issue", "edit", "1132", "--remove-milestone"]
+
+
+def test_releasing_keeps_the_issue_in_a_project_milestone():
+    issue = _issue(
+        comments=[claim_comment(LEAD, None, "t")], milestone=PROJECT_MILESTONE
+    )
+    plans = plan_release(issue, worktree=LEAD, when="t", reason="batch failed")
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+
+
+def test_claiming_from_another_branch_project_leaves_the_issue_in_it():
+    plans = plan_claim(
+        _issue(milestone=PROJECT_MILESTONE),
+        worktree=WT,
+        session=None,
+        when="t",
+        today=TODAY,
+        milestone=FOCUS,
+    )
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+
+
+def test_claiming_from_your_own_project_backlog_only_comments():
+    plans = plan_claim(
+        _issue(milestone=PROJECT_MILESTONE),
+        worktree=LEAD,
+        session=None,
+        when="t",
+        today=TODAY,
+        milestone=PROJECT,
+    )
+    assert [p[:2] for p in plans] == [["issue", "comment"]]
+
+
+@pytest.mark.parametrize(
+    ("issue", "reason"),
+    [
+        ({**_issue(), "state": "CLOSED"}, "closed"),
+        ({**_issue(), "labels": []}, "not in the register"),
+        (_issue(comments=[claim_comment(WT, None, "t")]), f"claimed by `{WT}`"),
+    ],
+    ids=["closed", "outside-the-register", "claimed"],
+)
+def test_a_backlog_refuses_an_issue_nobody_could_pick_up_from_it(issue, reason):
+    with pytest.raises(ClaimRefused, match=reason):
+        plan_milestone_add(issue, PROJECT_MILESTONE)
+
+
+def test_adding_an_issue_already_in_the_backlog_plans_nothing():
+    assert (
+        plan_milestone_add(_issue(milestone=PROJECT_MILESTONE), PROJECT_MILESTONE) == []
+    )
 
 
 def test_releasing_leaves_an_operator_milestone_alone():

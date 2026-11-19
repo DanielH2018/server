@@ -1,0 +1,8 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
+# here are overwritten. Ranks system.slice, where k3s runs, above kubepods.slice at the root
+# cgroup, only while the CPU is contended. `k3s_system_slice_cpu_weight` in
+# hosts/components/k3s-server/defaults/main.yml says why.
+#
+# The postinst's daemon-reload writes the weight into the running slice's cgroup.
+[Slice]
+CPUWeight={{ k3s_system_slice_cpu_weight }}

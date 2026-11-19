@@ -68,7 +68,8 @@ from secrets_mgmt.secrets_lib.secret_registry import (
     sync,
     unknown_tiers,
 )
-from secrets_mgmt.rotation_tools import RotationTools
+from secrets_mgmt.secrets_lib.registry_model import RegistryError
+from secrets_mgmt.rotation_tools import REGISTRY_FILE, RotationTools
 
 # A LITERAL, and it must stay one: `scripts/docs/gen_doc_fragments.py` reads this assignment
 # with `ast.literal_eval` (it never imports this module, which would need an age key on the
@@ -120,7 +121,7 @@ def cmd_sync(args, tools: RotationTools) -> int:
     tools.save_registry(reg)
     print("sync: %d added, %d stale" % (len(added), len(stale)))
     for n in added:
-        print("  + %-40s %s" % (n, reg["entries"][n]["tier"]))
+        print("  + %-40s %s" % (n, reg.entries[n].tier))
     for n in stale:
         print("  ! stale (in registry, not in secrets.yml): %s" % n)
     return 0
@@ -174,9 +175,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
     """
     reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
-    missing, stale = registry_drift(
-        set(reg.get("entries", {})), set(tools.sops_names())
-    )
+    missing, stale = registry_drift(set(reg.entries), set(tools.sops_names()))
     # A real rotation changes the ciphertext in git but leaves `last_rotated` behind,
     # because `sync` deliberately won't touch an existing value's date. Reading the date
     # back out of git closes that gap without writing the registry.
@@ -196,7 +195,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
     for name in unknown:
         print(
             "  UNKNOWN %-40s %-9s no cadence: nothing audits this tier"
-            % (name, reg["entries"][name].get("tier"))
+            % (name, reg.entries[name].tier)
         )
     summary = audit_summary(res, missing, stale, unknown)
     # An externally-detected fault the caller wants folded in, such as a revoked `gh` token.
@@ -246,7 +245,7 @@ def cmd_record(args, tools: RotationTools) -> int:
     DATE, for any row.
     """
     reg = tools.load_registry()
-    entries = reg.setdefault("entries", {})
+    entries = reg.entries
     if args.last_rotated > tools.today():
         error("%s is after today (%s)" % (args.last_rotated, tools.today()))
         return SECRET_ROTATION_BAD_ARGS
@@ -264,14 +263,14 @@ def cmd_record(args, tools: RotationTools) -> int:
             % args.key
         )
         return SECRET_ROTATION_BAD_ARGS
-    old = entries[args.key].get("last_rotated")
-    entries[args.key]["last_rotated"] = args.last_rotated.isoformat()
+    old = entries[args.key].last_rotated
+    entries[args.key].last_rotated = args.last_rotated
     tools.save_registry(reg)
     print(
         "record: %s last_rotated %s -> %s%s"
         % (
             args.key,
-            old,
+            old.isoformat() if old else None,
             args.last_rotated.isoformat(),
             " (row moved from %s)" % moved_from if moved_from else "",
         )
@@ -339,7 +338,11 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write and clock read a subcommand makes goes through it.
-    return args.func(args, RotationTools())
+    try:
+        return args.func(args, RotationTools())
+    except RegistryError as e:
+        error("%s is malformed: %s" % (REGISTRY_FILE, e))
+        return 1
 
 
 if __name__ == "__main__":

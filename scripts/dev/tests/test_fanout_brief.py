@@ -7,10 +7,20 @@ requirement that drifted onto the wrong host fails rather than passing twice.
 Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 """
 
+import json
 import re
 
-from fanout_lib.brief import Comment, Issue, relevant_health, render_brief
+from _review_fakes import _pipeline
+from fanout_lib.brief import (
+    DESIGN_HEADING,
+    DESIGN_RULES,
+    Comment,
+    Issue,
+    relevant_health,
+    render_brief,
+)
 from fanout_lib.review.review import issues_section
+from fanout_lib.review.review_prompts import system_prompt
 from fanout_lib.target import Target
 
 ISSUES = [
@@ -256,11 +266,31 @@ def test_a_server_brief_names_the_guard_script_and_a_dotfiles_brief_does_not():
         assert re.search(r"^uv run python scripts/dev/repo_guards\.py$", brief, re.M)
         assert not re.search(r"^uv run pytest", brief, re.M)
         assert brief.index("## Before you open the PR") < brief.index("## Landing")
-        assert "pytest_shard.py --record-files <module>" in brief
     brief = render_brief(
         ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], DOTFILES
     )
-    assert "## Before you open the PR" not in brief and "--record-files" not in brief
+    assert "## Before you open the PR" not in brief
+
+
+def test_every_brief_lists_what_a_change_must_not_add_before_the_landing():
+    for target in (None, DOTFILES):
+        args = (ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
+        brief = render_brief(*args) if target is None else render_brief(*args, target)
+        assert f"## {DESIGN_HEADING}\n" in brief and DESIGN_RULES in brief
+        assert brief.index(DESIGN_RULES) < brief.index("## Landing")
+
+
+def test_the_reviewer_gets_the_briefs_list_and_a_schema_for_every_kind_it_is_told_of(
+    tmp_path,
+):
+    pipeline, _ = _pipeline(tmp_path, [])
+    reviewer = pipeline._reviewer()
+    assert DESIGN_RULES in reviewer[reviewer.index("--append-system-prompt") + 1]
+    schema = json.loads(reviewer[reviewer.index("--json-schema") + 1])
+    finding = schema["properties"]["findings"]["items"]["properties"]
+    told_of = set(re.findall(r"`(\w+)` finding", system_prompt()))
+    assert "design" in told_of
+    assert told_of <= {*finding["category"]["enum"], *finding["subkind"]["enum"]}
 
 
 def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():

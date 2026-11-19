@@ -15,34 +15,41 @@ balances badly here: the suite's cost is concentrated, not flat. Measured agains
 42.7s for a sha256 split and 39.8s for a greedy split weighted by the number of `def test_` in
 each file, against 24.9s for a greedy split weighted by measured per-file seconds — an even
 split being 25.9s. File byte size fared no better than the hash (36.2s). So the split is
-longest-processing-time bin packing over per-file durations. It packs the runner seconds in
-`pytest_shard_runner_weights.json` where that table has the module, and scales the recorded
-weight otherwise; `shard_weight_gate.RUNNER_WEIGHTS_PATH` says why there are two tables.
+longest-processing-time bin packing over per-file durations: the runner seconds in
+`pytest_shard_runner_weights.json`, which `shard_weight_gate.RUNNER_WEIGHTS_PATH` describes.
 
-STALENESS IS GRACEFUL, WHICH IS WHY THE RECORDED FILE IS SAFE TO COMMIT. A path with no
-recorded weight is given the median of the recorded ones, and a recorded path that no longer
+THE TABLE IS CI'S OWN MEASUREMENT. The docs-refresh cron runs `--refresh-runner` twice a day,
+which reads every pytest leg's log from the newest runs that tested a green master tree. That
+is the master run itself, or the pull-request run that tested the tree when the push skipped
+its legs. Nothing measured on a workstation is written to it. `shard_weight_gate.refresh_runner_weights` has what a refresh
+adds, rewrites and drops.
+
+STALENESS IS GRACEFUL, WHICH IS WHY THE TABLE IS SAFE TO COMMIT. A path the table does not
+list is given the median of its directory's rows, and a row whose path no longer
 exists is ignored. Both cases cost balance and nothing else: every collected file still lands
 in exactly one shard, so a stale table makes CI slower, never wrong.
 
-THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
-The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
-suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
-module landing that way skews the four CI shards to 65/99/99/68s against a 43s projection.
+THE DIRECTORY MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES
+ARE HEAVY. A module is unlisted from the commit that adds it until a refresh reads it off a
+master run, and for that long it is packed like its neighbours. One unlisted 30s module packed
+as light skewed four CI shards to 65/99/99/68s against a 43s projection.
+
+IT IS A HIGH GUESS FOR A MODULE THAT NEVER GAINS A ROW. A module whose every test runs under
+pytest's 0.005s report floor prints no durations line, so no refresh lists it. On 2026-11-19
+that was 174 of 1,459 modules. Their directory medians total about 42 runner seconds that the
+legs do not spend, which moved the projected gap between six legs of 368s by under 6s.
 
 ONE CHECK WATCHES THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
-lets it see the two shapes nothing static can. A heavy module landing where every recorded
+lets it see the shapes nothing static can. A heavy module landing where every recorded
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
 directory mean all fail to separate a heavy module from an ordinary file; the
 check annotates it at `RUNNER_HEAVY_SECONDS` (in `shard_weight_gate.py`, with the arms).
-And a recorded number can go wrong in the other direction, which no arm asking "is this file
-MISSING" ever sees:
-a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
-shard carries 17s of phantom weight. The check
-answers that as a RATIO: it annotates at `shard_weight_gate.STALE_WEIGHT_RATIO`.
-`--record-files` is its repair, since `--record-missing` only fills gaps. A third arm takes the opposite direction: a module that grew
-after its weight was recorded measured 45.67s against 0.48s, and the split packed it as free.
-`shard_weight_gate.UNDER_WEIGHT_RATIO` bounds it, and `--record-files` repairs it too.
+A recorded number can also be wrong while present. A recorded 17.31s against 0.09s measured
+makes the greedy split place the file first, so one shard carries 17s of phantom weight, and
+a module that grew after its weight was recorded measured 45.67s against 0.48s and was packed
+as free. The check answers each as a RATIO: `shard_weight_gate.STALE_WEIGHT_RATIO` and
+`shard_weight_gate.UNDER_WEIGHT_RATIO`.
 
 A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
 builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
@@ -62,29 +69,10 @@ empty list and CI skips their remaining steps. A push to master passes the newes
 whose CI passed as REF. A dispatch passes no REF and runs the whole census, as does a push
 with no such ancestor in reach. `affected_lib/table.py` has the rule and what it can miss.
 
-The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
-
-A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE CHECK, so the cron re-measures it too.
-Three modules measured 1.66x to 1.98x their recorded weight in a serial run, well
-inside the 20x under-recorded arm, and `--record-missing` never touches a present entry. A CI
-ratio that low cannot separate drift from runner scale, because the runner already measures
-correctly recorded entries 1.1x to 13x their weight. A serial run on the recording host can, so
-the cron runs `--refresh-drifted`: each run re-measures one hash slice of the table and rewrites
-only the entries `DRIFT_RATIO` or more away from what they measured. Measurement noise inside
-that band leaves the table alone, which is what keeps a twice-daily run from churning it.
-Noise outside the band is caught by a second run of only the drifted files: an entry is
-rewritten only when both runs drift and agree with each other within the band. One outlying
-run wrote 0.0s for a 16s module and 62s for a 1s one.
-Two agreeing runs cannot catch a cost that is real on this host alone, such as a test walking
-untracked files: 85.09s against CI's 2.08s. So the refresh keeps the recorded weight and prints
-the module when the reading is `LOCAL_READING_MAX_RATIO` or more above the runner table. A new row has no
-recorded weight to keep, so `--record-missing` writes the runner seconds instead.
-
 THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
 zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
 own runner seconds on one leg, and the docs-refresh cron repairs it unattended within a day:
-`--refresh-runner` reads the packing table's rows off green master runs, and `--record-missing`
-and `--refresh-drifted` keep the recorded table. A failed run costs a full rerun of every job
+`--refresh-runner` reads the table's rows off green master runs. A failed run costs a full rerun of every job
 from a runner pool that is already the throughput limit, so failing on a weight spends more CI
 time than the weight costs. Each bound also compares one wall-clock reading against a fixed
 number, and runner variance spans it: one module measured about 8s and 15.6s on two runs of
@@ -96,23 +84,16 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --changed-since HEAD^1
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
-    uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
-    uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
-    uv run python scripts/dev/pytest_shard.py --record-files a.py b.py  # refresh these entries
-    uv run python scripts/dev/pytest_shard.py --refresh-drifted 8     # one eighth, drifted rows only
-    uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # runner table from CI's logs
+    uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # the table, from CI's logs
     uv run python scripts/dev/pytest_shard.py --leg-spread 42541064791  # one run's leg walls
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
-import hashlib
-import json
 import math
 import os
+import posixpath
 import statistics
-import subprocess
 import sys
-import time
 import tomllib
 from pathlib import Path, PurePosixPath
 
@@ -135,25 +116,18 @@ from shard_prebuild import (
     prebuild_wall,
 )
 from shard_weight_gate import (
-    LOCAL_READING_MAX_RATIO,
     RUNNER_HEAVY_SECONDS,
     RUNNER_WEIGHTS_PATH,
-    STALE_WEIGHT_FLOOR_SECONDS,
     STALE_WEIGHT_RATIO,
-    drifted,
     durations_complaints,
     fetch_runner_logs,
     green_pytest_legs,
-    host_only_readings,
     leg_spread,
-    packing_table,
-    parse_durations,
+    load_runner_weights,
     refresh_runner_weights,
-    runner_backed_readings,
     write_runner_weights,
 )
 
-WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # pytest's default `python_files`, both forms — the same pair
 # `tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
 # the same reason: a single hand-kept glob would miss a `foo_test.py` that pytest collects.
@@ -166,10 +140,6 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
-
-# The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
-# consecutive periods of this length, so successive runs visit successive slices.
-_SLICE_PERIOD_SECONDS = 12 * 60 * 60
 
 
 def testpaths() -> list[str]:
@@ -209,36 +179,50 @@ def census(repo: Path = REPO) -> list[str]:
     )
 
 
-def load_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
-    if not path.exists():
-        return {}
-    return {k: float(v) for k, v in json.loads(path.read_text()).items()}
+def packing_seconds(files, weights: dict[str, float]) -> dict[str, float]:
+    """The test seconds each of `files` is packed at.
+
+    A file `weights` lists takes its row. Any other takes the median of the rows in its own
+    directory, or of every row when its directory has none.
+    """
+    by_directory: dict[str, list[float]] = {}
+    for module, seconds in weights.items():
+        by_directory.setdefault(posixpath.dirname(module), []).append(seconds)
+    medians = {d: statistics.median(rows) for d, rows in by_directory.items()}
+    fallback = statistics.median(weights.values()) if weights else 1.0
+    return {
+        f: weights.get(f, medians.get(posixpath.dirname(f), fallback)) for f in files
+    }
 
 
 def _costs(files, weights: dict[str, float]) -> dict[str, float]:
-    """What each of `files` costs a leg; an unweighted file gets the median of the weighted."""
-    known = [weights[f] for f in files if f in weights]
-    default = statistics.median(known) if known else 1.0
-    return {f: weights.get(f, default) + _PER_FILE_SECONDS for f in files}
+    """What each of `files` costs a leg before any prebuild."""
+    return {
+        f: seconds + _PER_FILE_SECONDS
+        for f, seconds in packing_seconds(files, weights).items()
+    }
 
 
 def assign(
-    files, shards: int, weights: dict[str, float], repo: Path = REPO
+    files, shards: int, weights: dict[str, float] | None = None, repo: Path = REPO
 ) -> dict[str, int]:
     """Map each file to a shard index in `range(shards)`, greedy longest-processing-time.
 
-    A file's cost on a shard is its weight, `_PER_FILE_SECONDS`, and the prebuild seconds it
-    adds to what that shard already pays. The census files go as one unit, since they share
-    one census pass, and greedy placement would split them: the second file costs less on an
-    empty shard than beside the first. Units go in order of their cost on an empty shard,
-    each to the shard it leaves least loaded.
+    A file's cost on a shard is its `packing_seconds`, `_PER_FILE_SECONDS`, and the prebuild
+    seconds it adds to what that shard already pays. The census files go as one unit, since
+    they share one census pass, and greedy placement would split them: the second file costs
+    less on an empty shard than beside the first. Units go in order of their cost on an empty
+    shard, each to the shard it leaves least loaded.
 
     Deterministic: ties in that order break by path, and a tie between two shards goes to the
     lower index. The same census and the same weights give the same assignment on every
     machine.
+
+    `weights` is the committed runner table when None.
     """
     if shards < 1:
         raise ValueError(f"shards must be >= 1, got {shards}")
+    weights = load_runner_weights() if weights is None else weights
     file_cost = _costs(files, weights)
     census_files = tuple(sorted(f for f in files if f.startswith(CENSUS_FILE_PREFIX)))
     units = [(f,) for f in files if f not in census_files]
@@ -269,7 +253,6 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     if not 1 <= shard <= shards:
         raise ValueError(f"shard {shard} is outside 1..{shards}")
     files = census() if files is None else files
-    weights = packing_table(load_weights()) if weights is None else weights
     placed = assign(files, shards, weights)
     return sorted(f for f, i in placed.items() if i == shard - 1)
 
@@ -306,219 +289,25 @@ def leg_files(
     """
     if selection is None or selection.full:
         return shard_files(shard, shards)
-    weights = packing_table(load_weights())
+    weights = load_runner_weights()
     legs = legs_for(selection.modules, census(), shards, weights)
     return shard_files(shard, legs, selection.modules, weights) if shard <= legs else []
 
 
-def measure_weights(files: list[str] | None = None) -> dict[str, float]:
-    """Per-file seconds from one serial pytest run over `files` (the whole suite when None).
-
-    `-n0` so the durations are not distorted by worker contention, and `-vv` so pytest prints
-    every duration rather than hiding the ones under 5ms — a file whose tests are all fast
-    still costs its import, and leaving it unrecorded would hand it the median instead.
-
-    Nothing is deselected. The refusal below treats any failure as "not a baseline", so a
-    test that reads the weights this run has not written yet could block the recording that
-    would fix it. No test reads the table for staleness, so the
-    precondition cannot refuse to clear itself.
-
-    A file whose every test addopts deselects (`-m 'not ui'`, which CI runs under too) has no
-    durations line and is absent from the result; the callers record it at 0.0, since in the
-    run the shards are balanced for it costs its import and nothing else. A subset made only
-    of such files collects nothing, which pytest reports as exit 5 and is not a failure here.
-    """
-    serial = ["-n0", "-vv", "--durations=0", "-p", "no:cacheprovider"]
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", *serial, *(files or [])],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-    )
-    nothing_collected = bool(files) and proc.returncode == 5
-    if proc.returncode != 0 and not nothing_collected:
-        raise SystemExit(
-            f"the suite did not pass, so its durations are not a baseline:\n{proc.stdout[-4000:]}"
-        )
-    totals = parse_durations(proc.stdout)
-    if not totals and not nothing_collected:
-        raise SystemExit(
-            "parsed no durations out of the run — has the report format changed?"
-        )
-    return totals
-
-
-def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
-    ordered = dict(sorted(weights.items()))
-    path.write_text(json.dumps(ordered, indent=1, sort_keys=True) + "\n")
-    return ordered
-
-
-def record_weights(
-    path: Path = WEIGHTS_PATH,
-    *,
-    files: list[str] | None = None,
-    measure=measure_weights,
-) -> dict[str, float]:
-    """Re-measure every file's seconds from a serial run of the whole suite and write them out."""
-    measured = measure()
-    files = census() if files is None else files
-    return _write_weights({f: measured.get(f, 0.0) for f in files}, path)
-
-
-def record_missing_weights(
-    path: Path = WEIGHTS_PATH,
-    *,
-    files: list[str] | None = None,
-    measure=measure_weights,
-) -> dict[str, float]:
-    """Measure only the census files the table lacks, and write the merged table.
-
-    Seconds rather than the full run's minutes, which is what lets the docs-refresh cron run
-    this on every tick. A recorded path no longer in the census is dropped on the way
-    through, so the table does not keep a weight for a module that was deleted. A new row of
-    `STALE_WEIGHT_FLOOR_SECONDS` or more is measured twice and keeps the lower reading. A new
-    row whose reading `host_only_readings` names against the committed runner table holds the
-    runner seconds instead, and a line on stdout names it.
-    """
-    files = census() if files is None else files
-    known = load_weights(path)
-    kept = {f: known[f] for f in files if f in known}
-    missing = [f for f in files if f not in known]
-    if missing:
-        measured = measure(missing)
-        kept |= {f: measured.get(f, 0.0) for f in missing}
-        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s.
-        # Load only adds time, so a new row heavy enough for the stale arm to compare runs once
-        # more and keeps the lower reading. A second run that measured nothing is no reading,
-        # not 0.0s.
-        heavy = [f for f in missing if kept[f] >= STALE_WEIGHT_FLOOR_SECONDS]
-        again = measure(heavy) if heavy else {}
-        kept |= {f: min(kept[f], again[f]) for f in heavy if again.get(f)}
-        # DECIDED: a host-only reading writes the runner seconds, not no row. With no row the
-        # module is measured twice on every tick, under the git-tree lock, for as long as the
-        # local cost lasts. `assign` packs this module on the runner table either way, and
-        # `--refresh-drifted` refuses to raise it again.
-        rejected = host_only_readings({f: kept[f] for f in missing})
-        for module, seconds in rejected.items():
-            print(
-                f"recorded {module} at the runner table's {seconds:.2f}s: this host read "
-                f"{kept[module]:.2f}s, and a reading {LOCAL_READING_MAX_RATIO:g}x or more "
-                "above the runner table is a cost of this host alone"
-            )
-        kept |= rejected
-    return _write_weights(kept, path)
-
-
-def record_named_weights(
-    paths: list[str],
-    path: Path = WEIGHTS_PATH,
-    *,
-    files: list[str] | None = None,
-    measure=measure_weights,
-) -> dict[str, float]:
-    """Re-measure exactly `paths` and write the merged table, refreshing entries that exist.
-
-    The repair for a recorded weight that has drifted. `record_missing_weights` above
-    deliberately leaves a present entry alone, so without this the only refresh is a full
-    `--record` — the whole suite, in minutes, rewriting every other entry from the same run.
-
-    A path outside the census is refused rather than recorded: the census reads `git ls-files`,
-    so a typo and an unstaged file both land here, and silently writing an entry no shard can
-    ever use is how the table grows rows nobody can explain.
-    """
-    files = census() if files is None else files
-    if unknown := [p for p in paths if p not in files]:
-        raise SystemExit(
-            "not a committed test file under testpaths, so no shard runs it: "
-            + ", ".join(sorted(unknown))
-        )
-    known = load_weights(path)
-    kept = {f: known[f] for f in files if f in known}
-    measured = measure(paths)
-    kept |= {f: measured.get(f, 0.0) for f in paths}
-    return _write_weights(kept, path)
-
-
-def refresh_slice(path: str, slices: int) -> int:
-    """The 0-based slice of `slices` that `--refresh-drifted` re-measures `path` in.
-
-    A hash of the path, not `assign`'s weighted packing. Packing moves a module to another
-    slice whenever any weight changes, so a module could keep landing in slices already visited
-    and go unmeasured for several rotations. A hash places it by its own path alone.
-    """
-    return int(hashlib.sha256(path.encode()).hexdigest(), 16) % slices
-
-
-def slice_at(seconds: float, slices: int) -> int:
-    """The 0-based slice a `--refresh-drifted` run at epoch `seconds` re-measures."""
-    return int(seconds // _SLICE_PERIOD_SECONDS) % slices
-
-
-def refresh_drifted_weights(
-    index: int,
-    slices: int,
-    path: Path = WEIGHTS_PATH,
-    *,
-    files: list[str] | None = None,
-    measure=measure_weights,
-) -> list[str]:
-    """Re-measure slice `index` of `slices` of the recorded entries, and rewrite the drifted ones.
-
-    The unattended repair for a weight that has drifted but not far enough for the shard
-    check's ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
-    slice usually leaves the table byte-identical. A drifted entry is measured a second time,
-    and it is rewritten with the lower of the two only when the two runs agree. A run that
-    omits a file measured nothing and reads as 0.0. A recorded path no longer in the census is
-    dropped, as `record_missing_weights` drops it. An entry whose lower reading
-    `host_only_readings` names against the committed runner table keeps its recorded weight,
-    and a line on stdout names it.
-
-    Args:
-        index: The 0-based slice to re-measure.
-        slices: How many slices the table is split into.
-        path: The weights table to read and rewrite.
-        files: The census to keep entries for; `census()` when None.
-        measure: Measures a list of files, as `measure_weights` does.
-
-    Returns:
-        The paths whose weights were rewritten, sorted.
-    """
-    files = census() if files is None else files
-    known = load_weights(path)
-    kept = {f: known[f] for f in files if f in known}
-    chosen = [f for f in kept if refresh_slice(f, slices) == index]
-    measured = measure(chosen) if chosen else {}
-    candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
-    # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
-    # module and 62s for a 1s one. The
-    # drifted files run once more, and a row moves only when the second run drifts too and
-    # agrees with the first within DRIFT_RATIO. Load only adds time, so it keeps the lower run.
-    confirmed = measure(candidates) if candidates else {}
-    agreed = {
-        f: min(measured.get(f, 0.0), confirmed.get(f, 0.0))
-        for f in candidates
-        if drifted(kept[f], confirmed.get(f, 0.0))
-        and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
-    }
-    moved = runner_backed_readings(agreed)
-    _write_weights(kept | moved, path)
-    return sorted(moved)
-
-
 def _summary(shards: int) -> str:
-    files, weights = census(), packing_table(load_weights())
+    files, weights = census(), load_runner_weights()
     placed = assign(files, shards, weights)
+    file_cost = _costs(files, weights)
     lines = []
     for i in range(shards):
         members = [f for f, s in placed.items() if s == i]
-        cost = sum(weights.get(f, 0.0) + _PER_FILE_SECONDS for f in members)
+        cost = sum(file_cost[f] for f in members)
         lines.append(
             f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f} runner seconds projected"
             f" + {prebuild_seconds(members):4.1f} in render prebuilds"
         )
     unknown = sum(1 for f in files if f not in weights)
-    lines.append(f"  {len(files)} files, {unknown} with no recorded weight")
+    lines.append(f"  {len(files)} files, {unknown} packed at their directory's median")
     return "\n".join(lines)
 
 
@@ -541,29 +330,6 @@ def main(argv=None, select=affected) -> int:
         "--summary", action="store_true", help="print the projected balance"
     )
     parser.add_argument(
-        "--record", action="store_true", help="re-measure and rewrite the weights"
-    )
-    parser.add_argument(
-        "--record-missing",
-        action="store_true",
-        help="measure only the test files with no recorded weight and merge them in",
-    )
-    parser.add_argument(
-        "--record-files",
-        nargs="+",
-        metavar="PATH",
-        help="re-measure only these test files and refresh their recorded weights",
-    )
-    parser.add_argument(
-        "--refresh-drifted",
-        type=int,
-        metavar="SLICES",
-        help=(
-            "re-measure one of SLICES hash slices of the recorded weights, chosen by the "
-            "12-hour period, and rewrite the entries that drifted past DRIFT_RATIO"
-        ),
-    )
-    parser.add_argument(
         "--record-runner",
         nargs="+",
         type=Path,
@@ -575,8 +341,9 @@ def main(argv=None, select=affected) -> int:
         type=int,
         metavar="RUNS",
         help=(
-            "download every pytest leg's log from the newest RUNS green master runs of CI and "
-            "merge their medians into the runner table, rewriting only drifted rows"
+            "download every pytest leg's log from the newest RUNS runs that tested a green "
+            "master tree and merge their medians into the runner table, rewriting only "
+            "drifted rows"
         ),
     )
     parser.add_argument(
@@ -599,7 +366,7 @@ def main(argv=None, select=affected) -> int:
 
     if args.check_durations:
         report = args.check_durations.read_text(errors="replace")
-        complaints = durations_complaints(report, load_weights())
+        complaints = durations_complaints(report, load_runner_weights())
         if complaints:
             print("\n".join(f"::warning::{c}" for c in complaints))
         else:
@@ -610,37 +377,6 @@ def main(argv=None, select=affected) -> int:
             )
         return 0
 
-    if args.record:
-        written = record_weights()
-        print(f"recorded {len(written)} file weights to {WEIGHTS_PATH}")
-        return 0
-    if args.record_missing:
-        known = load_weights()
-        missing = [f for f in census() if f not in known]
-        written = record_missing_weights()
-        print(
-            f"recorded {len(missing)} unweighted file(s); {len(written)} in the table at "
-            f"{WEIGHTS_PATH}"
-        )
-        return 0
-    if args.record_files:
-        written = record_named_weights(args.record_files)
-        refreshed = ", ".join(
-            f"{f} ({written[f]:.2f}s)" for f in sorted(args.record_files)
-        )
-        print(f"re-measured {refreshed}; {len(written)} in the table at {WEIGHTS_PATH}")
-        return 0
-    if args.refresh_drifted is not None:
-        slices = args.refresh_drifted
-        if slices < 1:
-            parser.error("--refresh-drifted needs at least one slice")
-        index = slice_at(time.time(), slices)
-        moved = refresh_drifted_weights(index, slices)
-        print(
-            f"re-measured slice {index + 1} of {slices}; rewrote {len(moved)} drifted "
-            f"weight(s){': ' + ', '.join(moved) if moved else ''} in {WEIGHTS_PATH}"
-        )
-        return 0
     if args.record_runner:
         reports = [log.read_text(errors="replace") for log in args.record_runner]
         written = write_runner_weights(reports, census())
@@ -665,8 +401,7 @@ def main(argv=None, select=affected) -> int:
         return 0
     if args.shard is None:
         parser.error(
-            "one of --shard, --summary, --record, --record-missing, --record-files, "
-            "--refresh-drifted, --record-runner, --refresh-runner, --leg-spread or "
+            "one of --shard, --summary, --record-runner, --refresh-runner, --leg-spread or "
             "--check-durations is required"
         )
 

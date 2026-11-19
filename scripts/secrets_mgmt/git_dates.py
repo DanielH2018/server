@@ -25,6 +25,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
 from secrets_mgmt.rotation_tools import RotationTools
+from secrets_mgmt.secrets_lib.registry_model import Registry
 
 # Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
 # `rotation_tools.SECRETS_FILE` is the absolute spelling of this same file, for the callers
@@ -396,7 +397,7 @@ def _rotation_walk(
     # `host_secrets.py sync` rewrites each value of a host file, and that commit is the event
     # the host-file check looks for. With the guard, a host file of `_REENCRYPT_MIN_SHARED`
     # keys or more would have its `sync` commits skipped and a correct copy would fail. Full
-    # analysis in docs/target-architecture/host/h4-secrets-unit.md, *Which ciphertext each
+    # analysis in docs/archive/host/h4-secrets-unit.md, *Which ciphertext each
     # host carries*.
     guard = path == SECRETS_GIT_PATH
     revs = _revisions(tools, path)
@@ -443,7 +444,7 @@ def derived_rotation_dates(tools: RotationTools) -> dict[str, dt.date]:
 
 
 def advance_last_rotated(
-    reg: dict, dates: dict[str, dt.date]
+    reg: Registry, dates: dict[str, dt.date]
 ) -> list[tuple[str, str, str]]:
     """Move `last_rotated` forward where git shows a later change.
 
@@ -463,15 +464,13 @@ def advance_last_rotated(
     # fiction for every secret nobody has rotated since registration. That fiction is what
     # aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25.
     advanced = []
-    for name, entry in reg.get("entries", {}).items():
+    for name, entry in reg.entries.items():
         derived = dates.get(name)
-        recorded = entry.get("last_rotated")
-        if derived is None or not recorded:
+        recorded = entry.last_rotated
+        if derived is None or recorded is None or recorded >= derived:
             continue
-        if dt.date.fromisoformat(recorded) >= derived:
-            continue
-        entry["last_rotated"] = derived.isoformat()
-        advanced.append((name, recorded, derived.isoformat()))
+        entry.last_rotated = derived
+        advanced.append((name, recorded.isoformat(), derived.isoformat()))
     return advanced
 
 

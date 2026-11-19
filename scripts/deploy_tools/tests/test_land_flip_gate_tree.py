@@ -25,7 +25,7 @@ from _land_fakes import (
 )
 from deploy_tools.land_lib import health_gate
 from deploy_tools.land_lib.health_gate import GateTools
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
 SNAPSHOTS = Path("/snap")
@@ -50,7 +50,8 @@ def _probe(f: Fakes, healthy_everywhere: frozenset[str] = frozenset()):
     """
 
     def run(argv, cwd: Path, **_kwargs):
-        tag, extra = argv[5], argv[6:]
+        at = argv.index("health") + 1
+        tag, extra = argv[at], argv[at + 1 :]
         flipped = _carries_the_flip(cwd, f) or tag in healthy_everywhere
         rc, out, err = 0, f"{tag}: all 1 workload healthy", ""
         if tag == "traefik" and not flipped:
@@ -130,7 +131,7 @@ def _flip(**kwargs: object) -> Fakes:
         },
         derived=(["traefik", "traefik-crds", "artifacts"], "pr"),
         k8s_tags={MERGE_SHA: {*FLIPPED, "artifacts"}},
-        land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
+        land_wait=[WaitResult(WaitVerdict.SETTLED, detail="2 applied", tags=FLIPPED)],
     )
     return replace(fakes, **kwargs)
 

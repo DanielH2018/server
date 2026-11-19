@@ -101,6 +101,22 @@ def test_a_widened_set_attributes_a_hold_by_the_prs_services_alone():
     assert result.cause == "promote-held" and result.widened
     assert "texbrain" in result.tags
     assert "None is this PR's (bento-pdf)" in result.detail
+    assert (result.hold_sha, result.hold_owner) == (P, promote_wait.HOLD_OTHER)
+
+
+@pytest.mark.parametrize(
+    ("hold", "services", "owner"),
+    [
+        (f"{P} failed=texbrain,soak", ["bento-pdf"], promote_wait.HOLD_OTHER),
+        (f"{P} failed=texbrain,bento-pdf", ["bento-pdf"], promote_wait.HOLD_OWN),
+        (P, ["bento-pdf"], promote_wait.HOLD_UNATTRIBUTED),
+        (f"{P} stateful=bento-pdf", ["bento-pdf"], promote_wait.HOLD_UNATTRIBUTED),
+        (f"{P} failed=texbrain", [], promote_wait.HOLD_UNATTRIBUTED),
+    ],
+)
+def test_a_hold_is_owned_by_the_pr_whose_services_it_names(hold, services, owner):
+    """Only a `failed=` hold names services, and a PR with none can match no name."""
+    assert promote_wait.hold_owner(hold, services) == owner
 
 
 def test_a_hold_beside_a_suspended_tag_ends_the_wait_deploy_failed():
@@ -330,11 +346,30 @@ def test_deploy_failed_and_gave_up_write_no_annotation(sim):
 
 def test_the_exit_codes_are_land_sh_s(capsys):
     assert (
-        promote_wait.report_wait(M, promote_wait.WaitResult("settled", revision=D)) == 0
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.SETTLED, revision=D)
+        )
+        == 0
     )
-    assert promote_wait.report_wait(M, promote_wait.WaitResult("deploy-failed")) == 1
-    assert promote_wait.report_wait(M, promote_wait.WaitResult("gave-up")) == 75
+    assert (
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.DEPLOY_FAILED)
+        )
+        == 1
+    )
+    assert (
+        promote_wait.report_wait(
+            M, promote_wait.WaitResult(promote_wait.WaitVerdict.GAVE_UP)
+        )
+        == 75
+    )
     assert capsys.readouterr().out.splitlines()[-1].startswith("verdict=gave-up ")
+
+
+def test_a_verdict_outside_the_set_is_refused_where_the_result_is_built():
+    """A misspelt verdict would otherwise reach `wait_on_promotion` and end the wrong way."""
+    with pytest.raises(ValueError, match="setled"):
+        promote_wait.WaitResult("setled")  # ty: ignore[invalid-argument-type]
 
 
 # -- the forge reads -------------------------------------------------------------------------

@@ -9,8 +9,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_land.py
 import json
 import subprocess
 
+import pytest
+
 from _review_fakes import PR, _pipeline, _report
-from deploy_tools.land_lib.outcome import VERDICTS
+from deploy_tools.land_lib.ledger import Ledger, result_line
+from deploy_tools.land_lib.outcome import VERDICTS, Cause, Outcome
+from deploy_tools.promote_lib.wait import hold_owner
 from fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
     PR_CI_RED,
@@ -142,6 +146,71 @@ def test_a_land_sh_refusal_is_needs_input_with_its_output(tmp_path):
     assert "refused: bad body" in final["result"]
     assert len(run.lands) == 1
     assert "apply" not in [phase for _, _, phase in run.claude]
+
+
+HELD = "a" * 40
+MERGED = "b" * 40
+RE_LAND = "land.sh --pr 4000 --arm-merge --await-merge --detach && cc-wait land 4000"
+
+
+def _landing_log(verdict: str, rc: int, detail: str, hold: str = "") -> str:
+    """The last two lines land.sh prints for a PR whose own service is `bento-pdf`."""
+    ledger = Ledger(pr="4000", t_start=0.0)
+    if hold:
+        ledger.merge_sha, ledger.cause = MERGED, Cause.PROMOTE_HELD
+        ledger.hold_sha = hold.partition(" ")[0]
+        ledger.hold_owner = hold_owner(hold, ["bento-pdf"])
+    outcome = Outcome(rc, detail, verdict)
+    return f"{result_line(ledger, outcome)}\nVERDICT: {verdict} ({detail})"
+
+
+@pytest.mark.parametrize(
+    ("log", "wait_rc", "resumed", "starts"),
+    [
+        (
+            _landing_log("deploy-failed", 1, "held", f"{HELD} failed=texbrain"),
+            1,
+            False,
+            f"parked: merged, unverified behind DEPLOY_HOLD {HELD}; "
+            "re-land after cc-wait landing-clear\n",
+        ),
+        (
+            _landing_log("deploy-failed", 1, "held", HELD),
+            1,
+            False,
+            f"parked: merged, unverified behind DEPLOY_HOLD {HELD}; "
+            "re-land after cc-wait landing-clear; unattributed, so the root coordinator",
+        ),
+        (
+            _landing_log("deploy-failed", 1, "held", f"{HELD} failed=bento-pdf"),
+            1,
+            True,
+            "Applied it.",
+        ),
+        (
+            # cc-wait reports land.sh's exit 75 as its own 3.
+            _landing_log("refused", 75, "DEPLOY_HOLD holds; nothing is merged"),
+            3,
+            False,
+            "parked: refused before merge (DEPLOY_HOLD holds; nothing is merged); "
+            f"re-land with {RE_LAND}\n",
+        ),
+    ],
+    ids=[
+        "another-prs-hold",
+        "a-hold-with-no-names",
+        "its-own-hold",
+        "refused-pre-merge",
+    ],
+)
+def test_only_a_hold_on_the_prs_own_services_resumes_the_implementer(
+    tmp_path, log, wait_rc, resumed, starts
+):
+    pipeline, run = _pipeline(tmp_path, _clean_review())
+    run.verdict, run.waits = log, [wait_rc]
+    final = pipeline.run_all()
+    assert final["result"].startswith(starts), final["result"]
+    assert ("apply" in [phase for _, _, phase in run.claude]) == resumed
 
 
 def test_a_give_up_verdict_is_needs_input_and_resumes_nobody(tmp_path):

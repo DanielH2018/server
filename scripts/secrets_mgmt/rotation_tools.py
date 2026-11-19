@@ -28,6 +28,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
 from lib.git import git
+from secrets_mgmt.secrets_lib.registry_model import (
+    Registry,
+    dump_registry,
+    parse_registry,
+)
 from secrets_mgmt.sops_io import REPO, SECRETS_FILE
 
 REGISTRY_FILE = os.path.join(REPO, "secrets", "secret_rotation.yml")
@@ -55,12 +60,16 @@ def sops_names(path: str = SECRETS_FILE) -> list[str]:
     return sorted(k for k in data if k != "sops")
 
 
-def load_registry(path: str = REGISTRY_FILE) -> dict:
-    """The rotation registry as parsed YAML; an empty skeleton when the file is absent."""
+def load_registry(path: str = REGISTRY_FILE) -> Registry:
+    """The rotation registry, parsed; an empty one when the file is absent.
+
+    Raises:
+      RegistryError: the file's shape or a value is wrong (`registry_model.parse_registry`).
+    """
     if not os.path.exists(path):
-        return {"entries": {}}
+        return Registry()
     with open(path) as fh:
-        return yaml_fast.safe_load(fh) or {"entries": {}}
+        return parse_registry(yaml_fast.safe_load(fh))
 
 
 _HEADER = """\
@@ -79,9 +88,9 @@ _HEADER = """\
 """
 
 
-def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
+def save_registry(reg: Registry, path: str = REGISTRY_FILE) -> None:
     """Write `reg` back to the registry, managed header first and keys sorted."""
-    body = yaml.safe_dump(reg, sort_keys=True, default_flow_style=False)
+    body = yaml.safe_dump(dump_registry(reg), sort_keys=True, default_flow_style=False)
     with open(path, "w") as fh:
         fh.write(_HEADER)
         fh.write(body)
@@ -110,7 +119,7 @@ class RotationTools:
 
     git: Callable[..., str] = run_git
     today: Callable[[], dt.date] = today
-    load_registry: Callable[..., dict] = load_registry
+    load_registry: Callable[..., Registry] = load_registry
     save_registry: Callable[..., None] = save_registry
     sops_names: Callable[..., list[str]] = sops_names
     tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

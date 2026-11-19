@@ -27,4 +27,4 @@ Removing a key from a `secret.yaml.j2` removes it live only when Flux owns the k
 with a `cluster/services.yml` entry, Flux's server-side apply removes a key it
 no longer applies, and it takes over the `kubectl-client-side-apply` and `kubectl-patch` field
 managers. A key that any other field manager holds stays live, so patch it out and verify.
-`docs/target-architecture/deploy/d3-secrets.md` has the evidence, at step D3.5.
+`docs/archive/deploy/d3-secrets.md` has the evidence, at step D3.5.

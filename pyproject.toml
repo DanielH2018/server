@@ -29,7 +29,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "pytest>=8",
   "requests",                       # ical-proxy ical_proxy.py imports requests (test_app.py)
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
-  "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
+  "shellcheck-py==0.11.0.1",        # validate.render_lib.shell; pinned to match prek.toml's shellcheck-py rev
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "jsonschema",                     # validate.k8s_manifests checks every object against the
   # schemas vendored in scripts/validate/schemas/: Kubernetes'
@@ -93,7 +93,7 @@ testpaths = [                        # single source of truth for WHAT runs
 # registered here rather than from a conftest so it covers every `testpaths` entry at once;
 # tests is on `pythonpath` below, which is what makes the bare module name resolve.
 # -p xdist_width narrows `-n auto` to the run's selection: its recorded seconds over its heaviest
-# module's, from scripts/dev/pytest_shard_weights.json, capped at the core count, so one file
+# module's, from scripts/dev/pytest_shard_runner_weights.json, capped at the core count, so one file
 # runs on one worker rather than sixteen and five heavy ones get three. The whole suite and a CI
 # shard keep every core. Its module docstring has the measurements.
 #
@@ -293,9 +293,9 @@ select = [
 # it would be redundant rather than load-bearing.
 
 [tool.ruff.lint.per-file-ignores]
-# Vendored upstream script, byte-for-byte: tests/services/test_karakeep_time_tagger_script.py
-# asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
-# drift that test exists to catch.
+# Vendored upstream script, byte-for-byte: the `karakeep-time-tagger-script-matches-its-pinned-sha256`
+# row in tests/repo/_config_rows.py asserts its sha256 against the commit the archived Docker role
+# pins, so a lint fix here is a drift that row exists to catch.
 #
 # The docstring-layout rules are here for the same reason, and they are the load-bearing half:
 # this file's docstrings trip D212, so without this entry `ruff check --fix`
@@ -409,7 +409,7 @@ ignore_names = [
   "worth_renavigating",
   # role_installs.py: test_host_python_invocations.py's shebang check.
   "no_project_spans",
-  # setup_templates.py: tests/_setup_render.py, which every setup-template census renders.
+  # render_lib/setup_plane.py: tests/_setup_render.py, which every setup-template census renders.
   "standalone_templates",
   # Fields of a test dataclass, read through dataclasses.fields().
   "KUMA_URL", "NEW_SERVICE_TOKEN", "NEW_DISCORD_WEBHOOK_URL",
@@ -460,6 +460,7 @@ extra-paths = [
   "hosts/components/fake-remux/files",
   "k8s/roles/ical-proxy/files",
   "k8s/roles/homelab-mcp/files",
+  "k8s/roles/airflow/files",
   "k8s/roles/crowdsec/files",
   "k8s/roles/traefik/files",
   "k8s/roles/artifacts/files",
@@ -562,8 +563,11 @@ possibly-missing-submodule = "error"
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
-# tree-wide. The role's own tests are what cover that file's imports.
+# tree-wide. The role's own tests are what cover that file's imports. airflow's two files
+# import Airflow, which only its image installs; the image build's check_dags run imports both.
 include = [
+  "k8s/roles/airflow/files/check_dags.py",
+  "k8s/roles/airflow/files/dags/prom_daily_rollup.py",
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",

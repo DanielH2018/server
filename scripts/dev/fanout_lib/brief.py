@@ -285,8 +285,7 @@ other final message is a progress report: a Stop hook sends you back to work, an
 """
 
 
-# `scripts/dev/repo_guards.py` holds the list. The whole suite still misses CI's weight step,
-# which is a workflow step and not a test, so the brief names that repair on its own.
+# `scripts/dev/repo_guards.py` holds the list.
 REPO_GUARD_STEP = """## Before you open the PR
 The tests beside your change do not reach the guards that read the whole tree: the module
 length ratchet, the census and exit-code tests, and the script-basename check. A new file is
@@ -297,13 +296,34 @@ uv run python scripts/dev/repo_guards.py
 ```
 Fix a red guard. Never skip or deselect it. When the run ends with a `facts notice:` list,
 re-read each section it names and edit any sentence your change made false. When it ends with
-a `removed names:` list, edit each doc and comment that still uses a name you removed. Do not run the whole suite: a hook refuses a
+a `removed names:` list, edit each doc and comment that still uses a name you removed. When
+its `branch adds:` line is followed by names with no caller outside tests, delete each one, or
+say in the PR body what calls it. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
-whole suite on the PR and the pipeline resumes you with each failing check. CI's weight step also fails a heavy test module
-that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each
-test module you added, run `uv run python scripts/dev/pytest_shard.py --record-files <module>`
-after committing it, then commit the JSON it rewrites.
+whole suite on the PR and the pipeline resumes you with each failing check.
 """
+
+
+DESIGN_HEADING = "What a change must not add"
+
+# The reviewer's system prompt carries this list too (`review_prompts.system_prompt`), so a
+# `design` finding names a rule in the words the implementer was given.
+DESIGN_RULES = """- A function, module or layer that only passes its arguments on, or only renames what it
+  wraps. Its caller can hold that code.
+- A parameter, flag, option or config key that no caller sets, or that every caller sets to
+  the same value.
+- A second implementation of something the repo already has. Call the one that exists.
+- An alias, shim or fallback for an old path that no caller in the repo still takes.
+- More than one check of the same value read from JSON, YAML or a command's output. Parse it
+  into a typed value where it is read, and pass that value on.
+- A test that asserts something the change removed stays removed. Bringing it back would be
+  a decision, not a regression.
+"""
+
+DESIGN_STEP = f"""## {DESIGN_HEADING}
+The reviewer reports each of these in your diff as a `design` finding, and the fix round
+takes it out. Read your own diff for them before `gh pr create`:
+{DESIGN_RULES}"""
 
 
 TESTS_FAIL_HEADING = "Tests fail without the change"
@@ -421,6 +441,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 {health_block}
 
 {facts}
+{DESIGN_STEP}
 {_test_proof_step(target.base)}
 {guards}
 {_review_landing(target) if review else _landing(host, batch, target)}

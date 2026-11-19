@@ -184,10 +184,11 @@ CI-fix phases that resume its session. The reviewer stays on Opus at
 and `stats`.
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
-note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
+note, the landing path or the stop-at-PR rule, the list of what a change must not add
+(`scripts/dev/fanout_lib/brief.py:DESIGN_RULES`), and the session-health lines of the placed host
 that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
-prints for a solo session, plus the shard-weight repair and the call to `scripts/dev/repo_guards.py`, which runs the
+prints for a solo session, plus the call to `scripts/dev/repo_guards.py`, which runs the
 repo-wide guards no test beside a change reaches) and starts a headless
 agent at its rung as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
@@ -224,7 +225,9 @@ daniel-server the pipeline marks the PR ready after the review and its fix round
 once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
 PR is marked ready as on daniel-server.
 A fresh reviewer then reads only the issue text and the diff, and returns findings with
-a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
+a severity and a confidence. A `design` finding names code the change added that the repo
+would not miss, and its fix only takes code out
+([ADR-0038](../../../docs/adr/0038-design-is-checked-where-code-is-written.md)). A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
@@ -327,7 +330,7 @@ a count line (`3 running, 2 done, 1 needs-input`), then prints one line per batc
 `landed` or `cleaned`, `<batch> on <host>: <state> …`. A `done` batch prints as `<batch> on
 <host>: done <PR URL>` without the agent's final text. `--all` prints a line for every batch,
 `landed` and `cleaned` ones included, with the final text. State is `running`, `done <PR URL>`, `landed
-<PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
+<PR URL>`, `parked`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
 text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held batch reads
@@ -338,6 +341,11 @@ unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A dani
 PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
+
+**`parked` is a batch whose landing another PR's `DEPLOY_HOLD`, or a merge rule, stopped.**
+Its line starts `parked:` and names the re-land. Run `cc-wait landing-clear`, then the
+`land.sh` command for its PR; `clean` keeps the batch until that PR merges.
+`docs/issue-claiming-and-fanout.md`, *A parked batch*, has the three forms.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
 that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's

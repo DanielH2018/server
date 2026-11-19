@@ -111,6 +111,13 @@ def test_remux_candidates_selects_only_remux_qualities_with_a_path():
     assert out[0]["path"].startswith("/data/media/tv/")
 
 
+def test_quality_reads_the_nested_sonarr_quality_and_tolerates_missing_levels():
+    nested = {"quality": {"quality": {"id": 7, "name": "Bluray-1080p Remux"}}}
+    assert frl.Quality.of(nested) == frl.Quality(7, "Bluray-1080p Remux")
+    for partial in ({}, {"quality": None}, {"quality": {"quality": None}}):
+        assert frl.Quality.of(partial) == frl.Quality(None, None)
+
+
 def _probed(
     quality="Bluray-1080p Remux", encoder=None, keyframes=None, fid=1, series_id=9
 ):
@@ -285,3 +292,85 @@ def test_the_scan_probes_the_mapped_host_path_with_the_host_ffprobe(tmp_path):
     assert scan.probe_candidate(cand, str(stub), 40, 60, "/srv/media") is not None
     lines = calls.read_text().splitlines()
     assert lines and all(line.endswith(" /srv/media/media/tv/E.mkv") for line in lines)
+
+
+def test_a_held_set_posts_once_until_it_changes(tmp_path):
+    from fake_remux_lib import fake_remux_scan as scan
+
+    path = str(tmp_path / "replacements.json.held")
+    held = [{"episodeId": 2}, {"episodeId": 1}]
+    assert scan.held_set_changed(path, held) is True
+    assert scan.held_set_changed(path, list(reversed(held))) is False
+    assert scan.held_set_changed(path, held + [{"episodeId": 3}]) is True
+    assert scan.held_set_changed(path, []) is False
+    assert scan.held_set_changed(path, held) is True
+
+
+def test_the_hold_notice_names_the_first_episodes():
+    from fake_remux_lib import fake_remux_scan as scan
+
+    fakes = [{"episodeId": i, "relativePath": "S/E%d.mkv" % i} for i in range(1, 6)]
+    assert scan.hold_notice(fakes, 2) == (
+        "5 fakes — holding (max 2), investigate: S/E1.mkv, S/E2.mkv, S/E3.mkv and 2 more"
+    )
+
+
+def test_a_held_scan_posts_once_per_held_set_and_clears_the_record(tmp_path):
+    from fake_remux_lib import fake_remux_scan as scan
+
+    files = [
+        {
+            "id": i,
+            "seriesId": 1,
+            "path": "/data/media/tv/E%d.mkv" % i,
+            "relativePath": "S/E%d.mkv" % i,
+            "quality": {"quality": {"name": "Bluray-1080p Remux"}},
+        }
+        for i in range(1, 4)
+    ]
+    episodes = [
+        {"id": 10 + i, "episodeFileId": i, "monitored": True} for i in range(1, 4)
+    ]
+
+    class StubSonarr:
+        shown = files
+
+        def __init__(self, *args):
+            pass
+
+        def series(self):
+            return [{"id": 1, "title": "S"}]
+
+        def episodefiles(self, series_id):
+            return self.shown
+
+        def episodes(self, series_id):
+            return episodes
+
+    ffprobe = write_exec(
+        tmp_path / "ffprobe", 'echo \'{"streams": [{"tags": {"ENCODER": "x265"}}]}\'\n'
+    )
+    posts = []
+    ledger = tmp_path / "replacements.json"
+    cfg = {
+        "SONARR_API_KEY": "k",
+        "SONARR_URL": "http://sonarr",
+        "MAX_PER_SCAN": "2",
+        "LEDGER_FILE": str(ledger),
+        "FFPROBE_BIN": str(ffprobe),
+        "HOST_DATA_ROOT": "/srv/media",
+    }
+
+    def run():
+        return scan.scan(
+            cfg, StubSonarr, lambda _webhook, text, *args, **kw: posts.append(text)
+        )
+
+    assert [run()[0], run()[0]] == [False, False]
+    assert len(posts) == 1
+    assert "S/E1.mkv, S/E2.mkv, S/E3.mkv" in posts[0]
+    assert (tmp_path / "replacements.json.held").exists()
+
+    StubSonarr.shown = files[:1]
+    assert run()[0] is True
+    assert not (tmp_path / "replacements.json.held").exists()
