@@ -41,6 +41,9 @@ STARTUP_FILES = {
 }
 MARKER = "/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip"
 CPU_WEIGHT = "/usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf"
+SYSTEM_SLICE_WEIGHT = (
+    "/usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf"
+)
 
 
 @pytest.fixture(scope="module")
@@ -172,6 +175,18 @@ def test_the_cpu_weight_drop_in_ranks_k3s_above_its_siblings_with_no_restart(pac
     assert setting(text(package, CPU_WEIGHT), "CPUWeight") == str(weight)
     assert int(weight) > 100
     assert CPU_WEIGHT not in package.activations
+
+
+def test_the_system_slice_drop_in_outweighs_kubepods_with_no_restart(package):
+    """kubelet weights kubepods.slice at 625 on daniel-box's 16 cores, the larger node."""
+    weight = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+        "k3s_system_slice_cpu_weight"
+    ]
+    content = text(package, SYSTEM_SLICE_WEIGHT)
+    assert "[Slice]" in content.splitlines()
+    assert setting(content, "CPUWeight") == str(weight)
+    assert int(weight) > 625
+    assert SYSTEM_SLICE_WEIGHT not in package.activations
 
 
 def test_the_logging_drop_in_sends_both_streams_to_the_log_file(package):

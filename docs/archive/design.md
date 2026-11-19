@@ -401,17 +401,17 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 | H5 | [Pi Compose](host/h5-pi-compose.md) | A Renovate bump lands on the Pi, and a removed service loses its container |
 | H6 | [system-upgrade-controller for k3s](host/h6-k3s-suc.md) | A patch bump upgrades both nodes through Plans |
 | H7 | [Remaining roles, then delete Ansible](host/h7-delete-ansible.md) | A fresh Pi rebuilds from `bootstrap-host.sh` alone |
-| G1 | [Diff notice alongside the lock](docs-guard/g1-diff-notice.md) | 30 days of notices, counted against the prose edits they caused |
-| G2 | [Retire the lock](docs-guard/g2-retire-lock.md) | A PR that moves a cited symbol goes green and carries the notice |
-| G3 | [Notice dispatches the freshness reviewer](docs-guard/g3-freshness-reviewer.md) | Declined on 2026-11-12: the post-G2 yield did not fall far enough to build it |
-| G4 | [Drop the CI size test](docs-guard/g4-drop-size-test.md) | Size is one read-time budget plus a report |
-| G5 | [Shrink root CLAUDE.md](docs-guard/g5-shrink-root-claude-md.md) | Mechanism prose sits in `.claude/rules/`, and tool output in `--help` |
-| G6 | [Repair what the facts audit found](docs-guard/g6-repair-audit-defects.md) | The memory hook lists every citation `origin/master` no longer tracks |
-| G7 | [Removed names fail the PR](docs-guard/g7-removed-names.md) | Deleting a function that a skill and a comment name fails the hook, which names both lines |
-| G8 | [Memory resolver, checked index, read-only replica](docs-guard/g8-memory-resolver-and-replica.md) | A memory write on daniel-server fails at once, and the session-start line names the route |
-| G9 | [The notice blocks](docs-guard/g9-blocking-gate.md) | Stopped on 2026-11-13: 3 of 48 unedited moved rows left a false sentence, under the 20% the gate needed |
-| G10 | [Value rows](docs-guard/g10-value-rows.md) | A commit that changes a derived value rewrites the number in the doc |
-| G11 | [The binding sweep](docs-guard/g11-binding-sweep.md) | The five root sections cite content atoms, and the uncited share falls each batch |
+| G1 | [Diff notice alongside the lock](../target-architecture/docs-guard/g1-diff-notice.md) | 30 days of notices, counted against the prose edits they caused |
+| G2 | [Retire the lock](../target-architecture/docs-guard/g2-retire-lock.md) | A PR that moves a cited symbol goes green and carries the notice |
+| G3 | [Notice dispatches the freshness reviewer](../target-architecture/docs-guard/g3-freshness-reviewer.md) | Declined on 2026-11-12: the post-G2 yield did not fall far enough to build it |
+| G4 | [Drop the CI size test](../target-architecture/docs-guard/g4-drop-size-test.md) | Size is one read-time budget plus a report |
+| G5 | [Shrink root CLAUDE.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | Mechanism prose sits in `.claude/rules/`, and tool output in `--help` |
+| G6 | [Repair what the facts audit found](../target-architecture/docs-guard/g6-repair-audit-defects.md) | The memory hook lists every citation `origin/master` no longer tracks |
+| G7 | [Removed names fail the PR](../target-architecture/docs-guard/g7-removed-names.md) | Deleting a function that a skill and a comment name fails the hook, which names both lines |
+| G8 | [Memory resolver, checked index, read-only replica](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | A memory write on daniel-server fails at once, and the session-start line names the route |
+| G9 | [The notice blocks](../target-architecture/docs-guard/g9-blocking-gate.md) | Stopped on 2026-11-13: 3 of 48 unedited moved rows left a false sentence, under the 20% the gate needed |
+| G10 | [Value rows](../target-architecture/docs-guard/g10-value-rows.md) | A commit that changes a derived value rewrites the number in the doc |
+| G11 | [The binding sweep](../target-architecture/docs-guard/g11-binding-sweep.md) | The five root sections cite content atoms, and the uncited share falls each batch |
 
 ## Open questions
 

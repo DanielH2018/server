@@ -22,7 +22,7 @@ rewrites this module and leaves `promote.py` alone.
 Every HTTP request goes through a `Transport`, a callable taking the method, the URL and the
 headers: `urllib_transport`, or the tests' fake, which models a registry and counts requests.
 
-The plan is `docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*,
+The plan is `docs/archive/deploy/d1-flux-installed.md`, *Decisions*,
 *Every GitHub and GHCR call goes through one forge adapter*.
 """
 

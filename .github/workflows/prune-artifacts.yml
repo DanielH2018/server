@@ -5,7 +5,7 @@ name: prune-artifacts
 # and no promotion or rollback can reach it, together with the signatures of the digests it
 # deletes. It then runs `cosign verify` on `prod`'s digest, and on `last-good`'s, so a wrong
 # selection shows as a red run on the day it happens. The plan is
-# docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
+# docs/archive/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
 # pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
 #
 # The `prune-*` rows of tests/repo/test_census_rows_workflows.py hold this file's guard,

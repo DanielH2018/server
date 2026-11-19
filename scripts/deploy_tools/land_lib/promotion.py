@@ -6,7 +6,7 @@ wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_
 on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
 tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
 bundle file waits on `homelab` alone and gates no tag. The plan is
-docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
+docs/archive/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
 
 `wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its outcomes map to a
 landing's words:

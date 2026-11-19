@@ -13,7 +13,7 @@ No role template writes them, so no second writer overlaps this kind. The bundle
 
 Every flux-owned tag that renders into the namespace depends on this Kustomization
 (`ordering.kustomization_edges`). This module imports neither Ansible nor Jinja, like
-`bundle.py`, which imports it. The plan is docs/target-architecture/deploy/d5-bulk-move.md,
+`bundle.py`, which imports it. The plan is docs/archive/deploy/d5-bulk-move.md,
 step 30.
 """
 

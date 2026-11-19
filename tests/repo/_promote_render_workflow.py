@@ -21,7 +21,7 @@ CENSUS = "promote.py check-bundle out --against-prod"
 # `images` refuses a render without tags.json, and `publish` needs `images`, so the no-tag
 # branch passes --all-images too.
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only --all-images"
-# A `--role` render writes only the named tags' image contexts, and `images` builds all ten.
+# A `--role` render writes only the named tags' image contexts, and `images` builds every one.
 ALL_IMAGES = 'homelab_render.py cluster --out out --all-images "${roles[@]}"'
 NO_TAG = 'if [ -z "$listed" ]; then'
 CIPHERTEXT = "cluster_vars.py check --ciphertext-only"

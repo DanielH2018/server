@@ -2,7 +2,7 @@
   The pi-peer-backup CronJob's exported verdict: annotations on this object, patched by the script
   each nightly run (files/pull-pi-peers.sh:export_verdict), exported by kube-state-metrics as
   kube_configmap_annotations and read by the shadow rules in observability's `pods` group (M6
-  batch B7, docs/target-architecture/monitoring/m6-retire-kuma.md).
+  batch B7, docs/archive/monitoring/m6-retire-kuma.md).
 
   DECIDED: rendered with no annotations, so the annotations have one writer. The object must
   exist before the first run, because RBAC cannot narrow `create` by name and the CronJob's Role

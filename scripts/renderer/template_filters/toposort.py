@@ -82,7 +82,7 @@ K8S_CRD_EDGE_EXEMPT = {
 # after it. A role that declares `depends_on:` onto one of these makes a cycle, and
 # toposort_containers raises. The scaffolder (scripts/dev/new_k8s_service.py:append_entry)
 # still writes a new entry ahead of the first one, so the hand-ordered list stays a
-# topological order. The plan is docs/target-architecture/deploy/d4-ordering.md (D4.1).
+# topological order. The plan is docs/archive/deploy/d4-ordering.md (D4.1).
 K8S_APPLIES_LAST = {
     "netpol-baseline": (
         "its first task drains the rollouts queued earlier in its batch, then fences the "

@@ -56,7 +56,7 @@ container_healthcheck_retries: 5
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project.
 # Entries use the field names of cluster/services.yml's entries. Every reader of the Pi's
 # services fails on a missing key, so keep it even when it is empty. The cluster templates that
-# read it are named in docs/target-architecture/host/h5-pi-compose.md (The service list).
+# read it are named in docs/archive/host/h5-pi-compose.md (The service list).
 compose_services:
   # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
   # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,

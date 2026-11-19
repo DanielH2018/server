@@ -1,6 +1,6 @@
 """Secret-bearing files in host mode: declared outputs, compose files and credentials.
 
-H4's *Secret-bearing files* (docs/target-architecture/host/h4-secrets-unit.md) gives host mode
+H4's *Secret-bearing files* (docs/archive/host/h4-secrets-unit.md) gives host mode
 two exceptions to "render no secret", and `host.py` calls this module for both. Every other host
 file keeps the rule.
 

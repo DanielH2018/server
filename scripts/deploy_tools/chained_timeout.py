@@ -2,7 +2,7 @@
 
 `promote_lib/verify_promotion.py:expected_set` calls `promote_timeout` with T's bundle and its changed set,
 the same set `verify` expects, so the timeout and the expected statuses cannot disagree. The
-plan is docs/target-architecture/deploy/d4-ordering.md, *What `promote` reads*, and the
+plan is docs/archive/deploy/d4-ordering.md, *What `promote` reads*, and the
 operator's view is docs/flux-deploy-plane.md, *The timeout follows the chain*. Like
 `changed_set`, it is pure and reaches no forge: the caller reads the bundle.
 
@@ -44,7 +44,7 @@ CONCURRENT = 5
 # (the `promote-verify-timeout-holds-the-capped-derived-timeout` row of
 # tests/repo/test_census_rows_workflows.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 37152s with 125 Kustomizations, against 19800s). `verify`'s own wait is the same
+# (#5868: 38172s with 128 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
 # let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
 # promotion. The soak's wait cannot shrink to the chain of what changed either: the render

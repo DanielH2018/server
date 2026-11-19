@@ -77,9 +77,11 @@ names without putting their bytes in the annotation. The role's defaults list it
 `manifests_self_rollouts`, from
 `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads`. Each
 Secret reader names the rendered files its pod reads in `restart_secrets`:
-`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` for
-grafana and `alertmanager-secret.yaml` for alertmanager. The first two render from the
-role's `render_secrets` entries.
+`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` and
+`grafana-warehouse-datasource-secret.yaml` for grafana, and `alertmanager-secret.yaml` for
+alertmanager. The first two render from the role's `render_secrets` entries. Grafana mounts
+the warehouse datasource Secret as a projected volume source, beside its provisioning
+ConfigMap.
 `tests/services/test_observability_config_rolls_one_workload.py` holds that
 declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
 An Alertmanager config edit rolls Alertmanager alone.
@@ -128,7 +130,7 @@ Its config, credentials included, is the `alertmanager-config` Secret, and every
 expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file in
 `files/rules/` with a promtool test in `tests/rules/`, and ships only once
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
-are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
+are in `docs/archive/monitoring/m1-alertmanager.md`.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `k8s/roles/observability/tests/alertmanager/` holds
@@ -169,7 +171,7 @@ and drill alerts never escalate, and neither does a rule labelled `escalate: "fa
 daily instead of every 6h.
 `tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
 rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
-(`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
+(`docs/archive/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
 stored `ALERTS` samples of the last 48 hours against the Watchdog's instead, so a gap of
 about 2 hours does not restart the age. Prometheus cannot see an inhibit, so each inhibit
 whose target is a warning has a copy in `templates/alertmanager-secret.yaml.j2` that holds
@@ -199,7 +201,7 @@ verdict of its own: host-maintenance's `systemd-units` check counts every failed
 on each host every 5 minutes (#8219). It fires once per failed unit, so a weekly scan's own
 `*Failed` alert holds the copy for the scan's unit through an inhibit, and the host's other
 failed units keep paging (`tests/services/test_alertmanager_scan_unit_inhibit.py`). The per-check literals and their pin tests stay, for the
-reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
+reason `docs/archive/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
 moves. `homelab-reconcile-metrics.service` rewrites the reconcile file at boot, so a
@@ -261,7 +263,7 @@ target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules 
 from the target rather than from a literal. A new routed entry therefore changes
 `prometheus.yml` and rolls Prometheus. `tests/services/test_blackbox_ingress_targets.py`
 pins the targets to the filter's output, and
-`docs/target-architecture/monitoring/m4-blackbox-ingress.md` has the design.
+`docs/archive/monitoring/m4-blackbox-ingress.md` has the design.
 
 **A per-workload alert takes its `service` label from a recording rule.**
 `k8s/roles/observability/files/rules/workload-service.yaml` records one series per

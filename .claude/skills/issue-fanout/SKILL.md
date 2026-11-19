@@ -187,7 +187,7 @@ The dispatcher claims each batch (step 2), writes the brief (issue bodies verbat
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
 that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
-prints for a solo session, plus the shard-weight repair and the call to `scripts/dev/repo_guards.py`, which runs the
+prints for a solo session, plus the call to `scripts/dev/repo_guards.py`, which runs the
 repo-wide guards no test beside a change reaches) and starts a headless
 agent at its rung as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing

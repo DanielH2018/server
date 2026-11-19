@@ -160,7 +160,7 @@ PROMOTE_RENDER_ROWS = (
             name="promote-render-tag-branch-writes-every-image-context",
             reason=(
                 "A `--role` render writes only the named tags' image contexts, and the "
-                "`images` job builds all ten from `out/images/`, so the tag branch passes "
+                "`images` job builds every one from `out/images/`, so the tag branch passes "
                 "`--all-images` too."
             ),
             offence=judge(tag_branch_problems),

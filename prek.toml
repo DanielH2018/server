@@ -61,8 +61,11 @@ id = "check-merge-conflict"
 stages = ["pre-commit"]
 
 [[repos.hooks]]
+# The M6 plan grew past the 500 KB cap through edits, which this hook never sees; only its
+# move into the archive reads as an add. It is history, so nothing grows it further.
 id = "check-added-large-files"
 stages = ["pre-commit"]
+exclude = "^docs/archive/monitoring/m6-retire-kuma\\.md$"
 
 [[repos.hooks]]
 id = "mixed-line-ending"
@@ -567,7 +570,7 @@ files = "(^|/)CLAUDE\\.md$|^\\.claude/(rules|agents)/[^/]+\\.md$|^\\.claude/skil
 # The non-Markdown paths the docs-refresh and eval-run crons commit. Neither cron can edit a
 # CLAUDE.md, so a finding there would only park its publish, which the docs-refresh contract's
 # next-run review says to check before a hook gains one of its staged paths.
-exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|evals/history\\.json$)"
+exclude = "^(docs/assets/generated/|evals/history\\.json$)"
 
 # Static test modules that turn more PRs red than any other test the author's own code did not
 # break. Each failure names its own repair, so finding it at commit time saves a CI round trip
@@ -604,7 +607,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # The `static-ratchet-tests-*` siblings below carry further modules.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master. docs-refresh
-# stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
+# stages scripts/dev/pytest_shard_runner_weights.json, so this fires on that cron's commit, which
 # runs the whole suite green first. eval-run stages nothing this matches. To commit past it, `SKIP=static-ratchet-tests git commit`.
 # The shell, `hosts/` and wait-source paths are the scripts the shimmed-path census row reads.
 [[repos.hooks]]
@@ -613,7 +616,7 @@ name = "Static ratchet tests (module length, section lint, shard partition, doc 
 entry = "uv run --frozen pytest -q -p no:cacheprovider tests/repo/test_module_length_ratchet.py tests/repo/test_every_section_lints_clean.py tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py tests/repo/test_role_claude_md.py tests/repo/test_census_rows_python.py tests/repo/test_census_rows_suite.py tests/repo/test_census_rows_roles.py tests/repo/test_census_rows_text.py tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_runner_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the
