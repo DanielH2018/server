@@ -18,6 +18,7 @@ The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode trips
 from __future__ import annotations
 
 from itertools import pairwise
+from typing import NamedTuple
 
 
 # Consumer re-encoder identifiers that appear in a video stream's ENCODER tag. A remux (stream copy)
@@ -56,6 +57,24 @@ def sanitize(s, maxlen: int = 160) -> str:
     return s
 
 
+class Quality(NamedTuple):
+    """The quality Sonarr attaches to an episode file, a release or a queue item.
+
+    Attributes:
+      id: Sonarr's quality id, or None when the response omits it.
+      name: the quality's display name, such as "Bluray-1080p Remux", or None when omitted.
+    """
+
+    id: int | None
+    name: str | None
+
+    @classmethod
+    def of(cls, obj: dict) -> Quality:
+        """The quality nested at `obj["quality"]["quality"]`; a missing level reads as unknown."""
+        q = (obj.get("quality") or {}).get("quality") or {}
+        return cls(q.get("id"), q.get("name"))
+
+
 def is_remux_quality(quality_name) -> bool:
     return "remux" in (quality_name or "").lower()
 
@@ -69,7 +88,7 @@ def remux_candidates(episodefiles, series_title):
     """
     out = []
     for ef in episodefiles:
-        quality = ((ef.get("quality") or {}).get("quality") or {}).get("name")
+        quality = Quality.of(ef).name
         if not is_remux_quality(quality):
             continue
         path = ef.get("path")
