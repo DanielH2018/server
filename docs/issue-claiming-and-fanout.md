@@ -49,19 +49,28 @@ Project board follows the issue*).
 inside group names, so the bare word is mildly overloaded; the label namespace is separate
 enough that this has not been worth a longer name.
 
-A third label is dated and therefore not in `LABELS`: `not-before:<YYYY-MM-DD>`, one label per
-date, created on demand by `plan_ensure_label` the first time `defer` or `open --not-before`
-needs it. It means "workable on that date, not earlier" and it expires by comparison: `next`
-and `claim` read it against today's UTC date, so nobody clears it. That is the property
-`manual` lacks. #1288 could be re-derived only once seven days of a metric existed, said so in
-its body, and was claimed, read and released unchanged six times in four days because the only
-withholding label was permanent and meant the wrong thing (#1739).
+A date is not a label. It is the Not Before issue field, a date field the account owns, which
+`defer` and `open --not-before` set. It means "workable on that date, not earlier" and it
+expires by comparison: `next` and `claim` read it against today's UTC date, so nobody clears
+it. That is the property `manual` lacks. #1288 could be re-derived only once seven days of a
+metric existed, said so in its body, and was claimed, read and released unchanged six times in
+four days because the only withholding label was permanent and meant the wrong thing (#1739).
+Severity is the Severity issue field, `High`, `Medium` or `Low`, which `open --severity` sets.
 
-The label cannot give a list of every deferred issue in date order. GitHub's issue search has
-no prefix match on label names and sorts only by created, updated, comments, reactions and
-interactions. The "Deferred, by date" table on the generated backlog page fills that gap:
-`scripts/docs/reference/backlog.py` renders every open finding carrying a date, soonest first,
-marked *withheld* or *date passed*. It reads the label, so it never disagrees with `next`.
+Both replaced labels: one `not-before:<YYYY-MM-DD>` label per date, and three `severity/*`.
+`gh issue list --json` cannot return an issue field, so every loader in
+`findings_lib/gh_calls.py` adds them with `attach_fields`, one aliased GraphQL read per 100
+issues (0.79s and one point for 113 issues, measured 2026-11-19). A failed read fails the
+command, because an issue missing its date reads as not deferred, and `next` would offer it.
+Until [#9120](https://github.com/DanielH2018/server/issues/9120) closes, the readers still
+take a `not-before:` or `severity/` label as a fallback, the later date winning, because a
+session on a pre-field checkout writes only labels.
+
+Issue search filters a field directly, as `field."not before":>2026-12-01`, which a dated
+label never allowed. The "Deferred, by date" table on the generated backlog page still lists
+every deferred issue soonest first, marked *withheld* or *date passed*:
+`scripts/docs/reference/backlog.py` reads the same `not_before`, so it never disagrees with
+`next`.
 
 A date is the wrong tool for work that waits on another issue. A guessed date either expires
 before that work lands or holds the issue back after it has. On 2026-11-09, #7195 waited on
@@ -117,23 +126,16 @@ the session whose claim comment sorts first holds the issue, and the loser relea
 ## The Project board follows the issue
 
 The "Server Issue Tracking" Project shows every open finding. `findings_lib/board.py` derives
-three fields from the issue alone:
+one field from the issue alone: **Status**, which is `Done` once the issue is closed, `In
+Progress` while a worktree holds the issue's `Claim:` comment or an open pull request names it
+as closing, and `Todo` otherwise.
 
-- **Status**, a field on the board, is `Done` once the issue is closed. It is `In Progress`
-  while a worktree holds the issue's `Claim:` comment, or while an open pull request names it
-  as closing. Otherwise it is `Todo`.
-- **Severity**, an issue field on the issue itself, is the `severity/<level>` label's level:
-  `High`, `Medium` or `Low`.
-- **Not Before**, an issue field, is the `not-before:<date>` label's date.
-
-Severity and Not Before are issue fields because a GitHub issue field lives on the issue.
-Issue search filters it (`field."not before":>2026-12-01`), and the board shows it as a
-column with no item to keep in step. The account owns the definitions: the operator created
-both under Settings > Planning > Issue fields, with Public visibility. The gh token cannot
-read or create the account's definitions, but `repository.issueFields` lists them, which is
-what `board.py` reads. A missing field fails every sync with a line naming where to add it.
-The labels stay the record that `next`, `claim` and the backlog page read; the fields copy
-them.
+The board shows Severity and Not Before as columns read from the issue fields, so nothing
+keeps a copy of them in step. The account owns their definitions: the operator created both
+under Settings > Planning > Issue fields, with Public visibility. The gh token cannot read or
+create the account's definitions, but a repository's GraphQL `issueFields` connection lists
+them, which is what `gh_calls.set_fields` reads; a missing field or option fails the write with a line naming
+where to add it.
 
 The board's Status is the one claim state a person reads. GitHub shows it in each issue's
 sidebar and logs its changes on the issue's timeline. It is not the issue's own `status`

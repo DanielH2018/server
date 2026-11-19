@@ -2,9 +2,6 @@
 | Label | Colour | Meaning |
 |---|---|---|
 | `claude` | `#cba6f7` | Filed by Claude via scripts/dev/findings.py |
-| `severity/high` | `#f38ba8` | Review severity: High |
-| `severity/medium` | `#f9e2af` | Review severity: Medium |
-| `severity/low` | `#a6e3a1` | Review severity: Low |
 | `kind/gap` | `#fab387` | Something missing that should exist |
 | `kind/improvement` | `#89b4fa` | Something present that could be better |
 | `kind/addition` | `#94e2d5` | A new capability |
