@@ -331,7 +331,8 @@ re-run it on exit 75. N is the highest issue number the orchestrator has seen. T
 (4) when gh has no login, which no wait fixes. The `new` detail is JSON
 naming each one's number, title, severity, cited paths, `no_vetted_remediation` and
 `solo_only`, so the orchestrator can group and claim without another read. A new issue that
-is claimed, deferred, blocked, `manual` or named by an open PR keeps the wait open, because
+is claimed, deferred, blocked, `manual`, named by an open PR or reserved by another
+branch's open project keeps the wait open, because
 the source shares `scripts/dev/findings_lib/claim.py:free_issues` with `next`. Pass
 `--after` every time. Without it the baseline is the highest open number when the wait
 starts, so each resume re-baselines and misses an issue filed between the two runs. Each
