@@ -26,6 +26,7 @@ from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import PrView, parse_view, rest_filter
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
+from lib import gh_rate_limit
 from lib.json_types import as_object
 
 BRANCH = "master"
@@ -192,6 +193,18 @@ class Landing:
         except ValueError as exc:
             # json.JSONDecodeError is a ValueError subclass.
             self.die(f"could not read PR #{pr}: unparseable gh output: {exc}", 1)
+
+    def remedy(self, why: str, otherwise: str) -> str:
+        """The next step after GitHub refused a write with `why`: `otherwise`, or a rate limit's.
+
+        A rate limit's remedy is to wait and re-run the landing (`gh_rate_limit.remedy`),
+        because `otherwise` repeats the call the limit refused.
+        """
+
+        def read(name: str) -> object:
+            return self.tools.gh_json("api", "rate_limit", "--jq", f".resources.{name}")
+
+        return gh_rate_limit.remedy(why, read) or otherwise
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""

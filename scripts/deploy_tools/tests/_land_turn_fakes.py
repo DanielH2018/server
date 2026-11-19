@@ -31,6 +31,7 @@ def turn_landing(landing, polls=(OPEN, MERGED), start=OPEN, **fakes_or_opts):
             "line",
             "await_ci",
             "gh_merge_rc",
+            "gh_stderr",
             "compare",
             "head_runs",
         )
