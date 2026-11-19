@@ -170,8 +170,10 @@ if [[ -n "$project" ]]; then
 fi
 
 # stdout goes straight through on fd 3; only stderr is captured, for the failure line.
+# `--quiet` drops uv's own warnings, such as a `UV_*` setting that `--no-project` ignores,
+# which would otherwise be the last line; uv's errors still print.
 exec 3>&1
-err=$("$uv" run --no-project --no-python-downloads --python 3.15.2 \
+err=$("$uv" run --quiet --no-project --no-python-downloads --python 3.15.2 \
     "$script" 2>&1 >&3 3>&-)
 rc=$?
 exec 3>&-
