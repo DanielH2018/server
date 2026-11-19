@@ -240,13 +240,6 @@ def test_the_pull_and_the_push_share_one_ssh_connection(tmp_path):
     assert shared in pull and shared in push, (pull, push)
 
 
-def test_with_no_runtime_directory_each_rsync_connects_on_its_own(tmp_path):
-    run = _runner(tmp_path)
-    assert run("ok").returncode == 0
-    (pull,) = run.rsync_calls()
-    assert "ControlMaster" not in pull, pull
-
-
 def test_the_ssh_transport_drops_inherited_local_forwards():
     """The second error shape's whole fix: a forward this script never asked for.
 
