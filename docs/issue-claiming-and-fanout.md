@@ -393,6 +393,12 @@ not land its PR, because only daniel-box runs deploys. The manifest under
 `remote_fanout_lines` (`.claude/hooks/hooklib/worktree_lines.py`) all read to find a fan-out's
 live worktrees on the other host.
 
+A reader keeps the batch keys it does not know. `Batch.from_json` in
+`scripts/dev/fanout_lib/manifest.py` holds them in `Batch.extra`, and `Batch.to_json` writes
+them back beside the fields, so a `clean` run by one build does not erase what another build
+recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
+key to the `Batch` constructor skips the whole run on a key it has no field for.
+
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
 a transient user service. It reads both and takes the smaller headroom, so the tighter cap
