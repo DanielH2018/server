@@ -126,6 +126,12 @@ def test_a_declared_secret_of_the_right_shape_is_clean():
     assert cluster.secret_entries("widget", [entry], {"k": "v"}) == [entry]
 
 
+def test_a_render_key_that_does_not_resolve_is_flagged(stubs):
+    unresolvable = {**stubs, "traefik_k8s_manage_crowdsec": "{{ no_such_name }}"}
+    with pytest.raises(cluster.RenderError, match=r"render keys \['manifests_files'"):
+        cluster.render_tag("traefik", unresolvable)
+
+
 def test_a_listed_file_with_no_template_is_flagged(tmp_path):
     with pytest.raises(cluster.RenderError, match="has no template"):
         cluster._sources("littlelink", {"no-such-file.yaml"}, False)

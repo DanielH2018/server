@@ -19,8 +19,8 @@ macro argument is judged where the call's output goes, and binds the parameter i
 macro's body. These facts cross templates, so `scan_templates` repeats its walk until they
 stop growing.
 
-`var_aliases.py` holds the second clause, over role defaults and inventory, and both
-clauses' named members.
+`var_aliases.py` holds the vars-file clause, which refuses a key named in role defaults or
+inventory, so no template sees an alias it did not bind itself.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -166,7 +166,7 @@ def _literal_container(expr: nodes.Node | None) -> bool:
 class _Walk:
     """One pass over one template, with its scopes, judging every use and learning `Facts`."""
 
-    def __init__(self, path, tree, keys, policy, non_secret, facts, resolve, aliases):
+    def __init__(self, path, tree, keys, policy, non_secret, facts, resolve):
         self.path, self.keys, self.policy = path, keys, policy
         self.non_secret, self.facts = non_secret, facts
         self.macros = macro_names(tree)
@@ -179,7 +179,7 @@ class _Walk:
                 macro, local = entry if isinstance(entry, tuple) else (entry, entry)
                 if target is not None:
                     self.imports[local] = (target, macro)
-        self.scopes: list[dict[str, Binding | None]] = [dict(aliases), {}]
+        self.scopes: list[dict[str, Binding | None]] = [{}]
         self.contexts: list[tuple[str, MacroRef]] = []
         self.records: list[_Record] = []
         self.found = TemplateScan()
@@ -498,7 +498,6 @@ def scan_templates(
     env: jinja2.Environment,
     non_secret: dict[Path, frozenset[str]] | None = None,
     resolve: Callable[[Path, str], Path | None] = resolve_import,
-    aliases: dict[str, Binding] | None = None,
 ) -> dict[Path, TemplateScan]:
     """Judge every use of a key in `sources`, their aliases and macros included.
 
@@ -510,7 +509,6 @@ def scan_templates(
         non_secret: Per template, the argument texts of its non-literal `vars` lookups that
             read no secret key. They are recorded as sites and judged as nothing.
         resolve: The template a `{% from %}` names, from the template that imports it.
-        aliases: The names every template sees as aliases, from `var_aliases`.
     """
     trees = {path: env.parse(text) for path, text in sources.items()}
     facts, non_secret = Facts(), non_secret or {}
@@ -526,22 +524,9 @@ def scan_templates(
                 non_secret.get(path, frozenset()),
                 facts,
                 resolve,
-                aliases or {},
             ).found
             for path, tree in trees.items()
         }
         if facts.snapshot() == before:
             return scans
     raise RuntimeError("rule 5's macro facts did not settle in 20 passes")
-
-
-def judged_flows(
-    path: Path,
-    tree: nodes.Template,
-    keys: frozenset[str],
-    policy: Policy,
-    aliases: dict[str, Binding],
-) -> list[tuple[Flow, Use]]:
-    """`(flow, use)` for each use in one template walked alone, with no macro facts."""
-    walk = _Walk(path, tree, keys, policy, (), Facts(), resolve_import, aliases)
-    return [(r.flow, r.use) for r in walk.records]
