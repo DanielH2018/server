@@ -504,10 +504,11 @@ port and no reachability coverage: Kuma HTTP-monitored wg-easy and `ScrapeTarget
 that answer missed dozzle. The Pi limits carry `DECIDED:` markers in `hosts.yaml`, the port
 set is pinned in
 `tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
-hint in `tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs
-rules added to `hosts.yaml`: its per-host copies name the hosts, and
-`HostTemperatureCoverageShortfall` holds a literal floor of 3 hosts, so a fourth host makes that
-floor satisfiable by any three of four and one host can go dark silently.
+hint in `tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs only
+its `observability_expected_hosts` entry. `scripts/dev/gen_host_rules.py` renders its per-host
+copies, and it raises the floors of `HostCoverageShortfall` and
+`HostTemperatureCoverageShortfall` to the host table's counts, so no host can go dark behind the
+others' answers.
 `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_exporters.py)
 forces the decision for a host under a new scrape job, which is how daniel-pi arrived.
 Workload Log Errors (M6 batch A7) retired into the `WorkloadLogErrors` rule in

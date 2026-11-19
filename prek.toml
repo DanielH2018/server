@@ -723,6 +723,18 @@ language = "system"
 pass_filenames = false
 files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
+# observability's host-checks and hosts rule groups are rendered from files/rule-tables/ and the
+# host table, observability_expected_hosts (scripts/dev/gen_host_rules.py). `--check` fails on a
+# rule file edited by hand, a table edit committed without its render, and an inventory host the
+# host table does not list. Run the generator without `--check` and commit what it writes.
+[[repos.hooks]]
+id = "gen-host-rules"
+name = "The host rule groups match their tables"
+entry = "uv run --frozen python scripts/dev/gen_host_rules.py --check"
+language = "system"
+pass_filenames = false
+files = "^(k8s/roles/observability/(files/rule-tables/.*|files/rules/(host-checks|hosts)\\.yaml|defaults/main\\.yml)|hosts/[^/]+/package\\.yml|inventory/host_vars/[^/]+\\.yml|scripts/dev/gen_host_rules\\.py|scripts/lib/(cli_help|exit_codes|inventory_lists|repo_paths|yaml_fast)\\.py)$"
+
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]). ruff is pinned in uv.lock (lint group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
