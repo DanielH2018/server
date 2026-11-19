@@ -372,18 +372,20 @@ def test_a_failure_an_earlier_promotion_left_on_t_is_not_read_as_this_ones_is_cl
     t, expected, reads = _repromoted(world)
     since = MOVED_AT - timedelta(seconds=vp.MOVED_AT_SKEW_S)
     assert vp.verify(reads, t, "", expected, since) == vp.Verdict(
-        "failed", ("bento-pdf", "homelab")
+        vp.VerifyVerdict.FAILED, ("bento-pdf", "homelab")
     ), "nothing fresh arrived, so the timeout names both, not the stale failure"
     world.transport.status_times[t] = "2026-10-15T01:02:00Z"
     world.transport.statuses[t]["flux/bento-pdf"] = "success"
-    assert vp.verify(reads, t, "", expected, since) == vp.Verdict("good")
+    assert vp.verify(reads, t, "", expected, since) == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_a_failure_an_earlier_promotion_left_on_t_holds_at_once_is_flagged(world):
     """The red half: an unbounded read takes the old failure as this promotion's."""
     t, expected, reads = _repromoted(world)
     clock_before = reads.clock()
-    assert vp.verify(reads, t, "", expected) == vp.Verdict("failed", ("bento-pdf",))
+    assert vp.verify(reads, t, "", expected) == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("bento-pdf",)
+    )
     assert reads.clock() == clock_before, "it held on the first read, without waiting"
 
 

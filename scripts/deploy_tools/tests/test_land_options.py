@@ -75,6 +75,22 @@ def test_any_author_overrides_the_env(monkeypatch):
     assert options.parse_args(["--pr", "7", "--any-author"], "d").require_author == ""
 
 
+def test_land_require_head_pins_the_head_and_unset_pins_none(monkeypatch):
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", "c" * 40)
+    assert options.parse_args(["--pr", "7"], "d").require_head == "c" * 40
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", "")
+    o = options.parse_args(["--pr", "7"], "d")
+    assert o.require_head is None and not o.policy_active
+
+
+@pytest.mark.parametrize("value", ["abc1234", "C" * 40, "c" * 41])
+def test_a_require_head_that_is_no_full_sha_is_a_usage_error(monkeypatch, value):
+    monkeypatch.setenv("LAND_REQUIRE_HEAD", value)
+    with pytest.raises(SystemExit) as exc:
+        options.parse_args(["--pr", "7"], "d")
+    assert exc.value.code == exit_codes.USAGE_ERROR
+
+
 def test_help_prints_the_description(capsys):
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--help"], "Verdicts printed on stdout: settled")

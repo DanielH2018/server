@@ -9,7 +9,7 @@ import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
 from deploy_tools.land_lib.tools import Classifier
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 
 _ORDERED = ("await_ci", "land_wait", "gate")
 
@@ -136,7 +136,9 @@ def test_help_does_not_annotate():
 def _sonarr_settled(**kwargs: object) -> Fakes:
     """land-wait's changed set names sonarr, and the owner that keeps it gated."""
     fakes = Fakes(
-        land_wait=[WaitResult("settled", detail="1 applied", tags=("sonarr",))],
+        land_wait=[
+            WaitResult(WaitVerdict.SETTLED, detail="1 applied", tags=("sonarr",))
+        ],
     )
     for name, value in kwargs.items():
         setattr(fakes, name, value)

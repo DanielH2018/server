@@ -152,7 +152,7 @@ def test_a_derived_timeout_past_the_cap_gets_the_cap_and_verify_prints_failed(ca
     expected = vp.Expected(frozenset({"homelab", "n39"}), frozenset(), "", timeout)
     clock = Clock()
     verdict = vp.verify(reads({T: ok("homelab")}, clock), T, "", expected)
-    assert verdict == vp.Verdict("failed", ("n39",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("n39",))
     assert vp.report(T, verdict, None) == 1
     assert capsys.readouterr().out.endswith(f"target={T} verdict=failed failed=n39\n")
 
