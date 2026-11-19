@@ -54,7 +54,8 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
 THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an
 issue, `main` makes that issue's item on the "Server Issue Tracking" Project agree with it:
 Status (Todo, In Progress while a worktree holds its claim or an open PR will close it, Done
-once closed), Severity and Not before. `findings_lib/board.py` owns the mapping. A board
+once closed). It also sets the issue's own Severity and Not Before issue fields from its
+`severity/` and `not-before:` labels. `findings_lib/board.py` owns the mapping. A board
 write that fails prints one warning and leaves the exit code alone, because nothing reads the
 board back; `sync-board` repairs it, and with no numbers it checks every open issue. Another
 repo's register has no board, so `--repo` other than this one skips it.

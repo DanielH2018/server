@@ -6,9 +6,8 @@ description: >-
 # Every pin below is a LITERAL in a step, never an input default. renovate.json's python, node
 # and prek custom managers match the quoted value after the `python-version` and `node-version`
 # keys and the version after `pip install prek==`; a `default:` would read as none of them and
-# age silently. That is also why
-# no job can ask for a different version: a second version is a second pin, which is the
-# duplication this action exists to remove.
+# age silently. That is also why no job can ask for a different version: a second version is a
+# second pin, the duplication this action exists to remove.
 #
 # The pins are three-part. A two-part `python-version:` or `node-version:` resolves the patch
 # from whatever the runner image's toolcache holds that day, while a three-part one moves only
@@ -52,7 +51,7 @@ runs:
   using: composite
   steps:
     # apt reads every pocket through mirror+file:/etc/apt/apt-mirrors.txt and tries each listed
-    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all (#7957).
+    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all.
     - name: Add a non-ubuntu.com apt mirror as the last fallback
       shell: bash
       run: |
@@ -71,9 +70,8 @@ runs:
       uses: astral-sh/setup-uv@v10.3.3  # zizmor: ignore[unpinned-uses]
       with:
         # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
-        # (pytest, flask, ruff, ty, shellcheck-py) before the first one
-        # executes. Without this the download is repaid on every run. Keyed on uv.lock by
-        # the action itself, so a lock change invalidates it exactly.
+        # before the first one executes, so without a cache every run repays the download. The
+        # action keys it on uv.lock.
         enable-cache: true
         # The cache saves only on a miss, so a UV_NO_DEV or UV_NO_GROUP=lint job sharing the
         # full key would leave every lint job a partial entry to re-download around.
@@ -94,25 +92,16 @@ runs:
       shell: bash
       run: uv sync --frozen --compile-bytecode
 
-    # prek bootstraps one isolated environment per remote hook repo whenever its cache is
-    # cold — uncached, that is every CI run. Worth ~14s in the `hooks` job (the step measured
-    # 141s before these caches and 127s after). It is much cheaper on the runner than it is on
-    # a workstation: the `gitleaks` hook is `language = "golang"`, and where daniel-box has no
-    # Go and makes prek fetch a ~270 MB managed toolchain to build gitleaks from source (220s
-    # cold, for a scan that takes 0.05s), the runner image ships Go preinstalled and prek uses
-    # it. Hence a 45 MB cache rather than a 350 MB one.
-    #
-    # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
-    # DOWNLOAD cache — pure redundancy once the envs it built are themselves restored, and
-    # (~500 MB on a machine that does fetch a toolchain) large enough that carrying it would
-    # eat the saving in transfer time.
+    # Cold, prek builds one isolated environment per remote hook repo, which is every CI run
+    # without this cache. Only the environment dirs are cached: `~/.cache/prek/cache` is prek's
+    # own pip/uv download cache, redundant once the envs are restored and large enough to eat
+    # the saving in transfer time.
     #
     # restore-keys is safe because prek's env dirs are content-addressed
-    # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored rather than
-    # reused, so a partial hit still lets the UNCHANGED hooks skip their rebuild when one rev
-    # bumps. The fresh key then saves the union. The second restore-key reaches the `hooks`
-    # job's `prek-` entry, so a job with its own prefix still gets a warm start on a branch
-    # where its own entry does not exist yet; for the `hooks` job it repeats the first.
+    # (hooks/<language>-<hash>): a stale entry from an older prek.toml is ignored, so a partial
+    # hit lets the unchanged hooks skip their rebuild when one rev bumps. The second restore-key
+    # reaches the `hooks` job's `prek-` entry, so a job with its own prefix gets a warm start on
+    # a branch with no entry of its own; for the `hooks` job it repeats the first.
     - name: Cache prek hook environments
       if: inputs.prek-cache-key != ''
       uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]
@@ -134,4 +123,4 @@ runs:
     - if: inputs.node == 'true'
       uses: actions/setup-node@v7.1.0  # zizmor: ignore[unpinned-uses]
       with:
-        node-version: "26.13.0"
+        node-version: "26.13.1"

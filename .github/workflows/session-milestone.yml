@@ -1,11 +1,9 @@
 name: session-milestone
 
-# Keeps a Claude session's milestone in step with its work. `findings.py milestone start` opens
-# the milestone and `findings.py claim` files issues under it. This workflow files the
-# branch's PR when the PR opens, and closes the milestone when a PR or issue in it closes and
-# nothing in it is left open. scripts/dev/findings_lib/milestone.py documents the scheme.
-# Running on the PR event covers every way a PR opens: an agent's `gh pr create`, a fan-out
-# batch, and the web UI.
+# Keeps a Claude session's milestone in step with its work: files the branch's PR under it when
+# the PR opens, and closes it when a PR or issue in it closes and nothing in it is left open.
+# scripts/dev/findings_lib/milestone.py documents the scheme. The PR event covers every way a PR
+# opens: `gh pr create`, a fan-out batch, and the web UI.
 #
 # Only a same-repo PR runs a job. A fork PR gets a read-only token, and this repo is public, so
 # no job uses `pull_request_target`.

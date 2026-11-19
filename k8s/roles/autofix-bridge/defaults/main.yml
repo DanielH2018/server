@@ -37,3 +37,14 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "observability — auto-remediation loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) — two independent reasons"
 
 manifests_rollout: autofix-bridge
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The sidecar's API keys and webhook. Every other setting is a plain `env:` value in
+  # deployment.yaml.j2, because a Secret's quoted numeric literal fails Flux's typed patch.
+  - name: autofix-bridge-env
+    string_data:
+      SONARR_API_KEY: sonarr_api_key
+      RADARR_API_KEY: radarr_api_key
+      ARR_DISCORD_WEBHOOK_URL: arr_discord_webhook_url

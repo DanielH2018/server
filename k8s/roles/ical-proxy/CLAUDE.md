@@ -47,7 +47,7 @@ calendars, one feed each, for the Homepage calendar widget. See repo-root `CLAUD
 
 ## Notable
 - Aggregates Google + Obsidian ICS URLs (`calendar_1/2/4` from secrets, rendered by
-  `k8s/roles/ical-proxy/templates/secret.yaml.j2`), refreshing every 15 min
+  `k8s/roles/ical-proxy/defaults/main.yml:render_secrets`), refreshing every 15 min
   (`REFRESH_INTERVAL` in `k8s/roles/ical-proxy/templates/deployment.yaml.j2`, read by
   `k8s/roles/ical-proxy/files/ical_proxy.py:refresh_loop`). Not exposed publicly — Homepage
   consumes it over the private network (`k8s/roles/ical-proxy/templates/ingressroute.yaml.j2`).

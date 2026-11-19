@@ -1,7 +1,7 @@
 """Guards for the Homelab eval sweep timer (the eval-sweep component of homelab-daniel-box).
 
 Weekly hermetic run of every evals/cases/ case, rolled into evals/history.json by
-evals/trend.py. Modeled on docs-refresh: same git-tree lock, same PR-based publish (that
+evals/trend.py. Modeled on docs-refresh: the same PR-based publish (that
 half is covered generically for every unattended committing job by
 test_cron_scripts_publish_via_pr.py, which includes eval-run.sh.j2 in its SCRIPTS list).
 

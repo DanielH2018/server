@@ -74,7 +74,7 @@ def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, ca
     tools, _ = build_tools(Fakes())
     tools.gh_json = lambda *a, **k: 1 / 0
     with pytest.raises(ZeroDivisionError):
-        land._land(opts, tools, None)
+        land._land(opts, tools, None, ["--pr", "7"])
     from deploy_tools.land_lib import verdict_log
 
     expected = "VERDICT: refused (PR #7 — the landing raised ZeroDivisionError: division by zero)"

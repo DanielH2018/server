@@ -19,7 +19,7 @@ serves read-only (`k8s/roles/navidrome/defaults/main.yml:navidrome_k8s_media_sub
   from nightly or the plugins branch back to stable without restoring its database, so a
   Soulseek plugin that needs another branch is a decision for #8192, not an image bump.
 - **The API key comes from SOPS.** `lidarr_api_key` reaches the pod through the
-  `lidarr-exportarr` Secret (`k8s/roles/lidarr/templates/secret-exportarr.yaml.j2`), and the
+  `lidarr-exportarr` Secret (`k8s/roles/lidarr/defaults/main.yml:render_secrets`), and the
   shared macro's `api_key_secret` argument (`k8s/templates/arr-deployment.yml.j2`) sets
   `LIDARR__AUTH__APIKEY` from it. Lidarr reads `Lidarr:Auth:ApiKey` before its own
   `config.xml`, so the key in SOPS is the key Lidarr uses, and exportarr and Prowlarr can hold

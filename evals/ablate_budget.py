@@ -9,7 +9,7 @@ import json
 import shlex
 from pathlib import Path
 
-# The operator's ruling on #4259 (2026-10-10): each ablation run stays under $10.
+# Each ablation run stays under $10.
 CAP_USD = 10.0
 PROJECTION_MARGIN = 1.5
 # The most one engine call can bill: the agent's and the judge's --max-budget-usd ($0.75 and
@@ -17,7 +17,7 @@ PROJECTION_MARGIN = 1.5
 # when this much still fits under the cap, so no run can carry the total past it.
 WORST_RUN_USD = 3 * 0.75 + 3 * 0.50
 # What one run of a case no past report has priced is assumed to cost. The weekly sweep bills
-# about $7 for its 90 runs (#4308), about $0.078 a run, averaged over cases that are not this
+# about $7 for its 90 runs, about $0.078 a run, averaged over cases that are not this
 # one; this is that times PROJECTION_MARGIN.
 UNPRICED_RUN_USD = 0.12
 # Where past engine reports live: every ablation run keeps each run's report under

@@ -45,7 +45,7 @@ def test_help_exits_zero():
 def test_cluster_without_secret_stubs_renders_placeholders(out, capsys):
     assert _cluster(out, "--role", "speedtest") == 0
     assert "placeholder mode" in capsys.readouterr().out
-    text = (out / "cluster" / "speedtest" / "secret.yaml").read_text()
+    text = (out / "cluster" / "speedtest" / "secret-speedtest.yaml").read_text()
     # A secret key renders as its placeholder, not its stub.
     assert "APP_KEY: ${speedtest_app_key}\n" in text
     assert "stub-" not in text and "HOMELAB_SECRET" not in text

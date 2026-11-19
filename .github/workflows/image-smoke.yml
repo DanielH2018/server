@@ -1,16 +1,14 @@
 name: image-smoke
 
-# Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check,
-# and a path-filtered workflow that never triggers would leave the PR's required check
-# stuck at "Expected — waiting for status". The job self-scopes instead — the
-# "Collect changed image refs" step diffs only the k8s role defaults and group_vars/all.yml,
-# so a PR that changes no image ref there yields an empty list and the boot step is skipped
-# (a fast green).
+# Runs on EVERY PR (no `paths:` filter) on purpose: this is a required status check, and a
+# path-filtered workflow that never triggers would leave the PR's required check stuck at
+# "Expected — waiting for status". The job self-scopes instead: the "Collect changed image
+# refs" step diffs only the k8s role defaults and group_vars/all.yml, so a PR that changes no
+# image ref there yields an empty list and the boot step is skipped (a fast green).
 #
-# workflow_dispatch takes an explicit list instead of the diff, for two jobs the PR trigger
-# cannot do. It is the only way to exercise a change to the check itself — a PR that edits this
-# file changes no image pin, so the diff is empty and the checks below never run. And it is how
-# to sweep refs the PR path has not seen, which nothing else verifies resolve.
+# workflow_dispatch takes an explicit list instead of the diff. It is the only way to exercise
+# a change to the check itself, because a PR that edits this file changes no image pin and the
+# diff is empty. It also sweeps refs the PR path has not seen.
 on:
   pull_request:
   # Inert: merge queues are not offered on this user-owned repository (see the note in
@@ -53,11 +51,10 @@ jobs:
         with:
           uv: "false"
 
-      # No setup-uv step: scripts/dev/smoke_extract.py imports `re` and `sys` and nothing else, so it
-      # needs no project env, and `uv run` would resolve the whole `dev` group (uncached, since
-      # this workflow does not set enable-cache) to run a stdlib script, ~3s of a ~10s job. If
-      # that script ever grows a third-party import, add `astral-sh/setup-uv` WITH enable-cache
-      # and invoke it through `uv run`.
+      # No setup-uv step: scripts/dev/smoke_extract.py imports only the stdlib, and `uv run` would
+      # resolve the whole `dev` group (uncached, since this workflow does not set enable-cache)
+      # to run it. If the script gains a third-party import, add `astral-sh/setup-uv` WITH
+      # enable-cache and invoke it through `uv run`.
       - name: Collect changed image refs
         id: images
         env:
@@ -97,15 +94,13 @@ jobs:
           # manual-merge dockerfile-manager updates with no custom.regex automerge match.
           #
           # What this proves is narrow, and the boot step below says which half is which. The
-          # real gate is post-merge: promote and Flux apply the merged change, and `land.sh`
-          # waits for the changed workloads to come up healthy. That gate runs after the image
-          # already deployed, so this job is the last automated check before it does. Which is why it now covers every ref rather than
-          # excluding the ones that cannot boot bare — all 9 roles the old exclusion list
-          # touched were denylisted ones.
+          # real gate is post-merge, where `land.sh` waits for the changed workloads to come up
+          # healthy after promote and Flux apply them. This job is the last automated check
+          # before the image deploys.
           # smoke_extract.py selects a ref the diff adds only when no removed line carries it, so
           # a moved or reformatted defaults file with unchanged pins selects no image, whether or
-          # not --find-renames pairs the move. The ansible/ paths exist only on a base from
-          # before the rename; naming them puts that side's removed refs in the diff.
+          # not --find-renames pairs the move. The ansible/ paths exist only on a base that
+          # predates the rename; naming them puts that side's removed refs in the diff.
           diff="$(git diff --find-renames "origin/$BASE_REF"...HEAD -- \
             'k8s/roles/*/defaults/main.yml' \
             'inventory/group_vars/all.yml' \
@@ -125,11 +120,11 @@ jobs:
       # does not start it, so a config-required entrypoint is irrelevant. That is what lets
       # this run over EVERY changed ref with no exception list.
       #
-      # Layer 2 is the bare `docker run`, an annotation rather than a failure. As a fatal
-      # check it never once caught a real image problem across 11 failures and 14 months —
-      # every failure was an image that needs config to boot, which is the normal case for a
-      # service. An exception list would grow one red PR at a time, and because it filters
-      # refs out ahead of the pull it would leave tracked pins checked by nothing at all.
+      # Layer 2 is the bare `docker run`, an annotation rather than a failure. As a fatal check
+      # it catches no real image problem, because an image that needs config to boot is the
+      # normal case for a service. An exception list would grow one red PR at a time, and
+      # because it filters refs out ahead of the pull it would leave tracked pins checked by
+      # nothing at all.
       - name: Pull + boot each image
         if: steps.images.outputs.list != ''
         env:
@@ -159,18 +154,14 @@ jobs:
             if [ -z "$entry" ]; then
               echo "note: $img declares neither Entrypoint nor Cmd — nothing to assert"
             else
-              # Three shapes, and they resolve against three different things. Getting this
-              # wrong produces a false failure on a perfectly good image, so each was checked
-              # against real images rather than assumed:
+              # Three shapes, and they resolve against three different things. Treating them
+              # alike produces a false failure on a good image:
               #
               #   /app/entrypoint.sh   absolute — assert as given (authelia, tempo, dozzle)
               #   tini                 no slash — resolved through PATH at runtime (couchdb,
               #                        python's `python3`, wg-easy's `docker-entrypoint.sh`)
               #   ./run.sh             has a slash but is relative — resolved against
               #                        WorkingDir, NOT PATH (beardedio/terraria)
-              #
-              # Neither of the latter two is an edge case: of the 12 pins swept, three took the
-              # PATH branch and one the WorkingDir branch.
               case "$entry" in
                 /*)
                   candidates="$entry"

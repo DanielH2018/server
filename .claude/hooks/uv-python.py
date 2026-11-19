@@ -13,7 +13,9 @@ session ran the suite bare anyway, which is what this arm makes structurally imp
 than merely documented.
 
 It rewrites the command instead of denying it, so the session gets the answer it asked for
-rather than a round-trip. `uv run` resolves the venv from the *caller's* working directory, so a
+rather than a round-trip. Auto mode is the exception: its classifier refuses a call a hook
+changed after its review, so there `bash-pretool.py` denies with this arm's rewrite as the
+command to send instead. `uv run` resolves the venv from the *caller's* working directory, so a
 worktree keeps its own checkout — which is why this rewrites the command rather than pinning a
 PATH at the primary checkout's `.venv/bin`.
 

@@ -4,8 +4,8 @@
 Run: uv run python scripts/dev/duplicate_tests.py [PATH ...] [--json]
 
 Reads every tracked `test_*.py` under each PATH, or under the whole repo with none. Two tests
-are in one group when they take the same arguments and their bodies parse to the same tree
-once the docstring is dropped, so a comment or a reformat hides nothing. A body of one
+are in one group when they take the same arguments, carry the same decorators and their bodies
+parse to the same tree once the docstring is dropped, so a comment or a reformat hides nothing. A body of one
 statement is skipped, because a lone `assert` matches by chance.
 
 A group is a candidate, not a verdict. Copies that each read their own module's constant
@@ -48,7 +48,14 @@ def _shape(test: TestDef) -> str | None:
     body = test.body[1:] if ast.get_docstring(test) is not None else test.body
     if len(body) < 2:
         return None
-    return ast.dump(test.args) + ast.dump(ast.Module(body=body, type_ignores=[]))
+    decorators = [ast.dump(decorator) for decorator in test.decorator_list]
+    return "".join(
+        [
+            *decorators,
+            ast.dump(test.args),
+            ast.dump(ast.Module(body=body, type_ignores=[])),
+        ]
+    )
 
 
 def duplicate_groups(sources: Mapping[str, str]) -> list[list[str]]:

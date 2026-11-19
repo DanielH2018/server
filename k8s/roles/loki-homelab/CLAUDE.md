@@ -84,6 +84,18 @@ verbatim-prompts store this role's LAN route
   access-log stages and `redact_log_secrets` redact different names. Each stage is prospective: a record shipped before it still carries
   the value for the 744h retention window, and `kubectl logs` still shows it, because Alloy
   reads the pod's log file and never rewrites it.
+- **Pod lines carry a `level` structured-metadata field, never a label.** The last stages of
+  `loki.process "pods"` read the line's own level token in logfmt, logrus, JSON, loguru, ANSI,
+  bracketed, timestamp-prefixed and klog shapes. They file it as `debug`, `info`, `warn`,
+  `error` or `fatal`, so `{namespace="homelab"} | level="error"` filters every format at once.
+  A line with no token carries no field. Loki's own `detected_level` guesses from bare words,
+  and filed a `[WRN] ... error receiving data` line as an error.
+  `tests/k8s/test_alloy_tags_pod_log_level.py` runs the rendered stages over real line shapes.
+- **The access-log drop keeps a person's 302 and drops a pod's.** blackbox-exporter's
+  `http_sso_302` module probes every SSO-gated name from the pod CIDR, and those probes were
+  about 35,000 of 37,000 302s a day. The drop counts as `traefik_pod_probe_302` in
+  `loki_process_dropped_lines_total`. `tests/services/test_traefik_access_log_drop.py` holds
+  both halves.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
