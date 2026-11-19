@@ -33,11 +33,10 @@ groups:
         annotations:
           summary: The mosquitto-lan Service does not hold its pinned LAN address.
           description: >-
-            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
-            homelab/mosquitto-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape
-            job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an
-            existing allocation, so delete the Service and redeploy mosquitto to force
-            reallocation.
+            homelab/mosquitto-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
+            kube-state-metrics is not scraped. Home Assistant and the LAN publishers cannot reach
+            the broker. MetalLB does not re-evaluate an existing allocation, so delete the Service
+            and redeploy mosquitto.
       # jellyfin's twin of the rule above. TV and phone clients have the VIP typed in by
       # hand, so an auto-assigned address breaks them with every pod healthy.
       - alert: JellyfinLanAddressNotPinned
@@ -54,11 +53,10 @@ groups:
         annotations:
           summary: The jellyfin-lan Service does not hold its pinned LAN address.
           description: >-
-            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
-            homelab/jellyfin-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape
-            job. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not
-            re-evaluate an existing allocation, so delete the Service and redeploy jellyfin to
-            force reallocation.
+            homelab/jellyfin-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
+            kube-state-metrics is not scraped. TV and phone clients that dial the VIP cannot reach
+            Jellyfin. MetalLB does not re-evaluate an existing allocation, so delete the Service
+            and redeploy jellyfin.
       # pihole's twin of the rules above. LAN clients get the VIP from the router's DHCP
       # DNS option, so an auto-assigned address leaves every client without a resolver while
       # both pods stay Ready. CoreDNS forwards to the pinned ClusterIP instead, so the cluster
@@ -77,11 +75,10 @@ groups:
         annotations:
           summary: The pihole-dns Service does not hold its pinned LAN address.
           description: >-
-            kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on
-            homelab/pihole-dns for 5 minutes, or Prometheus has no kube-state-metrics scrape
-            job. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not
-            re-evaluate an existing allocation, so delete the Service and redeploy pihole to
-            force reallocation.
+            homelab/pihole-dns has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
+            kube-state-metrics is not scraped. LAN clients that took the VIP from DHCP have no DNS
+            resolver. MetalLB does not re-evaluate an existing allocation, so delete the Service
+            and redeploy pihole.
       # The same failure on the ingress edge: Cloudflare's origin, the router's port-forward
       # and the LAN DNS all hardcode the reserved ingress VIP. A Traefik Service that came up on
       # an auto-assigned address serves nothing those clients dial, behind a Ready pod.
@@ -99,8 +96,7 @@ groups:
         annotations:
           summary: The traefik Service does not hold the reserved ingress VIP.
           description: >-
-            kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on
-            homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job.
-            Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the
-            VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the
-            Service and the next apply of traefik re-creates it with a fresh allocation.
+            homelab/traefik has no LoadBalancer ingress at the reserved VIP for 5 minutes, or
+            kube-state-metrics is not scraped. Cloudflare, the router and the LAN DNS cannot reach
+            the edge. MetalLB does not re-evaluate an existing allocation, so delete the Service
+            and the next apply of traefik re-creates it.

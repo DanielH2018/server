@@ -23,7 +23,7 @@ tests:
               verify: "true"
             exp_annotations: &annotations
               summary: The mosquitto-lan Service does not hold its pinned LAN address.
-              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/mosquitto-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Home Assistant and the LAN publishers cannot reach the broker on the VIP. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy mosquitto to force reallocation."
+              description: "homelab/mosquitto-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or kube-state-metrics is not scraped. Home Assistant and the LAN publishers cannot reach the broker. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy mosquitto."
 
   # MetalLB gave mosquitto-lan an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m
@@ -104,7 +104,7 @@ tests:
               verify: "true"
             exp_annotations: &jellyfin_annotations
               summary: The jellyfin-lan Service does not hold its pinned LAN address.
-              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/jellyfin-lan for 5 minutes, or Prometheus has no kube-state-metrics scrape job. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy jellyfin to force reallocation."
+              description: "homelab/jellyfin-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or kube-state-metrics is not scraped. TV and phone clients that dial the VIP cannot reach Jellyfin. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy jellyfin."
 
   # MetalLB gave jellyfin-lan an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m
@@ -185,7 +185,7 @@ tests:
               verify: "true"
             exp_annotations: &pihole_annotations
               summary: The pihole-dns Service does not hold its pinned LAN address.
-              description: "kube-state-metrics reports no LoadBalancer ingress at the pinned VIP on homelab/pihole-dns for 5 minutes, or Prometheus has no kube-state-metrics scrape job. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy pihole to force reallocation."
+              description: "homelab/pihole-dns has no LoadBalancer ingress at its pinned VIP for 5 minutes, or kube-state-metrics is not scraped. LAN clients that took the VIP from DHCP have no DNS resolver. MetalLB does not re-evaluate an existing allocation, so delete the Service and redeploy pihole."
 
   # MetalLB gave pihole-dns an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m
@@ -266,7 +266,7 @@ tests:
               verify: "true"
             exp_annotations: &traefik_annotations
               summary: The traefik Service does not hold the reserved ingress VIP.
-              description: "kube-state-metrics reports no LoadBalancer ingress at the reserved ingress VIP on homelab/traefik for 5 minutes, or Prometheus has no kube-state-metrics scrape job. Cloudflare, the router's port-forward and the LAN DNS cannot reach the edge on the VIP. MetalLB does not re-evaluate an existing allocation, so the operator deletes the Service and the next apply of traefik re-creates it with a fresh allocation."
+              description: "homelab/traefik has no LoadBalancer ingress at the reserved VIP for 5 minutes, or kube-state-metrics is not scraped. Cloudflare, the router and the LAN DNS cannot reach the edge. MetalLB does not re-evaluate an existing allocation, so delete the Service and the next apply of traefik re-creates it."
 
   # MetalLB gave traefik an auto-assigned address. The rule holds 5 minutes, then fires.
   - interval: 1m

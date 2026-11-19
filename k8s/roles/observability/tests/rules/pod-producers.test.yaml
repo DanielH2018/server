@@ -45,10 +45,10 @@ tests:
               service: crowdsec
             exp_annotations:
               summary: The crowdsec remote allowlist job failed its last run.
-              description: The crowdsec-jobs sidecar's remote allowlist run failed, so a new VPN exit
-                or phone address is not exempted from CrowdSec bans. The cause is `kubectl` or `cscli` failing,
+              description: 'The crowdsec-jobs remote allowlist run failed, so a new VPN exit
+                or phone address is not exempt from CrowdSec bans. Causes: `kubectl` or `cscli` failing,
                 no router carrying the authelia middleware, or the list at its cap. Read the crowdsec-remote-allowlist
-                lines in the crowdsec-jobs container log.
+                lines in the crowdsec-jobs container log.'
       - eval_time: 5m
         alertname: CrowdSecAppSecVerifyFailed
         exp_alerts:
@@ -77,10 +77,10 @@ tests:
               service: crowdsec
             exp_annotations:
               summary: The crowdsec home allowlist job failed its last run.
-              description: The crowdsec-jobs sidecar's home allowlist sync failed. A lookup or a cscli
-                call failed, or the crowdsec-home-ips ConfigMap has not been written for three periods
-                because the CronJob is not running. Read the crowdsec-home-allowlist lines in the crowdsec-jobs
-                container log, then the crowdsec-home-ips Job logs.
+              description: 'The crowdsec-jobs home allowlist sync failed: a lookup or a cscli
+                call failed, or the CronJob is not running and the crowdsec-home-ips ConfigMap has gone
+                three periods unwritten. Read the crowdsec-home-allowlist lines in the crowdsec-jobs
+                container log, then the crowdsec-home-ips Job logs.'
       - eval_time: 10m
         alertname: CrowdSecJobStale
         exp_alerts: []
@@ -286,8 +286,7 @@ tests:
               summary: configarr's last sync is stale, failed or logged an error.
               description: 'The configarr-health reader judged the newest configarr Job down: older than
                 26 hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
-                the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap, then
-                `kubectl -n homelab logs job/<newest configarr Job>`.'
+                the annotation `homelab/check-message` on the configarr-health-verdict ConfigMap.'
       - eval_time: 5m
         alertname: JanitorrErrorsFound
         exp_alerts:

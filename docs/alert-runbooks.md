@@ -2,13 +2,13 @@
 
 Each critical alert links its runbook as its `runbook_url`, and the notification prints it as
 its `Runbook:` line. This page holds the runbook of each critical alert that no other page
-covers, one section per alert, named as the alert is. A few warnings whose descriptions
-outgrew a notification have a section too. An alert's description says what to do
+covers, one section per alert, named as the alert is. A warning has a section too when its
+edge cases did not fit its description. An alert's description says what to do
 first. Its section here says what the alert means, then the cases the description leaves out.
 
-`tests/services/test_alert_runbook_urls.py` fails a critical rule with no `runbook_url`, a
-link to a section this page does not have, and a description over the cap the notification
-can carry.
+`tests/services/test_alert_runbook_urls.py` fails a critical rule with no `runbook_url` and a
+link to a section this page does not have. It also fails any alert, warning or critical, whose
+description is over the cap the notification can carry.
 
 ## The alert plane
 
@@ -219,6 +219,37 @@ ends here too.
 - The unit makes one attempt per config hash. To allow another attempt, run `sudo rm
   /var/lib/homelab-k3s-restart/failed.sha256`. `docs/k3s-upgrade.md` describes the unit.
 
+### `K3sConfigRestartMetricsAbsent`
+
+No `homelab_k3s_restart_failed{host="daniel-box"}` series reaches Prometheus. The restart unit
+writes it on every run, so either its textfile never arrived or the timer stopped.
+
+- `K3sConfigRestartFailed` and `K3sConfigRestartPending` read empty while this fires, so a
+  failed or refused restart pages nothing.
+- Read `systemctl list-timers homelab-k3s-restart.timer` and
+  `journalctl -u homelab-k3s-restart -p notice` on daniel-box.
+- Then check the textfile directory for `homelab-k3s-restart.prom`.
+
+### `CheckoutSyncFailed`
+
+`homelab-checkout-sync` on daniel-box refused its last run, so the primary checkout is not
+following master.
+
+- `homelab_checkout_sync_refused` names the reason: a dirty tree (an untracked file counts), a
+  branch other than master, a HEAD that origin/master does not descend from, an empty CI
+  context set or walk bound, or a missing or refused GitHub token.
+- Read `journalctl -t homelab-checkout-sync` on daniel-box for the run's message.
+- One untracked file parks the sync until it moves.
+
+### `CheckoutSyncNotReporting`
+
+No `checkout-sync` verdict newer than 2 hours reached Prometheus, so nothing confirms that the
+primary checkout follows master.
+
+- A fetch that keeps failing writes no verdict, and neither does a git-tree lock held for hours.
+- Read `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync` on
+  daniel-box, then `checkout_sync.prom` in `/var/lib/node-exporter-textfile/`.
+
 ### `SystemdUnitsFailed`
 
 A warning. The host's `systemd-units` check found a system unit in the failed state, and the
@@ -259,6 +290,108 @@ card.
 
 - Read `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then `pi-sd-health.prom` in
   the textfile directory.
+
+### `AideCheckFailed`
+
+The weekly AIDE scan ended with `status=down`. The rule carries `escalate: "false"`, so
+Alertmanager repeats it daily and `WarningUnresolved` never pages it.
+
+- The scan fails when a file changed that no package explains, when AIDE exited with an error
+  and checked nothing, or when the previous week's run still held the lock.
+- Review every unexplained path before you accept it. `sudo /usr/lib/homelab/aide-check
+  --accept` records the new baseline.
+- `sudo systemctl start homelab-aide-check.service` re-runs the check. A pass clears this alert
+  and the unit's failed state together.
+
+### `RkhunterScanFailed`
+
+The weekly rkhunter scan ended with `status=down`. The rule carries `escalate: "false"`, so
+Alertmanager repeats it daily.
+
+- The scan fails when rkhunter raised a warning, a suspect file or a possible rootkit, or when
+  it wrote no summary.
+- An account change clears on the next run.
+- `sudo systemctl start homelab-rkhunter-check.service` re-runs the scan and clears the unit's
+  failed state with it. A run of the script by hand leaves the unit failed.
+
+### `KubeletShutdownLockMissing`
+
+The kubelet on the node holds no shutdown delay lock, so the next shutdown stops pods without
+draining them.
+
+- `systemd-analyze cat-config systemd/logind.conf` prints the setting that the k3s log line in
+  `loki-homelab` names.
+- Restart k3s-agent. The lock check runs every 5 minutes, and its next run resolves the alert.
+
+### `ClaudeMemorySyncNotReporting`
+
+The copy of the memory store from daniel-box to daniel-server has not reported within its
+deadline.
+
+- The timer stopped firing, or every run since failed and its `OnFailure` unit posted to
+  Discord.
+- A run that the `ExecCondition` skips, because daniel-box's `MEMORY.md` is empty, writes
+  nothing either. An empty store is not a healthy state, so restore the store.
+- If `claude_code_memory_sync_enabled` is false on purpose, delete this rule.
+
+### `ClaudePipelineTimelineNotReporting`
+
+The daily PR timeline snapshot has not reported within its deadline. The journal inputs it
+saves rotate after about ten days, so a gap that long loses data.
+
+- The timer stopped firing, or every run since failed and its `OnFailure` unit posted to
+  Discord.
+- Read the verdict file `/var/lib/node-exporter-textfile/claude-pipeline-timeline.prom`.
+- If `claude_code_pipeline_timeline_enabled` is false on purpose, delete this rule.
+
+### `ComposeUpStale`
+
+The boot's compose-run on daniel-pi wrote no result: `homelab_compose_up_timestamp_seconds`
+predates the boot or is missing.
+
+- The `homelab-compose` unit is masked or disabled, systemd killed the run at its
+  `TimeoutStartSec`, or the write to `/var/lib/node-exporter-textfile/homelab_compose.prom`
+  failed.
+- Read `systemctl status homelab-compose` and `journalctl -b -u homelab-compose` on daniel-pi.
+
+### `ComposeRestartUnreported`
+
+`homelab-reconcile` started `homelab-compose.service` on daniel-pi, and compose-run wrote no
+result for that start.
+
+- systemd killed the run at its `TimeoutStartSec`.
+- The write to `/var/lib/node-exporter-textfile/homelab_compose.prom` failed after `up`
+  succeeded. The run exits 0, so `HostReconcileFailed` stays quiet.
+- Read `journalctl -u homelab-compose -u homelab-reconcile` on daniel-pi.
+
+### `PiRecoveryNotReporting`
+
+No `pi-recovery-health` verdict newer than 15 minutes reached Prometheus from daniel-pi, so
+nothing confirms that the Pi's containers are watched.
+
+- Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
+  `/var/lib/node-exporter-textfile/pi-recovery-health.prom`.
+- A host that sets `optimize_pi_recovery_restart_enabled` to false drops the timer, so this
+  alert fires on purpose there.
+
+### `PiWatchdogFailed`
+
+`watchdog.service` on daniel-pi has not been active for 30 minutes, so the `max-load-1 = 24`
+load test is off. The hardware watchdog stays armed, because `wd_keepalive` holds the device.
+
+- A stop, or a daemon that died, is the cause. A restart leaves the daemon running and raises
+  nothing.
+- Run `sudo systemctl start watchdog` on daniel-pi.
+- The `pi-watchdog-health` lines in `/var/log/pi-health/health.log` date the stop.
+
+### `PiAuditFailed`
+
+`pi-audit-health` on daniel-pi has read `status=down` for 30 minutes. Either `auditd.service`
+is not active, or it is active and `/var/log/audit/audit.log` has had no write for an hour.
+
+- `auditd` suspends logging when `/var/log` runs out of space, and only a restart resumes it.
+  Read `df -m /var/log` first, then run `sudo systemctl restart auditd`.
+- The `pi-audit-health` lines in `/var/log/pi-health/health.log` date the stop.
 
 ## Power
 
@@ -429,3 +562,21 @@ no `homelab_check_success`.
 
 - Read the `autofix-bridge` pod's log in the `homelab` namespace. A pod restart clears a hung
   loop. `docs/autofix-bridge-actuators.md` describes the planes it runs.
+
+## GitHub checks
+
+### `GitHubRulesetDrift`
+
+The `github-ruleset-drift` check found a live GitHub ruleset that differs from the values
+`hosts/components/github-checks/defaults/main.yml` declares.
+
+- The check compares each ruleset's required status contexts, bypass actors, Renovate
+  exclusion and agent-branch fence.
+- The check also fails when the repo is not public, because the rulesets then do not enforce
+  the merge gate.
+- `github-ruleset-drift.sh` also ends `status=down` when it cannot read GitHub. A failed read
+  leaves the rulesets unchanged, so re-run the check before editing anything.
+- The `github-ruleset-drift` syslog tag on daniel-box names the ruleset id and the property
+  that differs.
+- Revert an accidental change in GitHub. For a deliberate one, update
+  `hosts/components/github-checks/defaults/main.yml` to match.

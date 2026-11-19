@@ -46,8 +46,7 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly apt autoremove has stopped reporting.
               description: >-
-                No apt-autoremove verdict newer than 612000s reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the weekly apt autoremove
-                still runs. Read the `Weekly apt autoremove` cron in root's crontab and
-                `journalctl -t apt-autoremove`, then
+                No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box,
+                so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
+                autoremove` cron and `journalctl -t apt-autoremove`, then
                 /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.

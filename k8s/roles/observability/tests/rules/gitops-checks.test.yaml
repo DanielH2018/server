@@ -29,9 +29,9 @@ tests:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
                 No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the merge gate matches the
-                repo. Read `systemctl status homelab-github-ruleset-drift` on daniel-box, then
-                /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
+                daniel-box, so nothing confirms the merge gate matches the repo. Read
+                `systemctl status homelab-github-ruleset-drift` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-ruleset-drift.prom.
       - eval_time: 30h
         alertname: GitHubRulesetDrift
         exp_alerts: []
@@ -43,10 +43,9 @@ tests:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the limit is being re-armed
-                before GitHub lets it lapse. Read `systemctl status
-                homelab-github-interaction-limit` on daniel-box, then
-                /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
+                daniel-box, so nothing confirms the limit is being re-armed. Read
+                `systemctl status homelab-github-interaction-limit` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-interaction-limit.prom.
       - eval_time: 30h
         alertname: GitHubInteractionLimitNotArmed
         exp_alerts: []
@@ -69,11 +68,10 @@ tests:
               summary: The live GitHub rulesets no longer match the values the repo declares.
               description: >-
                 github-ruleset-drift.sh on daniel-box ended with status=down: the repo is not
-                public, a ruleset's required contexts, bypass actors, Renovate exclusion or
-                agent-branch fence differ from hosts/components/github-checks/defaults/main.yml, or
-                GitHub could not be read. The `github-ruleset-drift` syslog tag names the ruleset
-                id and the property. Revert the ruleset change unless it was deliberate,
-                otherwise update the defaults.
+                public, a ruleset differs from the github-checks defaults, or GitHub could not
+                be read. The `github-ruleset-drift` syslog tag names the ruleset and the
+                property. Revert an accidental change, otherwise update the defaults.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#githubrulesetdrift
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="github-interaction-limit", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -91,9 +89,8 @@ tests:
               description: >-
                 github-interaction-limit.sh on daniel-box ended with status=down: gh is not
                 logged in for the deploy user, the PUT failed, or the readback did not match the
-                declared limit. The repo is open to non-collaborators until the limit is set
-                again. Run `gh auth status` as the deploy user, then check the limit in the repo
-                settings.
+                declared limit. Run `gh auth status` as the deploy user, then check the limit
+                in the repo settings.
 
   # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
   # The first arm is quiet when the gap equals the deadline and fires one hour later.
@@ -115,9 +112,9 @@ tests:
               summary: daniel-box's GitHub ruleset drift check has stopped reporting.
               description: >-
                 No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the merge gate matches the
-                repo. Read `systemctl status homelab-github-ruleset-drift` on daniel-box, then
-                /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
+                daniel-box, so nothing confirms the merge gate matches the repo. Read
+                `systemctl status homelab-github-ruleset-drift` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-ruleset-drift.prom.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="github-interaction-limit", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -136,10 +133,9 @@ tests:
               summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
               description: >-
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the limit is being re-armed
-                before GitHub lets it lapse. Read `systemctl status
-                homelab-github-interaction-limit` on daniel-box, then
-                /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
+                daniel-box, so nothing confirms the limit is being re-armed. Read
+                `systemctl status homelab-github-interaction-limit` on daniel-box, then
+                /var/lib/node-exporter-textfile/github-interaction-limit.prom.
 
   # A fresh timestamp keeps both rules quiet: the file is rewritten every hour here.
   - interval: 1h

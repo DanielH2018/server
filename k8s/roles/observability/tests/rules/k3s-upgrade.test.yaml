@@ -33,9 +33,9 @@ tests:
                 kube_node_info is absent, so no kubelet version skew can be judged.
               description: >-
                 For 2 hours either kube_node_info has carried more than one kubelet_version, so an
-                upgrade left one node behind, or the series has been absent, so the skew cannot be
-                judged. Read `kubectl get nodes`, then the Plans with `kubectl -n system-upgrade get
-                plans`. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+                upgrade left one node behind, or the series has been absent. Read `kubectl get
+                nodes`, then `kubectl -n system-upgrade get plans`. docs/k3s-upgrade.md says how
+                to finish or retry the upgrade.
               runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
       - eval_time: 2h
         alertname: K3sUpgradeJobFailed
@@ -64,9 +64,9 @@ tests:
                 v1.37.1+k3s1.
               description: >-
                 For 2 hours either kube_node_info has carried more than one kubelet_version, so an
-                upgrade left one node behind, or the series has been absent, so the skew cannot be
-                judged. Read `kubectl get nodes`, then the Plans with `kubectl -n system-upgrade get
-                plans`. docs/k3s-upgrade.md says how to finish or retry the upgrade.
+                upgrade left one node behind, or the series has been absent. Read `kubectl get
+                nodes`, then `kubectl -n system-upgrade get plans`. docs/k3s-upgrade.md says how
+                to finish or retry the upgrade.
               runbook_url: https://docs.local.daniel-hunter.com/k3s-upgrade/
 
   # One version on both nodes stays quiet.
@@ -230,9 +230,8 @@ tests:
             exp_annotations:
               summary: homelab-k3s-restart has written no metrics for daniel-box in an hour.
               description: >-
-                No homelab_k3s_restart_failed series carries host="daniel-box". The unit writes it
-                on every run, so either its textfile never reached Prometheus or the timer
-                stopped, and K3sConfigRestartFailed and K3sConfigRestartPending read empty
-                meanwhile. Read `systemctl list-timers homelab-k3s-restart.timer` and
-                `journalctl -u homelab-k3s-restart -p notice` on daniel-box, then the
-                node-exporter textfile collector.
+                No homelab_k3s_restart_failed series carries host="daniel-box", so either the
+                unit's textfile never reached Prometheus or the timer stopped. Read `systemctl
+                list-timers homelab-k3s-restart.timer` and `journalctl -u homelab-k3s-restart -p
+                notice` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#k3sconfigrestartmetricsabsent

@@ -355,11 +355,10 @@ tests:
               service: pi-peer-backup
             exp_annotations:
               summary: The nightly daniel-pi peer-key backup failed.
-              description: 'The pi-peer-backup script reported down: rsync from daniel-pi failed, daniel-pi''s
+              description: 'The pi-peer-backup script reported down: rsync from daniel-pi failed, its
                 host key no longer matches the committed pin, or fewer than two files came back. The WireGuard
-                peer keys are un-rebuildable, so the last good copy is the only one. Read the annotation
-                `homelab/check-message` on the pi-peer-backup-verdict ConfigMap, then `kubectl -n homelab
-                logs` on the newest pi-peer-backup Job.'
+                peer keys are un-rebuildable. Read the annotation
+                `homelab/check-message` on the pi-peer-backup-verdict ConfigMap.'
   - interval: 1m
     input_series:
       - series: kube_configmap_annotations{job="kube-state-metrics",instance="kube-state-metrics:8080",namespace="homelab",configmap="pi-peer-backup-verdict",annotation_homelab_check_verdict="up"}

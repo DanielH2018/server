@@ -28,11 +28,11 @@ tests:
             exp_annotations:
               summary: daniel-box's primary checkout sync has stopped reporting.
               description: >-
-                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the primary checkout follows master. A
-                fetch that keeps failing or a git-tree lock held for hours writes no verdict. Read
-                `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync`
-                on daniel-box, then /var/lib/node-exporter-textfile/checkout_sync.prom on the host.
+                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
+                so nothing confirms the primary checkout follows master. A fetch that keeps
+                failing or a git-tree lock held for hours writes no verdict. Read `journalctl -t
+                homelab-checkout-sync` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
       - eval_time: 200h
         alertname: CheckoutSyncFailed
         exp_alerts: []
@@ -72,9 +72,9 @@ tests:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms secret rotation is being
-                audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
-                then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+                daniel-box, so nothing confirms secret rotation is being audited. Read
+                `systemctl status homelab-secret-rotation-audit` on daniel-box, then
+                /var/lib/node-exporter-textfile/secret-rotation-audit.prom.
       - eval_time: 200h
         alertname: SecretRotationAuditFailed
         exp_alerts: []
@@ -89,19 +89,17 @@ tests:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
-                the host.
+                daniel-box, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-box, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
           - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-server's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom
-                on the host.
+                daniel-server, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-server, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
       - eval_time: 200h
         alertname: LokiReadRouteFailed
         exp_alerts: []
@@ -161,10 +159,10 @@ tests:
             exp_annotations:
               summary: daniel-box's secret-rotation audit reported a failure.
               description: >-
-                secret-rotation-audit.sh on daniel-box ended with a non-zero exit code: a secret
-                is past its rotation window, a secret in secrets.yml is missing from the
-                registry, a registry row carries a tier with no cadence, or the gh CLI token is
-                not authenticated. Run `secret_rotation.py audit` by hand to read which.
+                secret-rotation-audit.sh on daniel-box exited non-zero: a secret is past its
+                rotation window, a secret in secrets.yml is missing from the registry, a
+                registry tier has no cadence, or the gh CLI token is not authenticated. Run
+                `secret_rotation.py audit` to read which.
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="recovery-kit", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -182,11 +180,10 @@ tests:
             exp_annotations:
               summary: The off-site recovery kit is overdue for a refresh.
               description: >-
-                The secret-rotation audit on daniel-box ran `recovery_kit.py check`, which found
-                secrets/recovery_kit.yml missing, unreadable, dated after today, or older than
-                MAX_AGE_DAYS. Run `uv run python scripts/secrets_mgmt/recovery_kit.py check` to
-                read which. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site
-                recovery kit), then run `recovery_kit.py record` and commit the stamp.
+                `recovery_kit.py check` on daniel-box found secrets/recovery_kit.yml missing,
+                unreadable, future-dated or older than MAX_AGE_DAYS. Refresh the kit
+                (docs/longhorn-disaster-recovery.md, The off-site recovery kit), then run
+                `recovery_kit.py record` and commit the stamp.
               runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - eval_time: 4h
         alertname: SecretRotationAuditFailed
@@ -212,11 +209,10 @@ tests:
             exp_annotations:
               summary: daniel-box cannot read Loki through the loki-homelab route.
               description: >-
-                loki-read-route-health on daniel-box ran `probe.py loki-labels` through the
-                loki-homelab IngressRoute and judged the answer down: the route returned 404 or
-                an error, usually because the ClientIP guard rejects this host's source address.
-                Read `systemctl status homelab-loki-route-witness` on daniel-box and the traefik
-                pod's placement.
+                `probe.py loki-labels` through the loki-homelab IngressRoute failed on
+                daniel-box with a 404 or an error, usually because the ClientIP guard rejects
+                this host's source address. Read `systemctl status homelab-loki-route-witness`
+                on daniel-box and the traefik pod's placement.
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="loki-read-route-health", instance="daniel-server", job="node", origin="daniel-server"}'
@@ -238,11 +234,10 @@ tests:
             exp_annotations:
               summary: daniel-server cannot read Loki through the loki-homelab route.
               description: >-
-                loki-read-route-health on daniel-server ran `probe.py loki-labels` through
-                the loki-homelab IngressRoute and judged the answer down: the route returned 404
-                or an error, usually because the ClientIP guard rejects this host's source
-                address. Read `systemctl status homelab-loki-route-witness` on daniel-server and
-                the traefik pod's placement.
+                `probe.py loki-labels` through the loki-homelab IngressRoute failed on
+                daniel-server with a 404 or an error, usually because the ClientIP guard rejects
+                this host's source address. Read `systemctl status homelab-loki-route-witness`
+                on daniel-server and the traefik pod's placement.
 
   # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
   # The first arm is quiet when the gap equals the deadline and fires one hour later.
@@ -306,9 +301,9 @@ tests:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms secret rotation is being
-                audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
-                then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+                daniel-box, so nothing confirms secret rotation is being audited. Read
+                `systemctl status homelab-secret-rotation-audit` on daniel-box, then
+                /var/lib/node-exporter-textfile/secret-rotation-audit.prom.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="loki-read-route-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -333,10 +328,9 @@ tests:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
-                the host.
+                daniel-box, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-box, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="loki-read-route-health", instance="daniel-server", job="node", origin="daniel-server"}'
@@ -361,10 +355,9 @@ tests:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-server's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom
-                on the host.
+                daniel-server, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-server, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
 
   # The file is gone from hour 2, so the series goes stale while the exporter stays up. The
   # absent_over_time arm stays quiet while any sample lies inside the deadline window and fires
@@ -429,9 +422,9 @@ tests:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms secret rotation is being
-                audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
-                then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
+                daniel-box, so nothing confirms secret rotation is being audited. Read
+                `systemctl status homelab-secret-rotation-audit` on daniel-box, then
+                /var/lib/node-exporter-textfile/secret-rotation-audit.prom.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="loki-read-route-health", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -456,10 +449,9 @@ tests:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
-                the host.
+                daniel-box, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-box, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="loki-read-route-health", instance="daniel-server", job="node", origin="daniel-server"}'
@@ -484,10 +476,9 @@ tests:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
-                daniel-server's textfile collector, so nothing confirms the Loki read route is
-                being witnessed. Read `systemctl status homelab-loki-route-witness` on
-                daniel-server, then /var/lib/node-exporter-textfile/loki-read-route-health.prom
-                on the host.
+                daniel-server, so nothing confirms the Loki read route is being witnessed. Read
+                `systemctl status homelab-loki-route-witness` on daniel-server, then
+                /var/lib/node-exporter-textfile/loki-read-route-health.prom.
 
   # The exporter is down from hour 2: `up` reads 0 and the series is gone, as in the control
   # above. The bridge's `targets` check pages a dead exporter, so the `unless` clause keeps
@@ -571,12 +562,11 @@ tests:
             exp_annotations:
               summary: daniel-box's primary checkout sync is refusing to fast-forward.
               description: >-
-                homelab-checkout-sync on daniel-box refused its last run, so the primary checkout
-                is not following master. homelab_checkout_sync_refused names the reason: a dirty
-                tree (an untracked file counts), a branch other than master, a HEAD that
-                origin/master does not descend from, an empty CI context set or walk bound, or a
-                missing or refused GitHub token. Read `journalctl -t homelab-checkout-sync` on
-                daniel-box.
+                homelab-checkout-sync on daniel-box refused its last run, so the primary
+                checkout is not following master. The homelab_checkout_sync_refused metric names
+                the reason; a dirty tree, an untracked file included, is the usual one. Read
+                `journalctl -t homelab-checkout-sync` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncfailed
   - interval: 1h
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="checkout-sync", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -594,8 +584,8 @@ tests:
             exp_annotations:
               summary: daniel-box's primary checkout sync has stopped reporting.
               description: >-
-                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the primary checkout follows master. A
-                fetch that keeps failing or a git-tree lock held for hours writes no verdict. Read
-                `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync`
-                on daniel-box, then /var/lib/node-exporter-textfile/checkout_sync.prom on the host.
+                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
+                so nothing confirms the primary checkout follows master. A fetch that keeps
+                failing or a git-tree lock held for hours writes no verdict. Read `journalctl -t
+                homelab-checkout-sync` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
