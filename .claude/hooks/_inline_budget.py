@@ -40,6 +40,22 @@ def header(doc, trigger):
     return f"===== {doc} (applies to `{trigger}`) ====="
 
 
+_HEADER_LINE = re.compile(r"^===== (\S+) \(applies to `[^`\n]*`\) =====$", re.M)
+
+
+def blocks(text):
+    """The `(doc, block)` pairs in an injected text, each block running from its `header`.
+
+    A header counts only as a whole line, so a doc that quotes one inside a sentence does not
+    split its own block.
+    """
+    starts = list(_HEADER_LINE.finditer(text))
+    ends = [m.start() for m in starts[1:]] + [len(text)]
+    return [
+        (m.group(1), text[m.start() : end]) for m, end in zip(starts, ends, strict=True)
+    ]
+
+
 def inline_margins(text, header, max_chars, max_lines):
     """The (chars, newlines) left under the two limits by `text`'s whole-doc block.
 

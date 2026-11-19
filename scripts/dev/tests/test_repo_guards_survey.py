@@ -45,7 +45,9 @@ _FROZEN_CLOCK = (
 )
 
 
-def _red_run(run_id: int, created: datetime, *modules: str) -> dict:
+def _red_run(
+    run_id: int, created: datetime, *modules: str, branch: str = "fix-guard"
+) -> dict:
     """A CI run red on its only attempt, its pytest step's summary naming each module."""
     stamp = created.strftime("%Y-%m-%dT%H:%M:%S")
     lines = [
@@ -79,7 +81,7 @@ def _red_run(run_id: int, created: datetime, *modules: str) -> dict:
         "id": run_id,
         "name": "CI",
         "event": "pull_request",
-        "head_branch": "fix-guard",
+        "head_branch": branch,
         "created_at": created.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "attempts": [{"conclusion": "failure", "jobs": [job]}],
     }
@@ -97,19 +99,25 @@ def _droppable() -> list[str]:
     return [g for g in repo_guards.GUARDS if not any(h.startswith(g) for h in hooks)]
 
 
-def _drop_candidates(tmp_path: Path, *runs: dict) -> set[str]:
-    """Run `--drop-candidates --weeks 1` against a fake GitHub holding `runs`; return the guards named."""
+def _report(tmp_path: Path, *runs: dict, flags: tuple[str, ...] = ()) -> str:
+    """Run `--drop-candidates --weeks 1` against a fake GitHub holding `runs`; return stdout."""
     fake = f"#!{sys.executable} -IS\n{FAKE_GITHUB.read_text()}"
     stubs = fake_bin(tmp_path / "bin", gh=fake, ghread=fake)
     (stubs / "world.json").write_text(json.dumps(runs))
     argv = [sys.executable, "-c", _FROZEN_CLOCK, NOW.isoformat(), str(SCRIPT)]
-    argv += ["--drop-candidates", "--weeks", "1"]
+    argv += ["--drop-candidates", "--weeks", "1", *flags]
     done = run(argv, cwd=REPO, stub_bin=stubs)
     assert done.returncode == 0, f"exited {done.returncode}: {done.stderr}"
+    return done.stdout
+
+
+def _drop_candidates(tmp_path: Path, *runs: dict) -> set[str]:
+    """The guards `--drop-candidates` names against a fake GitHub holding `runs`."""
+    out = _report(tmp_path, *runs)
     return {
         guard
         for guard in repo_guards.GUARDS
-        if re.search(rf"(?<![\w/.]){re.escape(guard)}(?![\w/.]|::)", done.stdout)
+        if re.search(rf"(?<![\w/.]){re.escape(guard)}(?![\w/.]|::)", out)
     }
 
 
@@ -144,3 +152,23 @@ def test_the_guard_list_keeps_no_hand_kept_date():
             continue
         dated.append(guard)
     assert dated == []
+
+
+def test_cited_counts_a_master_failure_and_not_a_pr_branch_failure(tmp_path):
+    """Only a red attempt on master keeps a citing file off the `--cited` list."""
+    cited = [p for p in repo_guards.citing_checks() if p.startswith("tests/repo/")]
+    on_master, on_pr = cited[:2]
+    yesterday = NOW - timedelta(days=1)
+    out = _report(
+        tmp_path,
+        _red_run(46000000003, yesterday, on_master, branch="master"),
+        _red_run(46000000004, yesterday, on_pr),
+        flags=("--cited",),
+    )
+    lines = out.splitlines()
+    listed = {line.split()[0] for line in lines[1:]}
+    assert on_pr in listed
+    assert on_master not in listed
+    assert lines[0].startswith(
+        f"{len(listed)} of {len(repo_guards.citing_checks())} check files"
+    )

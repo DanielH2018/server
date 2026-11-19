@@ -5,16 +5,16 @@
 | `arr_queue` | none |  |  |
 | `bazarr` | `startup_grace` |  |  |
 | `prowlarr_indexers` | `startup_grace` |  |  |
-| `host_packages` | `prometheus` |  |  |
+| `host_packages` | `prometheus` |  | `host-packages` |
 | `etcd_restore_drill` | none |  | `k3s-etcd-restore` |
-| `scrutiny` | `startup_grace` | yes |  |
+| `scrutiny` | `startup_grace` | yes | `alert-runbooks` |
 | `ha_heartbeat` | none |  |  |
 | `speedtest` | `startup_grace` |  |  |
-| `discord` | `wan_reachable` | yes |  |
+| `discord` | `wan_reachable` | yes | `alert-runbooks` |
 | `r2_usage` | `wan_reachable` | yes | `longhorn-backup-tiering` |
 | `cloudflare_ips_drift` | `wan_reachable` |  |  |
-| `healthchecks_drift` | `wan_reachable` |  |  |
+| `healthchecks_drift` | `wan_reachable` |  | `healthchecks-io-deadman` |
 | `domain_registration` | `wan_reachable` |  |  |
 | `b2_storage` | `b2_reachable` | yes | `longhorn-backup-tiering` |
 | `b2_reachable` | is a gate | yes | `longhorn-backup-tiering` |
-| `wan_reachable` | is a gate | yes |  |
+| `wan_reachable` | is a gate | yes | `alert-runbooks` |
