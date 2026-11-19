@@ -68,6 +68,19 @@ direction differs from the two wave-level bounds below: a shared file is
 merged into one batch, never held for the next wave, because holding it would still produce
 two identical fixes.
 
+**Another coordinator's live batch holds the files it cites.** `launch` compares your
+batches with the batches other runs launched
+(`scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files`). It refuses a batch that
+cites a file such a batch holds, and a batch holds its files while its unit is active or its
+branch has an open PR. The refusal names the file, the run and the orchestrator branch that
+launched it. Ask that coordinator, hold the issue for a later wave, or pass
+`--allow-shared-file <path>` when the citation is context. Never clean another coordinator's
+run to clear the refusal. `launch` also runs one at a time for all coordinators on the host:
+exit 8 (`scripts/lib/exit_codes.py:FANOUT_PLACE_LOCK_TIMEOUT`) means another launch held the
+lock for the whole wait and this one did nothing, so run it again.
+`docs/issue-claiming-and-fanout.md`, *One launch at a time, and files held across runs*,
+has both rules and their limits.
+
 **An issue that cites the fan-out tooling goes in no batch.** `next` marks it
 `[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
 `fanout*.py` or a file under `fanout_lib/`, or its title or body uses the phrase
@@ -81,11 +94,19 @@ that merely mentions `fanout.py` is ordinary batch work (#4624).
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
 
-- **At most one batch per wave rotates or adds a SOPS secret.** `secrets/secrets.yml` is
-  ciphertext, so two branches that both touch it conflict at merge and the conflict is not
-  hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
-  value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
-  stalled six hours on it. Hold the second secret issue for the next wave.
+- **At most one live batch rotates or adds a SOPS secret, across every run.**
+  `secrets/secrets.yml` is ciphertext, so two branches that both touch it conflict at merge
+  and the conflict is not hand-resolvable; the second lander has to take master's file
+  wholesale and re-mint its own value on top. Two of eight wave-1 agents hit exactly that
+  (PRs #1556 and #1567), and one stalled six hours on it. `launch` refuses the second batch
+  whose issues cite the file: within one launch as a shared file, and against a live batch
+  in another run with no override, because
+  `scripts/dev/fanout_lib/launch_gates.py:excusable` rules the file out of
+  `--allow-shared-file`
+  (`scripts/dev/tests/test_fanout_launch_gates.py::test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds`).
+  Do not pass `--allow-shared-file` for the file within one launch either. The gates
+  read citations, so an issue that needs a secret and does not cite the file is still yours
+  to hold. Hold the second secret issue until the first batch's PR has merged.
 - **A batch that touches a path every tag renders runs alone.** `land.sh` holds this
   itself for `cluster/services.yml`, where a `containers_list` entry lives: a PR that
   changes the file lands as a serial PR (`docs/landing.md`, *Rules that refuse a merge*).
