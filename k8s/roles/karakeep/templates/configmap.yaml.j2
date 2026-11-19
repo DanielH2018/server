@@ -13,7 +13,8 @@ data:
   ever fail there, which would mean this manifest is the one nothing validates.
 
   Vendoring trades that for a copy that could drift from its upstream pin, so
-  test_karakeep_time_tagger_script.py asserts this file's sha256 equals the pinned checksum.
+  the `karakeep-time-tagger-script-matches-its-pinned-sha256` row of tests/repo/_config_rows.py
+  holds this file's sha256 to the pinned checksum.
 #}
 {{ lookup('file', role_file('files/karakeep-time-tagger.py')) | indent(4, true) }}
 ---

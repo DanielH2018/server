@@ -4,7 +4,7 @@
 The render half is `shipped_render.render_shipped`, beside this module. The lint half wraps the two external linters and returns error strings
 rather than raising, so a caller can report every failing template in one pass.
 
-`scripts/validate/shell_templates.py` is the entry point that sweeps the tree with these.
+`scripts/validate/render_lib/shell.py`, the shell family of `render_templates.py`, sweeps the tree with these.
 """
 
 import shutil

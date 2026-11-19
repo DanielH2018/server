@@ -8,7 +8,7 @@ that commit's own check-runs waits on a run that can never go green.
 and that the doc keeps naming the constant an operator would go read.
 """
 
-from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS, CheckRun, ci_verdict
 from _helpers import REPO
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
@@ -18,7 +18,7 @@ LANDING_DOC = (REPO / "docs" / "landing.md").read_text()
 
 
 def _run(conclusion, name="prek (lint + validate + tests + secrets)"):
-    return {"name": name, "status": "completed", "conclusion": conclusion}
+    return CheckRun(name, "completed", conclusion)
 
 
 def test_a_cancelled_required_run_is_pending():

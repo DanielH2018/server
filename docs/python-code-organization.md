@@ -60,7 +60,7 @@ outage (#7625). `test_ci_lint_group.py` holds the split. `test_promote_runtime_i
 and `ci.yml`, and fails on a third-party import outside that list's closure.
 `uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
-`validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
+`validate-render-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
 
 `[tool.uv] package = false` in `pyproject.toml`. uv's own guidance is that a project does not
 need a package when it is "writing scripts, building a simple application, using a flat
@@ -307,6 +307,9 @@ erases it.
 
 - **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
   `tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+- **Workflows.** A property of a GitHub Actions workflow or action is a row of
+  `tests/repo/test_census_rows_workflows.py`, which parses the file rather than matching its
+  text, so a reordered key or an `if` split across lines reads the same.
 - **Template-source readers are declared.** Every directory under `tests/` is in `SCANNED`
   of `tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
   template text lists itself in that file's `TEMPLATE_SOURCE_READERS` with what a render erases:

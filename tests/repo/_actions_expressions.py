@@ -1,8 +1,9 @@
 """A small GitHub Actions expression evaluator, and the runner's `$GITHUB_OUTPUT` parser.
 
-`test_host_package_cases_run_on_their_inputs.py` walks the `host_packages` job's steps with
-these: `condition` decides a step's `if:`, `interpolate` resolves `${{ }}` in its `env:` and
-`run:`, and `read_outputs` turns what a step wrote into `steps.<id>.outputs`. The evaluator
+`test_ci_arm64_tools_download_gates.py` and `test_ci_k3s_download_job_off_critical_path.py`
+walk a job's steps with these: `condition` decides a step's `if:`, `interpolate` resolves
+`${{ }}` in its `env:` and `run:`, and `read_outputs` turns what a step wrote into
+`steps.<id>.outputs`. The evaluator
 covers literals, context paths, `! == != && ||`, parentheses and the status functions, and
 raises on any form outside that subset rather than reading it as false.
 """

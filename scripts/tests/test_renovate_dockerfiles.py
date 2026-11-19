@@ -287,7 +287,7 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
 
     The two pins back DIFFERENT execution paths of the same tool — the prek hook env lints
     committed shell scripts, the pyproject dev dep lints RENDERED .sh.j2 output via
-    validate.shell_templates — so a version skew means the two gates disagree about the same
+    validate.render_lib.shell — so a version skew means the two gates disagree about the same
     code. They are tracked by different Renovate datasources (github-tags vs pypi); a
     packageRule groups them into one PR, and this asserts that coupling actually held.
     """

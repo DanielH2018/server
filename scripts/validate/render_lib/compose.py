@@ -1,0 +1,335 @@
+"""The compose family of `render_templates.py`: each Pi Compose service's compose.yaml.j2.
+
+Renders every ``compose_services`` entry and asserts the output parses as YAML. This guards against template edits that silently produce malformed YAML or
+broken indentation. It renders structure, not values: secrets and other runtime
+variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
+needed.
+
+The service set and per-service parameters are taken from the real
+``compose_services`` in each ``inventory/host_vars/*.yml`` file (the Pi package's Compose
+project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml.j2`` is
+exercised with the same shape it is deployed with (port, hostname, networks,
+use_authelia). Commented-out services are skipped automatically (they are not in
+the parsed list).
+"""
+
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+import yaml
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib import yaml_fast
+from validate.validate_lib.shipped_render import render_shipped
+from lib.render_context import render_context
+from lib.repo_paths import REPO
+from lib.render_guard import (
+    HOST_VARS,
+    dump_numbered,
+    host_layer,
+)
+
+# The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry.
+COMPONENT_SERVICES = REPO / "hosts" / "components" / "pi-compose" / "services"
+
+
+def _unescaped_dollars(value) -> list[str]:
+    """Return the items in `value` containing a `$` that is not doubled as `$$`.
+
+    Dropping every `$$` first means an escaped `$$(...)` leaves no `$` behind, while a lone
+    `$VAR` / `$(...)` does.
+    """
+    items = value if isinstance(value, list) else [value]
+    return [s for s in items if isinstance(s, str) and "$" in s.replace("$$", "")]
+
+
+def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
+    """Return (service, key, snippet) for every shell-bearing key holding an un-doubled `$`.
+
+    Checks `command`, `entrypoint` and `healthcheck.test`. Docker Compose interpolates `$VAR`
+    / `${VAR}` / `$(...)` at parse time, so a shell `$` meant for the container must be
+    written `$$`; otherwise the value is silently blanked or substituted. Restricted to these
+    shell-bearing keys so the deliberate `${GID-...}` interpolation that some services use in
+    `environment:` is not flagged. The plain-YAML validator misses this.
+    """
+    bugs: list[tuple[str, str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict):
+                continue
+            for key in ("command", "entrypoint"):
+                if key in spec:
+                    bugs += [(svc, key, s) for s in _unescaped_dollars(spec[key])]
+            hc = spec.get("healthcheck")
+            if isinstance(hc, dict) and "test" in hc:
+                bugs += [
+                    (svc, "healthcheck.test", s) for s in _unescaped_dollars(hc["test"])
+                ]
+    return bugs
+
+
+def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
+    """Return (service, label) for every LIST-form watchtower label written without an ``=``.
+
+    Docker splits a list-item label on the first ``=`` only, so a ``:``-separated watchtower
+    label (e.g. ``...depends-on:docker-proxy``) parses as a key with an EMPTY value — the
+    directive (``enable`` / ``depends-on``) silently becomes a no-op. The plain-YAML validator
+    misses this because the document still renders and parses cleanly.
+    Mapping-form labels are inherently ``key: value`` so they need no ``=`` and are skipped.
+    """
+    bugs: list[tuple[str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict):
+                continue
+            labels = spec.get("labels")
+            if not isinstance(labels, list):
+                continue
+            for label in labels:
+                if (
+                    isinstance(label, str)
+                    and label.startswith("com.centurylinklabs.watchtower.")
+                    and "=" not in label
+                ):
+                    bugs.append((svc, label))
+    return bugs
+
+
+# Documented exceptions to the cap_drop: [ALL] policy (service -> why). Keep SMALL and
+# justified — the baseline expectation is that EVERY service drops all caps and adds back only
+# what it proves it needs. These three need broad host/device access by design (verified in the
+# security reviews); everything else drops ALL.
+CAP_DROP_EXEMPT: dict = {
+    "cadvisor": "needs host-wide introspection (cgroups/proc, SYS_PTRACE) to read every container's stats",
+    "scrutiny-web": "LSIO web UI verified to need its default caps; no-cap_drop is accepted/documented",
+    "scrutiny-collector": "SMART collector runs smartctl against raw block devices (needs SYS_RAWIO/SYS_ADMIN)",
+}
+
+# Companion to CAP_DROP_EXEMPT for the `security_opt: [no-new-privileges:true]` baseline. Every
+# service should set it (it blocks a setuid binary from re-gaining a dropped capability); a service
+# that legitimately can't goes here with a reason. Kept empty until a real exception appears — the
+# whole fleet sets it today, and the guard exists so a new service (or a copy-paste that silently
+# drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
+NO_NEW_PRIV_EXEMPT: dict = {}
+
+# No guard covers the mutable-tag update policy, because nothing auto-updates a container.
+# `docker_deploy.yml` deploys with `pull: policy`, which never re-pulls a mutable tag already
+# present locally, so a `latest` tag ages in place rather than drifting. An image refresh is
+# the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
+
+
+# Compose services whose image is built or supplied rather than pulled by tag, so there is no
+# upstream digest to pin. Kept empty until a real case appears, for the same reason as
+# NO_NEW_PRIV_EXEMPT: the whole Pi fleet pins today, and the guard exists so the next role added
+# there cannot quietly omit it.
+IMAGE_DIGEST_EXEMPT: dict = {}
+
+
+def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
+    """Return (service, image) for every compose image pinned by tag with no ``@sha256:`` digest.
+
+    A tag is a moving name. ``pull: policy`` leaves an already-present ``latest`` ageing in
+    place rather than drifting under a redeploy, but that is the narrower half. The half that
+    bites: a tag alone gives Renovate NO update axis, so a bare ``latest`` is one no manager
+    can ever raise a PR against, and nothing in the repo records which bytes are running.
+    ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
+    the k8s plane already uses (see tests/k8s/test_base_images_digest_pinned.py, whose globs
+    reach k8s/roles but never the Pi's package; this is that gate's Pi half).
+    """
+    missing: list[tuple[str, str]] = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if not isinstance(spec, dict) or svc in exempt:
+                continue
+            image = spec.get("image")
+            # A service with no `image:` builds from `build:` — nothing to pin.
+            if isinstance(image, str) and image and "@sha256:" not in image:
+                missing.append((svc, image))
+    return missing
+
+
+def _cap_drops_all(spec: dict) -> bool:
+    caps = spec.get("cap_drop")
+    return isinstance(caps, list) and any(
+        isinstance(c, str) and c.upper() == "ALL" for c in caps
+    )
+
+
+def find_missing_cap_drop(docs, exempt=frozenset()) -> list:
+    """Return service names that do NOT ``cap_drop: [ALL]`` and aren't in ``exempt``.
+
+    Drop-all is the hardening baseline, with minimal caps added back after it. A service that
+    drops nothing — or only a subset — keeps Docker's default capability set.
+    """
+    missing = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if (
+                isinstance(spec, dict)
+                and svc not in exempt
+                and not _cap_drops_all(spec)
+            ):
+                missing.append(svc)
+    return missing
+
+
+def _sets_no_new_privileges(spec: dict) -> bool:
+    opts = spec.get("security_opt")
+    return isinstance(opts, list) and any(
+        isinstance(o, str) and o.replace(" ", "") == "no-new-privileges:true"
+        for o in opts
+    )
+
+
+def find_missing_no_new_privileges(docs, exempt=frozenset()) -> list:
+    """Return service names that do NOT set ``security_opt: [no-new-privileges:true]``.
+
+    Excludes anything in ``exempt``. This is the companion baseline to ``cap_drop: [ALL]`` — it
+    stops a setuid binary re-escalating past the dropped caps — so it is enforced symmetrically.
+    A service that omits it (a new one, or a copy-paste that drops the line) is flagged unless
+    allowlisted with a reason.
+    """
+    missing = []
+    for doc in docs:
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        for svc, spec in services.items():
+            if (
+                isinstance(spec, dict)
+                and svc not in exempt
+                and not _sets_no_new_privileges(spec)
+            ):
+                missing.append(svc)
+    return missing
+
+
+def check_component_service(
+    host: str, ci: dict, root: Path = COMPONENT_SERVICES
+) -> str | None:
+    """Render one `compose_services` entry's template for `host`; return an error or None.
+
+    `root` is the directory of service trees, injectable so a test can point at a fixture.
+    """
+    name = ci.get("name")
+    if not name:
+        return None
+    tpl = root / name / "compose.yaml.j2"
+    if not tpl.is_file():
+        return (
+            f"no hosts/components/pi-compose/services/{name}/compose.yaml.j2 — a "
+            "compose_services entry must render a compose file"
+        )
+    return _check_rendered(name, "compose.yaml.j2", tpl, host, ci)
+
+
+def _check_rendered(
+    name: str, template: str, tpl: Path, host: str, ci: dict
+) -> str | None:
+    """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
+    # A component template reads its secrets as plain names, and no role defaults sit under it.
+    ctx = render_context(None, host=host, overrides={"container_item": ci})
+    # A template reads its OWN entry through `container_item`; leaving the lists in would let
+    # one render against another service's entry.
+    ctx.pop("services", None)
+    ctx.pop("compose_services", None)
+    rendered, err = render_shipped(tpl, ctx)
+    if rendered is None:
+        return err
+
+    try:
+        docs = list(yaml_fast.safe_load_all(rendered))
+    except yaml.YAMLError as exc:
+        print(f"\n----- rendered {name}/{template} -----", file=sys.stderr)
+        dump_numbered(rendered)
+        return f"invalid YAML: {exc}"
+
+    bugs = find_dollar_escape_bugs(docs)
+    if bugs:
+        detail = "; ".join(
+            f"{svc}.{key}: {snippet.strip()[:80]}" for svc, key, snippet in bugs
+        )
+        return f"un-escaped '$' (Compose will interpolate it — double it to '$$'): {detail}"
+
+    wt_bugs = find_watchtower_label_bugs(docs)
+    if wt_bugs:
+        detail = "; ".join(f"{svc}: {label}" for svc, label in wt_bugs)
+        return (
+            "watchtower label missing '=' (Docker stores it as a key with an empty value, "
+            f"so the directive is a silent no-op — use '='): {detail}"
+        )
+
+    cap_missing = find_missing_cap_drop(docs, CAP_DROP_EXEMPT)
+    if cap_missing:
+        return (
+            "missing `cap_drop: [ALL]` (drop all caps, add back only what's needed — or "
+            f"allowlist in CAP_DROP_EXEMPT with a reason): {', '.join(cap_missing)}"
+        )
+
+    nnp_missing = find_missing_no_new_privileges(docs, NO_NEW_PRIV_EXEMPT)
+    if nnp_missing:
+        return (
+            "missing `security_opt: [no-new-privileges:true]` (companion of cap_drop: [ALL] — "
+            f"blocks setuid re-escalation; allowlist in NO_NEW_PRIV_EXEMPT with a reason): "
+            f"{', '.join(nnp_missing)}"
+        )
+
+    undigested = find_undigested_images(docs, IMAGE_DIGEST_EXEMPT)
+    if undigested:
+        detail = "; ".join(f"{svc}: {image}" for svc, image in undigested)
+        return (
+            "image pinned by tag with no '@sha256:' digest (a bare tag gives Renovate no "
+            "update axis and no record of which bytes run — read the live digest with "
+            f"`docker images --digests` and append it): {detail}"
+        )
+
+    return None
+
+
+def run(ok: Callable[[str], None], host_vars_dir: Path = HOST_VARS) -> tuple[int, int]:
+    """Render every host's `compose_services` entries and report render/parse failures.
+
+    Args:
+        ok: Prints one clean template's `[ok]` line.
+        host_vars_dir: The inventory's `host_vars` directory.
+
+    Returns:
+        (templates checked, failures). A tree with no host_vars file is one failure.
+    """
+    host_files = sorted(host_vars_dir.glob("*.yml"))
+    if not host_files:
+        print(f"  [FAIL] no host_vars found under {host_vars_dir}", file=sys.stderr)
+        return 0, 1
+
+    failures = 0
+    checked = 0
+    for host_file in host_files:
+        host_vars = host_layer(host_file.parent, host_file.stem)
+        for ci in host_vars.get("compose_services") or []:
+            err = check_component_service(host_file.stem, ci)
+            checked += 1
+            if err:
+                failures += 1
+                print(f"  [FAIL] {ci['name']}: {err}", file=sys.stderr)
+            else:
+                ok(f"  [ok]   {ci['name']}")
+    return checked, failures

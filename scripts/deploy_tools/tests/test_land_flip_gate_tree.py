@@ -25,7 +25,7 @@ from _land_fakes import (
 )
 from deploy_tools.land_lib import health_gate
 from deploy_tools.land_lib.health_gate import GateTools
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
 SNAPSHOTS = Path("/snap")
@@ -130,7 +130,7 @@ def _flip(**kwargs: object) -> Fakes:
         },
         derived=(["traefik", "traefik-crds", "artifacts"], "pr"),
         k8s_tags={MERGE_SHA: {*FLIPPED, "artifacts"}},
-        land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
+        land_wait=[WaitResult(WaitVerdict.SETTLED, detail="2 applied", tags=FLIPPED)],
     )
     return replace(fakes, **kwargs)
 

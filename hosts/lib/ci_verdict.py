@@ -1,14 +1,17 @@
 """Whether a commit's CI is green, and which ancestor a gate may choose when the tip is not.
 
-`ci_verdict` reduces GitHub's check-runs for ONE commit to `pass`, `pending` or `fail` over the
-required contexts, and `ci_walk_candidates` bounds the ancestor walk that runs when the tip is
-not green. Stdlib only and importing nothing first-party, because the host packages' builder grades the
-same rule and `homelab-checkout-sync` grades the fetched tip with it.
+Every reader parses GitHub's check-runs into `CheckRun` where it fetches them. `ci_verdict`
+reduces ONE commit's runs to a `CIVerdict` over the required contexts, and `CheckRun.state` is
+the one rule for what a single run says. `ci_walk_candidates` bounds the ancestor walk that runs
+when the tip is not green. Stdlib only and importing nothing first-party, because the host
+packages' builder grades the same rule and `homelab-checkout-sync` grades the fetched tip with it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # A GitHub check-run conclusion that counts as "this commit is good". `skipped` and `neutral` are
@@ -107,21 +110,109 @@ CI_SKIPPED_MATRIX_JOBS = {
 }
 
 
-def _run_state(run: dict) -> str:
-    """`pass` / `skipped` / `pending` / `fail` for one check-run."""
-    if run.get("status") != "completed":
-        return "pending"
-    conclusion = run.get("conclusion")
-    if conclusion == "success":
-        return "pass"
-    if conclusion == "skipped":
-        return "skipped"
-    if conclusion in _CI_NO_VERDICT_CONCLUSIONS:
-        return "pending"
-    return "fail"
+class CIVerdict(StrEnum):
+    """One commit's CI verdict. The values are the words the CLIs print and ci-cache.json holds."""
+
+    PASS = "pass"
+    PENDING = "pending"
+    FAIL = "fail"
 
 
-def jobs_verdict(check_runs: list[dict]) -> str:
+class RunState(StrEnum):
+    """What one check-run says about its commit. `ci_verdict` counts SKIPPED as a pass."""
+
+    PASS = "pass"
+    SKIPPED = "skipped"
+    PENDING = "pending"
+    FAIL = "fail"
+
+
+@dataclass(frozen=True)
+class CheckRun:
+    """One check-run, parsed from GitHub's REST listing or from a PR's status rollup.
+
+    Attributes:
+        name: the check-run name, which branch protection calls a context.
+        status: lowercase; `completed` once the run finished.
+        conclusion: lowercase, or None while the run has none.
+        suite_id: the check suite's id, or None when the source carries none.
+    """
+
+    name: str
+    status: str
+    conclusion: str | None
+    suite_id: int | None = None
+
+    @classmethod
+    def parse(cls, raw: object) -> CheckRun:
+        """One entry of the REST `check_runs` listing.
+
+        Raises:
+            ValueError: the entry is not a JSON object.
+        """
+        if not isinstance(raw, dict):
+            raise ValueError(f"a check-run is not an object: {raw!r}")
+        suite = raw.get("check_suite")
+        suite_id = suite.get("id") if isinstance(suite, dict) else None
+        return cls(
+            name=str(raw.get("name") or ""),
+            status=str(raw.get("status") or "").lower(),
+            conclusion=str(raw.get("conclusion") or "").lower() or None,
+            suite_id=suite_id if type(suite_id) is int else None,
+        )
+
+    @classmethod
+    def from_rollup(cls, node: object) -> CheckRun:
+        """One `statusCheckRollup` node of `gh pr view`.
+
+        A CheckRun node carries an uppercase `conclusion`, empty until it completes. A
+        StatusContext node carries only `context` and `state`, where PENDING and EXPECTED
+        mean it has not finished.
+
+        Raises:
+            ValueError: the node is not a JSON object.
+        """
+        if not isinstance(node, dict):
+            raise ValueError(f"a rollup check is not an object: {node!r}")
+        conclusion = str(node.get("conclusion") or "").lower() or None
+        if conclusion is None and node.get("state"):
+            state = str(node["state"]).lower()
+            conclusion = None if state in ("pending", "expected") else state
+        status = "completed" if conclusion else str(node.get("status") or "").lower()
+        return cls(
+            str(node.get("name") or node.get("context") or ""), status, conclusion
+        )
+
+    @property
+    def state(self) -> RunState:
+        """The run's state. A conclusion no set names, such as `action_required`, is FAIL."""
+        if self.status != "completed" or self.conclusion in _CI_NO_VERDICT_CONCLUSIONS:
+            return RunState.PENDING
+        if self.conclusion == "skipped":
+            return RunState.SKIPPED
+        if self.conclusion in _CI_PASS_CONCLUSIONS:
+            return RunState.PASS
+        return RunState.FAIL
+
+    @property
+    def no_verdict(self) -> bool:
+        """Whether the run completed in a conclusion that says nothing about the SHA."""
+        return (
+            self.status == "completed" and self.conclusion in _CI_NO_VERDICT_CONCLUSIONS
+        )
+
+    @property
+    def passed(self) -> bool:
+        """Whether the run finished in a conclusion that counts as green, a skip included."""
+        return self.state in (RunState.PASS, RunState.SKIPPED)
+
+
+def parse_check_runs(raw: list) -> list[CheckRun]:
+    """Every entry of a REST `check_runs` listing, parsed; a non-object entry raises ValueError."""
+    return [CheckRun.parse(entry) for entry in raw]
+
+
+def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     """The gate job's own pass condition, applied to the check-runs of the jobs it aggregates.
 
     Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
@@ -139,45 +230,43 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     """
     states: dict[str, set[str]] = {}
     for run in check_runs:
-        name = run.get("name")
-        if name in CI_SKIPPED_MATRIX_JOBS and _run_state(run) == "skipped":
+        name = run.name
+        if name in CI_SKIPPED_MATRIX_JOBS and run.state is RunState.SKIPPED:
             for leg in CI_SKIPPED_MATRIX_JOBS[name]:
-                states.setdefault(leg, set()).add("skipped")
+                states.setdefault(leg, set()).add(RunState.SKIPPED)
         if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
             # A cancelled or failed `prove` broke on the runner, and every dependent ran.
-            unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
+            unproven = name == CI_PROVE_JOB and run.conclusion in (
                 "cancelled",
                 "failure",
             )
-            states.setdefault(name, set()).add(
-                "unproven" if unproven else _run_state(run)
-            )
-    if any("fail" in s for s in states.values()):
-        return "fail"
+            states.setdefault(name, set()).add("unproven" if unproven else run.state)
+    if any(RunState.FAIL in s for s in states.values()):
+        return CIVerdict.FAIL
     prove = states.get(CI_PROVE_JOB)
-    if prove is None or "pending" in prove:
-        return "pending"
-    built = "pass" in states.get(CI_BUILD_JOB, set())
+    if prove is None or RunState.PENDING in prove:
+        return CIVerdict.PENDING
+    built = RunState.PASS in states.get(CI_BUILD_JOB, set())
     skipped = 0
     for name in CI_GATE_NEEDS_JOBS:
         job = states.get(name)
-        if job is None or "pending" in job:
-            return "pending"
+        if job is None or RunState.PENDING in job:
+            return CIVerdict.PENDING
         # A draft run's skip beside the ready run's pass on the same head is a pass.
-        if "skipped" in job and "pass" not in job:
+        if RunState.SKIPPED in job and RunState.PASS not in job:
             if built and name in CI_BUILD_READER_JOBS:
                 continue
             skipped += 1
     if not skipped:
-        return "pass"
+        return CIVerdict.PASS
     # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
     # workflow produces, so it is not read as proof.
-    if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
-        return "pass"
-    return "pending"
+    if prove == {RunState.PASS} and skipped == len(CI_GATE_NEEDS_JOBS):
+        return CIVerdict.PASS
+    return CIVerdict.PENDING
 
 
-def cancellation_suspects(check_runs: list[dict]) -> set:
+def cancellation_suspects(check_runs: list[CheckRun]) -> set[int | None]:
     """The check-suite ids of the failed gates that a cancelled run may explain.
 
     A suspect gate concluded `failure`, its own suite holds a cancelled need, and no need in
@@ -190,31 +279,29 @@ def cancellation_suspects(check_runs: list[dict]) -> set:
     suspects = set()
     for gate in check_runs:
         if (
-            gate.get("name") != CI_GATE_NAME
-            or gate.get("status") != "completed"
-            or gate.get("conclusion") != "failure"
+            gate.name != CI_GATE_NAME
+            or gate.status != "completed"
+            or gate.conclusion != "failure"
         ):
             continue
-        suite = (gate.get("check_suite") or {}).get("id")
         needs = [
             r
             for r in check_runs
-            if r.get("name") in CI_GATE_NEEDS_JOBS
-            and (r.get("check_suite") or {}).get("id") == suite
+            if r.name in CI_GATE_NEEDS_JOBS and r.suite_id == gate.suite_id
         ]
-        if any(r.get("conclusion") == "cancelled" for r in needs) and not any(
-            _run_state(r) == "fail" for r in needs
+        if any(r.conclusion == "cancelled" for r in needs) and not any(
+            r.state is RunState.FAIL for r in needs
         ):
-            suspects.add(suite)
+            suspects.add(gate.suite_id)
     return suspects
 
 
 def ci_verdict(
-    check_runs: list[dict],
+    check_runs: list[CheckRun],
     required: frozenset[str] | set[str],
     read_suites: Callable[[], list[dict]] | None = None,
-) -> str:
-    """Reduce GitHub's check-runs for ONE commit to `pass` / `pending` / `fail`.
+) -> CIVerdict:
+    """Reduce GitHub's check-runs for ONE commit to PASS / PENDING / FAIL.
 
     `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
     as branch-protection contexts (`prek (lint + validate + tests + secrets)`). An empty set means
@@ -236,48 +323,48 @@ def ci_verdict(
     no reader keeps such a gate red.
     """
     if not required:
-        return "pass"
+        return CIVerdict.PASS
     cancelled = set()
     suspects = cancellation_suspects(check_runs) if read_suites else set()
     if suspects and read_suites:
         try:
             suites = read_suites()
         except (OSError, ValueError):
-            return "pending"
+            return CIVerdict.PENDING
         cancelled = {s.get("id") for s in suites if s.get("conclusion") == "cancelled"}
         cancelled &= suspects
-    states: dict[str, set[str]] = {}
+    states: dict[str, set[CIVerdict]] = {}
     for run in check_runs:
-        name = run.get("name")
-        if name not in required:
+        if run.name not in required:
             continue
         # The gate skips only on a draft PR, and a draft run tested nothing. Its gate is
         # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
-        if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
+        if run.name == CI_GATE_NAME and run.conclusion == "skipped":
             continue
-        if (
-            name == CI_GATE_NAME
-            and (run.get("check_suite") or {}).get("id") in cancelled
-        ):
+        if run.name == CI_GATE_NAME and run.suite_id in cancelled:
             continue
-        if run.get("status") != "completed":
-            state = "pending"
-        elif run.get("conclusion") in _CI_PASS_CONCLUSIONS:
-            state = "pass"
-        elif run.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS:
-            state = "pending"
+        if run.passed:
+            state = CIVerdict.PASS
+        elif run.state is RunState.PENDING:
+            state = CIVerdict.PENDING
         else:
-            state = "fail"
-        states.setdefault(name, set()).add(state)
-    gate = states.get(CI_GATE_NAME, {"pending"})
-    if CI_GATE_NAME in required and "fail" not in gate and "pending" in gate:
+            state = CIVerdict.FAIL
+        states.setdefault(run.name, set()).add(state)
+    gate = states.get(CI_GATE_NAME, {CIVerdict.PENDING})
+    if (
+        CI_GATE_NAME in required
+        and CIVerdict.FAIL not in gate
+        and CIVerdict.PENDING in gate
+    ):
         states[CI_GATE_NAME] = {jobs_verdict(check_runs)}
-    if any("fail" in s for s in states.values()):
-        return "fail"
+    if any(CIVerdict.FAIL in s for s in states.values()):
+        return CIVerdict.FAIL
     # A name with no runs at all is a freshly-pushed SHA whose workflow hasn't registered yet.
-    if any("pending" in states.get(name, {"pending"}) for name in required):
-        return "pending"
-    return "pass"
+    if any(
+        CIVerdict.PENDING in states.get(name, {CIVerdict.PENDING}) for name in required
+    ):
+        return CIVerdict.PENDING
+    return CIVerdict.PASS
 
 
 def ci_walk_candidates(

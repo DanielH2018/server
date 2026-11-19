@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import yaml  # noqa: E402
-from ci_verdict import ci_verdict  # noqa: E402
+from ci_verdict import CheckRun, CIVerdict, ci_verdict, parse_check_runs  # noqa: E402
 
 PAGE_SIZE = 100
 
@@ -45,7 +45,7 @@ def master_chain(clone: Path, repo: str) -> list[str]:
 
 def check_runs(
     repo: str, sha: str, opener: Callable = urllib.request.urlopen
-) -> list[dict]:
+) -> list[CheckRun]:
     """Every check-run of `sha`, across pages. A short read raises, which reads as no verdict."""
     found: list[dict] = []
     for page in range(1, 11):
@@ -68,7 +68,7 @@ def check_runs(
                 raise ValueError(
                     f"read {len(found)} of {body['total_count']} check-runs"
                 )
-            return found
+            return parse_check_runs(found)
     raise ValueError("more than 10 pages of check-runs")
 
 
@@ -81,7 +81,7 @@ def required_contexts(tree: Path) -> frozenset[str]:
 def judge(
     sha: str,
     chain: list[str],
-    runs: Callable[[], list[dict]],
+    runs: Callable[[], list[CheckRun]],
     contexts: frozenset[str],
 ) -> str | None:
     """None when `sha` anchors; otherwise the refusal, naming the half that failed."""
@@ -93,7 +93,7 @@ def judge(
         verdict = ci_verdict(runs(), contexts)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return f"ci: the verdict of {sha} is unreadable: {exc}"
-    if verdict != "pass":
+    if verdict is not CIVerdict.PASS:
         return f"ci: the verdict of {sha} is {verdict}"
     return None
 

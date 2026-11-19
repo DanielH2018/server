@@ -1,7 +1,7 @@
 """The two seams this role owns around the vendored time-tagger script.
 
-`files/karakeep-time-tagger.py` is upstream's bytes, pinned by sha256 in
-`tests/services/test_karakeep_time_tagger_script.py`; its own logic is upstream's to
+`files/karakeep-time-tagger.py` is upstream's bytes, pinned by sha256 in the
+`karakeep-time-tagger-script-matches-its-pinned-sha256` row of `tests/repo/_config_rows.py`; its own logic is upstream's to
 test, and its imports (`fire`, `loguru`, `karakeep_python_api`, ...) are not in this repo's
 dev group, so nothing here imports it. What this role does own is how the deployment DRIVES
 it, and both halves fail as a crashloop the checksum pin cannot see:

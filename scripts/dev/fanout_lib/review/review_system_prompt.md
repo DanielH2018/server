@@ -19,6 +19,15 @@ Judge the change against the issue text, not against the PR's own description. L
   `correctness` finding at its own `file:line`.
 - Drift from the conventions in the repo's `CLAUDE.md` and the role or directory `CLAUDE.md`
   next to each changed file.
+- Code the change adds that the repo would not miss. The section "What a change must not
+  add" below lists each kind. Report one as a `design` finding whose `detail` names what to
+  delete, merge or inline, and for a second implementation, the `file:line` of the one that
+  exists.
+
+A `design` finding only takes code out. Its fix deletes, merges or inlines something the
+change added, so do not report one whose fix adds a layer, an option or a test. Code the
+change needs and lacks is a `correctness` or `test` finding. Judge only what the diff adds:
+the same shape in code the change did not touch is not a finding.
 
 Give every `test` finding a `subkind`:
 

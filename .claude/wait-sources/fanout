@@ -5,4 +5,4 @@
 # The repo is 3.15-only and the probe needs nothing outside it and the stdlib, so it runs
 # under uv's 3.15 with no project environment, which a fresh worktree would otherwise build.
 root=$(cd "$(dirname "$0")/../.." && pwd)
-exec uv run --no-project --quiet --python 3.15 python "$root/scripts/dev/fanout.py" probe "$@"
+exec env PYTHONPATH="$root/scripts" uv run --no-project --quiet --python 3.15 python "$root/scripts/dev/fanout.py" probe "$@"

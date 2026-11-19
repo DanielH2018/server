@@ -43,7 +43,14 @@ from lib.repo_paths import HOST_LIB_FILES
 sys.path.insert(0, str(HOST_LIB_FILES))
 
 from builder_ci_grade import read_check_pages
-from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from ci_verdict import (
+    _CI_NO_VERDICT_CONCLUSIONS,
+    CheckRun,
+    CIVerdict,
+    RunState,
+    ci_verdict,
+    parse_check_runs,
+)
 from host_lib import github_get, github_token
 
 CI_REPO = "DanielH2018/server"
@@ -114,7 +121,7 @@ class RateLimitedError(Exception):
 def _unless_rate_limited(read):
     """`read`, raising `RateLimitedError` in place of a rate-limit `HTTPError`."""
 
-    def checked(sha: str) -> list[dict]:
+    def checked(sha: str) -> list:
         try:
             return read(sha)
         except urllib.error.HTTPError as exc:
@@ -130,7 +137,7 @@ def required_contexts() -> frozenset[str]:
     return REQUIRED_CONTEXTS
 
 
-def fetch_check_runs(sha: str) -> list[dict]:
+def fetch_check_runs(sha: str) -> list[CheckRun]:
     """Check-runs for one SHA.
 
     Authenticated through `gh auth token` when the CLI is logged in, anonymous otherwise.
@@ -141,7 +148,7 @@ def fetch_check_runs(sha: str) -> list[dict]:
     `ANONYMOUS_INTERVAL_S` has the arithmetic. Authenticated, a poll also reads up to
     `DESCENDANT_LIMIT` descendants once a push reads as dropped.
     """
-    return _github_pages(f"commits/{sha}/check-runs", "check_runs")
+    return parse_check_runs(_github_pages(f"commits/{sha}/check-runs", "check_runs"))
 
 
 def fetch_check_suites(sha: str) -> list[dict]:
@@ -187,8 +194,10 @@ def _github_pages(path: str, key: str) -> list[dict]:
     )
 
 
-def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) -> str:
-    """`pass` / `pending` / `fail` for one SHA. An unreachable API reads as pending.
+def verdict_for(
+    sha: str, fetch=fetch_check_runs, required=None, suites=None
+) -> CIVerdict:
+    """One SHA's verdict. An unreachable API reads as PENDING.
 
     Raises:
         DisarmedGateError: no context is required.
@@ -202,7 +211,7 @@ def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) ->
     try:
         runs = _unless_rate_limited(fetch)(sha)
     except urllib.error.URLError, TimeoutError, ValueError, OSError:
-        return "pending"
+        return CIVerdict.PENDING
     return ci_verdict(runs, required, lambda: (suites or fetch_check_suites)(sha))
 
 
@@ -247,24 +256,18 @@ def resolve_sha(sha: str, fetch_tip=_fetch_tip, is_ancestor=_is_ancestor) -> str
     return sha
 
 
-def _has_only_no_verdict_conclusions(runs: list[dict], required) -> bool:
+def _has_only_no_verdict_conclusions(runs: list[CheckRun], required) -> bool:
     """True when every required run that exists finished with no verdict.
 
     This is the trigger for following the tip. It deliberately returns False when no
     required run exists at all: that is a freshly-pushed SHA whose workflow has not
     registered, which resolves on its own and must not send the wait chasing the tip.
     """
-    seen = [r for r in runs if r.get("name") in required]
-    if not seen:
-        return False
-    return all(
-        r.get("status") == "completed"
-        and r.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
-        for r in seen
-    )
+    seen = [r for r in runs if r.name in required]
+    return bool(seen) and all(r.no_verdict for r in seen)
 
 
-def draft_skipped(runs: list[dict], required) -> bool:
+def draft_skipped(runs: list[CheckRun], required) -> bool:
     """True when the head has gate runs and every one of them was skipped.
 
     A draft run is the only shape that skips the gate, so no CI ran on such a head and none
@@ -275,15 +278,12 @@ def draft_skipped(runs: list[dict], required) -> bool:
     so a ready run still in progress reads as True; `land_lib/merge.py` reads the workflow
     runs before it acts on this.
     """
-    seen = [r for r in runs if r.get("name") in required]
-    return bool(seen) and all(
-        r.get("status") == "completed" and r.get("conclusion") == "skipped"
-        for r in seen
-    )
+    seen = [r for r in runs if r.name in required]
+    return bool(seen) and all(r.state is RunState.SKIPPED for r in seen)
 
 
 def _cancelled_before_any_run_registered(
-    runs: list[dict], suites: list[dict], required
+    runs: list[CheckRun], suites: list[dict], required
 ) -> bool:
     """True when no required run exists and CI already finished with no verdict.
 
@@ -296,7 +296,7 @@ def _cancelled_before_any_run_registered(
     with `latest_check_runs_count == 0`. A suite still `queued` or `in_progress` is a
     run that may yet register, and is left alone.
     """
-    if any(r.get("name") in required for r in runs):
+    if any(r.name in required for r in runs):
         return False
     return any(
         s.get("status") == "completed"
@@ -306,11 +306,13 @@ def _cancelled_before_any_run_registered(
     )
 
 
-def _no_verdict_will_ever_arrive(target: str, runs: list[dict], fetch_suites) -> bool:
+def _no_verdict_will_ever_arrive(
+    target: str, runs: list[CheckRun], fetch_suites
+) -> bool:
     required = required_contexts()
     if _has_only_no_verdict_conclusions(runs, required):
         return True
-    if any(r.get("name") in required for r in runs):
+    if any(r.name in required for r in runs):
         return False
     try:
         suites = fetch_suites(target)
@@ -333,21 +335,21 @@ def _descendants(sha: str) -> list[str]:
     return out.split()
 
 
-def _push_was_dropped(runs: list[dict], suites: list[dict], required) -> bool:
+def _push_was_dropped(runs: list[CheckRun], suites: list[dict], required) -> bool:
     """True when GitHub Actions has registered nothing at all for the SHA.
 
     Only an Actions suite counts. Another app's suite (gitguardian, renovate) says nothing
     about whether CI was triggered. The caller applies `DROPPED_PUSH_GRACE_S`, since a fresh
     push looks the same for its first seconds.
     """
-    if any(r.get("name") in required for r in runs):
+    if any(r.name in required for r in runs):
         return False
     return not any((s.get("app") or {}).get("slug") == "github-actions" for s in suites)
 
 
 def descendant_verdict(
     sha: str, fetch=fetch_check_runs, descendants=_descendants
-) -> tuple[str, str]:
+) -> tuple[str, CIVerdict]:
     """(descendant, verdict) for the nearest descendant of `sha` whose CI has finished.
 
     Called only for a SHA GitHub never ran CI for. Asks about at most `DESCENDANT_LIMIT`
@@ -369,9 +371,9 @@ def descendant_verdict(
     required = required_contexts()
     for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
         verdict = verdict_for(candidate, fetch=fetch, required=required)
-        if verdict != "pending":
+        if verdict is not CIVerdict.PENDING:
             return candidate, verdict
-    return "", "pending"
+    return "", CIVerdict.PENDING
 
 
 def green_after(
@@ -404,14 +406,14 @@ def green_after(
         except urllib.error.URLError, TimeoutError, ValueError, OSError:
             runs = None
         if runs is None:
-            verdict = "pending"
+            verdict = CIVerdict.PENDING
         else:
             verdict = verdict_for(
                 candidate, lambda _s, _r=runs: _r, required, fetch_suites
             )
-        if verdict == "pass":
+        if verdict is CIVerdict.PASS:
             return candidate, ""
-        if verdict != "pending" or pending:
+        if verdict is not CIVerdict.PENDING or pending:
             continue
         if runs is not None and _never_gets_a_verdict(
             candidate, runs, fetch_suites, newest=candidate == window[-1]
@@ -422,7 +424,7 @@ def green_after(
 
 
 def _never_gets_a_verdict(
-    sha: str, runs: list[dict], fetch_suites, newest: bool
+    sha: str, runs: list[CheckRun], fetch_suites, newest: bool
 ) -> bool:
     """True when `sha`'s CI finished with no verdict, or, unless `newest`, never ran at all."""
     if _no_verdict_will_ever_arrive(sha, runs, fetch_suites):
@@ -493,9 +495,9 @@ def _tip_of(sha: str, descendants) -> str:
 
 def _read_once(read):
     """`read`, remembering each SHA's answer. A read that raises is not remembered."""
-    answers: dict[str, list[dict]] = {}
+    answers: dict[str, list] = {}
 
-    def once(sha: str) -> list[dict]:
+    def once(sha: str) -> list:
         if sha not in answers:
             answers[sha] = read(sha)
         return answers[sha]
@@ -557,9 +559,9 @@ def wait(
             verdict = verdict_for(
                 target, lambda _s, _runs=runs: _runs, None, suites_this_poll
             )
-            if verdict == "pass":
+            if verdict is CIVerdict.PASS:
                 return 0, f"{target[:8]}: CI green"
-            if verdict == "fail":
+            if verdict is CIVerdict.FAIL:
                 return 1, f"{target[:8]}: CI RED"
             if _no_verdict_will_ever_arrive(target, runs, suites_this_poll):
                 moved = resolve_sha(target)
@@ -578,7 +580,7 @@ def wait(
                     )
                 except urllib.error.URLError, TimeoutError, ValueError, OSError:
                     dropped = False
-            if any(r.get("name") in required_contexts() for r in runs):
+            if any(r.name in required_contexts() for r in runs):
                 # A push that was only late, not dropped: its own run now carries the verdict.
                 dropped = False
             if dropped and not walk_descendants:
@@ -590,12 +592,12 @@ def wait(
                 nearest, verdict = descendant_verdict(
                     target, fetch=fetch, descendants=descendants
                 )
-                if verdict == "pass":
+                if verdict is CIVerdict.PASS:
                     return 0, (
                         f"{nearest[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
                         f"{nearest[:8]} descends from it)"
                     )
-                if verdict == "fail":
+                if verdict is CIVerdict.FAIL:
                     fixed, unsettled = green_after(
                         target,
                         nearest,

@@ -144,7 +144,7 @@ def stop_post_property(cmd: str) -> str:
 def test_every_unit_runs_the_notifier_when_it_stops(review) -> None:
     prop = stop_post_property(systemd_run_command("b", review=review))
     # `-`: a tree the agent already removed fails the chdir, and that must not fail the unit.
-    assert prop.startswith('ExecStopPost=-/bin/sh -c "exec uv run --no-project ')
+    assert prop.startswith('ExecStopPost=-/bin/sh -c "exec env PYTHONPATH=')
     assert (
         f" {NOTIFY_SCRIPT} --batch b --unit fanout-b --branch worktree-fanout-b "
         "--repo DanielH2018/server " in prop

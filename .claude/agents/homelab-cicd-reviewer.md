@@ -29,7 +29,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   (compose tags, prek.toml, the CI prek pin, and the k8s-defaults manager for
   every `*_image:` var in `k8s/roles/*/defaults/main.yml`). **Watchtower is retired** —
   image updates are Renovate-PR-driven only, and the residual `watchtower.enable=false` labels are
-  dead metadata. A compose CI guard (`scripts/validate/compose_templates.py`) enforces cap_drop +
+  dead metadata. A compose CI guard (`scripts/validate/render_lib/compose.py`) enforces cap_drop +
   watchtower update-policy on services.
 - **Image pins:** `repo:<tag>@sha256:<digest>` is the pin form on the k8s plane. The digest is
   what runs, so the pin is immutable whatever the tag says. That holds for a channel tag such as
@@ -51,7 +51,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 ## Tools (read-only)
 - `Read`/`Grep` the workflow, `prek.toml`, `renovate.json`, `scripts/deploy_tools/promote.py` and `land.sh` + CLAUDE.md.
 - `uv run pytest <suite>` (read-only test run), `uv run python scripts/secrets_mgmt/secret_rotation.py audit`,
-  `uv run python scripts/validate/compose_templates.py` — confirm the live state matches the comments.
+  `uv run python scripts/validate/render_templates.py` — confirm the live state matches the comments.
   Never run a command that writes state (no `sync`/`record`, no deploy, no commit, no push).
 
 ## Method

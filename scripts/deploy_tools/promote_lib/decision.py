@@ -11,6 +11,7 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_decid
 """
 
 import sys as _sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -75,7 +76,7 @@ class Decision:
     stateful_record: dict = field(default_factory=dict)
     hold: str = ""
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
-    recorded: dict[str, str] = field(default_factory=dict)
+    recorded: Mapping[str, str] = field(default_factory=dict)
     supersedes: str = ""
     hold_read: str = "none"
     lost_settle: str = ""
@@ -148,7 +149,7 @@ def _promotion(
         verify.bundle_digests(base_bundle) if base_bundle is not None else None,
         digest,
     )
-    recorded: dict[str, str] = {}
+    recorded: Mapping[str, str] = {}
     if against_commit is not None and against is not None:
         recorded = verify.prior_statuses(
             target_bundle, against, lambda: reads.statuses(against_commit)

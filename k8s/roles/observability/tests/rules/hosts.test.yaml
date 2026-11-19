@@ -677,35 +677,35 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
-              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
-              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
-              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the memory check, under the floor of 2."
-              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
-              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
       - alertname: HostTemperatureCoverageShortfall
         eval_time: 24m
         exp_alerts: []
@@ -718,7 +718,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report temperature sensors, under the floor of 3."
-              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # HostClockUnsynchronised. box's kernel reports sync_status 0 with no offset, so the
   # unsynchronised arm fires. server is synchronised but 0.6s slow, so the offset arm fires, which
   # proves the absolute value. The Pi sits exactly at 0.5s, which is not over the limit. Both
@@ -885,35 +885,35 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
-              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
-              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
-              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the memory check, under the floor of 2."
-              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
-              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
       - alertname: HostTemperatureCoverageShortfall
         eval_time: 30m
         exp_alerts:
@@ -923,7 +923,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 0 hosts report temperature sensors, under the floor of 3."
-              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # Both x86 hosts report every family, so HostCoverageShortfall stays silent at the floor of
   # 2. daniel-pi's root disk is excluded from the count. Only two hosts report a temperature
   # sensor, under the floor of 3, so HostTemperatureCoverageShortfall fires with 2.
@@ -968,7 +968,7 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 2 hosts report temperature sensors, under the floor of 3."
-              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and 2 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
+              description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 2 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # Only box reports disk and memory: one host is under the floor of 2 for the three disk arms
   # and memory, and fires with 1. The cooling device arm has box's one device and fires too.
   - interval: 1m
@@ -993,35 +993,35 @@ tests:
               severity: warning
             exp_annotations:
               summary: "Only 1 hosts report series for the disk / check, under the floor of 2."
-              description: "The disk / check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 1 hosts report series for the disk /boot check, under the floor of 2."
-              description: "The disk /boot check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 1 hosts report series for the disk /boot/efi check, under the floor of 2."
-              description: "The disk /boot/efi check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 1 hosts report series for the memory check, under the floor of 2."
-              description: "The memory check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
               summary: "Only 1 hosts report series for the thermal-throttle check, under the floor of 2."
-              description: "The thermal-throttle check reads one series family from every node-exporter and needs two hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
+              description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
   # UPSOnBattery. NUT asserts OB at minute 5; the alert fires once it has held for 10m.
   - interval: 1m
     input_series:

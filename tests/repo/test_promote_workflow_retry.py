@@ -15,7 +15,7 @@ import forge
 import pytest
 from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run
-from test_promote_workflow import WORKFLOW, _load, _steps
+from _workflow_rows import PROMOTE, load, steps
 
 UNRETRIED = re.compile(r"(?<!retry )(?<![\w./-])gh [a-z]+|docker login")
 RETRY_CALLERS = re.compile(r"(?<![\w-])(?:retry|ghcr_login)\b")
@@ -45,7 +45,7 @@ def retry_problems(wf: dict) -> list[str]:
     runs = [
         (job_name, step.get("name") or step.get("id"), str(step.get("run", "")))
         for job_name, job in (wf.get("jobs") or {}).items()
-        for step in _steps(job)
+        for step in steps(job)
     ]
     # A function loaded after RETRY_FUNCTIONS, so it calls retry without loading it.
     runs.append(("env", DISPATCH, str((wf.get("env") or {}).get(DISPATCH, ""))))
@@ -73,7 +73,7 @@ def retry_problems(wf: dict) -> list[str]:
 
 @pytest.fixture(scope="module")
 def workflow() -> dict:
-    return _load(WORKFLOW)
+    return load(PROMOTE)
 
 
 def test_every_call_runs_inside_retry_is_clean(workflow):
@@ -138,7 +138,7 @@ def test_a_call_outside_retry_is_flagged(workflow, case):
 # GitHub prints every workflow-level env value in each step's header, so a literal command
 # there shows as a false hit to every grep for `::error` over the run's log.
 WORKFLOW_COMMAND = re.compile(r"::(?:error|warning|notice|debug)\b")
-ENV_HOLDERS = (WORKFLOW, WORKFLOW.parent / "prune-artifacts.yml")
+ENV_HOLDERS = (PROMOTE, ".github/workflows/prune-artifacts.yml")
 
 
 def env_command_problems(wf: dict) -> list[str]:
@@ -150,9 +150,9 @@ def env_command_problems(wf: dict) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize("path", ENV_HOLDERS, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", ENV_HOLDERS, ids=lambda p: p.rsplit("/", 1)[-1])
 def test_no_env_value_carries_a_literal_workflow_command_is_clean(path):
-    assert env_command_problems(_load(path)) == []
+    assert env_command_problems(load(path)) == []
 
 
 @pytest.mark.parametrize("command", ["::error::", "::warning::"])
@@ -198,7 +198,7 @@ PUBLISH_GROUP = "publish-${{ needs.render.outputs.sha }}"
 
 def _push(wf: dict) -> dict:
     publish = (wf.get("jobs") or {}).get("publish", {})
-    return next((s for s in _steps(publish) if s.get("id") == "push"), {})
+    return next((s for s in steps(publish) if s.get("id") == "push"), {})
 
 
 def resign_problems(wf: dict) -> list[str]:
