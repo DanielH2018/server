@@ -6,7 +6,7 @@ phases and the reasons for them.
 
 Usage::
 
-    fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
+    fanout.py review --batch 1345-1386 --repo DanielH2018/server < .fanout/brief.md
 """
 
 import json
@@ -53,20 +53,8 @@ def build(argv: list[str] | None, brief: str) -> Pipeline:
         default=DEFAULT.name,
         help="the model and effort the implementer runs at",
     )
-    p.add_argument(
-        "--red-green",
-        action="store_true",
-        help="write and gate failing tests before the implementer runs",
-    )
     args = p.parse_args(argv)
-    pipeline = Pipeline(
-        Path.cwd(),
-        args.batch,
-        this_host(),
-        resolve(args.repo),
-        brief,
-        red_green=args.red_green,
-    )
+    pipeline = Pipeline(Path.cwd(), args.batch, this_host(), resolve(args.repo), brief)
     pipeline.record.implementer = by_name(args.rung)
     return pipeline
 
@@ -80,7 +68,7 @@ def write_report(report: dict, out: TextIO, path: Path | None = None) -> None:
     """Write `report` as the whole of `out`, emptying it first when it is a regular file.
 
     systemd opens `.fanout/report.json` without truncating it, and status reads the last
-    result line there, so a line the red author planted past this report's end would win.
+    result line there, so a line an agent planted past this report's end would win.
     """
     if stat.S_ISREG(os.fstat(out.fileno()).st_mode):
         out.flush()
@@ -88,7 +76,7 @@ def write_report(report: dict, out: TextIO, path: Path | None = None) -> None:
         out.seek(0)
     print(json.dumps(report), file=out)
     out.flush()
-    # `status` reads the file by name. A red author who deleted it and wrote another in its
+    # `status` reads the file by name. An agent that deleted it and wrote another in its
     # place, or a symlink, left this process writing to an inode nobody reads.
     if path is not None and not _same_file(path, out):
         path.unlink(missing_ok=True)

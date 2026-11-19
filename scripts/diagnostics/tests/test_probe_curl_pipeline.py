@@ -381,3 +381,15 @@ def test_stream_pipeline_redacts_the_loki_query_body(capfd):
 def test_only_loki_query_output_is_redacted():
     assert curl_pipeline.output_redaction("loki-query") is core.redact_log_secrets
     assert curl_pipeline.output_redaction("metric") is None
+
+
+def test_a_t2_session_reads_a_route_as_plain_http_through_its_proxy(monkeypatch):
+    """A T2 session's squid admits the in-cluster reads only as plain HTTP, with no VIP pin."""
+    host = f"prometheus.local.{core.domain()}"
+    monkeypatch.delenv(core.VIA_PROXY_ENV, raising=False)
+    assert core.k8s_endpoint("prometheus") == (
+        f"https://{host}",
+        f"{host}:443:{core.metallb_vip()}",
+    )
+    monkeypatch.setenv(core.VIA_PROXY_ENV, "1")
+    assert core.k8s_endpoint("prometheus") == (f"http://{host}", None)

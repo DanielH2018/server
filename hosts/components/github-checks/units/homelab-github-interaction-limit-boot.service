@@ -4,7 +4,7 @@
 # dependency even when this unit's own condition fails.
 [Unit]
 Description=GitHub interaction-limit re-arm (boot rerun while red)
-ConditionPathExists=/var/lib/kuma-check/github-interaction-limit.down
+ConditionPathExists=/var/lib/homelab/check/github-interaction-limit.down
 
 [Service]
 SyslogLevel=notice

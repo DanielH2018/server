@@ -12,8 +12,6 @@ failure report and the couplings it depends on:
 - **Exactly one `trap ... EXIT`.** A second trap on the same signal REPLACES the first, so the
   temp-file cleanup and the verdict cannot both hang off EXIT through separate traps.
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
-
-test_host_check_textfiles.py holds the script to pushing nothing to Kuma.
 """
 
 import re

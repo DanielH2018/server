@@ -2,8 +2,7 @@
 
 Every process goes through one fake runner, `_review_fakes.FakeRunner`, which answers `git`,
 records `gh` and replays a scripted report per `claude` call. It also records `.fanout/phase`
-at each call, since the Stop hook reads that file to decide what a session owes. The red/green
-phases are tested in `test_fanout_review_red_green.py`.
+at each call, since the Stop hook reads that file to decide what a session owes.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 """
@@ -276,14 +275,14 @@ def test_new_tests_that_pass_without_the_fix_reach_the_reviewer_and_the_record(
 ):
     seen = []
 
-    def base_check(run, worktree, base, head, exclude):
-        seen.append((base, head, exclude))
+    def base_check(run, worktree, base, head):
+        seen.append((base, head))
         return BaseCheck(2, ["tests/test_x.py::test_guard"])
 
     reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
     pipeline, run = _pipeline(tmp_path, reports, base_check=base_check)
     pipeline.run_all()
-    assert seen == [("base0", "aaa", ())]
+    assert seen == [("base0", "aaa")]
     assert "- `tests/test_x.py::test_guard`" in run.claude[1][1]
     assert _record(tmp_path)["base_passing"] == ["tests/test_x.py::test_guard"]
     assert "1 of the PR's 2 new tests pass with its code changes" in run.comments[0]
@@ -431,7 +430,7 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
         assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
         assert settings["permissions"] == held["permissions"]
         assert (hooks / "block-protected-edits.py").is_file()
-    # With no red phase before it, the implement phase keeps the project source.
+    # No agent has written the tree yet, so the implement phase keeps the project source.
     assert "--setting-sources" not in run.claude[0][0]
 
 
@@ -488,7 +487,7 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
 
 def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path):
     """systemd opens the file without truncating it, and status reads its last result line,
-    so a line the red author planted past the report's end would otherwise win."""
+    so a line an agent planted past the report's end would otherwise win."""
     from fanout_lib.review_unit import write_report
 
     planted = json.dumps(_report(f"Opened {PR}")) + "\n"
