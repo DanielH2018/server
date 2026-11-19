@@ -1,4 +1,4 @@
-# The fixture whose line-arm edit lands in a conffile another package owns (#6088). The owner is
+# The fixture whose line-arm edit lands in a conffile another package owns. The owner is
 # `validate_lib/conffile_case.py`'s fixture-conffile-owner, which the case installs first, and
 # its upgrades must leave this line in place.
 description: Fixture host package that edits another package's conffile, for the host_packages container cases

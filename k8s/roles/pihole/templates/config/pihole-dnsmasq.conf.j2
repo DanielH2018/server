@@ -26,7 +26,7 @@
    record discloses an RFC1918 address and the existence of the naming scheme, nothing more.
    ACME is unaffected either way — issuance uses the DNS-01 TXT challenge, not this A record. #}
 address=/local.{{ domain }}/{{ pihole_wildcard_ip | default(k3s_metallb_ingress_vip) }}
-{# DECIDED (2026-09-18, #2010): `local=` here, not `address=/local.<domain>/::`. Both keep an
+{# DECIDED: `local=` here, not `address=/local.<domain>/::`. Both keep an
    AAAA for a `.local.` name from being forwarded upstream, which is the property that
    matters — since dnsmasq 2.86 an `address=` carrying only an IPv4 sends every OTHER record
    type upstream, past the public resolvers this file exists to keep LAN names away from.
