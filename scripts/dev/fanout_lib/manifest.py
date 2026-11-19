@@ -3,7 +3,7 @@
 import json
 import os
 from dataclasses import asdict, dataclass, field, fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -42,6 +42,12 @@ class Batch:
             which launched in this repo, hence the default.
         rung: the `fanout_lib.sizing` rung its implementer ran at. Absent from manifests
             written before sizing existed, every one of which ran at the default.
+        cited_paths: the files the batch's issues cite, as `launch` resolved them when it
+            briefed the batch. `launch_gates.refuse_live_shared_files` compares a new
+            launch against these. None for a batch saved before the field existed, whose
+            issue bodies that gate fetches instead.
+        excused_paths: the files this batch cites that a live batch in another run also
+            held at launch, each passed with `--allow-shared-file`.
         extra: the keys of the manifest entry that are not fields here, which a newer
             build wrote. `to_json` writes them back, so a rewrite by this build loses
             nothing the newer build recorded. Not part of equality.
@@ -57,6 +63,8 @@ class Batch:
     removed_at: str | None = None
     repo: str = SERVER
     rung: str = DEFAULT.name
+    cited_paths: tuple[str, ...] | None = None
+    excused_paths: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict, compare=False)
 
     @classmethod
@@ -69,8 +77,12 @@ class Batch:
         if not isinstance(data, dict):
             raise TypeError(f"a batch entry is an object, not {type(data).__name__}")
         known = {f.name for f in fields(cls)} - {"extra"}
+        given = {k: v for k, v in data.items() if k in known}
+        for name in ("cited_paths", "excused_paths"):
+            if isinstance(given.get(name), list):
+                given[name] = tuple(given[name])
         return cls(
-            **{k: v for k, v in data.items() if k in known},
+            **given,
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -118,6 +130,18 @@ class Manifest:
 def new_run_id(now: datetime) -> str:
     """Derive a run id from a timestamp, sortable and filesystem-safe."""
     return now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def unused_run_id(now: datetime, root: Path = MANIFEST_DIR) -> str:
+    """The first run id at or after `now` that no manifest under `root` has.
+
+    Two launches named in one second would share an id, and the second would save over the
+    first's manifest. The caller holds the launch lock (`fanout_lib.launch_lock`), so no
+    other launch can take the id between this read and its own first save.
+    """
+    while exists(new_run_id(now), root):
+        now += timedelta(seconds=1)
+    return new_run_id(now)
 
 
 def path(run_id: str, root: Path = MANIFEST_DIR) -> Path:
@@ -247,6 +271,22 @@ def live_batches(root: Path = MANIFEST_DIR) -> dict[tuple[str, str], tuple[str, 
         for b in run.batches
         if not b.removed_at
     }
+
+
+def standing_batches(
+    repo: str, root: Path = MANIFEST_DIR
+) -> list[tuple[Manifest, Batch]]:
+    """Every batch in `repo` with no `removed_at`, across every run under `root`, with its run.
+
+    Filtered by repo because a batch id is only issue numbers, and a path is only a path:
+    neither means the same thing in another repo's register or tree.
+    """
+    return [
+        (run, b)
+        for run in all_runs(root)
+        for b in run.batches
+        if not b.removed_at and b.repo == repo
+    ]
 
 
 def branches_launched_by(
