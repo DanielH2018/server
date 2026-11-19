@@ -118,7 +118,7 @@ def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
     `parse_args` still raises argparse's own 2 -- the tests above assert that -- and `main` is
     the one place it becomes `LAND_BAD_ARGS`.
     """
-    import land
+    from deploy_tools import land
 
     with pytest.raises(SystemExit) as exc:
         land.main(["--arm-merge"])
@@ -127,7 +127,7 @@ def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
 
 def test_help_opens_on_the_summary_and_usage_not_the_rationale(capsys):
     """`--help` skips the module docstring's rationale sections (#4448)."""
-    import land
+    from deploy_tools import land
 
     with pytest.raises(SystemExit):
         land.main(["--help"])
@@ -139,7 +139,7 @@ def test_help_opens_on_the_summary_and_usage_not_the_rationale(capsys):
 
 def test_main_leaves_helps_zero_alone():
     """The reject half: renumbering must not turn a successful `--help` into a usage error."""
-    import land
+    from deploy_tools import land
 
     with pytest.raises(SystemExit) as exc:
         land.main(["--help"])

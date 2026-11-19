@@ -113,7 +113,7 @@ def land_run(capsys, monkeypatch):
     which exists on the deploy host and not in CI -- and the pipeline refuses a primary
     that is not a directory. Pass `primary=` to drive that refusal.
     """
-    import land
+    from deploy_tools import land
 
     def run(
         argv: list[str],

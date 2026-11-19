@@ -30,9 +30,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import gh_rate_limit
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import CI_DISARMED, CI_RED, CI_UNPROVEN

@@ -7,9 +7,10 @@ died on `yaml`. A one-path test per break misses the next one; this module deriv
 set instead.
 
 - `stdlib_only_set()` maps each reached module to the directories its caller puts on
-  `sys.path`: the entry's own directory (a by-path run) plus every `sys.path.insert` the
-  reached modules make, evaluated statically. `scripts/lib/git.py` has no insert of its own
-  and is reached through session-health's insert of `REPO/scripts`.
+  `sys.path`: the entry's own directory (a by-path run), the `scripts/` root a repo launcher
+  sets on `PYTHONPATH` (a role's command gets none), plus every `sys.path.insert` the reached
+  modules make, evaluated statically. `scripts/lib/git.py` has no insert of its own and is
+  reached through session-health's insert of `REPO/scripts`.
 - `walk(path, dirs)` is the static layer: the imports of `path` that are none of the stdlib, a
   first-party module under `dirs`, a role module `repo_paths.ROLE_MODULES` lists for a
   directory in `dirs`, or `OUT_OF_TREE`.
@@ -95,16 +96,17 @@ def _wait_entries() -> list[tuple[Path, tuple[str, ...]]]:
     return found
 
 
-def entries() -> list[tuple[Path, tuple[str, ...]]]:
-    """Every no-venv entry file, with the subcommand argv its caller passes."""
+def entries() -> list[tuple[Path, tuple[str, ...], bool]]:
+    """Every no-venv entry file, the subcommand argv its caller passes, and whether it is rooted.
+
+    A rooted entry's launcher puts its checkout's `scripts/` on `PYTHONPATH`, which
+    `test_every_no_venv_launcher_sets_the_scripts_root` holds each launcher to. A role or
+    component command runs from its install directory, which has no such root.
+    """
+    launched = _hook_entries() + _wait_entries() + [*FANOUT_UNITS, *RUNBOOK_UNITS]
     return sorted(
-        set(
-            _hook_entries()
-            + _wait_entries()
-            + list(FANOUT_UNITS)
-            + list(RUNBOOK_UNITS)
-            + role_installs.role_entries()
-        )
+        {(entry, argv, True) for entry, argv in launched}
+        | {(entry, argv, False) for entry, argv in role_installs.role_entries()}
     )
 
 
@@ -362,9 +364,11 @@ def _scope(path: Path, argv: tuple[str, ...] | None) -> tuple[list[ast.AST], lis
     return nodes, modules
 
 
-def _reach(entry: Path, argv: tuple[str, ...]) -> tuple[set[Path], list[Path]]:
+def _reach(
+    entry: Path, argv: tuple[str, ...], rooted: bool
+) -> tuple[set[Path], list[Path]]:
     """Every file `entry` reaches when run with `argv`, and the `sys.path` its run builds."""
-    dirs = [entry.parent.resolve()]
+    dirs = [entry.parent.resolve(), *([repo_paths.SCRIPTS] if rooted else [])]
     while True:
         seen: set[Path] = set()
         todo: list[tuple[Path, tuple[str, ...] | None]] = [(entry.resolve(), argv)]
@@ -399,8 +403,8 @@ def members() -> list[tuple[Path, list[Path]]]:
     A role script appears as its staged copy, once per install directory it ships to.
     """
     found: dict[Path, list[Path]] = {}
-    for entry, argv in entries():
-        reached, dirs = _reach(entry, argv)
+    for entry, argv, rooted in entries():
+        reached, dirs = _reach(entry, argv, rooted)
         for member in reached:
             have = found.setdefault(member, [])
             have += [d for d in dirs if d not in have]

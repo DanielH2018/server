@@ -48,10 +48,8 @@ import shlex
 import subprocess
 from collections.abc import Callable, Generator, Sequence
 
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import line
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing

@@ -10,10 +10,6 @@ masked, reads as an older SHA here, which `homelab_host_reconcile_ok` cannot see
 
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from deploy_tools.land_lib.outcome import say
 

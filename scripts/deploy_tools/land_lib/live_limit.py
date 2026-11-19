@@ -15,10 +15,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import JsonValue, as_list, as_object
 from lib.role_paths import CLUSTER_VARS_PREFIX, is_test_path, role_for
 from validate.cluster_pins import PINS

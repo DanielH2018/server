@@ -2,7 +2,7 @@
 
 import subprocess
 
-import publish_pr
+from deploy_tools import publish_pr
 
 
 def cp(rc: int = 0, out: str = "", err: str = "") -> subprocess.CompletedProcess[str]:

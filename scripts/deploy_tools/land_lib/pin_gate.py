@@ -36,16 +36,11 @@ import getpass
 import subprocess
 from collections.abc import Mapping
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `artifact_retention` are imported bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from validate.cluster_pins import Pin, Unjudged
 
-import forge
-from artifact_retention import LAST_GOOD_TAG
+from deploy_tools import forge
+from deploy_tools.artifact_retention import LAST_GOOD_TAG
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
 from deploy_tools.land_lib.pin_reads import Unreadable

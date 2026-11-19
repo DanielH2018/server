@@ -146,7 +146,6 @@ import shlex
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git import git
 from deploy_tools.land_lib import (
