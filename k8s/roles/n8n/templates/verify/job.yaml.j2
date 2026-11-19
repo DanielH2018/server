@@ -1,17 +1,11 @@
 {#
-  n8n's verify Job and the ConfigMap that carries its script.
+  n8n's verify Job and the ConfigMap that carries its script; `k8s/templates/digest-job.yml.j2`
+  has the shape both share with the other plain Jobs.
 
   The renderer emits `templates/verify/*.yaml.j2` into `n8n-verify` (`verify_files`), which
   Flux applies once the `n8n` Kustomization reads Ready. The manifests role takes only
   top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the
   `n8n-netpol-probe` tasks and `netpol-probe-job.yaml.j2` in n8n's flip (#5546).
-
-  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
-  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
-  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
-  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
-  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
-  `templates/verify/` file (`render_tag`).
 
   DECIDED: the spec embeds a digest of n8n's rendered NetworkPolicy and Deployment, not only
   the Deployment as tdarr's and sonarr's do. The policy is what this Job tests, so a change
@@ -31,97 +25,36 @@
       proves closed. k8s/roles/n8n/tests/test_n8n_verify.py fails if either port
       admits the label.
 #}
-{% set script_name = 'n8n_verify.py' %}
-{% set script_dir = '/verify' %}
-{% set data = {
-  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
-  'flux_job_connect.py': flux_job_connect,
-} %}
-{% set configmap_name = 'n8n-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% from 'digest-job.yml.j2' import digest_job with context %}
+{% set script = 'n8n_verify.py' %}
 {% set render_digest8 = ((lookup('template', 'networkpolicy.yaml.j2') + lookup('template', 'deployment.yaml.j2')) | hash('sha256'))[:8] %}
 {% set n8n_host = container_item.name + '.' + k8s_namespace + '.svc.cluster.local' %}
-{% set spec_text %}
+{% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
 # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
 # The control's 60s of connect retries, then two 5s connects.
 activeDeadlineSeconds: 180
-template:
-  metadata:
-    labels:
-      # A peer of neither n8n port, which is what the two isolation legs need. It must never
-      # be `traefik`, `monitor-bridge` or `n8n-runners`.
-      app: n8n-verify
-  spec:
-    serviceAccountName: n8n-verify
-    # The Job reads no Kubernetes API, so its pod holds no token.
-    automountServiceAccountToken: false
-    restartPolicy: Never
-    enableServiceLinks: false
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 65534
-      runAsGroup: 65534
-      seccompProfile:
-        type: RuntimeDefault
-    containers:
-      - name: verify
-        image: {{ flux_job_image }}
-        imagePullPolicy: IfNotPresent
-        command:
-          - python3
-          - {{ script_dir }}/{{ script_name }}
-        env:
-          - name: CONTROL_URL
-            value: http://traefik.{{ k8s_namespace }}.svc.cluster.local:80/
-          - name: N8N_WEB_URL
-            value: http://{{ n8n_host }}:{{ container_item.port }}/
-          - name: N8N_BROKER_URL
-            value: http://{{ n8n_host }}:{{ n8n_k8s_broker_port }}/
-          # Renames the Job whenever the policy or the Deployment changes; see the note above.
-          - name: N8N_RENDER_DIGEST8
-            value: "{{ render_digest8 }}"
-          - name: PYTHONDONTWRITEBYTECODE
-            value: "1"
-        resources:
-          requests:
-            cpu: 10m
-            memory: 32Mi
-          limits:
-            memory: 64Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-              - ALL
-        volumeMounts:
-          - name: script
-            mountPath: {{ script_dir }}
-            readOnly: true
-    volumes:
-      - name: script
-        configMap:
-          name: {{ configmap_name }}
 {% endset %}
-{% set spec = spec_text | from_yaml %}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ configmap_name }}
-  namespace: {{ k8s_namespace }}
-data:
-{% for key, text in data | dictsort %}
-  {{ key }}: {{ text | to_json }}
-{% endfor %}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: n8n-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
-  namespace: {{ k8s_namespace }}
-  annotations:
-    homelab/job-kind: verify
-spec:
-{{ spec_text | indent(2, true) }}
+{% set label_note %}
+# A peer of neither n8n port, which is what the two isolation legs need. It must never
+# be `traefik`, `monitor-bridge` or `n8n-runners`.
+{% endset %}
+{% set env %}
+- name: CONTROL_URL
+  value: http://traefik.{{ k8s_namespace }}.svc.cluster.local:80/
+- name: N8N_WEB_URL
+  value: http://{{ n8n_host }}:{{ container_item.port }}/
+- name: N8N_BROKER_URL
+  value: http://{{ n8n_host }}:{{ n8n_k8s_broker_port }}/
+# Renames the Job whenever the policy or the Deployment changes; see the note above.
+- name: N8N_RENDER_DIGEST8
+  value: "{{ render_digest8 }}"
+{% endset %}
+{{ digest_job(
+     name='n8n-verify',
+     script=script,
+     script_text=lookup('file', role_file('files/' + script), rstrip=False),
+     head=head,
+     env=env,
+     label_note=label_note) }}
