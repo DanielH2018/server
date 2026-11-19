@@ -19,10 +19,8 @@ That test merges `ignore_foreign_slice_holds_env(tmp_path)` into the subprocess'
 environment instead.
 """
 
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import _claude_worktree  # noqa: F401
 import claude_worktree

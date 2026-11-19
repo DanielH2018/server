@@ -29,12 +29,12 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-from lib.repo_paths import HOST_LIB_FILES
 
 # `longhorn_lib.longhorn_backups` imports `host_lib` by bare name, because on the host the
 # package and host_lib.py are copied side by side. Here they sit in two directories, `hosts/lib`
 # and `scripts/lib`, so both go on the path.
-_sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
+
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 

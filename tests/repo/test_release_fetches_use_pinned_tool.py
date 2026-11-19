@@ -4,7 +4,8 @@ The action restores the asset from an actions/cache keyed on the tool, version a
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
 problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
-a third-party installer action. A script a step runs is out of scope: its downloads are held to a
+a third-party installer action. An exempt fetch in a job that checks out nothing is held to the
+action's own cache, retry and digest shape. A script a step runs is out of scope: its downloads are held to a
 cache by tests/repo/test_ci_release_downloads_are_cached.py.
 
 Run: uv run pytest tests/repo/test_release_fetches_use_pinned_tool.py
@@ -54,9 +55,10 @@ EXEMPT = {
     ("promote.yml", "reset-move", FLUX): NO_CHECKOUT,
     ("ci.yml", "host_packages_build", "gitleaks/gitleaks"): GITLEAKS,
     ("promote.yml", "render", "gitleaks/gitleaks"): GITLEAKS,
-    ("promote.yml", "promote", COSIGN): "moves to the action in #9222",
-    ("prune-artifacts.yml", "prune", COSIGN): "moves to the action in #9221",
 }
+# release repo -> the tool name an inline fetch's `pinned/<tool>` path and `<TOOL>_*` pins use.
+INLINE_TOOLS = {FLUX: "flux", COSIGN: "cosign"}
+NO_CHECKOUT_FETCHES = sorted(k for k, why in EXEMPT.items() if why == NO_CHECKOUT)
 # installer action -> why it stays.
 INSTALLERS = {
     "astral-sh/setup-uv": "fetches uv into its own cache keyed on uv.lock",
@@ -78,6 +80,8 @@ KNOWN_CALLERS = {
     ("flux-deletion-drill.yml", "drill", "cosign"),
     ("flux-deletion-drill.yml", "drill", "kind"),
     ("pytest-tools", "pytest-tools", "sops"),
+    ("promote.yml", "promote", "cosign"),
+    ("prune-artifacts.yml", "prune", "cosign"),
 }
 
 
@@ -154,14 +158,24 @@ def callers(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
     }
 
 
-def action_problems(steps: list[dict]) -> list[str]:
-    """What the action's steps lack of a cached, retried and digest-checked fetch."""
+def fetch_problems(
+    steps: list[dict],
+    pins: tuple[str, ...] = ("inputs.tool", "inputs.version", "inputs.sha256"),
+    digest: str = "SHA256",
+) -> list[str]:
+    """What a cache step and the fetch step after it lack of a cached, retried, checked fetch.
+
+    Args:
+        steps: The steps of one tool's fetch, the action's by default.
+        pins: The expressions the cache key must read.
+        digest: The shell variable holding the sha256 the fetch checks the download against.
+    """
     found = []
     cache = next(
         (s for s in steps if str(s.get("uses", "")).startswith("actions/cache@")), {}
     )
     key = str((cache.get("with") or {}).get("key", ""))
-    for pin in ("inputs.tool", "inputs.version", "inputs.sha256"):
+    for pin in pins:
         if pin not in key:
             found.append(f"the cache key does not read {pin}")
     fetch = next((s for s in steps if FETCH.search(str(s.get("run", "")))), {})
@@ -185,9 +199,23 @@ def action_problems(steps: list[dict]) -> list[str]:
                 found.append(f"curl retries only some errors: {text}")
             elif int(m[1]) * int(m[2]) < TOOL_RETRY_WINDOW_S:
                 found.append(f"curl retries for under {TOOL_RETRY_WINDOW_S}s: {text}")
-    if not re.search(r"\$SHA256 .*\| sha256sum -c --strict", run):
-        found.append("the fetch does not check the download against inputs.sha256")
+    if not re.search(rf"\${digest} .*\| sha256sum -c --strict", run):
+        found.append(f"the fetch does not check the download against ${digest}")
     return found
+
+
+def inline_problems(workflow: dict, job: str, repo: str) -> list[str]:
+    """What a job's inline fetch from `repo` lacks of the action's cache, retry and digest check."""
+    tool = INLINE_TOOLS[repo]
+    pin = tool.upper()
+    steps = [
+        s
+        for s in workflow["jobs"][job]["steps"]
+        if f"pinned/{tool}" in str(s.get("run", "")) + str(s.get("with", ""))
+    ]
+    return fetch_problems(
+        steps, (f"env.{pin}_VERSION", f"env.{pin}_SHA256"), f"{pin}_SHA256"
+    )
 
 
 def _action_tools() -> set[str]:
@@ -196,7 +224,12 @@ def _action_tools() -> set[str]:
 
 
 def test_the_action_fetches_from_a_pinned_cache_with_a_retried_digest_checked_curl():
-    assert action_problems(_action_steps()) == []
+    assert fetch_problems(_action_steps()) == []
+
+
+@pytest.mark.parametrize(("file", "job", "repo"), NO_CHECKOUT_FETCHES)
+def test_an_inline_fetch_without_a_checkout_has_the_actions_shape(file, job, repo):
+    assert inline_problems(_sources()[file], job, repo) == []
 
 
 def test_the_census_finds_the_known_callers():
@@ -307,4 +340,28 @@ def test_a_weakened_action_is_flagged(old, new, problem):
     text = (REPO / ACTION).read_text(encoding="utf-8")
     assert old in text, old
     steps = yaml_fast.safe_load(text.replace(old, new))["runs"]["steps"]
-    assert any(problem in p for p in action_problems(steps)), action_problems(steps)
+    assert any(problem in p for p in fetch_problems(steps)), fetch_problems(steps)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "problem"),
+    [
+        (
+            "-${{ env.COSIGN_SHA256 }}",
+            "",
+            "the cache key does not read env.COSIGN_SHA256",
+        ),
+        ("}}/pinned/cosign\n", "}}/elsewhere\n", "no actions/cache step runs before"),
+        ('if [[ -f "$cosign" ]]; then', "if true; then", "outside the cache-miss"),
+        ("--retry 12", "--retry 3", "curl retries for under"),
+        ("--retry-all-errors ", "", "curl retries only some errors"),
+        ("| sha256sum -c --strict", "> /dev/null", "does not check the download"),
+    ],
+)
+def test_a_weakened_inline_fetch_is_flagged(old, new, problem):
+    text = (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
+    assert old in text, old
+    found = inline_problems(
+        yaml_fast.safe_load(text.replace(old, new)), "publish", COSIGN
+    )
+    assert any(problem in p for p in found), found

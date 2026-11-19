@@ -22,11 +22,6 @@ Typical usage example:
     estate.source("daniel-pi", "has_docker")  # "host": daniel-pi's own file declares it
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path

@@ -22,9 +22,8 @@ from dataclasses import dataclass, field
 # hosts/lib/. Each importer carries its own insert rather than relying on
 # the entry point's having run first.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.repo_paths import HOST_LIB_FILES
 
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 import host_lib
 
 # The Backup CR reader and the group names, shared with the backup-health cron.

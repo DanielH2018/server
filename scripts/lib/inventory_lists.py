@@ -18,12 +18,8 @@ A deliberately narrower host set filters ``host_names()`` rather than replacing 
 where they are.
 """
 
-import sys
 from pathlib import Path
 
-# A directly-invoked importer gets only its own directory on sys.path, and pyproject's
-# `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.repo_paths import HOST_VARS
 

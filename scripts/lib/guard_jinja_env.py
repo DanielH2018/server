@@ -22,11 +22,6 @@ Imported as ``from lib.guard_jinja_env import ...`` after the caller's own ``sys
 bootstrap puts ``scripts/`` on the path (``.claude/rules/python-layout.md``).
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import functools
 from pathlib import Path
 from types import FunctionType

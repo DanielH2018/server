@@ -31,7 +31,6 @@ from pathlib import Path
 
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git
