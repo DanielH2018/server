@@ -3,7 +3,7 @@
 
 ``lint`` reports citations that cannot be support. ``report`` reads git and the instructions
 log: the sections citing nothing ranked by how often their doc loads, the docs read as a head
-ranked by reads, the instruction bytes each session loaded, and the notice and the comment
+ranked by reads, the instruction bytes each session loaded, and the comment
 class of the removed-name rule replayed over the window (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom that the diff from the merge base of
 ``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument(
         "--no-replay",
         action="store_true",
-        help="skip the notice and comment replays, which walk every commit in the window",
+        help="skip the comment replay, which walks every commit in the window",
     )
     rp.set_defaults(fn=cmd_report)
     nt = sub.add_parser("notice")
