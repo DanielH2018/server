@@ -359,7 +359,9 @@ text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held 
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
-PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
+PR from this session with `land.sh`. A daniel-server batch whose PR the server lander holds
+for a person reads `needs-input: the server lander will not land #N`, with the next step
+and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`). A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
 
