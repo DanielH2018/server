@@ -19,7 +19,6 @@ _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _HERE)
 
 from _hook_common import INSTRUCTIONS_LOG_ENV  # noqa: E402
-from _inline_budget import blocks  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "inject_nested_docs", os.path.join(_HERE, "inject-nested-docs.py")
@@ -137,4 +136,4 @@ def test_an_inherited_pointer_still_lets_a_write_inline_the_rule(repo, tmp_path)
 def test_a_header_quoted_inside_a_line_does_not_split_a_block():
     head = f"===== {ROLE} (applies to `k8s/roles/foo`) ====="
     text = f"{head}\nSee `===== other.md (applies to `x`) =====` for the shape.\n"
-    assert [doc for doc, _ in blocks(text)] == [ROLE]
+    assert [doc for doc, _ in _mod.blocks(text)] == [ROLE]
