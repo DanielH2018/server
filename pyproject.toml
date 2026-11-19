@@ -296,7 +296,12 @@ per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py3
 #   default behaviour and no error, which is legal, silent and wrong. A slot that a fixed
 #   signature must accept, such as a callback's or a table row's, takes a leading underscore,
 #   which the rule skips. Test paths are exempt below, because a fake mirrors the signature of
-#   what it replaces. ARG005 stays off: a lambda with an unused argument is a callback.
+#   what it replaces.
+#
+# DECIDED: BLE001 and ARG005 stay off. A lambda with an unused argument is a callback. The
+# blind excepts outside tests sit at boundaries built not to crash, which are the hooks, the
+# monitor-bridge checks and the byte-pinned karakeep script, and S110 and S112 already cover
+# the swallowing forms. (ADR-0040)
 #
 # DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
@@ -638,11 +643,12 @@ possibly-missing-submodule = "error"
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
-# tree-wide. The role's own tests are what cover that file's imports. airflow's two files
-# import Airflow, which only its image installs; the image build's check_dags run imports both.
+# tree-wide. The role's own tests are what cover that file's imports. airflow's check_dags and
+# DAG files import Airflow, which only its image installs; the image build's check_dags run
+# imports every DAG. The glob stops at the DAG folder, so `homelab_warehouse/` stays checked.
 include = [
   "k8s/roles/airflow/files/check_dags.py",
-  "k8s/roles/airflow/files/dags/prom_daily_rollup.py",
+  "k8s/roles/airflow/files/dags/*.py",
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",
