@@ -526,9 +526,29 @@ reason, as a batch that needs attention (exit tier 1). The unit's stop does not 
 A daniel-server batch that stops at its PR is landed by the server lander, whose logs are on
 daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the newest
 `land<pr>-*.log` there and reports the batch `landed`, `parked` by the same rule, or
-`needs-input` naming the verdict. With no result yet the batch stays `done (awaiting the
-server lander)`. That directory belongs to the user the lander runs as, so a session of
-another user reads none and reports `done`.
+`needs-input` naming the verdict. That directory belongs to the user the lander runs as, so a
+session of another user reads none and reports `done`.
+
+With no result yet, `status` reads the ruling the lander made on the PR from the lander unit's
+journal, in the same call to daniel-box. Each lander pass prints one line per candidate PR,
+and `scripts/dev/fanout_lib/status.py:lander_rulings` takes the newest pass's line.
+
+- A ruling that waits on a person reads `needs-input: the server lander will not land #N`,
+  followed by the next step and the ruling. `scripts/dev/fanout_lib/operator_waits.py:reason_of`
+  decides which rulings those are: the surface the lander itself runs from, an operator step in the PR body,
+  findings left after the fix round, and a batch that ended `needs-input`. `place runs` lists
+  the batch the same way, and `cc-wait fanout` names it as a batch that needs a hand.
+- Any other ruling, such as a draft or a head that moved since the review, stays `done
+  (awaiting the server lander: <ruling>)`.
+- A PR the newest pass did not name has merged, closed or aged out of the review records the lander reads,
+  and reads `done (awaiting the server lander)`.
+
+DECIDED: `status` reads the ruling the lander recorded and does not evaluate
+`autoland.problems` itself. That function needs the review record and the PR's file list
+from GitHub, which is one more GitHub call on every `status` and every `cc-wait fanout`
+poll. The journal read adds no ssh connection and no GitHub call. Its cost is age: a ruling
+is as old as the newest pass, ten minutes at most, so a batch reads `awaiting` until the
+first pass after its PR opens.
 
 **`clean` keeps a parked batch whose PR has not merged.** A claim expires with its worktree,
 and the open PR still holds the edits, so removing the tree would free the issues for a
@@ -658,14 +678,17 @@ at its PR, and a review batch whose PR the rule holds.
 | Server batch outcome | Who acts |
 |---|---|
 | A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
-| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. The sub-coordinator reads the reason and lands the PR, or passes an operator step to the operator. |
+| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, or passes an operator step to the operator. |
+| A PR the lander rules ineligible for a reason it clears itself (a draft, a head that moved) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`. |
 | A `--no-review` batch that qualifies for the server lander | The server lander. The sub-coordinator never lands it. |
 | A server lander landing refused before merge | The server lander, which starts the PR again once the rule clears (`scripts/dev/fanout_lib/autoland.py:refused_for_now`). |
 | A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |
 
-Before a sub-coordinator runs `land.sh` on any server batch's PR, it runs `probe.py
-lander`, which shows what the server lander did with the PR and how that landing ended.
-The table above then says whose the PR is. The probe is not a guard against a second
+`place status` says whose the PR is: a `needs-input` line that names the server lander is
+the sub-coordinator's, and `awaiting the server lander` is not. Before a sub-coordinator
+runs `land.sh` on any server batch's PR, it still runs `probe.py lander`, which shows
+whether a landing of the PR started since that ruling and how it ended. The probe is not a
+guard against a second
 landing: `land.sh` refuses one while a landing of the PR is live (`docs/landing.md`, *One
 landing of a PR at a time*).
 
