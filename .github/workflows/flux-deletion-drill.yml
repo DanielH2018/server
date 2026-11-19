@@ -1,8 +1,8 @@
 name: Flux deletion drill
 
 # Proves on a throwaway kind cluster what kustomize-controller does when a tag leaves the
-# bundle, and that break-glass promotion verifies a key-signed bundle (target slice D6, PR
-# D6.11, docs/target-architecture/deploy/d6-delete-old-path.md). The bundles come from the
+# bundle, and that break-glass promotion verifies a key-signed bundle (target slice D6,
+# docs/target-architecture/deploy/d6-delete-old-path.md). The bundles come from the
 # renderer's own writers (scripts/renderer/deletion_drill.py), so a green drill shows that the
 # form the renderer writes is one that Flux honours.
 #
@@ -27,7 +27,7 @@ name: Flux deletion drill
 # The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
 # The private keys are generated here and discarded with the runner; the kit's private half
 # never reaches CI. The merge gate requires this check (`github_expected_ruleset_contexts` in
-# hosts/components/github-checks/defaults/main.yml, #6042). It runs on every pull request and
+# hosts/components/github-checks/defaults/main.yml). It runs on every pull request and
 # skips itself when no in-scope path changed, so the required context never sticks at
 # "Expected".
 
@@ -158,7 +158,7 @@ jobs:
 
       # kind and its node image come from the pins ci.yml's sops_manifest_type_proof job reads,
       # so this file holds no copy that could drift. kind comes from ci.yml's cache entry, and
-      # the release only on a miss (#7781).
+      # the release only on a miss.
       - name: Read the kind pin
         id: kind
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -313,9 +313,9 @@ jobs:
           BUDGET=40 judge inventory-prune || rc=1
           exit "$rc"
 
-      # Open question 16 lives here: source-controller verifies a key-signed artifact from a
-      # plain-HTTP registry, through `insecure: true`. The OCIRepository and its Secret come
-      # from the flux role's own templates with the break-glass lever on.
+      # source-controller verifies a key-signed artifact from a plain-HTTP registry, through
+      # `insecure: true`. The OCIRepository and its Secret come from the flux role's own
+      # templates with the break-glass lever on.
       - name: Break-glass - a bundle signed with the key the cluster holds
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
@@ -338,7 +338,7 @@ jobs:
       # The red half runs only after the green half passed, so a transport failure on both
       # cannot read as a refusal. It pushes to its own repository path, because cosign v3
       # stores a signature as a referrer of the digest and equal content would inherit the
-      # green signature (#4820).
+      # green signature.
       - name: Break-glass - a bundle signed with a key the cluster does not hold
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         env:
@@ -357,7 +357,7 @@ jobs:
           BUDGET=40 judge break-glass-red
           kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
-      # The fresh-cluster case (#7555) needs a second cluster, so the first one goes. crane
+      # The fresh-cluster case needs a second cluster, so the first one goes. crane
       # writes each pinned image's whole index as an OCI layout, which keeps the digest the
       # manifests name whichever image store the runner's Docker uses.
       - name: Fresh cluster - delete the drill cluster and archive the kit's images
@@ -412,7 +412,7 @@ jobs:
           while read -r ref tar; do
             # No --digests: it adds an import-DATE@<index.json digest> alias that fails CreateContainer.
             docker exec -i "$node" ctr -n k8s.io images import --all-platforms - < "$f/kit/$tar"
-            # CRI learns of an imported image from containerd's event stream, so it can lag the import (run 42527932176).
+            # CRI learns of an imported image from containerd's event stream, so it can lag the import.
             served=0
             for _ in 1 2 3 4 5 6 7 8 9 10; do
               if docker exec "$node" crictl inspecti "$ref" > /dev/null 2>&1; then served=1; break; fi
