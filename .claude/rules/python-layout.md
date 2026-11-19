@@ -113,8 +113,8 @@ Delete a check in the PR that obsoletes it, when either holds:
   `scripts/validate/k8s_manifests.py`'s OpenAPI validation usually swallow a single-shape
   guard. Name the covering check in the PR body.
 
-`scripts/dev/quiet_checks.py` lists each check file under `tests/` that cites an issue or a
-date and has not failed on master within its window. The list proposes candidates for these two
+`scripts/dev/repo_guards.py --drop-candidates --cited` lists each check file under `tests/`
+that cites an issue or a date and has not failed on master within its window. The list proposes candidates for these two
 tests. It is not a third condition: a check that never fails can still be load-bearing.
 
 A check that pins a skill's restatement of a tool's enum retires in the PR that makes the tool
