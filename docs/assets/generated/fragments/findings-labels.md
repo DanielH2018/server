@@ -2,9 +2,6 @@
 | Label | Colour | Meaning |
 |---|---|---|
 | `claude` | `#cba6f7` | Filed by Claude via scripts/dev/findings.py |
-| `kind/gap` | `#fab387` | Something missing that should exist |
-| `kind/improvement` | `#89b4fa` | Something present that could be better |
-| `kind/addition` | `#94e2d5` | A new capability |
 | `refuted` | `#6c7086` | Closed because a skeptic disproved the finding; do not reopen |
 | `accepted` | `#9399b2` | Closed because the operator accepted the trade-off; true, but do not reopen |
 | `escalated` | `#f5c2e7` | Re-observed three or more times; needs a durable owner |

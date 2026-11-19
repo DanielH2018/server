@@ -1162,8 +1162,8 @@ jobs:
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
       # Renovate reads from the release's checksums.txt.
       # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
-      NFPM_VERSION: v2.48.0
-      NFPM_SHA256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+      NFPM_VERSION: v2.49.0
+      NFPM_SHA256: 2afaa5ffb5e3493402e31e7c67a5a1fb42133e3f66fc315ca0051934125561c7
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
@@ -1204,22 +1204,18 @@ jobs:
       # Each side renders with the renderer in its own tree, so a renderer change that alters a
       # render shows as a diff. The base tree is a worktree at the merge base.
       #
-      # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that is
-      # not a render input, so it changes no render: the test image's build context and
-      # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
-      # tests/repo/test_host_package_case_inputs_census.py holds it to every
-      # `validate` module the cases script imports. The renderer is a render input, so it
-      # reaches the cases through `changed` when it alters a real render. This job builds what
-      # the cases read and the `host_packages` job invokes them, so an edit to either job counts
-      # too. `job-changed` compares each as parsed YAML, so a comment-only edit, or an edit to
-      # another job, does not. The cases'
-      # fixture exercises renderer paths no real package does, so `fixture-changed` renders it
-      # in each tree with that tree's renderer, and a differing fixture counts too.
+      # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that
+      # changes no render. `host_packages.py cases-changed` decides it: a path CASE_INPUTS
+      # names, an edit to a host package job, or a differing render of the cases' fixture.
+      # CASE_INPUTS is the one list of the cases' own inputs: the test image's build context
+      # and fixture specs, and the cases' own code.
+      # tests/repo/test_host_package_case_inputs_census.py holds it to every `validate`
+      # module the cases script imports. The renderer is a render input, so it reaches the
+      # cases through `changed` when it alters a real render.
       #
-      # Each verdict is captured on a line of its own, where `set -e` aborts the step when
+      # The verdict is captured on a line of its own, where `set -e` aborts the step when
       # the command fails. Inside a `[ "$(...)" = true ]` test the failure would read as
-      # `false` and skip the cases. Each is computed only when the arms before it
-      # did not fire.
+      # `false` and skip the cases.
       - name: Render every host package at the head and at the merge base
         id: render
         env:
@@ -1273,30 +1269,8 @@ jobs:
           else
             echo "upgrade=true" >> "$GITHUB_OUTPUT"
           fi
-          cases=false
-          # CASE_INPUTS is left unquoted so each line is its own pathspec.
-          # shellcheck disable=SC2086
-          if ! git diff --quiet "$base" HEAD -- $CASE_INPUTS; then
-            echo "::notice::This PR changes an input of the container cases, so they run."
-            cases=true
-          fi
-          if [ "$cases" = false ]; then
-            job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
-              --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages \
-              --job host_packages_bootstrap --job k3s_download)
-            if [ "$job" = true ]; then
-              echo "::notice::This PR changes the host package jobs' steps, so the cases run."
-              cases=true
-            fi
-          fi
-          if [ "$cases" = false ]; then
-            fixture=$(uv run python scripts/validate/host_packages.py fixture-changed \
-              "$RUNNER_TEMP/base-tree" .)
-            if [ "$fixture" = true ]; then
-              echo "::notice::This PR changes how the cases' fixture renders, so the cases run."
-              cases=true
-            fi
-          fi
+          cases=$(uv run python scripts/validate/host_packages.py cases-changed "$base" \
+            "$RUNNER_TEMP/base-tree" --inputs "$CASE_INPUTS")
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
 
       # The two scans read the head render's package roots alone, so they sit here, after

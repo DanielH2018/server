@@ -1039,14 +1039,14 @@ They need no secrets, and they do these steps:
    `CASE_INPUTS` on the render step lists them, and
    `tests/repo/test_host_package_case_inputs_census.py` holds that list to
    every `validate` module the cases script imports (#5004). An edit to either job counts
-   too, because one builds what the cases read and the other invokes them.
-   `host_packages.py job-changed` compares each job as parsed YAML, so an edit to a comment
-   alone does not count. A renderer change that alters only the cases' fixture counts too,
-   because the fixture exercises renderer paths no real package does until H3.6.
-   `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
-   renderer and compares the output, so an edit to the renderer's files alone does not count
-   (#5066). Such a PR runs steps 3 to 5. Each of these verdicts fails the step when it cannot
-   be computed, rather than reading as no change (#5071).
+   too, because one builds what the cases read and the other invokes them. The comparison
+   is of each job as parsed YAML, so an edit to a comment alone does not count. A renderer
+   change that alters only the cases' fixture counts too, because the fixture exercises
+   renderer paths no real package does until H3.6. The fixture renders in each tree with
+   that tree's own renderer, so an edit to the renderer's files alone does not count
+   (#5066). `host_packages.py cases-changed` decides all three, and such a PR runs steps 3
+   to 5. The command fails the step when it cannot decide, rather than reading as no
+   change (#5071).
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It pulls or builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not

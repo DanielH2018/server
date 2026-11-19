@@ -84,7 +84,7 @@ session, remember-me included.
   `tests/services/test_smtp_wiring.py`.
 - **With OIDC on, the config file is a Go template, so it may hold one `{{` only.** A secret value
   holding `{{` would stop Authelia starting. `cluster_vars.py write` refuses a `{{` in any
-  value, naming the key and never the value. `oidc-jwk-secret.yaml` must stay in the `manifests_secret_files` expression,
+  value, naming the key and never the value. `oidc-jwk-secret.yaml` must stay in the `manifests_files` expression,
   because a passed list wins whole. Log level `trace` writes each filtered config, the key
   included, to the log as base64. ENFORCED:
   `tests/services/test_authelia_oidc_jwk_secret.py`.

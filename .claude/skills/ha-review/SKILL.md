@@ -40,7 +40,7 @@ include:
 
 ## 3. Output format the agent must return
 Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (role source), what's
-wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
+wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [FEATURE]**. Note verified-clean areas in
 one line. End with a **3-bullet top-priorities** summary. Be specific and skeptical: 5 real findings beat
 20 speculative ones.
 
