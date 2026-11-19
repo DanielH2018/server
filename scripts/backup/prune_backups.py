@@ -29,17 +29,12 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path as _Path
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "lib"))
-sys.path.insert(
-    0, str(_Path(__file__).resolve().parents[2] / "hosts" / "lib")
-)  # host_lib
 from diagnostics.probe_lib import core
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import B2_DRAIN_ERRORED, B2_DRAIN_OK, B2_DRAIN_REFUSED
 from lib.kubectl import K3S_KUBECONFIG, MissingKubectl, kubectl_argv
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
-from longhorn_lib.longhorn_backups import B2_TARGET
+from lib.longhorn_lib.longhorn_backups import B2_TARGET
 
 LONGHORN_NAMESPACE = "longhorn-system"
 DRAIN = str(_Path(__file__).resolve().parent / "b2_drain.py")
