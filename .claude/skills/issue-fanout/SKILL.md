@@ -268,7 +268,10 @@ The landing marks the draft ready, or a landing batch tests it with other drafts
 first CI run is the one it merges on (`docs/ci-throughput.md`, D9). A landing that ends
 `pr-ci-red` resumes the agent once, and the pipeline lands the PR again. It also resumes the agent for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. A daniel-server PR the pipeline did not land is left to `homelab-claude-fanout-server-lander.timer` on daniel-box, which applies the same PR rule and so leaves a held PR for a person. It lands a PR within about
+landing's log. A landing that ends `merge-conflict` resumes the agent once to rebase the
+branch onto master, a fresh reviewer reads the resolution, and the pipeline lands the PR
+again (`docs/issue-claiming-and-fanout.md`, *A batch whose landing conflicts with master*).
+Any other verdict ends the batch. A daniel-server PR the pipeline did not land is left to `homelab-claude-fanout-server-lander.timer` on daniel-box, which applies the same PR rule and so leaves a held PR for a person. It lands a PR within about
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
 head, with no operator step in its body. Run `probe.py lander` before
@@ -370,7 +373,10 @@ PR from this session with `land.sh`. A daniel-server batch whose PR the server l
 for a person reads `needs-input: the server lander will not land #N`, with the next step
 and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`). A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
-failure, then fix the branch or re-run the CI before landing.
+failure, then fix the branch or re-run the CI before landing. A batch whose landing
+conflicted with master a second time, or with too little run time left for its one resume,
+reads `needs-input` with the conflicting files named: rebase the branch onto
+`origin/master`, push, and land the PR again.
 
 **`parked` is a batch whose landing another PR's `DEPLOY_HOLD`, or a merge rule, stopped.**
 Its line starts `parked:` and names the re-land. Run `cc-wait landing-clear`, then the
