@@ -23,6 +23,7 @@ from lib.render_guard import entry_tags, k8s_services, load_yaml, services_file
 from lib.summary import grouped
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
+from lib import snapshot_uv
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
@@ -142,21 +143,21 @@ def check_one(
     """
 
     tools = tools or GateTools()
+    tree = cwd or REPO
 
     def probe(extra: list[str]) -> tuple[int, str]:
         """Run probe.py health for `tag` with `extra` args; return (exit code, first line)."""
         try:
             res = tools.run(
-                [
-                    "uv",
-                    "run",
+                snapshot_uv.argv(
+                    tree,
                     "python",
                     "scripts/diagnostics/probe.py",
                     "health",
                     tag,
                     *extra,
-                ],
-                cwd=cwd or REPO,
+                ),
+                cwd=tree,
                 capture_output=True,
                 text=True,
                 timeout=PROBE_TIMEOUT_S,
