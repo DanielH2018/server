@@ -183,12 +183,9 @@ traefik_k8s_access_log_keep: 2
 manifests_files: >-
   {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
       'deployment.yaml', 'service.yaml', 'metrics-service.yaml',
-      'dashboard-ingressroute.yaml']
+      'dashboard-ingressroute.yaml', 'origin-pull-secret.yaml']
      + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
-     + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
-
-manifests_secret_files: >-
-  {{ ['origin-pull-secret.yaml']
-     + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
+     + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
      + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
+     + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
      + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}

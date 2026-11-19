@@ -313,7 +313,7 @@ SHARED_MANIFEST_DEFAULTS = {
 # textually rather than by loading the file: authelia and traefik build their lists with a folded
 # `>-` expression that no plain YAML load resolves to a list at all.
 _MANIFEST_FILE_KEY = re.compile(
-    r"^(?P<indent>\s*)(?P<key>manifests_(?:secret_|exclude_|deferred_)?files):(?P<rest>.*)$"
+    r"^(?P<indent>\s*)(?P<key>manifests_(?:exclude_|deferred_)?files):(?P<rest>.*)$"
 )
 _MANIFEST_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml\b")
 _YAML_COMMENT = re.compile(r"(^|\s)#.*$")
@@ -326,9 +326,6 @@ MANIFEST_TEMPLATE_GLOB = "*.yaml.j2"
 # A one-off Job is staged in a reserved directory by the role's own task and applied on its own
 # (registry's selftests, the netpol probes). In the directory apply it would run on every deploy.
 JOB_MANIFEST_SUFFIX = "-job.yaml"
-# A basename naming a Secret renders 0600 under no_log. Every secret template in the tree is
-# named this way; a test refuses a Secret template that is not, unless its role lists it itself.
-SECRET_MANIFEST_NAME = re.compile(r"(^|-)secret[-.]")
 # The containers_list key that earns a role each shared default, when it ships no own template.
 SHARED_DEFAULT_TRIGGERS = {"service.yaml": "port", "ingressroute.yaml": "hostname"}
 
@@ -344,7 +341,6 @@ RENDER_KEYS = frozenset(
         "manifests_outside_secrets",
         "manifests_prune",
         "manifests_rollout",
-        "manifests_secret_files",
         "manifests_self_rollouts",
     }
 )
@@ -399,18 +395,14 @@ def _cached_k8s_entries() -> dict[str, dict]:
     return k8s_entries()
 
 
-def resolved_manifest_files(
-    role, k8s_roles=None, entry=None
-) -> tuple[set[str], set[str]]:
-    """`(manifests_files, manifests_secret_files)` as the renderer resolves them for `role`.
+def resolved_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
+    """Every manifest basename the renderer renders for `role`.
 
-    A list the role sets wins. Otherwise the list is derived:
-
-    - its secret files are its own manifest templates whose name says `secret`;
-    - its files are the rest of its own manifest templates, minus any one-off `-job.yaml`, its
-      `manifests_deferred_files` and its `manifests_exclude_files`, plus `service.yaml` and
-      `ingressroute.yaml` from the shared defaults when its containers_list entry carries a
-      `port` or a `hostname` and it ships no template of that name.
+    A `manifests_files` the role sets wins. Otherwise the list is derived: the role's own
+    manifest templates, minus any one-off `-job.yaml`, its `manifests_deferred_files` and its
+    `manifests_exclude_files`, plus `service.yaml` and `ingressroute.yaml` from the shared
+    defaults when its containers_list entry carries a `port` or a `hostname` and it ships no
+    template of that name.
 
     `entry` is the containers_list entry. Omitted, it is read from the k8s host's vars for the
     real tree, and taken as `{}` for any other `k8s_roles`, whose caller holds its own entries
@@ -422,43 +414,27 @@ def resolved_manifest_files(
     """
     roles_dir = Path(k8s_roles or K8S_ROLES)
     named = _named_files(role, roles_dir)
+    if "manifests_files" in named:
+        return named["manifests_files"]
     templates = roles_dir / role / "templates"
     own = (
         {p.name.removesuffix(".j2") for p in templates.glob(MANIFEST_TEMPLATE_GLOB)}
         if templates.is_dir()
         else set()
     )
-    candidates = {
-        name for name in own if not name.endswith(JOB_MANIFEST_SUFFIX)
-    } - named.get("manifests_exclude_files", set())
-    if "manifests_secret_files" in named:
-        secret = named["manifests_secret_files"]
-    else:
-        secret = {name for name in candidates if SECRET_MANIFEST_NAME.search(name)}
-    if "manifests_files" in named:
-        return named["manifests_files"], secret
     if entry is None:
         entry = _real_entry(role) if roles_dir == K8S_ROLES else {}
     shared = {
         basename
         for basename, key in SHARED_DEFAULT_TRIGGERS.items()
         if key in entry and basename not in own
-    } - named.get("manifests_exclude_files", set())
-    files = (
-        (candidates | shared) - secret - named.get("manifests_deferred_files", set())
+    }
+    candidates = {name for name in own if not name.endswith(JOB_MANIFEST_SUFFIX)}
+    return (
+        (candidates | shared)
+        - named.get("manifests_exclude_files", set())
+        - named.get("manifests_deferred_files", set())
     )
-    return files, secret
-
-
-def declared_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
-    """Every manifest basename the renderer renders for `role`.
-
-    Its files and its secret files, as `resolved_manifest_files` resolves them. The deploy
-    renders exactly these, so this is also the list an offline harness has to cover to render
-    what a deploy renders.
-    """
-    files, secret = resolved_manifest_files(role, k8s_roles, entry)
-    return files | secret
 
 
 def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None:
@@ -479,7 +455,7 @@ def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None
     if own.is_file():
         return own
     shared = SHARED_MANIFEST_DEFAULTS.get(basename)
-    if shared and basename in declared_manifest_files(role, roles_dir, entry):
+    if shared and basename in resolved_manifest_files(role, roles_dir, entry):
         return SHARED_TPL / shared
     return None
 
@@ -490,7 +466,7 @@ def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
     Sorted, so a harness iterating this renders in a stable order.
     """
     roles_dir = Path(k8s_roles or K8S_ROLES)
-    declared = declared_manifest_files(role, roles_dir, entry)
+    declared = resolved_manifest_files(role, roles_dir, entry)
     return sorted(
         SHARED_TPL / shared
         for basename, shared in SHARED_MANIFEST_DEFAULTS.items()

@@ -168,7 +168,7 @@ def test_the_shared_apply_carries_instance_one_only():
     """`manifests_files` is the directory the shared role applies in one request. Naming
     `deployment-2.yaml` there would put both Deployments back in that request and re-open the
     simultaneous-apply outage with every other guard in this file still green."""
-    files, _secret = resolved_manifest_files("pihole")
+    files = resolved_manifest_files("pihole")
     assert "deployment.yaml" in files, files
     assert "deployment-2.yaml" not in files, (
         "instance 2 must not be staged in the directory the shared role applies — "

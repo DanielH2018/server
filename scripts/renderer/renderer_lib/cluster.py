@@ -6,8 +6,8 @@ name no layer supplies stops the render, where the render guards' `StubUndefined
 
 The file rules:
 
-- The file lists come from `resolved_manifest_files`, or from the role's own
-  `manifests_files` and `manifests_secret_files` where it sets them.
+- The file list comes from `resolved_manifest_files`, or from the role's own
+  `manifests_files` where it sets one.
 - A basename the role ships no template for renders from the shared default in
   `k8s/templates/`, `service.yaml` and `ingressroute.yaml`.
 - Each `k8s_claims` entry renders `claim-default.yaml.j2` to `claim-<name>.yaml`.
@@ -104,7 +104,6 @@ NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
 INCLUDE_KEYS = frozenset(
     {
         "manifests_files",
-        "manifests_secret_files",
         "manifests_deferred_files",
         "manifests_deferred_dir_name",
         "manifests_prune",
@@ -255,7 +254,7 @@ def _sources(
 
     The role's own `<templates>/<name>.j2` wins, `templates` defaulting to the tree role's
     `templates/`. A basename in `SHARED_MANIFEST_DEFAULTS` the role ships no template for takes
-    the shared default, unless `own_only`, as for secret files.
+    the shared default, unless `own_only`, as for deferred files.
 
     Raises:
         RenderError: A basename has no template, which Ansible reports as "Could not find or
@@ -366,11 +365,9 @@ def render_tag(
     refusal = sync_suspend_refusal(tag, ansible_bool(ctx.get(SYNC_SUSPEND_KEY, False)))
     if refusal:
         raise RenderError(refusal)
-    files, secret = resolved_manifest_files(tag, roles, entry=entry)
+    files = resolved_manifest_files(tag, roles, entry=entry)
     if "manifests_files" in include:
         files = set(include["manifests_files"])
-    if "manifests_secret_files" in include:
-        secret = set(include["manifests_secret_files"])
     deferred = set(include.get("manifests_deferred_files") or [])
     # Through `bool`, as the render tasks read it: an include's quoted "false" is False.
     prune = ansible_bool(include.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT))
@@ -390,10 +387,7 @@ def render_tag(
     rendered = {}
     sources = {}
     templates = role_dir / "templates"
-    for name, src in {
-        **_sources(tag, files, False, templates),
-        **_sources(tag, secret, True, templates),
-    }.items():
+    for name, src in _sources(tag, files, False, templates).items():
         rendered[name] = render(src, name, prune, item=name)
         sources[name] = src.name
     for claim in ctx.get("k8s_claims") or []:
