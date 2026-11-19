@@ -92,8 +92,10 @@ FAMILIES: dict[str, Family] = {
         rf"hosts/components/(?!{_COMPOSE_TREES}).*|hosts/[^/]+/package\.yml"
         r"|k8s/roles/.*\.sh\.j2|scripts/validate/(validate_lib/shell_lint|render_lib/shell)\.py",
     ),
-    # Every file under hosts/: the family renders every host package, and a package unit may be
-    # a static file.
+    # DECIDED: every file under hosts/, so a compose-template-only commit runs units too. The
+    # family renders every host package, and the daniel-pi package renders the compose trees
+    # under the host renderer's own secret rules, which the compose family does not apply. A
+    # package unit may also be a static file.
     "units": _family(
         units.run,
         r"hosts/.*|k8s/roles/.*\.(service|timer|socket|rules)\.j2|scripts/validate/render_lib/units\.py",
