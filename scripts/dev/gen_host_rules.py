@@ -27,8 +27,10 @@ A SELECTOR picks hosts from the host table:
 
 A PLACEHOLDER `${name}` in any string of an expanded rule takes the host's value: `host`, `job`,
 `limit_seconds`, `limit` (that limit as the annotations write a duration), and the variable a
-`host_var` selector names. A rule with no `hosts:` key is copied as it stands, and an unknown
-placeholder, or one in a rule with no `hosts:`, is an error.
+`host_var` selector names. Every rule, with a `hosts:` key or without, also takes the host
+table's counts: `host_count`, and `count_<job>` for each scrape job (`count_node`,
+`count_node_pi`), so a coverage floor follows the table. A rule with no `hosts:` key is
+otherwise copied as it stands, and an unknown placeholder is an error.
 
 `per_host: {<host>: {...}}` merges a partial rule over one host's copy, for the copies that
 differ in more than their placeholders.
@@ -166,14 +168,24 @@ def _merge(base: dict, over: dict) -> dict:
     return merged
 
 
+def counts(facts: dict[str, dict]) -> dict[str, int]:
+    """The host table's counts every rule can read: `host_count` and `count_<job>`."""
+    found = {"host_count": len(facts)}
+    for fact in facts.values():
+        key = "count_" + fact["job"].replace("-", "_")
+        found[key] = found.get(key, 0) + 1
+    return found
+
+
 def expand(rules: list[dict], facts: dict[str, dict]) -> list[dict]:
     """The rule list a table's `rules` render to: one copy per selected host."""
+    totals = counts(facts)
     out = []
     for rule in rules:
         alert = rule.get("alert", rule.get("record"))
         body = {key: value for key, value in rule.items() if key not in TABLE_KEYS}
         if "hosts" not in rule:
-            out.append(_filled(body, {}, alert))
+            out.append(_filled(body, totals, alert))
             continue
         picked = select(rule["hosts"], facts)
         overrides = rule.get("per_host") or {}
@@ -183,7 +195,11 @@ def expand(rules: list[dict], facts: dict[str, dict]) -> list[dict]:
                 f"{alert}: per_host names {stray}, which its selector skips"
             )
         for host, found in picked:
-            out.append(_filled(_merge(body, overrides.get(host) or {}), found, alert))
+            out.append(
+                _filled(
+                    _merge(body, overrides.get(host) or {}), {**totals, **found}, alert
+                )
+            )
     return out
 
 

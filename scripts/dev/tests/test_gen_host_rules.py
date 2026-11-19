@@ -84,6 +84,15 @@ def test_a_new_host_gains_the_copies_its_selectors_take_with_no_table_edit(facts
     assert 'device="eth9",origin="daniel-new"' in wired["expr"]
 
 
+def test_a_new_host_raises_the_coverage_floors(facts):
+    new = {"job": "node", "limit_seconds": 3600, "components": set(), "host_vars": {}}
+    copies = _copies(g.render("hosts", facts={**facts, NEW_HOST: new}))
+    [disk] = copies["HostCoverageShortfall"]
+    [temperature] = copies["HostTemperatureCoverageShortfall"]
+    assert disk["expr"].count("or vector(0)) < 3,") == 5
+    assert "or vector(0)) < 4," in temperature["expr"]
+
+
 def test_a_per_host_override_reaches_its_host_alone(facts):
     copies = _copies(g.render("hosts", facts=facts))
     arms = {
@@ -132,6 +141,10 @@ def test_a_selector_picks_its_hosts_is_clean(selector, hosts):
         (_rule(hosts="all", summary="${unknown}"), "${unknown} has no value"),
         (_rule(hosts=["b"], summary="${limit}"), "${limit} has no value"),
         (_rule(), "${host} has no value"),
+        (
+            _rule(expr="up == 0", summary="${count_node_fixture}"),
+            "${count_node_fixture} has no value",
+        ),
         (_rule(hosts=["a"], per_host={"b": {}}), "per_host names ['b']"),
     ],
 )

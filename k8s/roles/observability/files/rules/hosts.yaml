@@ -427,19 +427,19 @@ groups:
   - alert: HostCoverageShortfall
     expr: |
       label_replace(
-        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/", origin!~"daniel-pi"})) or vector(0)) < 2,
+        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/", job="node"})) or vector(0)) < 2,
         "arm", "disk /", "", "")
       or
       label_replace(
-        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot", origin!~"daniel-pi"})) or vector(0)) < 2,
+        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot", job="node"})) or vector(0)) < 2,
         "arm", "disk /boot", "", "")
       or
       label_replace(
-        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot/efi", origin!~"daniel-pi"})) or vector(0)) < 2,
+        (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot/efi", job="node"})) or vector(0)) < 2,
         "arm", "disk /boot/efi", "", "")
       or
       label_replace(
-        (count(count by (origin) (node_memory_MemAvailable_bytes{origin!~"daniel-pi"})) or vector(0)) < 2,
+        (count(count by (origin) (node_memory_MemAvailable_bytes{job="node"})) or vector(0)) < 2,
         "arm", "memory", "", "")
       or
       label_replace(
@@ -454,7 +454,7 @@ groups:
         Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the
         floor of 2.
       description: >-
-        The {{ $labels.arm }} check reads one series family from every node-exporter and needs two hosts
+        The {{ $labels.arm }} check reads one series family from every node-exporter and needs 2 hosts
         answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not idle. Read the node
         scrape targets on Prometheus.
   - alert: HostTemperatureCoverageShortfall
@@ -470,9 +470,9 @@ groups:
       summary: >-
         Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of 3.
       description: >-
-        The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts, and {{
-        $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the node scrape targets
-        on Prometheus.
+        The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and {{ $value
+        | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the node scrape targets on
+        Prometheus.
   - alert: HostClockUnsynchronised
     expr: |
       label_replace(

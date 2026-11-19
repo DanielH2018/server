@@ -338,60 +338,63 @@ groups:
             collector on the host.
       # The bridge's estate-wide floors (_host_origin_shortfall), and the zero-series case: a
       # vanished scrape target leaves every per-host arm above with nothing to read, and `or
-      # vector(0)` turns an empty count into 0 < 2. The floor is 2 for disk and memory, which
-      # exclude daniel-pi by name, and 2 for thermal throttling because the Pi publishes no
-      # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
+      # vector(0)` turns an empty count into 0 under the floor. The floor is the number of
+      # `node`-job hosts in observability_expected_hosts: disk and memory read that job alone,
+      # and thermal throttling counts only those hosts because the Pi publishes no Processor
+      # cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
       # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
       # as well as through ScrapeTargetDown, the safe direction.
-      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is.
+      # DECIDED: the floor on every arm is every `node`-job host, the bridge's floor of 2 when the
+      # rule shipped, so a k3s node added to the host table raises it.
       - alert: HostCoverageShortfall
         expr: |
           label_replace(
-            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/", origin!~"daniel-pi"})) or vector(0)) < 2,
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/", job="node"})) or vector(0)) < ${count_node},
             "arm", "disk /", "", "")
           or
           label_replace(
-            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot", origin!~"daniel-pi"})) or vector(0)) < 2,
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot", job="node"})) or vector(0)) < ${count_node},
             "arm", "disk /boot", "", "")
           or
           label_replace(
-            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot/efi", origin!~"daniel-pi"})) or vector(0)) < 2,
+            (count(count by (origin) (node_filesystem_size_bytes{mountpoint="/boot/efi", job="node"})) or vector(0)) < ${count_node},
             "arm", "disk /boot/efi", "", "")
           or
           label_replace(
-            (count(count by (origin) (node_memory_MemAvailable_bytes{origin!~"daniel-pi"})) or vector(0)) < 2,
+            (count(count by (origin) (node_memory_MemAvailable_bytes{job="node"})) or vector(0)) < ${count_node},
             "arm", "memory", "", "")
           or
           label_replace(
-            (count(count by (origin) (node_cooling_device_cur_state{type="Processor"})) or vector(0)) < 2,
+            (count(count by (origin) (node_cooling_device_cur_state{type="Processor"})) or vector(0)) < ${count_node},
             "arm", "thermal-throttle", "", "")
         for: 15m
         labels:
           severity: warning
           service: observability
         annotations:
-          summary: Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the floor of 2.
+          summary: Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the floor of ${count_node}.
           description: >-
             The {{ $labels.arm }} check reads one series family from every node-exporter and needs
-            two hosts answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not
+            ${count_node} hosts answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not
             idle. Read the node scrape targets on Prometheus.
-      # A floor of 3 hosts over the series that survive the nvme_ exclusion, with `for: 25m` for
-      # the bridge's 5-cycle streak x 300s.
-      # DECIDED: a floor of 3 hosts, the bridge's value kept as is.
+      # A floor of every host in observability_expected_hosts, over the series that survive the
+      # nvme_ exclusion, with `for: 25m` for the bridge's 5-cycle streak x 300s.
+      # DECIDED: the floor is every host, the bridge's floor of 3 when the rule shipped, so a host
+      # added to the host table raises it.
       - alert: HostTemperatureCoverageShortfall
         expr: |
           label_replace(
-            (count(count by (origin) (node_hwmon_temp_celsius{chip!~".*nvme_.*"})) or vector(0)) < 3,
+            (count(count by (origin) (node_hwmon_temp_celsius{chip!~".*nvme_.*"})) or vector(0)) < ${host_count},
             "arm", "temperature", "", "")
         for: 25m
         labels:
           severity: warning
           service: observability
         annotations:
-          summary: Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of 3.
+          summary: Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of ${host_count}.
           description: >-
-            The host temperature check needs a non-NVMe hwmon sensor from each of the three hosts,
-            and {{ $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the
+            The host temperature check needs a non-NVMe hwmon sensor from each of the ${host_count}
+            hosts, and {{ $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the
             node scrape targets on Prometheus.
       # Clock skew breaks TOTP logins, ACME, etcd and Loki ingestion, and none of those failures
       # names the clock. The kernel's NTP state, from node-exporter's timex collector: the
