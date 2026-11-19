@@ -1,0 +1,132 @@
+{#
+  The plain Flux-applied Job: a script in a digest-named ConfigMap, run once under nobody by a
+  digest-named Job, and the token-less ServiceAccount it runs as.
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
+  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
+  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
+  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
+  `templates/verify/` and `templates/precheck/` file (`render_tag`); import this file
+  `with context` so the macros read them and `k8s_namespace`.
+
+  The caller does every `lookup()`, as in `arr-notification-seed.yml.j2`: the static scans
+  that follow a role's lookups read only the role's own templates.
+
+  Every `#` line in the arguments renders into the manifest, so each text argument is the YAML
+  it renders, written at column 0; the macro trims and indents it.
+
+  `digest_job` arguments:
+
+    name         the Job's name before its digest, and the ConfigMap's unless `configmap`
+                 is given.
+    script       the script's file name: its ConfigMap key, and the file `python3` runs.
+    script_text  the script, from the caller's `lookup('file', role_file(...))`.
+    head         the spec's keys above `template:`: `backoffLimit`, `activeDeadlineSeconds`
+                 and their comments.
+    env          the container's env entries. The macro appends `PYTHONDONTWRITEBYTECODE`.
+    sa           the ServiceAccount, which is also the pod's `app` label: the name fences
+                 admit or refuse the Job's pod by. Default: `name`.
+    configmap    the ConfigMap's name before its digest. Default: `name`.
+    container    the container's name; the script mounts at `/<container>`.
+    label_note   comment lines above the `app` label.
+    token_note   the comment line above `automountServiceAccountToken: false`.
+    annotations  the Job's annotations, `homelab/job-kind` among them.
+#}
+{% macro digest_job(name, script, script_text, head, env, sa=none, configmap=none,
+                    container='verify', label_note='',
+                    token_note='# The Job reads no Kubernetes API, so its pod holds no token.',
+                    annotations='homelab/job-kind: verify') %}
+{% set sa = sa or name %}
+{% set script_dir = '/' + container %}
+{% set data = {
+  script: script_text,
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = (configmap or name) + '-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% set spec_text %}
+{{ head | trim }}
+template:
+  metadata:
+    labels:
+{% if label_note %}
+{{ label_note | trim | indent(6, true) }}
+{% endif %}
+      app: {{ sa }}
+  spec:
+    serviceAccountName: {{ sa }}
+    {{ token_note }}
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    enableServiceLinks: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: {{ container }}
+        image: {{ flux_job_image }}
+        imagePullPolicy: IfNotPresent
+        command:
+          - python3
+          - {{ script_dir }}/{{ script }}
+        env:
+{{ env | trim | indent(10, true) }}
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: {{ k8s_namespace }}
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ name }}-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: {{ k8s_namespace }}
+  annotations:
+{{ annotations | trim | indent(4, true) }}
+spec:
+{{ spec_text | indent(2, true) }}
+{%- endmacro %}
+
+{#- `name`'s ServiceAccount, with no Role and no token: a Job that calls no Kubernetes API. -#}
+{% macro verify_sa(name) %}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ name }}
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
+{%- endmacro %}
