@@ -69,9 +69,9 @@ _SHARED = (
     r"|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\.py"
     r"|scripts/validate/(render_templates|validate_lib/(ok_lines|shipped_render))\.py"
     r"|inventory/(host_vars/[^/]+|group_vars/all)\.yml"
-    r"|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments"
-    r"|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard"
-    r"|repo_paths|role_files|yaml_fast)\.py"
+    r"|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|cli_help|exit_codes|estate"
+    r"|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml"
+    r"|render_context|render_guard|repo_paths|role_files|yaml_fast)\.py"
 )
 
 # The Pi's compose trees, which only the compose family and the host package render read.
