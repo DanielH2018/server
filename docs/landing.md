@@ -452,6 +452,12 @@ master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 K
 Read the full log only for a job whose failure the summary does not explain. To survey red
 attempts across a date range, run `scripts/dev/ci_failures.py`.
 
+**To grep a raw log for the errors that fired, match `##[error]`, not `::error`.** GitHub
+writes an emitted `::error::` command into the log as a `##[error]` line. Each step's
+`##[group]Run` header prints that step's script source, so a `::error` grep also returns the
+guard lines of every step that ran, including the guards that passed. Most steps of
+`promote.yml` carry such guards.
+
 **A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct
 merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` reads anything
