@@ -306,6 +306,28 @@ def test_a_day_of_runs_stays_under_the_loki_line_budget():
     )
 
 
+def test_every_slot_the_estimate_returns_is_a_tag_the_script_recognises():
+    """A slot missing from TIME_TAGS reads as no tag at all, so every bookmark in it is
+    re-tagged, with an INFO line and an API write, on every run."""
+    tree = _tree()
+    recognised = next(
+        ast.literal_eval(n.value)
+        for n in _class(tree).body
+        if isinstance(n, ast.Assign)
+        and any(getattr(t, "id", None) == "TIME_TAGS" for t in n.targets)
+    )
+    returned = {
+        str(r.value.value)
+        for r in ast.walk(_method(tree, "estimate_reading_time"))
+        if isinstance(r, ast.Return) and isinstance(r.value, ast.Constant)
+    }
+    assert {"0-5m", "30m+"} <= returned, returned
+    assert returned <= set(recognised), (
+        f"estimate_reading_time returns {sorted(returned - set(recognised))}, which "
+        "TIME_TAGS does not list, so those bookmarks are re-tagged on every run"
+    )
+
+
 def test_the_script_handler_rejects_the_library_records_its_own_sink_prints():
     """karakeep_python_api prints its records through its own sink, so an unfiltered
     script handler would ship each of them twice."""
