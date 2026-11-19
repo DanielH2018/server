@@ -77,6 +77,26 @@ Only a `land` row is cancellable (`hosts/components/deploy-ui/tests/test_deploy_
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
 `inventory/group_vars/all.yml:server_git_tree_lock`.
 
+## Landing queue
+
+The *Landing queue* table opens the page. It lists each `land` row of `/api/inflight` with the
+step that landing is at: the step boxes, the newest `== arm` or `== <n>/<of>` header, and the
+newest line under it. That line names the sub-state, such as "waiting for the landing turn" or
+the promotion wait. The page renders the queue from the in-flight poll, so it adds no request.
+
+`reads.landing_step` finds the step, and `App._step` feeds it every line of the log. The viewer's
+`read_log` keeps only the first `MAX_LOG_BYTES`, and the current step is the last header
+(`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_inflight_step_comes_from_past_the_viewer_cap_is_flagged`).
+A row whose log is not a readable landing log carries `step: null`, and a failed read never
+makes the panel unavailable, because `cancel` reads the panel for its pids
+(`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_inflight_unreadable_log_leaves_step_blank_and_panel_up_is_flagged`).
+
+The rows sort furthest step first, then longest running
+(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_page_renders_the_landing_queue_from_the_inflight_rows_is_clean`).
+That is a display order, not a turn order. The landing turn and slot locks are taken by
+polling, not FIFO, so the page numbers no positions. The queue reads only the logs; the lock
+panel still watches the tree lock alone.
+
 ## Writes
 
 Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`
