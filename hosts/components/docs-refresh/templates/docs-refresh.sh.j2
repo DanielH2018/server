@@ -326,8 +326,9 @@ fi
 # REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs. Nothing
 # else writes it: CI's measured check (`pytest_shard.py --check-durations`) only annotates, and
 # a module the table lacks is packed at its directory's median. --refresh-runner 3 downloads
-# every pytest leg's log from the three newest green master runs through the deploy user's
-# `gh`, the same CLI the publish step uses. It adds modules the table lacks, drops deleted ones,
+# every pytest leg's log from the three newest runs that tested a green master tree, through
+# the deploy user's `gh`, the same CLI the publish step uses. A push to master skips its legs
+# when a pull-request run already tested its tree, and that run is then the one read. It adds modules the table lacks, drops deleted ones,
 # and rewrites a present row only past the DRIFT_RATIO band, so most runs leave it
 # byte-identical and publish nothing.
 #
@@ -337,7 +338,7 @@ fi
 #
 # A WAN outage does not reach this step: the unlanded check above reads origin first and exits.
 # A FAILURE DEGRADES THE RUN, IT DOES NOT ABORT IT (GENERATORS_OK, not an early exit). A `gh`
-# error or fewer than three green runs writes nothing, the pages are still worth publishing,
+# error or fewer than three measured runs writes nothing, the pages are still worth publishing,
 # and the run reports DOWN with the reason named. `timeout` bounds the step so a wedged call
 # fails this run rather than hanging it, which would leave DocsRefreshNotReporting as the only
 # sign.
