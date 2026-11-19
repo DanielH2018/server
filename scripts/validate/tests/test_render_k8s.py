@@ -127,13 +127,6 @@ def real_tree_stdout(real_tree):
 _UNCOVERED = "matched neither the v"
 
 
-def test_a_clean_file_is_listed_only_through_the_ok_printer(real_tree_stdout):
-    """About 150 `[ok]` lines buried the `[FAIL]` ones; they print only under `-v`."""
-    failures, out = real_tree_stdout
-    assert failures == 0
-    assert "[ok]" not in out
-
-
 def test_the_real_tree_leaves_no_object_unchecked(real_tree_stdout):
     """Coverage, enforced rather than observed.
 

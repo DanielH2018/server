@@ -69,18 +69,32 @@ def test_verbose_passes_the_ok_lines_through(capsys):
     assert "  [ok]   x\n" in capsys.readouterr().out
 
 
-def test_every_path_the_hook_matches_selects_a_family():
+def _hook_pattern() -> re.Pattern[str]:
     hooks = [
         hook
         for repo in tomllib.loads((REPO / "prek.toml").read_text())["repos"]
         for hook in repo.get("hooks", [])
         if hook["id"] == "validate-render-templates"
     ]
-    pattern = re.compile(hooks[0]["files"])
-    tracked = run(["git", "ls-files"], cwd=REPO, check=True).stdout.splitlines()
-    matched = [path for path in tracked if pattern.search(path)]
+    return re.compile(hooks[0]["files"])
+
+
+def _tracked() -> list[str]:
+    return run(["git", "ls-files"], cwd=REPO, check=True).stdout.splitlines()
+
+
+def test_every_path_the_hook_matches_selects_a_family():
+    pattern = _hook_pattern()
+    matched = [path for path in _tracked() if pattern.search(path)]
     assert "hosts/components/pi-compose/services/alloy/compose.yaml.j2" in matched
     assert [path for path in matched if not _chosen(path)] == []
+
+
+def test_the_hook_matches_every_path_a_family_selects():
+    pattern = _hook_pattern()
+    selected = [path for path in _tracked() if _chosen(path)]
+    assert "k8s/roles/longhorn/defaults/main.yml" in selected
+    assert [path for path in selected if not pattern.search(path)] == []
 
 
 def test_a_compose_template_selects_compose_and_the_host_render_only():
