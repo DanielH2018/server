@@ -15,7 +15,6 @@ RESULTS = (
     "HOOKS",
     "PR_GATES",
     "PYTEST",
-    "DECK_MOD",
     "LOCKFILE",
     "FLUX_ROUNDTRIP",
     "SOPS_TYPE_PROOF",
