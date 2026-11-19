@@ -16,7 +16,7 @@ default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops o
 # then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit
 # syncs pass `--compile-bytecode` instead (checkout_sync.py, claude-clone-sync.sh, CI's setup
 # action), so a root importer of daniel-box's checkout or the agent clone still finds bytecode
-# the syncing user wrote (#6984). A session worktree's venv goes uncompiled.
+# the syncing user wrote. A session worktree's venv goes uncompiled.
 
 # PyYAML ships no wheel for some interpreters, and a source build without libyaml's headers
 # silently falls back to the pure-Python parser, which rejects input the C loader accepts.
@@ -64,35 +64,26 @@ testpaths = [                        # single source of truth for WHAT runs
   ".claude/hooks",
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
-  "hosts/lib/tests",                               # the scripts the host packages ship (H3)
+  "hosts/lib/tests",                               # the scripts the host packages ship
   "hosts/tests",                                   # guards over the host packages and components
   "hosts/components/*/tests",                      # a host component's own scripts, as for a role
 ]
-# `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and
-# pytest was 13.5s of the ~24s of hook work in CI's `rest` shard. Set here rather than in the prek
-# hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and order-
-# independent, so it parallelises cleanly — if you add a test that writes shared state, fix the
-# test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb needs that).
+# `-n auto` (pytest-xdist) fans the suite across the machine's cores. Set here rather than in
+# the prek hook so a bare `uv run pytest` gets it too. The suite is filesystem-read-only and
+# order-independent, so it parallelises cleanly — if you add a test that writes shared state,
+# fix the test rather than dropping this. Pass `-n0` to disable it for a debugging run (--pdb
+# needs that).
 #
 # `--dist loadscope` keeps a module's tests on ONE worker. xdist's default `load` hands tests
 # out one at a time regardless of the module they came from, so a module-scoped fixture is
 # rebuilt on every worker that draws any of its tests — and this suite has expensive ones,
 # chiefly `real_tree` in scripts/validate/tests/test_validate_k8s_manifests.py, which renders
-# every k8s role. A single `--durations` run showed that one fixture three times over, at 22s,
-# 24s and 28s of setup.
+# every k8s role.
 #
-# Measured at `-n 4` (the GitHub runner's width), the two modes run interleaved on the
-# same box so a busy neighbour could not favour either — an earlier non-interleaved pair read
-# 148s vs 47s and was contention, not signal:
-#   --dist load:      56.5s / 56.9s wall, ~160s CPU
-#   --dist loadscope: 45.3s / 44.8s wall, ~155s CPU
-# So it is ~20% of wall and almost no CPU: the saving is worker idle time, not work removed.
-# At `-n auto` on a 16-core workstation the two are within noise (35s vs 38s) — the narrower
-# the run, the more loadscope is worth, which is why it pays on CI and looks pointless locally.
-#
-# It is worth the flag because BOTH CI legs of a landing are pytest-bound: the `pytest` job's
-# own test step measured 267s against the `hooks` job's 29-46s, and a landing waits on CI twice
-# — once on the PR before auto-merge fires, once on the master merge commit.
+# The saving is about 20% of wall and almost no CPU: worker idle time, not work removed. The
+# narrower the run, the more loadscope is worth, which is why it pays on CI and looks
+# pointless locally. It is worth the flag because both CI legs of a landing are pytest-bound,
+# and a landing waits on CI twice.
 #
 # loadscope groups by class where a module has them; drop to `loadfile` only if a module's
 # classes ever need splitting across workers.
@@ -107,34 +98,27 @@ testpaths = [                        # single source of truth for WHAT runs
 # shard keep every core. Its module docstring has the measurements.
 #
 # -p render_share lets the workers of one run share a single placeholder render of the fleet
-# instead of one per module (6 modules, 10-16s each). The cache lives only as long as the run;
-# its module docstring has the design.
+# instead of one per module. The cache lives only as long as the run; its module docstring has
+# the design.
 #
 # -p phase_timing prints, on a run given `--durations`, what `--durations` cannot see: each
-# worker's collection, prebuild and finish times, and the slowest module collections (#7710).
+# worker's collection, prebuild and finish times, and the slowest module collections.
 #
 # -p named_files keeps a run that names files, as every CI leg does, from building a node for
-# each of their siblings: pytest re-collects a named file's directory once per named file in it,
-# 20,542 module builds to keep 237 on one leg (#8681).
+# each of their siblings: pytest re-collects a named file's directory once per named file in it.
 #
 # -p failure_report prints FAILURES and ERRORS after every other plugin's summary, just above the
 # short summary, so a failed run's output ends on its failure. `--github-report` adds CI's
 # per-test `::error` annotations and the job summary's count line.
 #
-# No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
-# run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
-# which suppresses the summary line entirely. Measured on `scripts/lib/tests`: with
-# `-q` in addopts, `uv run pytest scripts/lib/tests -q | tail -3` printed progress dots and no
-# count for a 152-test pass, and `-k nosuchtestname -q` printed only `bringing up nodes...` — a
-# run that collected nothing read exactly like one that passed. Reviewers had to override
-# addopts to get a count back. The default verbosity
-# costs ~2 header lines per xdist worker and prints the count every time.
+# No `-q` here, deliberately. pytest COUNTS the flag: with `-q` already in addopts, a hand-typed
+# `-q` becomes `-qq`, which suppresses the summary line entirely, so a run that collected
+# nothing reads exactly like one that passed. The default verbosity costs ~2 header lines per
+# xdist worker and prints the count every time.
 addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing -p named_files -p failure_report"
-# Every warning is a failure. Measured before enabling: the only classes that
-# fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
-# nothing closed, an sqlite connection the Valheim store never closed, and the since-retired
-# GitOps deployer's subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
-# bump surfaces here too, on the PR that bumps it rather than on the day the API goes away.
+# Every warning is a failure: each ResourceWarning is a real leak, and a DeprecationWarning
+# from a dependency bump surfaces on the PR that bumps it rather than on the day the API goes
+# away.
 filterwarnings = [
   "error",
 ]
@@ -167,7 +151,7 @@ pythonpath = [
   "hosts/components/deploy-ui/files",
   "k8s/roles/monitor-bridge/files",
   # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
-  # ConfigMap rather than duplicated (M6 batch B7). Without this, `from jobs_metrics import ...`
+  # ConfigMap rather than duplicated. Without this, `from jobs_metrics import ...`
   # in autofix.py resolves only when a crowdsec test collected first.
   "k8s/roles/crowdsec/files",
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
@@ -235,7 +219,7 @@ extend-exclude = [
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # hosts/lib/tests/test_repo_signer.py holds it to the same grammar.
 # The signer imports host_lib.py, so that is py312 too, and
-# hosts/lib/tests/test_host_lib.py parses it with the 3.12 grammar (#6202).
+# hosts/lib/tests/test_host_lib.py parses it with the 3.12 grammar.
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
@@ -248,33 +232,30 @@ per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py3
 # `ruff format`.
 #
 # B earns its place on the same "real bugs only" test as the rest: it is the ruleset for
-# constructs that are legal, silent and wrong. The 16 findings it opened on enabling were led
-# by B023 (a closure over a loop variable in await_ci's CI poller) and B905 (six `zip()` calls,
-# four of which had an equal-length invariant nothing asserted). Both classes fail by producing
-# a plausible wrong answer rather than an error, which is the block-footguns criterion.
+# constructs that are legal, silent and wrong, such as a closure over a loop variable (B023)
+# and a `zip()` whose equal-length invariant nothing asserts (B905). Both fail by producing a
+# plausible wrong answer rather than an error, which is the block-footguns criterion.
 #
-# The rest pass the same test, and each was measured against the tree before it was enabled:
-# - E402 + RUF100 together. 131 `# noqa: E402` comments sat on the sys.path bootstrap imports
-#   with E402 never selected, so the comments enforced nothing and nobody could tell; RUF100
-#   found 156 such dead directives (BLE001, S310 and S506 among them). E402 makes the bootstrap
-#   convention a lint, and RUF100 removes a noqa that names a rule this table does not run.
-# - DTZ: 30 naive datetime calls. The staleness, grace-period and rotation code compares
-#   timestamps across hosts and cron zones, where a naive value is the bug class the
-#   grace-periods-must-be-derived-from-the-schedule incident belongs to.
-# - RUF059 / RUF013 / RUF012 / PT017 / S110 / S112 / PLW0129 / PLW1508 / PGH003: 26 hits
-#   between them. An unpacked variable nothing reads, an implicit Optional, a mutable class
-#   default, an assert inside `except`, a swallowed exception, an assert on a string literal,
-#   a non-string envvar default and a blanket `type: ignore` are each legal, silent and wrong.
-# - PT011 / PT012 / RUF043: 60 hits on 2026-10-08, every one in a test. Each lets a
-#   `pytest.raises` pass on the wrong failure: a bare `ValueError` with no `match=`, a block whose
-#   earlier statement can raise first, or a `match=` pattern whose unescaped `.` or `(` matches
-#   more than the message it names. That is a test staying green while checking nothing.
+# The rest pass the same test:
+# - E402 + RUF100 together. A `# noqa: E402` on the sys.path bootstrap imports enforces
+#   nothing while E402 is unselected, so nobody can tell. E402 makes the bootstrap convention
+#   a lint, and RUF100 removes a noqa that names a rule this table does not run.
+# - DTZ: the staleness, grace-period and rotation code compares timestamps across hosts and
+#   cron zones, where a naive datetime value gives a plausible wrong answer.
+# - RUF059 / RUF013 / RUF012 / PT017 / S110 / S112 / PLW0129 / PLW1508 / PGH003: an unpacked
+#   variable nothing reads, an implicit Optional, a mutable class default, an assert inside
+#   `except`, a swallowed exception, an assert on a string literal, a non-string envvar
+#   default and a blanket `type: ignore` are each legal, silent and wrong.
+# - PT011 / PT012 / RUF043: each lets a `pytest.raises` pass on the wrong failure: a bare
+#   `ValueError` with no `match=`, a block whose earlier statement can raise first, or a
+#   `match=` pattern whose unescaped `.` or `(` matches more than the message it names. That
+#   is a test staying green while checking nothing.
 # - PLE / T10 / PIE794 / PIE796 / PIE800 / PIE804 / RUF006 / RUF009 / RUF018 / RUF024 / RUF034:
-#   0 hits on 2026-10-08. Each is a bug class (a pylint error, a leftover breakpoint, a duplicate
+#   each is a bug class (a pylint error, a leftover breakpoint, a duplicate
 #   class field or enum value, an un-awaited asyncio task, a call evaluated once as a dataclass
 #   default, an assignment inside `assert`, a shared mutable `dict.fromkeys` value, identical
 #   if/else arms), selected so the pattern cannot arrive rather than to clear a backlog.
-# - ANN401: 14 hits on 2026-10-08, all in signatures. `json.loads` and `yaml.safe_load` return
+# - ANN401: all hits are in signatures. `json.loads` and `yaml.safe_load` return
 #   `Any`, and a helper that annotates its return `Any` hands that to every caller: `ty` then
 #   checks nothing the caller reads from the parsed JSON, so a response of the wrong shape
 #   indexes, iterates and compares without a diagnostic. That is legal, silent and wrong.
@@ -285,15 +266,13 @@ per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py3
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
 # one-line summary ending in `.`, `?` or `!`, a blank line, the body, and the closing quotes on
 # their own line. That shape is a written convention with a rule file behind it
-# (~/.claude/rules/python.md, from Google's Python style guide section 3.8) that holds across
-# 226 files and 900-odd docstrings. `ruff format` does not touch docstring bodies, so
-# unlike the E7 checks this table turns off, no formatter can hold the convention — it either
-# gets linted or it drifts back.
+# (~/.claude/rules/python.md, from Google's Python style guide section 3.8). `ruff format` does
+# not touch docstring bodies, so unlike the E7 checks this table turns off, no formatter can
+# hold the convention — it either gets linted or it drifts back.
 #
-# The undocumented-symbol rules stay OFF, deliberately, and the numbers are here so nobody has to
-# re-measure to reopen it: D103 118, D102 28, D107 9 outside tests. Ruff's versions have no size
+# The undocumented-symbol rules stay OFF, deliberately. Ruff's versions have no size
 # threshold, where the rule we actually adopted asks for a docstring when a function is public
-# API, non-trivial in size, or non-obvious in logic. Selecting them means writing 155 docstrings
+# API, non-trivial in size, or non-obvious in logic. Selecting them means writing docstrings
 # on mostly-trivial functions — a wider rule than the docstring-layout rules above, so it
 # needs its own argument.
 select = [
@@ -319,7 +298,7 @@ select = [
 # drift that test exists to catch.
 #
 # The docstring-layout rules are here for the same reason, and they are the load-bearing half:
-# all 5 of the tree's D212 hits are in this one file, so without this entry `ruff check --fix`
+# this file's docstrings trip D212, so without this entry `ruff check --fix`
 # rewrites it and that sha256 test fails. A gate that forces an edit to a byte-pinned file is a
 # gate nobody can turn on.
 "k8s/roles/karakeep/files/karakeep-time-tagger.py" = [
@@ -331,31 +310,27 @@ select = [
   "D210",
 ]
 
-# Test modules are exempt from TWO of the five layout rules, and the exemption is the reason
-# this gate could land at all — it is not an oversight to tidy away later. Google makes a test
-# module's docstring optional, and says a test docstring exists only to carry something beyond
-# "Tests for foo": a run instruction, a setup pattern, an external dependency. The layout rules
-# leave tests alone on that basis, so behind this ignore sit 253 D205 and 202 D209. Removing
-# these two entries turns a 4-fix gate into a 455-error wall, which is how a later session
-# "cleaning up" the ignore ends up reverting the whole thing instead.
+# Test modules are exempt from TWO of the five layout rules, and the exemption is load-bearing
+# — it is not an oversight to tidy away. Google makes a test module's docstring optional, and
+# says a test docstring exists only to carry something beyond "Tests for foo": a run
+# instruction, a setup pattern, an external dependency. Removing these two entries turns the
+# gate into a wall of errors in test files, which is how a later session "cleaning up" the
+# ignore ends up reverting the whole gate instead.
 #
 # D415, D212 and D210 are NOT exempt, and that is deliberate. With D415 exempt here, nothing
-# would stop 111 test docstrings from silently regressing at a colon — a fix with no gate
-# behind it lasts until the next mechanical pass.
-# (Counts measured with `--isolated --exclude '*.md'`, which is what
-# bypasses these very entries; a plain `--select` run cannot see behind them.)
+# would stop test docstrings from silently regressing at a colon — a fix with no gate behind
+# it lasts until the next mechanical pass.
 "**/tests/**" = ["D205", "D209"]
 "**/test_*.py" = ["D205", "D209"]
 "**/conftest.py" = ["D205", "D209"]
 
-# A one-off dead-code sweep reads this, not a hook or CI job (#8517): `uvx vulture` from the
+# A one-off dead-code sweep reads this, not a hook or CI job: `uvx vulture` from the
 # repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
 # role files/ trees still counts. The extensionless hosts/lib/homelab-* scripts are not read, so
-# `refresh_pending` is the one line it reports. Every name below was triaged as live on
-# 2026-11-14 (#8517, #8623).
+# `refresh_pending` is the one line it reports. Every name below was triaged as live.
 # A test counts as a caller here, because many library functions exist for a guard under
 # tests/. To list production code that only tests call, run a second pass with
-# `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'` (#8632 has its triage).
+# `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'`.
 [tool.vulture]
 paths = [".claude", "evals", "hosts", "k8s", "scripts", "tests"]
 ignore_decorators = [
@@ -397,7 +372,7 @@ ignore_names = [
   "pytestmark",
   # Keyword a fake's signature accepts because the real call passes it.
   "server_hostname",
-  # Guard libraries: a guard under a tests/ directory is the designed caller (#8632).
+  # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.
   "FORMS", "node_citations", "line_numbered_citations", "guard_path_citations",
@@ -445,7 +420,7 @@ python-version = "3.15"
 # This repo has no `__init__.py` files and no installed package: a script reaches a sibling
 # directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
 # test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
-# it reports 189 import-not-found diagnostics for first-party modules that resolve fine at
+# it reports import-not-found for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
 # sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
 # ENFORCED: tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
@@ -516,8 +491,8 @@ extra-paths = [
 # other live sessions' whole checkouts of this same repo.
 #
 # The `include` list is required, not tidiness: dropping it does NOT fall back to the whole
-# project. Measured 2026-09-02 — with `include` absent, a deliberately broken file at the repo
-# root was not checked at all, while one under `scripts/` still was. A hand-kept list is the
+# project. With `include` absent, a file at the repo root is not checked at all, while one
+# under `scripts/` still is. A hand-kept list is the
 # enumeration failure `testpaths` has a guard for, so this one has a guard too.
 # ENFORCED: tests/repo/test_ty_config_covers_the_repo.py fails on a tracked .py
 # file outside these directories.
@@ -532,19 +507,17 @@ include = [
 exclude = ["site", ".claude/worktrees"]
 
 [tool.ty.rules]
-# missing-attribute, invalid-assignment and unsupported-operator are errors since
-# 2026-10-08. They were off from 2026-09-02, counted at 32, 10 and 14. While off they grew to 87,
-# 18 and 76, because a rule that is off does not stop new code adding to it. Each of the 181 was
-# fixed at its cause, not exempted. The causes, most common first:
+# missing-attribute, invalid-assignment and unsupported-operator are errors, because a rule
+# that is off does not stop new code adding to it. Fix a hit at its cause, never exempt it:
 # - An Optional used unnarrowed: an `re.match`, a `str | None` verdict or a `Path | None`. A
-#   test now asserts the value is present first, so a None fails on the assert and its message.
-# - Module-global cache dicts that inferred a value union; they now carry TypedDicts.
-# - Test doubles bolted onto functions as attributes; they are now small classes.
-# - Mixins calling methods only their host class defines; a TYPE_CHECKING stub declares them.
+#   test asserts the value is present first, so a None fails on the assert and its message.
+# - Module-global cache dicts that infer a value union carry TypedDicts.
+# - Test doubles are small classes, not attributes bolted onto functions.
+# - Mixins calling methods only their host class defines get a TYPE_CHECKING stub.
 #
-# Four line suppressions remain, each a `# ty: ignore[<rule>]`. Two are tests that omit a
-# required argument to prove the call raises a TypeError. One is a test that writes to a frozen
-# dataclass to prove it raises. One reads an attribute ansible's `constants` module sets at
+# The line suppressions that remain are each a `# ty: ignore[<rule>]`: tests that omit a
+# required argument to prove the call raises a TypeError, a test that writes to a frozen
+# dataclass to prove it raises, and a read of an attribute ansible's `constants` module sets at
 # import time. The vendored karakeep script is exempted per file in [[tool.ty.overrides]] below.
 #
 # A per-file `ignore` beats a CLI `--error`, so a per-file exemption from any rule here hides it

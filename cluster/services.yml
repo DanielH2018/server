@@ -22,19 +22,19 @@
 # and stays a hand-written rule in the authelia template; the entry's tier is what its UI gets.
 #
 # `tier:` ranks a service, and is declared here once and derived elsewhere
-# (template_filters/service_tier.py, #3389). `home-edge` is the edge (crowdsec, traefik), SSO
+# (template_filters/service_tier.py). `home-edge` is the edge (crowdsec, traefik), SSO
 # (authelia) and LAN DNS (pihole); `home-automation` is the automation chain (mosquitto,
 # zigbee2mqtt, home-assistant). Together they are the `home-critical` group, the services the
 # house and SSO stop working without. `platform` is critical without being home-critical: the
 # registry, the alert bridge, the UPS primary, the remote-access tunnel and the deploy
 # controller. Each tier names one
 # PriorityClass, and a tiered role's templates take it from `tier_priority_class` rather than
-# writing it (#3452). A home-critical entry's `backup_claims` names its Longhorn
+# writing it. A home-critical entry's `backup_claims` names its Longhorn
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
 # `tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
 #
-# The other two Longhorn tiers derive from the entries the same way (#4207).
+# The other two Longhorn tiers derive from the entries the same way.
 # `weekly_backup_claims` maps a claim to its weekly B2 shard, 0 (Sunday) to 6, and becomes
 # `k3s_longhorn_weekly_volumes`. The shard is that volume's weekday for good: change it only
 # to rebalance B2's daily transaction cap, and give a new claim the lightest weekday.
@@ -120,7 +120,7 @@ containers_list:
   - name: longhorn-restore-drill
     depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
-  # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
+  # prune: false and its directory never substitutes. traefik's tier keeps it out of
   # the shed set.
   - name: traefik-crds
     # Flux applies traefik-crds and traefik through `promote`, and every Ansible path skips
@@ -154,7 +154,7 @@ containers_list:
       - traefik  # forwardauth-middleware.yaml.j2 dials authelia.<ns>.svc:9091 from the Traefik
                  # pod. Apps behind the middleware never dial authelia: Traefik issues the 302.
     # Rendered by this role's templates/networkpolicy-redis.yaml.j2, not netpol-baseline:
-    # the portal exits without its session store, so the fence ships with the portal (#1609).
+    # the portal exits without its session store, so the fence ships with the portal.
     # `role_owned: true` makes netpol-baseline's callers loop skip the item.
     netpol_fences:
       - app: authelia-redis
@@ -320,7 +320,7 @@ containers_list:
   # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
     # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
-    # `prowlarr-verify` (#5594).
+    # `prowlarr-verify`.
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     # DECIDED: LAN-only by operator ruling 2026-11-15 (#8514); WireGuard covers remote use.
@@ -440,7 +440,7 @@ containers_list:
     port: 80
     use_authelia: true
     auth_tier: one_factor
-    # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port (#996).
+    # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port.
     # UNVERIFIED until someone flips the app's `prometheus_enabled` Settings toggle by hand: it
     # defaults OFF and lives in the app's own DB, so until then this job reads `up == 0`, not
     # silently empty. See k8s/roles/speedtest/CLAUDE.md. The port is the entry's own, which
@@ -610,7 +610,7 @@ containers_list:
       - karakeep-archive-pruner
     # The backends `wait-for-deps` (karakeep/templates/deployment.yaml.j2) dials in an unbounded
     # loop. Each fence ships with this role, rendered by its templates/networkpolicy-<backend>
-    # template, so `--tags karakeep` never stages a pod that waits in Init forever (#1620).
+    # template, so `--tags karakeep` never stages a pod that waits in Init forever.
     # Ports are the containerPort and Service port both; test_karakeep_backend_policies.py pins them.
     netpol_fences:
       - app: karakeep-meilisearch
@@ -629,13 +629,13 @@ containers_list:
   - name: registry
     # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
     # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host script and the
-    # one writer of ghcr-mirror's replicas (#5732).
+    # one writer of ghcr-mirror's replicas.
     tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
-    # Flux applies n8n through `promote`, and every Ansible path skips it (#5546).
+    # Flux applies n8n through `promote`, and every Ansible path skips it.
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678
@@ -731,7 +731,7 @@ containers_list:
   # Prometheus discovers its pods individually — so no ordering edge derives from its templates
   # and none is needed: it reads the kernel, not another workload. `port` is the exporter's
   # listener, which its DaemonSet and observability's `gpu` scrape job both read through
-  # `entry_port` (#3868). 9101 is one past node-exporter's 9100. They do not collide, since
+  # `entry_port`. 9101 is one past node-exporter's 9100. They do not collide, since
   # this pod is not hostNetwork, but a distinct number keeps `ss -ltnp` on a node unambiguous.
   - name: gpu-exporter
     # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5).
@@ -848,7 +848,7 @@ containers_list:
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
   # every metric/API check; autofix-bridge is the *arr remediation loop.
   - name: monitor-bridge
-    # Flux applies monitor-bridge through `promote`, and every Ansible path skips it (#5594).
+    # Flux applies monitor-bridge through `promote`, and every Ansible path skips it.
     tier: platform
     # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
     # exporter's on monitor_bridge_deploy_pipeline_port. The `metrics` item renders the
@@ -1020,7 +1020,7 @@ containers_list:
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
   # it an edge onto every other entry, so it applies last wherever it sits in this list, and an
-  # entry appended after it still deploys before it (#4833).
+  # entry appended after it still deploys before it.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
   # NetworkPolicy peer podSelector is a label match evaluated at connection time, so
