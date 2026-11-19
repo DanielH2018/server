@@ -563,7 +563,9 @@ Instead it reads the cluster every 30 seconds:
   line names the held SHA and, for a `failed=` hold, the failed names, and says whether any
   of them is one of this PR's services. The held SHA is the newest commit the promotion
   carried, which may be another PR's, so a hold naming none of this PR's services was most
-  likely caused by another merge in it, or by a run it superseded (D7, #6199). Clearing the hold is
+  likely caused by another merge in it, or by a run it superseded (D7, #6199). The
+  `LAND-RESULT:` line carries the same answer for a program as `hold_owner` (*The
+  `LAND-RESULT:` line*). Clearing the hold is
   the operator's decision, approved through the permission prompt the agent's clear raises. `promote`'s `settle` job writes a `failed=` hold when a promotion fails
   its verification (`docs/flux-deploy-plane.md`, *Verification*).
 - **`nothing-to-deploy`, from land-wait's `suspended`, exit 0.** Every tag Flux applies for
@@ -706,6 +708,59 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
 A PR that moves a key into another role at the same version is no bump, so none of the first
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,
 exits 2: the check cannot judge it. There is no bypass.
+
+## The `LAND-RESULT:` line
+
+`land.sh` prints one machine line just above its `VERDICT:` line
+(`land_lib/ledger.py:result_line`). A program reads this line and never the sentence beside
+it. `land_lib/detach.py:result_in` returns its fields by name, so a field added at the end
+breaks no reader.
+
+```text
+LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hold_sha=<sha> hold_owner=<owner> merge=<40 hex>
+```
+
+A field the landing never reached reads `-`.
+
+- `verdict`, `cause` and `exit` are the landing's verdict, its cause and its exit code.
+- `sha` is the merge commit's first 8 characters, and `merge` is the whole commit. A landing
+  that merged nothing prints `-` for both.
+- `tags` counts the tags the landing waited on. After the promotion wait that is every tag
+  the promotion carried, other PRs' included.
+- `hold_sha` and `hold_owner` are set beside cause `promote-held` only. `hold_sha` is the SHA
+  `DEPLOY_HOLD` held. `hold_owner` says whose failure the hold records
+  (`promote_lib/wait.py:hold_owner`):
+    - `own`: a `failed=` name is one of this PR's own services.
+    - `other`: the hold names failures, and none is one of this PR's services.
+    - `unattributed`: the hold names no failure, or this PR has no service. Nothing ties
+      the hold to this PR, and nothing clears the PR of it.
+
+Only `land-wait` can compute `hold_owner`. It holds the raw hold value and the PR's own
+services together. The ledger's tags are widened with every tag the promotion carried before
+the line is written, so an owner worked out from them would blame this PR for another PR's
+failure, which is the wrong blame #6199 fixed in the prose.
+
+### A PR that merged behind a hold
+
+Clearing `DEPLOY_HOLD` starts no promotion. `promote.yml` runs after a green CI run on
+master, on the Sunday schedule, and on a dispatch, and a variable write is none of those.
+The next promotion covers the merge whichever commit starts it: `promote.py decide` ignores
+its trigger and walks master from its tip back to `prod`, so it promotes the newest eligible
+commit, and that commit descends from the merges the hold stopped.
+
+A re-run of `land.sh` on the merged PR starts no promotion either. `--arm-merge` is a no-op
+on a merged PR, and the landing goes straight to the promotion wait and then the health
+gate. So the re-run is what verifies the merge, and it needs a promotion to wait on:
+
+- When master has taken a later merge since the hold, the CI run of that merge starts the
+  promotion and the re-run settles on it.
+- When nothing has merged since, the re-run waits `LAND_WAIT_TIMEOUT_S` and ends `deferred`,
+  cause `promote-timeout`. The operator who clears the hold also dispatches `promote` for the
+  tip, as *Clearing a hold* in `docs/flux-deploy-plane.md` says:
+  `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>`.
+
+The command to re-run is the one the landing started with, after `cc-wait landing-clear`
+ends 0.
 
 ## Reading a `deploy-failed`
 

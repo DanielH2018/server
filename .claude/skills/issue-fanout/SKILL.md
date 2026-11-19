@@ -327,7 +327,7 @@ a count line (`3 running, 2 done, 1 needs-input`), then prints one line per batc
 `landed` or `cleaned`, `<batch> on <host>: <state> …`. A `done` batch prints as `<batch> on
 <host>: done <PR URL>` without the agent's final text. `--all` prints a line for every batch,
 `landed` and `cleaned` ones included, with the final text. State is `running`, `done <PR URL>`, `landed
-<PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
+<PR URL>`, `parked`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
 text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held batch reads
@@ -338,6 +338,11 @@ unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A dani
 PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
+
+**`parked` is a batch whose landing another PR's `DEPLOY_HOLD`, or a merge rule, stopped.**
+Its line starts `parked:` and names the re-land. Run `cc-wait landing-clear`, then the
+`land.sh` command for its PR; `clean` keeps the batch until that PR merges.
+`docs/issue-claiming-and-fanout.md`, *A parked batch*, has the three forms.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
 that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's

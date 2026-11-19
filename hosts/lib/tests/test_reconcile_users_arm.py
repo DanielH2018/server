@@ -17,11 +17,12 @@ ARM = "reconcile_lib/users.py"
 CLAUDE = {
     "name": "claude",
     "uid": 1001,
+    "gid": 1001,
     "home": "/home/claude",
     "shell": "/bin/bash",
     "comment": "Claude agent",
 }
-BOT = {**CLAUDE, "name": "bot", "uid": 1002, "home": "/home/bot"}
+BOT = {**CLAUDE, "name": "bot", "uid": 1002, "gid": 1002, "home": "/home/bot"}
 DRIFT = 'homelab_host_reconcile_drift{host="daniel-pi",arm="users"}'
 
 
@@ -67,7 +68,7 @@ def test_a_missing_user_is_created_by_sysusers_and_a_second_run_changes_nothing(
 
     assert first.returncode == 0, first.stderr
     assert node.state["users"] == {"claude": 1001}
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": []}
     assert commands(node) == [], "the second run found the user and ran no change"
     assert second.returncode == 0, second.stderr
     assert f"{DRIFT} 0" in metrics(node)
@@ -83,7 +84,7 @@ def test_a_user_that_exists_with_the_declared_uid_needs_no_sysusers(node):
     assert commands(node) == []
 
 
-# A uid mismatch is a fault.
+# A uid or gid mismatch is a fault.
 
 
 def mismatch_fails_the_run(node: Node) -> None:
@@ -99,10 +100,6 @@ def mismatch_fails_the_run(node: Node) -> None:
     assert (
         "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev -uid 1000"
         " -exec chown -h 1001 {} +;" in result.stderr
-    )
-    assert (
-        "if claude's primary group is claude with gid 1000, also groupmod -g 1001 claude"
-        " and the same find with -gid 1000 -exec chown -h :1001 {} +;" in result.stderr
     )
     assert "then sudo /usr/lib/homelab/homelab-updater --clear-hold" in result.stderr
     assert node.applied()["result"]["ok"] is False
@@ -120,6 +117,68 @@ def test_red_an_arm_that_never_compares_the_uid_would_leave_the_host_unheld(tmp_
         ARM,
         'if int(fields[2]) != user["uid"]:',
         "if False:",
+    )
+
+
+def gid_mismatch_fails_the_run(node: Node) -> None:
+    declare(node, CLAUDE)
+    node.state["users"] = {"claude": 1001}
+    node.state["gids"] = {"claude": 985}
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert (
+        "claude has gid 985 and group claude has gid 985; the package declares 1001 for both"
+        in result.stderr
+    )
+    assert "groupmod -g 1001 claude; usermod -g 1001 claude;" in result.stderr
+    assert (
+        "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev -gid 985"
+        " -exec chown -h :1001 {} +;" in result.stderr
+    )
+    assert node.applied()["result"]["ok"] is False
+
+
+def test_a_declared_gid_that_differs_from_the_live_gid_fails_the_run(node):
+    gid_mismatch_fails_the_run(node)
+
+
+def test_red_an_arm_that_never_compares_the_gid_would_leave_the_host_unheld(tmp_path):
+    red(
+        tmp_path,
+        gid_mismatch_fails_the_run,
+        ARM,
+        'if int(fields[3]) != user["gid"] or group_gid != str(user["gid"]):',
+        "if False:",
+    )
+
+
+def group_gid_mismatch_fails_the_run(node: Node) -> None:
+    declare(node, CLAUDE)
+    node.state["users"] = {"claude": 1001}
+    node.state["group_gids"] = {"claude": 985}
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "claude has gid 1001 and group claude has gid 985" in result.stderr
+    assert node.applied()["result"]["ok"] is False
+
+
+def test_a_users_own_group_at_another_gid_fails_the_run(node):
+    group_gid_mismatch_fails_the_run(node)
+
+
+def test_red_an_arm_that_reads_only_the_passwd_gid_would_leave_the_host_unheld(
+    tmp_path,
+):
+    red(
+        tmp_path,
+        group_gid_mismatch_fails_the_run,
+        ARM,
+        ' or group_gid != str(user["gid"])',
+        "",
     )
 
 
@@ -161,9 +220,23 @@ def test_a_user_that_leaves_the_list_is_expired_and_never_deleted(node):
         ["usermod", "--expiredate", "1", "bot"]
     ]
     assert "bot" in node.state["users"], "the account stays"
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": ["bot"]}
     assert node.run().returncode == 0
     assert node.calls("usermod") == [], "the next run expires nothing again"
+    assert node.applied()["users"]["expired"] == ["bot"], (
+        "the next run keeps the record"
+    )
+
+
+def test_a_user_declared_again_leaves_the_expired_record(node):
+    two_users_then_one(node)
+    assert node.run().returncode == 0
+    declare(node, CLAUDE, BOT)
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
 
 
 def test_a_user_that_left_the_list_and_is_gone_is_dropped_without_usermod(node):
@@ -174,7 +247,7 @@ def test_a_user_that_left_the_list_and_is_gone_is_dropped_without_usermod(node):
 
     assert result.returncode == 0, result.stderr
     assert node.calls("usermod") == []
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": []}
 
 
 def test_a_failed_expiry_fails_the_run_and_the_name_stays_recorded(node):
@@ -184,7 +257,7 @@ def test_a_failed_expiry_fails_the_run_and_the_name_stays_recorded(node):
     result = node.run()
 
     assert result.returncode == 1
-    assert node.applied()["users"] == {"names": ["bot", "claude"]}
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
 
 
 def revert_expires_nobody(node: Node) -> None:
@@ -199,7 +272,7 @@ def revert_expires_nobody(node: Node) -> None:
     assert result.returncode == 0, result.stderr
     assert node.calls("usermod") == [], "an empty declared set expires nothing"
     assert node.applied()["result"]["ok"] is True
-    assert node.applied()["users"] == {"names": ["bot", "claude"]}
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
     assert f"{DRIFT} 2" in metrics(node)
 
 

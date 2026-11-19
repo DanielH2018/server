@@ -420,6 +420,53 @@ reading a host whose report file went with the worktree. Once every batch is rem
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
 
+### A parked batch
+
+A review batch lands its own PR with `land.sh`. Another PR's failed promotion sets
+`DEPLOY_HOLD`, and that hold stops this batch's landing in one of two ways. The batch then
+ends `parked`: it is neither resumed nor reported as `needs-input`, because the hold is not
+its to fix and no person has a question to answer.
+`scripts/dev/fanout_lib/land_result.py:park_line` decides from the landing's `LAND-RESULT:` line
+(`docs/landing.md`, *The `LAND-RESULT:` line*), never from a sentence in the log.
+
+- **Refused before merge.** `land.sh` exits 75 with `verdict=refused` and merges nothing. The
+  batch's final line is `parked: refused before merge (<why>); re-land with land.sh --pr N
+  --arm-merge --await-merge --detach && cc-wait land N`. Any rule in *Rules that refuse a
+  merge* parks the same way, not only the hold.
+- **Merged, then held.** The landing ends `deploy-failed`, cause `promote-held`, with
+  `hold_owner=other`. The final line is `parked: merged, unverified behind DEPLOY_HOLD <sha>;
+  re-land after cc-wait landing-clear`.
+- **Merged, then held, with no owner.** `hold_owner=unattributed` parks with the same line
+  and `unattributed, so the root coordinator triages the hold` after it. The hold names no
+  failed service, or the PR has none, so nobody can say from the hold whose it is.
+
+`hold_owner=own` does not park. The hold names one of the PR's own services, so the pipeline
+resumes the implementer with the landing's log, as it does for `unhealthy`.
+
+**A parked batch never waits in its unit for the hold to clear.** A wait there spends the
+unit's run time, keeps its 2 GiB reservation and counts as a live batch against the width.
+The unit ends, and the sub-coordinator that owns the batch re-lands it: it runs `cc-wait
+landing-clear`, then the `land.sh` command for the PR. For a PR that merged, the re-run
+skips the merge and waits on the next promotion (`docs/landing.md`, *A PR that merged behind
+a hold*). Clearing the hold stays the operator's decision.
+
+`place status`, `place runs` and `cc-wait fanout` count a `parked` batch and list it with its
+reason, as a batch that needs attention (exit tier 1). The unit's stop does not page for it
+(`fanout_lib/notify.py:PAGED_STATES`).
+
+A daniel-server batch that stops at its PR is landed by the server lander, whose logs are on
+daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the newest
+`land<pr>-*.log` there and reports the batch `landed`, `parked` by the same rule, or
+`needs-input` naming the verdict. With no result yet the batch stays `done (awaiting the
+server lander)`. That directory belongs to the user the lander runs as, so a session of
+another user reads none and reports `done`.
+
+**`clean` keeps a parked batch whose PR has not merged.** A claim expires with its worktree,
+and the open PR still holds the edits, so removing the tree would free the issues for a
+second batch to work. `clean_one` prints `kept: … parked with its PR unmerged` and names the
+re-land. A batch parked after its merge is cleaned like any merged batch. To give up on a
+parked batch, run `abandon`.
+
 `launch` refuses daniel-server as a host until the operator registers its SSH key as a GitHub
 signing key once (`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`): the repo's ruleset
 requires a verified commit signature, and a PR signed with an unregistered key sits `BLOCKED`

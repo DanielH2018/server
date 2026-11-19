@@ -8,7 +8,7 @@ import json
 
 from fanout_lib.manifest import Batch, Manifest, all_runs, load, path, save
 from fanout_lib.place import main
-from _fanout_fakes import fake_tools
+from _fanout_fakes import fake_tools, ok
 
 
 def _runs(tmp_path, *args):
@@ -104,3 +104,24 @@ def test_a_saved_batch_has_only_keys_a_constructor_reader_accepts(tmp_path):
     (entry,) = json.loads(path("20260101T000010Z", tmp_path).read_text())["batches"]
     assert set(entry) == CONSTRUCTOR_READER_FIELDS
     assert Batch(**entry) == b
+
+
+def test_runs_shows_a_parked_batch_with_its_reason_in_place_of_standing(
+    tmp_path, capsys
+):
+    b1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
+    b2 = Batch("2", "daniel-box", "/w2", "worktree-fanout-2", "u2", [2], "t")
+    save(Manifest("20260101T000010Z", "worktree-a", [b1, b2]), root=tmp_path)
+    report = json.dumps(
+        {"type": "result", "result": "parked: refused before merge (a hold)\nPR"}
+    )
+    exited = "ActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    tools, run = fake_tools()
+    run.answers = {
+        "daniel-box": ok(f"=== 1\n{exited}{report}\n=== 2\n{exited}"),
+    }
+    assert main(["runs", "--manifest-root", str(tmp_path)], tools) == 0
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "1 parked, 1 standing"
+    assert "1 on daniel-box: worktree-fanout-1 #1 parked: refused before merge" in out
+    assert "2 on daniel-box: worktree-fanout-2 #2 standing" in out

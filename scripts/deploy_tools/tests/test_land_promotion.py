@@ -117,6 +117,21 @@ def test_a_held_promotion_records_the_changed_sets_tags_on_the_ledger(land_run):
     assert "tags=bento-pdf" in logline
 
 
+def test_a_held_promotion_puts_the_waits_hold_owner_on_the_result_line(land_run):
+    """Only the wait reads the hold against the PR's own services, so its answer is copied."""
+    held = WaitResult(
+        "deploy-failed",
+        "promote-held",
+        "DEPLOY_HOLD holds abc",
+        tags=("bento-pdf",),
+        hold_sha="abc",
+        hold_owner="other",
+    )
+    _, out, _, _, _ = land_run([], _fakes(land_wait=[held]))
+    result = out.rstrip().splitlines()[-2]
+    assert result.endswith(f"hold_sha=abc hold_owner=other merge={MERGE_SHA}")
+
+
 def test_a_held_promotion_still_names_the_plane_and_the_host_it_carries(land_run):
     """The wait ends the landing before the health step and the host wait print these."""
     held = WaitResult("deploy-failed", "promote-held", "DEPLOY_HOLD holds abc")

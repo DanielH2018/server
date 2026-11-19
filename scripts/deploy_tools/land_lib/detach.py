@@ -122,9 +122,14 @@ def result_in(log: Path) -> dict[str, str] | None:
     `VERDICT:` line.
     """
     try:
-        match = _RESULT_LINE.search(log.read_text(errors="replace"))
+        return result_fields(log.read_text(errors="replace"))
     except OSError:
         return None
+
+
+def result_fields(text: str) -> dict[str, str] | None:
+    """The fields of the `LAND-RESULT:` line in a landing log's `text`, or None without one."""
+    match = _RESULT_LINE.search(text)
     if not match:
         return None
     return dict(pair.split("=", 1) for pair in match.group(1).split() if "=" in pair)
