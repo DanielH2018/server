@@ -4,10 +4,11 @@ Run: uv run pytest scripts/dev/tests/test_fanout_headroom_probe.py
 """
 
 import json
+import os
 
 import pytest
 
-from fanout_lib import headroom_probe
+from fanout_lib import headroom_probe, launch_lock
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main as place_main
@@ -160,6 +161,17 @@ def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
     assert after["state"] == "full"
     assert "daniel-box already holds 6 live batch(es) (1 in run" in after["detail"]
     assert place_main(["launch", "--batch", "2", *root], tools()) == 3
+
+
+def test_a_wait_reads_full_while_a_launch_holds_the_lock(tmp_path):
+    with launch_lock.held(tmp_path, lambda: "20260101T000010Z"):
+        during = headroom_probe.read(_tools(ROOMY, ROOMY), 1, None, tmp_path)
+    assert during == {
+        "state": "full",
+        "detail": f"launch lock held by pid {os.getpid()} (run 20260101T000010Z)",
+    }
+    after = headroom_probe.read(_tools(ROOMY, ROOMY), 1, None, tmp_path)
+    assert after["state"] == "room"
 
 
 def test_cc_wait_reads_afresh_for_every_wait(capsys):

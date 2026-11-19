@@ -19,6 +19,9 @@ Usage::
     fanout.py place stop <run-id> [batch]
     fanout.py place clean <run-id>
 
+One `launch` runs at a time for a user on a host: it holds `fanout_lib.launch_lock` from its
+first gate to its last manifest save, so a second launch reads the batches the first placed.
+
 `launch` claims this repo's issues itself, under the branch checked out where it runs, just
 before each batch's agent starts; `claim` takes the same claims and launches nothing.
 `fanout_lib/claims.py` has the rules.
@@ -34,6 +37,8 @@ Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' ti
 - 5: `status` only: a batch's unit exited non-zero or its session set `is_error`.
 - 6: no candidate host signs commits GitHub verifies, or the signing keys were unreadable.
 - 7: `launch` started batches but dropped at least one refused claim.
+- 8: `launch` waited 120 s for the launch lock (`fanout_lib.launch_lock`) while another
+  launch held it, and did nothing.
 - 64: a malformed `--batch`, an unregistered `--repo`, or a run-id with no manifest.
 - 75: `status` only: a host's read timed out and no batch reported 1 or 5.
 
@@ -60,8 +65,8 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
+import dataclasses
 import json
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -76,19 +81,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fanout_lib import claims as claims_mod
 from fanout_lib.abandon import cmd_abandon, cmd_stop
 from fanout_lib import launch as launch_mod
+from fanout_lib import launch_lock
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import sizing
 from fanout_lib import status as status_mod
 from fanout_lib.status_view import one_line, runs_lines, status_lines
-from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
+from fanout_lib.brief import render_brief
 from findings_lib.tracked_paths import tracked_files
 from fanout_lib.launch_gates import (
+    batch_paths,
+    fetch_issues,
     live_elsewhere,
     live_by_host,
     live_batch_slots,
     over_live_batch_cap,
     over_ssh_budget,
+    refuse_live_shared_files,
     refuse_shared_files,
     refuse_solo_only,
 )
@@ -96,6 +105,7 @@ from lib.cli_help import ArgumentParser, error, warn
 from lib.exit_codes import (
     FANOUT_PLACE_BAD_ARGS,
     FANOUT_PLACE_FAILED,
+    FANOUT_PLACE_LOCK_TIMEOUT,
     FANOUT_PLACE_NO_HOST_READABLE,
     FANOUT_PLACE_NO_SIGNING_HOST,
     FANOUT_PLACE_NOTHING_PLACED,
@@ -110,7 +120,6 @@ from fanout_lib.transport import (
     HOSTS,
     Tools,
     this_host,
-    error_text,
     read_host,
     registered_keys,
     verified_hosts,
@@ -217,33 +226,6 @@ def placement(
     return placed
 
 
-def _fetch_issues(
-    tools: Tools, batches: dict[str, list[int]], repo: str = SERVER
-) -> dict[int, Issue] | None:
-    """Fetch every batch's issues up front, or return None having said why it refused.
-
-    Every fetch completes before the first launch on purpose: a fetch that failed inside the
-    placement loop left the batches already launched running under `auto`, in worktrees this
-    slice locks, with no manifest naming them.
-    """
-    fetched: dict[int, Issue] = {}
-    for number in [n for numbers in batches.values() for n in numbers]:
-        try:
-            fetched[number] = tools.gh_issue(number, repo)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            error(f"could not fetch issue {number}: {error_text(exc)}")
-            return None
-    unlabelled = [
-        n for n, issue in fetched.items() if REQUIRED_LABEL not in issue.labels
-    ]
-    for number in unlabelled:
-        error(
-            f"issue {number} does not carry the `{REQUIRED_LABEL}` label — only "
-            "issues findings.py filed are fan-out work"
-        )
-    return None if unlabelled else fetched
-
-
 def cmd_claim(args, tools: Tools) -> int:
     """Claim every batch's issues under the orchestrator's branch, launching nothing."""
     batches = claims_mod.parse_batches(args.batch)
@@ -267,18 +249,52 @@ def cmd_launch(args, tools: Tools) -> int:
     except ValueError as exc:
         error(str(exc))
         return FANOUT_PLACE_BAD_ARGS
+
+    def name_run() -> str:
+        return manifest_mod.unused_run_id(datetime.now(UTC), args.manifest_root)
+
+    try:
+        with launch_lock.held(args.manifest_root, name_run, args.lock_wait) as run_id:
+            return _launch_locked(args, tools, batches, sizes, target, run_id)
+    except launch_lock.LockTimeout as exc:
+        error(
+            f"{exc} after a {args.lock_wait:g} s wait — nothing was read, claimed or "
+            "placed; run the same launch again once that launch has ended"
+        )
+        return FANOUT_PLACE_LOCK_TIMEOUT
+
+
+def _launch_locked(
+    args, tools: Tools, batches: dict[str, list[int]], sizes, target, run_id: str
+) -> int:
+    """Gate, place and start `batches` as run `run_id`; the caller holds the launch lock.
+
+    Every read of the run manifests and every save of this run's own happens in here, which
+    is what the lock makes one launch at a time.
+    """
     holder = claims_mod.orchestrator_branch(tools, target)
     if holder is None:
         return FANOUT_PLACE_FAILED
     if live_elsewhere(batches, args.manifest_root, target.repo):
         return FANOUT_PLACE_FAILED
-    fetched = _fetch_issues(tools, batches, target.repo)
+    fetched = fetch_issues(tools, batches, target.repo)
     if fetched is None:
         return FANOUT_PLACE_FAILED
     if refuse_solo_only(batches, fetched, target.repo):
         return FANOUT_PLACE_FAILED
     tracked = tracked_files() if target.is_server else ()
     if refuse_shared_files(batches, fetched, args.allow_shared_file, tracked):
+        return FANOUT_PLACE_FAILED
+    excused = refuse_live_shared_files(
+        batches,
+        fetched,
+        args.manifest_root,
+        target.repo,
+        tools,
+        args.allow_shared_file,
+        tracked,
+    )
+    if excused is None:
         return FANOUT_PLACE_FAILED
     # Read the registered keys before the first ssh: a gh outage then refuses having spent no
     # connection against the per-host ssh limit.
@@ -306,10 +322,11 @@ def cmd_launch(args, tools: Tools) -> int:
     ]
     # After every gate, like the claims: a refused launch writes nothing to the register.
     claims_mod.reap_register(tools, target)
-    run = manifest_mod.Manifest(manifest_mod.new_run_id(datetime.now(UTC)), holder, [])
+    run = manifest_mod.Manifest(run_id, holder, [])
     refused = False
     for batch, host in placed:
         numbers = batches[batch]
+        allowed_here = excused.get(batch, ())
         chosen = sizes.get(batch)
         if target.is_server:
             # Claimed here, after every gate, so a refusal above leaves nothing claimed,
@@ -326,6 +343,12 @@ def cmd_launch(args, tools: Tools) -> int:
         try:
             launched = launch_mod.launch(
                 tools, host, batch, brief, numbers, target, args.review, rung=rung
+            )
+            cited = batch_paths(issues, tracked)
+            launched = dataclasses.replace(
+                launched,
+                cited_paths=cited,
+                excused_paths=tuple(p for p in allowed_here if p in cited),
             )
             run.batches.append(launched)
             # Saved per batch, not once after the loop: a launch killed between batches
@@ -523,8 +546,16 @@ def main(argv=None, tools: Tools | None = None) -> int:
         action="append",
         default=[],
         metavar="PATH",
-        help="excuse this one file from the shared-file refusal (its citation is context, "
-        "not an edit target); repeatable, and the collision is still printed",
+        help="excuse this one file from the shared-file refusals, within this launch and "
+        "against live batches in other runs (its citation is context, not an edit target); "
+        "repeatable, and the collision is still printed. Never excuses secrets/secrets.yml "
+        "or a secrets/cluster-vars file held by another run",
+    )
+    launch_parser.add_argument(
+        "--lock-wait",
+        type=float,
+        default=launch_lock.WAIT_S,
+        help=argparse.SUPPRESS,
     )
     launch_parser.add_argument(
         "--review",

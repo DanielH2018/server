@@ -399,6 +399,62 @@ them back beside the fields, so a `clean` run by one build does not erase what a
 recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
 key to the `Batch` constructor skips the whole run on a key it has no field for.
 
+### One launch at a time, and files held across runs
+
+Several coordinators launch from one host as one user: a root session, and one
+sub-coordinator per project. Each calls `fanout.py place launch`, and each reads the same
+manifest directory. Two rules keep their launches apart.
+
+**One launch runs at a time.** `launch` takes an exclusive `flock` on `launch.lock` in the
+manifest directory before its first gate and holds it through its last manifest save
+(`scripts/dev/fanout_lib/launch_lock.py:held`). Without the lock, two launches both read
+the manifests before either saves, so both pass the live-batch cap. Refill waits make that
+overlap the normal case, because every waiting coordinator wakes on the same freed slot. A
+launch that waits `scripts/dev/fanout_lib/launch_lock.py:WAIT_S` seconds without the lock
+exits `scripts/lib/exit_codes.py:FANOUT_PLACE_LOCK_TIMEOUT` and prints the holder's pid and
+run id. The kernel releases the lock when its holder exits, so a killed launch leaves
+nothing to clear. The `fanout-headroom` wait source reads `full` while a launch holds the
+lock (`scripts/dev/fanout_lib/launch_lock.py:holder`). The lock also makes run ids unique:
+`scripts/dev/fanout_lib/manifest.py:unused_run_id` picks the id once the lock is held.
+Two launches started in one second once shared an id, and the second saved over the
+first's manifest.
+
+The lock covers the launches that share a manifest directory, which is one user on one
+host. A launch from another host, or as another user, takes a different lock and reads
+different manifests. Every coordinator runs on daniel-box as `ubuntu`, so one lock covers
+them all.
+
+**A live batch holds the files it cites.** `launch` records on each batch the files its
+issues cite (`Batch.cited_paths`), resolved as the within-launch check resolves them
+(`scripts/dev/fanout_lib/launch_gates.py:batch_paths`).
+`scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files` then refuses a launch
+that cites a file a live batch in another run holds. The refusal names the file, the run
+and the orchestrator branch the run was launched under. Ask that coordinator to finish or
+release its batch. Do not clean another coordinator's run.
+
+A batch is live for this rule while its unit is active or its branch has an open PR. An
+uncleaned batch is not live for that reason alone: on 2026-11-19 `place runs` listed over
+20 standing batches, the oldest from 2026-10-22. A parked batch has an open PR, so it keeps
+its files. The gate reads the open PRs with one `gh pr list` call. It reads a unit's state
+only for a batch with no open PR that could collide. A read that fails refuses the launch.
+A batch saved before `cited_paths` existed has its issue bodies fetched instead.
+
+`--allow-shared-file <path>` excuses a path here as it does within one launch, and the
+launch records the path on the new batch as `Batch.excused_paths`, where the holder's
+coordinator can read it with `place runs --json`.
+`scripts/dev/fanout_lib/launch_gates.py:excusable` rules out `secrets/secrets.yml` and
+every `secrets/cluster-vars.` file: each is one encrypted document, and two branches that
+edit it cannot be rebased over each other.
+
+The rule has two known limits:
+
+- **A batch's diff can exceed its cited paths.** The gate compares what each batch was
+  briefed on, not what its agent edits. Two batches that cite different files can still
+  edit one.
+- **A batch that ended with no PR holds nothing, and a resumed one still holds nothing.**
+  Someone who resumes such a batch by hand edits files a later launch was free to take,
+  until the resumed work opens a PR.
+
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
 a transient user service. It reads both and takes the smaller headroom, so the tighter cap
