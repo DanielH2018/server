@@ -58,7 +58,9 @@ gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing
 batch.
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
-`cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
+`cc-wait land <n>`, never `land.sh`. A second `land.sh` for a PR whose landing is live ends
+`refused` with exit 75 and `cause=landing-live`, and its verdict prints the `cc-wait land <n>
+--log <log>` command that waits on the live landing: run that. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
 not: a host's updater applies its package, so there is nothing to re-run. Where a task notification can
 wake the session, run the command with `run_in_background: true`. A headless `claude -p` agent
