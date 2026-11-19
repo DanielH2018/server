@@ -57,6 +57,8 @@ EnvironmentFile=/etc/renovate-agent/session.env
 Environment=HTTPS_PROXY=http://{{ t2_egress_proxy }} https_proxy=http://{{ t2_egress_proxy }}
 Environment=HTTP_PROXY=http://{{ t2_egress_proxy }} http_proxy=http://{{ t2_egress_proxy }}
 Environment=NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1
+# probe.py's in-cluster reads go to squid as plain HTTP, the only form squid admits for them.
+Environment=HOMELAB_PROBE_VIA_PROXY=1
 {% endif %}
 # Only this script's own lines reach the journal: it captures the session's output and writes
 # it to a file the runner reads, so session text never becomes a syslog line.
