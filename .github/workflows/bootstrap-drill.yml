@@ -15,10 +15,9 @@ name: Bootstrap drill
 #   root-first    applies the root before the stand-in. Passes only when the claim check
 #                 fails, because the root created the claim first.
 #
-# Before this file is on the default branch, a pull request whose changed paths match the
-# filter below starts it; `gh workflow run` finds only workflows on the default branch. After
-# the merge, `gh workflow run bootstrap-drill.yml --ref <branch>` runs it on any branch, so
-# R4's PR 8 can run it on its own head.
+# A pull request whose changed paths match the filter below starts it. `gh workflow run`
+# finds only workflows on the default branch, so `gh workflow run bootstrap-drill.yml --ref
+# <branch>` runs it on any branch only once the file is there.
 
 on:
   workflow_dispatch:
@@ -90,7 +89,7 @@ jobs:
 
       # sops, kind and the node image come from the pins ci.yml's sops_manifest_type_proof job
       # reads, so this file holds no copy that could drift. age comes from apt. sops and kind
-      # come from ci.yml's cache entries, and the release only on a miss (#7781).
+      # come from ci.yml's cache entries, and the release only on a miss.
       - name: Read the sops and kind pins
         id: pins
         run: |

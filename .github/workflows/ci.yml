@@ -1,47 +1,43 @@
 name: CI
 
 on:
-  # A draft PR runs no job; `ready_for_review` starts its first real run (#5563). A fan-out
-  # batch opens its PR as a draft and pushes again while its review runs. From 2026-10-16 to
-  # 2026-10-18, 27 PR runs were cancelled by a push made before the review ended: 359
-  # runner-minutes, 37% of all cancelled PR runner-minutes. 50 more finished on a head such a
-  # push replaced: 1,075 runner-minutes. Setting `types` replaces GitHub's default list, so
-  # the first three are that default restated. Every job below carries
+  # A draft PR runs no job; `ready_for_review` starts its first real run. A fan-out batch opens
+  # its PR as a draft and pushes again while its review runs, and a push before the review ends
+  # cancels or wastes the run. Setting `types` replaces GitHub's default list, so the first
+  # three are that default restated. Every job below carries
   # `github.event.pull_request.draft != true`, which is true on a push, a dispatch and a
   # merge_group run, where the field is unset.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   # Inert. Merge queues are not offered on user-owned repositories, so the push run below
-  # stays the only full sweep a merge commit gets. The
-  # trigger is harmless and would do the right thing if the repo ever moved to an org: every
-  # job treats a merge_group event like a push, no PR scoping.
+  # stays the only full sweep a merge commit gets. The trigger is harmless: every job treats a
+  # merge_group event like a push, no PR scoping.
   merge_group:
   # An on-demand full sweep, for a PR whose own diff scopes out every hook that matters. The
-  # runner-image bump is the case it exists for: #2259 moves every `runs-on` to `ubuntu-26.04`,
-  # and a workflow-only diff matches no hook's `files` regex, so that PR's green run says nothing
-  # about `validate-unit-templates` against the image's systemd-analyze and Node, nor about
-  # gitleaks built with its Go (#2366). Without this trigger the first full sweep on a new image
-  # is the merge commit's push run, and a red one there parks every landing behind it.
+  # runner-image bump is the case it exists for: a workflow-only diff matches no hook's `files`
+  # regex, so that PR's green run says nothing about `validate-unit-templates` against the
+  # image's systemd-analyze and Node, nor about gitleaks built with its Go. Without this trigger
+  # the first full sweep on a new image is the merge commit's push run, and a red one there
+  # parks every landing behind it.
   #
   # Dispatch the BRANCH, never master. `ci_verdict` in `hosts/lib/ci_verdict.py` reduces
   # every check-run sharing a required name for one commit, worst outcome wins. A red dispatch
   # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that
   # checkout-sync's gate and `await_ci.py` both read, and that SHA's own green push run does not
   # outvote it. The concurrency arm below keeps a dispatch out of a push's group; it does nothing
-  # about this. Since #2402 the rule is enforced rather than asked for:
-  # `.claude/hooks/block-footguns.py:ci_dispatch_on_master_problem` denies a `gh workflow run`
-  # naming this workflow with no `--ref` or with `--ref master`. It cannot see the Actions UI
-  # button or a raw `gh api .../dispatches`, so this paragraph is still the rule for those.
+  # about this. `.claude/hooks/block-footguns.py:ci_dispatch_on_master_problem` enforces the
+  # rule: it denies a `gh workflow run` naming this workflow with no `--ref` or with `--ref
+  # master`. It cannot see the Actions UI button or a raw `gh api .../dispatches`, so this
+  # paragraph is still the rule for those.
   #
   # The REF you dispatch must carry this trigger, because GitHub runs the workflow file from that
   # ref. A branch cut before this landed therefore rebases onto master before it can be swept,
-  # which for a Renovate PR is its own rebase-check box. Measured 2026-09-24 against a branch
-  # without the trigger: `gh workflow run ci.yml --ref <branch>` returned HTTP 422 `Workflow does
-  # not have 'workflow_dispatch' trigger`. The DEFAULT branch does not need it for the API to
-  # accept a dispatch — measured the same day, with master still carrying no trigger, dispatching
-  # a probe branch that carried one started run 35999885346 and every job took the full-sweep
-  # path. GitHub documents the Run-workflow BUTTON as requiring the default branch; that half is
-  # untested here, so reach for `gh workflow run` rather than the UI.
+  # which for a Renovate PR is its own rebase-check box. Against a branch without the trigger,
+  # `gh workflow run ci.yml --ref <branch>` returns HTTP 422 `Workflow does not have
+  # 'workflow_dispatch' trigger`. The API accepts a dispatch of a branch that carries the
+  # trigger even when master does not. GitHub documents the Run-workflow BUTTON as requiring the
+  # default branch; that half is untested here, so reach for `gh workflow run` rather than the
+  # UI.
   #
   # Every job treats a dispatch like a push that no PR run proved, with nothing to configure.
   # The `prove` job runs on `push` only, so on a dispatch its output is empty and every other job
@@ -66,27 +62,18 @@ concurrency:
   # `cancel-in-progress: false` does not buy that. It governs the
   # RUNNING run; it does not protect a QUEUED one. GitHub keeps at most one pending run per
   # concurrency group, so when master moves faster than a ~3-minute sweep, each new push evicts
-  # the pending run ahead of it. Measured with eight sessions landing: nine master
-  # runs cancelled within three and a half minutes, each 4-52s after creation, every one with
-  # `total_count: 0` jobs — evicted while queued, never started.
+  # the pending run ahead of it, and the evicted run never starts a job.
   #
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 25 jobs (82 runs measured 2026-11-12, #8143). At most
-  # 18 of them were in progress at once across 20 of those sweeps, a peak seen under contention,
-  # not a ceiling the workflow sets. The queue measurement that prompted this
-  # grouping found job start lag at 1-4s with nothing waiting on a slot. That no longer holds.
-  # Measured 2026-10-25 over 95 minutes (#6306), the pool was full 17% of the time, and a
-  # `ci.yml` job waited 76s for a runner at the median, 293s at p90 and 572s at worst. A
-  # concurrent master sweep therefore delays queued PR runs by minutes.
+  # jobs at once, and a full sweep runs 25 jobs. A concurrent master sweep therefore delays
+  # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: #6309 measured whether paced merges let push runs take
-  # the 2-job proven skip, where a full sweep runs 25 jobs, and #6307 is the operator's call on more
-  # runner capacity.
+  # of the pool, not the group key: a full sweep runs 25 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -100,13 +87,12 @@ permissions:
   contents: read
 
 jobs:
-  # Proves, on a push to master, that the pushed tree is one a green PR run already tested
-  # (#5489). Of 235 squash commits from 2026-10-15 to 2026-10-17, 186 had the tree of their PR's
-  # head run, and master runs were 21% of all runner time. A PR run whose `pytest` legs ran the
-  # whole census is a full sweep (see the `hooks` job), so a master run on a tree it already
-  # swept repeats work and checks nothing new. A PR run whose legs ran a selection (#8458) ran
-  # every other job in full, and records its tree under a second context (#8943). The push run
-  # after it then repeats only `pytest`.
+  # Proves, on a push to master, that the pushed tree is one a green PR run already tested.
+  # Most squash commits have the tree of their PR's head run. A PR run whose `pytest` legs ran
+  # the whole census is a full sweep (see the `hooks` job), so a master run on a tree it already
+  # swept repeats work and checks nothing new. A PR run whose legs ran a selection ran every
+  # other job in full, and records its tree under a second context. The push run after it then
+  # repeats only `pytest`.
   #
   # `scripts/dev/tested_tree.py` reads the `ci/tested-tree` commit status that the `prek` gate
   # writes on the PR head, and answers `proven=true` only when that status carries the pushed
@@ -135,14 +121,12 @@ jobs:
   # pass only when this job succeeded and said `proven=true`. checkout-sync's CI gate and
   # `await_ci.py` read the gate's check-run, and read `skipped` as a pass.
   #
-  # A timed-out or failed `prove` falls back to the full sweep (#5783). Each dependent runs when
+  # A timed-out or failed `prove` falls back to the full sweep. Each dependent runs when
   # `prove` was cancelled or failed, whatever `proven` says, and the gate reads such a `prove` as
   # unproven, so every dependent must succeed. `tested_tree.py` exits 0 on every answer, so
   # either conclusion comes from the runner (a timeout, a failed checkout, a lost runner) and
-  # says nothing about the tree. HISTORY -- before that, master run 39279035375 (2026-10-19) went
-  # red and parked the since-retired GitOps deployer for 21h. `prove` had set `proven=true` 6s in, the runner then hung in
-  # teardown after "Cleaning up orphan processes", and the job timeout cancelled it at 5m23s.
-  # Every dependent skipped on `proven=true`, and the gate failed on `prove=cancelled`.
+  # says nothing about the tree. A runner that hangs in teardown after `prove` set `proven=true`
+  # would otherwise skip every dependent while the gate failed on `prove=cancelled`.
   #
   # DECIDED: a cancelled or failed `prove` runs the dependents ahead of `!cancelled()` and the
   # proof.
@@ -152,8 +136,7 @@ jobs:
   # still stops the sweep, through `!cancelled()`. `proven` cannot be trusted from a cancelled
   # or failed job, because the job set it and then did not succeed.
   #
-  # The timeout is sized from the 41 most recent master attempts on 2026-10-22: 40 took 6-10s,
-  # and the 41st is the hang above. A hang delays the sweep by the whole timeout, so it is short.
+  # A normal run takes 6-10s. A hang delays the sweep by the whole timeout, so it is short.
   prove:
     name: prove the pushed tree was tested
     if: >-
@@ -193,29 +176,26 @@ jobs:
   # carries the branch-protection required context; the `prek` gate job at the bottom does,
   # under the name "prek (lint + validate + tests + secrets)".
   #
-  # By PR run 40125170130 (2026-10-24) `hooks` took 4m58s and set the wall, ahead of pytest's
-  # slowest shard at 4m29s. 77s of that was the cross-plane order gate (the render-diff gates
-  # since D6.12), which now runs in the `pr_gates` job beside this one (#6149).
+  # The cross-plane order gate (the render-diff gates) runs in the `pr_gates` job beside this
+  # one, so it stays off this job's wall.
   #
-  # `mkdocs build --strict` is NOT worth a job: 4s on master run 34029520131. The
-  # `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
+  # `mkdocs build --strict` is NOT worth a job (4s): the `mkdocs-strict` hook in the full sweep
+  # is this job's only docs build.
   #
-  # NB the FIRST run on any given branch is slower, once — the merge of #166 took 108s, not 77s.
-  # A branch restores its hook-env cache via restore-keys from an older entry and rebuilds the
-  # rest in-step (measured: a 44s hook step), saving the union key at the end. Caches are scoped
-  # per branch, so master paid this on its own first run and each open PR branch pays it once
-  # too. Don't read either as the steady state.
+  # The FIRST run on any given branch is slower, once: a branch restores its hook-env cache via
+  # restore-keys from an older entry and rebuilds the rest in-step, saving the union key at the
+  # end. Caches are scoped per branch, so each open PR branch pays it once. Don't read it as the
+  # steady state.
   hooks:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     name: hooks (lint + validate + secrets + docs)
     # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
-    # new release with no commit here (#2152). The built-in github-actions manager tracks a
+    # new release with no commit here. The built-in github-actions manager tracks a
     # versioned label through the `github-runners` datasource, so the image moves in a PR that
-    # runs these hooks on it first. The alias resolved to ubuntu-24.04 when this was
-    # pinned (2026-09-21), so the pin changed nothing on the day. The same reasoning covers
-    # the `python-version:` and `node-version:` pins in .github/actions/setup/action.yml.
+    # runs these hooks on it first. The same reasoning covers the `python-version:` and
+    # `node-version:` pins in .github/actions/setup/action.yml.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
     # the `workflow-runners-are-pinned` row of tests/repo/test_census_rows_text.py.
     runs-on: ubuntu-26.04
@@ -236,9 +216,8 @@ jobs:
           prek-cache-key: prek
 
       # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
-      # is on PATH — unverified on the runner image before this ran once. This step exists so a
-      # runner image change that drops the binary fails loud here rather than as an opaque
-      # "command not found" inside the hook.
+      # is on PATH. This step exists so a runner image change that drops the binary fails loud
+      # here rather than as an opaque "command not found" inside the hook.
       - name: Check systemd-analyze is available
         run: systemd-analyze --version
 
@@ -258,7 +237,7 @@ jobs:
       # format" — naming the tarball instead of the URL that was never fetched.
       #
       # Each GitHub release download in this file sits behind an actions/cache keyed on its pin,
-      # so it runs once per version bump and a release outage (#7625) fails only the bump's run.
+      # so it runs once per version bump and a release outage fails only the bump's run.
       # The cache holds the download, never the installed binary, and each run checks its digest
       # where it has one. ENFORCED by tests/repo/test_ci_release_downloads_are_cached.py.
       - name: Cache the Vale release
@@ -335,14 +314,13 @@ jobs:
           ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
-      # A PR run sweeps every hook over the whole tree. This is what lets the push run skip when it merges a tree that a PR run
-      # already tested (the `prove` job below, #5489): the PR run is the sweep, so the green it
-      # records covers everything the push run would check. A changed-file scope on the PR run
-      # would leave the scoped-out files unchecked, and the skipped push run would be the only
-      # place they ever got checked.
+      # A PR run sweeps every hook over the whole tree. This is what lets the push run skip when
+      # it merges a tree that a PR run already tested (the `prove` job below): the PR run is the
+      # sweep, so the green it records covers everything the push run would check. A changed-file
+      # scope on the PR run would leave the scoped-out files unchecked, and the skipped push run
+      # would be the only place they ever got checked.
       #
-      # What stays of the old scoping step is its empty-merge check. scripts/dev/pr_changed_files.sh
-      # owns the fetch and the merge-base diff.
+      # scripts/dev/pr_changed_files.sh owns the fetch and the merge-base diff.
       - name: Reject a PR whose merge changes no files
         id: changed
         if: github.event_name == 'pull_request'
@@ -457,9 +435,7 @@ jobs:
       # leaves unchecked.
       #
       # The sweep builds the docs site through the `mkdocs-strict` hook, and that is this job's
-      # only build (#6150). A standalone `mkdocs build --strict` step once ran after the sweep,
-      # from before the hook existed, and built the site a second time on every run (16s on run
-      # 40125170130). The build matters here because the twice-daily docs-refresh cron is the only
+      # only build. The build matters here because the twice-daily docs-refresh cron is the only
       # other place it runs, and a broken internal link found there leaves the PREVIOUS site
       # serving with nothing saying why.
       - name: Run hooks (full sweep)
@@ -467,14 +443,13 @@ jobs:
         # test_static_ratchet_hook.py holds this list equal to prek.toml's ratchet hook ids.
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
-        # `real_tree`), so the hook here was a second render of every k8s role (#6150).
+        # `real_tree`), so the hook here would be a second render of every k8s role.
         # --verbose: prek prints each hook's duration only with it, and this log is where a slow hook shows.
         run: prek run --all-files --verbose --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
 
   # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
-  # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
-  # 40125170130 the cross-plane gate's 77s made `hooks` the slowest job at 4m58s. Here they run
-  # beside the sweep, and the run wall is the slower of the two jobs instead of their sum.
+  # their own. They run beside the `hooks` sweep, so the run wall is the slower of the two jobs
+  # instead of their sum.
   #
   # The job-level `if:` is the same prove condition every gated job carries, and the PR-only
   # test sits on each step instead. A job-level `pull_request` condition would make the job
@@ -501,23 +476,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false  # nothing here pushes or fetches
 
-      # Python and uv only. Neither gate runs prek; both ran in `hooks` before this job existed.
+      # Python and uv only. Neither gate runs prek.
       - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
-      # The render-diff gates (D4.4, renamed from the cross-plane gate in D6.12, which deleted
-      # its plane-order arm). It refuses an edge added beside a change to its dependent.
-      # docs/landing.md says how to split a refused PR, and there is no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
-      # `Removes-Object:` line in the PR's commits (docs/flux-deploy-plane.md). It runs on a
-      # pull request only, because a push or a dispatch has no diff to judge and no PR commits to read. The
-      # checkout is the merge commit, so its first parent is the base it merges onto, and each
-      # side renders with its own tree's renderer, about 15s each.
+      # The render-diff gates. They refuse an edge added beside a change to its dependent.
+      # docs/landing.md says how to split a refused PR, and there is no bypass. Their removal
+      # arms refuse an object a flux-owned tag drops without a `Removes-Object:` line in the
+      # PR's commits (docs/flux-deploy-plane.md). They run on a pull request only, because a push
+      # or a dispatch has no diff to judge and no PR commits to read. The checkout is the merge
+      # commit, so its first parent is the base it merges onto, and each side renders with its
+      # own tree's renderer.
       - name: Render-diff gates
         if: github.event_name == 'pull_request'
         timeout-minutes: 8
         run: uv run python scripts/validate/render_diff_gates.py --base HEAD^1
 
-      # The cluster pin checks (H1.1f). Merging a Longhorn or MetalLB pin is the upgrade, so it
+      # The cluster pin checks. Merging a Longhorn or MetalLB pin is the upgrade, so it
       # refuses a pin that decreases, a Longhorn bump that skips a minor release, and a bump
       # whose PR changes anything besides the pin's role directory and docs. `land.sh`'s land
       # gate relies on that last refusal to gate one bump per PR. docs/landing.md says what to
@@ -527,7 +502,7 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/cluster_pins.py --base HEAD^1
 
-      # The k3s version and its binary sum move together (H6.3e). The `binary` gate mode
+      # The k3s version and its binary sum move together. The `binary` gate mode
       # compares each node's binary with the sum, so a bump that keeps the old one is refused.
       - name: k3s binary sum co-change
         if: github.event_name == 'pull_request'
@@ -537,12 +512,11 @@ jobs:
   # The pytest suite, invoked as the prek `pytest` hook invokes it (`uv run python -m pytest`,
   # addopts from pyproject.toml), so a local `prek run --all-files` and this job cannot disagree
   # about what a test run is. A push to master and a dispatch run every module. A pull request
-  # runs the modules its diff can affect (#8458); the `Select` step below has the rule.
+  # runs the modules its diff can affect; the `Select` step below has the rule.
   #
   # Sharded across a matrix, because this job is the pole of every run and a landing
   # waits on it twice — once on the PR, once on the master merge commit that `land.sh` and
-  # checkout-sync's CI gate both read. Unsharded, the test step took 124s and the job 138s of which
-  # 11s is setup, against 98s for the `hooks` job beside it.
+  # checkout-sync's CI gate both read.
   #
   # THE MATRIX KEEPS THE JOB ID `pytest`, which is what makes this a one-file change.
   # `needs.pytest.result` in the gate below is the AGGREGATE of every matrix leg, so the gate's
@@ -557,7 +531,7 @@ jobs:
   # hide another's.
   #
   # DECIDED: a pull request's selection comes from a recorded table, never from a path list
-  # (#8458, the operator's ruling of 2026-11-15). Several tests discover their inputs by walking
+  # Several tests discover their inputs by walking
   # the tree (test_validate_shell_templates' pinned roster, test_healthchecks_pings' rglob), so
   # a hand-kept map from changed paths to tests would skip the tests that should fail on a new
   # *.sh.j2. `scripts/dev/affected_tests.json` holds what each module's own run read and listed
@@ -569,11 +543,8 @@ jobs:
   # What neither run can reach is a test outside `testpaths`, which
   # test_testpaths_covers_every_test_file guards.
   #
-  # This job is the suite's only automated run before a merge. The prek `pytest` hook that
-  # re-ran it at `git push` was removed on 2026-10-02: it took 89s on daniel-box at load 0.9
-  # (2026-10-02) and 235s on daniel-server at load 15, on every push, to repeat what this job
-  # checks, and `land.sh` already waits on this job through the `prek` gate. The job took ~61s
-  # then. By PR run 40125170130 (2026-10-24) its legs took 2m49s to 4m29s.
+  # This job is the suite's only automated run before a merge, and `land.sh` waits on it
+  # through the `prek` gate.
   pytest:
     needs: prove
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.pytest-proven != 'true')) && github.event.pull_request.draft != true }}
@@ -597,26 +568,10 @@ jobs:
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
-      # Its reading over 20 green master runs on 2026-11-14 kept six. A run used a median 1,414
-      # slot-seconds (a full sweep about 3,800), pytest about 1,020 of them, and the pooled
-      # queue wait was 10s at p50 and 161s at p90. The p90 comes from the
-      # `host_packages_bootstrap` legs, which wait a median 56s for a runner; the pytest legs
-      # wait 12s. Dropping a leg removes about 40 slot-seconds: the 29.5s it spends outside
-      # `Run the test suite`, plus the k8s render prebuild and the import cost every leg repeats.
-      # Its 17-22s of collection and up to 15s of fleet prebuild before the first test (the
-      # `phase timing` sections of run 43594559130) mostly move with its files to another leg.
-      # Five shards would save about 40 of the 1,414 and one of the 25 queued jobs, and add
-      # about 20s to the wall of every run that skips the host package legs, where pytest is
-      # the last job to finish. Four would save about 80 and add about 50s. Neither moves the
-      # p90.
-      #
       # A shard can never finish faster than its largest `--dist loadscope` group, a module or
-      # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
-      # and 42542483114 (2026-11-09) the heaviest module measured 90-114s on one worker, against
-      # 111-197s of `--durations` per worker; #7710 split it into class groups of about 30s.
-      # The next is test_validate_k8s_manifests.py at about 87s, most of it one module-scoped
-      # fixture. Each leg's `phase timing` section prints every worker's finish time, which
-      # shows when one group sets the leg's wall.
+      # a class within one, so the floor rises as the matrix grows. Each leg's `phase timing`
+      # section prints every worker's finish time, which shows when one group sets the leg's
+      # wall.
       matrix:
         # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
         shard: [1, 2, 3, 4, 5, 6]
@@ -664,7 +619,7 @@ jobs:
         if: steps.select.outputs.count != '0'
         uses: $/.github/actions/pytest-tools
       # Every xdist worker collects the whole shard, and on a cold checkout each one rewrites
-      # every module's assertions itself: 2.3-2.5s of a 6.7s collection on daniel-server (#8693).
+      # every module's assertions itself, which is over a third of collection.
       # pytest names a rewritten module `<name>.<cache tag>-pytest-<version>.pyc` and validates it
       # by the source's hash, not its mtime, so an entry from an earlier commit stays valid for
       # every module the commit left unchanged, and a changed module is rewritten again.
@@ -685,9 +640,8 @@ jobs:
           key: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-${{ steps.rewrite-day.outputs.day }}
           restore-keys: pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-shard${{ matrix.shard }}-
 
-      # --durations because this job is the pole of the whole landing: unsharded, its test step
-      # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
-      # The runner is slower per test than the workstation, so a local `--durations` run does
+      # --durations because this job is the pole of the whole landing, and a landing waits on CI
+      # twice. The runner is slower per test than the workstation, so a local `--durations` run does
       # not tell you which tests dominate HERE. Printing it on every run means the next person to
       # attack this reads the answer off a green build instead of guessing at the shape. It is
       # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
@@ -696,7 +650,7 @@ jobs:
       # `=0` rather than `=15`, and the log is teed because the next step reads it.
       # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
       # 200 sub-second tests contributes nothing to them. `=0` prints every duration above
-      # pytest's own 0.005s floor — 1,188 lines and 156 KB for one shard of six — and the
+      # pytest's own 0.005s floor, and the
       # report is still sorted descending, so the top-15 reading above
       # survives as its first fifteen lines. The `failure_report` plugin prints FAILURES after
       # it, so a red shard's log still ends on the traceback and the short summary.
@@ -736,24 +690,24 @@ jobs:
       # The measured half of the shard-weight check. Nothing static separates a heavy module from
       # a light one, so this step reads the durations report the shard just wrote. It has three
       # arms: a heavy module with no recorded weight, a recorded weight far HIGHER than what the
-      # module measured, and one far LOWER (#4873). Each complaint names its own repair.
+      # module measured, and one far LOWER. Each complaint names its own repair.
       #
       # DECIDED: the step annotates and never fails, on every event. A wrong weight costs one leg
       # at most that module's own seconds, until the docs-refresh cron's `--refresh-runner` reads
       # the module off green master runs, within a day. A failed run costs a full rerun from the
-      # 20-job runner pool. A failing version was narrowed five times (#3604, #4010, #5480,
-      # #5616, #5989), each after it failed a PR on a weight the PR could not have known about.
+      # 20-job runner pool. A failing version kept failing PRs on a weight the PR could not
+      # have known about.
       - name: Check every heavy module's recorded weight
         if: steps.select.outputs.count != '0'
         run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
-  # The deck mod (`.claude/plugins/deck/`, #3676) is a Claude Code plugin of function hooks,
+  # The deck mod (`.claude/plugins/deck/`) is a Claude Code plugin of function hooks,
   # an early-access API that changes between releases. `claude plugin validate` reads the
   # module the way the engine will, and `claude plugin test` runs its tests against the engine
   # with the probe call mocked. Neither needs credentials. `.github/claude-cli/package-lock.json`
   # pins the CLI to the version whose API the mod was written and type-checked against, so a
   # bump is a deliberate change that re-runs this job. The package's postinstall puts the
-  # native binary in place: run 37866869971 failed under --ignore-scripts with `claude native
+  # native binary in place: under --ignore-scripts alone, the run fails with `claude native
   # binary not installed`. The install skips every script and then runs that one by name, so
   # it works whatever npm's lifecycle-script policy is and runs no other package's script.
   #
@@ -808,7 +762,7 @@ jobs:
           "$claude" plugin test .claude/plugins/deck
 
   # Workflows name actions by version tag, and `.github/workflows/actions.lock` pins each tag to
-  # a commit (#8014). `--verify` fails when the lockfile is out of step with the workflows, or
+  # a commit. `--verify` fails when the lockfile is out of step with the workflows, or
   # when a locked commit no longer verifies upstream, such as a moved tag. After changing a
   # `uses:` line, run `gh actions-lock` and commit the lockfile it rewrites.
   lockfile:
@@ -864,7 +818,7 @@ jobs:
       # that publishes and the controllers' release. scripts/tests/test_renovate_flux_cli.py
       # fails a drift.
       # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
-      # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
+      # miss, with nfpm's 12x30s retry window. The sha256 check runs on a hit too.
       - name: Cache the flux CLI release
         uses: actions/cache@v6.1.0
         with:
@@ -899,7 +853,7 @@ jobs:
           [ "$rc" = 1 ]
 
       # The green run builds every tag in both passes, since placeholder mode skips none
-      # (R2's PR 9). It covers home-assistant, pi-peer-backup, qbittorrent and authelia, which
+      # It covers home-assistant, pi-peer-backup, qbittorrent and authelia, which
       # carry the render_sops_manifests entries: each pass also asserts it dropped exactly one
       # document for each. The red half stays on three tags: it only has to show that one
       # changed byte is seen.
@@ -917,8 +871,7 @@ jobs:
       # covers it. With `email` dropped from the committed map under every tag, the `${email}`
       # in traefik's CF_API_EMAIL env value takes `0123` and loses its string type, so the
       # narrowed pass must still see that standalone use. Every other key keeps the committed
-      # map's cover, so the step holds whether or not `domain` is a placeholder (R2's domain
-      # PR 2b).
+      # map's cover, so the step holds whether or not `domain` is a placeholder.
       - name: Red-proof the round trip's second pass with email dropped from the guard's map
         run: |
           set -euo pipefail
@@ -934,9 +887,9 @@ jobs:
           [ "$rc" = 1 ]
           grep -qx 'traefik: Deployment/homelab/traefik differs' "$RUNNER_TEMP/rt-map.log"
 
-  # Target slice D3's in-cluster proof (docs/target-architecture/deploy/d3-secrets.md, PR
-  # D3.3d). R2 PR 7b moves `mullvad_account`, whose value is all digits, into a SOPS manifest
-  # that kustomize-controller decrypts and applies. This job measures what the controller and
+  # Target slice D3's in-cluster proof (docs/target-architecture/deploy/d3-secrets.md).
+  # `mullvad_account`, whose value is all digits, lives in a SOPS manifest that
+  # kustomize-controller decrypts and applies. This job measures what the controller and
   # the API server do with such a value in a quoted `stringData` field, in a throwaway kind
   # cluster running the controller images the cluster runs: the vendored gotk-components.yaml.
   # scripts/secrets_mgmt/tests/_sops_type_proof.py builds both halves with a key it generates.
@@ -1213,10 +1166,9 @@ jobs:
   # actions/cache key of the verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg pulls the pinned test image for its Ubuntu
   # release, or builds it on a Dockerfile change, and runs the updater cases in it (steps 4 and 5).
   #
-  # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
-  # As one job, the arm64 job started only after both legs' 36s image build and 243s of cases,
-  # although the build was done about 80s in (run 40125170130). The cases legs now pay one more
-  # job's setup and the hand-off's transfer before their image build.
+  # The build is a job of its own so that `host_tools_arm64` waits for the build alone, not for
+  # both legs' image build and cases. The cases legs pay one more job's setup and the hand-off's
+  # transfer before their image build.
   #
   # `host_packages` has no `name:`, so GitHub shows each leg as `host_packages (<release>,
   # <python>)`, and later host slices filter `gh run view` on that prefix. The build job's
@@ -1292,7 +1244,7 @@ jobs:
       # render shows as a diff. The base tree is a worktree at the merge base.
       #
       # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that is
-      # not a render input, so it changes no render (#5004): the test image's build context and
+      # not a render input, so it changes no render: the test image's build context and
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
       # tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
@@ -1301,11 +1253,11 @@ jobs:
       # too. `job-changed` compares each as parsed YAML, so a comment-only edit, or an edit to
       # another job, does not. The cases'
       # fixture exercises renderer paths no real package does, so `fixture-changed` renders it
-      # in each tree with that tree's renderer, and a differing fixture counts too (#5066).
+      # in each tree with that tree's renderer, and a differing fixture counts too.
       #
       # Each verdict is captured on a line of its own, where `set -e` aborts the step when
       # the command fails. Inside a `[ "$(...)" = true ]` test the failure would read as
-      # `false` and skip the cases (#5071). Each is computed only when the arms before it
+      # `false` and skip the cases. Each is computed only when the arms before it
       # did not fire.
       - name: Render every host package at the head and at the merge base
         id: render
@@ -1386,7 +1338,7 @@ jobs:
           fi
           echo "cases=$cases" >> "$GITHUB_OUTPUT"
 
-      # H4.1c. The two scans read the head render's package roots alone, so they sit here, after
+      # The two scans read the head render's package roots alone, so they sit here, after
       # the render and ahead of every step that stands down when the tree is unchanged. Neither
       # step has an `if:`: a PR that changes only .gitleaks.toml or the gitleaks pin renders no
       # package differently, and it still runs them (test_host_package_scans_run_on_every_pr.py).
@@ -1438,14 +1390,14 @@ jobs:
       - name: Check the named package roots' placeholders against their SOPS keys
         run: uv run python scripts/validate/host_packages.py placeholders "$RUNNER_TEMP/render/head"
 
-      # homelab-tools renders pins and no bytes (H3.11). The builder's own `install_tools`
+      # homelab-tools renders pins and no bytes. The builder's own `install_tools`
       # fetches each pinned file, checks its sha256 and places it under the tree's root/, so a
       # wrong digest or a 404 URL fails here, and a Renovate bump of a pin reaches master only
       # if its new digest verifies. The cache is keyed by digest, so the base and head trees
       # share one download.
       #
       # The cache directory persists across runs under a key hashed from every rendered
-      # tools.json, base and head (#7449). A run with unchanged pins restores it and requests no
+      # tools.json, base and head. A run with unchanged pins restores it and requests no
       # release URL. A pin bump changes the key and misses, so the new pin is downloaded and
       # verified. No restore-keys, so an entry never carries a retired pin into the hand-off.
       # `download_tool` checks a cached file against its pin on every use, so a bad entry is
@@ -1481,7 +1433,7 @@ jobs:
       # Every package of both sides packs at once, each in a background subshell with its own
       # TMPDIR and log, and the step prints every log before it fails on any. nfpm packs on one
       # core, and the four homelab-tools debs take 21-24s each, so packing them one after another
-      # set the step's wall (#7834). The base debs are not only diff input: the upgrade cases
+      # set the step's wall. The base debs are not only diff input: the upgrade cases
       # install them.
       - name: Build both renders with the pinned nfpm
         if: >-
@@ -1628,9 +1580,8 @@ jobs:
     # Each leg boots a container per case. The bootstrap cases run in `host_packages_bootstrap`.
     # The image step pulls the pinned image, but a PR that
     # changes the Dockerfile builds it from snapshot.ubuntu.com, so the budget stays sized to
-    # the build. Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the
-    # build, a 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
-    # Pulling, 2026-11-08 to 11-09: the image step took 10-32s, the longest leg 31min 47s (#7665).
+    # the build: with a slow mirror the image build takes over half an hour and the cases 20
+    # minutes more.
     # scripts/deploy_tools/land_lib/options.py:CI_TIMEOUT_S moves with this value.
     timeout-minutes: 60
     permissions:
@@ -1657,15 +1608,15 @@ jobs:
 
       # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
       # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
-      # that a rerun cleared; every red one followed a build that never uploaded (#8005).
+      # that a rerun cleared; every red one followed a build that never uploaded.
       - name: Download the hand-off from the build job
         uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/handoff
 
-      # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
-      # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
+      # The tarball unpacks to the paths the build job wrote: `$RUNNER_TEMP/render` and
+      # `$RUNNER_TEMP/debs`.
       - name: Unpack the render, the debs and nfpm
         run: |
           set -euo pipefail
@@ -1734,33 +1685,22 @@ jobs:
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
 
   # The bootstrap cases (`validate_lib/bootstrap_case.py`), one leg per release, beside the
-  # `host_packages` legs rather than inside them (#7819). In those legs they were the longest group,
-  # 338-477 s across seven master runs on 2026-11-09, against 214-271 s for the next-longest. The
-  # serial prepare took 18-42 s of that. The items took the rest: three CPU-bound offline builds
-  # ran 227-303 s each, sharing the leg's 4 vCPUs with every other group. Alone here, the first run
-  # still took 329-385 s against 208-215 s for `upgrade_path`, so `run` submits the three builds
-  # first and the host items fill in behind them (#7866). That took it to 264-298 s against
-  # 207-212 s (run 42697086899), each build still 244-271 s beside the other two. So each release
-  # runs three shards, one offline build in each (#7879). The split left each build at 224-244 s
-  # with a runner to itself (runs 43146660058 and 43148777838), so a build is slow on its own, and
-  # these legs still end 28-80 s after the `host_packages` legs. A local run copies the kit's uv
-  # cache in under a second and builds the venv from it in less, so each item prints each phase of
-  # the script's local build under its `[DONE]` line to find the rest (#7982). Those lines put
-  # 181-182 s of a 243 s offline build in its `apt-get update`, against 2 s online (run
-  # 43750408193): the image's `Acquire::Retries "10"` backs off 1+2+4+8+16+5x30 s on fetches a
-  # container with no network cannot make, so the offline item sets no retries. Keep the shard
-  # count equal to the number of offline builds `bootstrap_plan.plan` lists;
-  # `test_bootstrap_case.py` holds it.
+  # `host_packages` legs rather than inside them, where they were the longest group. Each
+  # release runs three shards, one CPU-bound offline build in each, and `run` submits the three
+  # builds first so the host items fill in behind them. Keep the shard count equal to the number
+  # of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  #
+  # Each item prints each phase of the script's local build under its `[DONE]` line. An offline
+  # build spends most of its time in `apt-get update`: the image's `Acquire::Retries "10"` backs
+  # off 1+2+4+8+16+5x30 s on fetches a container with no network cannot make, so the offline
+  # item sets no retries.
   #
   # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
-  # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. Over 20 green
-  # master runs on 2026-11-14 these six legs used about 1,740 slot-seconds of a full sweep's
-  # 3,800, and they set the p90 wait. They wait for runners because they become ready while the
-  # six pytest legs still hold slots. Only about 30s of a leg's 294s median is fixed setup
-  # (checkout, the setup action, the hand-off, the image build), so two shards per release
-  # would save about 60 slot-seconds and two queued jobs. They would also put two offline builds
-  # on one leg, each 224-244s with a runner to itself, which lengthens the sweep's last leg by
-  # more than the queue it saves.
+  # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. These legs
+  # wait for runners because they become ready while the six pytest legs still hold slots. Two
+  # shards per release would put two offline builds on one leg, which lengthens the sweep's
+  # last leg by more than the queue it saves.
+  #
   # The `name:` leaves the shard out, so a release's three shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
@@ -1855,11 +1795,11 @@ jobs:
             --bootstrap-shard "$SHARD"
 
   # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
-  # of the release binary run whatever the legs seed (#7751 seeds k3s there; #7754). One release
+  # of the release binary run whatever the legs seed. One release
   # is enough: the download does not depend on the release under test.
   #
   # It is a job of its own, beside the legs rather than after their cases, so it adds nothing to
-  # the 26.04 leg, the longest of the run (#7810). It sits outside the `prek` gate, with a
+  # the 26.04 leg, the longest of the run. It sits outside the `prek` gate, with a
   # job-level `continue-on-error`, so a GitHub release outage cannot fail the PR. The image and
   # case steps carry their own `continue-on-error` too: a job-level one still leaves a failed
   # job's check-run red, which every reader of a PR's check rollup counts as a failure. A failed
@@ -1953,7 +1893,7 @@ jobs:
   # repository, the job falls back to QEMU on `ubuntu-26.04`, and the PR that does so records the
   # run time (Open question 9). A run that leaves this job queued is that refusal.
   #
-  # It waits for `host_packages_build` alone, not for the cases legs (#6151).
+  # It waits for `host_packages_build` alone, not for the cases legs.
   #
   # When `host_packages_build` built no homelab-tools, because no render changed, there is no
   # artifact and the job skips, so it takes no runner (docs/ci-throughput.md). The `prek` gate
@@ -1965,8 +1905,7 @@ jobs:
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.arm64-tools == 'true') }}
     runs-on: ubuntu-24.04-arm
     # Pulls the pinned test image as host_packages does, and builds it from the same mirror on a
-    # Dockerfile change. Measured 2026-11-04 with the mirror slow: this job's build reached
-    # 29min 05s and host_packages' 33min 45s (#7128).
+    # Dockerfile change. A slow mirror makes the build take about half an hour.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -2080,11 +2019,11 @@ jobs:
             "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
           # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
-          # dependent ran (#5783).
+          # dependent ran.
           case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
-          # A record from a selected run proves every job but `pytest` (#8943).
+          # A record from a selected run proves every job but `pytest`.
           pytest_proven=false
           if [ "$proven" = true ] && [ "${PYTEST_PROVEN:-}" = true ]; then pytest_proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
@@ -2098,7 +2037,7 @@ jobs:
             && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
             && { ok "$HOST_TOOLS_ARM64" || idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"; }
 
-      # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
+      # Records what this green run tested, for the push run's `prove` job. On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree
       # every job above checked out. The status goes on the PR head commit, which is the commit
       # the squash merge's PR lookup returns.
@@ -2113,8 +2052,8 @@ jobs:
       # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
       # cancelled ran the sweep, and that run records.
       #
-      # A run whose pytest legs ran a selection (#8458) did not run every test module on this
-      # tree, so it records under `ci/tested-tree-but-pytest` instead (#8943). Every other job
+      # A run whose pytest legs ran a selection did not run every test module on this
+      # tree, so it records under `ci/tested-tree-but-pytest` instead. Every other job
       # ran in full here, so the push run after its merge repeats only `pytest`.
       # `needs.pytest.outputs.scope` is `full` when the legs ran the whole census and `selected`
       # when they ran a selection; a leg that never reached its select step leaves it empty,
@@ -2196,19 +2135,17 @@ jobs:
           uv: "false"
           node: "true"
 
-      # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, which
-      # makes this job the longest in the workflow on a PR that touches renovate.json. Skip it on PRs that do not touch the file it validates.
-      # renovate.json moved in 26 of the last 1600 commits (~1.6%), so this is a fast green for
-      # essentially every PR.
+      # The script's `npm install renovate@latest` re-downloads Renovate on every run, which
+      # makes this job the longest in the workflow on a PR that touches renovate.json. Skip it
+      # on PRs that do not touch the file it validates; renovate.json rarely changes, so this is
+      # a fast green for nearly every PR.
       #
-      # Caching was measured and rejected. npm's cache splits in two: keeping `_cacache` alone
-      # (309 MB) still re-resolves from the registry and cuts the step to 7.2s, but the key
-      # cannot be content-derived from an unpinned package, so a rolling key would write a new
-      # 309 MB entry every run and churn the repo's 10 GB cache budget — likely evicting the
-      # prek caches this workflow depends on. Also keeping `_npx` (341 MB) gets to
-      # 0.9s but SILENTLY PINS: that tree's manifest records `renovate: ^44.30.1`, npm sees the
-      # install satisfies it and reuses it without ever contacting the registry (it runs
-      # happily with --offline). That would quietly defeat the whole point of this job, below.
+      # Caching does not help. The key cannot be content-derived from an unpinned package, so a
+      # rolling key would write a large entry every run and churn the repo's 10 GB cache budget,
+      # likely evicting the prek caches this workflow depends on. Keeping npm's `_npx` tree
+      # SILENTLY PINS: its manifest records `renovate: ^44.30.1`, npm sees the install satisfies
+      # it and reuses it without ever contacting the registry. That would quietly defeat the
+      # whole point of this job, below.
       - name: Check whether this PR touches renovate.json
         id: scope
         if: github.event_name == 'pull_request'
@@ -2219,7 +2156,7 @@ jobs:
           set -euo pipefail
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           # The script diffs against the merge base, so this is the PR's own change to the file.
-          # A deletion of renovate.json counts as touching it, as `git diff -- renovate.json` did.
+          # A deletion of renovate.json counts as touching it.
           if grep -qFx renovate.json "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/deleted.txt"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
