@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from host_lib import DISCORD_MAX
+from host_lib import DISCORD_MAX, clamp_discord
 from pending_logic import PENDING_HEADER
 
 # Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
@@ -167,9 +167,7 @@ def problems_fingerprint(problems: set[str]) -> str:
     return ",".join(sorted(problems))
 
 
-PROBLEMS_HEADER = (
-    "\U0001f9e8 Renovate — Repository Problems (updates silently stalled):"
-)
+PROBLEMS_HEADER = "Renovate — Repository Problems (updates silently stalled):"
 
 
 def render_problems(problems: set[str]) -> str:
@@ -312,12 +310,12 @@ def actionable(prs: list[PR]) -> list[tuple[PR, str]]:
     return out
 
 
-CLEARED_MSG = "✅ Renovate backlog cleared — nothing needs your attention."
+CLEARED_MSG = "Renovate backlog cleared — nothing needs your attention."
 
 _BUCKET_ORDER = ("stuck", "manual")
 _BUCKET_HEADER = {
-    "stuck": "🔧 Stuck (should auto-merge, can't):",
-    "manual": "✋ Awaiting your merge (merging → auto-deploys, health-gated, ≤30 min):",
+    "stuck": "Stuck (should auto-merge, can't):",
+    "manual": "Awaiting your merge (merging → auto-deploys, health-gated, ≤30 min):",
 }
 
 
@@ -379,53 +377,51 @@ def _pr_note(pr: PR) -> str:
         # Names the remedy, because the whole failure mode is that "conflicting" implies a rebase
         # will fix it and here nothing will: the files are gone from the base branch.
         return (
-            "🪦 conflicting against deleted path(s) — close it, Renovate recreates: %s"
+            "DEAD PATH: conflicting against deleted path(s) — close it, Renovate recreates: %s"
             % (", ".join(pr.dead_paths or ()),)
         )
     if pr.conflicting:
-        return "⚠️ conflicting"
+        return "CONFLICTING"
     if pr.ci == "failure":
-        return "❌ CI failing"
+        return "CI FAILING"
     if pr.ci == "pending":
-        return "⏳ CI pending"
-    return "✅ green"
+        return "CI pending"
+    return "green"
 
 
 def render_digest(items: list[tuple[PR, str]], limit: int = DISCORD_MAX) -> str:
     """Render the actionable (pr, bucket) list into a Discord digest message.
 
-    Groups by bucket in `_BUCKET_ORDER`, then truncates the tail (adding a "…and N more"
-    line) to stay under `limit` characters — Discord's message cap.
+    Groups by bucket in `_BUCKET_ORDER`, then adds PRs one at a time while they fit under
+    `limit` characters, Discord's message cap, and ends with a "…and N more" line for the rest.
 
     Args:
         items: (pr, bucket) pairs, typically `actionable()`'s output.
         limit: character budget for the rendered message.
     """
     total = len(items)
-    head = "📦 Renovate — %d PR(s) need attention" % total
-    # Build per-PR entries in bucket order; add as many as fit, count the remainder.
-    entries: list[tuple[str, list[str]]] = []  # (bucket_header, [lines]) groups
-    for bucket in _BUCKET_ORDER:
-        group = [(pr) for pr, b in items if b == bucket]
-        if not group:
-            continue
-        lines = []
-        for pr in group:
-            lines.append(" • #%d %s — %s" % (pr.number, pr.title, _pr_note(pr)))
-            lines.append("   %s" % pr.url)
-        entries.append((_BUCKET_HEADER[bucket], lines))
-
-    out = [head, ""]
+    out = ["Renovate — %d PR(s) need attention" % total, ""]
     shown = 0
     truncated = False
-    for header, lines in entries:
-        block = [header] + lines + [""]
-        # +len for a possible "…and N more" tail keeps us safely under the limit.
-        if len("\n".join(out + block)) > limit - 20:
-            truncated = True
-            break
-        out += block
-        shown += len(lines) // 2
+    for bucket in _BUCKET_ORDER:
+        group = [pr for pr, b in items if b == bucket]
+        if not group or truncated:
+            continue
+        header = [_BUCKET_HEADER[bucket]]
+        for pr in group:
+            entry = [
+                " • #%d %s — %s" % (pr.number, pr.title, _pr_note(pr)),
+                "   %s" % pr.url,
+            ]
+            # The 20 spare characters hold a possible "…and N more" tail.
+            if len("\n".join(out + header + entry)) > limit - 20:
+                truncated = True
+                break
+            out += header + entry
+            header = []
+            shown += 1
+        if not header:
+            out.append("")
     msg = "\n".join(out).rstrip()
     if truncated and shown < total:
         msg += "\n…and %d more" % (total - shown)
@@ -472,7 +468,7 @@ def dashboard_body(issues: list[dict]) -> str | None:
 
 
 DASHBOARD_UNPARSEABLE_MSG = (
-    "⚠️ Renovate — the Dependency Dashboard no longer parses: either no section header "
+    "Renovate — the Dependency Dashboard no longer parses: either no section header "
     "matched, or Pending Status Checks yielded no items. Renovate may have renamed a "
     "header or an item marker, which leaves the Repository-Problems and stuck-pending "
     "checks silently inert. Check https://github.com/%s/issues/3"
@@ -557,7 +553,7 @@ def autoclosed_fingerprint(items: list[Autoclosed]) -> str:
 
 
 AUTOCLOSED_HEADER = (
-    "\U0001f6aa Renovate autoclosed these PRs unmerged, and their updates are back on the "
+    "Renovate autoclosed these PRs unmerged, and their updates are back on the "
     "dashboard. Renovate re-raises them only in the rule's schedule window. Land the bump by "
     "hand, or tick its dashboard checkbox:"
 )
@@ -569,3 +565,26 @@ def render_autoclosed(items: list[Autoclosed]) -> str:
         for a in items
     ]
     return "\n".join(lines)
+
+
+# The least room the PR digest keeps however long the sections before it run: its head, a
+# bucket header and a few PRs.
+DIGEST_FLOOR = 600
+
+
+def compose_message(
+    sections: list[str], items: list[tuple[PR, str]], limit: int = DISCORD_MAX
+) -> str:
+    """One Discord message: the report `sections`, then the PR digest of `items`, within `limit`.
+
+    The digest is rendered last and within the room the sections leave, but never less than
+    `DIGEST_FLOOR`. When the sections leave less, they are cut to make room, so the cap never
+    clips the digest's tail.
+    """
+    prefix = "\n\n".join(sections)
+    if not items:
+        return clamp_discord(prefix, limit)
+    if not prefix:
+        return render_digest(items, limit)
+    digest = render_digest(items, max(limit - len(prefix) - 2, DIGEST_FLOOR))
+    return clamp_discord(prefix, limit - len(digest) - 2) + "\n\n" + digest

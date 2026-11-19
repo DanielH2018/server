@@ -51,14 +51,14 @@ def test_a_cycle_without_an_exporter_records_nothing():
 
 
 def test_a_cycle_that_raises_is_a_down_naming_the_error():
-    def boom(streaks):
+    def boom(state):
         raise RuntimeError("sonarr unreachable")
 
     assert autofix.cycle_verdict({}, run=boom) == (
         False,
         "autofix-bridge error: sonarr unreachable",
     )
-    assert autofix.cycle_verdict({}, run=lambda streaks: (True, "ok")) == (True, "ok")
+    assert autofix.cycle_verdict({}, run=lambda state: (True, "ok")) == (True, "ok")
 
 
 def test_the_exporter_covers_the_check_with_a_three_cycle_deadline():
