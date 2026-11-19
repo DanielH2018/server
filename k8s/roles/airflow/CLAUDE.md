@@ -43,9 +43,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `k8s/roles/airflow/templates/networkpolicy-postgres.yaml.j2` admits the four Airflow apps
   and observability's Grafana to 5432. A source a DAG reads needs an allow for
   `app: airflow-task` in its own fence, after a caller census (ADR 0009). Prometheus's is
-  netpol-baseline's `prometheus-callers`, and that grant lands in its own PR: the render-diff
-  gate refuses one PR that both adds this role's `dependsOn` edge onto netpol-baseline and
-  changes netpol-baseline's render.
+  netpol-baseline's `prometheus-callers`. A grant for a source in another role is a PR of its
+  own whenever this role's PR also changes its `containers_list` entry's edges: the
+  render-diff gate refuses one PR that both adds a `dependsOn` edge onto a tag and changes
+  that tag's render.
 - **Backed up weekly to B2, on Tuesday's shard.** A lost week re-derives by backfill from
   sources that keep at least seven days. Home Assistant's recorder keeps exactly seven, so
   its slice depends on that week holding.
