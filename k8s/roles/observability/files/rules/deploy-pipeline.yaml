@@ -1,6 +1,6 @@
 # The `promote` workflow's own state: its hold, its lag behind master and whether `prod` moved
 # outside it. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
-# design is docs/target-architecture/deploy/d2-first-leaf.md, "The deploy-pipeline exporter and
+# design is docs/archive/deploy/d2-first-leaf.md, "The deploy-pipeline exporter and
 # its alerts", and docs/flux-deploy-plane.md says what each alert means for the operator.
 #
 # The five homelab_deploy_* gauges come from the deploy-pipeline scrape job, which monitor-bridge

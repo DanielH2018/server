@@ -1,5 +1,5 @@
 # The monitor-bridge check exporter's own rules. Plain YAML, never Jinja: prometheus-rules.yaml.j2
-# carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# carries this file verbatim. The design is docs/archive/monitoring/m6-retire-kuma.md,
 # "The bridge as an exporter". The series come from the `monitor-bridge` scrape job, port 9181,
 # which monitor-bridge's files/verdict_export.py serves.
 #
