@@ -182,11 +182,11 @@ def run_groups(
     return {name: result[3] for name, result in results.items()}
 
 
-# GitHub shows at most 10 error annotations per step.
-ANNOTATION_CAP = 10
+# GitHub shows at most 10 error annotations per step, and the runner's exit-code error takes one.
+ANNOTATION_CAP = 9
 
 
-def report(cases) -> int:
+def report(cases, list_passed: bool = False) -> int:
     """Annotate each failed case, print the run's last line, and return the exit status.
 
     Each failed case gets one `::error` annotation, up to `ANNOTATION_CAP`; past the cap the
@@ -194,6 +194,10 @@ def report(cases) -> int:
     lists the failed cases, or the cases with no verdict when none failed. When
     `GITHUB_STEP_SUMMARY` names a file, the count and every failed or no-verdict case are
     appended to it.
+
+    Args:
+        cases: The `Cases` whose `passed`, `failed` and `no_verdict` `run_groups` filled.
+        list_passed: Print a `[PASS]` line per passing case before the last line.
 
     Returns:
         1 when a case failed, else 0, even when some cases gave no verdict.
@@ -204,6 +208,9 @@ def report(cases) -> int:
         + ["passed"] * len(cases.passed)
     )
     counts = count_line(states)
+    if list_passed:
+        for name in cases.passed:
+            print(f"[PASS] {name}", file=sys.stderr)
     shown = cases.failed
     if len(shown) > ANNOTATION_CAP:
         shown = shown[: ANNOTATION_CAP - 1]
@@ -218,6 +225,8 @@ def report(cases) -> int:
             file=sys.stderr,
         )
     _summarise(cases, counts)
+    if cases.passed and not list_passed:
+        counts += "; --all to list the passes"
     if cases.failed:
         print(f"[FAIL] {counts}: {cases.failed}", file=sys.stderr)
         return 1

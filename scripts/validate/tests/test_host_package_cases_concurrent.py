@@ -141,7 +141,7 @@ def test_a_case_with_no_verdict_passes_the_leg_and_is_counted_last(
     last = capfd.readouterr().err.splitlines()[-1]
     assert (status, last) == (
         0,
-        "[NO VERDICT] 1 no verdict, 10 passed: ['bootstrap_age_case']",
+        "[NO VERDICT] 1 no verdict, 10 passed; --all to list the passes: ['bootstrap_age_case']",
     )
 
 
@@ -163,7 +163,7 @@ def test_a_failed_case_is_annotated_and_summarised_and_no_pass_is_listed(
         "status": 1,
         "errors": ["::error title=host package case failed::cold_install"],
         "passes": [],
-        "last": "[FAIL] 1 failed, 10 passed: ['cold_install']",
+        "last": "[FAIL] 1 failed, 10 passed; --all to list the passes: ['cold_install']",
         "summary": ["1 failed, 10 passed", "", "- failed: cold_install"],
     }
 
@@ -175,9 +175,20 @@ def test_a_clean_run_ends_with_one_count_line(tmp_path, monkeypatch, capfd):
     err = capfd.readouterr().err.splitlines()
     assert (status, err[-1], [line for line in err if "::error" in line]) == (
         0,
-        "[PASS] 11 passed",
+        "[PASS] 11 passed; --all to list the passes",
         [],
     )
+
+
+def test_the_all_flag_lists_each_passing_case(tmp_path, monkeypatch, capfd):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    _, status = _run_main(tmp_path, monkeypatch, flags=("--all",))
+
+    err = capfd.readouterr().err.splitlines()
+    passes = {
+        line.removeprefix("[PASS] ") for line in err[:-1] if line.startswith("[PASS] ")
+    }
+    assert (status, passes, err[-1]) == (0, GROUPS, "[PASS] 11 passed")
 
 
 def test_failures_past_the_annotation_cap_are_counted_in_the_last_annotation(capfd):
@@ -195,7 +206,7 @@ def test_failures_past_the_annotation_cap_are_counted_in_the_last_annotation(cap
     assert (status, len(errors), errors[-1]) == (
         1,
         case_groups.ANNOTATION_CAP,
-        "::error title=host package case failed::3 more; the job summary lists them",
+        "::error title=host package case failed::4 more; the job summary lists them",
     )
 
 

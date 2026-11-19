@@ -80,7 +80,7 @@ Usage:
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
     uv run python scripts/validate/host_package_cases.py ... --bootstrap
 
-A passing case prints nothing. A failed case prints a `[FAIL]` line naming why, then its
+A passing case prints nothing unless `--all` is given. A failed case prints a `[FAIL]` line naming why, then its
 container's journal. The last line counts each verdict, and each failed case gets an `::error`
 annotation; `case_groups.report` writes both.
 
@@ -582,6 +582,9 @@ def main(argv: list[str] | None = None) -> int:
         help="run only the K-th of N shares of the bootstrap cases, one offline build each",
     )
     parser.add_argument(
+        "--all", action="store_true", help="also print a [PASS] line per passing case"
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=4,
@@ -597,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
         run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
     else:
         run_groups(cases, groups(Cases), args.jobs)
-    return report(cases)
+    return report(cases, list_passed=args.all)
 
 
 if __name__ == "__main__":
