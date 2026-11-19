@@ -96,6 +96,20 @@ def test_a_fork_inheriting_the_block_by_reference_is_clean(repo, tmp_path):
     assert _docs(repo, READ, main, session="sess-a", agent_id="f1") == []
 
 
+def test_a_fork_payload_reaches_the_transcript_through_context(repo, tmp_path):
+    main = str(tmp_path / "proj/sess-a.jsonl")
+    _write(tmp_path / "proj/sess-a/subagents/agent-f1.jsonl", [_injection(repo, READ)])
+    payload = {
+        "tool_name": "Bash",
+        "tool_input": {"command": READ},
+        "cwd": str(repo),
+        "session_id": "sess-a",
+        "agent_id": "f1",
+        "transcript_path": main,
+    }
+    assert _mod.context(payload) is None
+
+
 def test_a_block_after_the_forks_cut_is_flagged(repo, tmp_path):
     main = _write(
         tmp_path / "proj/sess-a.jsonl",
