@@ -1,6 +1,6 @@
 {#
   lidarr's quality profile seed as a post-apply mutation Job, in `lidarr-verify` beside the
-  Discord notification seed. The shape follows `notification.yaml.j2`: the renderer emits it
+  Discord notification seed. The shape follows `k8s/templates/arr-notification-seed.yml.j2`: the renderer emits it
   from `templates/verify/`, the pod carries the `lidarr-verify` label that lidarr's
   `netpol_from` admits, and the spec embeds a digest of the rendered Deployment so the seed
   runs again on every revision that rolls lidarr.

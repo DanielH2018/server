@@ -142,7 +142,7 @@ _ROLE_TEMPLATES = "k8s/roles/{}/templates/{}"
 
 
 # The fewest in-scope templates whose syntax tree names a secret key, set to the tree's count.
-RULE5_FLOOR = 40
+RULE5_FLOOR = 38
 
 
 class NamedUse(NamedTuple):

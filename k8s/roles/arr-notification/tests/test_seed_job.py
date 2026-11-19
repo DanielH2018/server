@@ -10,7 +10,6 @@ Run: uv run pytest k8s/roles/arr-notification/tests/test_seed_job.py
 """
 
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +20,7 @@ import jinja2
 import pytest
 
 from lib import yaml_fast
+from lib.k8s_lookups import cross_role_files
 from lib.k8s_roles import K8S_ROLES
 from lib.repo_paths import SECRETS
 from renderer import shadow_diff
@@ -86,10 +86,16 @@ def _container(docs: list[dict]) -> dict:
     return container
 
 
-def test_the_apps_carry_the_same_template():
-    """One file, byte for byte, so a fix to one app's seed Job cannot miss another's."""
+def test_the_apps_call_the_one_shared_seed_job():
+    """One tracked seed Job body, so a fix to one app's seed Job cannot miss another's."""
     # fact: k8s/roles/arr-notification/CLAUDE.md#The Job form
-    assert len({(K8S_ROLES / app / TEMPLATE).read_bytes() for app in APPS}) == 1
+    callers = {(K8S_ROLES / app / TEMPLATE).read_text() for app in APPS}
+    assert len(callers) == 1
+    (caller,) = callers
+    assert (
+        "{% from 'arr-notification-seed.yml.j2' import arr_notification_seed" in caller
+    )
+    assert "apiVersion:" not in caller
 
 
 @pytest.mark.parametrize("app", APPS)
@@ -148,7 +154,9 @@ def test_the_seed_job_reads_no_role_but_its_app_and_arr_notification(app):
     """`land.sh`'s cross-role scan routes an arr-notification change to both apps through it."""
     # fact: k8s/roles/arr-notification/CLAUDE.md#k8s/arr-notification — the shared *arr Discord Connect declaration
     text = (K8S_ROLES / app / TEMPLATE).read_text()
-    assert set(re.findall(r"\bk8s/roles/([^/'\"]+)/", text)) == {"arr-notification"}
+    assert {path.split("/")[2] for path in cross_role_files(text)} == {
+        "arr-notification"
+    }
 
 
 def _verify_docs(rendered) -> list[dict]:
