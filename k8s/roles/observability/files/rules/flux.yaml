@@ -98,15 +98,11 @@ groups:
             {{ $labels.name }} has not been Ready for 15 minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
             root Kustomization for 15 minutes.{{ end }}
           description: >-
-            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
-            {{ $labels.name }} in {{ $labels.exported_namespace }} has had a Ready condition
-            other than True for 15 minutes. Its status conditions name the failing
-            step.{{ else }}kube-state-metrics is scraped, but for 15 minutes it has exported no
-            gotk_resource_info series for the Kustomization {{ $labels.name }}, so FluxNotReady
-            and FluxSuspended cannot see any Flux object. Read the kube-state-metrics log in
-            the observability namespace for a Forbidden or a custom-resource-state config
-            error, and compare the Flux CRD versions with
-            observability_ksm_flux_resource_state.{{ end }}
+            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }} {{ $labels.name }}
+            in {{ $labels.exported_namespace }} is not Ready after 15 minutes; read its conditions.
+            {{- else }}kube-state-metrics exports no gotk_resource_info for {{ $labels.name }}; read
+            its log.{{ end }}
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
       # kube-state-metrics drops a label whose field is absent, and the renderer writes
       # spec.suspend only when it is true, so suspension matches suspended="true". A role's
       # flux_suspend and a hand suspend both count; the renderer refuses

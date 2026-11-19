@@ -420,13 +420,11 @@ tests:
               summary: >-
                 node_exporter on daniel-box cannot read a textfile, candidates: bad.prom.
               description: >-
-                node_exporter's textfile collector on daniel-box has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): bad.prom.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in the node-exporter pod's log.
+                Read the node-exporter log on daniel-box for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # The same failure on daniel-server fires its own rule, with daniel-server as `service`.
   - interval: 1m
@@ -450,13 +448,11 @@ tests:
               summary: >-
                 node_exporter on daniel-server cannot read a textfile, candidates: none known.
               description: >-
-                node_exporter's textfile collector on daniel-server has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in the node-exporter pod's log.
+                Read the node-exporter log on daniel-server for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # daniel-pi's reconcile reads 0 from minute 0, so the host holds. HostReconcileFailed is
   # pending at 14 minutes and fires for daniel-pi alone at 16, past its 15-minute hold.
@@ -1311,13 +1307,11 @@ tests:
               summary: >-
                 node_exporter on daniel-pi cannot read a textfile, candidates: none known.
               description: >-
-                node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in `journalctl -u node_exporter` on daniel-pi.
+                Read the node-exporter log on daniel-pi for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # The Pi's compose run reads 1, then 0 from minute 3. ComposeUpFailed fires with no hold.
   - interval: 1m
@@ -2298,13 +2292,11 @@ tests:
               summary: >-
                 nut-monitor.service has failed on daniel-box.
               description: >-
-                systemd-units-check on daniel-box found the unit in the failed state. Read
-                `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once the cause
-                is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-                state, and the next check resolves this alert. A summary that names no unit means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-box.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
           - exp_labels:
               check: systemd-units
               instance: daniel-box
@@ -2317,13 +2309,11 @@ tests:
               summary: >-
                 homelab-claude-pipeline-timeline.service has failed on daniel-box.
               description: >-
-                systemd-units-check on daniel-box found the unit in the failed state. Read
-                `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once the cause
-                is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-                state, and the next check resolves this alert. A summary that names no unit means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-box.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
           - exp_labels:
               check: systemd-units
               instance: daniel-server
@@ -2336,13 +2326,11 @@ tests:
               summary: >-
                 systemd-fsck@dev-disk-by\x2duuid-1.service has failed on daniel-server.
               description: >-
-                systemd-units-check on daniel-server found the unit in the failed state. Read
-                `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once the cause
-                is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-                state, and the next check resolves this alert. A summary that names no unit means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-server.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server, fix
+                the cause, then run `systemctl reset-failed <unit>`; the next check resolves this
+                alert. A summary that names no unit means the check named none, so run `systemctl
+                --failed` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
           - exp_labels:
               check: systemd-units
               instance: daniel-pi
@@ -2354,13 +2342,11 @@ tests:
               summary: >-
                 daniel-pi has failed system units that its check did not name.
               description: >-
-                systemd-units-check on daniel-pi found the unit in the failed state. Read
-                `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once the cause
-                is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-                state, and the next check resolves this alert. A summary that names no unit means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-pi.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
   # SystemdUnitsNotReporting's stale arm: a timestamp frozen at 0 crosses the 900s deadline
   # after the 15th minute, while the verdict stays green.
   - interval: 1m

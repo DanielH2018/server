@@ -2,7 +2,8 @@
 
 Each critical alert links its runbook as its `runbook_url`, and the notification prints it as
 its `Runbook:` line. This page holds the runbook of each critical alert that no other page
-covers, one section per alert, named as the alert is. An alert's description says what to do
+covers, one section per alert, named as the alert is. A few warnings whose descriptions
+outgrew a notification have a section too. An alert's description says what to do
 first. Its section here says what the alert means, then the cases the description leaves out.
 
 `tests/services/test_alert_runbook_urls.py` fails a critical rule with no `runbook_url`, a
@@ -217,6 +218,29 @@ ends here too.
 - Recover the node by hand if it is down.
 - The unit makes one attempt per config hash. To allow another attempt, run `sudo rm
   /var/lib/homelab-k3s-restart/failed.sha256`. `docs/k3s-upgrade.md` describes the unit.
+
+### `SystemdUnitsFailed`
+
+A warning. The host's `systemd-units` check found a system unit in the failed state, and the
+alert fires once per failed unit.
+
+- Read `systemctl status <unit>` and `journalctl -u <unit> -b` on the host, and fix the cause.
+- `systemctl reset-failed <unit>`, or a clean run of the unit, clears the state. The next
+  check, within 5 minutes, resolves the alert.
+- A summary that names no unit means the host wrote no `homelab_systemd_unit_failed` series.
+  Either `systemctl` could not list the units (`journalctl -t systemd-units`), or the host's
+  package predates the per-unit series. Run `systemctl --failed` on the host.
+
+### `TextfileCollectorError`
+
+A shadow warning. node_exporter's textfile collector on the host has failed for 10 minutes, so
+a file in `/var/lib/node-exporter-textfile` is malformed or unreadable, and every series in it
+is gone.
+
+- The summary lists the files seen in the last 7 days and missing now. A rejected file drops
+  out of `node_textfile_mtime_seconds`, but so does a file a retired check stopped writing.
+- A file that was malformed from its first write never reported an mtime, so the list can omit
+  it. The node-exporter pod's log names the file it rejects.
 
 ### `PiSdHealthFailed`
 

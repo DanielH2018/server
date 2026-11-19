@@ -861,13 +861,11 @@ groups:
           summary: >-
             {{ with $labels.unit }}{{ . }} has failed on daniel-box.{{ else }}daniel-box has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-box found the unit in the failed state. Read
-            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once the cause
-            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-            state, and the next check resolves this alert. A summary that names no unit means
-            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-            list the units (`journalctl -t systemd-units`) or the host package predates the
-            per-unit series, so run `systemctl --failed` on daniel-box.
+            Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+            cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert. A
+            summary that names no unit means the check named none, so run `systemctl --failed` on
+            daniel-box.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -907,13 +905,11 @@ groups:
           summary: >-
             {{ with $labels.unit }}{{ . }} has failed on daniel-server.{{ else }}daniel-server has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-server found the unit in the failed state. Read
-            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once the cause
-            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-            state, and the next check resolves this alert. A summary that names no unit means
-            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-            list the units (`journalctl -t systemd-units`) or the host package predates the
-            per-unit series, so run `systemctl --failed` on daniel-server.
+            Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server, fix the
+            cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert. A
+            summary that names no unit means the check named none, so run `systemctl --failed` on
+            daniel-server.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -953,13 +949,11 @@ groups:
           summary: >-
             {{ with $labels.unit }}{{ . }} has failed on daniel-pi.{{ else }}daniel-pi has failed system units that its check did not name.{{ end }}
           description: >-
-            systemd-units-check on daniel-pi found the unit in the failed state. Read
-            `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once the cause
-            is fixed, `systemctl reset-failed <unit>` or a clean run of the unit clears the
-            state, and the next check resolves this alert. A summary that names no unit means
-            the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-            list the units (`journalctl -t systemd-units`) or the host package predates the
-            per-unit series, so run `systemctl --failed` on daniel-pi.
+            Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi, fix the
+            cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert. A
+            summary that names no unit means the check named none, so run `systemctl --failed` on
+            daniel-pi.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
       - alert: SystemdUnitsNotReporting
         expr: |
           (
@@ -1122,13 +1116,10 @@ groups:
           summary: >-
             node_exporter on daniel-box cannot read a textfile, candidates: {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-box"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-box"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
           description: >-
-            node_exporter's textfile collector on daniel-box has failed for 10 minutes, so a
-            file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone.
-            Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-            node_textfile_mtime_seconds, but so does a file a retired check stopped writing): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-box"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-box"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
-            A file that was malformed from its first write never reported an mtime, so the
-            list can omit it. Confirm in the node-exporter pod's log.
+            Read the node-exporter log on daniel-box for the textfile it rejects: a file in
+            /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+            gone. The summary lists candidates, and the runbook says which files the list misses.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-server"} == 1
         for: 10m
@@ -1140,13 +1131,10 @@ groups:
           summary: >-
             node_exporter on daniel-server cannot read a textfile, candidates: {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-server"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-server"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
           description: >-
-            node_exporter's textfile collector on daniel-server has failed for 10 minutes, so
-            a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone.
-            Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-            node_textfile_mtime_seconds, but so does a file a retired check stopped writing): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-server"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-server"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
-            A file that was malformed from its first write never reported an mtime, so the
-            list can omit it. Confirm in the node-exporter pod's log.
+            Read the node-exporter log on daniel-server for the textfile it rejects: a file in
+            /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+            gone. The summary lists candidates, and the runbook says which files the list misses.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-pi"} == 1
         for: 10m
@@ -1158,13 +1146,10 @@ groups:
           summary: >-
             node_exporter on daniel-pi cannot read a textfile, candidates: {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-pi"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-pi"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
           description: >-
-            node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
-            file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-            series in it is gone.
-            Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-            node_textfile_mtime_seconds, but so does a file a retired check stopped writing): {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-pi"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-pi"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
-            A file that was malformed from its first write never reported an mtime, so the
-            list can omit it. Confirm in `journalctl -u node_exporter` on daniel-pi.
+            Read the node-exporter log on daniel-pi for the textfile it rejects: a file in
+            /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+            gone. The summary lists candidates, and the runbook says which files the list misses.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
       # A replaced Longhorn instance-manager leaves the iSCSI sessions it served in the kernel,
       # FREE with a failed connection, and the next attach of such a volume on that node loops
       # The node-exporter DaemonSet's `iscsi-sessions` sidecar writes one
