@@ -89,6 +89,29 @@ it throttles on, and the derivation itself lives in `defaults/main.yml` beside
 `claude_code_fleet_memory_high`: the operator-set floor of about 8 GiB of `MemAvailable`, worked
 backward from a measured `MemAvailable` and fleet size. Re-derive it there, not from this page.
 
+## The fleet's CPU weight
+
+The same drop-in sets `CPUWeight=` from `claude_code_fleet_cpu_weight`. At the root cgroup,
+`user.slice` competes with `system.slice` (100), where k3s runs, and `kubepods.slice` (625).
+On 2026-11-18 a dozen sessions' pytest runs saturated daniel-box's 16 cores. etcd applies then
+took 150-480 ms, and kube-controller-manager lost its leader lease three times in five minutes,
+each time exiting k3s ([#9060](https://github.com/DanielH2018/server/issues/9060)).
+
+- **A drop-in on `user-1000.slice` would miss part of the fleet.** `claude-rc.service` and
+  `claude-bg-resume.service` sit directly under `user.slice`, beside the login slices.
+- **A weight on `k3s.service` alone ranks k3s only inside `system.slice`.** The k3s components
+  set one too (`k3s_cpu_weight`), because the docs-refresh run's pytest and MkDocs are
+  `system.slice` siblings of k3s.
+- **A weight divides CPU only under contention.** An idle box still gives the fleet every core,
+  which is why neither drop-in sets `CPUQuota=`.
+
+To verify a weight deploy, read the kernel's value, not only the unit's:
+
+```bash
+systemctl show -p CPUWeight user.slice k3s.service
+cat /sys/fs/cgroup/user.slice/cpu.weight /sys/fs/cgroup/system.slice/k3s.service/cpu.weight
+```
+
 ## Verifying a caps deploy from `cgroupfs`
 
 The parent drop-in applies live on `daemon-reload`, so it lands on already-running login sessions.

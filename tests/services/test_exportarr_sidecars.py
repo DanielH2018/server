@@ -18,7 +18,6 @@ either here as well would split one rule's rationale across two files. Do not ad
 row there.
 """
 
-from lib.k8s_roles import resolved_manifest_files
 import re
 
 import yaml
@@ -171,17 +170,6 @@ def test_every_arr_renders_its_exportarr_secret():
         and doc["metadata"]["name"].endswith("-exportarr")
     }
     assert found == {f"{a}-exportarr" for a in ARRS}
-
-
-def test_the_secret_is_staged_through_the_no_log_path():
-    """A Secret resolved into manifests_files instead of manifests_secret_files renders 0644
-    and prints its decrypted contents in the play recap."""
-    for arr in ARRS:
-        files, secret = resolved_manifest_files(arr)
-        assert "secret-exportarr.yaml" in secret, (
-            f"{arr}'s secret-exportarr.yaml must resolve into manifests_secret_files"
-        )
-        assert "secret-exportarr.yaml" not in files, arr
 
 
 def test_the_image_pins_stay_in_lockstep():

@@ -180,8 +180,9 @@ ROWS = (
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
         # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
         # H7.44 deleted three of k3s's and its handlers, 469 before H7.55 deleted the emptied
-        # setup roles and the runbook roles, 455 before H7.55's second PR deleted the rest.
-        min_matches=435,
+        # setup roles and the runbook roles, 455 before H7.55's second PR deleted the rest, 435
+        # before 22 flat Secret templates became `render_secrets` entries.
+        min_matches=433,
         # The `*_files` lists the bare-entry alternative exists for.
         must_find=frozenset({"k8s/roles/home-assistant/defaults/main.yml"}),
     ),

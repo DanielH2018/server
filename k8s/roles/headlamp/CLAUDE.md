@@ -112,4 +112,4 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
 - Manifests: everything under `k8s/roles/headlamp/templates/`. Three carry a rule of their own.
   `k8s/roles/headlamp/templates/rbac.yaml.j2` holds the cluster identity,
   `k8s/roles/headlamp/templates/rbac-observability.yaml.j2` holds the Prometheus proxy Role, and
-  `k8s/roles/headlamp/templates/oidc-secret.yaml.j2` holds the OIDC client secret.
+  `k8s/roles/headlamp/defaults/main.yml:render_secrets` holds the OIDC client secret.

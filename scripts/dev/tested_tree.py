@@ -7,13 +7,11 @@ the PR. The PR run's `prek` gate records that tree on the PR head commit as a co
 context `ci/tested-tree`, success state and the tree id as its description. The status counts
 only when the Actions token created it and its `target_url` is one of this repository's Actions
 runs. This script is the reader. The push run of ci.yml calls it first, and every other job
-skips when it answers `proven=true` and `pytest-proven=true`.
+skips when it answers `proven=true`.
 
-A PR run whose `pytest` legs ran a selection of the test modules records the tree under a
-second context, `ci/tested-tree-but-pytest`. Every other job ran in full on that
-tree, so `prove` answers `proven=true` for it and `pytest-proven=false`: the push run repeats
-only `pytest`. `pytest-proven` is never true while `proven` is false, and
-`hosts/lib/ci_verdict.py:jobs_verdict` relies on that.
+A PR run whose `pytest` legs ran a selection of the test modules records the tree the same
+way. The push run would diff the same tree against the same base with the same table, so its
+own selection would be the one the PR run already ran (`docs/ci-throughput.md`).
 
 A pull-request run asks a second question, `prove-head`: whether the PR's head carries such a
 record at all, for any tree. The run of a landing batch records one on the head of each PR it
@@ -34,9 +32,8 @@ It fails safe in every direction: any error, any missing status and any mismatch
 error. Each command exits 0 in all of those cases, so a broken lookup never turns a run red
 by itself.
 
-`prove` and `prove-head` write `proven=true|false` and `pytest-proven=true|false` to the file
-named by $GITHUB_OUTPUT when that variable is set. `prove-head` counts only a full record, so
-its two answers are equal. Every command prints its answer with the reason.
+`prove` and `prove-head` write `proven=true|false` to the file named by $GITHUB_OUTPUT when
+that variable is set. Every command prints its answer with the reason.
 
 Run: python3 scripts/dev/tested_tree.py prove --repo OWNER/NAME --sha SHA --tree TREE
      python3 scripts/dev/tested_tree.py prove-head --repo OWNER/NAME --head SHA
@@ -62,9 +59,6 @@ from lib.tree_stack import Conflict, stack
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
 # it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
 CONTEXT = "ci/tested-tree"
-# The context a PR run writes when its `pytest` legs ran a selection: every job but `pytest`
-# ran on the recorded tree. Only `prove` reads it.
-CONTEXT_BUT_PYTEST = "ci/tested-tree-but-pytest"
 
 CREATOR = "github-actions[bot]"
 
@@ -85,10 +79,8 @@ Get = Callable[[str], Rows]
 Post = Callable[[str, dict[str, str]], None]
 
 
-def _is_recorded_run(
-    status: dict[str, Any], repo: str, tree: str | None, context: str = CONTEXT
-) -> bool:
-    """Whether `status` is the green record under `context` this repository's CI wrote for `tree`.
+def _is_recorded_run(status: dict[str, Any], repo: str, tree: str | None) -> bool:
+    """Whether `status` is the green record this repository's CI wrote for `tree`.
 
     With `tree` None, a record for any tree counts.
     """
@@ -97,7 +89,7 @@ def _is_recorded_run(
     url = status.get("target_url")
     recorded = status.get("description")
     return (
-        status.get("context") == context
+        status.get("context") == CONTEXT
         and status.get("state") == "success"
         and isinstance(recorded, str)
         and _OBJECT_ID.fullmatch(recorded) is not None
@@ -111,53 +103,34 @@ def _is_recorded_run(
     )
 
 
-# What a push's tree was proven for: every job, every job but `pytest`, or none.
-ALL = "all"
-ALL_BUT_PYTEST = "all-but-pytest"
-NONE = "none"
+def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]:
+    """Whether a green run recorded `tree` on the head of the PR that `sha` squash-merged.
 
-
-def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
-    """Which jobs a green run recorded `tree` for, on the head of the PR that `sha` squash-merged.
-
-    `get` maps an API path to its decoded JSON and raises on any failure. Returns `ALL`,
-    `ALL_BUT_PYTEST` or `NONE`, and the reason, which the push run prints. A full record
-    beats a partial one for the same tree, wherever each sits in the list.
+    `get` maps an API path to its decoded JSON and raises on any failure. Returns the answer
+    and the reason, which the push run prints.
     """
     if not (_OBJECT_ID.fullmatch(sha) and _OBJECT_ID.fullmatch(tree)):
-        return NONE, "the commit or its tree id is unreadable"
+        return False, "the commit or its tree id is unreadable"
     try:
         pulls = get(f"repos/{repo}/commits/{sha}/pulls")
         # Only a PR that this commit IS the merge of counts. A commit can be listed under a PR
         # that merely contains it, and that PR's run tested some other tree.
         heads = [p["head"]["sha"] for p in pulls if p.get("merge_commit_sha") == sha]
         if not heads:
-            return NONE, "no pull request merged as this commit"
-        partial = None
+            return False, "no pull request merged as this commit"
         for head in heads:
             statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-            for status in statuses:
-                if _is_recorded_run(status, repo, tree):
-                    return (
-                        ALL,
-                        f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
-                    )
-                if partial is None and _is_recorded_run(
-                    status, repo, tree, CONTEXT_BUT_PYTEST
-                ):
-                    partial = head
-        if partial is not None:
-            return (
-                ALL_BUT_PYTEST,
-                f"PR head {partial[:8]} recorded a green run on tree {tree[:8]}"
-                " whose pytest legs ran a selection",
-            )
+            if any(_is_recorded_run(status, repo, tree) for status in statuses):
+                return (
+                    True,
+                    f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
+                )
         return (
-            NONE,
+            False,
             f"no green {CONTEXT} status from this repository's CI on the PR head carries tree {tree[:8]}",
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        return NONE, f"the lookup failed: {type(exc).__name__}: {exc}"
+        return False, f"the lookup failed: {type(exc).__name__}: {exc}"
 
 
 def head_is_proven(get: Get, repo: str, head: str) -> tuple[bool, str]:
@@ -337,19 +310,15 @@ def main(
         print(told)
         return 0
     if args.command == "prove":
-        scope, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
+        proven, reason = tree_is_proven(get, args.repo, args.sha, args.tree)
     else:
-        head_proven, reason = head_is_proven(get, args.repo, args.head)
-        scope = ALL if head_proven else NONE
-    answers = [
-        f"proven={'true' if scope in (ALL, ALL_BUT_PYTEST) else 'false'}",
-        f"pytest-proven={'true' if scope == ALL else 'false'}",
-    ]
-    print(f"{' '.join(answers)}: {reason}")
+        proven, reason = head_is_proven(get, args.repo, args.head)
+    answer = f"proven={'true' if proven else 'false'}"
+    print(f"{answer}: {reason}")
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as handle:
-            handle.write("".join(f"{answer}\n" for answer in answers))
+            handle.write(f"{answer}\n")
     return 0
 
 
