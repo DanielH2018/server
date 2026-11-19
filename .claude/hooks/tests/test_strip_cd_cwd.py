@@ -10,7 +10,9 @@ Run: uv run pytest .claude/hooks/tests/test_strip_cd_cwd.py
 
 import importlib.util
 import os
+import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
 _HOOKS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

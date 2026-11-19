@@ -11,7 +11,6 @@ Run: uv run pytest .claude/hooks/tests/test_inject_nested_docs_head.py
 import re
 
 import test_inject_nested_docs as base
-from _hook_common import parse_payload
 
 # Bound by assignment, not imported, so the test arguments naming it do not read as a
 # redefinition of an unused import (F811).
@@ -148,7 +147,9 @@ def test_a_head_row_logs_the_injected_size_not_the_file_size(repo, tmp_path):
         "cwd": str(repo),
         "tool_input": {"command": "cat k8s/roles/foo/templates/deployment.yaml.j2"},
     }
-    block = _mod.context(parse_payload(payload).bash()).removeprefix(_mod._PREAMBLE)
+    block = _mod.context(base.parse_payload(payload).bash()).removeprefix(
+        _mod._PREAMBLE
+    )
     (row,) = (tmp_path / "instructions.log").read_text().splitlines()
     assert row.endswith(f" bytes={len(block.encode('utf-8'))}"), row
     assert len(block) < doc.stat().st_size
@@ -167,7 +168,7 @@ def _logged_row(repo, log_dir, text):
         "cwd": str(repo),
         "tool_input": {"command": f"cat {FOO_FILE}"},
     }
-    assert _mod.context(parse_payload(payload).bash())
+    assert _mod.context(base.parse_payload(payload).bash())
     (row,) = (log_dir / "instructions.log").read_text().splitlines()
     return row
 

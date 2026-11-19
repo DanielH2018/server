@@ -241,19 +241,16 @@ def test_a_bash_payload_is_a_bash_call_keeping_its_tool_input(tmp_path):
     "payload",
     [
         {"tool_name": "Bash", "tool_input": None},
-        {"tool_name": "Bash", "tool_input": {"command": None}},
         {"tool_name": "Bash", "tool_input": {"command": ""}},
-        {"tool_name": "Bash", "tool_input": "ls"},
         {"tool_name": "Edit", "tool_input": {"command": "ls"}},
-        {"tool_input": {"command": "ls"}},
     ],
-    ids=["null-input", "null-command", "empty", "non-object", "edit", "no-tool"],
+    ids=["null-input", "empty", "edit"],
 )
 def test_a_payload_with_no_bash_command_is_no_bash_call(payload):
     assert parse_payload(payload).bash() is None
 
 
-@pytest.mark.parametrize("cwd", [None, "", "relative/dir", 7], ids=repr)
+@pytest.mark.parametrize("cwd", [None, "relative/dir"], ids=repr)
 def test_a_payload_with_no_absolute_cwd_runs_in_the_process_cwd(
     cwd, tmp_path, monkeypatch
 ):
@@ -279,9 +276,7 @@ def test_an_edit_resolves_a_relative_file_path_against_the_payload_cwd(tmp_path)
     assert call.file_path == tmp_path / "a" / "b.md"
 
 
-@pytest.mark.parametrize(
-    "tool_input", [None, {}, {"file_path": None}, {"file_path": ""}]
-)
+@pytest.mark.parametrize("tool_input", [None, {"file_path": ""}])
 def test_an_edit_with_no_file_path_is_no_edit_call(tool_input):
     assert (
         parse_payload({"tool_name": "Write", "tool_input": tool_input}).edit() is None

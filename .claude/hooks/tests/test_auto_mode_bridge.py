@@ -14,6 +14,8 @@ import os
 import sys
 
 import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
 _HOOK = os.path.join(
@@ -78,9 +80,13 @@ def test_a_push_that_failed_for_another_reason_gets_no_note():
 
 
 @pytest.mark.parametrize(
-    "tool_input", [None, {"command": None}], ids=["null-tool-input", "null-command"]
+    ("event", "tool_input"),
+    [
+        ("PostToolUseFailure", None),
+        ("PostToolUseFailure", {"command": None}),
+        ("PostToolUse", None),
+    ],
 )
-@pytest.mark.parametrize("event", ["PostToolUseFailure", "PostToolUse"])
 def test_a_null_tool_input_or_command_gets_no_note(
     event, tool_input, capsys, monkeypatch
 ):

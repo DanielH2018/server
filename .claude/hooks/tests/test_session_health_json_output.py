@@ -10,8 +10,11 @@ Run: uv run pytest .claude/hooks/tests/test_session_health_json_output.py
 import importlib.util
 import json
 import os
+import sys
 
 import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
 _HOOK = os.path.join(

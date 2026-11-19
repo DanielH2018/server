@@ -13,6 +13,7 @@ import threading
 import types
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
 _HOOK = os.path.join(

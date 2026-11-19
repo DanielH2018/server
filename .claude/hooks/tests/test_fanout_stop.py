@@ -12,7 +12,9 @@ import importlib.util
 import io
 import json
 import os
+import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 from fanout_lib import status
 from fanout_lib.brief import Issue, render_brief
