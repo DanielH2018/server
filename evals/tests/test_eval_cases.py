@@ -266,6 +266,27 @@ def test_no_case_cites_a_missing_role_path():
     )
 
 
+def test_recurrence_case_premise_is_still_open_in_the_live_template():
+    case = json.loads(
+        (CASES_DIR / "homelab-review/008-recurrence-not-discovery.json").read_text()
+    )
+    cited = "k8s/roles/game-stats/templates/deployment-valheim.yaml.j2:94"
+    assert cited in case["input"]
+    path, line = cited.rsplit(":", 1)
+    lines = (REPO / path).read_text().splitlines()
+    n = int(line)
+    rebuild = (
+        f"homelab-review/008's open finding is fixed or moved at {cited}. A case whose "
+        "premise is false scores on its contradiction, not on recurrence (issue #8952): "
+        "rebuild the case on another finding that is still open (evals/README.md, rule 4)."
+    )
+    assert lines[n - 2].strip() == "- name: valheim-stats-tmp", rebuild
+    assert lines[n - 1].strip() == "emptyDir: {}", rebuild
+    resources_macro = REPO / "k8s/templates/container-resources.yml.j2"
+    for source in (REPO / path, resources_macro):
+        assert "ephemeral-storage" not in source.read_text(), rebuild
+
+
 # A case that quotes a section of the root CLAUDE.md, because a hermetic run loads no CLAUDE.md
 # and the engine's own section loader (`load-rules.mjs`) reads only the chezmoi user file.
 _CLAUDE_MD_QUOTE_RE = re.compile(

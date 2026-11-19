@@ -311,7 +311,13 @@ and re-running it, not by reasoning:
    `light.bedroom_lights`, with their planted automation marked a proposed addition.
    `skeptic/002` plants the jsonpath bug the bash reaper really shipped, which the Python
    rewrite in `scripts/backup/` fixed, so it became a new-role fixture. A passing case edited this
-   way is unverified until the next hermetic sweep.
+   way is unverified until the next hermetic sweep. A fix to a case's planted finding makes the
+   premise false too. `homelab-review/008` planted the qbittorrent livenessProbe gap, which
+   `6cc352588` fixed, and the skill's own HISTORY note says so. Failing trials spent their
+   output on that contradiction. The case now plants the valheim-stats `/tmp` emptyDir with no
+   `sizeLimit`, and
+   `evals/tests/test_eval_cases.py::test_recurrence_case_premise_is_still_open_in_the_live_template`
+   fails once that gap is fixed (#8952).
 5. **Quote a root `CLAUDE.md` section verbatim when the case depends on it.** A live session
    always has the root `CLAUDE.md`; a hermetic run has none of it. The `land-after-merge` skill
    leaves its two decisive rules there, the merge-to-deploy directive and the *When to wait*
