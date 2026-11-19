@@ -17,13 +17,15 @@ set instead.
 - `runtime_import(path, dirs)` is the runtime layer: it imports `path` in a fresh interpreter
   with no site-packages and `PYTHONPATH` set to `dirs`.
 
-The callers come from four places. `.claude/settings.json` names each `run-hook.sh` entry, and
+The callers come from five places. `.claude/settings.json` names each `run-hook.sh` entry, and
 one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names the file and
 subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
 Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
 the role scripts a host runs `--no-project`, which `lib.role_installs` reads from each
-role's templates and each host component's files.
+role's templates and each host component's files. The fifth is each workflow step that runs a
+script with the runner's own `python` rather than `uv run`. Such a step is rooted only when its
+env sets `PYTHONPATH`.
 
 A role script runs from the path a host component's `files` entry installs it to, so its
 `sys.path` is the install directory, not its tree path. `lib.role_installs` copies every installed file to
@@ -46,10 +48,11 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-from lib import repo_paths, role_installs
+from lib import repo_paths, role_installs, yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
 
 HOOKS = REPO / ".claude" / "hooks"
+WORKFLOWS = REPO / ".github" / "workflows"
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
 # Modules a hook imports from outside the tree: `_claude_guard.py` inserts the dotfiles
 # directory that holds them.
@@ -71,6 +74,10 @@ RUNBOOK_UNITS = (
 )
 # A `run-hook.sh` entry with a flag runs `--project`, in the venv.
 _HOOK_ENTRY = re.compile(r"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)")
+# A script a workflow step runs with the runner's interpreter, and its subcommand if any.
+_WORKFLOW_ENTRY = re.compile(
+    r"(?<![\w/-])python3?\s+(scripts/[\w/.-]+\.py)((?:\s+(?!-)[\w-]+)?)"
+)
 _WAIT_ENTRY = re.compile(r'--no-project\b.*\bpython "\$root/([^"]+)"((?: [\w-]+)*)')
 
 
@@ -96,6 +103,24 @@ def _wait_entries() -> list[tuple[Path, tuple[str, ...]]]:
     return found
 
 
+def _workflow_entries() -> list[tuple[Path, tuple[str, ...], bool]]:
+    found = []
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        doc = yaml_fast.safe_load(workflow.read_text(encoding="utf-8"))
+        for job in (doc.get("jobs") or {}).values():
+            for step in job.get("steps") or []:
+                env = {**(doc.get("env") or {}), **(job.get("env") or {})}
+                env |= step.get("env") or {}
+                rooted = "scripts" in str(env.get("PYTHONPATH", ""))
+                run = str(step.get("run", "")).replace("\\\n", " ")
+                for line in run.splitlines():
+                    for match in _WORKFLOW_ENTRY.finditer(line):
+                        if not re.search(r"\buv\b", line[: match.start()]):
+                            argv = tuple(match.group(2).split())
+                            found.append((REPO / match.group(1), argv, rooted))
+    return found
+
+
 def entries() -> list[tuple[Path, tuple[str, ...], bool]]:
     """Every no-venv entry file, the subcommand argv its caller passes, and whether it is rooted.
 
@@ -107,6 +132,7 @@ def entries() -> list[tuple[Path, tuple[str, ...], bool]]:
     return sorted(
         {(entry, argv, True) for entry, argv in launched}
         | {(entry, argv, False) for entry, argv in role_installs.role_entries()}
+        | set(_workflow_entries())
     )
 
 

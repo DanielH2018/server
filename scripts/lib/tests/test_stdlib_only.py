@@ -137,6 +137,12 @@ def test_a_launched_entry_reaches_the_scripts_root_its_launcher_sets(tmp_path):
     assert SCRIPTS in dirs and SCRIPTS / "lib" / "git.py" in reached
 
 
+def test_a_workflow_step_on_the_runners_python_is_an_entry_and_a_uv_run_step_is_not():
+    found = {(path, argv) for path, argv, _ in _checker()._workflow_entries()}
+    assert (SCRIPTS / "deploy_tools" / "ci_images.py", ("plan",)) in found
+    assert not any(path == SCRIPTS / "dev" / "fact_status.py" for path, _ in found)
+
+
 def test_yaml_added_to_the_fanout_review_path_turns_the_walk_red(tmp_path):
     checker = _checker()
     dirs = checker.stdlib_only_set()[FANOUT_REVIEW_UNIT]
