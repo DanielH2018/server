@@ -86,6 +86,7 @@ def test_a_bypass_notice_is_named_a_push_that_landed(capsys, monkeypatch):
     _mod.main()
     out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
     assert out["hookEventName"] == "PostToolUse"
+    assert out["additionalContext"].startswith("[auto-mode-bridge] ")
     assert "the push landed" in out["additionalContext"]
     assert "push-rules worktree-fanout-4507`" in out["additionalContext"]
 

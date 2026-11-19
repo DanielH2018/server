@@ -188,7 +188,7 @@ def main() -> int:
     payload = read_payload()
     verdict = decision(payload) if payload else None
     if verdict:
-        emit_pretooluse_decision(*verdict)
+        emit_pretooluse_decision("block-batch-full-suite", *verdict)
     return 0
 
 
