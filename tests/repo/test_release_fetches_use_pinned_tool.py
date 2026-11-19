@@ -20,7 +20,11 @@ from lib import yaml_fast
 
 ACTION = ".github/actions/pinned-tool/action.yml"
 USES = "$/.github/actions/pinned-tool"
-RELEASE = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/releases/download\b")
+RELEASE = re.compile(
+    r"github\.com/([^\s\"'/]+(?:/[^\s\"'/]+)?)/releases/(?:latest/)?download\b"
+)
+# The repo a release URL built from a variable reads as; no EXEMPT row can name it.
+UNRESOLVED = "<repo built from a variable>"
 FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re.M)
 GH_RELEASE = re.compile(
     r"\bgh release download\b[^\n]*?(?:-R|--repo)[ =]([\w.-]+/[\w.-]+)"
@@ -104,7 +108,8 @@ def _fetched_repos(step: dict, context: str) -> set[str]:
     if not FETCH.search(run):
         return set()
     own = set(RELEASE.findall(run + str(step.get("env") or "")))
-    return own | set(GH_RELEASE.findall(run)) or set(RELEASE.findall(context))
+    repos = own | set(GH_RELEASE.findall(run)) or set(RELEASE.findall(context))
+    return {UNRESOLVED if "$" in r or "{" in r else r for r in repos}
 
 
 def release_fetches(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
@@ -232,23 +237,38 @@ def test_no_unlisted_installer_action_runs():
 NFPM_URL = "https://github.com/goreleaser/nfpm/releases/download/v1/nfpm.tar.gz"
 
 
+NFPM = "goreleaser/nfpm"
+
+
 @pytest.mark.parametrize(
-    "run",
+    ("run", "repo"),
     [
-        f"curl -fsSLo f {NFPM_URL}",
-        f"out=$(curl -fsSL {NFPM_URL})",
-        f"mkdir -p d && curl -fsSLo d/f {NFPM_URL}",
-        f"wget -q {NFPM_URL}",
-        "gh release download v1 -R goreleaser/nfpm -p 'nfpm_*'",
+        (f"curl -fsSLo f {NFPM_URL}", NFPM),
+        (f"out=$(curl -fsSL {NFPM_URL})", NFPM),
+        (f"mkdir -p d && curl -fsSLo d/f {NFPM_URL}", NFPM),
+        (f"wget -q {NFPM_URL}", NFPM),
+        ("gh release download v1 -R goreleaser/nfpm -p 'nfpm_*'", NFPM),
+        (
+            "curl -fsSLo f https://github.com/goreleaser/nfpm/releases/latest/download/n",
+            NFPM,
+        ),
+        (
+            'repo=goreleaser/nfpm; curl -fsSLo f "https://github.com/$repo/releases/download/v1/n"',
+            UNRESOLVED,
+        ),
+        (
+            'curl -fsSLo f "https://github.com/${OWNER}/nfpm/releases/download/v1/n"',
+            UNRESOLVED,
+        ),
     ],
 )
-def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run):
+def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
     sources = copy.deepcopy(_sources())
     sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
         {"run": run + "\n"}
     )
     assert release_fetches(sources) - set(EXEMPT) == {
-        ("ci.yml", "host_packages_build", "goreleaser/nfpm")
+        ("ci.yml", "host_packages_build", repo)
     }
 
 
