@@ -95,6 +95,7 @@ tests:
                 Traefik serves a certificate for soon.example.com that expires in 9.992 days.
                 Read Traefik's ACME log for a failed renewal, and `probe.py cert <host>` for the
                 chain it serves.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#certexpiringsoon
       - eval_time: 11m
         alertname: EdgeMetricsMissing
         exp_alerts: []

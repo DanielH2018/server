@@ -73,6 +73,7 @@ groups:
           description: >-
             {{ $labels.origin }} has its {{ $labels.mountpoint }} filesystem over 90% full. Longhorn
             stops scheduling replicas on a node at 75%. Read `df -h` on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
       - alert: HostDiskFull
         expr: |
           max by (origin, job, instance, mountpoint) (
@@ -92,6 +93,7 @@ groups:
           description: >-
             {{ $labels.origin }} has its {{ $labels.mountpoint }} filesystem over 90% full. Longhorn
             stops scheduling replicas on a node at 75%. Read `df -h` on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
       # The bridge's check_mem host arm: MemAvailable under 100 - MEM_MAX_PCT (90) percent of
       # MemTotal.
       - alert: HostMemoryHigh
@@ -775,6 +777,7 @@ groups:
           description: >-
             NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying
             the load. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       # Charge under UPS_CHARGE_MIN_PCT (50), strict as the bridge's `<`.
       - alert: UPSBatteryLow
         expr: |
@@ -790,6 +793,7 @@ groups:
           description: >-
             The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10
             minutes. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       # Estimated runtime under UPS_RUNTIME_MIN_S (300).
       - alert: UPSRuntimeLow
         expr: |
@@ -805,6 +809,7 @@ groups:
           description: >-
             The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for
             10 minutes. The battery has aged. Read the UPS on the NUT host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
       # The UPS's own replace-battery verdict (the NUT RB flag).
       - alert: UPSReplaceBattery
         expr: |
@@ -820,6 +825,7 @@ groups:
           description: >-
             NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs
             replacing. This trips before charge or runtime read low.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsreplacebattery
       # The bridge's partial-absence and all-absent arms of check_ups. While the nut scrape is down
       # the arms stay silent and ScrapeTargetDown owns the outage, as the bridge deferred to Scrape
       # Targets.
@@ -858,3 +864,4 @@ groups:
             The NUT exporter answers its scrape but publishes no {{ $labels.arm }} series for 10
             minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual
             cause. Read nut-exporter's /ups_metrics.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent

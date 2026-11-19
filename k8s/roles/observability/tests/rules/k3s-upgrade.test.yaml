@@ -168,11 +168,11 @@ tests:
             exp_annotations:
               summary: homelab-k3s-restart failed to restart k3s on daniel-box.
               description: >-
-                The last windowed restart of k3s.service on daniel-box did not end with the unit
-                active, under a new MainPID, and the node Ready past its restart, or a run was
-                killed after it restarted k3s. The unit makes one attempt per config hash. Read
-                `journalctl -u homelab-k3s-restart -p notice` on daniel-box, recover the node by
-                hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
+                Read `journalctl -u homelab-k3s-restart -p notice` on daniel-box and recover the
+                node by hand if it is down. The last windowed restart of k3s.service did not end
+                active, under a new MainPID, with the node Ready. The runbook says how to allow
+                another attempt.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#k3sconfigrestartfailed
 
   # K3sConfigRestartPending fires only after 72 hours of `pending 1`. An absent series fires
   # nothing here: K3sConfigRestartMetricsAbsent owns that case.

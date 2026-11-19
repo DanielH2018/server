@@ -74,6 +74,7 @@ groups:
             promote moved it, or promote moved it and failed to write PROD_DIGEST. Compare
             probe.py landing's prod line with gh variable get PROD_DIGEST, and read the
             package's version history for who pushed the tag.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
       # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
       # job, which no other check can see. The second pages a scrape that works but lacks any one
       # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
