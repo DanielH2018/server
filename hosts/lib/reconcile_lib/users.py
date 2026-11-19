@@ -34,6 +34,7 @@ from reconcile_lib.common import ERR, run, log, under_root
 SYSUSERS = Path("/usr/lib/sysusers.d/homelab.conf")
 NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 KEYS = {"name", "uid", "gid", "home", "shell", "comment"}
+IDS = ("uid", "gid")
 
 
 def valid(section: object) -> bool:
@@ -43,18 +44,12 @@ def valid(section: object) -> bool:
     users = section["users"]
     if not isinstance(users, list):
         return False
-    names = [u.get("name") for u in users if isinstance(u, dict)]
-    uids = [u.get("uid") for u in users if isinstance(u, dict)]
-    gids = [u.get("gid") for u in users if isinstance(u, dict)]
+    ids = [[u.get(k) for u in users if isinstance(u, dict)] for k in ("name", *IDS)]
     return (
-        len(names) == len(users) == len(set(names)) == len(set(uids)) == len(set(gids))
+        all(len(users) == len(column) == len(set(column)) for column in ids)
         and all(set(u) == KEYS for u in users)
         and all(isinstance(u["name"], str) and NAME.fullmatch(u["name"]) for u in users)
-        and all(
-            type(u[key]) is int and 0 < u[key] < 65534
-            for u in users
-            for key in ("uid", "gid")
-        )
+        and all(type(u[k]) is int and 0 < u[k] < 65534 for u in users for k in IDS)
         and all(
             isinstance(u[key], str) and u[key].startswith("/") and ".." not in u[key]
             for u in users
@@ -73,12 +68,8 @@ def check(user: dict) -> str:
     if found.returncode == 2:
         return "absent"
     fields = found.stdout.split(":")
-    if (
-        found.returncode != 0
-        or len(fields) < 4
-        or not fields[2].isdigit()
-        or not fields[3].isdigit()
-    ):
+    numbers = fields[2:4]
+    if found.returncode or len(numbers) < 2 or not all(map(str.isdigit, numbers)):
         log(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
         return "fault"
     name, home = user["name"], user["home"]
@@ -130,9 +121,7 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
         if not users:
             names.add(name)
             drift += 1
-            continue
-        outcome = expire(name)
-        if outcome == "expired":
+        elif (outcome := expire(name)) == "expired":
             expired.add(name)
         elif outcome == "failed":
             names.add(name)
