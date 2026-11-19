@@ -601,7 +601,7 @@ A resolved notification would count as a ping and hide the outage. Its `payload`
 | `Watchdog` | always 1 (`vector(1)`) | — | `info` |
 | `PrometheusRuleReloadFailed` | `prometheus_config_last_reload_successful == 0` | 10m | `warning` |
 | `AlertmanagerNotificationsFailing` | `increase(alertmanager_notifications_failed_total{reason!="rateLimited"}[30m]) > 0`, by integration | — | `critical` |
-| `AlertmanagerNotificationsRateLimited` | `increase(alertmanager_notifications_failed_total{reason="rateLimited"}[5m]) > 0`, by integration | 10m | `critical` |
+| `AlertmanagerNotificationsRateLimited` | `increase(alertmanager_notifications_failed_total{reason="rateLimited"}[7m]) > 0`, by integration | 10m | `critical` |
 | `AlertmanagerMetricsMissing` | `absent(up{job="alertmanager"})` or (`absent(alertmanager_notifications_failed_total{job="alertmanager"})` and on() `up{job="alertmanager"} == 1`) | 10m | `warning` |
 
 `AlertmanagerNotificationsFailing` is Alertmanager's counterpart of Kuma's `Kuma Notification
@@ -611,13 +611,15 @@ before any family cuts over. Once M2 cuts over, Alertmanager pages for real, and
 must not be silent.
 
 `AlertmanagerNotificationsRateLimited` holds the `rateLimited` reason apart. Alertmanager
-retries a rate-limited send, and a large rollout's alert churn makes Discord return 429 for a
-few minutes. On 2026-11-19 that burst fired `AlertmanagerNotificationsFailing`, failed the soak
+sends a group again at its next flush after a failed one, and a large rollout's alert churn
+makes Discord return 429 for a few minutes. On 2026-11-19 that burst fired `AlertmanagerNotificationsFailing`, failed the soak
 and set `DEPLOY_HOLD` on a healthy cluster
-([#9088](https://github.com/DanielH2018/server/issues/9088)). The 5-minute window with a
-10-minute `for:`, two of the default route's `group_interval`, lets a burst that the retries
-deliver pass. A rate limit that holds for 10 minutes still pages as a critical, so it reaches
-email.
+([#9088](https://github.com/DanielH2018/server/issues/9088)). The counter moves once
+per failed flush: at 00:10 that night, the 30-minute increase of failed Discord requests and
+of `rateLimited` failures both read 11. A group stuck behind the limit therefore fails once per
+5-minute `group_interval`, and the 7-minute window always holds one such failure. The burst
+held the 7-minute increase above 0 for about 8 minutes, under the 10-minute `for:`, so it
+passes. A rate limit that holds for 10 minutes still pages as a critical, so it reaches email.
 
 `AlertmanagerMetricsMissing` is the family's zero-series alert (convention 2). If
 Alertmanager's metrics stop reaching Prometheus, `AlertmanagerNotificationsFailing` evaluates

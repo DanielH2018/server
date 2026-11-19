@@ -49,9 +49,10 @@ groups:
             the error.
       # This rule covers a send Alertmanager drops. Critical, so it routes to
       # Discord and email both, and a dropped Discord send still reaches the operator.
-      # A rate-limited send is AlertmanagerNotificationsRateLimited's: Alertmanager retries it,
-      # and a rollout's alert burst would otherwise page and fail the soak. The match is
-      # negative, so a reason this file does not name still pages at once.
+      # A rate-limited send is AlertmanagerNotificationsRateLimited's: Alertmanager sends the
+      # group again at its next flush, and a rollout's alert burst would otherwise page and
+      # fail the soak. The match is negative, so a reason this file does not name still pages
+      # at once.
       - alert: AlertmanagerNotificationsFailing
         expr: >-
           sum by (integration)
@@ -66,14 +67,14 @@ groups:
             the last 30 minutes, for a reason other than a rate limit. Read
             alertmanager_notifications_failed_total by reason, and the alertmanager pod's log.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
-      # A rate limit that outlasts Alertmanager's retries. The 5m window and the 10m `for:`,
-      # two of the default route's `group_interval`, keep a burst that the retries deliver
-      # from firing: a burst holds the 5m increase above 0 for about 5 minutes. Critical, so
-      # a sustained Discord rate limit still reaches the operator by email.
+      # A rate limit that outlasts a rollout's burst. The counter moves once per failed flush,
+      # so a group stuck behind the limit adds one failure per 5m `group_interval`; the 7m
+      # window always holds one. A burst holds the 7m increase above 0 for about 8 minutes,
+      # under the 10m `for:`. Critical, so a sustained Discord rate limit still reaches email.
       - alert: AlertmanagerNotificationsRateLimited
         expr: >-
           sum by (integration)
-          (increase(alertmanager_notifications_failed_total{job="alertmanager", reason="rateLimited"}[5m])) > 0
+          (increase(alertmanager_notifications_failed_total{job="alertmanager", reason="rateLimited"}[7m])) > 0
         for: 10m
         labels:
           severity: critical
@@ -82,7 +83,7 @@ groups:
           summary: Alertmanager's {{ $labels.integration }} sends have been rate limited for 10 minutes.
           description: >-
             The {{ $labels.integration }} integration refused Alertmanager's sends as rate
-            limited in every 5-minute window for 10 minutes, so its retries are not getting
+            limited in every 7-minute window for 10 minutes, so its resends are not getting
             through. Read the alertmanager pod's log, and look for an alert group that floods
             the receiver.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsratelimited
