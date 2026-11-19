@@ -5,8 +5,6 @@ import subprocess
 
 from fanout_lib.review.base_check import BaseCheck
 from fanout_lib.brief import Issue, render_brief
-from fanout_lib.review.hunk_check import HunkCheck
-from fanout_lib.review.red_gate import Gates
 from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 
@@ -77,8 +75,6 @@ class FakeRunner:
         self.listed = []
         # Every other `gh` call, argv only; `comments` holds the stdin of the same calls.
         self.gh_calls = []
-        # What `gh issue view --json labels` answers for every issue of the batch.
-        self.labels = {"labels": []}
         self.verdict = "VERDICT: settled (deployed)"
         # The VERDICT lines of the first landings, in order; `verdict` answers the rest.
         self.verdicts = []
@@ -136,8 +132,6 @@ class FakeRunner:
         if argv[:3] == ["gh", "pr", "list"]:
             self.listed.append(argv)
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.branch_prs), "")
-        if argv[:3] == ["gh", "issue", "view"]:
-            return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[:3] == ["gh", "pr", "view"]:
             fixed = any(phase == "ci-fix" for *_, phase in self.claude)
             fields = self.pr_fields
@@ -212,10 +206,8 @@ def _pipeline(
     host="daniel-box",
     heads=("aaa", "bbb"),
     clock=None,
-    gates=None,
     target=SERVER_TARGET,
     base_check=None,
-    hunk_check=None,
     sleep=None,
 ):
     (tmp_path / ".fanout").mkdir()
@@ -230,10 +222,7 @@ def _pipeline(
         run=run,
         clock=clock or (lambda: 0.0),
         state_dir=tmp_path / "state",
-        red_green=gates is not None,
-        gates=gates or Gates(),
         base_check=base_check or (lambda *_: BaseCheck()),
-        hunk_check=hunk_check or (lambda *_: HunkCheck()),
         sleep=sleep or (lambda _: None),
     )
     return pipeline, run

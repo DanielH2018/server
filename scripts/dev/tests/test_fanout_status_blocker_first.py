@@ -34,9 +34,9 @@ def _final(result: str) -> str:
     )
 
 
-# The ending `held_for_findings` and `held_for_green` give a batch: a blocker line, then the PR.
+# The ending `held_for_findings` gives a batch: a blocker line, then the PR.
 HELD_WITH_A_PR_URL = _final(f"needs input: the review held this PR.\n{PR}")
-FAILED_WITH_A_PR_URL = _final(f"failed: the green gate refused it.\n{PR}")
+FAILED_WITH_A_PR_URL = _final(f"failed: the review did not run.\n{PR}")
 
 
 def test_a_blocker_line_ending_in_a_pr_url_is_flagged():
