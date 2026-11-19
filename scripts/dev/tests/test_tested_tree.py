@@ -57,11 +57,16 @@ def _status(
 
 
 def _prove(pulls, statuses, tree=TREE, sha=SQUASH):
-    return tested_tree.tree_is_proven(_api(pulls, statuses), REPO_NAME, sha, tree)[0]
+    return bool(tested_tree.tested_run(_api(pulls, statuses), REPO_NAME, sha, tree)[0])
 
 
 def test_equal_trees_are_proven():
     assert _prove(_pr(), _status()) is True
+
+
+def test_a_proven_tree_names_the_run_that_recorded_it():
+    run, _ = tested_tree.tested_run(_api(_pr(), _status()), REPO_NAME, SQUASH, TREE)
+    assert run == RUN_URL
 
 
 def test_unequal_trees_are_not_proven():
