@@ -299,7 +299,7 @@ def refuse_solo_only(
     """Whether `launch` must refuse because a batch holds an issue citing the fan-out tooling.
 
     `next` marks such an issue `[solo-only]`. A batch that edits the pipeline runs
-    under its own edited copy of the reviewer, the red gate and the Stop hook, which is why
+    under its own edited copy of the reviewer and the Stop hook, which is why
     the held-settings machinery exists. Refused before the first ssh, like the shared-file
     check, and a solo session claims and works the issue instead. `repo` is the register the
     batches come from; another repo's issue is never solo-only.

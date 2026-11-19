@@ -198,7 +198,6 @@ from dev.findings_lib.issue_model import (
     SEVERITY_FIELD,
     SEVERITY_OPTIONS,
     KIND_TYPES,
-    cited_paths,
     recorded_blockers,
     is_deferred_row,
     now_iso,
@@ -216,7 +215,6 @@ from dev.findings_lib.plans import (
     plan_close,
     plan_comment,
     plan_defer,
-    plan_ensure_label,
     plan_manual,
     plan_release_held,
     plan_open,
@@ -229,7 +227,6 @@ from dev.findings_lib.boundaries import (
     aimed,
     read_peer_worktrees,
 )
-from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
 from dev.findings_lib.verify import verification_report
 from dev.findings_lib.new_issue_probe import cmd_new_issues
 
@@ -267,14 +264,9 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append("manual")
     if args.review_leftover:
         labels.append("review-leftover")
-    if tools.repo is None and red_green_eligible(cited_paths(body)):
-        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase
     # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
-    # first, and `red-green` the first time it is used.
-    have = _existing_labels(tools)
-    extra = [RED_GREEN_LABEL] if RED_GREEN_LABEL in labels else []
-    ensure = [plan for name in extra for plan in plan_ensure_label(name, have)]
-    run(plan_sync_labels(have) + ensure, args.dry_run, tools)
+    # first.
+    run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     existing = fingerprint_match(fp, tools)
     outcome, code, plans = plan_open(
         existing,

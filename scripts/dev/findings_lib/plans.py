@@ -13,7 +13,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.red_green import RED_GREEN_STYLE
 from dev.findings_lib.milestone import branch_of
 from dev.findings_lib.issue_model import (
     LABELS,
@@ -43,18 +42,6 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
                 ["label", "create", name, "--color", colour, "--description", desc]
             )
     return plans
-
-
-def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
-    """The `label create` the `red-green` label needs before anything can apply it.
-
-    `gh issue create --label` fails on a label the repo lacks, and `plan_sync_labels` only
-    knows the static `LABELS` set. Returns `[]` when the label already exists.
-    """
-    if name in existing:
-        return []
-    colour, desc = RED_GREEN_STYLE
-    return [["label", "create", name, "--color", colour, "--description", desc]]
 
 
 def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:

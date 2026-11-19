@@ -16,7 +16,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import ISSUES_HEADING
-from fanout_lib.review.green_contest import judgment
 from fanout_lib.review.review_prompts import is_held
 from fanout_lib.sizing import DEFAULT, REVIEWER, Rung
 from fanout_lib.status import BLOCKER, NO_PR
@@ -82,33 +81,11 @@ class Record:
     # How many fix rounds ran: 0 with no actionable finding, 2 when a medium-or-worse finding
     # survived the first delta review.
     fix_rounds: int = 0
-    # The red gate's verdict: "" when the batch had no red phase, else "passed" or the
-    # gate's reason. The test author reruns its tests until they fail, so a refusal is rare
-    # whatever the tests are worth; `green_first` and the `red_hunks` fields measure them.
-    red_gate: str = ""
-    red_behaviours: int = 0
-    red_tests: int = 0
-    # How many red tests failed only because a name was missing.
-    red_by_absence: int = 0
-    green_gate: str = ""
-    # The first green gate run's `red_gate.green_cause`: `passed`, `unmet`, `flaky` or `lock`.
-    green_first: str = ""
-    # The implementer's contest of a red test (`green_contest`): "" when there was
-    # none, else `upheld: ` or `rejected: ` and the contested nodes.
-    green_contest: str = ""
-    # The PR's new test nodes outside the red phase, those of them that pass with its code
-    # changes taken out (`base_check`), and why the check could not run, if it could not.
+    # The PR's new test nodes, those of them that pass with its code changes taken out
+    # (`base_check`), and why the check could not run, if it could not.
     base_tests: int = 0
     base_passing: list[str] = field(default_factory=list)
     base_error: str = ""
-    # The fix hunks tried by reverting each alone under the red tests (`hunk_check`), those
-    # no red test noticed, those noticed only through a missing name, and any error.
-    red_hunks: int = 0
-    red_hunks_missed: list[str] = field(default_factory=list)
-    red_hunks_by_absence: int = 0
-    red_hunks_error: str = ""
-    # Why the batch ran no red phase (`red_gate.red_skip_reason`), "" when it ran one.
-    red_skipped: str = ""
     # How the batch ended, so the records count the batches that never reached a PR:
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.
@@ -247,26 +224,6 @@ def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
     }
 
 
-def held_for_green(record: Record, reason: str) -> dict:
-    """The hold on a PR that fails the green gate, saying whether the reviewers faulted the fix.
-
-    Without that, a correct fix held by a wrong red test reads like a wrong fix.
-    """
-    verdict, _, nodes = record.green_contest.partition(": ")
-    rejected = nodes.split(", ") if verdict == "rejected" else []
-    # `remaining` is the delta review's verdict, and stays empty when no fix round ran.
-    left = record.remaining if "fix" in record.durations else record.actionable
-    why = judgment(reason, left, record.review_error, rejected)
-    return {
-        "type": "result",
-        "is_error": False,
-        "result": (
-            f"needs input: the PR fails the green gate, so it was not landed: {reason}. "
-            f"{why}\n{record.pr}"
-        ),
-    }
-
-
 def issues_section(brief: str) -> str:
     """The brief's fenced issue text, which is all the reviewer learns about intent."""
     _, sep, rest = brief.partition(ISSUES_HEADING)
@@ -278,42 +235,16 @@ def comment_body(record: Record) -> str:
     lines = ["## Fan-out review", ""]
     if record.review_error:
         lines += [f"The review did not complete: {record.review_error}.", ""]
-    if record.red_gate == "passed":
-        lines.append(
-            f"Red gate passed: {record.red_tests} tests for {record.red_behaviours} stated "
-            "behaviours failed on the unchanged code"
-            + (
-                f", {record.red_by_absence} of them only because a name was missing."
-                if record.red_by_absence
-                else "."
-            )
-        )
-    elif record.red_gate:
-        lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")
-    if record.green_gate:
-        lines.append(f"Green gate: {record.green_gate}.")
-    if record.green_contest.startswith("upheld: "):
-        lines.append(
-            "Green gate contested: a fresh reviewer upheld the implementer's cited contest "
-            f"of {record.green_contest.removeprefix('upheld: ')}, so the PR went on with "
-            "those red tests failing."
-        )
     if record.ci_gate:
         lines.append(f"CI gate: {record.ci_gate}.")
     if record.land_hold:
         lines.append(f"Not landed by the pipeline: {record.land_hold}.")
-    if record.red_hunks:
-        noticed = record.red_hunks - len(record.red_hunks_missed)
-        lines.append(
-            f"The red tests noticed {noticed} of {record.red_hunks} fix hunks reverted one at "
-            f"a time, {record.red_hunks_by_absence} of them only through a missing name."
-        )
     if record.base_tests:
         lines.append(
             f"{len(record.base_passing)} of the PR's {record.base_tests} new tests pass with "
             "its code changes taken out."
         )
-    if record.red_gate or record.base_tests or record.ci_gate:
+    if record.base_tests or record.ci_gate:
         lines.append("")
     held = sum(1 for f in record.findings if is_held(f))
     lines.append(
