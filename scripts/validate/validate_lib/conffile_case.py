@@ -214,9 +214,10 @@ def run(cases) -> None:
         ).stdout
         print(f"::group::journal after {NAME}\n{journal}::endgroup::", file=sys.stderr)
     else:
+        cases.passed.append(NAME)
         unchanged, changed = results
         print(
-            f"[PASS] {c.name}: {NAME}: the unchanged conffile's upgrade was {unchanged},"
+            f"[MEASURED] {NAME}: the unchanged conffile's upgrade was {unchanged},"
             f" the changed conffile's was {changed}",
             file=sys.stderr,
         )

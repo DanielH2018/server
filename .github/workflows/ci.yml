@@ -447,8 +447,13 @@ jobs:
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here would be a second render of every k8s role.
-        # --verbose: prek prints each hook's duration only with it, and this log is where a slow hook shows.
-        run: prek run --all-files --verbose --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        # --log-file: prek's trace log holds each hook's duration, which the next step tabulates.
+        # Without --verbose the job log holds only a failing hook's output.
+        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+      - name: Write the slowest hooks to the job summary
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: uv run python scripts/dev/prek_durations.py "$RUNNER_TEMP/prek.log" >> "$GITHUB_STEP_SUMMARY"
 
   # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
   # their own. They run beside the `hooks` sweep, so the run wall is the slower of the two jobs
@@ -2031,18 +2036,35 @@ jobs:
           # `prove` runs on a push and on a labelled PR, so it is `skipped` on every other run. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran.
-          case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
+          case "$PROVE" in
+            success | skipped | cancelled | failure) ;;
+            *) echo "::error title=gate::prove's result is '$PROVE', not success, skipped, cancelled or failure"; exit 1 ;;
+          esac
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
           # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
           # build's own result is required below, so a build that failed passes nothing here.
-          idle() { [ "$1" = skipped ] && [ "$2" = false ]; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" && ok "$LOCKFILE" \
-            && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
-            && { ok "$HOST_PACKAGES" || idle "$HOST_PACKAGES" "${RUN_CASES:-}"; } \
-            && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
-            && { ok "$HOST_TOOLS_ARM64" || idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"; }
+          ok_or_idle() { ok "$1" || { [ "$1" = skipped ] && [ "$2" = false ]; }; }
+          # `need <half> <check> <result> [<build's answer>]` records the half as `<half>=<result>`
+          # when the check refuses its result.
+          failed=()
+          need() { local half=$1; shift; "$@" || failed+=("$half=$2"); }
+          need hooks ok "$HOOKS"
+          need pr-gates ok "$PR_GATES"
+          need pytest ok "$PYTEST"
+          need deck-mod ok "$DECK_MOD"
+          need lockfile ok "$LOCKFILE"
+          need flux-roundtrip ok "$FLUX_ROUNDTRIP"
+          need sops-type-proof ok "$SOPS_TYPE_PROOF"
+          need host-packages-build ok "$HOST_PACKAGES_BUILD"
+          need host-packages ok_or_idle "$HOST_PACKAGES" "${RUN_CASES:-}"
+          need host-packages-bootstrap ok_or_idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"
+          need host-tools-arm64 ok_or_idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error title=gate::${#failed[@]} halves failed: ${failed[*]}"
+            exit 1
+          fi
 
       # Records what this green run tested, for the push run's `prove` job. On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree

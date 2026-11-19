@@ -81,7 +81,7 @@ def test_a_snapshot_5xx_on_a_failed_run_gives_no_verdict(monkeypatch, tmp_path, 
     )
     _fake_age_container(monkeypatch, "", returncode=1, stderr=stderr)
     cases = SimpleNamespace(
-        work=tmp_path, image="img", python="3.12", failed=[], no_verdict=[]
+        work=tmp_path, image="img", python="3.12", passed=[], failed=[], no_verdict=[]
     )
 
     age_case.run(cases)
