@@ -2,7 +2,7 @@
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -42,6 +42,9 @@ class Batch:
             which launched in this repo, hence the default.
         rung: the `fanout_lib.sizing` rung its implementer ran at. Absent from manifests
             written before sizing existed, every one of which ran at the default.
+        extra: the keys of the manifest entry that are not fields here, which a newer
+            build wrote. `to_json` writes them back, so a rewrite by this build loses
+            nothing the newer build recorded. Not part of equality.
     """
 
     batch: str
@@ -54,6 +57,31 @@ class Batch:
     removed_at: str | None = None
     repo: str = SERVER
     rung: str = DEFAULT.name
+    extra: dict = field(default_factory=dict, compare=False)
+
+    @classmethod
+    def from_json(cls, data: dict) -> Batch:
+        """Build a batch from its manifest entry, keeping the keys that are not fields.
+
+        Raises:
+            TypeError: `data` is not an object, or lacks a field that has no default.
+        """
+        if not isinstance(data, dict):
+            raise TypeError(f"a batch entry is an object, not {type(data).__name__}")
+        known = {f.name for f in fields(cls)} - {"extra"}
+        return cls(
+            **{k: v for k, v in data.items() if k in known},
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_json(self) -> dict:
+        """The manifest entry for this batch: its fields, then `extra`'s keys beside them.
+
+        `extra` is flattened, never nested, because a reader from before `from_json`
+        builds each batch with `Batch(**entry)` and raises on a key it has no field for.
+        """
+        entry = asdict(self)
+        return {**entry.pop("extra"), **entry}
 
 
 @dataclass(frozen=True)
@@ -63,6 +91,28 @@ class Manifest:
     run_id: str
     orchestrator_branch: str
     batches: list[Batch]
+
+    @classmethod
+    def from_json(cls, data: dict) -> Manifest:
+        """Build a run from the object `to_json` wrote.
+
+        Raises:
+            KeyError: `data` lacks one of the three keys.
+            TypeError: `data` or one of its batches has the wrong shape.
+        """
+        return cls(
+            data["run_id"],
+            data["orchestrator_branch"],
+            [Batch.from_json(b) for b in data["batches"]],
+        )
+
+    def to_json(self) -> dict:
+        """The object `save` writes and `place runs --json` prints."""
+        return {
+            "run_id": self.run_id,
+            "orchestrator_branch": self.orchestrator_branch,
+            "batches": [b.to_json() for b in self.batches],
+        }
 
 
 def new_run_id(now: datetime) -> str:
@@ -128,7 +178,7 @@ def save(m: Manifest, root: Path = MANIFEST_DIR, replace=os.replace) -> Path:
     manifest_path = path(m.run_id, root)
     tmp = manifest_path.with_name(f"{manifest_path.name}.{os.getpid()}.tmp")
     try:
-        tmp.write_text(json.dumps(asdict(m), indent=2) + "\n")
+        tmp.write_text(json.dumps(m.to_json(), indent=2) + "\n")
         replace(tmp, manifest_path)
     except OSError:
         tmp.unlink(missing_ok=True)
@@ -155,19 +205,15 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
             text = retired_path(run_id, root).read_text()
         except FileNotFoundError:
             raise missing from None
-    data = json.loads(text)
-    return Manifest(
-        data["run_id"],
-        data["orchestrator_branch"],
-        [Batch(**b) for b in data["batches"]],
-    )
+    return Manifest.from_json(json.loads(text))
 
 
 def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:
     """Every run manifest under `root`, oldest run-id first.
 
     A manifest that cannot be read is skipped on its own rather than raising: every caller is
-    a read view or a launch gate, and one bad file must fail neither. `fanout.py place runs`
+    a read view or a launch gate, and one bad file must fail neither. A batch key this build
+    has no field for does not make a manifest unreadable. `fanout.py place runs`
     lists these, so a run-id lost to compaction or a resumed session is recoverable.
     """
     if not root.is_dir():
@@ -175,14 +221,7 @@ def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:
     runs = []
     for manifest_file in sorted(root.glob("*.json")):
         try:
-            data = json.loads(manifest_file.read_text())
-            runs.append(
-                Manifest(
-                    data["run_id"],
-                    data["orchestrator_branch"],
-                    [Batch(**b) for b in data["batches"]],
-                )
-            )
+            runs.append(Manifest.from_json(json.loads(manifest_file.read_text())))
         except OSError, ValueError, KeyError, TypeError:
             continue
     return runs

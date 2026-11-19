@@ -59,7 +59,6 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
-import dataclasses
 import json
 import subprocess
 import sys
@@ -384,7 +383,7 @@ def cmd_runs(args, tools: Tools) -> int:
         if not args.orchestrator or r.orchestrator_branch == args.orchestrator
     ]
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in runs]))
+        print(json.dumps([r.to_json() for r in runs]))
         return 0
     if not runs:
         whose = f" for {args.orchestrator}" if args.orchestrator else ""
