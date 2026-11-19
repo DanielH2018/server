@@ -27,22 +27,37 @@ from validate.validate_lib import k8s_schema
 from validate import k8s_manifests as vkm
 
 
-@pytest.fixture(scope="module")
-def shared_render():
+class SharedRender:
     """A `render` for `main()` that reads each role off the run's shared k8s render.
 
     `_k8s_render` readers on the same leg build that render anyway, so `main()` renders
     nothing a second time. A tree that fails to render leaves no shared tags, and each role
     renders afresh, so `main()` still prints its own failure lines.
+
+    Attributes:
+        asked: Each role `main()` asked for, in order.
+        fresh: Each role this rendered itself because the shared render did not hold it.
     """
+
+    def __init__(self, tags: dict[str, cluster.RenderedTag]):
+        self._tags = tags
+        self.asked: list[str] = []
+        self.fresh: list[str] = []
+
+    def __call__(self, role: str, stubs: dict) -> cluster.RenderedTag:
+        self.asked.append(role)
+        if role in self._tags:
+            return self._tags[role]
+        self.fresh.append(role)
+        return cluster.render_tag(role, stubs)
+
+
+@pytest.fixture(scope="module")
+def shared_render() -> SharedRender:
     tags = {}
     with contextlib.suppress(cluster.RenderError):
         tags = _k8s_render.rendered_tags()
-
-    def render(role, stubs):
-        return tags[role] if role in tags else cluster.render_tag(role, stubs)
-
-    return render
+    return SharedRender(tags)
 
 
 @pytest.fixture(scope="module")
@@ -156,6 +171,17 @@ def test_a_shared_tag_is_the_render_main_would_make():
     assert _k8s_render.rendered_tags()["traefik"] == cluster.render_tag(
         "traefik", stub_vars()
     )
+
+
+def test_main_renders_no_role_the_shared_render_holds(real_tree, shared_render):
+    assert "traefik" in shared_render.asked
+    assert shared_render.fresh == []
+
+
+def test_a_role_the_shared_render_lacks_is_rendered_fresh_and_flagged():
+    render = SharedRender({})
+    assert render("traefik", stub_vars()).tag == "traefik"
+    assert render.fresh == ["traefik"]
 
 
 def _run_with_render(render) -> tuple[int, str]:

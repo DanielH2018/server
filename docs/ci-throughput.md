@@ -753,9 +753,10 @@ what has changed it:
   `.github/actions/pytest-tools` puts SOPS, age and apt-utils in `~/.local/bin`, which the
   runner image has on PATH. It refreshes stale apt lists into a directory under
   `$RUNNER_TEMP`, not `/var/lib/apt/lists`. `hooks` unpacks Vale into `$RUNNER_TEMP/bin`.
-  Two uses of root remain, both in `.github/actions/setup`, and an image that needs neither
-  skips both. The fallback apt mirror is added only when `/etc/apt/apt-mirrors.txt` exists,
-  and `libyaml-dev` is installed only when it is missing.
+  One use of root remains: `.github/actions/setup` installs `libyaml-dev` when it is
+  missing, so a pod's base image carries it. The same action adds the fallback apt mirror to
+  `/etc/apt/apt-mirrors.txt` through `sudo -n`. A runner that refuses sudo keeps its list
+  and prints a notice.
 - **A pod needs a base image and a writable home.** The base image carries what the hosted
   image ships and the jobs do not install: `systemd-analyze`, Go, `jq`, `libyaml-dev` (PyYAML
   ships no wheel for the pinned Python), and the binaries test modules skip without. It puts
