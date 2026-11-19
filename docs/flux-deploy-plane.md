@@ -150,7 +150,10 @@ reconciliations from 2026-11-02 to 2026-11-09, about 6.9 an hour, and 371 from 2
 
 To read the rate, use `gotk_reconcile_duration_seconds_count` from the `flux` scrape job. The
 audit log does not carry it, because the audit policy drops the Kustomize controller's status
-patches ([#8512](https://github.com/DanielH2018/server/issues/8512)). A full reconcile and a
+patches ([#8512](https://github.com/DanielH2018/server/issues/8512)). Loki does not carry it
+either: the Alloy pods pipeline drops both log lines at info
+(`k8s/roles/loki-homelab/CLAUDE.md`), so count them in `kubectl -n flux-system logs`. A full
+reconcile and a
 requeue each count once. Over the same hour,
 `sum(increase(gotk_reconcile_duration_seconds_count{kind="Kustomization"}[1h]))` read 2952,
 against 2935 for the two log lines together.
