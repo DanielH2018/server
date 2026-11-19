@@ -116,6 +116,7 @@ tests:
                 Alertmanager's discord integration failed at least one send in the last 30
                 minutes. Read alertmanager_notifications_failed_total by reason, and the
                 alertmanager pod's log.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
       - eval_time: 45m
         alertname: AlertmanagerNotificationsFailing
         exp_alerts: []

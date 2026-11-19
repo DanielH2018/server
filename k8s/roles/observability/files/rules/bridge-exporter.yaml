@@ -32,12 +32,11 @@ groups:
         annotations:
           summary: monitor-bridge cannot reach the public internet.
           description: >-
-            Both WAN probe providers failed from monitor-bridge, so this house has no working link
-            or no DNS. The rows behind this gate (Discord delivery, R2 headroom, Cloudflare IP
-            drift, Healthchecks.io console drift and the domain registration read) are held by
-            the inhibit rule. Read the probe's failure messages in the monitor-bridge log in the
-            homelab namespace.
-            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN wan_reachable '`.
+            Check the router and the modem. Both WAN probe providers failed from monitor-bridge, so
+            the house has no working link or no DNS, and the rows that need the internet are held.
+            The probe's errors: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
+            wan_reachable '`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wanunreachable
       - alert: DiscordDeliveryFailing
         expr: homelab_check_success{job="monitor-bridge", check="discord"} == 0
         labels:
@@ -48,10 +47,10 @@ groups:
           summary: >-
             {{ with query "homelab_check_detail{job='monitor-bridge',check='discord'}" }}Alert delivery is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Discord webhook no longer resolves, or the SMTP backstop login failed.{{ end }}
           description: >-
-            One of the five Discord webhooks (Kuma, CrowdSec, gitops-deploy, *arr, healthchecks)
-            no longer resolves, or the Gmail SMTP backstop login failed. Rotate the named webhook
-            in SOPS and redeploy its consumer. The monitor-bridge log names the failing webhook.
-            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN discord '`.
+            Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
+            SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
+            deploy/monitor-bridge | grep 'DOWN discord '`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#discorddeliveryfailing
       - alert: R2FreeTierHeadroomLow
         expr: homelab_check_success{job="monitor-bridge", check="r2_usage"} == 0
         labels:
@@ -135,6 +134,7 @@ groups:
             The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
             days out. A lapse takes down ACME renewal, every public route, the WireGuard
             endpoint name and the alert plane's own notifications. Renew it at the registrar.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#domainregistrationexpiring
       # `ScrapeTargetDown` (service monitor-bridge, files/rules/
       # scrape-targets.yaml) pages a failed scrape of this job, and M1 convention 5 allows one
       # pager. The absent() arm is what that rule cannot see: a scrape job removed from
@@ -151,6 +151,7 @@ groups:
             up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
             monitor-bridge pod is down or the monitor-bridge scrape job is gone from
             prometheus.yml. Read the pod's events and log in the homelab namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#monitorbridgedown
       # This rule is the class-3 guard of
       # docs/failure-classes.md: a run loop that hangs behind a live HTTP thread keeps `up` at 1
       # and serves stale gauges. It is one aggregate alert, so a hung loop pages once rather than
@@ -177,10 +178,10 @@ groups:
           summary: >-
             {{ with query "time() - homelab_check_last_run_timestamp_seconds{job='monitor-bridge'} > homelab_check_deadline_seconds{job='monitor-bridge'}" }}monitor-bridge's verdicts have gone stale for {{ range $i, $s := . | sortByLabel "check" }}{{ if $i }}, {{ end }}{{ $s.Labels.check }}{{ end }}.{{ else }}monitor-bridge exports fewer check rows than homelab_check_rows counts.{{ end }}
           description: >-
-            For 10 minutes either a row's homelab_check_last_run_timestamp_seconds has aged past
-            its homelab_check_deadline_seconds, or fewer rows export homelab_check_success than
-            homelab_check_rows counts. The scrape works, so the run loop is hung or skipping
-            rows. Read the monitor-bridge pod's log in the homelab namespace.
+            Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but for 10
+            minutes a row has aged past its deadline or fewer rows export homelab_check_success than
+            homelab_check_rows counts, so the run loop is hung or skipping rows.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#bridgecheckstale
       # THE B2 FAMILY: the gate row and the one row behind it. Both rules are `for: 10m`, so the
       # two-minute gate dip of the weekly reboot does not page. The two rules share one `for:`
       # on purpose: the dependent must not page before its inhibit source exists, and both go
@@ -352,10 +353,11 @@ groups:
           summary: >-
             {{ with query "homelab_check_detail{job='monitor-bridge',check='scrutiny'}" }}Scrutiny reports {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Scrutiny reports a failing drive, stale collector data or high NVMe wear.{{ end }}
           description: >-
-            A drive's collector data is older than 26h, its SMART self-assessment or an attribute
-            threshold failed, or NVMe wear passed 80%. Scrutiny's own notifier is unconfigured,
-            so this is the only drive-failure page. The monitor-bridge log names the drive.
-            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN scrutiny '`.
+            A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear passed
+            80%, or its collector data is older than 26h. This is the only drive-failure page. The
+            log names the drive: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
+            scrutiny '`.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#smarthealthfailing
       - alert: SpeedtestDegraded
         expr: homelab_check_success{job="monitor-bridge", check="speedtest"} == 0
         for: 10m
