@@ -142,10 +142,16 @@ groups:
             short bursts never reach this alert.
       # The cAdvisor census (CADVISOR_PODS_MIN), one arm per check because the three vectors
       # differ in size: the cpu arm sees only pods that carry a cpu limit.
-      # tests/services/test_container_checks_rule_literals.py pins the literal 20, with the
-      # DECIDED marker for the measurement behind it. `or vector(0)` is the zero-series case: a
-      # vanished kubernetes-cadvisor job leaves every count() empty, and without it the arm
-      # would be silent exactly when blind. `for: 10m` is CADVISOR_CONSECUTIVE (2) x 300s, and
+      # DECIDED: floor 20 pods, from measurement rather than intuition. Over the 7d to 2026-08-27
+      # the pre-filter counts never fell below 98 (restarts), 98 (oom) and 70 (cpu); live values
+      # were 99/99/71. The cpu arm counts the DIVISION, not its denominator: a PromQL binary op
+      # drops series present on only one side, so re-measure from the division. 20 sits 3.5x
+      # under the smallest trough, so a deploy draining pods cannot reach it, while a broken
+      # selector or a vanished kubernetes-cadvisor job lands at 0. One floor for all three arms:
+      # a floor applied to two of three would reproduce the selector-drift class inside its own
+      # fix. Lowering it below about 70 blinds the cpu arm first.
+      # `or vector(0)` is the zero-series case: a vanished kubernetes-cadvisor job leaves every
+      # count() empty, and without it the arm would be silent exactly when blind. `for: 10m` is CADVISOR_CONSECUTIVE (2) x 300s, and
       # no shorter than ScrapeTargetDown's 10m, so a dead scrape pages its own alert first. No
       # inhibit: the per-pod rules read counters that a dead scrape leaves empty, so they go
       # quiet, and an inhibit keyed on ScrapeTargetDown would also mute this rule while one

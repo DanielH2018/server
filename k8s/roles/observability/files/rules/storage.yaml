@@ -13,8 +13,10 @@
 # the claim census while a selector break empties the other node's vector. The bridge row kept
 # the same page on purpose, so two criticals for one dead kubelet target is the accepted outcome.
 #
-# THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried, and
-# tests/services/test_storage_rule_literals.py pins it (M1 convention 1).
+# THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried, and its
+# `DECIDED:` marker on the rule is what a retune is reviewed against. A literal another role
+# declares (valheim's transient, jellyfin's snapshot cap, the Longhorn disk floor) is held to
+# that role by tests/services/test_storage_rule_literals.py.
 #
 # THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
 # (fullness, the free-space floor, the read-only mount and the etcd size) hold for one bridge
@@ -75,6 +77,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornvolumesmissing
       # monitor-bridge's `pvc_fullness`, percentage arm: a claim over PVC_MAX_PCT (85). media-data
       # is PVC_EXCLUDE: a `local` PV that is the `/` filesystem the host disk rules already watch.
+      # DECIDED: 85%, the bridge's PVC_MAX_PCT kept as is.
       - alert: PVCFull
         expr: >-
           max by (namespace, persistentvolumeclaim) (
@@ -93,6 +96,10 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pvcfull
       # The `pvc_fullness` free-bytes floor, for a claim whose peak is a step rather than a
       # slope. PVC_MIN_FREE declares valheim-server's largest transient, 3 GiB.
+      # DECIDED: 3 GiB even though 85% of the 20Gi claim also breaches at 3 GiB free. The floor is
+      # sized to the transient, not to open a gap under the percentage: a resize moves what 85%
+      # means and leaves this where the copy is, which at the 10Gi the incident happened on was
+      # 1.5 G more warning than the percentage gave.
       - alert: PVCBelowFreeFloor
         expr: >-
           max by (namespace, persistentvolumeclaim) (
@@ -133,6 +140,8 @@ groups:
       # claims' one source, and each node's target reports its own claims, so a dead
       # target drops the count below the floor and this rule does not wait on `up`. `for: 15m` is
       # PVC_CLAIMS_CONSECUTIVE (3) x 300s.
+      # DECIDED: a floor of 32 claims, the bridge's PVC_MIN_CLAIMS kept as is. A dead kubelet
+      # target drops a node's whole share, which lands well under it.
       - alert: PVCCoverageShortfall
         expr: >-
           (count(count by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes)) or vector(0)) < 32
@@ -156,6 +165,7 @@ groups:
       # `group` makes the capacity side a value of 1. The inner `max by (volume, snapshot)` is the
       # bridge's dedupe of a snapshot two managers report. `for: 15m` is SNAPSHOT_CAP_CONSECUTIVE (3)
       # x 300s.
+      # DECIDED: page at 0.9 of the cap, the bridge's SNAPSHOT_CAP_WARN_RATIO kept as is.
       - alert: LonghornSnapshotNearCap
         expr: >-
           sum by (pvc) (
@@ -245,6 +255,8 @@ groups:
       # accepting writes. The size comes from `apiserver_storage_size_bytes`, which two jobs carry
       # with one value, so `max` reads it once. The bridge treats an absent series as UP, because
       # ScrapeTargetDown owns a dead apiserver scrape, so this rule has no census arm.
+      # DECIDED: 80% of the 2 GiB quota, the bridge's ETCD_DB_MAX_PCT kept as is, leaving room to
+      # compact and defragment before etcd goes read-only.
       - alert: EtcdDBNearQuota
         expr: 100 * max(apiserver_storage_size_bytes) / 2147483648 >= 80
         for: 5m

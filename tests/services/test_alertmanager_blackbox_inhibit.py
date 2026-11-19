@@ -16,7 +16,7 @@ import re
 
 from lib import yaml_fast
 from test_alertmanager_host_check_inhibit import _selects, inhibit_rules, inhibited
-from test_alertmanager_routing import SCRAPE_RULES, ingress_set
+from test_alertmanager_routing import RULES_DIR, ingress_set
 
 SCRAPE_DOWN = "ScrapeTargetDown"
 INGRESS_JOB = "blackbox-ingress"
@@ -24,7 +24,9 @@ INGRESS_JOB = "blackbox-ingress"
 
 def scrape_down_rule(job: str) -> dict:
     """The one `ScrapeTargetDown` rule whose job matcher names `job`, from the shipped rules."""
-    [group] = yaml_fast.safe_load(SCRAPE_RULES.read_text())["groups"]
+    [group] = yaml_fast.safe_load((RULES_DIR / "scrape-targets.yaml").read_text())[
+        "groups"
+    ]
     named = re.compile(r'^up\{job(?:=~|=)"([^"]+)"\} == 0$')
 
     def jobs(rule: dict) -> list[str]:

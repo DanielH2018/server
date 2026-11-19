@@ -44,16 +44,21 @@
 # HWMON_TEMP_ORIGINS_CONSECUTIVE (5) is 25m, HWMON_TEMP_CONSECUTIVE (12) is 1h,
 # THERMAL_THROTTLE_CONSECUTIVE (3) is 15m, UPS_CONSECUTIVE (2) and CLAUDE_CGROUP_CONSECUTIVE (2)
 # are 10m. The disk, memory, undervoltage and Pi pressure thresholds had no streak, so they have
-# no `for:`. The numeric literals equal the retired bridge env keys, which
-# tests/services/test_host_check_rule_literals.py holds as RETIRED_ENV.
+# no `for:`. The numeric literals are the retired bridge env keys' values, and each rule's
+# `DECIDED:` marker is what a retune is reviewed against: no test pins the number.
 #
-# DROPPED ON PURPOSE. The retired-uid note on the Memory tile never paged, so it has no
-# rule. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
+# DROPPED ON PURPOSE. The Pi's published-port arm is `PiPortDead` in extra-probes.yaml.
+# DECIDED: a Claude Code process running as a retired uid never pages. As an arm it held the
+# Memory tile DOWN near-continuously, because background jobs and fan-out still started as the
+# operator's uid, and it masked any real memory page, so no rule here reads it.
+# `claude_uid_processes` is still written, and `test_claude_cgroup_metrics.py` holds the writer.
 groups:
   - name: hosts
     rules:
       # The bridge's check_disk for daniel-box: any of /, /boot and /boot/efi over DISK_MAX_PCT
       # (90). Percentage per series, so avail and size come from the same device.
+      # DECIDED: over 90% of /, /boot or /boot/efi, the bridge's value kept as is, and critical:
+      # a full root stops the node's writers.
       - alert: HostDiskFull
         expr: |
           max by (origin, job, instance, mountpoint) (
@@ -96,6 +101,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
       # The bridge's check_mem host arm: MemAvailable under 100 - MEM_MAX_PCT (90) percent of
       # MemTotal.
+      # DECIDED: 90% used, the bridge's MEM_MAX_PCT kept as is, and a warning.
       - alert: HostMemoryHigh
         expr: |
           100 * (
@@ -254,6 +260,26 @@ groups:
       # drops the 65261.85 sentinel. A sensor with none takes HWMON_TEMP_FALLBACK_C (85) raw. Every
       # series of one sensor shares one label set, so `or` keeps the first source that answers.
       # Chips matching nvme_ are Scrutiny's. `for: 1h` is HWMON_TEMP_CONSECUTIVE (12) x 300s.
+      # DECIDED: HostTemperatureHot holds for 1h (12 x 300s), not the 15 minutes (3 cycles) the
+      # bridge shipped with. daniel-box's k10temp/Tctl boosts into the low 90s as ordinary
+      # workload. Measured over a true 7 days (a [30d] query here truncates to about 11.4) at the
+      # 5-minute loop cadence: 12.0% of samples above the 90C limit, p95 93.1C, max 93.75C against
+      # AMD's rated 100C, in 115 excursions. Run lengths in cycles were 66x1, 23x2, 12x3, 5x4,
+      # 2x5, 3x6, 3x7, 1x8, then ONE of 18 (90 minutes). Nothing sits between 9 and 17 cycles, so
+      # 12 is 1.5x the largest ordinary excursion and half the outlier. Pages per week by
+      # threshold were 3 -> 26, 5 -> 10, 8 -> 2, 12 -> 1, 19 -> 0. Twelve keeps the one 90-minute
+      # excursion paging on purpose: 90 minutes pinned above 90C is the shape of a cooling fault,
+      # and a threshold fitted to silence it would leave no margin to detect one.
+      # DECIDED: a declared hwmon max or crit is sanity-bounded (20..150C), not trusted. Three of
+      # the ten max-declaring sensors declare 65261.85, a 0xFFFF sentinel encoded as a number, and
+      # a ratio of it is unreachable, so those sensors would read green through a fire. Such a
+      # value is read as undeclared and falls through to crit, then the flat 85C fallback.
+      # DECIDED: daniel-box's k10temp/Tctl takes its limit from AMD's published Tjmax of 100C (the
+      # Ryzen 7 8845HS page, `Max. Operating Temperature (Tjmax)`), so it lands on 90C, the same
+      # effective limit daniel-server's coretemp carries from its own declared max. k10temp
+      # subtracts no Tctl offset on this CPU (the driver's `tctl_offset_table` holds six
+      # family-0x17 SKUs), so Tctl is the junction temperature. amd.com answers a plain fetch
+      # only with a browser User-Agent.
       - alert: HostTemperatureHot
         expr: |
           node_hwmon_temp_celsius{origin="daniel-box", chip!~".*nvme_.*"}
@@ -506,6 +532,8 @@ groups:
       # Processor cooling device. `for: 15m` is HOST_ORIGINS_CONSECUTIVE (3) x 300s. The alert
       # carries no `job` or `instance`, so no inhibit can hold it: a dead exporter pages here
       # as well as through ScrapeTargetDown, the safe direction.
+      # DECIDED: a floor of 2 hosts on every arm, the bridge's floors kept as is: two hosts
+      # publish each family, so one host going blind already breaches it.
       - alert: HostCoverageShortfall
         expr: |
           label_replace(
@@ -539,6 +567,8 @@ groups:
             idle. Read the node scrape targets on Prometheus.
       # HWMON_TEMP_ORIGINS_MIN (3) over the series that survive the nvme_ exclusion, with `for: 25m`
       # for HWMON_TEMP_ORIGINS_CONSECUTIVE (5) x 300s.
+      # DECIDED: a floor of 3 hosts, the bridge's value kept as is: every host publishes a
+      # non-nvme hwmon sensor, so any one going blind breaches it.
       - alert: HostTemperatureCoverageShortfall
         expr: |
           label_replace(
@@ -633,6 +663,7 @@ groups:
             below its critical threshold, which corrupts SD cards and stalls USB devices. Check the
             power supply and cable. A clean reading later does not undo the damage.
       # The Prometheus half of the pi_pressure check: load5 per core over 1.5.
+      # DECIDED: load5 over 1.5 per core, the bridge's PI_LOAD_MAX kept as is.
       - alert: PiLoadHigh
         expr: |
           node_load5{origin="daniel-pi"}
@@ -648,6 +679,7 @@ groups:
             daniel-pi has a 5-minute load average of {{ $value | printf "%.2f" }} per core, over
             1.5. Read `top` on the host for the process behind it.
       # Available memory under 50 MB.
+      # DECIDED: 50 MB available, the bridge's PI_MEM_MIN_MB kept as is.
       - alert: PiMemoryLow
         expr: |
           node_memory_MemAvailable_bytes{origin="daniel-pi"} < 50 * 1048576
@@ -661,6 +693,7 @@ groups:
             when that runs out. Read `free -m` and `docker stats` on the host.
       # Fullness per block device, not per mount: the SD card is mounted twice. tmpfs is out,
       # because log2ram's /var/log fills and flushes by design.
+      # DECIDED: over 90% of a block device, the bridge's PI_DISK_MAX_PCT kept as is.
       - alert: PiDiskFull
         expr: |
           max by (origin, job, instance, device) (
@@ -764,6 +797,10 @@ groups:
       # charge, runtime and replace-battery rules below stay silent through `unless`, because they
       # read the runway and a runway arm adds nothing to an outage. `for: 10m` is UPS_CONSECUTIVE
       # (2) x 300s. One UPS, so `max by (job, instance)` equals the bridge's bare max.
+      # DECIDED: every UPS arm reads nut-exporter alone. The Home Assistant re-export of the same
+      # UPS read the same upsd, so it covered only nut-exporter dying while upsd lived, which
+      # `ScrapeTargetDown{job="nut"}` already pages. Units are nut's own: charge in percent,
+      # runtime in seconds.
       - alert: UPSOnBattery
         expr: |
           max by (job, instance) (network_ups_tools_ups_status{flag="OB"}) > 0.5
@@ -779,6 +816,7 @@ groups:
             the load. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       # Charge under UPS_CHARGE_MIN_PCT (50), strict as the bridge's `<`.
+      # DECIDED: under 50% charge on mains, the bridge's value kept as is.
       - alert: UPSBatteryLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_charge) < 50
@@ -795,6 +833,7 @@ groups:
             minutes. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       # Estimated runtime under UPS_RUNTIME_MIN_S (300).
+      # DECIDED: under 300s of runtime, the bridge's value kept as is.
       - alert: UPSRuntimeLow
         expr: |
           max by (job, instance) (network_ups_tools_battery_runtime) < 300

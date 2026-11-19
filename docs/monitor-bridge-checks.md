@@ -448,36 +448,34 @@ rows and env keys are gone. The numbers those groups carry are pinned in
 `k8s/roles/observability/files/rules/log-pipeline.yaml`.
 TLS Cert Expiry, Traefik 5xx, Traefik Latency, Traefik 404 Flood and Traefik 421 (M6 batch A4)
 retired into the `edge` rule group in observability, and their tiles, rows and env keys are
-gone. The numbers that group carries are pinned in
-`tests/services/test_edge_rule_literals.py`. The `DECIDED:` markers for the exempt
-stream services, for bazarr and prowlarr staying measured, and for jellyfin staying measured
-(#6649) sit there too, and the `DECIDED:` marker for the 5-of-10-minute latency count sits at
-`TraefikBackendSlow` in `k8s/roles/observability/files/rules/edge.yaml`.
+gone. Each threshold that group carries has its `DECIDED:` marker on its rule in
+`k8s/roles/observability/files/rules/edge.yaml`, and no test pins the number. The markers at
+`TraefikBackendSlow` cover the exempt stream services, bazarr and prowlarr staying measured,
+jellyfin staying measured (#6649) and the 5-of-10-minute latency count.
 k3s Container Restarts, k3s Container OOM and k3s CPU Throttling (M6 batch A2) retired into the
 `container-checks` rule group in observability, and their tiles, rows, streak counters and env
-keys are gone. The 20-pod census floor behind `CAdvisorCoverageShortfall` is pinned in
-`tests/services/test_container_checks_rule_literals.py`, where its `DECIDED:` marker
-now sits. The CPU rule's 3-cycle streak became `for: 15m` over a `max_over_time(...[5m:1m])`
+keys are gone. The `DECIDED:` marker for the 20-pod census floor sits at
+`CAdvisorCoverageShortfall` in the rules file. The CPU rule's 3-cycle streak became `for: 15m` over a `max_over_time(...[5m:1m])`
 smoothing, whose reasoning is at `ContainerCPUThrottled` in
 `k8s/roles/observability/files/rules/container-checks.yaml`.
 Longhorn Volume Redundancy, k3s PVC Fullness, Longhorn Snapshot Headroom, Kubelet CSI Mount
 Read-Only and etcd DB Size (M6 batch A5) retired into the `storage` rule group in
-observability, and their tiles, rows and env keys are gone. The thresholds those rules carry
-are pinned in `tests/services/test_storage_rule_literals.py`, which also holds
-`PVCBelowFreeFloor` to the transient valheim declares, `LonghornSnapshotNearCap` to the
-jellyfin snapshot cap, and `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
-The `DECIDED:` marker for the 3 GiB free-bytes floor sits there too.
+observability, and their tiles, rows and env keys are gone. Each threshold those rules carry
+has its `DECIDED:` marker on its rule in `storage.yaml`, the 3 GiB free-bytes floor among them.
+`tests/services/test_storage_rule_literals.py` holds `PVCBelowFreeFloor` to the transient
+valheim declares, `LonghornSnapshotNearCap` to the jellyfin snapshot cap, and
+`LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
 `hosts/tests/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
 quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
 `max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
 `ScrapeTargetDown`'s) is in `k8s/roles/observability/files/rules/storage.yaml`.
 Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired into the
 `hosts` rule group in observability, and their tiles, rows, check bodies, verdicts and env keys
-are gone. The thresholds, floors and `for:` durations those
-rules carry are pinned in `tests/services/test_host_check_rule_literals.py`, where the
-`DECIDED:` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
-maximum junction temperature, the nut-only UPS source and the retired-uid note now sit. That file also holds the
-`ClaudeCgroupNotReporting` host and cgroup pairs to the inventory, and
+are gone. Each threshold and floor those rules carry has its `DECIDED:` marker on its rule
+in `hosts.yaml`, as do the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
+maximum junction temperature, the nut-only UPS source and the retired-uid note.
+`tests/services/test_host_check_rule_literals.py` holds the `ClaudeCgroupNotReporting` host
+and cgroup pairs to the inventory, and
 `test_claude_cgroup_consumers_agree_with_the_writer.py` holds the rules' `claude_cgroup_*`
 selectors to the series the writer emits. The reasoning behind each rule (the `up == 1` start of
 every missing-data arm, the per-host copies, the `unless on ()` that lets mains loss outrank the
@@ -502,8 +500,8 @@ a stopped container from a detached one. `PiHostDown` inhibits `PiPortDead`, as
 `udp_port` is not probed, because a UDP port has no TCP-connect equivalent. The arm adds a named
 port and no reachability coverage: Kuma HTTP-monitored wg-easy and `ScrapeTargetDown` covers
 `alloy`, but nothing said which port went quiet, and the 2026-08-08 sweep across four monitors for
-that answer missed dozzle. The Pi limits are pinned in
-`tests/services/test_host_check_rule_literals.py`, the port set in
+that answer missed dozzle. The Pi limits carry `DECIDED:` markers in `hosts.yaml`, the port
+set is pinned in
 `tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
 hint in `tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs
 rules added to `hosts.yaml`: its per-host copies name the hosts, and
