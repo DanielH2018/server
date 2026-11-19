@@ -10,7 +10,8 @@ A step that curls holds three properties: an earlier step of its job caches the
 `$RUNNER_TEMP/pinned/<tool>` directory the step writes to, that cache's key reads the pin
 rather than a constant, and every curl sits in the branch that runs when the cached file is
 absent. A step running a script that downloads into its own cache directory has an earlier
-cache of that directory instead.
+cache of that directory instead. A step that runs `.github/actions/pinned-tool` is checked by
+tests/repo/test_release_fetches_use_pinned_tool.py instead.
 
 Run: uv run pytest tests/repo/test_ci_release_downloads_are_cached.py
 """
@@ -43,8 +44,6 @@ KNOWN_DOWNLOADS = {
     ("ci.yml", "hooks", "Provision promtool, amtool, pint and lokitool"),
     ("ci.yml", "hooks", "Prove each alert tool rejects its bad fixture"),
     (PYTEST_TOOLS, PYTEST_TOOLS, "Install sops, age and apt-utils for the tests"),
-    ("ci.yml", "sops_manifest_type_proof", "Install sops, age and kind"),
-    ("ci.yml", "host_packages_build", "Fetch the pinned nfpm and check its sha256"),
     ("ci.yml", "host_packages_build", "Scan the named package roots for secrets"),
     ("promote.yml", "render", "Scan the bundle for secrets"),
 }
@@ -159,16 +158,6 @@ def test_an_uncached_promote_download_is_flagged():
     assert problems(broken) == [
         "render: Scan the bundle for secrets: "
         "no earlier actions/cache step caches $RUNNER_TEMP/pinned/gitleaks"
-    ]
-
-
-def test_a_download_without_its_cache_is_flagged(workflow):
-    broken = copy.deepcopy(workflow)
-    steps = _job_steps(broken, "host_packages_build")
-    steps.remove(_step(broken, "host_packages_build", "Cache the nfpm release"))
-    assert problems(broken) == [
-        "host_packages_build: Fetch the pinned nfpm and check its sha256: "
-        "no earlier actions/cache step caches $RUNNER_TEMP/pinned/nfpm"
     ]
 
 

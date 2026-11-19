@@ -1,0 +1,90 @@
+name: Fetch a pinned release binary
+description: >-
+  Restores a tool's GitHub release asset from an actions/cache keyed on its pin, downloads it
+  only on a cache miss, checks its sha256 on every run, and puts the binary on PATH in
+  $RUNNER_TEMP/bin. The one
+  place a workflow job fetches a release binary, so each fetch outlasts a release-host outage
+  the same way.
+
+# The pins stay in each caller's `env:`, under the `# renovate:` annotation renovate.json's
+# custom managers match, and the caller passes them in. An input default would read as no pin
+# to Renovate, for the reason .github/actions/setup/action.yml gives.
+#
+# The caller checks the repository out first, because a `$/` action resolves from the checkout.
+# The promote.yml jobs its header table marks "Checks out nothing" keep their fetch inline.
+#
+# DECIDED: the step below names actions/cache by version tag with `zizmor: ignore[unpinned-uses]`,
+# for the reason .github/actions/setup/action.yml gives.
+
+inputs:
+  tool:
+    description: The tool to fetch. The fetch step's `case` names every tool it knows.
+    required: true
+  version:
+    description: The release tag, such as `v2.9.6`.
+    required: true
+  sha256:
+    description: The sha256 of the release asset the fetch step downloads.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The cache holds the download, never the installed binary, so the digest check below runs
+    # on a hit too. The drills' inline fetches write the same key, path and file name, so a
+    # cache entry from either serves both.
+    - name: Cache the ${{ inputs.tool }} release
+      uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]
+      with:
+        path: ${{ runner.temp }}/pinned/${{ inputs.tool }}
+        key: ${{ inputs.tool }}-${{ runner.os }}-${{ inputs.version }}-${{ inputs.sha256 }}
+
+    # 12 retries 30s apart outlast a release-host outage, the window
+    # hosts/lib/homelab_tool_fetch.py:TOOL_RETRY_WINDOW_S gives the hosts' own fetches.
+    # $RUNNER_TEMP/bin, not ~/.local/bin: host_packages_build hands `bin/nfpm` to its legs.
+    # The GITHUB_PATH write appends that constant path, never an input, hence the zizmor ignore.
+    - name: Fetch the pinned ${{ inputs.tool }} and check its sha256
+      shell: bash
+      env:
+        TOOL: ${{ inputs.tool }}
+        VERSION: ${{ inputs.version }}
+        SHA256: ${{ inputs.sha256 }}
+      run: |  # zizmor: ignore[github-env]
+        set -euo pipefail
+        member=""
+        case "$TOOL" in
+          flux)
+            url="https://github.com/fluxcd/flux2/releases/download/$VERSION/flux_${VERSION#v}_linux_amd64.tar.gz"
+            member=flux
+            probe=(version --client) ;;
+          nfpm)
+            url="https://github.com/goreleaser/nfpm/releases/download/$VERSION/nfpm_${VERSION#v}_Linux_x86_64.tar.gz"
+            member=nfpm
+            probe=(--version) ;;
+          sops)
+            url="https://github.com/getsops/sops/releases/download/$VERSION/sops-$VERSION.linux.amd64"
+            probe=(--version --disable-version-check) ;;
+          kind)
+            url="https://github.com/kubernetes-sigs/kind/releases/download/$VERSION/kind-linux-amd64"
+            probe=(version) ;;
+          *)
+            echo "::error::pinned-tool has no release URL for '$TOOL'"
+            exit 1 ;;
+        esac
+        dir="$RUNNER_TEMP/pinned/$TOOL"
+        download="$dir/$TOOL${member:+.tar.gz}"
+        if [[ -f "$download" ]]; then
+          echo "$TOOL $VERSION: cached"
+        else
+          mkdir -p "$dir"
+          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$download" "$url"
+        fi
+        echo "$SHA256  $download" | sha256sum -c --strict
+        mkdir -p "$RUNNER_TEMP/bin"
+        if [[ -n "$member" ]]; then
+          tar -xzf "$download" -C "$RUNNER_TEMP/bin" "$member"
+        else
+          install -m 0755 "$download" "$RUNNER_TEMP/bin/$TOOL"
+        fi
+        echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/bin/$TOOL" "${probe[@]}"
