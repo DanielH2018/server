@@ -1,8 +1,9 @@
 """The dialect's spec fixture for variable semantics: a role tree and its inventory.
 
-`write_tree` writes them, and `TREE_LITERAL` is what the template renders to. The PR that added
-them checked the literal once against an `ansible-playbook` render of the same tree, with the
-render keys on a role include.
+`write_tree` writes them, and `TREE_LITERAL` is what the template renders to. Every line but
+`render_key` matches an `ansible-playbook` render of the same tree. A render key ranks as the
+role default it is, below host_vars, where Ansible ranked it as an include var (ADR-0028's
+amendment).
 """
 
 from pathlib import Path
@@ -13,7 +14,7 @@ _TREE_TEMPLATE = """\
 default={{ only_default }}
 group={{ group_over_default }}
 host={{ host_over_group }}
-include={{ manifests_deferred_dir_name }}
+render_key={{ manifests_deferred_dir_name }}
 derived={{ derived }}
 other_host_literal={{ hosts['h2'].server_ip }}
 missing_with_default={{ absent | default('fallback') }}
@@ -23,7 +24,7 @@ only_default: from-defaults
 group_over_default: from-defaults
 host_over_group: from-defaults
 derived: "derived-{{ host_over_group }}"
-manifests_deferred_dir_name: from-include
+manifests_deferred_dir_name: from-defaults
 manifests_prune: false
 """
 _GROUP_VARS = """\
@@ -45,7 +46,7 @@ TREE_LITERAL = """\
 default=from-defaults
 group=from-group
 host=from-host
-include=from-include
+render_key=from-host
 derived=derived-from-host
 other_host_literal=10.9.9.9
 missing_with_default=fallback
