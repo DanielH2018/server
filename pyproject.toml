@@ -447,8 +447,8 @@ ignore_names = [
 
 [tool.ty.environment]
 python-version = "3.15"
-# This repo has no `__init__.py` files and no installed package: a script reaches a sibling
-# directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
+# This repo has no `__init__.py` files. `scripts/` is installed in place, but a script still reaches
+# a sibling directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
 # test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
 # it reports import-not-found for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
