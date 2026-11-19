@@ -12,6 +12,10 @@ reads, and the CI state is `landing_blockers.ci_state`, so this wait and `probe.
 disagree on what blocks. The other reads `collect` makes (the cluster,
 GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
 
+A third blocker is a live landing of a forward-only pin, flux or cluster-vars change, which
+holds the serial lock and makes `land.sh` refuse every other landing. `probe.py landing` does
+not count it.
+
 THE STATE.
 
     blocked             (open)  a blocker holds; the detail names each one
@@ -44,10 +48,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "deploy_tools"))
 
 import json
+import socket
 from collections.abc import Callable
 from subprocess import CompletedProcess
 
 import forge
+from deploy_tools.land_lib.slots import serial_landing_live
 from diagnostics.probe_lib.landing_blockers import blockers, ci_state
 from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
@@ -92,12 +98,15 @@ def _master_ci_run(run_gh: Callable[..., CompletedProcess[str]] = gh) -> dict | 
 def read(
     deploy_hold: Callable[[], str | None] = LIVE_PROMOTE_READS.deploy_hold,
     master_ci_run: Callable[[], dict | None] = _master_ci_run,
+    serial_live: Callable[[], bool] = lambda: serial_landing_live(socket.gethostname()),
 ) -> dict:
     """The landing's state now, as cc-wait's state and detail.
 
     Args:
         deploy_hold: reads DEPLOY_HOLD; None means the variable is absent. Raises on failure.
         master_ci_run: reads the newest master `ci.yml` run in REST's shape. Raises on failure.
+        serial_live: whether a landing of a forward-only pin, flux or cluster-vars change
+            holds the serial lock; `land.sh` refuses every other landing meanwhile.
     """
     try:
         run = master_ci_run()
@@ -113,6 +122,10 @@ def read(
         "url": (run or {}).get("html_url", ""),
     }
     found = blockers({"promote": {"deploy_hold": hold}, "ci": ci})
+    if serial_live():
+        found.append(
+            "a landing of a serial PR is live; `land.sh` refuses until it ends"
+        )
     if found:
         return {"state": "blocked", "detail": " | ".join(found)[:DETAIL_MAX]}
     detail = f"DEPLOY_HOLD {hold or 'none'}; master CI {ci['state']} {ci['sha']}"
