@@ -5,11 +5,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_turn_lock.py
 
 import os
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from deploy_tools.land_lib import line, turn
+from _land_fakes import Fakes
+from deploy_tools.land_lib import fresh, line, turn
 from lib.proc_testing import fake_bin, path_with
 
 HEAD = "a" * 40
@@ -127,3 +129,67 @@ def test_a_moved_turn_dir_keeps_the_lock_and_the_line_on_this_host(
     give_up()
     turn._line("daniel-server")("join", "7", HEAD)
     assert (tmp_path / "turn" / line.DIR.name / "7").read_text().split() == [HEAD]
+
+
+def test_a_turn_given_up_is_free_while_a_handed_copy_of_it_stays_open(tmp_path):
+    lock = tmp_path / "turn.lock"
+    held = turn.try_take(lock)
+    assert held is not None
+    copy = os.dup(held.fd)
+    held()
+    again = turn.try_take(lock)
+    assert again is not None
+    again()
+    os.close(copy)
+
+
+def test_a_landing_that_hands_its_turn_over_leaves_it_locked(tmp_path, landing):
+    lock = tmp_path / "turn.lock"
+    ln, _ = landing(Fakes())
+    ln.tools = replace(ln.tools, try_turn=lambda: turn.try_take(lock))
+
+    def hand_over_in_turn() -> None:
+        with turn.held(ln) as take_turn:
+            assert take_turn("")[0]
+            ln.hand_over_turn("its code lags master")
+
+    with pytest.raises(turn.HandOver) as raised:
+        hand_over_in_turn()
+    assert turn.try_take(lock) is None
+    os.close(raised.value.fd)
+    assert turn.try_take(lock) is not None
+
+
+def test_a_landing_handed_the_turn_holds_it_at_once_until_it_ends(
+    tmp_path, landing, monkeypatch
+):
+    lock = tmp_path / "turn.lock"
+    handed = turn.try_take(lock)
+    assert handed is not None
+    monkeypatch.setenv(fresh.TURN_FD_ENV, str(os.dup(handed.fd)))
+    os.close(handed.fd)
+    ln, calls = landing(Fakes())
+    with turn.held(ln) as take_turn:
+        assert take_turn("") == (True, 0)
+        assert turn.try_take(lock) is None
+    assert [c for c in calls if c[0] == "try_turn"] == []
+    assert fresh.TURN_FD_ENV not in os.environ
+    assert turn.try_take(lock) is not None
+
+
+def test_a_landing_handed_the_turn_never_hands_it_on(tmp_path, landing, monkeypatch):
+    handed = turn.try_take(tmp_path / "turn.lock")
+    assert handed is not None
+    monkeypatch.setenv(fresh.TURN_FD_ENV, str(handed.fd))
+    ln, _ = landing(Fakes())
+    with turn.held(ln) as take_turn:
+        take_turn("")
+        assert ln.hand_over_turn("master moved again") is None
+
+
+def test_a_turn_held_over_ssh_is_never_handed_over(landing):
+    ln, calls = landing(Fakes())
+    with turn.held(ln) as take_turn:
+        take_turn("")
+        assert ln.hand_over_turn("its code lags master") is None
+    assert [c[0] for c in calls if "turn" in c[0]] == ["try_turn", "release_turn"]

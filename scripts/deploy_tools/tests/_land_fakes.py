@@ -407,8 +407,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         freed = "release_serial" if serial else "release_slot"
         return (lambda: calls.append((freed, (), {}))) if answer else None
 
-    def fresh_landing(primary, argv):
-        calls.append(("fresh_landing", (primary, argv), {}))
+    def fresh_landing(primary, argv, turn_fd=None):
+        calls.append(("fresh_landing", (primary, argv), {"turn_fd": turn_fd}))
         if f.fresh_fails:
             raise fresh.CheckoutFailed(f.fresh_fails)
         return f.fresh_rc
