@@ -1,4 +1,4 @@
-"""`lib.inventory_lists`: the one reading of the host list and the service lists.
+"""`lib.inventory_lists`: the host list and the Pi's service list.
 
 Run: uv run pytest scripts/lib/tests/test_inventory_lists.py
 """

@@ -1,4 +1,4 @@
-"""The one reading of the service lists and the host list every script under ``scripts/`` shares.
+"""The host list and the Pi's service list, read with no YAML or Jinja import.
 
 WHY A MODULE WITH NO IMPORTS. Importing ``render_guard`` costs a ``jinja2`` and a ``yaml``
 import, so a script that needs only a host name or the Pi's service list reads it here. This
