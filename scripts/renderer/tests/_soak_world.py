@@ -14,7 +14,11 @@ import threading
 from datetime import UTC, datetime
 
 import flux_soak
-import soak_pods
+
+WORKLOAD_RULES = {
+    "homelab:deployment_service:info": ("Deployment", "deployment"),
+    "homelab:daemonset_service:info": ("DaemonSet", "daemonset"),
+}
 
 R, OTHER = "a" * 40, "b" * 40
 T0 = 1_800_000_000.0
@@ -178,13 +182,13 @@ class World:
         return out
 
     def query(self, promql, at):
-        for kind, (rule, label) in soak_pods.WORKLOAD_RULES.items():
-            if promql == rule:
-                return [
-                    {"metric": {"namespace": ns, label: name, "service": service}}
-                    for (k, ns, name), service in self.workload_services.items()
-                    if k == kind
-                ]
+        if promql in WORKLOAD_RULES:
+            kind, label = WORKLOAD_RULES[promql]
+            return [
+                {"metric": {"namespace": ns, label: name, "service": service}}
+                for (k, ns, name), service in self.workload_services.items()
+                if k == kind
+            ]
         if promql.startswith("homelab:pod_service:info"):
             return [
                 {
