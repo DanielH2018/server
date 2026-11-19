@@ -176,7 +176,7 @@ def _core_validators(
     return validators
 
 
-def crd_schema_path(doc: dict) -> Path | None:
+def crd_schema_path(doc: dict, schemas: Path | None = None) -> Path | None:
     """Where a vendored JSON Schema for this object's apiVersion/kind would live, or None.
 
     Mirrors datreeio/CRDs-catalog's layout — ``<group>/<lowercase kind>_<version>.json`` — so
@@ -190,10 +190,12 @@ def crd_schema_path(doc: dict) -> Path | None:
     if "/" not in api_version:
         return None
     group, _, version = api_version.partition("/")
-    return CRD_SCHEMA_DIR / group / f"{kind.lower()}_{version}.json"
+    return (schemas or CRD_SCHEMA_DIR) / group / f"{kind.lower()}_{version}.json"
 
 
-def crd_schema_error(doc: dict) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
+def crd_schema_error(
+    doc: dict, schemas: Path | None = None
+) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
     """Validate one CRD object against its vendored JSON Schema, or NO_SCHEMA if none exists.
 
     WHAT THIS CATCHES, precisely — it is narrower than it looks and the difference matters.
@@ -208,22 +210,45 @@ def crd_schema_error(doc: dict) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
     valid document and passes here — ``tls`` is optional in the CRD, because plain-HTTP routes
     are legal. That bug class is `https_route_without_tls` below, and it stays the thing that
     catches it. Verified against the vendored schema rather than assumed.
+
+    Args:
+      doc: the object.
+      schemas: the directory of vendored schemas, `CRD_SCHEMA_DIR` when omitted.
     """
-    path = crd_schema_path(doc)
+    path = crd_schema_path(doc, schemas)
     if path is None or not path.is_file():
         return NO_SCHEMA
     try:
-        schema = json.loads(path.read_text())
+        validator = _crd_validator(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         return f"vendored schema {path.name} is unreadable: {exc}"
-    try:
-        jsonschema.validate(normalise_octal(doc), schema)
-    except jsonschema.ValidationError as exc:
-        where = ".".join(str(p) for p in exc.absolute_path) or "<root>"
-        return f"{where}: {exc.message}"
     except jsonschema.SchemaError as exc:
         return f"vendored schema {path.name} is invalid: {exc.message}"
-    return None
+    error = jsonschema.exceptions.best_match(
+        validator.iter_errors(normalise_octal(doc))
+    )
+    if error is None:
+        return None
+    where = ".".join(str(p) for p in error.absolute_path) or "<root>"
+    return f"{where}: {error.message}"
+
+
+@functools.cache
+def _crd_validator(text: str) -> jsonschema.protocols.Validator:
+    """A validator for one vendored schema, built from the file's text.
+
+    Checking a schema against its metaschema costs about 0.1s, and a run validates over a
+    hundred objects against a handful of schemas, so each distinct text is checked once. The
+    key is the text and not the path, so a schema rewritten on disk is read afresh.
+
+    Raises:
+      json.JSONDecodeError: the text is not JSON.
+      jsonschema.SchemaError: the schema does not meet its metaschema.
+    """
+    schema = json.loads(text)
+    validator = jsonschema.validators.validator_for(schema)
+    validator.check_schema(schema)
+    return validator(schema)
 
 
 def schema_error(doc: dict) -> str | None | Literal[_NoSchema.NO_SCHEMA]:
