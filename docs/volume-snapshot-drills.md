@@ -184,7 +184,7 @@ sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> --namespa
   second claim leaves the service up. A failure after the scale-down leaves the service at zero
   replicas, and `docs/volume-revert-drill-and-sizing.md` has the hand recovery.
 - **Nothing runs it unattended.** No cron, unit or workflow calls it.
-- **The 2026-11-08 drill passed through the script**, so H7.55 deleted the
+- **HISTORY — the 2026-11-08 drill passed through the script**, so H7.55 deleted the
   `volume-revert.yml` playbook that had been its fallback.
 
 ### The drill
