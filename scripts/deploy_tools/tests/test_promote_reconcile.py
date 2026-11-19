@@ -192,6 +192,16 @@ def test_a_run_settle_would_not_reset_holds_in_settles_form_and_tags_held(
     ]
 
 
+@pytest.mark.parametrize("form", ["", "stateful-ish"], ids=["empty", "unknown"])
+def test_a_missing_status_with_a_hold_form_decide_never_writes_holds_nothing(
+    tmp_path, jobs, form
+):
+    result, calls = _reconcile(tmp_path, jobs, HOLD_FORM=form)
+    assert result.returncode != 0
+    assert calls == []
+    assert "is not stateful, no-reset or reset" in result.stdout
+
+
 def test_a_standing_hold_is_left_in_place(tmp_path, jobs):
     result, calls = _reconcile(tmp_path, jobs, FAKE_HOLD=f"{'b' * 40} failed=bento-pdf")
     assert (result.returncode, calls) == (0, [])

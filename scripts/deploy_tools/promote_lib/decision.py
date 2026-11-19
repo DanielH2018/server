@@ -12,7 +12,7 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_decid
 
 import sys as _sys
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 # `promote_lib` imports as `deploy_tools.promote_lib`, from scripts/.
@@ -227,16 +227,21 @@ def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
     no_reset = forward_only.no_reset_names(
         forward_only.changed_tags(prod_digests, base or {}), flagged
     )
-    if record["stateful"] or no_reset:
-        hold = f"{commit} stateful=unverified" if record["stateful"] else commit
-        reason = verify.lost_settle(digest, last_good or "", commit, hold)
-    return Decision(
+    decision = Decision(
         verdict,
         reason=reason,
         no_reset=tuple(sorted(no_reset)),
         stateful=tuple(record["stateful"]),
         lost_settle=commit,
         lost_settle_digest=digest,
+    )
+    hold = {"stateful": f"{commit} stateful=unverified", "no-reset": commit}.get(
+        decision.hold_form
+    )
+    if hold is None:
+        return decision
+    return replace(
+        decision, reason=verify.lost_settle(digest, last_good or "", commit, hold)
     )
 
 

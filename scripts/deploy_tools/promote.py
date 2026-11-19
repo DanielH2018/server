@@ -325,7 +325,7 @@ def decide(
                     supersedes=(prod or "") if flight else "",
                     hold_read=hold_read,
                 )
-                if not flight or not (decision.no_reset or decision.stateful):
+                if not flight or decision.hold_form == "reset":
                     return decision
                 why = "T names a forward-only tag or a snapshot role"
             print(

@@ -248,9 +248,8 @@ PROMOTE_VERIFY_ROWS = (
             name="promote-hands-hold-form-to-its-readers",
             reason=(
                 "`decide` alone computes the hold form. Without `hold_form` reaching each "
-                "reader's HOLD_FORM, `settle` writes no hold, `verdict-status` posts no "
-                "status, and `reconcile` writes the unverified hold, which invites a reset "
-                "over a migration or a forward-only upgrade."
+                "reader's HOLD_FORM, `settle` and `reconcile` write no hold and "
+                "`verdict-status` posts no status, so a failed revision stops no promotion."
             ),
             offence=judge(_hold_form_problems),
             red=mutants(

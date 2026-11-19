@@ -1496,7 +1496,12 @@ jobs:
           fi
           # `settle`'s hold for the form the lost run recorded. A status for another digest, or
           # none, takes decide's HOLD_FORM. Any form but stateful or no-reset holds `unverified`.
-          [ "$digest" = "$DIGEST" ] || form=${HOLD_FORM:-}
+          if [ "$digest" != "$DIGEST" ]; then
+            case "$HOLD_FORM" in
+              stateful|no-reset|reset) form=$HOLD_FORM ;;
+              *) echo "::error::decide's hold_form '$HOLD_FORM' is not stateful, no-reset or reset, so this job writes nothing"; exit 1 ;;
+            esac
+          fi
           case "$form" in
             stateful) new_hold="$COMMIT stateful=unverified" ;;
             no-reset) new_hold="$COMMIT" ;;
