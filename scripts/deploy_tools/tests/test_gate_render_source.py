@@ -14,8 +14,10 @@ Run: uv run pytest scripts/deploy_tools/tests/test_gate_render_source.py
 """
 
 import types
+from pathlib import Path
 
 from deploy_tools.land_lib import health_gate as notify_mod
+from lib import snapshot_uv
 
 
 def _result(returncode, stdout="", stderr=""):
@@ -38,9 +40,11 @@ def _k8s_inventory(root, tag):
 def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
     """A landing gates the snapshot it deployed, not the checkout land.py lives in.
 
-    The second assertion is the load-bearing one: `probe.py` is named RELATIVELY, which is the
-    entire mechanism by which `cwd` moves the render root. An absolute path would make `cwd`
-    decorative and the gate would still report `ok` from the wrong tree.
+    The argv assertions are the load-bearing ones: `probe.py` is named RELATIVELY, which is
+    the mechanism by which `cwd` moves the render root, and every absolute path the argv
+    carries (`lib.snapshot_uv`'s project and import root) is inside that same tree. A path
+    into another checkout would make `cwd` decorative and the gate would still report `ok`
+    from the wrong tree.
     """
     seen = []
 
@@ -52,8 +56,11 @@ def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
     argv, cwd = seen[0]
     assert ok is True
     assert cwd == tmp_path
-    assert "scripts/diagnostics/probe.py" in argv
-    assert not any(str(arg).startswith("/") for arg in argv)
+    assert argv == snapshot_uv.argv(
+        tmp_path, "python", "scripts/diagnostics/probe.py", "health", "sonarr"
+    )
+    absolute = [a.split("=")[-1] for a in map(str, argv) if a.split("=")[-1][:1] == "/"]
+    assert all(Path(a).is_relative_to(tmp_path) for a in absolute), absolute
 
 
 def test_without_a_cwd_the_gate_renders_this_checkout(tmp_path):

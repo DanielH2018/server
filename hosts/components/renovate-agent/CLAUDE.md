@@ -92,7 +92,8 @@ the caps or the schedule cannot quietly widen it.
   `LAND_REQUIRE_AUTHOR=app/renovate`, which `land.sh --arm-merge` reads —
   `scripts/deploy_tools/land_lib/merge.py:_require_author`;
   `hosts/tests/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
-  pins both to the wrapper's census). **Never** a landing of a PR that changes a path on
+  pins both, and the wrapper's census, to `hosts/lib/renovate_identity.py`, the one module
+  that names Renovate's GitHub logins). **Never** a landing of a PR that changes a path on
   `files/t2-approval-floor`, the one list every T2 lander reads, other than by a digest-only
   image bump, or whose branch
   another account pushed to, without the operator's approval of its head (dotfiles#967 slice

@@ -111,14 +111,6 @@ from longhorn_reap_lib import logic, selection
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
-TIMEOUT = int(os.environ.get("LONGHORN_REAP_KUBECTL_TIMEOUT_S", "30"))
-# Server-side wait on each `kubectl delete`, in whole seconds. Integer rather than the
-# snapshot reaper's "120s" duration string, and an int
-# needs no duration parser to reach the subprocess cap below.
-DELETE_TIMEOUT_S = int(os.environ.get("LONGHORN_REAP_DELETE_TIMEOUT_S", "120"))
-# Margin the CLIENT-side subprocess cap carries over kubectl's own --timeout, so the subprocess
-# can never fire first and report a still-running delete as FAILED. See the module docstring.
-DELETE_TIMEOUT_MARGIN_S = 30
 # Measured 2026-08-17: seven strays came to ~3,640 Class C, about 520 per deletion, against a
 # 2,500/day free tier. Four deletions is ~2,080 -- the most that fits in one day's cap.
 MAX_DELETIONS_DEFAULT = 4
@@ -155,21 +147,21 @@ _USAGE = "expected --apply, --apply-deleted-volumes, %s N, %s <%s>, %s <pvc>, %s
 )
 
 
-def _delete_backup(name: str) -> tuple[int, str]:
+def _delete_backup(name: str, config: logic.ReapConfig) -> tuple[int, str]:
     """Delete one Backup CR, bounded server-side and client-side. See the module docstring."""
     kubectl = host_lib.kubectl_runner(
-        KUBECTL_BIN, NAMESPACE, DELETE_TIMEOUT_S + DELETE_TIMEOUT_MARGIN_S
+        KUBECTL_BIN, NAMESPACE, config.delete_subprocess_timeout_s
     )
     return kubectl(
         "delete",
         logic.longhorn_backups.RESOURCE,
         name,
         "--ignore-not-found",
-        "--timeout=%ds" % DELETE_TIMEOUT_S,
+        "--timeout=%ds" % config.delete_timeout_s,
     )
 
 
-def _delete_bucket(label: str, rows: list) -> int:
+def _delete_bucket(label: str, rows: list, config: logic.ReapConfig) -> int:
     """Delete every row in `rows`, stopping at the FIRST failure.
 
     Bash's loop did the same (`if ! $KUBECTL delete ...; then ... exit 1; fi`, unconditionally
@@ -179,7 +171,7 @@ def _delete_bucket(label: str, rows: list) -> int:
     print("deleting %s..." % label)
     deleted = 0
     for name, _vol, _created, _job in rows:
-        rc, out = _delete_backup(name)
+        rc, out = _delete_backup(name, config)
         if rc != 0:
             print(
                 "delete FAILED for %s after %d deletion(s) — stopping: %s"
@@ -343,6 +335,11 @@ def main(argv: list[str]) -> int:
     if arg_err:
         print(arg_err, file=sys.stderr)
         return USAGE_ERROR
+    try:
+        config = logic.parse_reap_config()
+    except ValueError as e:
+        print("ABORT: %s" % e, file=sys.stderr)
+        return USAGE_ERROR
 
     needs_admin = args.apply or args.apply_deleted
     refusal = logic.readonly_kubeconfig_refusal(
@@ -365,7 +362,7 @@ def main(argv: list[str]) -> int:
     if kubeconfig:
         os.environ["KUBECONFIG"] = kubeconfig
 
-    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, TIMEOUT)
+    kubectl = host_lib.kubectl_runner(KUBECTL_BIN, NAMESPACE, config.kubectl_timeout_s)
 
     vol_rc, vol_out = kubectl("get", "volumes.longhorn.io", "-o", "json")
     if vol_rc != 0:
@@ -422,7 +419,9 @@ def main(argv: list[str]) -> int:
         # Read the PVC collection for one namespace, not `get pvc <name>`: the collection comes
         # back as the same `{"items": [...]}` body every other read here parses, so a claim that
         # does not exist is an empty selection rather than an exit code to interpret.
-        claims = host_lib.kubectl_runner(KUBECTL_BIN, CLAIM_NAMESPACE, TIMEOUT)
+        claims = host_lib.kubectl_runner(
+            KUBECTL_BIN, CLAIM_NAMESPACE, config.kubectl_timeout_s
+        )
         pvc_rc, pvc_out = claims("get", "persistentvolumeclaims", "-o", "json")
         if pvc_rc != 0:
             print(
@@ -495,7 +494,7 @@ def main(argv: list[str]) -> int:
     for label, rows, enabled in buckets:
         if not enabled:
             continue
-        rc = _delete_bucket(label, rows)
+        rc = _delete_bucket(label, rows, config)
         if rc != 0:
             return rc
     return 0

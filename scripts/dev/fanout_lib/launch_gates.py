@@ -1,18 +1,24 @@
 """The refusals `launch` applies to a batch grouping before it spends an ssh connection.
 
 Each gate prints its own reason and returns True to refuse, so `cmd_launch` reads as a list of
-refusals rather than a nest of conditions. Two read the issue bodies: `refuse_shared_files`
-and `refuse_solo_only`. The rest read the placement and the live run manifests.
+refusals rather than a nest of conditions. Three read the issue bodies: `refuse_shared_files`,
+`refuse_live_shared_files` and `refuse_solo_only`. The rest read the placement and the live
+run manifests.
 
 The shared-file check exists because the triage step groups issues so no two batches share an
 Ansible role, and that rule never covers the shared code under `scripts/`. Two batches with
 different role groupings can both cite `scripts/diagnostics/probe_lib/alerts.py`, and two
 agents then fix the same defect. The check reads the same body citations the orchestrator
 groups by, so a grouping that missed one is refused here rather than discovered at merge.
+
+`refuse_shared_files` compares the batches of one launch. `refuse_live_shared_files` compares
+them with the batches other runs launched, which is the only check that spans two
+coordinators: each groups its own project and neither reads the other's grouping.
 """
 
+import subprocess
 import sys
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -20,15 +26,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import Issue
-from fanout_lib.manifest import Batch, live_batches
+from fanout_lib.brief import REQUIRED_LABEL, Issue
+from fanout_lib.manifest import Batch, Manifest, live_batches, standing_batches
 from fanout_lib.placement import HostReading
 from fanout_lib.status import BatchStatus, parse_status
+from fanout_lib.target import SERVER
+from fanout_lib.transport import Tools, error_text, read_host
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import solo_only_reasons
 from findings_lib.tracked_paths import resolve_fragments
 from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
+from lib.role_paths import CLUSTER_VARS_PREFIX, SECRETS_FILE
 
 # The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the
 # per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
@@ -191,6 +200,33 @@ def over_live_batch_cap(
     return over
 
 
+def fetch_issues(
+    tools: Tools, batches: dict[str, list[int]], repo: str = SERVER
+) -> dict[int, Issue] | None:
+    """Fetch every batch's issues up front, or return None having said why it refused.
+
+    Every fetch completes before the first launch on purpose: a fetch that failed inside the
+    placement loop left the batches already launched running under `auto`, in worktrees this
+    slice locks, with no manifest naming them.
+    """
+    fetched: dict[int, Issue] = {}
+    for number in [n for numbers in batches.values() for n in numbers]:
+        try:
+            fetched[number] = tools.gh_issue(number, repo)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            error(f"could not fetch issue {number}: {error_text(exc)}")
+            return None
+    unlabelled = [
+        n for n, issue in fetched.items() if REQUIRED_LABEL not in issue.labels
+    ]
+    for number in unlabelled:
+        error(
+            f"issue {number} does not carry the `{REQUIRED_LABEL}` label — only "
+            "issues findings.py filed are fan-out work"
+        )
+    return None if unlabelled else fetched
+
+
 def live_elsewhere(batches: dict[str, list[int]], root: Path, repo: str) -> bool:
     """Print and return True when a new batch shares an issue with one still live.
 
@@ -212,21 +248,40 @@ def live_elsewhere(batches: dict[str, list[int]], root: Path, repo: str) -> bool
         root: the manifest directory to read every run under.
         repo: the repo this launch works, as `OWNER/NAME`.
     """
-    live = [entry for entry in live_batches(root).values() if entry[1].repo == repo]
+    live = standing_batches(repo, root)
     refused = False
     for spec, issues in batches.items():
-        for run_id, b in live:
+        for run, b in live:
             overlap = sorted(set(issues) & set(b.issues))
             if not overlap:
                 continue
             shared = ", ".join(f"#{n}" for n in overlap)
             error(
                 f"batch {spec} shares {shared} with batch {b.batch}, live in "
-                f"run {run_id} on {b.host}; run clean {run_id} first"
+                f"run {run.run_id} on {b.host}; run clean {run.run_id} first"
             )
             refused = True
             break
     return refused
+
+
+def batch_paths(
+    issues: Iterable[Issue], tracked: Collection[str] = ()
+) -> tuple[str, ...]:
+    """The files `issues`' bodies cite, sorted, each resolved against `tracked`.
+
+    One definition of what a batch was briefed on: the two shared-file gates compare it, and
+    `launch` records it on the batch.
+    """
+    return tuple(
+        sorted(
+            {
+                path
+                for issue in issues
+                for path in resolve_fragments(cited_paths(issue.body), tracked)
+            }
+        )
+    )
 
 
 def shared_files(
@@ -239,7 +294,7 @@ def shared_files(
     Args:
         batches: batch id → the issue numbers in it, as `_parse_batches` returns them.
         issues: every fetched issue by number; a number a batch names but this lacks is
-            skipped, since `_fetch_issues` has already refused that launch.
+            skipped, since `fetch_issues` has already refused that launch.
         tracked: the target repo's tracked files, which a path cited from a subdirectory
             resolves against. Empty leaves every path as the body spells it.
 
@@ -249,12 +304,9 @@ def shared_files(
     """
     cited: dict[str, set[str]] = {}
     for batch, numbers in batches.items():
-        for number in numbers:
-            issue = issues.get(number)
-            if issue is None:
-                continue
-            for path in resolve_fragments(cited_paths(issue.body), tracked):
-                cited.setdefault(path, set()).add(batch)
+        fetched = [issues[n] for n in numbers if n in issues]
+        for path in batch_paths(fetched, tracked):
+            cited.setdefault(path, set()).add(batch)
     return [
         (path, sorted(names)) for path, names in sorted(cited.items()) if len(names) > 1
     ]
@@ -291,6 +343,151 @@ def refuse_shared_files(
             f"--allow-shared-file {path} if the citation is context rather than an edit"
         )
     return refused
+
+
+def excusable(path: str) -> bool:
+    """Whether `--allow-shared-file` may excuse a cross-run collision on `path`.
+
+    Never the SOPS file or a cluster-vars file. Each is one encrypted document, so two
+    branches that both edit it conflict on every line and neither rebases over the other.
+    """
+    return path != SECRETS_FILE and not path.startswith(CLUSTER_VARS_PREFIX)
+
+
+def _with_running_unit(tools: Tools, batches: Sequence[Batch]) -> set[tuple[str, str]]:
+    """The (host, unit) of each of `batches` whose agent has not stopped.
+
+    One read per host that holds one, with `still_running`'s rule: a host that cannot be
+    read, or a unit with no block in the reply, counts as running.
+    """
+    running: set[tuple[str, str]] = set()
+    for host in sorted({b.host for b in batches}):
+        there = [("", b) for b in batches if b.host == host]
+        reading = read_host(tools, host, [b for _, b in there])
+        states = "" if isinstance(reading, str) else reading.unit_states
+        running |= {(b.host, b.unit) for _, b in still_running(there, states)}
+    return running
+
+
+def refuse_live_shared_files(
+    batches: Mapping[str, Sequence[int]],
+    issues: Mapping[int, Issue],
+    root: Path,
+    repo: str,
+    tools: Tools,
+    allowed: Sequence[str] = (),
+    tracked: Collection[str] = (),
+) -> dict[str, tuple[str, ...]] | None:
+    """Refuse a launch citing a file that a live batch in another run holds.
+
+    A batch holds the files it cites while its unit is active or its branch has an open PR.
+    A batch whose agent ended with no PR holds nothing, however long its worktree stands:
+    "uncleaned" is not the rule, because a finished batch can stand for weeks.
+
+    Reads the open PRs in one `gh pr list` call, and only when another run has an uncleaned
+    batch. Reads a unit's state only for a batch with no open PR that could collide, at one
+    connection per host holding one. A batch
+    saved before `Batch.cited_paths` existed has its issue bodies fetched, once each. Every
+    read that fails refuses the launch, because it cannot tell who holds what.
+
+    The caller holds the launch lock (`fanout_lib.launch_lock`), so no other launch can add
+    a batch between this read and the caller's own manifest save.
+
+    Args:
+        batches: batch id to the issue numbers it would take.
+        issues: every fetched issue by number.
+        root: the manifest directory to read every run under.
+        repo: the repo this launch works; a path means nothing in another repo's tree.
+        tools: the process boundary.
+        allowed: the `--allow-shared-file` paths. One excuses a collision on that path
+            unless `excusable` rules it out, and the collision is still printed.
+        tracked: the repo's tracked files, which a cited fragment resolves against.
+
+    Returns:
+        None having printed why the launch is refused. Otherwise each new batch's excused
+        paths, for `Batch.excused_paths`; a batch that needed no excuse has no entry.
+    """
+    new = {
+        batch: set(batch_paths([issues[n] for n in numbers if n in issues], tracked))
+        for batch, numbers in batches.items()
+    }
+    standing = standing_batches(repo, root)
+    if not standing or not any(new.values()):
+        return {}
+    open_branches = tools.open_pr_branches(repo)
+    if open_branches is None:
+        error(
+            f"could not read the open PRs of {repo}, so cannot tell which batches in "
+            "other runs still hold their files — run launch again"
+        )
+        return None
+
+    def could_collide(b: Batch) -> bool:
+        if b.cited_paths is None:
+            return True
+        return any(paths & set(b.cited_paths) for paths in new.values())
+
+    candidates = [(run, b) for run, b in standing if could_collide(b)]
+    running = _with_running_unit(
+        tools, [b for _, b in candidates if b.branch not in open_branches]
+    )
+    holders = [
+        (
+            run,
+            b,
+            "an open PR"
+            if b.branch in open_branches
+            else "an agent not read as stopped",
+        )
+        for run, b in candidates
+        if b.branch in open_branches or (b.host, b.unit) in running
+    ]
+    collisions: list[tuple[str, str, Manifest, Batch, str]] = []
+    for run, b, why in holders:
+        held = b.cited_paths
+        if held is None:
+            try:
+                held = batch_paths([tools.gh_issue(n, repo) for n in b.issues], tracked)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                error(
+                    f"could not fetch the issues of batch {b.batch} (run {run.run_id}) to "
+                    f"read the files it holds: {error_text(exc)}"
+                )
+                return None
+        collisions += [
+            (path, batch, run, b, why)
+            for batch, paths in new.items()
+            for path in sorted(paths & set(held))
+        ]
+    excused: dict[str, set[str]] = {}
+    refused = []
+    for path, batch, run, b, why in sorted(collisions, key=lambda c: c[:2]):
+        holder = (
+            f"batch {b.batch} holds it with {why} (run {run.run_id}, orchestrator "
+            f"branch `{run.orchestrator_branch}`)"
+        )
+        if path in allowed and excusable(path):
+            warn(
+                f"{path}: batch {batch} cites it; {holder} — allowed by --allow-shared-file"
+            )
+            excused.setdefault(batch, set()).add(path)
+            continue
+        way_out = (
+            f"pass --allow-shared-file {path} if the citation is context rather than an edit"
+            if excusable(path)
+            else "--allow-shared-file cannot excuse this path"
+        )
+        refused.append(f"{path}: batch {batch} cites it; {holder}; {way_out}")
+    if not refused:
+        return {batch: tuple(sorted(paths)) for batch, paths in excused.items()}
+    error(
+        f"{len(refused)} cited file(s) held by live batches in other runs — ask the "
+        "coordinator on the orchestrator branch named to finish or release the batch, and "
+        "do not clean another coordinator's run"
+    )
+    for line in refused:
+        error(line)
+    return None
 
 
 def refuse_solo_only(

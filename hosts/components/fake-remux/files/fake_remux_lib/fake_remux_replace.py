@@ -119,10 +119,6 @@ def _save_json(path, obj):
     atomic_write(path, json.dumps(obj))
 
 
-def _qname(cand):
-    return ((cand.get("quality") or {}).get("quality") or {}).get("name")
-
-
 def _queue_by_episode(records):
     """episodeId (str) -> queue record, first wins.
 
@@ -474,7 +470,7 @@ def reconcile_once(cfg, sonarr=None):
                             "guid": cand["guid"],
                             "indexerId": cand["indexerId"],
                             "title": cand["title"],
-                            "quality": _qname(cand),
+                            "quality": frl.Quality.of(cand).name,
                         },
                         "lastAction": int(time.time()),
                     }
