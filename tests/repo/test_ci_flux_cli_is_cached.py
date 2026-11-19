@@ -7,8 +7,9 @@ nfpm: an `actions/cache` step keyed on the pinned version and sha256, then a ste
 the release only when the cached file is absent and checks the digest every time.
 
 The jobs are named rather than derived from the action, because the fix removes the string a
-derivation would match. ci.yml's flux jobs fetch through `.github/actions/pinned-tool`, which
-tests/repo/test_release_fetches_use_pinned_tool.py holds to the same shape.
+derivation would match. The jobs of ci.yml and the drill workflows fetch the CLI through
+`.github/actions/pinned-tool`, which tests/repo/test_release_fetches_use_pinned_tool.py holds
+to the same shape, so only promote.yml's inline fetches are named here.
 
 Run: uv run pytest tests/repo/test_ci_flux_cli_is_cached.py
 """
@@ -32,9 +33,9 @@ FLUX_JOBS = (
     ("promote.yml", "settle"),
     ("promote.yml", "reconcile"),
     ("promote.yml", "reset-move"),
-    ("bootstrap-drill.yml", "drill"),
-    ("flux-deletion-drill.yml", "drill"),
 )
+# The job the mutation tests below break a copy of.
+BROKEN = ("promote.yml", "publish")
 
 
 def _load(path: str) -> dict:
@@ -195,18 +196,14 @@ def test_each_flux_job_checks_the_pinned_sha256(workflow, job):
 
 
 def _broken(monkeypatch, mutate) -> None:
-    """Point `_job` at a copy of bootstrap-drill.yml's drill job with `mutate` applied to its steps."""
-    loaded, steps = _job("bootstrap-drill.yml", "drill")
+    """Point `_job` at a copy of the `BROKEN` job with `mutate` applied to its steps."""
+    loaded, steps = _job(*BROKEN)
     mutate(steps)
     real = _job
     monkeypatch.setattr(
         sys.modules[__name__],
         "_job",
-        lambda w, j: (
-            (loaded, steps)
-            if (w, j) == ("bootstrap-drill.yml", "drill")
-            else real(w, j)
-        ),
+        lambda w, j: (loaded, steps) if (w, j) == BROKEN else real(w, j),
     )
 
 
@@ -225,9 +222,7 @@ def test_a_flux_job_without_its_cache_step_is_flagged(monkeypatch):
         ),
     )
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
-        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
-            "bootstrap-drill.yml", "drill"
-        )
+        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(*BROKEN)
 
 
 def test_a_flux_cache_with_a_constant_key_is_flagged(monkeypatch):
@@ -238,9 +233,7 @@ def test_a_flux_cache_with_a_constant_key_is_flagged(monkeypatch):
 
     _broken(monkeypatch, constant_key)
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
-        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
-            "bootstrap-drill.yml", "drill"
-        )
+        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(*BROKEN)
 
 
 def test_a_flux_curl_outside_the_cache_check_is_flagged(monkeypatch):
@@ -251,13 +244,13 @@ def test_a_flux_curl_outside_the_cache_check_is_flagged(monkeypatch):
         ),
     )
     with pytest.raises(AssertionError):
-        test_each_flux_job_fetches_only_on_a_cache_miss("bootstrap-drill.yml", "drill")
+        test_each_flux_job_fetches_only_on_a_cache_miss(*BROKEN)
 
 
 def test_a_flux_curl_with_a_short_retry_window_is_flagged(monkeypatch):
     _broken(monkeypatch, lambda steps: _edit_fetch(steps, "--retry 12", "--retry 3"))
     with pytest.raises(AssertionError, match="must retry all errors"):
-        test_each_flux_fetch_outlasts_a_release_outage("bootstrap-drill.yml", "drill")
+        test_each_flux_fetch_outlasts_a_release_outage(*BROKEN)
 
 
 def test_a_flux_fetch_without_its_digest_check_is_flagged(monkeypatch):
@@ -266,4 +259,4 @@ def test_a_flux_fetch_without_its_digest_check_is_flagged(monkeypatch):
         lambda steps: _edit_fetch(steps, "| sha256sum -c --strict", "> /dev/null"),
     )
     with pytest.raises(AssertionError, match="no flux step runs sha256sum -c"):
-        test_each_flux_job_checks_the_pinned_sha256("bootstrap-drill.yml", "drill")
+        test_each_flux_job_checks_the_pinned_sha256(*BROKEN)
