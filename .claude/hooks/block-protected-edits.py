@@ -149,25 +149,17 @@ def main():
     worktree, not the primary checkout), then emits the PreToolUse deny decision `classify`
     returns. Always returns 0.
     """
-    data = read_payload()
-    if data is None:
+    event = read_payload()
+    call = event.edit() if event else None
+    if call is None:
         return 0
-    file_path = ((data.get("tool_input") or {}).get("file_path")) or ""
     # Guard the checkout that owns the edited file, not the one this hook runs from: a
     # session edits files outside its own checkout by absolute path.
     hook_root = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    if file_path:
-        target = (
-            file_path
-            if os.path.isabs(file_path)
-            else os.path.join(os.getcwd(), file_path)
-        )
-        repo_root = find_repo_root(target, hook_root)
-    else:
-        repo_root = hook_root
-    reason = classify(file_path, repo_root)
+    file_path = str(call.file_path)
+    reason = classify(file_path, find_repo_root(file_path, hook_root))
     if reason:
         emit_pretooluse_decision("block-protected-edits", "deny", reason)
     return 0

@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+import pytest
+from _hook_common import parse_payload
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "auto-mode-bridge.py"
@@ -56,18 +58,36 @@ BYPASSED_PUSH = (
 
 def test_a_ruleset_refused_push_names_the_probe_for_its_branch():
     note = _mod.push_refusal_note(
-        failure(command="git push origin master", error=REFUSED_PUSH)
+        parse_payload(failure(command="git push origin master", error=REFUSED_PUSH))
     )
     assert "probe.py push-rules master`" in note
 
 
 def test_a_push_that_failed_for_another_reason_gets_no_note():
     error = "Exit code 128\nfatal: unable to access 'https://github.com/': Could not resolve host"
-    assert _mod.push_refusal_note(failure(command="git push", error=error)) is None
     assert (
-        _mod.push_refusal_note(failure(command="git status", error=REFUSED_PUSH))
+        _mod.push_refusal_note(parse_payload(failure(command="git push", error=error)))
         is None
     )
+    assert (
+        _mod.push_refusal_note(
+            parse_payload(failure(command="git status", error=REFUSED_PUSH))
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "tool_input", [None, {"command": None}], ids=["null-tool-input", "null-command"]
+)
+@pytest.mark.parametrize("event", ["PostToolUseFailure", "PostToolUse"])
+def test_a_null_tool_input_or_command_gets_no_note(
+    event, tool_input, capsys, monkeypatch
+):
+    payload = {"hook_event_name": event, "tool_name": "Bash", "tool_input": tool_input}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    _mod.main()
+    assert capsys.readouterr().out == ""
 
 
 def _push_success(stderr, command="git push -u origin worktree-fanout-4507"):
@@ -93,4 +113,4 @@ def test_a_bypass_notice_is_named_a_push_that_landed(capsys, monkeypatch):
 
 def test_a_push_with_no_bypass_notice_gets_no_note():
     plain = "To github.com:DanielH2018/server.git\n   abc..def  topic -> topic\n"
-    assert _mod.push_bypass_note(_push_success(plain)) is None
+    assert _mod.push_bypass_note(parse_payload(_push_success(plain))) is None

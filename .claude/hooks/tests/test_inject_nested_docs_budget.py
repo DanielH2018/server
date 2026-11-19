@@ -8,6 +8,7 @@ Run: uv run pytest .claude/hooks/tests/test_inject_nested_docs_budget.py
 """
 
 import test_inject_nested_docs as base
+from _hook_common import parse_payload
 
 # Bound by assignment, not imported, so the test arguments naming it do not read as a
 # redefinition of an unused import (F811).
@@ -86,14 +87,13 @@ def _add_docs_page(repo):
 
 
 def _run(repo, command, session):
-    return _mod.context(
-        {
-            "tool_name": "Bash",
-            "session_id": session,
-            "cwd": str(repo),
-            "tool_input": {"command": command},
-        }
-    )
+    payload = {
+        "tool_name": "Bash",
+        "session_id": session,
+        "cwd": str(repo),
+        "tool_input": {"command": command},
+    }
+    return _mod.context(parse_payload(payload).bash())
 
 
 def test_the_generated_docs_rule_is_a_pointer_on_a_read(repo):
@@ -177,6 +177,6 @@ def test_an_outline_row_carries_form_outline(repo, tmp_path):
         "cwd": str(repo),
         "tool_input": {"command": f"cat {BAR_DOC}"},
     }
-    assert _mod.context(payload)
+    assert _mod.context(parse_payload(payload).bash())
     (row,) = (tmp_path / "instructions.log").read_text().splitlines()
     assert row.split()[-2] == "form=outline"

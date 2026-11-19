@@ -17,7 +17,8 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -255,8 +256,107 @@ def emit_pretooluse_context(context: str) -> None:
     )
 
 
-def read_payload(stream=None) -> dict | None:
-    """The hook's JSON payload from `stream` (stdin by default), or None when there is none to judge.
+@dataclass(frozen=True)
+class HookEvent:
+    """One hook call's payload, with the fields every hook reads typed once.
+
+    A string field that is absent, empty or not a string reads as `""`, or as None where the
+    attribute says so.
+
+    Attributes:
+        hook_event_name: the event, such as `PreToolUse` or `Stop`.
+        session_id: the session's id.
+        agent_id: the subagent's id, or None in the main session.
+        agent_type: the subagent's type, or None in the main session.
+        permission_mode: the session's permission mode, such as `auto`.
+        cwd: the session's working directory. See `parse_payload` for a missing one.
+        transcript_path: the session transcript's path.
+        tool_name: the tool being called, or `""` for an event that names no tool.
+        tool_input: the tool input, or `{}` when it is absent or not an object.
+        raw: the whole payload, for the fields only one event carries.
+    """
+
+    hook_event_name: str
+    session_id: str
+    agent_id: str | None
+    agent_type: str | None
+    permission_mode: str
+    cwd: Path
+    transcript_path: str
+    tool_name: str
+    tool_input: Mapping[str, Any]
+    raw: Mapping[str, Any]
+
+    def bash(self) -> "BashCall | None":
+        """This event as a Bash call, or None when it is not one or carries no command."""
+        command = _text(self.tool_input, "command")
+        if self.tool_name != "Bash" or not command:
+            return None
+        return BashCall(**vars(self), command=command)
+
+    def edit(self) -> "EditCall | None":
+        """This event as a file edit, or None when its tool input names no `file_path`.
+
+        A relative `file_path` resolves against `cwd`.
+        """
+        file_path = _text(self.tool_input, "file_path")
+        if not file_path:
+            return None
+        return EditCall(**vars(self), file_path=self.cwd / file_path)
+
+
+@dataclass(frozen=True)
+class BashCall(HookEvent):
+    """A Bash tool call. A rewrite arm hands the next one `dataclasses.replace(call, command=…)`.
+
+    Attributes:
+        command: the command text, never empty. `tool_input` keeps the call's own input,
+            which a rewrite leaves alone, so every other key survives into `updatedInput`.
+    """
+
+    command: str
+
+
+@dataclass(frozen=True)
+class EditCall(HookEvent):
+    """An Edit or Write tool call.
+
+    Attributes:
+        file_path: the file the call writes, absolute.
+    """
+
+    file_path: Path
+
+
+def _text(data: Mapping[str, Any], key: str) -> str:
+    value = data.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def parse_payload(data: Mapping[str, Any]) -> HookEvent:
+    """`data`, the decoded hook JSON object, as a HookEvent."""
+    tool_input = data.get("tool_input")
+    cwd = _text(data, "cwd")
+    return HookEvent(
+        hook_event_name=_text(data, "hook_event_name"),
+        session_id=_text(data, "session_id"),
+        agent_id=_text(data, "agent_id") or None,
+        agent_type=_text(data, "agent_type") or None,
+        permission_mode=_text(data, "permission_mode"),
+        # DECIDED: a payload with no absolute `cwd` runs in the process cwd, not `""` or `.`.
+        # Every hook joins it as a path prefix, and the shim's `cd` makes the process cwd the
+        # primary checkout, so a deny that depends on the repo root reads the same root in
+        # every hook.
+        cwd=Path(cwd) if os.path.isabs(cwd) else Path.cwd(),
+        transcript_path=_text(data, "transcript_path"),
+        tool_name=_text(data, "tool_name"),
+        tool_input=tool_input if isinstance(tool_input, dict) else {},
+        raw=data,
+    )
+
+
+def read_payload(stream=None) -> HookEvent | None:
+    """The hook's payload from `stream` (stdin by default), or None when there is none to judge.
 
     None covers empty input, text that is not JSON, a read error, and JSON that is not an
     object. Every caller treats those the same way: it decides nothing and exits 0. `stream`
@@ -265,9 +365,9 @@ def read_payload(stream=None) -> dict | None:
     stream = sys.stdin if stream is None else stream
     try:
         payload = json.loads(stream.read() or "null")
-    except ValueError, OSError:
+    except ValueError, OSError, RecursionError:
         return None
-    return payload if isinstance(payload, dict) else None
+    return parse_payload(payload) if isinstance(payload, dict) else None
 
 
 def session_state_path(name: str, session_id: str) -> str:

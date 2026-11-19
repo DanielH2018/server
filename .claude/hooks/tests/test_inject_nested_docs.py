@@ -28,7 +28,11 @@ _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)  # inject-nested-docs.py imports _hook_common
 
-from _hook_common import INSTRUCTIONS_LOG_ENV, instructions_log_path  # noqa: E402
+from _hook_common import (  # noqa: E402
+    INSTRUCTIONS_LOG_ENV,
+    instructions_log_path,
+    parse_payload,
+)
 
 
 def _load(name):
@@ -252,7 +256,7 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
         "cwd": str(repo),
         "tool_input": {"command": "cat k8s/roles/foo/templates/deployment.yaml.j2"},
     }
-    assert _mod.context(payload)
+    assert _mod.context(parse_payload(payload).bash())
     loaded = {
         "hook_event_name": "InstructionsLoaded",
         "session_id": "sess-a",
