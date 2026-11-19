@@ -177,7 +177,9 @@ the next edit that tree reads merged, clean and unlocked. So `claim_is_live` in
 `scripts/dev/findings_lib/claim.py` also holds a tree that a process this user can read has
 as its cwd or `CLAUDE_PROJECT_DIR`, through `lib.worktrees.held_by_readable_process`. An
 unreadable process counts for nothing there, unlike in `remove`, because a hold with no
-evidence would stop `reap` releasing any claim.
+evidence would stop `reap` releasing any claim. The main worktree is never held this way:
+every session tree sits under it, sessions also run in it, and its branch is `master`, which
+no claim may name.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,

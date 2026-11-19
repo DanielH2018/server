@@ -320,6 +320,16 @@ def test_an_unreadable_hold_or_a_sibling_tree_does_not_hold_it_is_clean():
     assert not held_by_readable_process("/w/a", holds=lambda: holds)
 
 
+def test_a_hold_in_the_main_worktree_does_not_hold_it_is_clean(tmp_path):
+    (tmp_path / ".git").mkdir()
+    holds = [
+        (4242, str(tmp_path), "cwd"),
+        (4243, f"{tmp_path}/.claude/worktrees/s", "cwd"),
+    ]
+
+    assert not held_by_readable_process(str(tmp_path), holds=lambda: holds)
+
+
 def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
     tmp_path, monkeypatch
 ):

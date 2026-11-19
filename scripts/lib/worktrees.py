@@ -690,7 +690,13 @@ def held_by_readable_process(
     a deletion. A claim held on no evidence is never reaped, so an unreadable process (a
     FOREIGN_UID hold, whose path is unknown) counts for nothing here. The /proc scan runs
     once per process, shared by every tree asked about; `holds` is its test seam.
+
+    The main worktree, the one whose `.git` is a directory, is never held: every linked
+    session tree sits under it, sessions also run in it, and its branch is `master`, which
+    no claim may name.
     """
+    if Path(path, ".git").is_dir():
+        return False
     roots = tree_roots(path)
     return any(
         how != FOREIGN_UID and held and holds_tree(held, roots)
