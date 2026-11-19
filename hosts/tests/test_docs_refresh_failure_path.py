@@ -1,22 +1,13 @@
-"""Guards for docs-refresh.sh's commit-failure path (initial_setup role, tag `crons`).
-
-One failed commit in this cron can park EVERY deploy on daniel-box. `git commit || git reset`
-unstages and nothing more, so the regenerated pages stay MODIFIED in the primary checkout;
-`homelab-checkout-sync` reads any porcelain output as dirty and refuses to fast-forward until a
-human cleans the tree.
+"""Guards for docs-refresh.sh's own tree and its failure path.
 
 The functions below are executed, not pattern-matched. Each one is lifted out of the RENDERED
 template by name and sourced into a scratch git repository, so what these tests exercise is the
-production code rather than a copy of its logic. Six behaviours, each with the half that proves
-the test can go red:
+production code rather than a copy of its logic. Each behaviour has the half that proves the
+test can go red:
 
-- **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
-  generated one — an untracked leftover parks `homelab-checkout-sync` exactly as a modified one
-  does. The rejecting half runs a bare `git reset` body against the same fixture and requires it
-  dirty.
-- **dirty_tree_status distinguishes this cron's own dirt from a human's**, via a stamp outside
-  the repo. Path-based attribution cannot: a human running build_docs.py by hand dirties the
-  same files.
+- **prepare_tree leaves no ignored file behind**, so a role that master deleted but whose
+  `__pycache__` survived is gone from the tree the generators and the suite read. The rejecting
+  half runs the same body without `clean -x` and requires the leftover role directory.
 - **say_failure names the failing hook**, and still says something when no hook token matches.
 - **say_suite_failure names the failing node ids**, and falls back to the tail without them.
 - **keep_failure_log keeps one log per failing run**, pruned to the newest few.
@@ -44,10 +35,7 @@ SOURCED = (
     "say_suite_failure",
     "keep_failure_log",
     "keep_tree_evidence",
-    "restore_generated_tree",
-    "mark_commit_failed",
-    "clear_commit_failed",
-    "dirty_tree_status",
+    "prepare_tree",
     "build_docs_failure",
 )
 
@@ -141,147 +129,6 @@ def _stage_a_regeneration(repo: Path, stamp: Path) -> str:
     return run.stdout
 
 
-def _porcelain(repo: Path, stamp: Path) -> str:
-    return _bash("git status --porcelain", repo, stamp).stdout
-
-
-def test_the_restore_leaves_no_modified_page_behind(tmp_path):
-    """ACCEPT: a regenerated page goes back to its HEAD content, so the tree reads clean."""
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    run = _bash(f"restore_generated_tree {shlex.quote(staged)}", repo, stamp)
-    assert run.returncode == 0, run.stderr
-    assert (repo / "docs/reference/state.md").read_text() == "committed state\n"
-    assert " M docs/reference/state.md" not in _porcelain(repo, stamp)
-
-
-def test_the_restore_leaves_no_untracked_page_behind(tmp_path):
-    """A brand-new generated page has no HEAD version, so `git checkout HEAD --` fails on it.
-
-    Left there it is UNTRACKED, and `git status --porcelain` counts untracked — which parks
-    `homelab-checkout-sync` just as surely as the modified page above. This is the half a
-    checkout-only fix would miss.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    assert "A\tdocs/assets/generated/infra-map.svg" in staged
-    _bash(f"restore_generated_tree {shlex.quote(staged)}", repo, stamp)
-    assert not (repo / "docs/assets/generated/infra-map.svg").exists()
-    assert "infra-map.svg" not in _porcelain(repo, stamp)
-
-
-def test_the_restore_does_not_touch_a_hand_edit_it_never_staged(tmp_path):
-    """topology.md is the hand-written page in docs/reference/.
-
-    The narrowing of the ACTION is the point: a blanket `git checkout -- docs/reference` would
-    clean the tree and destroy an uncommitted human edit doing it.
-
-    The restore still REPORTS this tree as dirty, and that is the deliberate asymmetry — see the
-    hook-leftover test below for why the check cannot be scoped the same way. It costs a false
-    "still dirty" only for an edit made inside the run window, because the top-of-script gate
-    exits on a tree that was already dirty when the run began.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    (repo / "docs/reference/topology.md").write_text("hand-written prose, mid-edit\n")
-    _bash(f"restore_generated_tree {shlex.quote(staged)}", repo, stamp)
-    assert (
-        repo / "docs/reference/topology.md"
-    ).read_text() == "hand-written prose, mid-edit\n"
-
-
-def test_the_restore_reports_a_leftover_a_hook_wrote_after_git_add(tmp_path):
-    """ACCEPT: the case that decides the check's scope.
-
-    prek's gen-doc-fragments hook regenerates the WHOLE fragment set, so it rewrites fragments this
-    run's generators never touched. That happens after `git add`, so the file is dirty, it parks
-    `homelab-checkout-sync`, and it is absent from the captured name-status by construction. A check
-    scoped to the staged paths would report `tree restored` over it.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    # Committed, never staged by this run, rewritten by the hook mid-commit.
-    (repo / "docs/assets/generated/topology.svg").write_text("<svg>hook</svg>\n")
-    assert "topology.svg" not in staged
-    run = _bash(f"restore_generated_tree {shlex.quote(staged)}", repo, stamp)
-    assert run.returncode != 0, (
-        "a hook's leftover under docs/assets/generated read as a clean restore"
-    )
-    assert " M docs/assets/generated/topology.svg" in _porcelain(repo, stamp)
-
-
-def test_a_reset_only_failure_path_leaves_the_tree_dirty(tmp_path):
-    """REJECT: a bare `git reset` body, minimised, against the same fixture.
-
-    Without this half a restore that silently stopped restoring would be indistinguishable from
-    one that works — the fixture would simply never have been dirty.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    _stage_a_regeneration(repo, stamp)
-    _bash("git reset >/dev/null 2>&1", repo, stamp)
-    porcelain = _porcelain(repo, stamp)
-    assert " M docs/reference/state.md" in porcelain
-    assert "?? docs/assets/generated/infra-map.svg" in porcelain
-
-
-def test_the_restore_reports_failure_when_the_tree_stays_dirty(tmp_path):
-    """A restore that cannot finish must say so, or the run reports the wrong reason.
-
-    Simulated by making the page read-only through its directory, which is how a
-    root-owned leftover would present.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    run = _bash(
-        f"chmod 500 docs/assets/generated; restore_generated_tree {shlex.quote(staged)}; rc=$?; "
-        "chmod 700 docs/assets/generated; exit $rc",
-        repo,
-        stamp,
-    )
-    assert run.returncode != 0
-
-
-def test_the_dirty_branch_reports_down_on_this_cron_s_own_leftover_dirt(tmp_path):
-    """ACCEPT: run N stamped a commit failure, so run N+1's dirt is the alarm, not a human."""
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    _bash("mark_commit_failed 'commit failed at T; tree restored'", repo, stamp)
-    assert (stamp / "commit-failed").exists()
-    assert _bash("dirty_tree_status", repo, stamp).stdout == "down"
-
-
-def test_the_dirty_branch_still_reports_up_on_foreign_dirt(tmp_path):
-    """REJECT: with no stamp the dirt is somebody else's mid-edit and the run is legitimately up.
-
-    Without this half a `dirty_tree_status` wired to `down` unconditionally would pass the test
-    above and turn every human edit on the box into a false DOWN twice a day.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    assert _bash("dirty_tree_status", repo, stamp).stdout == "up"
-
-
-def test_the_stamp_is_cleared_once_a_run_publishes(tmp_path):
-    """The reverse state. A stamp nothing clears makes every later dirty tree read down."""
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    _bash("mark_commit_failed 'commit failed at T'; clear_commit_failed", repo, stamp)
-    assert not (stamp / "commit-failed").exists()
-    assert _bash("dirty_tree_status", repo, stamp).stdout == "up"
-
-
-def test_both_paths_that_end_a_healthy_run_clear_the_stamp():
-    """`clear_commit_failed` on the publish path only would strand the `no change` runs.
-
-    Most runs have nothing to publish, so a stamp cleared solely by a successful PR would keep
-    reporting down long after the failure was fixed by hand.
-    """
-    assert SCRIPT.count("\nclear_commit_failed\n") >= 1, (
-        "the publish path no longer clears it"
-    )
-    no_change = SCRIPT[SCRIPT.index('PUSH_MSG="no change"') :]
-    assert "clear_commit_failed" in no_change[: no_change.index("exit 0")], (
-        "the `no change` exit does not clear the stamp — a fixed-by-hand tree stays down"
-    )
-
-
 def _alert(log_text: str, tmp_path: Path, say: str = "say_failure") -> str:
     log = tmp_path / "commit.log"
     log.write_text(log_text)
@@ -372,8 +219,7 @@ def test_the_suite_failure_branch_pushes_the_summary():
 def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     """on_exit deletes the temp log and the suite output never reaches the cron's logger, so this copy is the record.
 
-    Outside the checkout for the same reason as the stamp: a file written inside it is untracked
-    dirt, and a diagnostic that parks `homelab-checkout-sync` is not a diagnostic.
+    Outside the tree, because the next run's prepare_tree cleans every untracked file in it.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     log = tmp_path / "commit.log"
@@ -392,7 +238,7 @@ def _keep_runs(starts: list[str], tmp_path: Path) -> tuple[Path, list[str]]:
     """Run the script's FAILURE_LOG= line and keep_failure_log per start, `date` pinned to it."""
     stamp = tmp_path / "stamp"
     stamp.mkdir(exist_ok=True)
-    (stamp / "commit-failed").write_text("suite failed at T\n")
+    (stamp / "tree").mkdir()
     log = shlex.quote(str(tmp_path / "suite.log"))
     script = ""
     for start in starts:
@@ -418,7 +264,7 @@ def test_the_prune_keeps_only_the_newest_logs(tmp_path):
     stamp, names = _keep_runs(starts, tmp_path)
     assert sorted(names) == names, names
     assert sorted(p.name for p in stamp.glob("failure-*.log")) == names[2:]
-    assert (stamp / "commit-failed").exists()
+    assert (stamp / "tree").is_dir()
 
 
 def _hook_rewrites_a_staged_page(repo: Path) -> None:
@@ -446,34 +292,8 @@ def test_the_kept_log_names_the_file_a_hook_rewrote(tmp_path):
     assert "git diff --stat" in log, log
 
 
-def test_the_evidence_is_gone_once_the_restore_has_run(tmp_path):
-    """REJECT: capturing after the restore names nothing, which is why the order is pinned.
-
-    restore_generated_tree puts every staged path back and clears the index. Run it first and the
-    same capture reports a clean tree — a log that proves only that the failure was cleaned up.
-    """
-    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
-    staged = _stage_a_regeneration(repo, stamp)
-    _hook_rewrites_a_staged_page(repo)
-    run = _bash(
-        f"restore_generated_tree {shlex.quote(staged)}; keep_tree_evidence", repo, stamp
-    )
-    log = (stamp / FAILURE_LOG_NAME).read_text()
-    assert "docs/reference/state.md" not in log, log
-    assert run.returncode == 0, run.stderr
-
-
-def test_the_capture_runs_before_the_restore_on_the_commit_failure_path():
-    """The production call site, not a copy of it: the two tests above only bracket the ordering."""
-    branch = SCRIPT[SCRIPT.index('if [ "$COMMIT_RC" -ne 0 ]; then') :]
-    branch = branch[: branch.index("\nfi\n")]
-    assert branch.index("keep_tree_evidence") < branch.index(
-        "restore_generated_tree"
-    ), branch
-
-
 def test_the_stamp_directory_is_created_and_writable_by_the_service_user():
-    """The fix is inert if the stamp cannot be written, and every failure path swallows that."""
+    """The tree and the failure logs live here, and every failure path swallows a write error."""
     tmpfiles = (
         REPO / "hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2"
     ).read_text()
@@ -484,11 +304,90 @@ def test_the_stamp_directory_is_created_and_writable_by_the_service_user():
     assert line, f"no tmpfiles d line creates {STAMP_DIR}"
     assert re.search(r"0755 \{\{ sys_user \}\} \{\{ sys_user \}\} -$", line), (
         "the docs-refresh service runs as sys_user — a root-owned stamp directory "
-        "makes every mark_commit_failed a silent no-op"
+        "leaves it no tree to work in and no failure log"
     )
     assert STAMP_DIR in SCRIPT, (
         "the script and the tmpfiles file no longer agree on the stamp path"
     )
+    assert f'TREE="{STAMP_DIR}/tree"' in SCRIPT, (
+        "the tree moved out of the stamp directory"
+    )
+
+
+def _primary_with_a_role_master_deletes(tmp_path: Path) -> tuple[Path, Path, str]:
+    """A primary checkout whose master deletes role `retired`, and the cron's tree before that.
+
+    Returns the primary, the tree prepared at the commit before the deletion, and the SHA after
+    it. The tree holds what a run leaves in it: `retired`'s `__pycache__` and a `.venv`.
+    """
+    repo, stamp = tmp_path / "server", tmp_path / "stamp"
+    for role in ("kept", "retired"):
+        (repo / "k8s/roles" / role / "defaults").mkdir(parents=True)
+        (repo / "k8s/roles" / role / "defaults/main.yml").write_text(f"{role}: 1\n")
+    (repo / ".gitignore").write_text("__pycache__/\n.venv/\n")
+    commit = "git -c commit.gpgsign=false commit -q --no-verify -m"
+    before = _bash(
+        f"git init -q -b master . && git add -A && {commit} init && git rev-parse HEAD",
+        repo,
+        stamp,
+    )
+    before.check_returncode()
+    tree = stamp / "tree"
+    _bash(
+        f"REPO={repo}; TREE={tree}; prepare_tree {before.stdout.strip()}", repo, stamp
+    ).check_returncode()
+    (tree / "k8s/roles/retired/tests/__pycache__").mkdir(parents=True)
+    (tree / "k8s/roles/retired/tests/__pycache__/test_retired.pyc").write_bytes(b"")
+    (tree / ".venv").mkdir()
+    (tree / ".venv/pyvenv.cfg").write_text("home = /usr/bin\n")
+    after = _bash(
+        f"git rm -rq k8s/roles/retired && {commit} drop && git rev-parse HEAD",
+        repo,
+        stamp,
+    )
+    after.check_returncode()
+    return repo, tree, after.stdout.strip()
+
+
+def _head(tree: Path, stamp: Path) -> str:
+    return _bash(f"git -C {tree} rev-parse HEAD", tree, stamp).stdout.strip()
+
+
+def test_prepare_tree_drops_a_deleted_roles_ignored_leftovers_is_clean(tmp_path):
+    """ACCEPT: the role master deleted is gone from the tree, and the virtualenv stays."""
+    repo, tree, after = _primary_with_a_role_master_deletes(tmp_path)
+    stamp = tmp_path / "stamp"
+    run = _bash(f"REPO={repo}; TREE={tree}; prepare_tree {after}", repo, stamp)
+    assert run.returncode == 0, run.stderr
+    assert not (tree / "k8s/roles/retired").exists()
+    assert (tree / "k8s/roles/kept/defaults/main.yml").exists()
+    assert (tree / ".venv/pyvenv.cfg").exists()
+    assert _head(tree, stamp) == after
+
+
+def test_prepare_tree_without_clean_x_keeps_the_deleted_role_is_flagged(tmp_path):
+    """REJECT: without -x the leftover `__pycache__` keeps `retired` on disk, as on daniel-box."""
+    repo, tree, after = _primary_with_a_role_master_deletes(tmp_path)
+    no_x = _function("prepare_tree").replace("clean -ffdxq", "clean -ffdq")
+    assert "clean -ffdq" in no_x, "prepare_tree no longer runs `clean -ffdxq`"
+    run = _bash(
+        f"{no_x}\nREPO={repo}; TREE={tree}; prepare_tree {after}",
+        repo,
+        tmp_path / "stamp",
+    )
+    assert run.returncode == 0, run.stderr
+    assert (tree / "k8s/roles/retired").is_dir()
+
+
+def test_prepare_tree_replaces_a_tree_git_no_longer_recognises(tmp_path):
+    """A tree whose `.git` link is gone is added again, rather than failing every later run."""
+    repo, tree, after = _primary_with_a_role_master_deletes(tmp_path)
+    stamp = tmp_path / "stamp"
+    (tree / ".git").unlink()
+    run = _bash(f"REPO={repo}; TREE={tree}; prepare_tree {after}", repo, stamp)
+    assert run.returncode == 0, run.stderr
+    assert not (tree / "k8s/roles/retired").exists()
+    assert _head(tree, stamp) == after
 
 
 def test_build_docs_failure_names_which_half_failed(tmp_path):

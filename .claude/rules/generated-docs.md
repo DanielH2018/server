@@ -43,10 +43,10 @@ or, for a claim's tier, its StorageClass or the `longhorn-reconcile` role's
 `gen_role_glance.py --fix` on that commit. It rewrites the block and fails once like a
 formatter, so stage the rewritten doc and commit again. `scripts/docs/tests/test_gen_role_glance.py` is the CI backstop for a commit that
 skipped the hook. The docs-refresh cron does not run the generator: a write under
-`k8s/roles/` is outside the paths the cron stages, so it would leave the primary checkout
-dirty.
+`k8s/roles/` is outside the paths the cron stages, so the run would report it as a stray write
+and never publish it.
 
-**What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
+**What the cron DOES stage is a closed list, and a write outside it degrades the run.**
 Five paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
 (the test shard-weights table, which `pytest_shard.py --record-missing` records and
 `--refresh-drifted` re-measures where it drifted),
@@ -54,10 +54,10 @@ Five paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_sha
 which `--refresh-runner` refreshes from CI's own logs), and `scripts/dev/affected_tests.json`
 (what each test module depends on, which `affected_tests.py record` traces and a pull
 request's CI run selects its test modules from).
-Adding a sixth means editing the cron's `git add`, the porcelain check in its
-`restore_generated_tree`, and `hosts/tests/test_docs_refresh_records_shard_weights.py`,
-which holds the first two against each other. A path written but not staged parks
-`homelab-checkout-sync`, which reads any porcelain output on the primary checkout as dirty.
+Adding a sixth means editing the cron's `git add` and
+`hosts/tests/test_docs_refresh_records_shard_weights.py`, which holds each table against it. The
+cron works in its own worktree, so a path written but not staged parks nothing: the run reports
+it as a stray write, reads DOWN, and the next run discards it.
 
 **Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
 reference page carries a `generated_at` banner, so a stale one announces itself on the page.
