@@ -98,10 +98,9 @@ a run. Its host key is pinned, not accepted on first connect.
   `hypervisor_etcd_drill_log_retention_days`, and the two textfile verdicts that alarm,
   `etcd-restore-drill-vm.prom` (the drill) and `etcd-restore-drill-egress-fence.prom` (the fence
   leg) in node_exporter's textfile directory, with a deadline from
-  `etcd_drill_full_kuma_interval_s`. The rules in
+  `etcd_drill_full_deadline_s`. The rules in
   `observability/files/rules/other-setup-checks.yaml` read them (M6 batch B4), and the run's
-  `status=` and `fence=` syslog lines carry the messages. B4's Cutover-2 removed the two Kuma
-  pushes.
+  `status=` and `fence=` syslog lines carry the messages.
 - **Next-run review:** read the last run's directory before changing the cadence or what ships
   into the guest. `tests/staging/test_etcd_drill_vm.py` pins the fence, the host key, no
   `define` and the deadline.

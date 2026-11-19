@@ -42,7 +42,8 @@ files:
 enable:
   homelab-loki-route-witness.timer: timers.target
   homelab-loki-route-witness-boot.service: multi-user.target
-# What initial_setup installed before each host's move. Reconcile retires each once the timer
+# What initial_setup installed before each host's move, and the down marker the witness kept
+# outside /var/lib/homelab/check. Reconcile retires each once the timer
 # above has started, and keeps each while that start fails, so the witness still runs. Both run
 # only if the timer starts outside reconcile while the host holds (docs/host-packages.md). The two
 # manifest fragments
@@ -57,5 +58,6 @@ legacy:
   - {path: /opt/loki-route-health/loki_route_health.py}
   - {path: /opt/loki-route-health}
   - {path: /var/lib/kuma-check/loki-read-route.down}
+  - {path: /var/lib/kuma-check/loki-route-witness.down}
   - {path: /var/lib/homelab/setup-render-manifest.d/loki-route-witness}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-health}
