@@ -1503,16 +1503,16 @@ render publishes, and the publish job renders every published tag. The edges are
 - **A tag's toposort edges, kept when flux-owned.** `<tag>` depends on each member of its
   `build_k8s_dep_map` edges that the bundle publishes. Any other edge is
   dropped, because a `dependsOn` naming a missing Kustomization fails every reconcile.
-- **The dropped edges stay visible.** The annotation `homelab/ansible-owned-deps` lists them,
-  comma-separated and sorted. Each becomes a real `dependsOn` in the first render after its
-  role moves to Flux. bento-pdf carries `authelia,traefik`.
+- **The dropped edges stay visible.** The annotation `homelab/unrendered-deps` lists them,
+  comma-separated and sorted. Every k8s role is flux-owned, so a full render writes it on no
+  Kustomization; a fixture `flux_owned` set in a test is what produces it.
 - **A `K8S_APPLIES_LAST` tag waits on the deferred applies.** It also depends on every other
   tag's `<tag>-deferred`, never its own, which depends on it.
 - **`<tag>-deferred` depends on `<tag>`.** It also depends on the role that creates a
   namespace one of its documents names, by the same flux-owned rule.
   `NAMESPACE_ROLE_VARS` in the same file maps `k8s_observability_namespace` to
   `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
-  `observability` once it is flux-owned and annotate it until then.
+  `observability`.
 - **`cluster-vars`**, for a substituting directory, as above.
 - **`homelab-namespace`**, for a tag with a document in `k8s_namespace` in any of its
   directories. `bundle_ordering` passes that name, and the tag's `-snapshot`, `-prepull` and
