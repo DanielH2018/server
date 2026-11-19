@@ -42,7 +42,7 @@ spec:
               containerPort: {{ services | metrics_port('monitor-bridge') }}
 {{ hardened_security_context(read_only=true) }}
           # The settings, one plain value per entry of config/env.yaml.j2; the credentials come
-          # from env-secret.yaml.j2. A quoted number belongs there, never in the Secret: Flux's
+          # from the monitor-bridge-env Secret. A quoted number belongs there, never in the Secret: Flux's
           # typed patch reads a Secret's "300" back as a number and refuses it.
           # `to_json` writes each value as the double-quoted string the file holds, so a value
           # that file left unquoted as a number renders as one and the apply refuses it.
@@ -103,7 +103,7 @@ spec:
 {% endfor %}
         - name: monitor-bridge-credentials
           # Deliberately NOT monitor-bridge-env: that Secret is consumed by envFrom, which
-          # injects every key it holds as an env var. See credentials-secret.yaml.j2.
+          # injects every key it holds as an env var. See render_secrets in defaults.
           secret:
             secretName: monitor-bridge-credentials
             defaultMode: 0440

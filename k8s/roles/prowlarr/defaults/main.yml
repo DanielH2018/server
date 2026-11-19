@@ -150,3 +150,12 @@ k8s_claims:
 # queued into k8s_pending_rollouts and the batch drain never checks it.
 manifests_extra_rollouts:
   - name: flaresolverr
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The exportarr sidecar's credential: prowlarr's own API key, since prowlarr offers no
+  # scoped read-only key.
+  - name: prowlarr-exportarr
+    string_data:
+      api_key: prowlarr_api_key

@@ -203,3 +203,11 @@ image_builder_builds:
     image_builder_timeout: 3600
 
 manifests_rollout: code-server
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: code-server-env
+    string_data:
+      PASSWORD: code_server_password
+      SUDO_PASSWORD: code_server_sudo_password

@@ -117,13 +117,23 @@ the session whose claim comment sorts first holds the issue, and the loser relea
 ## The Project board follows the issue
 
 The "Server Issue Tracking" Project shows every open finding. `findings_lib/board.py` derives
-three of its fields from the issue alone:
+three fields from the issue alone:
 
-- **Status** is `Done` once the issue is closed. It is `In Progress` while a worktree holds
-  the issue's `Claim:` comment, or while an open pull request names it as closing. Otherwise
-  it is `Todo`.
-- **Severity** is the `severity/<level>` label's level.
-- **Not before** is the `not-before:<date>` label's date.
+- **Status**, a field on the board, is `Done` once the issue is closed. It is `In Progress`
+  while a worktree holds the issue's `Claim:` comment, or while an open pull request names it
+  as closing. Otherwise it is `Todo`.
+- **Severity**, an issue field on the issue itself, is the `severity/<level>` label's level:
+  `High`, `Medium` or `Low`.
+- **Not Before**, an issue field, is the `not-before:<date>` label's date.
+
+Severity and Not Before are issue fields because a GitHub issue field lives on the issue.
+Issue search filters it (`field."not before":>2026-12-01`), and the board shows it as a
+column with no item to keep in step. The account owns the definitions: the operator created
+both under Settings > Planning > Issue fields, with Public visibility. The gh token cannot
+read or create the account's definitions, but `repository.issueFields` lists them, which is
+what `board.py` reads. A missing field fails every sync with a line naming where to add it.
+The labels stay the record that `next`, `claim` and the backlog page read; the fields copy
+them.
 
 The board's Status is the one claim state a person reads. GitHub shows it in each issue's
 sidebar and logs its changes on the issue's timeline. It is not the issue's own `status`

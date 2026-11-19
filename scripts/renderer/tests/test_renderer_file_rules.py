@@ -92,6 +92,40 @@ def test_a_role_with_two_claims_writes_two_labelled_claim_files(stubs):
         assert doc["metadata"]["labels"][ROLE_LABEL] == "scrutiny"
 
 
+def test_a_declared_secret_renders_each_field_from_its_sops_key(stubs):
+    rendered = cluster.render_tag("karakeep", stubs)
+    (doc,) = _docs(rendered.files["secret-karakeep.yaml"])
+    assert doc["kind"] == "Secret"
+    assert doc["metadata"]["labels"][ROLE_LABEL] == "karakeep"
+    assert doc["stringData"]["NEXTAUTH_SECRET"] == stubs["karakeep_nextauth_secret"]
+    assert not any(n.startswith("secret.") for n in rendered.files)
+
+
+def test_a_declared_secret_that_reuses_a_rendered_file_name_is_flagged(stubs):
+    entry = {"name": "soularr", "string_data": {"key": "slskd_wireguard_private_key"}}
+    with pytest.raises(cluster.RenderError, match="already render"):
+        cluster.render_tag("slskd", {**stubs, "render_secrets": [entry]})
+
+
+@pytest.mark.parametrize(
+    ("entry", "reason"),
+    [
+        ({"name": "a", "string_data": {"F": "not_a_sops_key"}}, "not SOPS keys"),
+        ({"name": "a", "string_data": {"F": "k"}, "type": "tls"}, "unknown keys"),
+        ({"name": "a", "string_data": {}}, "non-empty `string_data`"),
+        ({"string_data": {"F": "k"}}, "needs a `name`"),
+    ],
+)
+def test_a_declared_secret_of_the_wrong_shape_is_flagged(entry, reason):
+    with pytest.raises(cluster.RenderError, match=reason):
+        cluster.secret_entries("widget", [entry], {"k": "v"})
+
+
+def test_a_declared_secret_of_the_right_shape_is_clean():
+    entry = {"name": "a", "namespace": "ns", "string_data": {"F": "k"}}
+    assert cluster.secret_entries("widget", [entry], {"k": "v"}) == [entry]
+
+
 def test_a_listed_file_with_no_template_is_flagged(tmp_path):
     with pytest.raises(cluster.RenderError, match="has no template"):
         cluster._sources("littlelink", {"no-such-file.yaml"}, False)

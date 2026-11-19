@@ -22,7 +22,7 @@ Usage:
 The deployment runs it as the container command with no arguments, and it loops forever.
 `--once` runs a single cycle and exits. `-h` and `--help` print this text and exit 0.
 
-Environment (all optional; deployment.yaml.j2 sets them, the credentials from env-secret.yaml.j2):
+Environment (all optional; deployment.yaml.j2 sets them, the credentials from the role's render_secrets):
 
     INTERVAL                   seconds between cycles (default 300)
     DRY_RUN                    true unless set to 0, false or no (default true)
