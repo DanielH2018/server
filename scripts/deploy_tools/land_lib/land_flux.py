@@ -5,7 +5,7 @@ other boundary. `promotion.split_k8s` and the gate read which tags have a k8s en
 Flux applies (`k8s_tags_at`).
 `promotion.wait_on_promotion` runs
 `promote.py land-wait` in process (`run_land_wait`). The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `pins` holds the reads
+docs/archive/deploy/d2-first-leaf.md, *How `land.sh` waits*. `pins` holds the reads
 the pin gate makes before a forward-only pin bump merges (`pin_reads.py`, `pin_gate.py`): Flux
 applies those pins on promotion, so their gate sits with the other Flux boundaries.
 

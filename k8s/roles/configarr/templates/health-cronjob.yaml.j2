@@ -5,7 +5,7 @@
   and its log, then record the verdict as a log line and on the verdict ConfigMap's
   annotations (health-verdict-configmap.yaml.j2). It replaced the
   daniel-box host cron `configarr sync health` at H2.5b
-  (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13).
+  (docs/archive/host/h2-shrink-host-plane.md, Steps item 13).
 
   Two containers, because the reader is Python and kubectl ships in neither image alone. The
   init container copies kubectl out of alpine/k8s into an emptyDir, and the reader runs it from

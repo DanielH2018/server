@@ -176,6 +176,17 @@ k3s_agent_node_ips: []
 # the docs-refresh run's pytest and mkdocs. Range 1-10000, and it divides CPU only under
 # contention. etcd and the controllers' leases run in this one process, and a starved etcd costs
 # kube-controller-manager its lease, which exits k3s. 1000 gives k3s ten times a sibling's share.
-# It does not rank system.slice
-# against user.slice; claude_code_fleet_cpu_weight in hosts/components/claude-code does that.
+# It does not rank system.slice at the root cgroup: k3s_system_slice_cpu_weight below ranks it
+# above kubepods.slice, and claude_code_fleet_cpu_weight in hosts/components/claude-code ranks
+# user.slice below it.
 k3s_cpu_weight: 1000
+
+# system.slice's CPU weight at the root cgroup on both k3s nodes, against kubepods.slice and
+# user.slice. Range 1-10000, and it divides CPU only under contention. At systemd's default of
+# 100, busy pods get about six times the CPU of the slice that holds etcd and the controllers.
+# kubelet sets kubepods.slice's weight from the node's allocatable CPU: millicores x 1024 / 1000
+# gives shares, and 1 + (shares - 2) x 9999 / 262142 gives the weight. That is 625 on daniel-box's
+# 16 cores and 313 on daniel-server's 8, so re-derive this when a node gains cores. 1000 sits above
+# both. The docs-refresh run's pytest and mkdocs outrank pods too, as system.slice siblings of
+# k3s, but k3s_cpu_weight keeps them to a small part of the slice.
+k3s_system_slice_cpu_weight: 1000

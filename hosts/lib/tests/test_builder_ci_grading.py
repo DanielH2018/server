@@ -1,19 +1,21 @@
 """The builder's CI grading and its metric reasons, held to `hosts/lib/ci_verdict.py` and the plan's.
 
-`builder_ci_grade.py` carries its own copy of `ci_verdict` and the two conclusion sets. These
-tests hold the copy equal to `hosts/lib/ci_verdict.py`.
+The builder grades with `ci_verdict.ci_verdict`, which its component ships beside it, so a commit
+reads the same verdict there as in `homelab-checkout-sync`.
 
 Run: uv run pytest hosts/lib/tests/test_builder_ci_grading.py
 """
 
-import builder_ci_grade as cg
 import host_package_builder as hb
-import pytest
-import ci_verdict as shared_gate
-
-GREEN = [{"name": "prek", "status": "completed", "conclusion": "success"}]
-RED = [{"name": "prek", "status": "completed", "conclusion": "failure"}]
-PENDING = [{"name": "prek", "status": "in_progress", "conclusion": None}]
+from ci_verdict import (
+    CI_GATE_NAME,
+    CI_GATE_NEEDS_JOBS,
+    CI_PROVE_JOB,
+    ci_verdict,
+    parse_check_runs,
+)
+from test_host_package_builder import lab  # noqa: F401 (the fixture, found by name)
+from test_host_package_builder_ci_pages import armed, paged_builder
 
 
 def test_every_reason_is_a_plan_value_and_none_is_trust():
@@ -32,24 +34,16 @@ def test_every_reason_is_a_plan_value_and_none_is_trust():
     }
 
 
-@pytest.mark.parametrize(
-    "runs",
-    [
-        GREEN,
-        RED,
-        PENDING,
-        [],
-        GREEN + RED,
-        [{"name": "prek", "status": "completed", "conclusion": "cancelled"}],
-        [{"name": "other", "status": "completed", "conclusion": "failure"}],
-    ],
-)
-def test_the_grading_matches_the_shared_gate(runs):
-    assert cg.ci_verdict(runs, frozenset({"prek"})) == shared_gate.ci_verdict(
-        runs, frozenset({"prek"})
-    )
+def test_a_gate_whose_jobs_all_passed_grades_pass_as_checkout_sync_grades_it(lab):  # noqa: F811
+    origin, *_ = lab
+    sha = origin.commit("a")
+    run, github = paged_builder(lab)
+    jobs = [
+        {"name": name, "status": "completed", "conclusion": "success"}
+        for name in (CI_PROVE_JOB, *CI_GATE_NEEDS_JOBS)
+    ]
+    github.runs[sha] = jobs
+    gate = frozenset({CI_GATE_NAME})
 
-
-def test_the_conclusion_sets_match_the_shared_gate():
-    assert cg._CI_PASS_CONCLUSIONS == shared_gate._CI_PASS_CONCLUSIONS
-    assert cg._CI_NO_VERDICT_CONCLUSIONS == shared_gate._CI_NO_VERDICT_CONCLUSIONS
+    assert ci_verdict(parse_check_runs(jobs), gate) == "pass"
+    assert armed(run).verdict(sha, gate) == "pass"

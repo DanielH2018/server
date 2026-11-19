@@ -761,7 +761,7 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
       targets resolve the vendored workloads by name. The takeover census and the diff before
       each flip show every field that changes.
     - **Source-tree guards still read them.**
-      `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
+      `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_outside_the_runner_namespace`
       runs `git grep` over `ansible/`. H1.3 and H1.5a therefore grep their vendored file for
       each kind such a guard forbids, and strip or exempt each match in the same PR.
     - **One render-time guard reads them (#8447).**
@@ -3044,7 +3044,7 @@ fixed. Each confirmation was measured at `70591c307` or from the upstream source
       annotation alone marks every case that can persist.
 - **H1-R10-04 (high)** H1.7b depended on an R2 rule-3 exemption that no slice recorded.
   *Refuted in its central claim.* `grep -n 'BackupTarget\|PLACEHOLDER_KIND_EXEMPT'
-  docs/target-architecture/render/r2-secret-placeholders.md` returns matches:
+  docs/archive/render/r2-secret-placeholders.md` returns matches:
     - rule 3's own text: "H1 adds the first two pairs, for its BackupTargets (Open question
       10)";
     - R2's *Open questions* 10, which accepts `PLACEHOLDER_KIND_EXEMPT` with

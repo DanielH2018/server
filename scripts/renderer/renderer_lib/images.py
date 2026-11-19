@@ -18,7 +18,7 @@ No Kustomization applies these files. D5.4a2's `images` job builds and pushes th
 `ghcr_refs` points each flux-owned tag's refs to a built image at that push, with
 `imagePullPolicy: IfNotPresent` beside each (D5.4b). An Ansible-owned tag keeps the in-cluster
 registry and its `Always`. `pull_policy_offences` refuses a GHCR content-tag ref whose policy is
-`Always` or unset. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Images built
+`Always` or unset. The plan is docs/archive/deploy/d5-bulk-move.md, *Images built
 by CI (D5.4)*.
 """
 

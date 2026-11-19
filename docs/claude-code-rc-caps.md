@@ -92,7 +92,8 @@ backward from a measured `MemAvailable` and fleet size. Re-derive it there, not 
 ## The fleet's CPU weight
 
 The same drop-in sets `CPUWeight=` from `claude_code_fleet_cpu_weight`. At the root cgroup,
-`user.slice` competes with `system.slice` (100), where k3s runs, and `kubepods.slice` (625).
+`user.slice` competes with `system.slice`, where k3s runs, and `kubepods.slice`, which kubelet
+weights at 625 on daniel-box's 16 cores.
 On 2026-11-18 a dozen sessions' pytest runs saturated daniel-box's 16 cores. etcd applies then
 took 150-480 ms, and kube-controller-manager lost its leader lease three times in five minutes,
 each time exiting k3s ([#9060](https://github.com/DanielH2018/server/issues/9060)).
@@ -102,14 +103,20 @@ each time exiting k3s ([#9060](https://github.com/DanielH2018/server/issues/9060
 - **A weight on `k3s.service` alone ranks k3s only inside `system.slice`.** The k3s components
   set one too (`k3s_cpu_weight`), because the docs-refresh run's pytest and MkDocs are
   `system.slice` siblings of k3s.
+- **A weight on `k3s.service` does not rank `system.slice` against the pods.** At systemd's
+  default of 100, busy pods outweighed the slice that holds etcd and the controllers about six
+  to one ([#9075](https://github.com/DanielH2018/server/issues/9075)). Both k3s components
+  therefore set `system.slice`'s own weight, `k3s_system_slice_cpu_weight`, above kubelet's
+  `kubepods.slice` weight on either node.
 - **A weight divides CPU only under contention.** An idle box still gives the fleet every core,
   which is why neither drop-in sets `CPUQuota=`.
 
 To verify a weight deploy, read the kernel's value, not only the unit's:
 
 ```bash
-systemctl show -p CPUWeight user.slice k3s.service
-cat /sys/fs/cgroup/user.slice/cpu.weight /sys/fs/cgroup/system.slice/k3s.service/cpu.weight
+systemctl show -p CPUWeight user.slice system.slice k3s.service
+cat /sys/fs/cgroup/user.slice/cpu.weight /sys/fs/cgroup/system.slice/cpu.weight \
+    /sys/fs/cgroup/system.slice/k3s.service/cpu.weight
 ```
 
 ## Verifying a caps deploy from `cgroupfs`

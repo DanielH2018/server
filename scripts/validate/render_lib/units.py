@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-"""Render every systemd unit under k8s/roles/ and hosts/, and verify the output.
+"""The units family of `render_templates.py`: every systemd unit, rendered and verified.
 
-`shell_templates.py` covers `*.sh.j2` and `k8s_manifests.py` covers `k8s/roles/*/templates/*.j2`;
-`*.service.j2` / `*.timer.j2` fell between them — nothing rendered a unit template or checked the
-result, so a typo'd directive key reached a live host with `daemon_reload: true` reporting
-success and systemd loading the unit anyway, ignoring the bad line with only a journal warning.
+Covers the unit templates under k8s/roles/ and every unit the host packages under hosts/ emit.
+Without it a typo'd directive key reaches a live host with systemd loading the unit anyway,
+ignoring the bad line with only a journal warning.
 
 Render context = `lib.render_context`: StubUndefined (`scripts.lib.render_guard`) under the
 OWNING ROLE's `defaults/main.yml` under `inventory/group_vars/all.yml`, every value
@@ -30,7 +28,7 @@ target that systemd-analyze cannot read outside its normal unit search path, and
 check) is deliberately not a failure — this hook proves the unit PARSES, not that its ExecStart
 binary exists on the render host.
 
-Structural check only, same scope as `shell_templates.py`: this catches a typo'd DIRECTIVE KEY,
+Structural check only, same scope as the shell family: this catches a typo'd DIRECTIVE KEY,
 not a wrong value (`TimeoutStartSec=45min` when the intent was 60) or a misspelled `OnFailure=`
 TARGET — `--recursive-errors=no` suppresses the line that would name a target unit systemd can't
 find.
@@ -42,7 +40,7 @@ laid out beside it: each host package installs with every shared package, so a h
 over the shared `homelab-updater.timer` is verified over that timer. A component no host
 package lists yet renders through a package of its own. The run fails unless it verified
 `homelab-updater.timer`, so a host render that emits nothing cannot pass (H3.2c,
-`docs/target-architecture/host/h3-pi-pilot.md`).
+`docs/archive/host/h3-pi-pilot.md`).
 
 Also renders every polkit rule (`*.rules.j2`) under k8s/roles/ — JavaScript that the
 roles' tests content-check but whose syntax nothing else checks — and runs `node --check` on
@@ -52,18 +50,18 @@ absence must not read as "checked"; the polkit rules are checked by a tool GitHu
 images always carry (they run Actions itself on Node.js), so the skip path is a
 local-workstation fallback, not a gate this repo depends on being armed in CI.
 
-Run directly or via the ``validate-unit-templates`` prek hook. Exits non-zero if any unit fails
-to render, if a host package fails to render or emits no `homelab-updater.timer`, if `systemd-analyze` reports a matching diagnostic, if a polkit rule fails to
-render, or if `node --check` flags one. Exits non-zero if `systemd-analyze` itself isn't
-available on PATH (fail loud, matching `shell_templates.py`'s policy — a missing verifier must
-not silently degrade to "renders, so it's fine").
+A failure is a unit that fails to render, a host package that fails to render or emits no
+`homelab-updater.timer`, a matching `systemd-analyze` diagnostic, a polkit rule that fails to
+render or that `node --check` flags, and a missing `systemd-analyze` (fail loud, matching the
+shell family's policy — a missing verifier must not silently degrade to "renders, so it's
+fine").
 """
 
 import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable
 import tempfile
 from pathlib import Path, PurePosixPath
 
@@ -72,10 +70,8 @@ from pathlib import Path, PurePosixPath
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from validate.validate_lib.ok_lines import ok_printer
-from lib.cli_help import answer_help
 from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context
 from lib.repo_paths import K8S_ROLES
@@ -355,7 +351,7 @@ def check_host_units(
     return checked, failures
 
 
-def main(argv: Sequence[str] = ()) -> int:
+def run(ok: Callable[[str], None]) -> tuple[int, int]:
     """Render every discovered unit template, then `systemd-analyze verify` the output.
 
     Also renders and `node --check`s every polkit rule (`discover_rules`) — a missing `node`
@@ -363,36 +359,32 @@ def main(argv: Sequence[str] = ()) -> int:
     docstring for why the two missing-tool cases are handled differently).
 
     Args:
-        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
-            template as an `[ok]` line; by default only failures and the summary print.
+        ok: Prints one clean unit's or rule's `[ok]` line.
 
     Returns:
-        0 if every unit rendered clean and verified clean, and every polkit rule either rendered
-        clean or was skipped, 1 otherwise (including when systemd-analyze is missing from PATH
-        or no unit templates were found).
+        (unit templates, host package units and polkit rules checked, failures). A missing
+        systemd-analyze or an empty discovery is one failure.
     """
-    answer_help(__doc__, list(argv))
-    ok = ok_printer(argv)
     systemd_analyze_bin = shutil.which("systemd-analyze")
     if not systemd_analyze_bin:
         print(
-            "[FAIL] systemd-analyze not found on PATH. Failing closed rather than silently "
+            "  [FAIL] systemd-analyze not found on PATH. Failing closed rather than silently "
             "skipping the render — a template with a typo'd key must not read as checked when "
             "nothing checked it.",
             file=sys.stderr,
         )
-        return 1
+        return 0, 1
 
     templates = discover_templates()
     if not templates:
         print(
-            f"No *.service.j2 / *.timer.j2 templates found under {K8S_ROLES}",
+            f"  [FAIL] no *.service.j2 / *.timer.j2 templates found under {K8S_ROLES}",
             file=sys.stderr,
         )
-        return 1
+        return 0, 1
 
     failures = 0
-    with tempfile.TemporaryDirectory(prefix="validate-unit-templates-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="render-templates-units-") as tmp:
         out_dir = Path(tmp)
         for path in templates:
             rel = path.relative_to(REPO)
@@ -430,12 +422,4 @@ def main(argv: Sequence[str] = ()) -> int:
         failures += host_failures
 
     rules_checked = len(rules) if node_bin else 0
-    print(
-        f"\n{len(templates)} unit template(s), {host_units} host package unit(s) and "
-        f"{rules_checked} polkit rule(s) checked, {failures} failure(s)."
-    )
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    return len(templates) + host_units + rules_checked, failures

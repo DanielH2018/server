@@ -3,7 +3,7 @@
 Run: uv run pytest evals/tests/test_review_outcomes.py
 
 Offline and free: this only checks each row's shape, matching the
-`scripts/validate/tests/test_validate_compose_templates.py` pattern of proving the guard
+`scripts/validate/tests/test_render_compose.py` pattern of proving the guard
 via review_metrics.validate_row rather than trusting the committed file to stay clean.
 """
 

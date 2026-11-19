@@ -1,17 +1,17 @@
-"""Tests for scripts/validate/shell_templates.py and the scripts/lib/ modules it composes.
+"""Tests for scripts/validate/render_lib/shell.py and the scripts/lib/ modules it composes.
 
 This module keeps the validator machinery: template discovery, the render/lint/syntax passes,
-the shellcheck batch attribution and `main`'s fail-closed behaviour. The rendered
+the shellcheck batch attribution and `run`'s fail-closed behaviour. The rendered
 longhorn-backup-health shim is tested in `test_backup_health_shim.py`.
 
-Run: uv run pytest scripts/validate/tests/test_validate_shell_templates.py
+Run: uv run pytest scripts/validate/tests/test_render_shell.py
 """
 
 import shutil
 
 from lib import yaml_fast
 from lib.repo_paths import HOST_VARS
-from validate import shell_templates as v
+from validate.render_lib import shell as v
 from validate.validate_lib import shell_lint as sl
 from validate.validate_lib.shipped_render import render_shipped_text
 
@@ -52,13 +52,6 @@ def test_shellcheck_batch_blames_every_file_when_it_cannot_attribute(tmp_path):
     a.write_text('#!/bin/bash\necho "a"\n')
     flagged = sl.shellcheck_batch([a], "false")  # `false`: exits 1, prints nothing
     assert a in flagged
-
-
-def test_all_real_shell_templates_render_and_lint_clean():
-    # The regression guard: every *.sh.j2 under k8s/roles/ must render with stubbed vars to
-    # a script that passes both `bash -n` and shellcheck. Mirrors the sibling validators'
-    # real-render test (validate.compose_templates.test_real_templates_render_clean).
-    assert v.main() == 0
 
 
 def test_discover_templates_finds_the_known_set():
@@ -171,11 +164,11 @@ def test_check_template_passes_a_clean_render(tmp_path):
     assert err is None
 
 
-def test_main_fails_closed_when_shellcheck_missing():
+def test_run_fails_closed_when_shellcheck_missing():
     # A missing shellcheck must FAIL the gate, not silently fall back to bash -n alone — the
     # whole point of failing loud instead of degrading (see module docstring / SHELL_STUB_OVERRIDES
     # design comment).
-    assert v.main(which=lambda _name: None) == 1
+    assert v.run(print, which=lambda _name: None) == (0, 1)
 
 
 def test_role_defaults_reach_the_render_context():

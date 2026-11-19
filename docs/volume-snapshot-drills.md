@@ -18,7 +18,7 @@ paragraph here disagrees with it, the script is right.
 Every step that writes to the cluster or to `DEPLOY_HOLD` is **operator-only**. The agent's
 permissions deny `sudo` and every `kubectl` write, and plain `kubectl` is read-only. The
 design and the reasoning behind each step are in
-`docs/target-architecture/deploy/d5-bulk-move.md`, *The revert runbook (D5.2c)*.
+`docs/archive/deploy/d5-bulk-move.md`, *The revert runbook (D5.2c)*.
 
 The runbook starts from a stateful hold. When a failed revision R changed a snapshot role,
 `promote` writes `DEPLOY_HOLD` as `<R> stateful=<names>`, does **not** reset `prod`, and
@@ -198,7 +198,7 @@ root and of `speedtest` before step 2.
 
 ### Drill record
 
-The full evidence for each drill is in `docs/target-architecture/deploy/d5-bulk-move.md`.
+The full evidence for each drill is in `docs/archive/deploy/d5-bulk-move.md`.
 
 - **Wave B, before the flux PR.** [#5605](https://github.com/DanielH2018/server/pull/5605)
   broke speedtest's readinessProbe, and the revert

@@ -10,6 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 
 import await_ci
 import pytest
+from ci_verdict import CheckRun
 
 from deploy_tools.land_lib import options
 
@@ -17,7 +18,7 @@ REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
 def _run(name, status, conclusion):
-    return {"name": name, "status": status, "conclusion": conclusion}
+    return CheckRun(name, status, conclusion)
 
 
 def test_green_sha_is_clean():

@@ -17,7 +17,7 @@
 
 It imports the stdlib and `lib.cli_help`, which is stdlib only itself, so the job that holds
 `packages: write` installs nothing and imports no renderer code. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+docs/archive/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
 
 Run: python3 scripts/deploy_tools/ci_images.py plan out
      python3 scripts/deploy_tools/ci_images.py push out

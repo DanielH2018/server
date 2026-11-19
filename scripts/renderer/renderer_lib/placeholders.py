@@ -34,7 +34,7 @@ renders it. `PlaceholderRender.sops_manifests` keeps each dropped file's sentine
 `sops-manifest-entries` check in `sops_entries.py`.
 
 `docs/homelab-render.md` is the operator's page, and
-`docs/target-architecture/render/r2-secret-placeholders.md` the plan.
+`docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
 import sys as _sys

@@ -1,6 +1,6 @@
 """List the managed fields a Flux takeover strips or leaves behind, from two JSON inputs (H1.1j).
 
-The operator runs this before each H1 flip (`docs/target-architecture/host/h1-cluster-config-to-flux.md`,
+The operator runs this before each H1 flip (`docs/archive/host/h1-cluster-config-to-flux.md`,
 *A takeover census before each flip*). It reads two inputs and makes no API call of its own:
 
 - LIVE: the tag's live objects, from `get -o json --show-managed-fields`.
