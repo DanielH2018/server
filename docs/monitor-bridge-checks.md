@@ -263,7 +263,7 @@ checks each gate suppresses.
   `now()`, so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing.
   `down` once it is older than `HA_HEARTBEAT_MAX_AGE` (300 s): a wedged-but-running HA (HTTP
   `:8123` up, scheduler stuck) that the container healthcheck cannot see. **`HA_CONSECUTIVE` (2)
-  adds consecutive-cycle hysteresis** (the idiom of `UPS_CONSECUTIVE`): a planned redeploy takes
+  adds consecutive-cycle hysteresis** (the idiom the bridge's UPS check used): a planned redeploy takes
   the API unreachable for ~120 s and then leaves the scheduler a beat behind, so one cycle reads
   unreachable OR stale. The first down cycle pushes `up` with a "down streak n/N" `msg`, the
   second pages, and one fresh read resets the streak. The check catches the unreachable-API error
