@@ -11,7 +11,8 @@
       "labels": {"alertname": "WarningUnresolved", "check": "systemd-units", "escalated_from": "SystemdUnitsFailed", "escalated_service": "daniel-box", "origin": "daniel-box", "service": "alert-escalation", "severity": "critical", "unit": "nut-monitor.service"},
       "annotations": {
         "summary": "SystemdUnitsFailed (daniel-box, nut-monitor.service) has fired as a warning for 48 hours.",
-        "description": "The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dnut-monitor.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: \"false\"."
+        "description": "Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: \"false\".",
+        "runbook_url": "https://docs.local.example.com/alert-runbooks/#warningunresolved"
       },
       "startsAt": "2026-11-17T09:00:00Z",
       "endsAt": "0001-01-01T00:00:00Z"
@@ -21,7 +22,8 @@
       "labels": {"alertname": "WarningUnresolved", "check": "systemd-units", "escalated_from": "SystemdUnitsFailed", "escalated_service": "daniel-box", "origin": "daniel-box", "service": "alert-escalation", "severity": "critical", "unit": "homelab-claude-pipeline-timeline.service"},
       "annotations": {
         "summary": "SystemdUnitsFailed (daniel-box, homelab-claude-pipeline-timeline.service) has fired as a warning for 48 hours.",
-        "description": "The warning SystemdUnitsFailed for daniel-box has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-box&q=unit%3Dhomelab-claude-pipeline-timeline.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: \"false\"."
+        "description": "Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: \"false\".",
+        "runbook_url": "https://docs.local.example.com/alert-runbooks/#warningunresolved"
       },
       "startsAt": "2026-11-17T09:00:00Z",
       "endsAt": "0001-01-01T00:00:00Z"
@@ -31,7 +33,8 @@
       "labels": {"alertname": "WarningUnresolved", "check": "systemd-units", "escalated_from": "SystemdUnitsFailed", "escalated_service": "daniel-server", "origin": "daniel-server", "service": "alert-escalation", "severity": "critical", "unit": "nut-monitor.service"},
       "annotations": {
         "summary": "SystemdUnitsFailed (daniel-server, nut-monitor.service) has fired as a warning for 48 hours.",
-        "description": "The warning SystemdUnitsFailed for daniel-server has fired for 48 hours, and its Discord repeats have not cleared it. Karma lists it with its own description and runbook: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed&q=service%3Ddaniel-server&q=unit%3Dnut-monitor.service This page resolves when the warning does. If the warning holds by design, give its rule the label escalate: \"false\"."
+        "description": "Fix the warning SystemdUnitsFailed for daniel-server, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: \"false\".",
+        "runbook_url": "https://docs.local.example.com/alert-runbooks/#warningunresolved"
       },
       "startsAt": "2026-11-17T09:00:00Z",
       "endsAt": "0001-01-01T00:00:00Z"

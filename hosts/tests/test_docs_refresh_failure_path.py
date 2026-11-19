@@ -8,6 +8,8 @@ test can go red:
 - **prepare_tree leaves no ignored file behind**, so a role that master deleted but whose
   `__pycache__` survived is gone from the tree the generators and the suite read. The rejecting
   half runs the same body without `clean -x` and requires the leftover role directory.
+- **stray_writes names a write outside the staged paths**, and is silent when every change is
+  staged. The clean tree would otherwise drop that write with nothing said.
 - **say_failure names the failing hook**, and still says something when no hook token matches.
 - **say_suite_failure names the failing node ids**, and falls back to the tail without them.
 - **keep_failure_log keeps one log per failing run**, pruned to the newest few.
@@ -36,6 +38,7 @@ SOURCED = (
     "keep_failure_log",
     "keep_tree_evidence",
     "prepare_tree",
+    "stray_writes",
     "build_docs_failure",
 )
 
@@ -127,6 +130,31 @@ def _stage_a_regeneration(repo: Path, stamp: Path) -> str:
     )
     run.check_returncode()
     return run.stdout
+
+
+def test_stray_writes_with_every_change_staged_is_clean(tmp_path):
+    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
+    _stage_a_regeneration(repo, stamp)
+    run = _bash("stray_writes", repo, stamp)
+    assert run.stdout == "", run.stdout
+
+
+def test_stray_writes_names_an_unstaged_and_an_untracked_write_is_flagged(tmp_path):
+    repo, stamp = _tree(tmp_path), tmp_path / "stamp"
+    _stage_a_regeneration(repo, stamp)
+    (repo / "docs/reference/topology.md").write_text("a generator rewrote this\n")
+    (repo / "k8s-glance.md").write_text("written outside the staged paths\n")
+    run = _bash("stray_writes", repo, stamp)
+    assert "docs/reference/topology.md" in run.stdout, run.stdout
+    assert "k8s-glance.md" in run.stdout, run.stdout
+    assert "state.md" not in run.stdout, run.stdout
+
+
+def test_the_stray_check_degrades_the_run():
+    """The production call site: the pair above proves a function nothing might call."""
+    gate = SCRIPT[SCRIPT.index('STRAY="$(stray_writes)"') :]
+    gate = gate[: gate.index("\nfi\n")]
+    assert "GENERATORS_OK=0" in gate, gate
 
 
 def _alert(log_text: str, tmp_path: Path, say: str = "say_failure") -> str:

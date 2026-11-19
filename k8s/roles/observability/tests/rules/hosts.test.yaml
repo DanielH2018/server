@@ -48,6 +48,7 @@ tests:
             exp_annotations:
               summary: "daniel-box / is 95% full."
               description: "daniel-box has its / filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
           - exp_labels:
               instance: daniel-server
               job: node
@@ -58,6 +59,7 @@ tests:
             exp_annotations:
               summary: "daniel-server /boot/efi is 92% full."
               description: "daniel-server has its /boot/efi filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
   # HostMemoryHigh. box is 95% used and fires; server at 85% does not.
   - interval: 1m
     input_series:
@@ -1040,6 +1042,7 @@ tests:
             exp_annotations:
               summary: "The UPS is on battery."
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
   # During an outage only UPSOnBattery speaks. Charge 30%, runtime 100s and the RB flag would
   # each fire on their own, and `unless` holds all three while OB is 1.
   - interval: 1m
@@ -1064,6 +1067,7 @@ tests:
             exp_annotations:
               summary: "The UPS is on battery, 30% charged, about 1m 40s of runtime left."
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       - alertname: UPSBatteryLow
         eval_time: 15m
         exp_alerts: []
@@ -1100,6 +1104,7 @@ tests:
             exp_annotations:
               summary: "The UPS battery is at 40%."
               description: "The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10 minutes. Read the UPS on the NUT host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       - alertname: UPSRuntimeLow
         eval_time: 12m
         exp_alerts:
@@ -1111,6 +1116,7 @@ tests:
             exp_annotations:
               summary: "The UPS has 2m 0s of runtime."
               description: "The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for 10 minutes. The battery has aged. Read the UPS on the NUT host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
       - alertname: UPSReplaceBattery
         eval_time: 12m
         exp_alerts:
@@ -1122,6 +1128,7 @@ tests:
             exp_annotations:
               summary: "The UPS asks for a battery replacement."
               description: "NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs replacing. This trips before charge or runtime read low."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsreplacebattery
   # UPSBatteryLow at exactly 50% and UPSRuntimeLow at exactly 300s are not under the floor.
   - interval: 1m
     input_series:
@@ -1162,6 +1169,7 @@ tests:
             exp_annotations:
               summary: "The UPS runtime series is absent."
               description: "The NUT exporter answers its scrape but publishes no runtime series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
           - exp_labels:
               arm: replace-battery
               instance: 'nut-exporter.homelab.svc:9199'
@@ -1171,6 +1179,7 @@ tests:
             exp_annotations:
               summary: "The UPS replace-battery series is absent."
               description: "The NUT exporter answers its scrape but publishes no replace-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
           - exp_labels:
               arm: on-battery
               instance: 'nut-exporter.homelab.svc:9199'
@@ -1180,6 +1189,7 @@ tests:
             exp_annotations:
               summary: "The UPS on-battery series is absent."
               description: "The NUT exporter answers its scrape but publishes no on-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
   # UPSSensorAbsent with the nut scrape down (up 0) publishes nothing and stays silent:
   # ScrapeTargetDown owns a dead upsd or exporter.
   - interval: 1m

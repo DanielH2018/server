@@ -27,6 +27,7 @@ groups:
             Traefik serves a certificate for {{ $labels.cn }} that expires in
             {{ $value | humanize }} days. Read Traefik's ACME log for a failed renewal, and
             `probe.py cert <host>` for the chain it serves.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#certexpiringsoon
       # `traefik5xx`: a backend's 5xx share over 5 minutes above 5% (TRAEFIK_5XX_PCT), behind the
       # volume floor.
       - alert: TraefikBackend5xx
@@ -92,7 +93,7 @@ groups:
         annotations:
           summary: Over 5% of Traefik backend {{ $labels.backend }}'s requests take longer than 5s.
           description: >-
-            In {{ $value }} of the last 10 minutes, over 5% of the requests to
+            In {{ $value | printf "%.0f" }} of the last 10 minutes, over 5% of the requests to
             {{ $labels.backend }} in the trailing 5 minutes finished after the 5.0s histogram
             bucket. The backend is slow, not the edge. Its own log and its resource use are the
             next reads.

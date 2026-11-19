@@ -650,6 +650,11 @@ registration. That suffix exits 2 with a stderr reason when `run-hook.sh` is not
 passes every other exit through. The other hooks keep the non-blocking error, because exit 2 on
 `Stop` would keep the session working forever.
 
+The posture with no flags exits 0 when its hook crashes, and it keeps the cause. On a non-zero
+exit it prints `{"systemMessage":"[<name>] failed: <last stderr line>"}`, which reaches the
+operator. The hook's own stdout passes through either way. Every message a hook hands the
+harness opens with `[<hook>] `, built by `.claude/hooks/_hook_common.py:tagged`.
+
 ### `bash-pretool` (PreToolUse, Bash)
 
 It *decides nothing itself*. It is the one process that runs the Bash arms:
@@ -662,8 +667,10 @@ Each arm runs under its own `try/except` and contributes a `(decision, reason)` 
 nothing. `bash-pretool.py` then merges them the way the harness merges separate hooks — `deny`
 over `ask` over `allow`, the earliest arm at the winning level keeping the reason — and emits
 one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
-`additionalContext`. An arm that raises loses its own verdict, keeps the others, and says so
-on stderr naming itself.
+`additionalContext`. An arm that raises loses its own verdict and keeps the others. It names
+itself twice: its traceback goes to stderr, and the one line
+`[bash-pretool] arm <arm> raised <Exc>: <msg>` opens that `additionalContext`. The harness
+drops stderr from a hook that exits 0, so the line is how the model learns a guard was skipped.
 
 `uv-python` (an arm since #3286) is one of the two arms that rewrite rather than judge. The
 rewrite arms run LAST, so every decision arm still reads the command the session typed.

@@ -59,14 +59,10 @@ def test_the_issue_fetch_carries_operator_decisions_and_drops_bookkeeping():
         ),
         f"{brief_mod.WORKED_BY}worktree-fanout-7`",
         *_bodies(plan_touch(open_issue, "session")),
-        *_bodies(
-            plan_defer(open_issue, until=date(2026, 11, 1), existing_labels=set())
-        ),
+        *_bodies(plan_defer(open_issue, until=date(2026, 11, 1))),
         *_bodies(
             plan_defer(
-                {**open_issue, "labels": [{"name": "not-before:2026-11-01"}]},
-                until=None,
-                existing_labels=set(),
+                {**open_issue, "fields": {"Not Before": "2026-11-01"}}, until=None
             )
         ),
         *_bodies(plan_manual(open_issue, clear=False)),

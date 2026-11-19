@@ -16,6 +16,7 @@ stages a rule can see, and a quoted `;` that must NOT split. Run:
 """
 
 import io
+import json
 import os
 import sys
 import tempfile
@@ -26,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from _hook_common import (
     Unsplittable,
+    emit_pretooluse_decision,
     gh_repo,
     primary_checkout,
     read_payload,
@@ -247,3 +249,9 @@ def test_primary_checkout_is_none_for_a_bare_repo_worktree(tmp_path):
 
 def test_primary_checkout_is_none_outside_git(tmp_path):
     assert primary_checkout(str(tmp_path)) is None
+
+
+def test_a_decision_reason_opens_with_the_deciding_hook(capsys):
+    emit_pretooluse_decision("block-protected-edits", "deny", "no")
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecisionReason"] == "[block-protected-edits] no"

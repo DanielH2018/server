@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-agent component. Started by homelab-kubelet-shutdown-lock.timer.
+[Unit]
+Description=Check that kubelet holds its shutdown delay lock and write the textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=kubelet-shutdown-lock
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+ExecStart=/usr/lib/homelab/kubelet-shutdown-lock-check
