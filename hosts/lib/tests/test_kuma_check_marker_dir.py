@@ -6,15 +6,26 @@ Run: uv run pytest hosts/lib/tests/test_kuma_check_marker_dir.py
 import json
 
 import pytest
-import yaml
 from _reconcile_host import Node
 
-from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 DIRECTORY = "/var/lib/kuma-check"
 HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
-COMPONENT = REPO / "hosts/components/kuma-check-dir/component.yml"
+# Every check that wrote a down marker under DIRECTORY, from the repo's history.
+CHECKS = (
+    "github-ruleset-drift",
+    "github-interaction-limit",
+    "setup-drift",
+    "secret-rotation-audit",
+    "loki-read-route",
+    "loki-route-witness",
+    "render-records",
+    "manifest-prune",
+    "live-drift",
+    "remember-logs",
+)
+MARKERS = tuple(f"{name}.down" for name in CHECKS)
 
 
 def kuma_check_legacy(host: str) -> list[dict]:
@@ -22,11 +33,6 @@ def kuma_check_legacy(host: str) -> list[dict]:
         host_mode.render_host(host).files["/usr/lib/homelab/manifest.json"][0]
     )
     return [e for e in manifest["legacy"] if e.get("path", "").startswith(DIRECTORY)]
-
-
-def marker_names() -> list[str]:
-    paths = [e["path"] for e in yaml.safe_load(COMPONENT.read_text())["legacy"]]
-    return [p.rsplit("/", 1)[1] for p in paths if p != DIRECTORY]
 
 
 @pytest.mark.parametrize("host", HOSTS)
@@ -41,14 +47,12 @@ def test_a_marker_written_after_its_entry_retired_goes_with_the_directory(
     legacy = kuma_check_legacy(host)
     node = Node(tmp_path)
     node.manifest["handoffs"] = []
-    node.manifest["legacy"] = [
-        {"path": f"{DIRECTORY}/{name}"} for name in marker_names()
-    ]
+    node.manifest["legacy"] = [{"path": f"{DIRECTORY}/{name}"} for name in MARKERS]
     first = node.run()
     assert first.returncode == 0, first.stderr
     stale = node.root / DIRECTORY.lstrip("/")
     stale.mkdir(parents=True)
-    for name in marker_names():
+    for name in MARKERS:
         (stale / name).write_text("")
     node.manifest["legacy"] = legacy
 
