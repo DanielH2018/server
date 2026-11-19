@@ -27,6 +27,8 @@ ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_py
 Restart=on-failure
 RestartSec=5
 SyslogLevel=notice
+# Without it, journald and syslog tag every line `uv`, the ExecStart binary.
+SyslogIdentifier=deploy-ui
 
 [Install]
 WantedBy=multi-user.target
