@@ -10,8 +10,9 @@
 #
 # extractVersion is load-bearing: metallb/metallb publishes the app (`v0.16.0`) and the Helm
 # chart (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of
-# the app. Anchoring on a leading `v` reads app releases only.
-# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
+# the app. Anchoring on a leading `v` reads app releases only. The `v` sits inside the version
+# group because Renovate writes the extracted version back here, and the url needs the tag.
+# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^(?<version>v\d+\.\d+\.\d+)$
 k3s_metallb_version: v0.16.0
 metallb_vendored_manifests:
   - name: metallb-native.yaml
