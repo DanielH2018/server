@@ -35,7 +35,7 @@ spec:
             - name: checks
               containerPort: {{ services | metrics_port('autofix-bridge') }}
 {{ hardened_security_context(read_only=true) }}
-          # The settings, as plain values; the credentials come from env-secret.yaml.j2. A
+          # The settings, as plain values; the credentials come from render_secrets. A
           # quoted number belongs here, never in the Secret: Flux's typed patch reads a
           # Secret's "300" back as a number and refuses it (#5574). Only what CHANGED in the
           # move from the Docker compose template is commented.
