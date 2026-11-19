@@ -67,6 +67,7 @@ def test_advice_that_cannot_run_says_why_in_one_line_per_source(tmp_path):
     assert repo_guards.advice(tmp_path).splitlines() == [
         "facts notice skipped: no merge base with origin/master; is it fetched?",
         "removed names skipped: no merge base with origin/master; is it fetched?",
+        "branch adds skipped: no merge base with origin/master; is it fetched?",
     ]
 
     def crash(repo):
