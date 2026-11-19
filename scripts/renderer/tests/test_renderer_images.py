@@ -27,9 +27,10 @@ from renderer.renderer_lib import cluster, images, placeholders
 from renderer.renderer_lib.environment import RenderError
 from renderer.shadow_diff import stub_file_text
 
-# The ten images k8s/image-builder builds; n8n builds two.
-TEN = frozenset(
+# The images k8s/image-builder builds; n8n builds two.
+BUILT_IMAGES = frozenset(
     {
+        "airflow",
         "code-server",
         "homelab-mcp",
         "ical-proxy",
@@ -115,14 +116,14 @@ def _oracle_tag(context, name: str) -> str:
     return expression_content_tag(variables)
 
 
-def test_the_render_writes_all_ten_contexts_and_tags_json(out):
-    assert set(_tags(out)) == TEN
-    assert _contexts(out) == TEN
-    for name in TEN:
+def test_the_render_writes_every_context_and_tags_json(out):
+    assert set(_tags(out)) == BUILT_IMAGES
+    assert _contexts(out) == BUILT_IMAGES
+    for name in BUILT_IMAGES:
         assert (out / images.IMAGES_DIR / name / "Dockerfile").is_file(), name
 
 
-def test_a_render_of_every_target_builds_all_ten():
+def test_a_render_of_every_target_builds_every_image():
     """A render without `--role` names `select_tags(None)`, which must hold every builder.
 
     A builder role that left the render targets would drop its context from the full render,
@@ -132,7 +133,7 @@ def test_a_render_of_every_target_builds_all_ten():
     built = images.render_images(
         placeholders.placeholder_vars(keys), tags=cluster.select_tags(None)
     )
-    assert set(built) == TEN
+    assert set(built) == BUILT_IMAGES
 
 
 def test_a_role_render_writes_only_the_contexts_its_roles_build(tmp_path):
@@ -151,12 +152,12 @@ def test_a_role_render_that_names_no_builder_writes_no_images(tmp_path):
     assert not (out / images.IMAGES_DIR).exists()
 
 
-def test_all_images_writes_all_ten_whatever_the_role_names(tmp_path):
-    """The publish job renders only the flux-owned tags, and its images job builds all ten."""
+def test_all_images_writes_every_image_whatever_the_role_names(tmp_path):
+    """The publish job renders only the flux-owned tags, and its images job builds every one."""
     out = tmp_path / "out"
     argv = ["cluster", "--out", str(out), "--role", "pihole", "--all-images"]
     assert homelab_render.main(argv) == RENDER_OK
-    assert set(_tags(out)) == _contexts(out) == TEN
+    assert set(_tags(out)) == _contexts(out) == BUILT_IMAGES
 
 
 def test_all_images_beside_secret_stubs_is_a_usage_error(tmp_path, capsys):
@@ -180,11 +181,11 @@ def test_a_shared_only_render_with_all_images_passes_the_images_jobs_plan(tmp_pa
     out = tmp_path / "out"
     argv = ["cluster", "--out", str(out), "--shared-only", "--all-images"]
     assert homelab_render.main(argv) == RENDER_OK
-    assert {name for name, _ in ci_images.plan(out)} == TEN
+    assert {name for name, _ in ci_images.plan(out)} == BUILT_IMAGES
     assert bundle_census.census(out, []) == []
 
 
-@pytest.mark.parametrize("name", sorted(TEN))
+@pytest.mark.parametrize("name", sorted(BUILT_IMAGES))
 def test_each_tag_equals_the_content_tag_over_its_written_context(out, name):
     context = out / images.IMAGES_DIR / name
     assert _oracle_tag(context, name) == _tags(out)[name]
@@ -208,7 +209,7 @@ def test_every_consumer_ref_equals_tags_json(out):
         for name, tag in tags.items()
         if f"/{name}:{tag}" in text
     }
-    assert named == TEN
+    assert named == BUILT_IMAGES
     assert images.ref_mismatches(directories, tags) == []
 
 

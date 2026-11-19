@@ -125,9 +125,9 @@ renders for that image, byte for byte as its `data` parses. `DIR/images/tags.jso
 name to its content tag, `sha-<12 hex>`, which image-builder's own expression computes over
 that `data`. The renderer renders each role among the render's tags that includes
 `k8s/image-builder`, because a consumer reads only the images its own role builds. A render
-without `--role` therefore writes all ten. A `--role` render writes the named builders'
-contexts alone, and no `DIR/images/` when it names none (#5374). `--all-images` renders all
-ten whatever `--role` names, and the publish job passes it, because its `images` job builds
+without `--role` therefore writes every one. A `--role` render writes the named builders'
+contexts alone, and no `DIR/images/` when it names none (#5374). `--all-images` renders every
+one whatever `--role` names, and the publish job passes it, because its `images` job builds
 every context. Every placeholder render refuses an `--out` whose `images/` already holds a
 file. A consumer's ref reads its tag
 from the same computation, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS`. No

@@ -43,7 +43,7 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 37152s with 125 Kustomizations, against 19800s). `verify`'s own wait is the same
+# (#5868: 38172s with 128 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
 # let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
 # promotion. The soak's wait cannot shrink to the chain of what changed either: the render
