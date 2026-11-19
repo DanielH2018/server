@@ -8,7 +8,7 @@ Check 9 reads what each job SAID. Check 10 reads whether it ran at all. They are
 separate arms because silence and a bad verdict are different faults with different fixes.
 
 - The **filesystem trim** is Longhorn's `trim` RecurringJob (H2.2c of
-  docs/target-architecture/host/h2-shrink-host-plane.md). Its arm reads the CronJob Longhorn
+  docs/archive/host/h2-shrink-host-plane.md). Its arm reads the CronJob Longhorn
   creates for it, that CronJob's newest Job, and the Job's pod log. The pod log is the evidence,
   because longhorn-manager logs a per-volume failure and can still finish the Job as succeeded.
 - The **B2 deletion accounting** and the **B2 budget listing** are host timers. Each one's arm

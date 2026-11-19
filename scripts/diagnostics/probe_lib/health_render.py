@@ -1,30 +1,28 @@
-"""The render context `probe.py health` resolves a role's workloads with, built once per process.
+"""What `probe.py health` reads off a role's render, built once per process.
 
 `health.py` renders a role's templates to find the workloads it declares, and the alert plane
-reads the role's `containers_list` entry. Both come from the validator module, so this module
-builds that pair once and hands it to every caller.
+reads the role's `containers_list` entry. This module reads the entries once and hands them to
+every caller.
 """
 
-_RENDER_CONTEXT = None
+import functools
 
-from lib.repo_paths import K8S_ROLES  # noqa: E402
+from lib.repo_paths import K8S_ROLES
 
 
-def render_context():
-    """(validator module, containers_list entries), built once per process.
+@functools.cache
+def entries() -> dict[str, dict]:
+    """The `containers_list` entries by name, read once per process.
 
-    The import is deferred because it pulls in PyYAML, jsonschema and the k8s manifest validator,
-    and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
-    0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
-    one role and 0.22s for the slowest (home-assistant) — against the 300s `PROBE_TIMEOUT_S`
-    the notifier allows.
+    The import is deferred because it pulls in PyYAML and the render pieces, and twelve of
+    probe.py's thirteen subcommands never need any of it. Measured on daniel-box: 0.41s to
+    import with the k8s render family, ~5 ms to build one role's context (2026-10-09), 0.02s
+    median to render one role and 0.22s for the slowest (home-assistant) — against the 300s
+    `PROBE_TIMEOUT_S` the notifier allows.
     """
-    global _RENDER_CONTEXT
-    if _RENDER_CONTEXT is None:
-        from validate import k8s_manifests as validator
+    from lib.k8s_roles import k8s_entries
 
-        _RENDER_CONTEXT = (validator, validator.k8s_entries())
-    return _RENDER_CONTEXT
+    return k8s_entries()
 
 
 def rendered_docs(role, roles_dir=K8S_ROLES):
@@ -40,21 +38,21 @@ def rendered_docs(role, roles_dir=K8S_ROLES):
     if not role_dir.is_dir():
         return None
 
-    validator, entries = render_context()
-    if role in validator.SKIP_ROLES or role not in entries:
+    from lib.k8s_roles import SKIP_ROLES, is_manifest_template
+    from lib.render_context import render_context
+    from validate.render_lib.k8s import check_template
+
+    entry = entries().get(role)
+    if role in SKIP_ROLES or entry is None:
         return None
 
     templates = sorted(
-        p
-        for p in (role_dir / "templates").glob("*.j2")
-        if validator.is_manifest_template(p)
+        p for p in (role_dir / "templates").glob("*.j2") if is_manifest_template(p)
     )
-    ctx = validator.render_context(
-        role_dir, overrides={"container_item": entries[role]}, strict=True
-    )
+    ctx = render_context(role_dir, overrides={"container_item": entry}, strict=True)
     docs = []
     for tpl in templates:
-        err, rendered = validator.check_template(role, tpl, ctx)
+        err, rendered = check_template(role, tpl, ctx)
         if err:
             raise RuntimeError(f"{role}/{tpl.name} failed to render: {err}")
         docs += [doc for doc in rendered if isinstance(doc, dict)]

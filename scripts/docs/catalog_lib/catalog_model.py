@@ -6,11 +6,6 @@ one leaf with no first-party dependency beyond ``lib.repo_paths`` — which is w
 derivation modules from having to import the generator they were split out of.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-
 from dataclasses import dataclass
 
 from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES

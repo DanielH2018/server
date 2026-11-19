@@ -18,7 +18,8 @@ import pytest
 
 from lib import yaml_fast
 
-from validate.k8s_manifests import K8S_ROLES, load_yaml
+from lib.render_guard import load_yaml
+from lib.repo_paths import K8S_ROLES
 
 from _k8s_render import render_role_template
 

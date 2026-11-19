@@ -468,16 +468,10 @@ def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_
 
 
 def test_known_deferred_bootstraps_are_satisfied():
-    """Pin four files with deferred-import shapes, so a future
-    change to the evaluator that regresses them fails here specifically, not just in the
-    aggregate test above."""
+    """Pin a file with a deferred-import shape, so a future change to the evaluator that
+    regresses it fails here specifically, not just in the aggregate test above."""
     missing, unresolvable = find_bootstrap_gaps()
     flagged = {f for f, *_ in missing} | {f for f, *_ in unresolvable}
-    for rel in (
-        "scripts/docs/reference/hosts.py",
-        "scripts/infra_map/gen_infra_map.py",
-        "scripts/docs/service_catalog.py",
-        "scripts/dev/k8s_autodeploy_counts.py",
-    ):
+    for rel in ("scripts/dev/k8s_autodeploy_counts.py",):
         path = REPO / rel
         assert path not in flagged, f"{rel} regressed: {flagged}"

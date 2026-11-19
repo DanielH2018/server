@@ -1,14 +1,11 @@
-#!/usr/bin/env python3
-"""Validate every file the renderer writes for a k8s tag, and assert each parses as valid YAML.
+"""The k8s family of `render_templates.py`: every file the renderer writes for a k8s tag.
 
-The compose templates have the same guard (``validate/render_lib/compose.py``), and the k8s
-manifests need it for the same reason. A Jinja indentation bug is exactly the class
-``check-yaml`` misses — it does not render ``.j2`` — so it passes CI and first
-appears as ``error validating data`` partway through an apply, with some objects already applied
-and some not.
+A Jinja indentation bug is exactly the class ``check-yaml`` misses — it does not render
+``.j2`` — so it passes CI and first appears as ``error validating data`` partway through an
+apply, with some objects already applied and some not.
 
 The files are ``render_tag``'s in stub mode, so what this checks is what Flux applies, with a
-stub in place of each secret.
+stub in place of each secret. Structural check only: no SOPS access is needed.
 
 Every parsed object is then validated against the Kubernetes OpenAPI schema for
 ``K8S_SCHEMA_VERSION``, vendored from Kubernetes itself and made strict, so an undefined field is
@@ -16,28 +13,23 @@ an error. That is the check ``--dry-run`` makes against the live API server, mad
 instead: no cluster, and on a PR. A CRD is checked against its vendored catalog schema, and one
 with neither is reported as skipped rather than passed.
 
-Structural check only: secrets are stubbed, so no SOPS access is needed. Run
-directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure
-or invalid YAML.
-
 Also cross-checks every ``persistentVolumeClaim.claimName`` against the PVC names actually
 rendered across the whole tree (a Deployment mounting a PVC nothing declares passes admission —
 PVC binding is a scheduling concern, not a validating webhook — so this is otherwise only caught
-live). Reported as ``[WARN]``, not folded into the exit code. Promote to a hard failure (fold
-`unresolved` into `failures` in main()) once it has run clean — no false positive — for a while.
+live). Reported as ``[WARN]``, not folded into the failure count. Promote to a hard failure (fold
+`unresolved` into `failures` in run()) once it has run clean — no false positive — for a while.
 
 The rendering and parsing pieces live under ``scripts/lib/`` — ``k8s_roles`` (which roles are
 rendered and which are exempt), ``k8s_context`` (Ansible's variable semantics), ``k8s_yaml``
 (the strict loaders, the ``lookup()`` stub and the claim names). The two rule modules
-only this validator imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
+only this family imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
 vendored-CRD checks) and ``k8s_net_rules`` (the two semantic rules no schema can make). The
 filter registration every render guard shares is ``lib.guard_jinja_env``. This module keeps
-``check_template``, the per-template render other guards call, and ``main()``, and re-exports
-every moved name so an existing importer keeps working.
+``check_template``, the per-template render other guards call, and ``run()``.
 """
 
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -45,25 +37,10 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from validate.validate_lib.ok_lines import ok_printer
-from lib.cli_help import answer_help
-from lib.k8s_context import resolve_vars
-from lib.render_context import render_context
-from validate.validate_lib.k8s_net_rules import (
-    HTTPS_ENTRYPOINT,
-    https_route_without_tls,
-    netpol_port_mismatches,
-    service_port_translations,
-    workload_container_ports,
-)
-from lib.repo_paths import K8S_SERVICES
+from lib.guard_jinja_env import template_env
 from lib.k8s_roles import (
-    CALLER_RENDERED_ROLES,
-    K8S_ROLES,
-    NO_MANIFEST_ROLES,
-    SHARED_MANIFEST_DEFAULTS,
     SKIP_ROLES,
     is_manifest_template,
     k8s_entries,
@@ -72,18 +49,6 @@ from lib.k8s_roles import (
     role_dirs,
     shared_default_templates,
 )
-from validate.validate_lib.k8s_schema import (
-    K8S_SCHEMA_VERSION,
-    NO_SCHEMA,
-    crd_schema_error,
-    crd_schema_path,
-    normalise_octal,
-    schema_error,
-)
-from lib.guard_jinja_env import (
-    register_ansible_filters,
-    template_env,
-)
 from lib.k8s_yaml import (
     find_claim_name_refs,
     find_pvc_names,
@@ -91,65 +56,22 @@ from lib.k8s_yaml import (
     parse_docs,
     yaml_error,
 )
-from lib.render_guard import (
-    ALL_VARS,
-    BASE_CONTEXT,
-    SHARED_TPL,
-    dump_numbered,
-    load_yaml,
-    make_env,
-    render_or_error,
+from lib.render_guard import dump_numbered, render_or_error
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
+from validate.validate_lib.k8s_net_rules import (
+    https_route_without_tls,
+    netpol_port_mismatches,
+    service_port_translations,
+    workload_container_ports,
 )
-
-# Re-exported for the ~20 modules that import these from here: the render helpers and inventory
-# anchors from `lib.render_guard`, and everything the six `lib.k8s_*` modules were split into.
-__all__ = [
-    "ALL_VARS",
-    "BASE_CONTEXT",
-    "CALLER_RENDERED_ROLES",
-    "HTTPS_ENTRYPOINT",
-    "K8S_ROLES",
-    "K8S_SCHEMA_VERSION",
-    "NO_MANIFEST_ROLES",
-    "NO_SCHEMA",
-    "SHARED_MANIFEST_DEFAULTS",
-    "SHARED_TPL",
-    "SKIP_ROLES",
-    "check_template",
-    "crd_schema_error",
-    "crd_schema_path",
-    "dump_numbered",
-    "find_claim_name_refs",
-    "find_pvc_names",
-    "https_route_without_tls",
-    "is_manifest_template",
-    "k8s_entries",
-    "load_yaml",
-    "misplaced_template_lookups",
-    "non_manifest_documents",
-    "main",
-    "make_env",
-    "make_lookup",
-    "netpol_port_mismatches",
-    "normalise_octal",
-    "parse_docs",
-    "register_ansible_filters",
-    "render_context",
-    "render_or_error",
-    "resolve_vars",
-    "schema_error",
-    "shared_default_templates",
-    "service_port_translations",
-    "workload_container_ports",
-    "yaml_error",
-]
+from validate.validate_lib.k8s_schema import K8S_SCHEMA_VERSION, NO_SCHEMA, schema_error
 
 
 def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     """Render one manifest template.
 
     Returns (error, docs) — docs is [] whenever error is set, otherwise the manifest's parsed YAML
-    documents (for the PVC claimName cross-reference check in main(), which needs the actual objects
+    documents (for the PVC claimName cross-reference check in run(), which needs the actual objects
     rather than just a pass/fail).
     """
     env = template_env(K8S_ROLES / role / "templates")
@@ -189,7 +111,7 @@ def _manifests(rendered) -> list[tuple[str, str]]:
     ]
 
 
-def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
+def run(ok: Callable[[str], None], render: Callable | None = None) -> tuple[int, int]:
     """Validate what the renderer writes for every k8s role against the k3s schemas.
 
     Reads each tag's stub-mode `render_tag` output, the bytes Flux would apply with a stub for
@@ -198,20 +120,18 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
     PersistentVolumeClaim against every `claimName` reference across all roles.
 
     Args:
-        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
-            template as an `[ok]` line; by default only failures and the summary print.
+        ok: Prints the `[ok]` line of each clean file.
         render: Takes a tag and its stubs and returns its `RenderedTag`. The default is
             `render_tag`; a test passes one that writes a file the validator must reject.
 
     Returns:
-        0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
+        (files checked, failures). A failure is a file that did not render, parse or
+        schema-check clean.
     """
-    answer_help(__doc__, list(argv))
-    # Function-level: the ~20 modules that import this one for its re-exports render nothing.
+    # Function-level: the modules that import this one for `check_template` render no tag.
     from renderer.renderer_lib.cluster import RenderError, render_tag
     from renderer.shadow_diff import stub_vars
 
-    ok = ok_printer(argv)
     entries = k8s_entries()
     stubs = stub_vars()
     render = render or render_tag
@@ -396,9 +316,4 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
             "Vendor one with scripts/validate/refresh_vendored_schemas.py."
         )
 
-    print(f"\n{checked} k8s manifest template(s) checked, {failures} failure(s).")
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    return checked, failures

@@ -1,0 +1,436 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Daily rollups from the Warehouse datasource, which Airflow loads each night from Prometheus (k8s/roles/airflow/CLAUDE.md). Prometheus keeps about three weeks; these panels keep every day since 2026-10-28. Volume figures are filesystem usage of mounted claims, from kubelet, not Longhorn's actual size.",
+  "editable": true,
+  "id": null,
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Each claim's largest used size that day. A claim with no running pod has no row for the day.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key AS metric, \"max\" AS value FROM prom.series_daily WHERE metric = 'volume_used_bytes' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Volume used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Change in each claim's largest used size from the day before.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "sortBy": "Total",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, metric, value FROM (SELECT day::timestamptz AS time, key AS metric, \"max\" - lag(\"max\") OVER (PARTITION BY key ORDER BY day) AS value, day FROM prom.series_daily WHERE metric = 'volume_used_bytes') growth WHERE value IS NOT NULL AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Volume growth per day",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Mean and peak five-minute load average per host.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key || ' mean' AS metric, avg AS value FROM prom.series_daily WHERE metric = 'node_load5' AND $__timeFilter(day) UNION ALL SELECT day::timestamptz, key || ' peak', \"max\" FROM prom.series_daily WHERE metric = 'node_load5' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Load average (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Mean and peak share of memory not available, per host.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key || ' mean' AS metric, avg AS value FROM prom.series_daily WHERE metric = 'node_mem_used_pct' AND $__timeFilter(day) UNION ALL SELECT day::timestamptz, key || ' peak', \"max\" FROM prom.series_daily WHERE metric = 'node_mem_used_pct' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Mean and 95th-percentile GPU busy per host: amdgpu's busy gauge on daniel-box, the complement of i915's RC6 residency on daniel-server.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key || ' mean' AS metric, avg AS value FROM prom.series_daily WHERE metric = 'gpu_busy_pct' AND $__timeFilter(day) UNION ALL SELECT day::timestamptz, key || ' p95', p95 FROM prom.series_daily WHERE metric = 'gpu_busy_pct' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "GPU busy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "95th-percentile CPU package temperature and the day's peak, per host.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, host || ' p95' AS metric, p95_c AS value FROM prom.cpu_temp_daily WHERE $__timeFilter(day) UNION ALL SELECT day::timestamptz, host || ' peak', max_c FROM prom.cpu_temp_daily WHERE $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU package temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Energy the UPS delivered each day, from its load and nominal real power.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, 'kWh' AS metric, kwh AS value FROM prom.ups_energy_daily WHERE $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "UPS energy per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "The day's lowest battery charge and shortest reported runtime. A dip marks an outage or a self-test.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "runtime min"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "charge min"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, CASE metric WHEN 'ups_battery_charge_pct' THEN 'charge min' ELSE 'runtime min' END AS metric, \"min\" AS value FROM prom.series_daily WHERE metric IN ('ups_battery_charge_pct', 'ups_battery_runtime_s') AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "UPS battery",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "warehouse",
+    "history"
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "title": "Homelab history",
+  "uid": "homelab-history",
+  "version": 1
+}

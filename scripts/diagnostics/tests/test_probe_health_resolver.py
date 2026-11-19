@@ -11,7 +11,11 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_health_resolver.py
 import collections
 import functools
 
-from diagnostics.probe_lib import health, health_kubectl
+from diagnostics.probe_lib import health, health_kubectl, health_render
+from lib.k8s_roles import SKIP_ROLES, is_manifest_template
+from lib.render_context import render_context
+from lib.repo_paths import K8S_ROLES
+from validate.render_lib.k8s import check_template
 
 #
 # The derived corpus. The role -> workload mapping is rendered from the manifests rather than
@@ -84,9 +88,7 @@ def _resolved():
     Cached: this renders every role in the tree (~3s), and six tests read it. The tree does
     not change under a test run.
     """
-    from validate import k8s_manifests as validator
-
-    roles = sorted(d.name for d in validator.K8S_ROLES.iterdir() if d.is_dir())
+    roles = sorted(d.name for d in K8S_ROLES.iterdir() if d.is_dir())
     out = {}
     for role in roles:
         targets = health.role_workload_targets(role, _DEFAULT_NS)
@@ -160,9 +162,7 @@ def test_resolver_respects_the_validators_skip_roles():
     """volume-claim and image-builder render only with vars a CALLING role passes, so rendering
     them standalone produces stub-filled manifests. Widening past that boundary would invent
     workload names and report them MISSING."""
-    from validate import k8s_manifests as validator
-
-    for role in sorted(validator.SKIP_ROLES):
+    for role in sorted(SKIP_ROLES):
         assert health.role_workload_targets(role, _DEFAULT_NS) is None, role
 
 
@@ -289,20 +289,18 @@ def _rendered_workloads():
 
 
 def _iter_rendered_workloads():
-    validator, entries = health._render_context()
-    for role_dir in sorted(d for d in validator.K8S_ROLES.iterdir() if d.is_dir()):
+    entries = health_render.entries()
+    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
         role = role_dir.name
-        if role in validator.SKIP_ROLES or role not in entries:
+        if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = validator.render_context(
+        ctx = render_context(
             role_dir, overrides={"container_item": entries[role]}, strict=True
         )
         for tpl in sorted(
-            p
-            for p in (role_dir / "templates").glob("*.j2")
-            if validator.is_manifest_template(p)
+            p for p in (role_dir / "templates").glob("*.j2") if is_manifest_template(p)
         ):
-            err, docs = validator.check_template(role, tpl, ctx)
+            err, docs = check_template(role, tpl, ctx)
             assert not err, f"{role}/{tpl.name}: {err}"
             for doc in docs:
                 if (

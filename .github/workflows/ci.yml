@@ -436,12 +436,15 @@ jobs:
       - name: Run hooks (full sweep)
         # --skip static-ratchet-tests*: the `pytest` job runs those hooks' test files already, and
         # test_static_ratchet_hook.py holds this list equal to prek.toml's ratchet hook ids.
-        # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
-        # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
-        # `real_tree`), so the hook here would be a second render of every k8s role.
+        # RENDER_TEMPLATES_SKIP=k8s: the `pytest` job runs the k8s family of
+        # validate-render-templates over the real tree and asserts it reports no failure
+        # (scripts/validate/tests/test_render_k8s.py, `real_tree`), so the family here would be
+        # a second render of every k8s role. The hook's other families run.
         # --log-file: prek's trace log holds each hook's duration, which the next step tabulates.
         # Without --verbose the job log holds only a failing hook's output.
-        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        env:
+          RENDER_TEMPLATES_SKIP: k8s
+        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
       - name: Write the slowest hooks to the job summary
         if: ${{ !cancelled() }}
         continue-on-error: true

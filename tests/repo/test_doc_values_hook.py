@@ -12,8 +12,8 @@ import tomllib
 
 from _helpers import REPO
 
-from doc_values_lib.readers import staged_paths
-import doc_values
+from docs.doc_values_lib.readers import staged_paths
+from docs import doc_values
 
 HOOK_ID = "regen-doc-values"
 CRON = "hosts/components/docs-refresh/templates/docs-refresh.sh.j2"

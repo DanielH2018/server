@@ -52,17 +52,11 @@ Usage::
     uv run python scripts/docs/gen_doc_fragments.py --fix  # write, exit 1 if any was stale
 """
 
-import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
 
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from dev.k8s_autodeploy_counts import autodeploy_stances
-from fragment_readers import (
+from docs.fragment_readers import (
     container_udp_port,
     host_has_docker,
     hosts_listing_component,
@@ -71,7 +65,7 @@ from fragment_readers import (
     registry_counts,
     registry_record_keys,
 )
-from fragment_renderers import (
+from docs.fragment_renderers import (
     render_autodeploy_coverage,
     render_crowdsec_agent_liveness,
     render_deadman_cadences,
@@ -83,7 +77,7 @@ from fragment_renderers import (
     render_secret_tiers,
     render_traefik_ports,
 )
-from fragments_lib import (
+from docs.fragments_lib import (
     fragments_bridge,
     fragments_deploy,
     fragments_hosts,

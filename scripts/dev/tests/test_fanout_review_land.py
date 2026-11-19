@@ -18,6 +18,7 @@ from deploy_tools.land_lib.outcome import VERDICTS, Cause, Outcome
 from deploy_tools.promote_lib.wait import hold_owner
 from fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
+    MERGE_CONFLICT,
     PR_CI_RED,
     RESUME_VERDICTS,
 )
@@ -135,7 +136,7 @@ def test_a_landing_still_running_at_the_deadline_names_the_wait_to_resume(tmp_pa
 
 
 def test_every_verdict_the_review_acts_on_is_one_land_sh_emits():
-    acted_on = RESUME_VERDICTS | FINISHED_VERDICTS | {PR_CI_RED}
+    acted_on = RESUME_VERDICTS | FINISHED_VERDICTS | {PR_CI_RED, MERGE_CONFLICT}
     assert acted_on <= VERDICTS, sorted(acted_on - VERDICTS)
 
 
@@ -167,7 +168,7 @@ def test_a_start_refused_for_a_live_landing_parks_and_resumes_no_one(tmp_path):
     )
     assert "cc-wait land 4000 --log /tmp/land4000-1.log" in final["result"]
     assert len(run.lands) == 1
-    assert "apply" not in [phase for _, _, phase in run.claude]
+    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
 
 
 HELD = "a" * 40
@@ -232,7 +233,8 @@ def test_only_a_hold_on_the_prs_own_services_resumes_the_implementer(
     run.verdict, run.waits = log, [wait_rc]
     final = pipeline.run_all()
     assert final["result"].startswith(starts), final["result"]
-    assert ("apply" in [phase for _, _, phase in run.claude]) == resumed
+    phases = [phase for _, _, phase in run.claude]
+    assert phases == ["implement", "review", *(["apply"] if resumed else [])]
 
 
 def test_a_give_up_verdict_is_needs_input_and_resumes_nobody(tmp_path):

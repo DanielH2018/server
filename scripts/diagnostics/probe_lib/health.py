@@ -8,7 +8,7 @@
   - `health_alerts.py`  — the alert plane: firing alerts and ingress probes (C7)
   - `health_plumbing.py` — the CoreDNS and Longhorn StorageClass checks keyed by tag (H1)
   - `health_backup_targets.py` — the `longhorn-backup` verdict: the BackupTargets (H1.7b)
-  - `health_render.py` — the render context the workload resolution and alert plane share
+  - `health_render.py` — the entries and the role render the workload resolution and alert plane share
 
 What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
@@ -52,7 +52,7 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST, pi_ssh_argv
 from diagnostics.probe_lib import health_alerts, health_checkout, health_plumbing
 from diagnostics.probe_lib import health_backup_targets, health_cronjob
-from diagnostics.probe_lib.health_render import render_context as _render_context
+from diagnostics.probe_lib.health_render import entries as _entries
 from diagnostics.probe_lib.health_render import rendered_docs
 from diagnostics.probe_lib.health_cronjob import (
     declared_schedule_gated,
@@ -105,7 +105,7 @@ def _role_kind_targets(role, default_namespace, kinds, roles_dir=K8S_ROLES):
     probing the tag name itself, which is what lets `--docker` pick up a Pi service.
 
     The rendered manifests are the only source that cannot drift from what a deploy applies, so
-    this reuses validate.k8s_manifests' own render machinery rather than a second renderer or a
+    this reuses validate.render_lib.k8s' own render machinery rather than a second renderer or a
     hand-written role->workload table. `namespace` comes from each object's own metadata,
     falling back to `default_namespace` for the majority that omit it — the same rule
     `kubectl apply -f` follows. The objects of the role's vendored files count as well
@@ -285,7 +285,7 @@ def _with_alert_plane(role, text, code, ready_at, prom, read):
         text, code = health_plumbing.with_checks(role, text, read)
     if code:
         return text, code
-    entry = _render_context()[1].get(role)
+    entry = _entries().get(role)
     plane_code, lines = health_alerts.check(role, ready_at, entry, prom)
     if plane_code:
         head = f"{role}: the alert plane FAILED the gate after a healthy rollout"

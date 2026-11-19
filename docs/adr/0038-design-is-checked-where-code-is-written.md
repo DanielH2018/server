@@ -10,7 +10,8 @@ governs: []
 
 ## Status
 
-Accepted.
+Accepted. ADR-0040 records the gates that followed the same day, from the options this
+record's *Consequences* section sets aside.
 
 ## Context
 

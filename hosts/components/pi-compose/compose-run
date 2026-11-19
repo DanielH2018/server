@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bring the Pi's `homelab` Compose project up (H5, docs/target-architecture/host/h5-pi-compose.md,
+# Bring the Pi's `homelab` Compose project up (H5, docs/archive/host/h5-pi-compose.md,
 # *homelab-compose.service*). homelab-compose.service runs this as root.
 #
 # Six steps, in this order. Every check that can refuse runs before compose-adopt, so adopt removes

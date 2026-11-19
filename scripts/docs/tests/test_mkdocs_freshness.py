@@ -2,8 +2,7 @@
 
 from types import SimpleNamespace
 
-
-import _mkdocs_freshness as hook
+from docs import _mkdocs_freshness as hook
 from lib.doc_freshness import PageFreshness
 
 

@@ -7,9 +7,8 @@ recording every `kubectl delete` argv the stub receives.
 
 The entry point runs as a bare subprocess, not an import, because that is how an operator runs
 it (`uv run python scripts/backup/longhorn_reap.py backups`). A subprocess does not inherit
-pytest's pythonpath, so the sys.path bootstraps in the entry point and in longhorn_reap_lib/ are
-the only thing that makes `host_lib` (hosts/lib/) and
-`longhorn_reap_lib` importable.
+pytest's pythonpath, so the installed import root makes `backup.longhorn_reap_lib` importable
+and `lib.host_modules` makes `host_lib` (hosts/lib/) importable.
 
 `BACKUPS_ENTRY` and `SNAPSHOTS_ENTRY` are `(entry point, subcommand)` pairs: `_run` puts the
 subcommand ahead of the test's own arguments, so a suite names the reaper once rather than in
@@ -41,9 +40,9 @@ SNAPSHOTS_ENTRY = (REAP_ENTRY, "snapshots")
 NOW = 1_800_000_000.0
 
 # Runs the entry point with main(argv, now=NOW) instead of `python <entry> <args>`,
-# still as a subprocess: the sys.path bootstrap, the stub `k3s` on
-# PATH and the env parsing are the real ones. `-P` keeps the cwd off sys.path, so the bootstrap
-# is what makes `host_lib` importable, as it is for an operator; `run_name` is not `__main__`, so
+# still as a subprocess: the import root, the stub `k3s` on
+# PATH and the env parsing are the real ones. `-P` keeps the cwd off sys.path, so the installed
+# root and `lib.host_modules` make the imports resolve, as for an operator; `run_name` is not `__main__`, so
 # the file's own entry line does not fire a second, clock-reading run.
 _MAIN_WITH_NOW = (
     "import runpy, sys; "
