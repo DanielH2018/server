@@ -496,6 +496,11 @@ k8s_registry_host_ip: 127.0.0.1
 # runs the registry) resolves it to the loopback hostPort, agents to the pinned ClusterIP
 # below over flannel.
 k8s_registry_pull_host: "localhost:{{ k8s_registry_port }}"
+# Where a Flux-owned tag pulls each built image. The renderer rewrites every container `image:`
+# naming a built image to this host (scripts/renderer/renderer_lib/images.py:GHCR); a ref
+# the rewrite cannot reach, such as one inside ConfigMap text, names it directly.
+# tests/services/test_airflow_task_image.py holds the two equal.
+k8s_ghcr_pull_host: ghcr.io/danielh2018
 # The registry Service's pinned ClusterIP (spec.clusterIP in the registry role) — pinned
 # because agents' registries.yaml must name it as the mirror endpoint, and containerd is a
 # host process that resolves no cluster DNS. Plain HTTP between nodes crosses the LAN inside

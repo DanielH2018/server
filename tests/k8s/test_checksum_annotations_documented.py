@@ -120,7 +120,11 @@ CENSUS_MEMBERS = {
 
 # Named rather than derived, so a manifest template that drops out of the render still fails.
 _UNLISTED = frozenset(
-    {"pihole/pihole-deployment.yaml.j2", "navidrome/ingressroute.yaml.j2"}
+    {
+        "airflow/airflow-env.yaml.j2",
+        "pihole/pihole-deployment.yaml.j2",
+        "navidrome/ingressroute.yaml.j2",
+    }
 )
 
 

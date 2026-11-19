@@ -1,0 +1,130 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+# Runs once, on an empty data directory, after the image's entrypoint has created the `airflow`
+# superuser and its database. Task pods write as `warehouse_writer`, which owns the warehouse
+# database and nothing else; Grafana reads as `warehouse_reader`. A password rotation after the
+# first start is an ALTER ROLE by hand: see CLAUDE.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-postgres-init
+  namespace: {{ k8s_namespace }}
+data:
+  10-warehouse.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 -v writer_pw="$WAREHOUSE_WRITER_PASSWORD" \
+      -v reader_pw="$WAREHOUSE_READER_PASSWORD" \
+      --username "$POSTGRES_USER" --dbname postgres <<'SQL'
+    CREATE ROLE warehouse_writer LOGIN PASSWORD :'writer_pw';
+    CREATE ROLE warehouse_reader LOGIN PASSWORD :'reader_pw';
+    CREATE DATABASE warehouse OWNER warehouse_writer;
+    REVOKE CONNECT ON DATABASE airflow FROM PUBLIC;
+    REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
+    GRANT CONNECT ON DATABASE warehouse TO warehouse_reader;
+    SQL
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname warehouse <<'SQL'
+    REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+    ALTER DEFAULT PRIVILEGES FOR ROLE warehouse_writer GRANT SELECT ON TABLES TO warehouse_reader;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-postgres
+  namespace: {{ k8s_namespace }}
+spec:
+  selector:
+    app: airflow-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-postgres
+  namespace: {{ k8s_namespace }}
+spec:
+{# One RWO claim and one Postgres writer: a rolling update would deadlock on the volume. #}
+{{ spec_shell('Recreate') }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-postgres
+  template:
+    metadata:
+      labels:
+        app: airflow-postgres
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-best-effort', run_as_user=airflow_k8s_postgres_uid, run_as_group=airflow_k8s_postgres_uid, fs_group=airflow_k8s_postgres_uid, non_root=true) }}
+{{ node_affinity_preference(airflow_k8s_node) }}
+      containers:
+        - name: airflow-postgres
+          image: {{ airflow_k8s_postgres_image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_DB
+              value: airflow
+{# A subdirectory: the claim's root holds ext4's lost+found, and initdb refuses a
+               non-empty directory. #}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: AIRFLOW_POSTGRES_PASSWORD
+            - name: WAREHOUSE_WRITER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: WAREHOUSE_WRITER_PASSWORD
+            - name: WAREHOUSE_READER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: WAREHOUSE_READER_PASSWORD
+          volumeMounts:
+            - name: airflow-postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: airflow-postgres-init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: airflow-postgres-run
+              mountPath: /var/run/postgresql
+            - name: airflow-postgres-tmp
+              mountPath: /tmp
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "airflow", "-d", "airflow"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "airflow", "-d", "airflow"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+{{ container_resources(cpu_limit=airflow_k8s_postgres_cpu_limit, mem_limit=airflow_k8s_postgres_mem_limit, cpu_request=airflow_k8s_postgres_cpu_request, mem_request=airflow_k8s_postgres_mem_request) }}
+      volumes:
+        - name: airflow-postgres-data
+          persistentVolumeClaim:
+            claimName: {{ airflow_k8s_postgres_claim }}
+        - name: airflow-postgres-init
+          configMap:
+            name: airflow-postgres-init
+        - name: airflow-postgres-run
+          emptyDir: {}
+        - name: airflow-postgres-tmp
+          emptyDir: {}

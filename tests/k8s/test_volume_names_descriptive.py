@@ -83,7 +83,11 @@ ALLOWED_UNPREFIXED = frozenset({"media"})
 # checked from its source. image-builder's context ConfigMap is
 # skipped too, but declares no volume, so it is not a member.
 SOURCE_FALLBACK_WITH_VOLUMES = frozenset(
-    {"image-builder/build-job.yaml.j2", "pihole/pihole-deployment.yaml.j2"}
+    {
+        "airflow/airflow-env.yaml.j2",
+        "image-builder/build-job.yaml.j2",
+        "pihole/pihole-deployment.yaml.j2",
+    }
 )
 
 

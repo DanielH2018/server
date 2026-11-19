@@ -43,6 +43,7 @@ _CONTENT_TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 # set the moment those files move, and an `all()` over nothing passes — so the members are named.
 KNOWN_BUILT_IMAGES = frozenset(
     {
+        "airflow",
         "code-server",
         "homelab-mcp",
         "ical-proxy",

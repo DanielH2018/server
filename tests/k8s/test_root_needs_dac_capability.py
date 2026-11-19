@@ -69,13 +69,14 @@ _DROP = re.compile(r"^\s*drop:\s*$")
 
 # The role templates no render reaches. `_k8s_render` skips `k8s/image-builder`, an
 # `include_role` helper with no `containers_list` entry, so its image and tag arrive on the
-# calling role's include task. pihole's holds only the macro its two Deployments import. Their
+# calling role's include task. pihole's and airflow's `airflow-env` hold only macros their Deployments import. Their
 # source is read instead, and `test_the_render_reaches_every_role_template` fails if the set
 # grows.
 FALLBACK_TEMPLATES = frozenset(
     {
         "k8s/roles/image-builder/templates/build-job.yaml.j2",
         "k8s/roles/image-builder/templates/context-configmap.yaml.j2",
+        "k8s/roles/airflow/templates/airflow-env.yaml.j2",
         "k8s/roles/pihole/templates/pihole-deployment.yaml.j2",
     }
 )

@@ -1,0 +1,60 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% from 'airflow-env.yaml.j2' import airflow_env, airflow_mounts, airflow_volumes with context %}
+---
+# The scheduler, which launches one KubernetesExecutor pod per task. Its init container runs
+# `airflow db migrate`; every other Airflow pod waits for that migration before it starts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: {{ k8s_namespace }}
+spec:
+{# One scheduler, and one migrator: a rolling update would run the old scheduler beside a
+     new one whose init container is migrating the schema under it. #}
+{{ spec_shell('Recreate') }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-best-effort', service_account='airflow-scheduler', automount=true, run_as_user=airflow_k8s_uid, run_as_group=airflow_k8s_uid, fs_group=airflow_k8s_uid, non_root=true) }}
+{{ node_affinity_preference(airflow_k8s_node) }}
+      initContainers:
+        - name: airflow-db-migrate
+          image: {{ airflow_k8s_image }}
+          imagePullPolicy: Always
+          args: ["airflow", "db", "migrate"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+{{ airflow_env(true) }}
+          volumeMounts:
+{{ airflow_mounts() }}
+{{ container_resources(cpu_limit='1', mem_limit='768Mi', cpu_request='50m', mem_request='256Mi') }}
+      containers:
+        - name: airflow-scheduler
+          image: {{ airflow_k8s_image }}
+          imagePullPolicy: Always
+          args: ["airflow", "scheduler"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+{{ airflow_env(true) }}
+          volumeMounts:
+{{ airflow_mounts() }}
+          livenessProbe:
+            exec:
+              command: ["airflow", "jobs", "check", "--job-type", "SchedulerJob", "--local"]
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 5
+{{ container_resources(cpu_limit=airflow_k8s_scheduler_cpu_limit, mem_limit=airflow_k8s_scheduler_mem_limit, cpu_request=airflow_k8s_scheduler_cpu_request, mem_request=airflow_k8s_scheduler_mem_request) }}
+      volumes:
+{{ airflow_volumes() }}

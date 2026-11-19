@@ -41,6 +41,16 @@ _NO_READINESS = {
         "access-log-rotate",
     ): "sidecar; a tail/rotate hiccup must never gate the edge proxy's Service",
     ("authelia", "crowdsec-agent"): "same shape as traefik's sidecar; would gate SSO",
+    # No Service selects either pod: each runs a loop against the metadata database and serves
+    # nothing, and `airflow jobs check` is their liveness probe.
+    (
+        "airflow",
+        "airflow-scheduler",
+    ): "no Service selects it; liveness is `airflow jobs check`",
+    (
+        "airflow",
+        "airflow-dag-processor",
+    ): "no Service selects it; liveness is `airflow jobs check`",
     (
         "crowdsec",
         "crowdsec-jobs",

@@ -1,0 +1,37 @@
+{# Slim Airflow, not the full image: the full one ships ~80 providers this stack never loads and
+   doubles the pull. A version tag with its digest beside it, so Renovate's dockerfile manager
+   reads the version it bumps. #}
+FROM apache/airflow:slim-3.3.2-python3.12@sha256:a54e7bd6c4d7a17e55cd14b0ead257877b8f8111680d2692cbdba2ff32bd3ff3
+
+{# The three providers slim lacks, at the versions Airflow's own constraints file for 3.3.2
+   pins. Pinning apache-airflow beside them stops pip from moving the core to satisfy one.
+   A base bump moves all four to the new constraints file's versions in the same PR. #}
+RUN pip install --no-cache-dir \
+      "apache-airflow==3.3.2" \
+      "apache-airflow-providers-cncf-kubernetes==10.22.0" \
+      "apache-airflow-providers-postgres==7.0.2" \
+      "apache-airflow-providers-standard==1.19.0" \
+      --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
+
+{# The context is a ConfigMap mount whose files are symlinks into ..data/, and a multi-file
+   COPY drops all but the first symlinked file (homelab-mcp's Dockerfile has the detail). So
+   COPY the whole snapshot and place each file with `cp -L`, which follows the link. #}
+USER root
+COPY . /opt/build-context/
+RUN mkdir -p /opt/dags/homelab_warehouse \
+    && cp -L /opt/build-context/prom_daily_rollup.py /opt/dags/ \
+    && cp -L /opt/build-context/airflowignore /opt/dags/.airflowignore \
+    && cp -L /opt/build-context/warehouse.py /opt/build-context/prom_rollup.py /opt/dags/homelab_warehouse/ \
+    && cp -L /opt/build-context/check_dags.py /opt/check_dags.py \
+    && rm -rf /opt/build-context \
+    && chmod -R a+rX /opt/dags /opt/check_dags.py
+USER airflow
+
+{# Airflow 3 does not put the DAG folder on sys.path, so the DAGs' own `homelab_warehouse`
+   package resolves through PYTHONPATH, in every container and task pod this image runs. #}
+ENV AIRFLOW__CORE__DAGS_FOLDER=/opt/dags \
+    PYTHONPATH=/opt/dags \
+    AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+{# Fails the build when a DAG file raises on import, so a broken DAG never reaches a tag. #}
+RUN python /opt/check_dags.py

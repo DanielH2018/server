@@ -37,7 +37,7 @@ tag waits on.
 A placeholder render also writes the context of each image its tags' roles build with
 `k8s/image-builder`: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
-writes all ten. `--all-images` writes all ten whatever `--role` names, or beside `--shared-only`,
+writes every one. `--all-images` writes every one whatever `--role` names, or beside `--shared-only`,
 which the publish job passes because its `images` job builds every context.
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `secrets/cluster-vars.source`
@@ -533,7 +533,7 @@ def main(argv: list[str] | None = None) -> int:
         "--all-images",
         action="store_true",
         help="write every image context and tags.json, not only those the named tags' "
-        "roles build: the publish job's render, whose images job builds all ten",
+        "roles build: the publish job's render, whose images job builds every one",
     )
     render.add_argument(
         "--revision",

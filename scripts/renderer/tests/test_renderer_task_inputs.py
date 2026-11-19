@@ -39,9 +39,9 @@ def _ctx(role: str, stubs: dict) -> dict:
     return cluster.tag_context(K8S_ROLES / role, role, stubs)
 
 
-def test_the_site_census_finds_all_ten_builds():
+def test_the_site_census_finds_every_build():
     """Non-vacuity for the parametrisation below; n8n builds two images."""
-    assert len(SITES) == 10
+    assert len(SITES) == 11
     assert {("homelab-mcp", 0), ("n8n", 0), ("n8n", 1)} <= set(SITES)
 
 

@@ -179,6 +179,9 @@ def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
 # deliberate act. The FROM line of each Dockerfile is what moves, and Renovate's built-in
 # dockerfile manager watches it (test_every_dockerfile_is_renovate_visible).
 REGISTRY_BUILT_IMAGES = {
+    "airflow_k8s_image",  # k8s/roles/airflow/templates/Dockerfile.j2
+    # The same build at its GHCR ref, for the task pods' pod template.
+    "airflow_k8s_task_image",
     "n8n_k8s_image",  # k8s/roles/n8n/templates/Dockerfile.j2
     "n8n_k8s_runners_image",  # k8s/roles/n8n/templates/Dockerfile-runners.j2
     "ical_proxy_k8s_image",  # k8s/roles/ical-proxy/templates/Dockerfile.j2

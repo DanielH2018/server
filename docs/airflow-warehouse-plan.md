@@ -1,0 +1,93 @@
+# Airflow warehouse plan
+
+Airflow 3 on daniel-server rolls short-retention sources up into a Postgres warehouse every
+night, so Grafana can show trends over months instead of days. The work ships as nine slices
+under the `Airflow homelab warehouse` milestone. Slice 0 is the platform plus one end-to-end
+rollup, and each later slice adds one source. `k8s/roles/airflow/CLAUDE.md` describes the
+role as built.
+
+## Why every history store forgets
+
+| Source | Retention | Slice |
+|---|---|---|
+| Prometheus | 30d or 7GB, and the size cap binds first: 22 days on 2026-11-19 | 0, 1 |
+| Claude Code OTEL telemetry | ~30d | 2 |
+| Home Assistant recorder | 7 days (`configuration.yaml:145`) | 3 |
+| Scrutiny SMART history | forever, on `scrutiny-influxdb-data`, which is not backed up | 4 |
+| GitHub PRs and CI runs | kept by GitHub, but costly to query live | 5, 6 |
+| Traefik access log | the `loki-homelab` copy only | 7 |
+| Pi-hole query DB | FTL default 91 days, not checked against this config | 8 |
+
+## Decisions
+
+- **Hand-written Jinja manifests, not the Helm chart.** No role uses Helm, and Flux applies
+  only rendered output.
+- **KubernetesExecutor.** No idle workers, and no Redis or Celery.
+- **Four components:** api-server, scheduler, dag-processor and Postgres. Airflow's
+  deferred-task process and its metrics emitter are off.
+- **DAGs are baked into the built image**, so a DAG change is reviewed, tested, and rolls the
+  pods by moving the content tag.
+- **Authelia two_factor in front, and Airflow's simple auth manager makes every user an
+  admin.** The fences admit only the pods that call each port.
+- **One Postgres, two databases**, `airflow` and `warehouse`. Grafana reads the warehouse as a
+  SELECT-only role.
+- **The claim is backed up weekly to B2.** The R2 daily tier is derived from home-critical
+  entries only, and Airflow is not one. A lost week re-derives by backfill from sources that
+  keep at least seven days.
+- **The backfill window is read from the source, not declared.** Prometheus' size cap moves
+  its oldest day, so the DAG reads `prometheus_tsdb_lowest_timestamp_seconds` per run.
+
+## Conventions every DAG follows
+
+- One partition per day, replaced in one transaction, so a backfill is always safe to rerun.
+- A `check` task after each load fails the run on a missing key, an hour-long gap or a value
+  out of bounds. A gap usually means the source was down.
+- A day the source no longer wholly holds is skipped.
+- Sources are read by ClusterIP, never through a route. Each source's NetworkPolicy gains an
+  allow for `app: airflow-task`, after a caller census (ADR 0009).
+- Transforms are stdlib-only and tested against recorded source responses in the role's
+  `tests/`.
+- Each load DAG emits an asset, and derived DAGs (slice 6) schedule on assets.
+
+## Slices
+
+- **Slice 0, platform plus one rollup.** The role, Postgres, Grafana's `Warehouse`
+  datasource, and `prom_daily_rollup`: daily UPS energy from NUT and daily CPU package
+  temperature per host. Done when `land.sh` reads healthy, the backfill fills every day
+  Prometheus holds, a cleared day reloads to the same row counts, and the idle footprint is in
+  the role's `CLAUDE.md`.
+- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the api-server's
+  `/api/v2/monitor/health`, and its alert rule, so a dead scheduler pages.
+- **Slice 1, long-term metrics (idea 1).** Longhorn volume size and growth, node load and
+  memory, GPU busy, UPS battery, and daily B2 Class-B counts, plus a "Homelab history" board.
+  Longhorn state metrics are one-hot over a label, and `actualSize` is not filesystem usage
+  (ADR 0006).
+- **Slice 2, Claude Code telemetry history (idea 2).** Daily spend, tokens, cache hit rate,
+  tool errors and permission decisions, with the four counting traps as tested code.
+- **Slice 3, Home Assistant history (idea 3).** State history for a declared entity list. The
+  source keeps seven days, so a longer DAG outage loses data.
+- **Slice 4, SMART history (idea 4).** Scrutiny's stored history, by ClusterIP.
+- **Slice 5, repo engineering metrics (idea 5).** PRs, CI runs and findings issues,
+  incremental by `updated_at`. All of one user's tokens share one GitHub quota, so each run is
+  budgeted and scheduled in quiet hours.
+- **Slice 6, cost per merged PR (idea 6).** Joins slices 2 and 5 on assets. The join key is
+  open: check whether the telemetry carries a branch or worktree name per session.
+- **Slice 7, network edge history (idea 7).** Traefik, CrowdSec and Authelia counts from
+  `loki-homelab`. Confirm the access log's format there first.
+- **Slice 8, DNS history (idea 8).** Both Pi-hole instances' query counts per client and
+  domain.
+
+Later, once the warehouse holds a few months: forecasting DAGs, an energy-cost model, and
+weekly reconciliation checks.
+
+## Risks
+
+- **Losing the claim erases history the sources no longer hold.** The weekly B2 backup bounds
+  the loss to the last week, which backfill restores.
+- **A DAG outage longer than a source's retention loses days.** The quality check fails on a
+  gap, and slice 0b pages on a dead scheduler.
+- **Task logs live only in the task pod.** A failed pod is kept for `kubectl logs`; a remote
+  log store is not planned yet.
+- **Airflow upgrades are schema migrations.** The base is pinned by digest with
+  `k8s_autodeploy: false`, and the scheduler's init container migrates before anything else
+  starts.
