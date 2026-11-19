@@ -69,8 +69,7 @@ def _find_dashboard_issue(issues: list[dict]) -> dict | None:
     for it in issues:
         if it.get("pull_request"):
             continue
-        login = (it.get("user") or {}).get("login", "")
-        if it.get("title") == DASHBOARD_TITLE and login.startswith("renovate"):
+        if it.get("title") == DASHBOARD_TITLE and is_renovate(it.get("user")):
             return it
     return None
 

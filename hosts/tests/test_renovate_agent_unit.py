@@ -20,9 +20,12 @@ expression is spelled that way.
 Run: uv run pytest hosts/tests/test_renovate_agent_unit.py
 """
 
+import json
 import re
 
+import land_renovate_pr
 import pytest
+import renovate_agent
 import renovate_identity
 from lib import yaml_fast
 from _helpers import REPO, K8S_ROLES
@@ -97,12 +100,19 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     envs = directive(render("renovate-agent-land@.service.j2"), "Environment")
     required = [e for e in envs if e.startswith("LAND_REQUIRE_AUTHOR=")]
     assert required, "the unit sets no LAND_REQUIRE_AUTHOR"
-    assert required[-1] == f"LAND_REQUIRE_AUTHOR={renovate_identity.GH_AUTHOR}"
-    for script in ("renovate_agent.py", "land_renovate_pr.py"):
-        source = (COMPONENT / "files" / script).read_text()
-        assert "from renovate_identity import" in source, (
-            f"{script} must read Renovate's login from renovate_identity"
-        )
+    pinned = required[-1].removeprefix("LAND_REQUIRE_AUTHOR=")
+    assert pinned == renovate_identity.GH_AUTHOR
+    lookalike = "renovate-fan"
+    for login, admitted in ((pinned, True), (lookalike, False)):
+        reasons = land_renovate_pr.refusals({"author": {"login": login}}, frozenset())
+        assert any("author" in r for r in reasons) is not admitted, login
+    listing = json.dumps(
+        [
+            {"number": 1, "author": {"login": pinned}},
+            {"number": 2, "author": {"login": lookalike}},
+        ]
+    )
+    assert [pr.number for pr in renovate_agent._renovate_prs(listing)] == [1]
 
 
 def test_a_pre_merge_refusal_leaves_the_lander_unit_inactive() -> None:
