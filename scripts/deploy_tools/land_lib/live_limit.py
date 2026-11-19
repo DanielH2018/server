@@ -34,12 +34,23 @@ SERIAL_ROLES = frozenset(
     {key.removeprefix("k3s_").removesuffix("_version") for key in PINS} | {"flux"}
 )
 CLUSTER_VARS_PREFIX = "secrets/cluster-vars."
+# DECIDED: every edit to the service list is serial, a field change on one service included.
+# Every tag promotes with the bundle the list declares, and one crashlooping new service fails
+# that whole promotion and sets `DEPLOY_HOLD`.
+SERIAL_PATHS = frozenset({"cluster/services.yml"})
+# What a serial PR changes, as the object of "changes" in a refusal.
+SERIAL_WHAT = "a forward-only pin, the flux role, cluster-vars or " + " or ".join(
+    sorted(SERIAL_PATHS)
+)
 
 
 def kind(paths: Iterable[str]) -> str:
     """`SERIAL`, `K8S`, or "" for a PR changing `paths`."""
+    paths = list(paths)
     roles = {role_for(p) for p in paths if not is_test_path(p)}
-    if roles & SERIAL_ROLES or any(p.startswith(CLUSTER_VARS_PREFIX) for p in paths):
+    if roles & SERIAL_ROLES or any(
+        p in SERIAL_PATHS or p.startswith(CLUSTER_VARS_PREFIX) for p in paths
+    ):
         return SERIAL
     return K8S if roles - {None} else ""
 

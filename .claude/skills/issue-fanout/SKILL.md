@@ -86,10 +86,12 @@ Both were measured on the 2026-09-10 fan-outs:
   hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
   value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
   stalled six hours on it. Hold the second secret issue for the next wave.
-- **A batch that adds a `containers_list` entry, or otherwise touches a path every tag
-  renders, runs alone.** `promote` publishes the whole bundle, so one crashlooping service
-  anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports `deploy-failed` to every
-  other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
+- **A batch that touches a path every tag renders runs alone.** `land.sh` holds this
+  itself for `cluster/services.yml`, where a `containers_list` entry lives: a PR that
+  changes the file lands as a serial PR (`docs/landing.md`, *Rules that refuse a merge*).
+  For any other such path the rule is yours. `promote` publishes the whole bundle, so one
+  crashlooping service anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports
+  `deploy-failed` to every other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
   Authelia change was mid-rollout (issue #1602), and the hold outlived the outage by twenty
   minutes.
 
