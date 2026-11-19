@@ -17,9 +17,8 @@ Argparse still owns argument parsing in every caller. This module owns two thing
 does not: a `--list` renderer, and a completeness guard so a new entry point can't ship
 unregistered. It has no ``CHECKS_ONLY``/``CHECKS_SKIP`` selection; monitor-bridge keeps its own.
 
-Import it through the same bootstrap as any other ``lib`` module::
+Import it from the installed root, as any other ``lib`` module::
 
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
     from lib.cli_registry import Registry, package_entry_points
 """
 

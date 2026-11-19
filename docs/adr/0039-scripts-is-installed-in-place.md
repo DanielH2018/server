@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-11-19
 governs:
   - ".claude/hooks/run-hook.sh#the hook's own scripts/ goes ahead of the venv's .pth"
+  - "scripts/lib/longhorn_lib/longhorn_backup_health_logic.py#a shared module keeps its own insert of `hosts/lib`"
 ---
 
 # ADR-0039: scripts/ is installed in place as the one import root, and each tree's own root goes first
@@ -74,6 +75,14 @@ venv per tree.
   `scripts/` first (#9269). It orders the roots and does not stop fall-through.
 - A test that needs to see a tree with no `scripts/` of its own runs its interpreter with
   `-S`, so no venv root is on the path.
+- `lib.host_modules` is the one module under `scripts/` that puts a directory on `sys.path`:
+  `hosts/lib` and the gh-quota component's `files/`, whose modules ship to the hosts as flat
+  files and import by bare name. A caller imports it before those bare imports.
+- A module a host package copies (a `shared:` entry, such as `scripts/lib/longhorn_lib/`) is
+  the exception. No `lib` ships beside it, so it cannot import `lib.host_modules`. It keeps its
+  own insert of `hosts/lib`, which names a directory that does not exist on the host, and
+  imports its own package's siblings relatively (`from . import longhorn_backups`), which
+  resolves the same on the host and in the checkout.
 - Once slice 3 deletes the bootstraps, `python scripts/x.py` without `uv run` raises
   `ModuleNotFoundError`. The repo's rule is already to run its Python through `uv run`.
 - Reverting is a revert of the slice 1 PR plus `uv sync --frozen` on each checkout, for as
@@ -84,3 +93,5 @@ venv per tree.
 
 - `.claude/hooks/run-hook.sh`, the `--project` leg's `PYTHONPATH`. That leg is the runner
   every session's guards go through, so it is where the running tree's root has to come first.
+- `scripts/lib/longhorn_lib/longhorn_backup_health_logic.py`, the shared module's own insert of
+  `hosts/lib`. Its four sibling modules carry the same insert for the same reason.

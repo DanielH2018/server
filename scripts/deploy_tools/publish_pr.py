@@ -97,11 +97,10 @@ from lib.exit_codes import (
 from lib import detach_fork
 from lib import gh as gh_mod
 from lib import git as git_mod
-from lib.repo_paths import HOST_LIB_FILES
 
 # The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
 # gate that failed only because its run was cancelled, and the rule that grades one check.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, CheckRun, RunState
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's

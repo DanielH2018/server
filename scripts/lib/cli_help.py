@@ -49,11 +49,8 @@ Typical usage example:
 import argparse
 import os
 import sys
-from pathlib import Path as _Path
 from typing import NoReturn
 
-# Reach `lib` from a caller that put only its own directory on sys.path.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.exit_codes import USAGE_ERROR
 
