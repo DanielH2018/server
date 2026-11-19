@@ -67,6 +67,11 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
   A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
   `test_census_rows_test_renders.py`.
+- A property of a GitHub Actions workflow or action goes in a row of
+  `tests/repo/test_census_rows_workflows.py`, from the `_*_workflow_rows.py` module for its
+  workflow. `tests/repo/_workflow_rows.py:judge` runs a rule over the parsed file, and
+  `tests/repo/_workflow_rows.py:mutants` builds the red half as the real file with one property
+  broken.
 - An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
   row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
   the strings it requires, the pattern it forbids or the step that must come first.

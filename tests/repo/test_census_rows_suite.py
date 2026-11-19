@@ -207,7 +207,8 @@ ROWS = (
             "(.claude/rules/python-layout.md). A row fails `subject gone: delete this row` "
             "once its selector matches nothing, so it retires with its subject; a file "
             "passes over an empty census until someone notices. Write the check as a "
-            "`Census` row, a rendered-property row or a `RunbookRule` row. A check that needs "
+            "`Census` row, a row of the workflow table, a rendered-property row or a "
+            "`RunbookRule` row. A check that needs "
             "a second render context, a cross-document join or a long exemption list keeps "
             "its file and goes in `allow` with that reason."
         ),
