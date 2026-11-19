@@ -1,7 +1,7 @@
 # `hosts/components/builder` — the host-package builder and its apt repository (daniel-box)
 
 The builder half of target-architecture slice H3, whose plan is
-`docs/target-architecture/host/h3-pi-pilot.md`. It builds the host packages from master, signs
+`docs/archive/host/h3-pi-pilot.md`. It builds the host packages from master, signs
 them, and serves the apt repository the hosts' updater reads. daniel-box's package ships it.
 The `failure-alert` component ships the page that
 a failed run opens. This file holds the rules for the component; the plan's *The builder and the

@@ -61,8 +61,11 @@ id = "check-merge-conflict"
 stages = ["pre-commit"]
 
 [[repos.hooks]]
+# The M6 plan grew past the 500 KB cap through edits, which this hook never sees; only its
+# move into the archive reads as an add. It is history, so nothing grows it further.
 id = "check-added-large-files"
 stages = ["pre-commit"]
+exclude = "^docs/archive/monitoring/m6-retire-kuma\\.md$"
 
 [[repos.hooks]]
 id = "mixed-line-ending"

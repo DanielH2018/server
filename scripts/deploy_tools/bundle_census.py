@@ -42,8 +42,8 @@ whose role declares snapshot claims (`snapshot_tags`), those whose role sets
 mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
 Job with `flux_cronjob_gates` (`gating_tags`).
 
-The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
-and docs/target-architecture/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,
+The plan is docs/archive/deploy/d2-first-leaf.md, *Publication and verification*,
+and docs/archive/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,
 for the member census.
 
 Run: uv run python scripts/deploy_tools/promote.py check-bundle out

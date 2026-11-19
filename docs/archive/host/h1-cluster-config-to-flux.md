@@ -3044,7 +3044,7 @@ fixed. Each confirmation was measured at `70591c307` or from the upstream source
       annotation alone marks every case that can persist.
 - **H1-R10-04 (high)** H1.7b depended on an R2 rule-3 exemption that no slice recorded.
   *Refuted in its central claim.* `grep -n 'BackupTarget\|PLACEHOLDER_KIND_EXEMPT'
-  docs/target-architecture/render/r2-secret-placeholders.md` returns matches:
+  docs/archive/render/r2-secret-placeholders.md` returns matches:
     - rule 3's own text: "H1 adds the first two pairs, for its BackupTargets (Open question
       10)";
     - R2's *Open questions* 10, which accepts `PLACEHOLDER_KIND_EXEMPT` with

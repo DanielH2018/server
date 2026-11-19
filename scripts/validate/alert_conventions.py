@@ -2,7 +2,7 @@
 
 promtool accepts a rule that pages nobody useful, and a rule file that never reaches
 Prometheus. `rule_problems` holds the role's rule files to the conventions in
-`docs/target-architecture/monitoring/m1-alertmanager.md`:
+`docs/archive/monitoring/m1-alertmanager.md`:
 
 - every rule file parses, and holds one group named like the file;
 - the stems in `files/rules/`, `observability_rule_groups` and the rendered `prometheus-rules`
@@ -64,7 +64,7 @@ RULE_TEST_SUFFIX = ".test.yaml"
 
 SEVERITIES = frozenset({"critical", "warning", "info"})
 
-# M2's join shape, from docs/target-architecture/monitoring/m2-first-bridge-family.md, "The
+# M2's join shape, from docs/archive/monitoring/m2-first-bridge-family.md, "The
 # rules": the join that takes `service` from a workload-service recording rule, and the
 # fallback that keeps an alert whose workload the join misses. A join with no fallback drops
 # the alert whenever its mapping is missing.

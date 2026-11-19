@@ -31,7 +31,7 @@ ratchet, so any violation fails the render. Admitting one means changing the rul
 rule 5's result over the whole tree.
 
 `docs/homelab-render.md` is the operator's page, and
-`docs/target-architecture/render/r2-secret-placeholders.md` the plan.
+`docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
 import sys as _sys

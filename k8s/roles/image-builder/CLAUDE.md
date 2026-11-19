@@ -53,7 +53,7 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
   immutable. Every consumer pulls its image from GHCR.
 - **A package refresh that no pin moves is a hand PR.** The PR bumps a `rebuild_stamp` data
   key in the context, which moves the content tag. No context carries that key yet.
-  The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Images built by CI (D5.4)*.
+  The plan is `docs/archive/deploy/d5-bulk-move.md`, *Images built by CI (D5.4)*.
 
 ## Editing
 - Job shape: `k8s/roles/image-builder/templates/build-job.yaml.j2`. The renderer reads

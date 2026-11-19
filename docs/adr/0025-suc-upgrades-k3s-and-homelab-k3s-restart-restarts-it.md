@@ -11,7 +11,7 @@ governs: []
 ## Status
 
 Accepted. The operator accepted it on 2026-10-24. Slice H6 step H6.1a (the
-[H6 plan](../target-architecture/host/h6-k3s-suc.md)) records the approval, which PR H6.1b
+[H6 plan](../archive/host/h6-k3s-suc.md)) records the approval, which PR H6.1b
 required before it could merge.
 
 ## Context
@@ -27,7 +27,7 @@ line that pages six hours later, and the operator then runs the upgrade by hand 
 `docs/k3s-upgrade.md`. About 56 of the 74 line edits to the 12 most-edited keys in the role's
 defaults are cluster configuration, which ships only through the same hand-run playbook.
 
-The [target architecture](../target-architecture/design.md) (*Host plane*) fixes
+The [target architecture](../archive/design.md) (*Host plane*) fixes
 system-upgrade-controller (SUC) as the upgrade mechanism for k3s, and Flux as the deploy
 plane ([ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md)). Slice H6
 weighs no other k3s upgrade mechanism. This ADR does not decide whether to use SUC. It

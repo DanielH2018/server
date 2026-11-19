@@ -396,7 +396,7 @@ def _rotation_walk(
     # `host_secrets.py sync` rewrites each value of a host file, and that commit is the event
     # the host-file check looks for. With the guard, a host file of `_REENCRYPT_MIN_SHARED`
     # keys or more would have its `sync` commits skipped and a correct copy would fail. Full
-    # analysis in docs/target-architecture/host/h4-secrets-unit.md, *Which ciphertext each
+    # analysis in docs/archive/host/h4-secrets-unit.md, *Which ciphertext each
     # host carries*.
     guard = path == SECRETS_GIT_PATH
     revs = _revisions(tools, path)

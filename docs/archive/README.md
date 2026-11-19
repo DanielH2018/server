@@ -6,8 +6,9 @@ was mothballed, or has been superseded by a design that stayed live. History fol
 
 A programme with more than a couple of documents gets a subdirectory named for it, and the
 shared filename prefix moves onto that directory — `networkpolicy/slice5-plan.md`, not
-`networkpolicy-slice5-plan.md`. The four here are `k3s-migration/`, `networkpolicy/`,
-`zero-downtime/` and `docs-ui-and-adrs/`.
+`networkpolicy-slice5-plan.md`. The subdirectories here are `k3s-migration/`, `networkpolicy/`,
+`zero-downtime/` and `docs-ui-and-adrs/`, plus the target-architecture migration's four slice
+trees: `deploy/`, `host/`, `render/` and `monitoring/`.
 
 **DECIDED: the `slice-` prefix in `k3s-migration/` stays, against the rule above.** Those
 filenames are a citation key, not decoration: manifest templates cite them by name, and a
@@ -56,11 +57,14 @@ recording rather than that nobody looked.
 | `gitops-deploy-plane-narrowing.md` | the tick's narrowing and apply of the deploy plane was deleted in slice D6 (D6.12, D6.15, D6.18b) | `docs/flux-deploy-plane.md`; `gitops-deployer.md` → *A deploy-plane change applies nothing on the tick*, in this archive | [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) |
 | `anilist-integration.md` | Phase 1 shipped 2026-08-25; Phase 2 never started (the page's own status line) | `docs/jellyfin-plugins.md`; the ani-sync comment in `ansible/roles/k8s/jellyfin/defaults/main.yml`; `ansible/tests/services/test_anisync_pin_matches_server.py` | the ani-sync comment in `ansible/roles/k8s/jellyfin/defaults/main.yml`, which records why the role installs a watch-status sync rather than a rating bridge |
 | `gitops-deployer.md` (from `docs/gitops-pipeline.md`) | H7.52 retired `gitops-deploy.timer` ([#7828](https://github.com/DanielH2018/server/pull/7828)); the deployer's code stays under `ansible/roles/setup/gitops_deploy/files/` until H7.53 deletes it | `docs/deploying.md`, which keeps what runs in the deployer's place; `hosts/components/checkout-sync/` | the `# DECIDED:` markers at the lines they govern in the deployer's code |
-| `gitops-deploy-role.md` (from the `gitops_deploy` role's `CLAUDE.md`) | the same H7.52 retirement; H7.55 deleted the emptied role | `docs/deploying.md` | the H7.55 entry in `docs/target-architecture/host/h7-delete-ansible.md` |
+| `gitops-deploy-role.md` (from the `gitops_deploy` role's `CLAUDE.md`) | the same H7.52 retirement; H7.55 deleted the emptied role | `docs/deploying.md` | the H7.55 entry in `docs/archive/host/h7-delete-ansible.md` |
 | `setup-role-loop-measurement.md` | the #4265 measurement for #3734, taken 2026-10-10; H7.55 deleted `ansible/initial_setup.yml` and `ansible/deploy.yml`, so the question it answers no longer arises | none — no playbook remains | — |
 | `uptime-kuma-autokuma-record.md` | M6 retired Uptime Kuma; C-2b deleted the role | `docs/monitor-bridge-checks.md`; `docs/observability-dashboards.md` | [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) |
 | `alert-triggered-diagnosis.md` | the #4616 no-go was superseded on 2026-10-15, when the operator ruled that the `claude` user triages a monitor alert end to end | `docs/claude-agent-user.md` → *Alert-triggered triage* | — |
 | `gitops-pipeline.md` | H7.53 deleted the GitOps deployer the page described; what stays true of it moved on 2026-11-12 (#8164) | `docs/deploying.md`; `docs/landing.md` → *The CI wait* | — |
+| `deploy/`, `host/`, `render/`, `monitoring/` (from `docs/target-architecture/`) | every slice's `Status:` line reads DONE or ARCHIVED; the migration finished on 2026-11-12 | [What the migration built](../what-the-migration-built.md), `docs/flux-deploy-plane.md`, `docs/host-packages.md` | [ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md), [ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md), [ADR-0029](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md) |
+| `design.md`, `contracts.md` (from `docs/target-architecture/`) | ARCHIVED on 2026-11-13 (the pages' own status lines) | [What the migration built](../what-the-migration-built.md) | the same three ADRs |
+| `test-coverage-snapshot.md` | one coverage run at `ec7b15021` on 2026-11-14; it gates nothing | none — coverage is not part of CI | — |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
@@ -87,11 +91,9 @@ on the operator's decision that no manual staging sessions continue. Both pages 
 system that no longer runs; what survives out of them is the libvirt substrate in
 `hosts/components/hypervisor`, which the monthly etcd restore drill uses.
 
-The target-architecture plans are archived in place, under `docs/target-architecture/`, and
-are not listed in the table above. Hundreds of files link into those paths, so a `git mv`
-would break more links than it tidies. Each plan's `Status:` line says whether it is done.
-The site's nav omits the plans, as it omits this archive. The live documentation is
-[What the migration built](../what-the-migration-built.md), which links the decisions:
-[ADR-0020](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md),
-[ADR-0026](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) and
-[ADR-0029](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md).
+The docs-guard slices stay live under `docs/target-architecture/docs-guard/`, because G7 and
+G11 are in progress. Beside them, `docs/target-architecture/` holds one stub for each archived
+plan that a rendered comment still cites: a `#` line in a template or a shipped file renders
+into a manifest or a host package, so repointing it restarts the workload or rebuilds the
+package. [#9170](https://github.com/DanielH2018/server/issues/9170) repoints those comments
+and deletes the stubs.

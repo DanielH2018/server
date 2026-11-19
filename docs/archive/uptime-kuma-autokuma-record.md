@@ -391,7 +391,7 @@ M4's PR 4 (#5625) removed that loop. blackbox-exporter probes the same URLs thro
 observability's `blackbox-ingress` job, built from the same filter. The `ingress-probes` rules
 alert on the result, and `probe.py monitors` lists each firing ingress alert with its `service`.
 The move followed a shadow soak in which the probes caught every outage the tiles caught
-(`docs/target-architecture/monitoring/m4-blackbox-ingress.md`).
+(`docs/archive/monitoring/m4-blackbox-ingress.md`).
 
 - **AutoKuma deletes the 26 monitors and their history** when the change deploys, under
   `ON_DELETE=delete`. Nothing restores that history.
