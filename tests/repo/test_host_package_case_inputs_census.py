@@ -3,8 +3,8 @@
 The render step in ci.yml sets `cases=true` when a PR changes a path CASE_INPUTS names, and the
 container steps run on it as they run on a differing render. The list is the one
 place those inputs are named, so an input missing from it is an input whose PR skips the cases.
-`test_host_package_cases_run_on_their_inputs.py` proves the trigger fires for each input; this
-module proves the list holds every input there is: the cases script, every `validate` module it
+`scripts/validate/tests/test_validate_host_packages.py` proves a path under an entry matches it;
+this module proves the list holds every input there is: the cases script, every `validate` module it
 imports, every tracked file in the test image's build context, and the script the bootstrap cases
 run.
 
