@@ -107,13 +107,17 @@ shows it, and `milestone close` abandons it. `findings_lib/milestone.py` has the
 PROJECT MILESTONES. `milestone start --project "<title>" --worktree <branch>` opens a session
 milestone that also holds a backlog. `milestone add <n...>` files unclaimed issues under it
 and `milestone remove <n...>` takes them out. `release`, `reap` and `manual` leave an issue
-in a project, and a claim by another branch does not move it out. `next`, `list` and
-`new-issues` take `--milestone "<title>"` for the issues one milestone holds, and
-`--milestone none` for the issues no open milestone holds.
+in a project. `next`, `list` and `new-issues` take `--milestone "<title>"` for the issues
+one milestone holds, and `--milestone none` for the issues no open milestone holds. An open
+project RESERVES its backlog for its branch: `next` offers a backlog issue only under
+`--milestone "<title>"` and counts the rest on a `reserved by a project` line, `list` marks
+each `[project:<title>]`, and `claim` refuses another branch, naming the project.
+`milestone remove <n> --worktree <its branch>` takes an issue out of the backlog. A closed
+project and a session milestone reserve nothing.
 
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already
-holds, and issues an open PR already says it closes. An issue whose claim is stale IS
+holds, issues an open PR already says it closes, and issues in an open project other than the `--milestone` it reads. An issue whose claim is stale IS
 offered, marked with who holds it — `claim` reaps that claim on the way past, and `reap`
 clears every one of them at once. `--limit N` bounds the list; there is no default bound,
 because one truncated the free set silently and the reader took ten rows for all of them.
@@ -152,7 +156,7 @@ never dropped silently.
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 64 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry and a `--milestone` title no milestone has; 3 nothing was written because the issue refuses it — closed, `manual`,
-deferred to a later date, blocked by an open issue, outside the register, held by another worktree or milestone, not claimed, or
+deferred to a later date, blocked by an open issue, outside the register, held by another worktree or milestone, reserved by another branch's open project, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
 birth, or because `manual` found the label already in the state it was asked for.
 """
@@ -176,13 +180,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `scripts/` on sys.path, so a bare `from issue_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
 from dev.findings_lib.board import FAILED, UNCHANGED, UPDATED, board_warning
-from dev.findings_lib.claim import free_issues
+from dev.findings_lib import milestone
 from lib.cli_help import refuse_help_under_describe
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from lib.progress import count_line
 from lib.worktrees import held_by_readable_process
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.milestone_cli import cmd_milestone, open_issues
+from dev.findings_lib.next_cli import cmd_next
 from dev.findings_lib.cli import _parser
 from dev.findings_lib.export_cli import cmd_export
 from dev.findings_lib.history_cli import cmd_history, cmd_show
@@ -194,7 +199,6 @@ from dev.findings_lib.gh_calls import (
     fingerprint_match,
     load_issues,
     blocker_hints,
-    open_pr_refs,
     run,
     fill_missing,
     set_fields,
@@ -214,8 +218,6 @@ from dev.findings_lib.issue_model import (
     issue_rows,
     sort_key,
     today_utc,
-    waiting,
-    waiting_line,
 )
 from dev.findings_lib.plans import (
     ClaimRefused,
@@ -616,7 +618,12 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
             ``milestone`` and ``limit``.
         tools: the process boundaries the issue read goes through.
     """
-    rows = sorted(issue_rows(open_issues(args, tools), tools.tracked()), key=sort_key)
+    issues = open_issues(args, tools)
+    held = milestone.reservations(issues, tools.owner_name, gh_json=tools.gh_json)
+    rows = sorted(issue_rows(issues, tools.tracked()), key=sort_key)
+    for r in rows:
+        project = held.get(r["number"])
+        r["project"] = project["title"] if project else None
     rows = [
         r
         for r in rows
@@ -645,6 +652,7 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
                 (f"deferred until {r['not_before']}", is_deferred_row(r, today)),
                 (f"blocked by {', '.join(r['blocked_by'])}", bool(r["blocked_by"])),
                 (f"claimed:{r['claimed']}", bool(r["claimed"])),
+                (f"project:{r['project']}", bool(r["project"])),
             )
             if on
         )
@@ -654,68 +662,6 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     if len(shown) < len(rows):
         print(cut)
-    return 0
-
-
-def waiting_summary(rows: list[dict]) -> list[str]:
-    """The one line `next` prints in place of ``rows``' `waiting_line`s, none for no rows."""
-    if not rows:
-        return []
-    kinds = count_line("blocked" if r["blocked_by"] else "deferred" for r in rows)
-    return [f"{len(rows)} waiting ({kinds}); --waiting to list"]
-
-
-def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Handles the ``next`` subcommand: prints the issues a session may pick up, best first.
-
-    `claim.free_issues` decides the free set. On a failed worktree read it withholds every
-    claimed issue rather than refusing like `reap`: `next` never writes, so it degrades to
-    the more conservative read instead of refusing to answer at all.
-
-    Args:
-        args: parsed CLI namespace carrying ``limit``, ``json``, ``milestone`` and
-            ``waiting``.
-        tools: the process boundaries every gh call goes through.
-    """
-    issues = open_issues(args, tools)
-    today = today_utc()
-    rows, stale = free_issues(issues, tools, pr_refs=open_pr_refs(tools), today=today)
-    rows = rows[: args.limit]
-    # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
-    # `--json` the note goes to stderr, because the array IS the free set an orchestrator
-    # claims (`issue-fanout`), and a waiting row inside it would be claimed.
-    held_rows = waiting(issues, today=today, tracked=tools.tracked())
-    held_back = (
-        [waiting_line(r, today) for r in held_rows]
-        if args.waiting
-        else waiting_summary(held_rows)
-    )
-    if args.json:
-        print(json.dumps(rows))
-        for line in held_back:
-            sys.stderr.write(line + "\n")
-        return 0
-    for line in held_back:
-        print(line)
-    for r in rows:
-        # A stale claim does not withhold the issue, so say who holds it and what clears it.
-        # `claim` reaps it on the way past; `reap` is how the operator clears the register.
-        held = (
-            f"  [stale claim by `{stale[r['number']]}`]" if r["number"] in stale else ""
-        )
-        # Offered, not withheld: a solo session works it. Only a fan-out batch may not.
-        solo = "  [solo-only: cites fan-out tooling]" if r["solo_only"] else ""
-        print(
-            f"#{r['number']:<5} {r['severity'] or '-':<6} {r['domain'] or '-':<21} "
-            f"{r['title']}{held}{solo}"
-        )
-    if any(r["number"] in stale for r in rows):
-        print(
-            "note: a stale claim is released by `findings.py reap`; `claim` also reaps one "
-            "before taking the issue"
-        )
-    if not rows:
-        print("nothing to pick up")
     return 0
 
 
