@@ -7,7 +7,7 @@ line, rather than with a YAML library.
 The bound derives from `etcd-snapshot-schedule-cron` in the installed drop-in, read each run, so a
 schedule change in the `homelab-daniel-box` package moves the bound with no `setup/k3s` apply.
 *The token comparison stays on daniel-box* and *Check 12* in
-docs/target-architecture/host/h2-shrink-host-plane.md have the design.
+docs/archive/host/h2-shrink-host-plane.md have the design.
 """
 
 from __future__ import annotations

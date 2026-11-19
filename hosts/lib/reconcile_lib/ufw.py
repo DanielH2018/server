@@ -1,6 +1,6 @@
 """The ufw arm: the firewall rules a host package declares, and no others.
 
-The design is docs/target-architecture/host/h7-delete-ansible.md, *Reconcilers for state dpkg
+The design is docs/archive/host/h7-delete-ansible.md, *Reconcilers for state dpkg
 does not hold*. A host package's manifest lists "ufw" in `reconcilers` and carries:
 
     "ufw": {"rules":  [{"id": "ssh-limit", "spec": "limit 22/tcp", "keep": true,
