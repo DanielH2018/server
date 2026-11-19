@@ -223,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.json:
-        json.dump(model, sys.stdout, indent=2)
+        json.dump(model, sys.stdout)
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

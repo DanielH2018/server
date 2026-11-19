@@ -459,6 +459,10 @@ def test_json_carries_the_five_keys_and_no_summary():
     }
 
 
+def test_json_is_one_compact_line():
+    assert "\n" not in render(_MIXED, _SUMMARY, "json")
+
+
 def test_reread_lists_only_the_sections_whose_prose_is_unchanged():
     lines = render(_MIXED, _SUMMARY, "reread").splitlines()
     assert lines[0].startswith("facts notice: 4 to re-read.")
