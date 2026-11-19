@@ -30,6 +30,8 @@ TAGGED = [
         '{"level":"error","time":"2026-11-19T00:46:17Z","message":"router has no domains"}',
         "error",
     ),
+    ('{"level": "error", "message": "json.dumps spaces its separators"}', "error"),
+    ("level = warn msg=spaced", "warn"),
     ("2026-11-19 00:52:41.547 | DEBUG    | app.poll:run:42 - polling", "debug"),
     (
         f"{ESC}[2m2026-11-19T00:52:42Z{ESC}[0m {ESC}[32m INFO{ESC}[0m HTTP request",

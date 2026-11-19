@@ -252,7 +252,7 @@ loki.process "pods" {
 ] %}
 {% for name, words, klog in pod_levels %}
   stage.match {
-    selector = "{namespace=~\".+\"} |~ \"(?i)(^|[^a-z_])level(=|.:).?({{ words }})([^a-z]|$)|[|] *({{ words }}) *[|]|.[[][0-9;]*m *({{ words }}).[[]|[[]({{ words }})[]]|^(.[[][0-9;]*m)?[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.,+-]+Z?[^a-z0-9]+({{ words }})([^a-z]|$){% if klog %}|^{{ klog }}[0-9]{4} [0-9]{% endif %}\""
+    selector = "{namespace=~\".+\"} |~ \"(?i)(^|[^a-z_])level *(=|.:) *.?({{ words }})([^a-z]|$)|[|] *({{ words }}) *[|]|.[[][0-9;]*m *({{ words }}).[[]|[[]({{ words }})[]]|^(.[[][0-9;]*m)?[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.,+-]+Z?[^a-z0-9]+({{ words }})([^a-z]|$){% if klog %}|^{{ klog }}[0-9]{4} [0-9]{% endif %}\""
     stage.template {
       source   = "level"
       template = "{{ name }}"
