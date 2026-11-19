@@ -12,7 +12,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
   log-pipeline rules) since A3's Cutover-b. Every rule of M6's batch A4 (the edge rules) since
   A4's Cutover-b, every rule of batch A2 (the container-checks rules) since A2's Cutover-b, and
   every rule of batch A5 (the storage rules) since A5's Cutover-b, and every host rule of batch
-  A1 since A1's Cutover-b. B8's probe rules are in `test_alertmanager_routing_b8_probes.py`.
+  A1 since A1's Cutover-b. `ROUTED` names every rules file whose rules all page this way, with
+  its count of paging rules and its critical alerts, which also mail.
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that has not cut over to paging carries `shadow="true"`, and this is the proof that
   it pages nobody. M3's two `DiskHealth*` sets move in its PR 5,
@@ -46,26 +47,108 @@ BLACKHOLE = "blackhole"
 # rather than reading as no match, which would silently skip a route.
 MATCHER = re.compile(r'^(\w+)(=~|=)"([^"]*)"$')
 
-INGRESS_RULES = K8S_ROLES / "observability" / "files" / "rules" / "ingress-probes.yaml"
-HOST_RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
-DEPLOY_PIPELINE_RULES = (
-    K8S_ROLES / "observability" / "files" / "rules" / "deploy-pipeline.yaml"
-)
+RULES_DIR = K8S_ROLES / "observability" / "files" / "rules"
+INGRESS_RULES = RULES_DIR / "ingress-probes.yaml"
+DEPLOY_PIPELINE_RULES = RULES_DIR / "deploy-pipeline.yaml"
 LOKI_LOG_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules" / "homelab-logs.yaml"
-LOKI_HEALTH_RULES = (
-    K8S_ROLES / "observability" / "files" / "rules" / "loki-homelab.yaml"
-)
-SCRAPE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "scrape-targets.yaml"
-LOG_PIPELINE_RULES = (
-    K8S_ROLES / "observability" / "files" / "rules" / "log-pipeline.yaml"
-)
-EDGE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "edge.yaml"
-STORAGE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
-BRIDGE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
-HOSTS_RULES = K8S_ROLES / "observability" / "files" / "rules" / "hosts.yaml"
-# A per-target ingress alert takes `service` from its probe target, so a probed service
-# stands in for it.
-INGRESS_STAND_IN_SERVICE = "homepage"
+LOKI_HEALTH_RULES = RULES_DIR / "loki-homelab.yaml"
+# A per-target or per-pod alert takes `service` from its series, so a real service stands in
+# for it. No route matches on `service`, so the stand-in cannot move a set.
+STAND_IN_SERVICE = "homepage"
+CRITICAL_RECEIVERS = ["discord", "email"]
+
+# Each rules file whose every rule pages through the muted routes: the file, its count of
+# rules without `shadow`, and the alerts among them that are critical, so mail as well as post.
+# A rule added, dropped, shadowed or re-severitied fails its row until the row agrees.
+ROUTED = [
+    (
+        "bridge-exporter.yaml",
+        21,
+        {
+            "WANUnreachable",
+            "DiscordDeliveryFailing",
+            "R2FreeTierHeadroomLow",
+            "MonitorBridgeDown",
+            "BridgeCheckStale",
+            "B2Unreachable",
+            "B2FreeTierHeadroomLow",
+            "SmartHealthFailing",
+            "DomainRegistrationExpiring",
+        },
+    ),
+    ("container-checks.yaml", 4, set()),
+    ("edge.yaml", 7, {"CertExpiringSoon"}),
+    ("extra-probes.yaml", 5, {"ExtraProbeFailedCritical"}),
+    ("gitops-checks.yaml", 4, set()),
+    (
+        "host-checks.yaml",
+        85,
+        {
+            "DiskHealthFailed",
+            "DiskHealthNotReporting",
+            "EtcdSnapshotOffboxFailed",
+            "EtcdSnapshotOffboxNotReporting",
+            "HostReconcileFailed",
+            "HostUpdateStale",
+            "LonghornBackupHealthFailed",
+            "LonghornBackupHealthNotReporting",
+        },
+    ),
+    (
+        "hosts.yaml",
+        37,
+        {
+            "HostDiskFull",
+            "UPSOnBattery",
+            "UPSBatteryLow",
+            "UPSRuntimeLow",
+            "UPSReplaceBattery",
+            "UPSSensorAbsent",
+        },
+    ),
+    ("initial-setup-checks.yaml", 13, set()),
+    ("log-pipeline.yaml", 6, set()),
+    (
+        "other-setup-checks.yaml",
+        16,
+        {
+            "EtcdRestoreDrillFailed",
+            "EtcdRestoreDrillNotReporting",
+            "UpsSecondaryFailed",
+            "UpsSecondaryNotReporting",
+        },
+    ),
+    ("pi-checks.yaml", 8, {"PiSdHealthFailed", "PiSdHealthNotReporting"}),
+    (
+        "pod-producers.yaml",
+        9,
+        {
+            "CrowdSecAppSecVerifyFailed",
+            "CrowdSecJobStale",
+            "CrowdSecJobsExporterAbsent",
+        },
+    ),
+    ("pods.yaml", 6, {"AutofixBridgeDown", "AutofixBridgeStale"}),
+    ("registry.yaml", 10, set()),
+    ("scrape-targets.yaml", 47, set()),
+    (
+        "storage.yaml",
+        11,
+        {
+            "LonghornVolumeDegraded",
+            "LonghornVolumesMissing",
+            "PVCFull",
+            "PVCBelowFreeFloor",
+            "PVCFreeFloorUnmonitored",
+            "PVCCoverageShortfall",
+            "LonghornSnapshotNearCap",
+            "LonghornSnapshotCapUnmonitored",
+            "LonghornDiskOverSchedulingFloor",
+            "KubeletCSIMountReadOnly",
+            "EtcdDBNearQuota",
+        },
+    ),
+]
 
 
 def ingress_set(alert: str) -> dict[str, str]:
@@ -78,7 +161,7 @@ def ingress_set(alert: str) -> dict[str, str]:
     [rule] = [r for r in group["rules"] if r["alert"] == alert]
     return {
         "alertname": alert,
-        "service": INGRESS_STAND_IN_SERVICE,
+        "service": STAND_IN_SERVICE,
         **rule["labels"],
     }
 
@@ -94,43 +177,25 @@ def deploy_pipeline_set(alert: str) -> dict[str, str]:
     return {"alertname": alert, **rule["labels"]}
 
 
-def host_sets(shadow: bool) -> dict[str, dict[str, str]]:
-    """The labels each host-checks rule reaches Alertmanager with, keyed `<alert>/<service>`.
-
-    `TextfileCollectorError` and the host-plane rules are one rule per host, so the alert name
-    alone is not a key. Every rule there carries a literal `service`.
-
-    Args:
-        shadow: Whether to return the rules that carry `shadow`, or those that do not.
-    """
-    [group] = yaml_fast.safe_load(HOST_RULES.read_text())["groups"]
-    return {
-        f"{rule['alert']}/{rule['labels']['service']}": {
-            "alertname": rule["alert"],
-            **rule["labels"],
-        }
-        for rule in group["rules"]
-        if ("shadow" in rule["labels"]) == shadow
-    }
+def rules_of(name: str) -> list[dict]:
+    [group] = yaml_fast.safe_load((RULES_DIR / name).read_text())["groups"]
+    return group["rules"]
 
 
-def literal_sets(path, shadow: bool) -> dict[str, dict[str, str]]:
-    """The labels each rule of `path` reaches Alertmanager with, keyed `<alert>/<service>`.
-
-    M6's batch A3 files carry a literal `service` on every rule, and several rules share an
-    alert name, so the key adds the service.
+def rule_sets(name: str, shadow: bool) -> dict[str, dict[str, str]]:
+    """The labels each rule of rules file `name` reaches Alertmanager with, keyed
+    `<alert>/<service>`, since several rules share an alert name.
 
     Args:
-        path: The rule file.
+        name: The rules file under `RULES_DIR`.
         shadow: Whether to return the rules that carry `shadow`, or those that do not.
     """
-    [group] = yaml_fast.safe_load(path.read_text())["groups"]
     return {
-        f"{rule['alert']}/{rule['labels']['service']}": {
-            "alertname": rule["alert"],
-            **rule["labels"],
-        }
-        for rule in group["rules"]
+        f"{rule['alert']}/{labels['service']}": labels
+        for rule in rules_of(name)
+        for labels in [
+            {"alertname": rule["alert"], "service": STAND_IN_SERVICE, **rule["labels"]}
+        ]
         if ("shadow" in rule["labels"]) == shadow
     }
 
@@ -152,29 +217,6 @@ def loki_sets(shadow: bool) -> dict[str, dict[str, str]]:
                 if ("shadow" in rule["labels"]) == shadow:
                     sets[rule["alert"]] = {"alertname": rule["alert"], **rule["labels"]}
     return sets
-
-
-CONTAINER_RULES = (
-    K8S_ROLES / "observability" / "files" / "rules" / "container-checks.yaml"
-)
-
-
-def container_sets() -> dict[str, dict[str, str]]:
-    """The labels each M6 batch A2 rule reaches Alertmanager with, keyed by alert name.
-
-    A per-pod rule takes `service` from the workload join, so `homepage` stands in for it, and
-    the census rule's literal `service` wins. A2's Cutover-b dropped `shadow`, so every set
-    here is in `PAGING`; a rule that regains the label moves to the blackhole and fails there.
-    """
-    [group] = yaml_fast.safe_load(CONTAINER_RULES.read_text())["groups"]
-    return {
-        rule["alert"]: {
-            "alertname": rule["alert"],
-            "service": INGRESS_STAND_IN_SERVICE,
-            **rule["labels"],
-        }
-        for rule in group["rules"]
-    }
 
 
 # Each label set and the receivers Alertmanager sends it to.
@@ -216,70 +258,25 @@ PAGING = {
         deploy_pipeline_set("DeployPipelineExporterAbsent"),
         ["discord"],
     ),
-    # A critical host rule pages both channels; a warning, such as WiredLinkDown, Discord alone.
     **{
         name: (
             labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
-        )
-        for name, labels in host_sets(shadow=False).items()
-    },
-    **{
-        name: (
-            labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+            CRITICAL_RECEIVERS if labels["severity"] == "critical" else ["discord"],
         )
         for name, labels in loki_sets(shadow=False).items()
     },
-    # Batch A3's scrape-target and log-pipeline rules, all `warning`, since its Cutover-b.
     **{
         name: (
             labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
+            CRITICAL_RECEIVERS if labels["severity"] == "critical" else ["discord"],
         )
-        for path in (SCRAPE_RULES, LOG_PIPELINE_RULES)
-        for name, labels in literal_sets(path, shadow=False).items()
-    },
-    # Batch A4's edge rules since its Cutover-b: `CertExpiringSoon` is critical, so both
-    # channels, and the rest are `warning`.
-    **{
-        name: (
-            labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
-        )
-        for name, labels in literal_sets(EDGE_RULES, shadow=False).items()
-    },
-    # Batch A2's container-checks rules since its Cutover-b. All four are `warning`, so Discord
-    # alone.
-    **{name: (labels, ["discord"]) for name, labels in container_sets().items()},
-    # Batch A5's storage rules since its Cutover-b. All ten are `critical`, so both channels.
-    **{
-        name: (
-            labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
-        )
-        for name, labels in literal_sets(STORAGE_RULES, shadow=False).items()
-    },
-    # Batch A1's host rules since its Cutover-b: `HostDiskFull` and the five `UPS*` rules are
-    # critical, so both channels, and the rest are `warning`. The five Pi pressure arms joined
-    # at B8's Cutover-b, when they dropped `shadow`. Batch A6's 21 bridge-exporter rules joined at
-    # its Cutover-1b: eight are `critical`, so both channels, and the rest post to Discord alone.
-    **{
-        name: (
-            labels,
-            ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
-        )
-        for path in (HOSTS_RULES, BRIDGE_RULES)
-        for name, labels in literal_sets(path, shadow=False).items()
+        for file, _, _ in ROUTED
+        for name, labels in rule_sets(file, shadow=False).items()
     },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
-# The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
-SHADOW = {
-    **host_sets(shadow=True),
-    **loki_sets(shadow=True),
-    **literal_sets(HOSTS_RULES, shadow=True),
-}
+# The shadow sets, as M3's host-checks rules ship them.
+SHADOW = {**rule_sets("host-checks.yaml", shadow=True), **loki_sets(shadow=True)}
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
 
@@ -374,7 +371,6 @@ DRILL = {
     "drill": "true",
     "service": "littlelink",
 }
-CRITICAL_RECEIVERS = ["discord", "email"]
 
 
 def test_a_critical_drill_alert_reaches_only_the_blackhole():
@@ -410,12 +406,12 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
     assert {rule["alert"] for rule in group["rules"]} <= covered
 
 
-def test_host_sets_names_every_host_check_rule():
-    """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
+def test_rule_sets_names_every_host_check_rule():
+    """Non-vacuity for `rule_sets` over host-checks.yaml: every shadow rule of the group, per host for the rules each
     host carries, and the paging host-plane rules, M3's two disk-health rules among
     them since its PR 5 and B9's four AIDE and rkhunter rules per host since its Cutover-1b."""
     hosts = ("daniel-box", "daniel-server", "daniel-pi")
-    assert set(host_sets(shadow=True)) == (
+    assert set(rule_sets("host-checks.yaml", shadow=True)) == (
         {f"TextfileCollectorError/{host}" for host in hosts}
         | {"ComposeUpFailed/daniel-pi"}
     )
@@ -432,7 +428,7 @@ def test_host_sets_names_every_host_check_rule():
         if not (alert.startswith("Aide") and host == "daniel-pi")
     }
     assert (
-        set(host_sets(shadow=False))
+        set(rule_sets("host-checks.yaml", shadow=False))
         >= {
             "DiskHealthFailed/daniel-box",
             "DiskHealthNotReporting/daniel-box",
@@ -485,72 +481,46 @@ def test_the_a7_log_rule_pages_to_discord_and_a_shadowed_one_does_not():
     assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
 
 
-def test_every_a2_container_rule_pages_since_cutover_b():
-    """Non-vacuity for `container_sets`: A2's four rules, none shadow, each routed to Discord."""
-    sets = container_sets()
-    assert set(sets) == {
-        "ContainerRestartLoop",
-        "ContainerOOMKilled",
-        "ContainerCPUThrottled",
-        "CAdvisorCoverageShortfall",
+def row_problems(rules: list[dict], count: int, critical: set[str]) -> list[str]:
+    """How `rules` differ from a `ROUTED` row's count of paging rules and critical alerts."""
+    paging = [rule for rule in rules if "shadow" not in rule["labels"]]
+    got = {r["alert"] for r in paging if r["labels"]["severity"] == "critical"}
+    problems = (
+        [f"{len(paging)} paging rules, not {count}"] if len(paging) != count else []
+    )
+    if got != critical:
+        problems.append(f"critical {sorted(got)}, not {sorted(critical)}")
+    return problems
+
+
+@pytest.mark.parametrize(
+    ("file", "count", "critical"), ROUTED, ids=[r[0] for r in ROUTED]
+)
+def test_each_routed_file_holds_its_paging_rules_and_critical_set(
+    file, count, critical
+):
+    assert row_problems(rules_of(file), count, critical) == []
+
+
+def test_a_routed_rule_that_regains_shadow_is_flagged():
+    rules = rules_of("pods.yaml")
+    [autofix] = [r for r in rules if r["alert"] == "AutofixBridgeDown"]
+    autofix["labels"]["shadow"] = "true"
+    assert row_problems(rules, 6, {"AutofixBridgeDown", "AutofixBridgeStale"}) == [
+        "5 paging rules, not 6",
+        "critical ['AutofixBridgeStale'], not ['AutofixBridgeDown', 'AutofixBridgeStale']",
+    ]
+
+
+def test_the_disarmed_checks_have_no_rule():
+    """Their producers stop at the hand apply, so a rule left behind would page NotReporting."""
+    alerts = {rule["alert"] for rule in rules_of("host-checks.yaml")}
+    disarmed = {
+        f"{check}Check{suffix}"
+        for check in ("ManifestPrune", "ReleaseStaleness", "LiveDrift")
+        for suffix in ("Failed", "NotReporting")
     }
-    assert all("shadow" not in labels for labels in sets.values())
-    assert all(name in PAGING and name not in SHADOW for name in sets)
-    assert all(PAGING[name][1] == ["discord"] for name in sets)
-
-
-def test_every_a3_rule_pages():
-    """Non-vacuity for `literal_sets`: batch A3's scrape and log-pipeline rules all page since
-    Cutover-b, so none routes to the blackhole."""
-    for path in (SCRAPE_RULES, LOG_PIPELINE_RULES):
-        assert literal_sets(path, shadow=True) == {}
-        assert literal_sets(path, shadow=False)
-    assert "ScrapeTargetDown/observability" in PAGING
-    assert "ScrapeTargetFlapping/observability" in PAGING
-    assert "LogShipperDroppingEntries/loki-homelab" in PAGING
-    assert "ScrapeTargetDown/observability" not in SHADOW
-
-
-def test_every_a4_edge_rule_pages_with_its_ported_severity():
-    """Non-vacuity for `literal_sets`: batch A4's seven edge rules all page since Cutover-b, so
-    none routes to the blackhole, and the certificate rule is the one that also emails."""
-    assert literal_sets(EDGE_RULES, shadow=True) == {}
-    assert set(literal_sets(EDGE_RULES, shadow=False)) == {
-        "CertExpiringSoon/traefik",
-        "TraefikBackend5xx/traefik",
-        "TraefikBackendSlow/traefik",
-        "TraefikLatencyBucketMissing/traefik",
-        "TraefikEntrypoint404Flood/traefik",
-        "TraefikRouter421/traefik",
-        "EdgeMetricsMissing/traefik",
-    }
-    assert PAGING["CertExpiringSoon/traefik"][1] == ["discord", "email"]
-    assert PAGING["TraefikBackendSlow/traefik"][1] == ["discord"]
-    assert "TraefikBackendSlow/traefik" not in SHADOW
-
-
-def test_every_a5_storage_rule_pages_as_critical():
-    """Non-vacuity for `literal_sets`: batch A5's ten storage rules all page since Cutover-b, so
-    none routes to the blackhole, and each is critical, so it mails as well as posting. The
-    Longhorn disk floor joined the file later on the same terms."""
-    assert literal_sets(STORAGE_RULES, shadow=True) == {}
-    sets = literal_sets(STORAGE_RULES, shadow=False)
-    assert set(sets) == {
-        "LonghornVolumeDegraded/longhorn",
-        "LonghornVolumesMissing/longhorn",
-        "PVCFull/longhorn",
-        "PVCBelowFreeFloor/longhorn",
-        "PVCFreeFloorUnmonitored/longhorn",
-        "PVCCoverageShortfall/longhorn",
-        "LonghornSnapshotNearCap/longhorn",
-        "LonghornSnapshotCapUnmonitored/longhorn",
-        "LonghornDiskOverSchedulingFloor/longhorn",
-        "KubeletCSIMountReadOnly/longhorn",
-        "EtcdDBNearQuota/etcd",
-    }
-    assert all(labels["severity"] == "critical" for labels in sets.values())
-    assert all(name in PAGING and name not in SHADOW for name in sets)
-    assert all(PAGING[name][1] == ["discord", "email"] for name in sets)
+    assert not alerts & disarmed, sorted(alerts & disarmed)
 
 
 def test_a_storage_rule_that_regains_shadow_is_flagged():
