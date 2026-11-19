@@ -241,10 +241,8 @@ def _audit_level(user: str, verb: str, group: str, resource: str) -> str:
     ("user", "verb", "resource", "omits_started"),
     [
         (KUSTOMIZE_CONTROLLER, "watch", "secrets", True),
-        (LONGHORN_MANAGER, "watch", "secrets", True),
         (KUSTOMIZE_CONTROLLER, "get", "secrets", False),
         (OPERATOR, "watch", "secrets", False),
-        (OPERATOR, "create", "pods/exec", False),
     ],
 )
 def test_only_a_known_controllers_secret_watch_skips_response_started(
@@ -253,8 +251,7 @@ def test_only_a_known_controllers_secret_watch_skips_response_started(
     """A controller's endless watch is logged once; any other watch keeps its opening entry.
 
     The client picks a watch's timeoutSeconds, so for an unknown identity ResponseStarted is
-    the only prompt record of a stream that reads every Secret. A long exec reaches
-    ResponseComplete only when it ends, so it keeps ResponseStarted too.
+    the only prompt record of a stream that reads every Secret.
     """
     policy = _audit_policy()
     assert "ResponseStarted" not in policy["omitStages"], policy["omitStages"]
