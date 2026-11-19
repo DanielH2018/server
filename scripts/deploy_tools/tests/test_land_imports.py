@@ -15,6 +15,7 @@ MODULES = frozenset(
         "ledger",
         "landing",
         "merge",
+        "serial_lock",
         "turn",
         "slots",
         "line",
@@ -100,9 +101,11 @@ ALLOWED = {
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
     # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge;
     # `fresh` names the variable a landing handed the turn reads it from.
-    "turn": {"landing", "outcome", "line", "fresh"},
+    "turn": {"landing", "outcome", "line", "fresh", "serial_lock"},
+    # The stdlib-only read of the serial lock, which `cc-wait landing-clear` runs without the venv.
+    "serial_lock": set(),
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
-    "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn"},
+    "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn", "serial_lock"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
     "line": set(),
     # The drafts in the line, tested with the turn holder's own in one run, then merged.

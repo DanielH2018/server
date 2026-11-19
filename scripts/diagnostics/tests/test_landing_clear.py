@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import landing_clear
 import pytest
-from deploy_tools.land_lib import slots, turn
+from deploy_tools.land_lib import serial_lock, turn
 from lib import proc_testing
 
 RUN_URL = "https://github.com/DanielH2018/server/actions/runs/123"
@@ -140,24 +140,24 @@ def _hold(directory, name):
 def test_a_held_serial_lock_keeps_the_wait_open_and_freeing_it_clears(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path))
-    held = _hold(tmp_path, slots.SERIAL_NAME)
-    assert slots.serial_landing_live("anywhere")
+    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+    held = _hold(tmp_path, serial_lock.SERIAL_NAME)
+    assert serial_lock.serial_landing_live("anywhere")
     held()
-    assert not slots.serial_landing_live("anywhere")
+    assert not serial_lock.serial_landing_live("anywhere")
 
 
 def test_a_held_landing_slot_is_not_a_serial_landing(tmp_path, monkeypatch):
-    monkeypatch.setenv(turn.TURN_DIR_ENV, str(tmp_path))
-    held = _hold(tmp_path, slots.SLOT_NAMES[0])
-    assert not slots.serial_landing_live("anywhere")
+    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+    held = _hold(tmp_path, "homelab-land-slot-0.lock")
+    assert not serial_lock.serial_landing_live("anywhere")
     held()
 
 
 def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
     tmp_path, monkeypatch, capsys
 ):
-    monkeypatch.delenv(turn.TURN_DIR_ENV, raising=False)
+    monkeypatch.delenv(serial_lock.TURN_DIR_ENV, raising=False)
     bin_dir = proc_testing.fake_bin(
         tmp_path, ssh="echo 'ssh: connection refused' >&2\nexit 255\n"
     )
@@ -167,7 +167,7 @@ def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
         return landing_clear.read(
             lambda: "none",
             lambda: _run(),
-            lambda: slots.serial_landing_live("daniel-server"),
+            lambda: serial_lock.serial_landing_live("daniel-server"),
         )
 
     assert landing_clear.main([], read_state=read_state) == 1

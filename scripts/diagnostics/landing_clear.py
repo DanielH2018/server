@@ -53,7 +53,7 @@ from collections.abc import Callable
 from subprocess import CompletedProcess
 
 import forge
-from deploy_tools.land_lib.slots import serial_landing_live
+from deploy_tools.land_lib.serial_lock import serial_landing_live
 from diagnostics.probe_lib.landing_blockers import blockers, ci_state
 from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
