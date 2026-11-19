@@ -41,7 +41,7 @@ def watch_set(package) -> set[str]:
 
 
 def test_the_service_file_declares_the_proxy_and_its_lifecycle_sub_proxy(package):
-    """Named members: has_code_server is false on the Pi, so no codeserver sub-proxy renders."""
+    """Named members: the file declares the proxy and its lifecycle sub-proxy, nothing else."""
     project = project_of(package)
     assert f"{COMPOSE}/docker-proxy/compose.yaml" in project["files"]
     declared = set(project["files"][f"{COMPOSE}/docker-proxy/compose.yaml"]["services"])
