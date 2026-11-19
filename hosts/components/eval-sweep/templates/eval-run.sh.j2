@@ -24,8 +24,7 @@
 # a multi-agent LLM sweep (minutes, not seconds) would block every deploy and the other host
 # crons for no reason docs-refresh's generator actually has.
 #
-# THE COMMIT SEQUENCE FOLLOWS docs-refresh.sh EXACTLY: dirty-tree guard, one-open-PR guard,
-# commit, then scripts/deploy_tools/publish_pr.py (throwaway branch, push, reset master,
+# THE COMMIT SEQUENCE: dirty-tree guard, one-open-PR guard, commit, then scripts/deploy_tools/publish_pr.py (throwaway branch, push, reset master,
 # `gh pr create`, then a detached `land.py --arm-merge --await-merge` that merges the PR once
 # its CI is green). The landing merges directly at the head CI checked rather than arming
 # GitHub's auto-merge. A repository ruleset rejects every direct push to master (see
