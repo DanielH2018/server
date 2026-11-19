@@ -80,9 +80,9 @@ Usage:
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
     uv run python scripts/validate/host_package_cases.py ... --bootstrap
 
-A passing case prints nothing unless `--all` is given. A failed case prints a `[FAIL]` line naming why, then its
-container's journal. The last line counts each verdict, and each failed case gets an `::error`
-annotation; `case_groups.report` writes both.
+A passing case prints nothing unless `--all` is given. A failed case prints a `[FAIL]` line
+naming why, then its container's journal. The last line counts each verdict, and each failed
+case gets an `::error` annotation; `case_groups.report` writes both.
 
 Exit codes: 0 no case failed, with a last `[NO VERDICT]` line naming the cases a mirror outage
 left untested; 1 a case failed or a container never booted; 64 a usage error.
