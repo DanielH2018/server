@@ -49,7 +49,7 @@ def test_an_entry_dumps_to_yaml_as_a_plain_mapping():
         "non-string-name",
         "duplicate",
         "misspelt-tier",
-        "group-as-tier",
+        "group-as-tier-has-no-single-priority-class",
     ],
 )
 def test_a_malformed_list_is_refused(raw, message):

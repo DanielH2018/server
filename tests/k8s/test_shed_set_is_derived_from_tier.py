@@ -9,15 +9,9 @@ is the first member (H1.2), and `coredns` joins it in H1.4.
 Run: uv run pytest tests/k8s/test_shed_set_is_derived_from_tier.py
 """
 
-import pytest
-
 from _k8s_render import k8s_entries
 from lib import yaml_fast
-from lib.container_entry import (
-    SERVICE_TIERS,
-    ContainerEntryError,
-    parse_containers_list,
-)
+from lib.container_entry import SERVICE_TIERS
 from lib.repo_paths import K8S_ROLES
 from lib.service_tiers import shed_set
 from renderer.template_filters.service_tier import NEVER_SHED, shed_entries
@@ -45,11 +39,6 @@ def _tiered_dependencies_on_shed(entries):
 def test_an_untiered_entry_is_shed_and_every_tier_is_kept():
     entries = [_entry("sonarr"), *(_entry(f"svc-{t}", t) for t in SERVICE_TIERS)]
     assert [e["name"] for e in shed_entries(entries)] == ["sonarr"]
-
-
-def test_a_misspelt_tier_raises_rather_than_shedding_the_service():
-    with pytest.raises(ContainerEntryError, match="unknown tier 'home-edg'"):
-        shed_entries(parse_containers_list([_entry("traefik", "home-edg")]))
 
 
 def test_the_inventory_sheds_an_arr_and_keeps_every_tiered_service():

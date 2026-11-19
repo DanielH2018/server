@@ -14,11 +14,7 @@ from lib.guard_jinja_env import FilterError, repo_filters
 
 from _helpers import K8S_ROLES
 from _k8s_render import k8s_entries
-from lib.container_entry import (
-    SERVICE_TIERS,
-    ContainerEntryError,
-    parse_containers_list,
-)
+from lib.container_entry import SERVICE_TIERS
 from renderer.template_filters.service_tier import (
     in_service_tier,
     tier_priority_class,
@@ -100,14 +96,6 @@ def test_in_service_tier_selects_by_tier_group():
 def test_in_service_tier_refuses_a_missing_entry():
     with pytest.raises(ValueError, match="no containers_list entry named 'b'"):
         in_service_tier([{"name": "a", "tier": "home-edge"}], "b", "home-critical")
-
-
-def test_a_tier_group_is_not_a_declarable_tier():
-    """`home-critical` selects tiers; an entry declaring it would have no single class."""
-    with pytest.raises(ContainerEntryError, match="unknown tier 'home-critical'"):
-        tier_priority_class(
-            parse_containers_list([{"name": "a", "tier": "home-critical"}]), "a"
-        )
 
 
 def test_every_tier_names_a_declared_priority_class():

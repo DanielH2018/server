@@ -9,11 +9,8 @@ claims cannot become a second hand list that drifts from the manifests.
 Run: uv run pytest tests/longhorn/test_r2_tier_is_derived.py
 """
 
-import pytest
-
 from _helpers import load_defaults
 from _k8s_render import k8s_entries
-from lib.container_entry import ContainerEntryError, parse_containers_list
 from lib.service_tiers import R2_TIER, r2_volumes, resolved_tier_lists
 from renderer.template_filters.service_tier import tier_backup_claims, tier_entries
 from test_every_longhorn_pvc_has_a_tier import longhorn_pvcs_by_role
@@ -97,12 +94,3 @@ def test_untagging_an_entry_drops_its_claims():
     ]
     del entries[0]["tier"]
     assert tier_backup_claims(entries, "home-critical", "homelab") == ["other/c-data"]
-
-
-def test_a_misspelt_tier_is_refused():
-    with pytest.raises(ContainerEntryError, match="home-critcal"):
-        tier_backup_claims(
-            parse_containers_list([{"name": "a", "tier": "home-critcal"}]),
-            "home-critical",
-            "homelab",
-        )
