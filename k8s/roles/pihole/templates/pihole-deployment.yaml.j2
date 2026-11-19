@@ -55,7 +55,7 @@ spec:
       # rollout, not against node loss.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-      # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
+      # Edge/auth/DNS eviction ordering — see k8s/roles/cluster-base/templates/priorityclass.yaml.j2.
 {{ pod_shell(services | tier_priority_class('pihole')) }}
       containers:
         # Both containers share the pod network namespace: FTL binds :53/:80, unbound sits on

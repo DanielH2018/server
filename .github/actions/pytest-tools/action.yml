@@ -26,7 +26,7 @@ runs:
     # `dpkg-deb -x` unpacks the packages. The one `sudo` left refreshes stale lists.
     #
     # The download runs once per runner image version: an apt-get install took a median 4.1s
-    # of a leg's 28s outside `Run the test suite` (#8684). The unpacked binaries are cached
+    # of a leg's 28s outside `Run the test suite`. The unpacked binaries are cached
     # under a key that carries the image version, because they link against the image's own
     # libraries. A copy that does not run falls back to the download, as does a runner that
     # sets no `ImageVersion`.

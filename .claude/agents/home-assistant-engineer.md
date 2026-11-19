@@ -56,8 +56,8 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   `_template_files`. `configmap.yaml.j2` loops over them, the init container installs whatever
   each ConfigMap holds, and the validator fails when a list and its directory disagree.
   Add a new `files/*.yaml` or `*.jinja` without adding both lines — and its `!include` — and
-  the deploy is green while the pod never sees it. This replaces the old Docker-era
-  `common_config_changed` wiring; there are no bind mounts and no `register:` chain any more.
+  the deploy is green while the pod never sees it. There are no bind mounts and no
+  `register:` chain.
 - **Rollout is automatic when the manifests change.** `defaults/main.yml` sets
   `manifests_rollout: home-assistant`, so the renderer stamps `checksum/restart` on that
   Deployment's pod template (`scripts/renderer/renderer_lib/restart.py`). Since the config is

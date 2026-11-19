@@ -45,8 +45,8 @@ depends:
 units:
   log2ram.service: {policy: manual}
 files:
-  # DECIDED: the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false (#2694,
-  # #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
+  # DECIDED: the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false.
+  # Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
   # --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse`
   # seeks over a run of NULs in the source, and `--inplace` makes the destination the live file,
   # so whatever the previous file left at those offsets survives. Rotated .gz files then fail
