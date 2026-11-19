@@ -94,9 +94,15 @@ loki.process "pods" {
   // directly; this stage reads the access-log-rotate sidecar's STDOUT copy of the same file,
   // so a drop here is invisible to the WAF. Scoped to that container name and nothing else.
   //
-  // 302 is deliberately KEPT — Authelia redirects are the cheapest evidence of an auth loop.
-  // The expression pairs a routine status with a sub-second Duration (nanoseconds, at most 9
-  // digits); Traefik emits fields alphabetically, which puts DownstreamStatus before Duration.
+  // A person's 302 is KEPT, because Authelia redirects are the cheapest evidence of an auth
+  // loop. A 302 from a pod address is dropped: blackbox-exporter's http_sso_302 module probes
+  // every SSO-gated name each minute and was ~35,000 of ~37,000 302s a day. A person arrives
+  // from the LAN or through Cloudflare, never from the pod CIDR, and a Cloudflare request's
+  // ClientHost is a comma-separated chain, which the pod-address pattern cannot match.
+  //
+  // The routine expression pairs a status with a sub-second Duration (nanoseconds, at most 9
+  // digits). Traefik emits fields alphabetically, which puts ClientHost before
+  // DownstreamStatus and DownstreamStatus before Duration.
   //
   // The counter this bumps is loki_process_dropped_lines_total, NOT the
   // loki_write_dropped_entries_total that monitor-bridge's dropped-entries check watches at
@@ -106,6 +112,11 @@ loki.process "pods" {
     stage.drop {
       expression          = "\"DownstreamStatus\":(200|204|304),.*\"Duration\":[0-9]{1,9},"
       drop_counter_reason = "traefik_routine_access_log"
+    }
+{# The pod CIDR is a /16, so its first two octets are the whole network prefix. #}
+    stage.drop {
+      expression          = "\"ClientHost\":\"{{ k3s_pod_cidr.split('.')[:2] | join('[.]') }}[.][0-9.]+\",.*\"DownstreamStatus\":302,"
+      drop_counter_reason = "traefik_pod_probe_302"
     }
   }
 
@@ -217,6 +228,41 @@ loki.process "pods" {
     stage.replace {
       expression = "\"RequestPath\":\"/rest/[^\"\\s]*(?:[?&]|u0026)p=([^&\"\\s\\\\]+)"
       replace    = "<redacted>"
+    }
+  }
+
+  // Normalise the line's own level into a `level` structured-metadata field, never a label, so
+  // `{namespace="homelab"} | level="error"` works across formats without adding streams. Each
+  // shape keys on the format's level token, never on a bare word, which is how Loki's own
+  // detected_level tags a `[WRN] ... error receiving data` line as an error. The shapes:
+  // logfmt and logrus (`level=INFO`, `level="warn"`), JSON (`"level":"info"`), loguru
+  // (`| DEBUG    |`), an ANSI-coloured token (`<ESC>[32minfo<ESC>[39m`), a bracketed token
+  // (`[WRN]`, `[error]`), a token right after a leading timestamp (zap console, Python logging,
+  // Home Assistant) and klog's `E1119 ` prefix. A line that matches none carries no field.
+  //
+  // The stages run from least to most severe and each overwrites the last, so a line holding
+  // two tokens is filed under the worse one. Selectors avoid backslashes and quotes, as the k3s
+  // stage below explains: `.` stands in for each JSON quote and for the ANSI escape byte.
+{% set pod_levels = [
+  ('debug', 'debug|debu|dbg|trace|trac|trc', ''),
+  ('info', 'info|inf|information|notice', 'I'),
+  ('warn', 'warn|warning|wrn', 'W'),
+  ('error', 'error|erro|err|eror', 'E'),
+  ('fatal', 'fatal|fata|ftl|critical|crit|panic|pani|dpanic|emerg', 'F'),
+] %}
+{% for name, words, klog in pod_levels %}
+  stage.match {
+    selector = "{namespace=~\".+\"} |~ \"(?i)(^|[^a-z_])level(=|.:).?({{ words }})([^a-z]|$)|[|] *({{ words }}) *[|]|.[[][0-9;]*m *({{ words }}).[[]|[[]({{ words }})[]]|^(.[[][0-9;]*m)?[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:.,+-]+Z?[^a-z0-9]+({{ words }})([^a-z]|$){% if klog %}|^{{ klog }}[0-9]{4} [0-9]{% endif %}\""
+    stage.template {
+      source   = "level"
+      template = "{{ name }}"
+    }
+  }
+{% endfor %}
+
+  stage.structured_metadata {
+    values = {
+      level = "",
     }
   }
 }
