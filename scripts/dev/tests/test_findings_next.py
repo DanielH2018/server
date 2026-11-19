@@ -112,7 +112,7 @@ def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
         "`fanout_place.py status`, `fanout_lib/brief.py` and "
         "scripts/dev/fanout_lib/review/review.py:120, "
         "the `.claude/hooks/fanout-stop.py` hook; not scripts/dev/tests/"
-        "test_fanout_red_gate.py, the issue-fanout skill or ~/.claude/fanout/."
+        "test_fanout_review.py, the issue-fanout skill or ~/.claude/fanout/."
     )
     assert fanout_tooling_paths(body) == [
         ".claude/hooks/fanout-stop.py",
@@ -122,21 +122,19 @@ def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
     ]
 
 
-def test_fanout_vocabulary_5400_green_gate_title_is_flagged():
-    """A body that names the green gate and the red lock in prose and no path."""
-    title = (
-        "The green gate still strands a correct fix on a false-premise red test, "
-        "a red-file helper under test, or a derived constant"
-    )
-    assert solo_only_reasons(title, "The lock refuses the fix.") == ["green gate"]
-    assert solo_only_reasons("t", "A Red-Lock refusal ends the batch.") == ["red lock"]
+def test_fanout_vocabulary_in_a_title_or_body_that_names_no_path_is_flagged():
+    title = "The fan-out review holds a correct fix on a finding the fix resolved"
+    assert solo_only_reasons(title, "The hold names no file.") == ["fan out review"]
+    assert solo_only_reasons("t", "Two Fanout Reviews ended the batch.") == [
+        "fanout reviews"
+    ]
 
 
 def test_fanout_vocabulary_absent_review_wording_is_clean():
-    title = "Review the red test helper and the gate image tag"
-    body = "A code review found the green tests and a lock file; nothing about the pipeline."
+    title = "Review the red gate helper and the green gate image tag"
+    body = "A code review found the fan-out tests and a red lock file; nothing about the pipeline."
     assert solo_only_reasons(title, body) == []
-    assert solo_only_reasons("green gate", "red lock", "DanielH2018/dotfiles") == []
+    assert solo_only_reasons("fan-out review", "t", "DanielH2018/dotfiles") == []
 
 
 def test_pickable_orders_high_severity_first():
@@ -264,8 +262,10 @@ def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
     assert {r["number"]: r["solo_only"] for r in rows} == {1150: True, 1151: False}
 
 
-def test_next_json_marks_an_issue_whose_title_names_the_green_gate_solo_only(capsys):
-    prose = make_issue(5400, title="The green gate strands a correct fix")
+def test_next_json_marks_an_issue_whose_title_names_the_fanout_review_solo_only(
+    capsys,
+):
+    prose = make_issue(5400, title="The fan-out review strands a correct fix")
     tools, _ = build_tools(
         Fakes(issues=[prose, make_issue(1151)], worktree_facts=facts())
     )
@@ -286,7 +286,7 @@ def test_next_json_does_not_mark_another_repos_issue_solo_only(capsys):
 
 def test_next_text_render_marks_a_solo_only_issue(capsys):
     tooling = make_issue(1150, title="tooling")
-    tooling["body"] = "scripts/dev/fanout_lib/review/red_gate.py drops the commit"
+    tooling["body"] = "scripts/dev/fanout_lib/review/fix_round.py drops the commit"
     tools, _ = build_tools(
         Fakes(issues=[tooling, make_issue(1151)], worktree_facts=facts())
     )

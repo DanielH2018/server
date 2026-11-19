@@ -19,10 +19,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-# The red/green gate's finding names no source file, so there is no line to quote at the head.
-# `green_contest` judges it from the red tests themselves.
-from fanout_lib.review.red_gate import GREEN_FILE
-
 # A fix that adds or removes a few lines moves the cited line, so the quote is looked for around the line, not on it.
 WINDOW = 10
 
@@ -36,8 +32,6 @@ def _squash(text: str) -> str:
 
 def holds_at_head(finding: dict, read: ReadAtHead) -> bool:
     """Whether the finding quotes a line that the fix head's file has near the cited line."""
-    if finding.get("file") == GREEN_FILE:
-        return True
     quote = _squash(str(finding.get("evidence") or ""))
     text = read(str(finding.get("file") or ""))
     if not quote or text is None:

@@ -8,7 +8,7 @@ Usage::
     fanout.py place status <run-id>
     fanout.py probe [--describe] <run-id>...
     fanout.py headroom [--describe] [--batches N] [--host HOST]
-    fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
+    fanout.py review --batch 1345-1386 --repo DanielH2018/server < .fanout/brief.md
     fanout.py stats [--dir DIR ...] [--since YYYY-MM-DD] [--json]
     fanout.py land-server [--dry-run]
 

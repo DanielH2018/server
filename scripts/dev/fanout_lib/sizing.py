@@ -55,7 +55,7 @@ DEFAULT = LADDER[1]
 # A batch carrying this label reruns work whose last fix round did not finish it.
 LEFTOVER_LABEL = "review-leftover"
 LEFTOVER_FLOOR = LADDER[2]
-# The red-test author and the reviewer, whatever the batch's rung.
+# The reviewer, whatever the batch's rung.
 REVIEWER = Rung("opus", "medium", 15)
 SIZE_HELP = (
     f"run this batch's implementer at RUNG, one of {', '.join(r.name for r in LADDER)};"

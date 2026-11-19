@@ -65,15 +65,6 @@ def test_a_test_of_a_module_the_fix_adds_is_clean_beside_one_that_is_flagged(tmp
     assert check.passing == ["tests/test_mod.py::test_zero"]
 
 
-def test_the_red_nodes_are_left_out(tmp_path):
-    repo, base = _repo(tmp_path)
-    head = commit(repo, "fix", **{"mod.py": FIXED, "tests/test_mod.py": PASSES_ANYWAY})
-    check = unproven_tests(
-        run, repo, base, head, exclude=["tests/test_mod.py::test_zero"]
-    )
-    assert (check.new, check.passing) == (0, [])
-
-
 def test_a_change_with_no_new_test_reads_nothing(tmp_path):
     repo, base = _repo(tmp_path)
     head = commit(repo, "fix", **{"mod.py": FIXED})

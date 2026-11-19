@@ -194,8 +194,8 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
             # the PR" exits the process just as cleanly as one that opened it.
             if BLOCKER.search(final):
                 # Tested first, so a blocker line wins whatever URL follows it: the review
-                # holds (`held_for_findings`, `held_for_green`) end on the full PR URL, and
-                # read as `done` on daniel-server, where the URL alone is the finish.
+                # hold (`held_for_findings`) ends on the full PR URL, and
+                # reads as `done` on daniel-server, where the URL alone is the finish.
                 # `m` still fills the line's PR url below, which the orchestrator needs.
                 state = NEEDS_INPUT
             elif m and lands(b.host, b.repo) and not landed:

@@ -25,7 +25,6 @@ def test_every_review_pipeline_phase_names_the_prompt_tool(tmp_path):
     pipeline.session = "sid-1"
     phases = (
         pipeline._implementer(),
-        pipeline._red_author(),
         pipeline._resume(),
         pipeline._reviewer(),
     )

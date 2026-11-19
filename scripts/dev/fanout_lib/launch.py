@@ -309,15 +309,13 @@ def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
 def review_command(
     batch: str,
     target: Target = SERVER_TARGET,
-    red_green: bool = False,
     rung: Rung = DEFAULT,
 ) -> str:
     """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
         f"{review_script(batch, target)} review --batch {batch} --repo {target.repo}"
-        + (" --red-green" if red_green else "")
-        + f" --rung {rung.name}"
+        f" --rung {rung.name}"
     )
 
 
@@ -326,7 +324,6 @@ def systemd_run_command(
     target: Target = SERVER_TARGET,
     home: str | None = None,
     review: bool = False,
-    red_green: bool = False,
     rung: Rung = DEFAULT,
 ) -> str:
     """The shim check, then the `systemd-run` step; `home` defaults to the launcher's."""
@@ -334,7 +331,7 @@ def systemd_run_command(
     home = home or str(_Path.home())
     command = claude_args(target, wt, home, rung)
     if review:
-        command = review_command(batch, target, red_green, rung)
+        command = review_command(batch, target, rung)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     run = (
         f"env PATH={unit_path(home)} systemd-run --user --unit {unit_name(batch, target)} "
@@ -363,9 +360,7 @@ def prepare_command(batch: str, target: Target) -> str:
     )
 
 
-def launch_command(
-    batch: str, review: bool = False, red_green: bool = False, rung: Rung = DEFAULT
-) -> str:
+def launch_command(batch: str, review: bool = False, rung: Rung = DEFAULT) -> str:
     """The one call a batch launch runs: worktree add+lock, venv sync, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -379,7 +374,7 @@ def launch_command(
             create_worktree_command(batch),
             venv_sync_command(batch),
             write_brief_command(batch),
-            systemd_run_command(batch, review=review, red_green=red_green, rung=rung),
+            systemd_run_command(batch, review=review, rung=rung),
         ]
     )
 
@@ -578,7 +573,6 @@ def launch(
     issues: list[int],
     target: Target = SERVER_TARGET,
     review: bool = False,
-    red_green: bool = False,
     rung: Rung = DEFAULT,
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
@@ -612,8 +606,6 @@ def launch(
             failure into the same message; so does a refused `systemd-run`. A `fetch` or
             `brief write` failure, or one this can't attribute, leaves the tree in place.
         review: start `fanout_lib.review.review`'s pipeline instead of one `claude -p`.
-        red_green: give that pipeline its red phase (`fanout_lib.review.red_gate`); this repo
-            only, as `red_gate.review_flags` decides.
         rung: the model and effort the implementer runs at (`fanout_lib.sizing`).
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
@@ -632,7 +624,7 @@ def launch(
             proc = _run(
                 tools,
                 host,
-                launch_command(batch, review, red_green, rung),
+                launch_command(batch, review, rung),
                 brief_text,
                 "launch",
             )

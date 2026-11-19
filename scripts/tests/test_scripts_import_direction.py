@@ -381,7 +381,6 @@ PACKAGE_APIS = {
         "dev.fanout_lib.review.api",
         frozenset(
             {
-                "dev.fanout_lib.place",
                 "dev.fanout_lib.review_unit",
                 "dev.fanout_lib.review_stats",
             }
@@ -412,16 +411,16 @@ def test_outside_code_imports_a_package_only_through_its_api():
 
 
 def test_an_import_past_the_api_is_flagged():
-    graph = {"dev.fanout_lib.place": {"dev.fanout_lib.review.red_gate"}}
+    graph = {"dev.fanout_lib.place": {"dev.fanout_lib.review.base_check"}}
     assert _past_the_api(
         graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api"
-    ) == ["dev.fanout_lib.place imports dev.fanout_lib.review.red_gate"]
+    ) == ["dev.fanout_lib.place imports dev.fanout_lib.review.base_check"]
 
 
 def test_the_api_itself_and_imports_inside_the_package_are_clean():
     graph = {
         "dev.fanout_lib.place": {"dev.fanout_lib.review.api"},
-        "dev.fanout_lib.review.review": {"dev.fanout_lib.review.red_gate"},
+        "dev.fanout_lib.review.review": {"dev.fanout_lib.review.base_check"},
     }
     assert (
         _past_the_api(graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api") == []
@@ -429,10 +428,10 @@ def test_the_api_itself_and_imports_inside_the_package_are_clean():
 
 
 def test_a_package_import_resolves_from_an_ancestor_directory():
-    """`fanout_lib.review.red_gate` inside `dev/fanout_lib/launch.py` names `dev.fanout_lib...`."""
-    known = {"dev.fanout_lib.launch", "dev.fanout_lib.review.red_gate"}
-    source = "from fanout_lib.review.red_gate import review_flags\n"
+    """`fanout_lib.review.base_check` inside `dev/fanout_lib/launch.py` names `dev.fanout_lib...`."""
+    known = {"dev.fanout_lib.launch", "dev.fanout_lib.review.base_check"}
+    source = "from fanout_lib.review.base_check import unproven_tests\n"
     assert _first_party_imports(source, "dev.fanout_lib.launch", known) == set()
     assert _first_party_imports(
         source, "dev.fanout_lib.launch", known, _resolve_from_ancestors
-    ) == {"dev.fanout_lib.review.red_gate"}
+    ) == {"dev.fanout_lib.review.base_check"}
