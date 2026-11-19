@@ -193,6 +193,42 @@ def probe_candidate(cand, ffprobe_bin, window_s, timeout, host_data_root=""):
     return probed
 
 
+def held_set_changed(path: str, fakes: list) -> bool:
+    """Record the held episode ids at `path` and say whether they differ from the last scan.
+
+    An empty `fakes` removes the record, so a hold that ends and returns posts again.
+    """
+    ids = sorted(str(f["episodeId"]) for f in fakes)
+    previous = None
+    if os.path.exists(path):
+        with open(path) as fh:
+            previous = json.load(fh)
+    if not ids:
+        if previous is not None:
+            os.remove(path)
+        return False
+    if previous == ids:
+        return False
+    atomic_write(path, json.dumps(ids))
+    return True
+
+
+def hold_notice(fakes: list, max_per_scan: int, named: int = 3) -> str:
+    """Name the first few held episodes in the Discord post for a held scan."""
+    shown = ", ".join(
+        frl.sanitize(f.get("relativePath"), 80)
+        for f in sorted(fakes, key=lambda f: str(f["episodeId"]))[:named]
+    )
+    more = len(fakes) - named
+    if more > 0:
+        shown += " and %d more" % more
+    return "%d fakes — holding (max %d), investigate: %s" % (
+        len(fakes),
+        max_per_scan,
+        shown,
+    )
+
+
 def write_state(state_file, ok, msg):
     atomic_write(
         state_file, json.dumps({"ts": int(time.time()), "ok": bool(ok), "msg": msg})
@@ -262,21 +298,21 @@ def scan(cfg):
     ledger, held = frl.seed_ledger(ledger, fakes, max_per_scan, int(time.time()))
     atomic_write(ledger_file, json.dumps(ledger))
 
+    held_file = ledger_file + ".held"
     if held:
         ok = False
-        summary = "%d fakes — holding (max %d), investigate" % (
-            len(new_fakes),
-            max_per_scan,
-        )
-        discord_post(
-            webhook,
-            summary,
-            USER_AGENT,
-            log=log,
-            marker=DISCORD_MARKER,
-            spool_dir=DISCORD_SPOOL_DIR,
-        )
+        summary = hold_notice(new_fakes, max_per_scan)
+        if held_set_changed(held_file, new_fakes):
+            discord_post(
+                webhook,
+                summary,
+                USER_AGENT,
+                log=log,
+                marker=DISCORD_MARKER,
+                spool_dir=DISCORD_SPOOL_DIR,
+            )
     else:
+        held_set_changed(held_file, [])
         for f in new_fakes:
             line = frl.format_fake_line("Seeded for replacement", f)
             log(line)

@@ -285,3 +285,24 @@ def test_the_scan_probes_the_mapped_host_path_with_the_host_ffprobe(tmp_path):
     assert scan.probe_candidate(cand, str(stub), 40, 60, "/srv/media") is not None
     lines = calls.read_text().splitlines()
     assert lines and all(line.endswith(" /srv/media/media/tv/E.mkv") for line in lines)
+
+
+def test_a_held_set_posts_once_until_it_changes(tmp_path):
+    from fake_remux_lib import fake_remux_scan as scan
+
+    path = str(tmp_path / "replacements.json.held")
+    held = [{"episodeId": 2}, {"episodeId": 1}]
+    assert scan.held_set_changed(path, held) is True
+    assert scan.held_set_changed(path, list(reversed(held))) is False
+    assert scan.held_set_changed(path, held + [{"episodeId": 3}]) is True
+    assert scan.held_set_changed(path, []) is False
+    assert scan.held_set_changed(path, held) is True
+
+
+def test_the_hold_notice_names_the_first_episodes():
+    from fake_remux_lib import fake_remux_scan as scan
+
+    fakes = [{"episodeId": i, "relativePath": "S/E%d.mkv" % i} for i in range(1, 6)]
+    assert scan.hold_notice(fakes, 2) == (
+        "5 fakes — holding (max 2), investigate: S/E1.mkv, S/E2.mkv, S/E3.mkv and 2 more"
+    )
