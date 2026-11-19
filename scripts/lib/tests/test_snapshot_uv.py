@@ -36,20 +36,11 @@ module-name = "lib"
 namespace = true
 """
 
-# The running session's settings that would point uv at another project or venv.
-PROJECT_VARS = frozenset(
-    {
-        "VIRTUAL_ENV",
-        "UV_PROJECT",
-        "UV_PROJECT_ENVIRONMENT",
-        "UV_NO_SYNC",
-        "UV_FROZEN",
-        "UV_LOCKED",
-        "UV_NO_INSTALL_PROJECT",
-        "UV_NO_EDITABLE",
-        "PYTHONPATH",
-    }
-)
+# The `UV_` settings the scratch keeps: where uv caches and which interpreter it finds. Every
+# other one is the running suite's, written for this repo's project (CI's `UV_NO_GROUP=lint`
+# names a group the scratch lacks, and uv refuses it).
+KEPT_UV_VARS = ("UV_CACHE_DIR", "UV_PYTHON")
+FOREIGN_VARS = frozenset({"VIRTUAL_ENV", "PYTHONPATH"})
 WHO = ("python", "-c", "import lib.who; print(lib.who.WHO)")
 
 
@@ -65,7 +56,12 @@ def scratch(tmp_path):
     """(caller, snapshot, env, the caller's `.pth`), the caller synced into its own venv."""
     caller = _tree(tmp_path / "caller", "caller")
     snapshot = _tree(tmp_path / "snapshot", "snapshot")
-    env = {k: v for k, v in os.environ.items() if k not in PROJECT_VARS}
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in FOREIGN_VARS
+        and (not k.startswith("UV_") or k.startswith(KEPT_UV_VARS))
+    }
     env |= {"UV_OFFLINE": "1", "UV_PROJECT_ENVIRONMENT": str(caller / ".venv")}
     run(["uv", "sync", "--quiet"], cwd=caller, env=env, check=True)
     shutil.copy(caller / "uv.lock", snapshot / "uv.lock")
