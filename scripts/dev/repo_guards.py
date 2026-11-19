@@ -6,6 +6,7 @@ A fan-out brief and a hand-run session both call this script, so the list has on
 
     uv run python scripts/dev/repo_guards.py                    # takes one to two minutes
     uv run python scripts/dev/repo_guards.py --drop-candidates  # what the list could lose
+    uv run python scripts/dev/repo_guards.py --drop-candidates --cited  # what tests/ could lose
 
 After the guards, the run prints advice for the branch: each instruction-file section that
 cites code the branch changed and whose prose it left unchanged, each name the branch
@@ -16,12 +17,18 @@ The whole suite is out of scope. It costs about five times this set, and the ope
 out for fan-out batches (`.claude/hooks/block-batch-full-suite.py`).
 
 `--drop-candidates` reads the CI failure survey (`ci_failures.py`) over the window, so it needs
-`gh` and the sandbox off.
+`gh` and the sandbox off. With `--cited` it lists, in place of the guards, each check file under
+`tests/` whose text cites an issue (`#1234`) or a date (`2026-11-18`) and that no red attempt on
+master named. A red attempt on a PR branch does not count there. Either list proposes and
+deletes nothing: a check that never fails can still be load-bearing, so the operator decides
+which go. GitHub keeps an Actions log for 90 days by default, so a longer window reads most red
+attempts as unreadable.
 
 Exit codes: pytest's own when running the guards; from `--drop-candidates`, 0 the proposal
 printed and 1 a `gh` call failed; and 64 for bad arguments.
 """
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -43,6 +50,8 @@ from lib.facts.notice import branch_notice
 from lib.repo_paths import REPO
 
 DEFAULT_WEEKS = 8
+CITED_BRANCH = "master"
+CITATION = re.compile(r"(?<![\w/&])#\d{2,}\b|\b20\d\d-\d\d-\d\d\b")
 
 
 def hook_files(repo: Path = REPO) -> list[str]:
@@ -105,6 +114,16 @@ def drop_candidates(
     ]
 
 
+def citing_checks(repo: Path = REPO) -> dict[str, list[str]]:
+    """Map each check file under `tests/` that cites an issue or a date to what it cites."""
+    found: dict[str, list[str]] = {}
+    for path in sorted((repo / "tests").rglob("test_*.py")):
+        cited = list(dict.fromkeys(CITATION.findall(path.read_text())))
+        if cited:
+            found[path.relative_to(repo).as_posix()] = cited
+    return found
+
+
 Run = Callable[..., subprocess.CompletedProcess]
 
 NOTICE_REF = "origin/master"
@@ -165,7 +184,7 @@ def run_guards(run: Run = subprocess.run, advice: Callable[[], str] = advice) ->
     return code
 
 
-Survey = Callable[[date, date], tuple[set[str], int]]
+Survey = Callable[[date, date, str | None], tuple[set[str], int]]
 
 
 def main(
@@ -186,21 +205,40 @@ def main(
         default=DEFAULT_WEEKS,
         help=f"the window for --drop-candidates (default {DEFAULT_WEEKS})",
     )
+    parser.add_argument(
+        "--cited",
+        action="store_true",
+        help="with --drop-candidates, list the tests/ files that cite an issue or a date"
+        f" and have no {CITED_BRANCH} failure, in place of the guards",
+    )
     args = parser.parse_args(argv)
+    if args.cited and not args.drop_candidates:
+        parser.error("--cited needs --drop-candidates")
     if not args.drop_candidates:
         return run_guards(run)
     today = datetime.now(UTC).date()
     since = today - timedelta(weeks=args.weeks)
+    branch = CITED_BRANCH if args.cited else None
     try:
-        failing, unread = survey(since, today)
+        failing, unread = survey(since, today, branch)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(f"gh failed: {exc.stderr or exc}", file=sys.stderr)
         return FAILED
     if unread:
         print(
-            f"{unread} red attempts since {since} had no readable log, so a guard "
+            f"{unread} red attempts since {since} had no readable log, so a file "
             "named below may have failed in one of them"
         )
+    if args.cited:
+        cited = citing_checks()
+        quiet = {path: refs for path, refs in cited.items() if path not in failing}
+        print(
+            f"{len(quiet)} of {len(cited)} check files that cite an issue or a date have"
+            f" no {CITED_BRANCH} failure since {since}; the operator decides which go"
+        )
+        for path, refs in quiet.items():
+            print(f"{path}  {', '.join(refs)}")
+        return OK
     candidates = drop_candidates(guards, hook_files(), failing)
     for path in candidates:
         print(f"{path}: no CI failure since {since}")
