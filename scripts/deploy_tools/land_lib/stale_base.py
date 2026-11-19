@@ -239,7 +239,7 @@ def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
         Whether the PR is now a draft at an updated head, for `merge._start_run` to take
         once GitHub has moved the head.
     """
-    if conflicting or head == ln.approved_head or ln.opts.require_head:
+    if conflicting or head == ln.approved_head or ln.opts.require_head is not None:
         return False
     try:
         moved = master_paths_since(ln, head)
