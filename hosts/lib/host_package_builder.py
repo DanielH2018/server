@@ -2,7 +2,7 @@
 """Build the host packages from the newest green first-parent commit of master, and stage them.
 
 The builder half of the host-package pipeline. The design, step by step, is
-docs/target-architecture/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
+docs/archive/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
 the numbered comments below are its builder steps. `homelab-builder.service` runs this as
 `homelab-builder` every 2 minutes. It stages packages under `staged/` and publishes nothing:
 the signer publishes them.

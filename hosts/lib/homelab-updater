@@ -2,7 +2,7 @@
 # homelab-updater: install the newest homelab-updater, homelab-<host> and every other installed
 # homelab-* package (homelab-tools, from H3.11), run reconcile, and report the verdict reconcile
 # recorded. The design is H3's *The updater* and *Host-plane
-# holds and stop levers* (docs/target-architecture/host/h3-pi-pilot.md); the step numbers
+# holds and stop levers* (docs/archive/host/h3-pi-pilot.md); the step numbers
 # below are that section's.
 #
 # Usage:

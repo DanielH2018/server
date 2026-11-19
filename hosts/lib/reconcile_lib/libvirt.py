@@ -1,6 +1,6 @@
 """The libvirt arm: the networks and nwfilters a host package declares, and no others.
 
-The design is docs/target-architecture/host/h7-delete-ansible.md, *Reconcilers for state dpkg
+The design is docs/archive/host/h7-delete-ansible.md, *Reconcilers for state dpkg
 does not hold*. A host package's manifest lists "libvirt" in `reconcilers` and carries:
 
     "libvirt": {"networks":  [{"name": "staging", "path": "/usr/lib/homelab/libvirt/networks/staging.xml"}],
