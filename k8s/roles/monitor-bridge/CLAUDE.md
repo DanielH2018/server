@@ -60,7 +60,8 @@ Three conventions hold across all of them:
 - Every threshold, window and streak is an env var in `templates/config/env.yaml.j2`; read the
   template, not the constant
   (`k8s/roles/monitor-bridge/tests/test_config_reads_the_rendered_env.py::test_no_rendered_key_carries_a_second_default_in_python`).
-  `templates/env-secret.yaml.j2` holds only credentials, because Flux's typed patch reads a
+  The `monitor-bridge-env` Secret
+  (`k8s/roles/monitor-bridge/defaults/main.yml:render_secrets`) holds only credentials, because Flux's typed patch reads a
   Secret's quoted `"300"` back as a number and refuses it (#5574;
   `scripts/renderer/tests/test_renderer_string_values_census.py::test_no_substituting_directory_holds_a_value_that_unquotes_to_a_non_string`).
 

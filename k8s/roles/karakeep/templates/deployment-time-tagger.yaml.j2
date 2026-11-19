@@ -107,20 +107,10 @@ spec:
           # bigger change than the hardening it buys, and out of scope for #1129.
 {{ hardened_security_context(non_root=true, run_as_user=1000, run_as_group=1000) }}
           env:
-            # Three loguru stderr handlers could be active at once, and every INFO line was
-            # written once per handler:
-            #
-            #   1. loguru's own pre-configured default handler,
-            #   2. the script's, added by setup_logging(),
-            #   3. karakeep_python_api's, added on every KarakeepAPI() construction. It accepts
-            #      only that package's records, so it duplicates nothing the script logs.
-            #
-            # LOGURU_AUTOINIT=false removes handler 1 at import. The script's setup_logging()
-            # calls `logger.remove()` and adds one INFO handler that rejects the package's
-            # records, which handler 3 already prints once. One run therefore ships one summary
-            # line plus the package's few INFO lines about the connection.
-            - name: LOGURU_AUTOINIT
-              value: "false"
+{# Never set LOGURU_AUTOINIT=false here. setup_logging() drops loguru's default handler itself,
+   and KarakeepAPI() then calls logger.remove(0) to drop that same default. Without the default,
+   the script's INFO handler is id 0, so the library removes it and installs a DEBUG catch-all,
+   and every DEBUG line ships. #}
             - name: TZ
               value: "{{ tz }}"
             - name: KARAKEEP_PYTHON_API_ENDPOINT
