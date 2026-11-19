@@ -92,6 +92,7 @@
  "hosts/components/renovate-agent/tests/test_run_requests.py": 0.0,
  "hosts/components/renovate-agent/tests/test_triage_visibility.py": 0.0,
  "hosts/components/renovate-notify/tests/test_autoclosed.py": 0.0,
+ "hosts/components/renovate-notify/tests/test_message_shape.py": 0.0,
  "hosts/components/renovate-notify/tests/test_notify_logic.py": 0.0,
  "hosts/components/renovate-notify/tests/test_pending_churn.py": 0.0,
  "hosts/components/renovate-notify/tests/test_pending_soak.py": 0.0,
