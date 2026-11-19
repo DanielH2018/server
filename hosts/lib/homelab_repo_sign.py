@@ -2,7 +2,7 @@
 """Sign and publish the host packages the builder staged, or re-sign the published tree.
 
 The signer half of the host-package pipeline. The design, step by step, is
-docs/target-architecture/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
+docs/archive/host/h3-pi-pilot.md, *The builder and the repository (daniel-box)*;
 the numbered comments below are its signer steps. `homelab-repo-sign.service` runs this as
 `homelab-signer` after every builder run that exits 0, through the builder unit's
 `OnSuccess=`. The unit sets `PrivateNetwork=yes`: nothing here reads the network.

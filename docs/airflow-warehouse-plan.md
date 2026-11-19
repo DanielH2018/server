@@ -59,10 +59,11 @@ role as built.
 - **Slice 0b, the scheduler deadman.** A monitor-bridge check on the scheduler's health,
   and its alert rule, so a dead scheduler pages. Done: the `airflow_scheduler` row reads the
   scheduler's own health server, and `AirflowSchedulerDown` pages it.
-- **Slice 1, long-term metrics (idea 1).** Longhorn volume size and growth, node load and
-  memory, GPU busy, UPS battery, and daily B2 Class-B counts, plus a "Homelab history" board.
-  Longhorn state metrics are one-hot over a label, and `actualSize` is not filesystem usage
-  (ADR 0006).
+- **Slice 1, long-term metrics (idea 1).** Volume usage and growth per claim, node load and
+  memory, GPU busy and UPS battery, as `prom_series_rollup` into `prom.series_daily`, plus a
+  "Homelab history" board. Volume usage reads kubelet's filesystem figures, because
+  `actualSize` is not filesystem usage (ADR 0006). Daily B2 Class-B counts moved to slice 7:
+  Longhorn logs them, so they live in `loki-homelab`, not Prometheus.
 - **Slice 2, Claude Code telemetry history (idea 2).** Daily spend, tokens, cache hit rate,
   tool errors and permission decisions, with the four counting traps as tested code.
 - **Slice 3, Home Assistant history (idea 3).** State history for a declared entity list. The
@@ -74,7 +75,8 @@ role as built.
 - **Slice 6, cost per merged PR (idea 6).** Joins slices 2 and 5 on assets. The join key is
   open: check whether the telemetry carries a branch or worktree name per session.
 - **Slice 7, network edge history (idea 7).** Traefik, CrowdSec and Authelia counts from
-  `loki-homelab`. Confirm the access log's format there first.
+  `loki-homelab`, and daily B2 Class-B counts from Longhorn's log, which
+  `probe.py b2-spend` already sums. Confirm the access log's format there first.
 - **Slice 8, DNS history (idea 8).** Both Pi-hole instances' query counts per client and
   domain.
 
@@ -87,8 +89,8 @@ weekly reconciliation checks.
   the loss to the last week, which backfill restores.
 - **A DAG outage longer than a source's retention loses days.** The quality check fails on a
   gap, and slice 0b pages on a dead scheduler.
-- **Task logs live only in the task pod.** A failed pod is kept for `kubectl logs`; a remote
-  log store is not planned yet.
+- **Task logs reach Loki only when the pod outlives Alloy's tail.** A sub-second task often
+  leaves no line there, so task state is read from Airflow. A remote log handler is #9202.
 - **Airflow upgrades are schema migrations.** The base is pinned by digest with
   `k8s_autodeploy: false`, and the scheduler's init container migrates before anything else
   starts.

@@ -32,21 +32,20 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
-# Both resolve via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs
-# before it imports this module. That directory holds this package and host_lib.py, which is
-# shipped there as a sibling (/usr/lib/homelab/longhorn-backup-health/, k3s-host-checks).
-# In the checkout the inserts below stand in for that copy.
+# host_lib resolves via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which
+# runs before it imports this module. That directory holds this package and host_lib.py, which
+# is shipped there as a sibling (/usr/lib/homelab/longhorn-backup-health/, k3s-host-checks).
+# In the checkout the insert below stands in for that copy.
 import sys as _sys
 from pathlib import Path as _Path
 
-# In the checkout, `hosts/lib` holds host_lib.py and `scripts/lib` holds this package. On a
-# host both sit beside the reader, whose directory is already on sys.path, so these inserts
-# name directories that do not exist there and change nothing.
+# DECIDED: a shared module keeps its own insert of `hosts/lib`. On a host the directory does
+# not exist and host_lib sits beside the reader; `lib.host_modules` is not shipped. (ADR-0039)
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import host_lib
-from longhorn_lib import longhorn_backups
+
+from . import longhorn_backups
 
 # 6h slack after a volume's first scheduled run before it is called uncovered. Hardcoded in the
 # original script too (`GRACE_SLACK_S=$(( 6 * 3600 ))`), not templated.

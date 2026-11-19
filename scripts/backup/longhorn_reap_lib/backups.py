@@ -94,20 +94,12 @@ Read the dry run, then re-run the same command with --apply.
 import os
 import sys
 from dataclasses import dataclass
-from pathlib import Path as _Path
 
-# host_lib.py is the host components' shared module and stays in hosts/lib/.
-# The entry point puts only its own directory on sys.path, so both inserts are needed: the
-# package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.repo_paths import HOST_LIB_FILES
-
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 import host_lib
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
-from longhorn_reap_lib import logic, selection
+from backup.longhorn_reap_lib import logic, selection
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")

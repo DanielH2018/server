@@ -46,23 +46,15 @@ Deleting needs the root-only admin kubeconfig, so run the same interpreter under
 
 import os
 import sys
-from pathlib import Path as _Path
 import time
 import urllib.request
 
-# host_lib.py is the host components' shared module and stays in hosts/lib/.
-# The entry point puts only its own directory on sys.path, so both inserts are needed: the
-# package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.repo_paths import HOST_LIB_FILES
-
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 import host_lib
 from renderer.template_filters.longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")

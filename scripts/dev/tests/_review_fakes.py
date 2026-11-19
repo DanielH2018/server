@@ -4,13 +4,18 @@ import json
 import subprocess
 
 from fanout_lib.review.base_check import BaseCheck
-from fanout_lib.brief import Issue, render_brief
+from fanout_lib.brief import render_brief
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
 BRANCH = "worktree-batch-1345"
-ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
+ISSUES = [
+    Issue(
+        1345, "Traefik startupProbe has no red-proof", IssueState.OPEN, body="body one"
+    )
+]
 
 
 def _report(result="", session="sid-1", structured=None, is_error=False, cost=1.0):
@@ -79,6 +84,8 @@ class FakeRunner:
         # The VERDICT lines of the first landings, in order; `verdict` answers the rest.
         self.verdicts = []
         self.land_rc = 0
+        # What a land.sh that refused to start printed on stdout.
+        self.land_out = ""
         self.waits = [0]
         # The CI wait a batch that does not land runs: each `cc-wait gh-ci` command, the
         # (exit code, output) it answers with in order (the last repeats), the PR's
@@ -194,7 +201,10 @@ class FakeRunner:
                 verdict = self.verdicts.pop(0) if self.verdicts else self.verdict
                 log.write_text(f"  waiting for CI\n{verdict}\n")
             return subprocess.CompletedProcess(
-                argv, self.land_rc, "", "refused: bad body"
+                argv,
+                self.land_rc,
+                self.land_out,
+                "" if self.land_out else "refused: bad body",
             )
         rc = self.waits.pop(0) if len(self.waits) > 1 else self.waits[0]
         return subprocess.CompletedProcess(argv, rc, "", "")

@@ -10,7 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_effort.py
 
 import pytest
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.launch import systemd_run_command
 from fanout_lib import review_unit
 from fanout_lib.place import main
@@ -72,7 +72,15 @@ def test_the_review_unit_builds_its_pipeline_at_the_rung_it_was_launched_with(
 def _launch(tmp_path, labels: tuple[str, ...], *flags: str) -> tuple[int, str]:
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
-        issues=[Issue(1, "one", "body one", ("claude", *labels))],
+        issues=[
+            Issue(
+                1,
+                "one",
+                IssueState.OPEN,
+                body="body one",
+                labels=frozenset({"claude", *labels}),
+            )
+        ],
     )
     argv = ["launch", "--batch", "1", "--host", "daniel-box", *flags]
     code = main([*argv, "--manifest-root", str(tmp_path)], tools)

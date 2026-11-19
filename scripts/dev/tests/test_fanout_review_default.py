@@ -3,7 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_review_default.py
 """
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
@@ -14,7 +14,11 @@ HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 def _unit_command(tmp_path, *flags) -> str:
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
-        issues=[Issue(1, "one", "body one", ("claude",))],
+        issues=[
+            Issue(
+                1, "one", IssueState.OPEN, body="body one", labels=frozenset({"claude"})
+            )
+        ],
     )
     argv = ["launch", "--batch", "1", "--host", "daniel-box", *flags]
     assert main([*argv, "--manifest-root", str(tmp_path)], tools) == 0

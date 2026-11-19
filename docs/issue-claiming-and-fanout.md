@@ -446,11 +446,24 @@ coordinator can read it with `place runs --json`.
 every `secrets/cluster-vars.` file: each is one encrypted document, and two branches that
 edit it cannot be rebased over each other.
 
-The rule has two known limits:
+`scripts/dev/findings_lib/issue_model.py:cited_paths` is the one reading of an issue body
+that both gates, the brief and the `paths` field of `next --json` share. It resolves each
+citation against the files `git ls-files` lists. A path from the repo root counts as
+written. A path from a subdirectory, such as `fanout_lib/clean.py`, counts as the one
+tracked file that ends with it. A filename with no directory counts only when it stands
+alone in an inline code span and exactly one tracked file has that name: `` `ci.yml` ``
+holds `.github/workflows/ci.yml`.
+
+The rule has three known limits:
 
 - **A batch's diff can exceed its cited paths.** The gate compares what each batch was
   briefed on, not what its agent edits. Two batches that cite different files can still
   edit one.
+- **A filename that several tracked files share holds nothing.** `` `main.yml` `` and
+  `` `CLAUDE.md` `` name dozens of files, so `cited_paths` drops them, and so it drops a
+  filename written outside a code span. An issue that means one of those files must spell
+  its path. In the other direction, a file an issue names only in passing is held like one
+  it edits, as a full path always was; `--allow-shared-file` excuses it.
 - **A batch that ended with no PR holds nothing, and a resumed one still holds nothing.**
   Someone who resumes such a batch by hand edits files a later launch was free to take,
   until the resumed work opens a PR.
@@ -513,9 +526,29 @@ reason, as a batch that needs attention (exit tier 1). The unit's stop does not 
 A daniel-server batch that stops at its PR is landed by the server lander, whose logs are on
 daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the newest
 `land<pr>-*.log` there and reports the batch `landed`, `parked` by the same rule, or
-`needs-input` naming the verdict. With no result yet the batch stays `done (awaiting the
-server lander)`. That directory belongs to the user the lander runs as, so a session of
-another user reads none and reports `done`.
+`needs-input` naming the verdict. That directory belongs to the user the lander runs as, so a
+session of another user reads none and reports `done`.
+
+With no result yet, `status` reads the ruling the lander made on the PR from the lander unit's
+journal, in the same call to daniel-box. Each lander pass prints one line per candidate PR,
+and `scripts/dev/fanout_lib/status.py:lander_rulings` takes the newest pass's line.
+
+- A ruling that waits on a person reads `needs-input: the server lander will not land #N`,
+  followed by the next step and the ruling. `scripts/dev/fanout_lib/operator_waits.py:reason_of`
+  decides which rulings those are: the surface the lander itself runs from, an operator step in the PR body,
+  findings left after the fix round, and a batch that ended `needs-input`. `place runs` lists
+  the batch the same way, and `cc-wait fanout` names it as a batch that needs a hand.
+- Any other ruling, such as a draft or a head that moved since the review, stays `done
+  (awaiting the server lander: <ruling>)`.
+- A PR the newest pass did not name has merged, closed or aged out of the review records the lander reads,
+  and reads `done (awaiting the server lander)`.
+
+DECIDED: `status` reads the ruling the lander recorded and does not evaluate
+`autoland.problems` itself. That function needs the review record and the PR's file list
+from GitHub, which is one more GitHub call on every `status` and every `cc-wait fanout`
+poll. The journal read adds no ssh connection and no GitHub call. Its cost is age: a ruling
+is as old as the newest pass, ten minutes at most, so a batch reads `awaiting` until the
+first pass after its PR opens.
 
 **`clean` keeps a parked batch whose PR has not merged.** A claim expires with its worktree,
 and the open PR still holds the edits, so removing the tree would free the issues for a
@@ -645,14 +678,19 @@ at its PR, and a review batch whose PR the rule holds.
 | Server batch outcome | Who acts |
 |---|---|
 | A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
-| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. The sub-coordinator reads the reason and lands the PR, or passes an operator step to the operator. |
+| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, or passes an operator step to the operator. |
+| A PR the lander rules ineligible for a reason it clears itself (a draft, a head that moved) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`. |
 | A `--no-review` batch that qualifies for the server lander | The server lander. The sub-coordinator never lands it. |
 | A server lander landing refused before merge | The server lander, which starts the PR again once the rule clears (`scripts/dev/fanout_lib/autoland.py:refused_for_now`). |
 | A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |
 
-Before a sub-coordinator runs `land.sh` on any server batch's PR, it runs `probe.py
-lander`. `land.sh` holds no per-PR lock, so a second landing of a PR the server lander
-started would arm the merge twice.
+`place status` says whose the PR is: a `needs-input` line that names the server lander is
+the sub-coordinator's, and `awaiting the server lander` is not. Before a sub-coordinator
+runs `land.sh` on any server batch's PR, it still runs `probe.py lander`, which shows
+whether a landing of the PR started since that ruling and how it ended. The probe is not a
+guard against a second
+landing: `land.sh` refuses one while a landing of the PR is live (`docs/landing.md`, *One
+landing of a PR at a time*).
 
 A re-land of a PR that merged behind a hold starts no promotion, and clearing the hold
 starts none either (`docs/landing.md`, *A PR that merged behind a hold*). The skill states

@@ -35,7 +35,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 ## Where things live (the mental model)
 
 - **`templates/` (role root) — k8s manifests ONLY.** `configmap.yaml.j2`, `deployment.yaml.j2`,
-  `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
+  `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/render_lib/k8s.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
   The Service is not here: the renderer renders the shared
   `k8s/templates/service-default.yaml.j2` for it, and the named port HA needs comes from

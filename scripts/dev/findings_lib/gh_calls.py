@@ -14,6 +14,7 @@ calling `run` instead.
 
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 import sys
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -27,10 +28,13 @@ from dev.findings_lib.issue_model import (
     _LIST_FIELDS,
     PR_REPO,
     REGISTER_AUTHOR,
+    Blocker,
+    Comment,
+    Issue,
+    IssueState,
     comment_cap_warning,
-    field_value,
     find_by_fingerprint,
-    issue_author,
+    parse_issue,
     pr_refs,
     waited_on,
 )
@@ -38,7 +42,7 @@ from dev.findings_lib.boundaries import FindingsTools
 from lib.json_types import JsonObject, as_object, as_object_list
 
 
-def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
+def _warn_at_the_comment_cap(issues: list[Issue]) -> list[Issue]:
     """Passes ``issues`` through, warning on stderr about any at gh's comment page cap.
 
     THE FOLD GOES BLIND PAST THE CAP. gh asks for `comments(first: 100)` and nothing
@@ -49,7 +53,7 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
     itself instead of being silently wrong.
     """
     for issue in issues:
-        warning = comment_cap_warning(issue)
+        warning = comment_cap_warning(issue.number, len(issue.comments))
         if warning:
             sys.stderr.write(warning + "\n")
     return issues
@@ -90,15 +94,15 @@ def _field_map(issue: JsonObject) -> dict[str, str]:
     return out
 
 
-def attach_fields(issues: list[dict], tools: FindingsTools) -> list[dict]:
-    """``issues``, each given a `fields` dict of its issue-field values by field name.
+def attach_fields(issues: list[Issue], tools: FindingsTools) -> list[Issue]:
+    """``issues``, each with `fields` holding its issue-field values by field name.
 
-    Every loader calls this, because `issue_model.not_before` and `severity` read `fields`,
+    Every loader calls this, because `Issue.not_before` and `Issue.severity` read `fields`,
     and an issue missing them reads as undeferred. So a failed read raises rather than
     returning issues with no fields: a command that cannot see the dates must not offer
     deferred issues.
     """
-    numbers = [i["number"] for i in issues]
+    numbers = [i.number for i in issues]
     by_number: dict[int, dict[str, str]] = {}
     for start in range(0, len(numbers), _FIELDS_PER_CALL):
         chunk = numbers[start : start + _FIELDS_PER_CALL]
@@ -112,9 +116,7 @@ def attach_fields(issues: list[dict], tools: FindingsTools) -> list[dict]:
         repository = as_object(_graphql(tools, query).get("repository"), "repository")
         for n in chunk:
             by_number[n] = _field_map(as_object(repository.get(f"i{n}") or {}, f"#{n}"))
-    for issue in issues:
-        issue["fields"] = by_number.get(issue["number"], {})
-    return issues
+    return [replace(i, fields=by_number.get(i.number, {})) for i in issues]
 
 
 def set_fields(
@@ -200,7 +202,7 @@ def set_fields(
 
 
 def fill_missing(
-    issue: dict,
+    issue: Issue,
     values: dict[str, str],
     issue_type: str,
     tools: FindingsTools,
@@ -212,11 +214,11 @@ def fill_missing(
     the same `open` fills only what that write left unset, and never overwrites a value
     set since.
     """
-    missing = {name: v for name, v in values.items() if not field_value(issue, name)}
-    held_type = (issue.get("issueType") or {}).get("name")
+    missing = {name: v for name, v in values.items() if not issue.fields.get(name)}
+    held_type = issue.issue_type
     if missing or not held_type:
         set_fields(
-            issue["number"],
+            issue.number,
             missing,
             tools,
             dry_run,
@@ -224,14 +226,12 @@ def fill_missing(
         )
 
 
-def _operator_issues(issues: list[dict]) -> list[dict]:
+def _operator_issues(issues: list[Issue]) -> list[Issue]:
     """The issues in ``issues`` that ``REGISTER_AUTHOR`` opened, warning about the rest."""
-    kept = [i for i in issues if issue_author(i) == REGISTER_AUTHOR]
-    dropped = [i for i in issues if issue_author(i) != REGISTER_AUTHOR]
+    kept = [i for i in issues if i.author == REGISTER_AUTHOR]
+    dropped = [i for i in issues if i.author != REGISTER_AUTHOR]
     if dropped:
-        listed = ", ".join(
-            f"#{i.get('number')} by {issue_author(i) or '?'}" for i in dropped
-        )
+        listed = ", ".join(f"#{i.number} by {i.author or '?'}" for i in dropped)
         sys.stderr.write(
             f"warning: skipped {len(dropped)} issue(s) not opened by {REGISTER_AUTHOR}: "
             f"{listed}\n"
@@ -278,7 +278,7 @@ def load_issues(
     tools: FindingsTools | None = None,
     labels: tuple[str, ...] = (),
     search: str = "",
-) -> list[dict]:
+) -> list[Issue]:
     """Fetches every ``claude``-labeled issue from gh, warning when it hits the list cap.
 
     Args:
@@ -296,7 +296,7 @@ def load_issues(
     if search:
         argv += ["--search", search]
     argv += ["--state", state, "--limit"]
-    issues = as_object_list(
+    raw = as_object_list(
         (tools or FindingsTools()).gh_json(
             *argv,
             str(ISSUE_LIST_CAP),
@@ -306,6 +306,7 @@ def load_issues(
         ),
         "gh issue list",
     )
+    issues = [parse_issue(i) for i in raw]
     if len(issues) >= ISSUE_LIST_CAP:
         sys.stderr.write(
             f"warning: gh returned {ISSUE_LIST_CAP} issues for --state {state}, its list "
@@ -329,7 +330,7 @@ UNRULED_CLOSE_SEARCH = "reason:not-planned " + " ".join(
 )
 
 
-def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
+def load_backlog_issues(tools: FindingsTools | None = None) -> list[Issue]:
     """The rows `scripts/docs/reference/backlog.py` renders, in four narrow fetches.
 
     NOT `--state all`. `backlog.render_markdown` renders exactly four sets — the open
@@ -350,9 +351,9 @@ def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
     for label in SETTLED_LABELS:
         fetched += load_issues("closed", tools, labels=(label,))
     fetched += load_issues("closed", tools, search=UNRULED_CLOSE_SEARCH)
-    by_number: dict[int, dict] = {}
+    by_number: dict[int, Issue] = {}
     for issue in fetched:
-        by_number.setdefault(issue["number"], issue)
+        by_number.setdefault(issue.number, issue)
     return list(by_number.values())
 
 
@@ -371,7 +372,7 @@ FINGERPRINT_SEARCH_LIMIT = 30
 # filing one fingerprint inside that window both create. That trade is right — a duplicate
 # issue is one `close --refuted` away, while a filer that cannot run drops the finding into
 # a reply and loses it, which is the harm the register exists to prevent.
-def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
+def fingerprint_match(fp: str, tools: FindingsTools) -> Issue | None:
     """The register's issue carrying fingerprint ``fp``, in any state, or None.
 
     Search NARROWS, it never decides. The hits go through the same
@@ -396,10 +397,12 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
         ),
         "gh issue list --search",
     )
-    found = find_by_fingerprint(_warn_at_the_comment_cap(hits), fp)
+    found = find_by_fingerprint(
+        _warn_at_the_comment_cap([parse_issue(h) for h in hits]), fp
+    )
     if found is not None:
-        attach_fields([found], tools)
-    if found is None and len(hits) >= FINGERPRINT_SEARCH_LIMIT:
+        return attach_fields([found], tools)[0]
+    if len(hits) >= FINGERPRINT_SEARCH_LIMIT:
         # The one way this returns a wrong None: the owning issue was pushed out of the page
         # by issues that merely mention the fingerprint. Says so rather than filing a silent
         # duplicate, because the caller's next act is to create one.
@@ -407,7 +410,7 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
             f"warning: {FINGERPRINT_SEARCH_LIMIT} search hits for fingerprint {fp} and none "
             "owns it -- the owning issue may be past the page, so check before filing\n"
         )
-    return found
+    return None
 
 
 # What `history` and `show` read: the register's fields plus the PRs that closed an issue.
@@ -416,7 +419,7 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
 HISTORY_FIELDS = f"{_LIST_FIELDS},closedByPullRequestsReferences"
 
 
-def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dict]:
+def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[Issue]:
     """The `claude` issues in any state that gh's search index matches ``query`` against.
 
     Measured 2026-10-09: a topic search returning two issues took 0.6-0.9s, where the
@@ -441,7 +444,7 @@ def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dic
         ),
         "gh issue list --search",
     )
-    return attach_fields(hits, tools)
+    return attach_fields([parse_issue(h) for h in hits], tools)
 
 
 def open_pr_refs(tools: FindingsTools) -> set[int]:
@@ -468,7 +471,7 @@ def _rest_list(tools: FindingsTools, path: str) -> list[JsonObject]:
     return as_object_list(tools.gh_json("api", url, timeout=REST_TIMEOUT), url)
 
 
-def newest_open_issues(tools: FindingsTools) -> list[dict]:
+def newest_open_issues(tools: FindingsTools) -> list[JsonObject]:
     """The 100 newest open `claude` issues, newest first, in REST's own shape.
 
     One request. Issue numbers rise with creation time, so the first entry is the highest
@@ -481,66 +484,96 @@ def newest_open_issues(tools: FindingsTools) -> list[dict]:
     return [i for i in raw if "pull_request" not in i]
 
 
-def _gh_comment(comment: dict) -> dict:
-    """One REST comment in the fields `current_claim` reads from `gh issue list`."""
-    return {
-        "body": comment.get("body") or "",
-        "author": {"login": (comment.get("user") or {}).get("login") or ""},
-        "authorAssociation": comment.get("author_association") or "",
-        "createdAt": comment.get("created_at") or "",
-    }
+def _rest_state(data: JsonObject) -> IssueState:
+    """REST's lower-case `state` as an `IssueState`; KeyError when it is missing."""
+    return IssueState(str(data["state"]).upper())
 
 
-def threaded_issues(raw: list[dict], tools: FindingsTools) -> list[dict]:
-    """``raw`` REST issues in `gh issue list`'s shape, comments and open blockers included.
+def _login(data: JsonObject) -> str:
+    return str(as_object(data.get("user") or {}, "user").get("login") or "")
+
+
+def _rest_comment(comment: JsonObject) -> Comment:
+    return Comment(
+        body=str(comment.get("body") or ""),
+        author=_login(comment),
+        association=str(comment.get("author_association") or ""),
+        created_at=str(comment.get("created_at") or ""),
+    )
+
+
+def rest_issue(data: JsonObject) -> Issue:
+    """One REST issue as an `Issue`, without the comments and blockers it costs a read to get.
+
+    Raises:
+        KeyError: the issue carries no `number` or `state`.
+    """
+    issue_type = as_object(data.get("type") or {}, "type").get("name")
+    values = as_object_list(data.get("issue_field_values") or [], "issue_field_values")
+    milestone = data.get("milestone")
+    return Issue(
+        number=int(str(data["number"])),
+        title=str(data.get("title") or ""),
+        state=_rest_state(data),
+        body=str(data.get("body") or ""),
+        labels=frozenset(
+            str(lab["name"])
+            for lab in as_object_list(data.get("labels") or [], "labels")
+        ),
+        created_at=str(data.get("created_at") or ""),
+        url=str(data.get("html_url") or ""),
+        author=_login(data),
+        issue_type=str(issue_type) if issue_type else None,
+        milestone=as_object(milestone, "milestone") if milestone else None,
+        fields={
+            str(v["issue_field_name"]): str(
+                as_object(v.get("single_select_option") or {}, "option").get("name")
+                or v.get("value")
+            )
+            for v in values
+        },
+    )
+
+
+def threaded_issues(raw: list[JsonObject], tools: FindingsTools) -> list[Issue]:
+    """``raw`` REST issues as `Issue`s, comments and blockers included.
 
     Each issue costs one more request per thread it has: its comments when it has any, and
     its blockers when it has an open one. Issues another account opened are dropped with
     `load_issues`'s warning.
+
+    Raises:
+        KeyError: an issue or a blocker carries no `state`.
     """
     issues = []
-    for i in raw:
-        number = i["number"]
+    for data in raw:
+        issue = rest_issue(data)
         comments = (
-            _rest_list(tools, f"issues/{number}/comments?per_page=100")
-            if i.get("comments")
+            _rest_list(tools, f"issues/{issue.number}/comments?per_page=100")
+            if data.get("comments")
             else []
         )
+        summary = as_object(
+            data.get("issue_dependencies_summary") or {}, "dependencies"
+        )
         blockers = (
-            _rest_list(tools, f"issues/{number}/dependencies/blocked_by")
-            if (i.get("issue_dependencies_summary") or {}).get("blocked_by")
+            _rest_list(tools, f"issues/{issue.number}/dependencies/blocked_by")
+            if summary.get("blocked_by")
             else []
         )
         issues.append(
-            {
-                "number": number,
-                "title": i.get("title") or "",
-                "state": "OPEN",
-                "labels": [{"name": lab["name"]} for lab in i.get("labels") or []],
-                "issueType": i.get("type"),
-                "body": i.get("body") or "",
-                "createdAt": i.get("created_at") or "",
-                "url": i.get("html_url") or "",
-                "author": {"login": (i.get("user") or {}).get("login") or ""},
-                "comments": [_gh_comment(c) for c in comments],
-                "fields": {
-                    v["issue_field_name"]: (v.get("single_select_option") or {}).get(
-                        "name"
+            replace(
+                issue,
+                comments=tuple(_rest_comment(c) for c in comments),
+                blockers=tuple(
+                    Blocker(
+                        int(str(b["number"])),
+                        _rest_state(b),
+                        str(b.get("html_url") or ""),
                     )
-                    or v.get("value")
-                    for v in i.get("issue_field_values") or []
-                },
-                "blockedBy": {
-                    "nodes": [
-                        {
-                            "number": b["number"],
-                            "state": str(b.get("state")).upper(),
-                            "url": b.get("html_url"),
-                        }
-                        for b in blockers
-                    ]
-                },
-            }
+                    for b in blockers
+                ),
+            )
         )
     return _operator_issues(issues)
 
@@ -572,7 +605,7 @@ def blocker_hints(
     """
     numbers, codes = waited_on(body)
     skip = {str(own), *(b.lstrip("#") for b in blocked_by)}
-    found: dict[int, tuple[str, str]] = {}
+    found: dict[int, tuple[str, IssueState]] = {}
     for n in numbers:
         if str(n) in skip:
             continue
@@ -582,7 +615,7 @@ def blocker_hints(
         )
         if "/pull/" in str(issue.get("url", "")):
             continue
-        found.setdefault(n, (f"#{n}", str(issue.get("state"))))
+        found.setdefault(n, (f"#{n}", IssueState(issue["state"])))
     for code in codes[:SLICE_LOOKUP_CAP]:
         hits = as_object_list(
             tools.gh_json(
@@ -595,11 +628,11 @@ def blocker_hints(
             n = int(str(hit["number"]))
             if str(hit.get("title", "")).startswith(f"{code}:"):
                 if str(n) not in skip:
-                    found.setdefault(n, (f"{code} (#{n})", str(hit.get("state"))))
+                    found.setdefault(n, (f"{code} (#{n})", IssueState(hit["state"])))
                 break
     lines = []
     for n, (label, state) in found.items():
-        if state == "OPEN":
+        if state == IssueState.OPEN:
             lines.append(
                 f"hint: the body waits on {label}, which is open — `findings.py block "
                 f"{own} --on {n}` withholds it until that closes, where a date only guesses"
@@ -620,21 +653,20 @@ def _existing_labels(tools: FindingsTools) -> set[str]:
     return {str(lab["name"]) for lab in labels}
 
 
-def _load_issue(number: int, tools: FindingsTools) -> JsonObject:
-    issue = as_object(
-        tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS),
-        "gh issue view",
+def _load_issue(number: int, tools: FindingsTools) -> Issue:
+    issue = parse_issue(
+        as_object(
+            tools.gh_json("issue", "view", str(number), "--json", _LIST_FIELDS),
+            "gh issue view",
+        )
     )
-    author = issue_author(issue)
-    if issue and author != REGISTER_AUTHOR:
+    if issue.author != REGISTER_AUTHOR:
         raise SystemExit(
-            f"#{number} was opened by {author or 'an unknown account'}, not "
+            f"#{number} was opened by {issue.author or 'an unknown account'}, not "
             f"{REGISTER_AUTHOR}, so findings.py does not read it"
         )
-    _warn_at_the_comment_cap([issue] if issue else [])
-    if issue:
-        attach_fields([issue], tools)
-    return issue
+    _warn_at_the_comment_cap([issue])
+    return attach_fields([issue], tools)[0]
 
 
 def _aimed_argv(argv: list[str], tools: FindingsTools) -> list[str]:

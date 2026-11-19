@@ -20,9 +20,9 @@ fixture in conftest.py is how a test reaches it.
 import re
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from dev.findings_lib.issue_model import LABELS
+from dev.findings_lib.issue_model import LABELS, Issue, parse_issue
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree, held_by_readable_process
@@ -101,7 +101,17 @@ def make_issue(
         "comments": [
             c if isinstance(c, dict) else operator_comment(c) for c in comments
         ],
+        "blockedBy": {"nodes": []},
     }
+
+
+def typed(raw: dict) -> Issue:
+    """``raw``, a gh issue object such as `make_issue` builds, parsed into an `Issue`.
+
+    A `fields` key, which gh's JSON never carries but `attach_fields` fills, becomes
+    `Issue.fields`, so a test of a pure reader can set an issue field without the graphql fake.
+    """
+    return replace(parse_issue(raw), fields=raw.get("fields") or {})
 
 
 @dataclass
@@ -163,6 +173,9 @@ class Fakes:
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
+    # The register's tracked files. Empty by default, so no test's `paths` depend on
+    # what this tree tracks.
+    tracked: frozenset[str] = frozenset()
     # What the board sync answers per issue, `(outcome, detail)`; an issue absent here reads
     # `unchanged`, so no test reaches the real board.
     board: dict[int, tuple[str, str]] = field(default_factory=dict)
@@ -420,6 +433,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             sync_board=sync_board,
             attach_milestone=attach_milestone,
             close_idle_milestones=close_idle_milestones,
+            tracked=lambda: f.tracked,
             tree_held=lambda path: held_by_readable_process(
                 path, holds=lambda: [(1, p, "cwd") for p in f.held_paths]
             ),

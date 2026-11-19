@@ -12,7 +12,7 @@ roles needs no edit here, and a key held by none or by two files is an
 error.
 The registry image is read from the `registry` role alone, because a second role copies it.
 The flux CLI's tarball digest is homelab-tools' amd64 pin. `overlay` copies the system-upgrade bundle rendered at RENDERED into OUT and rewrites it
-for a one-node guest (*Rehearsal in a drill guest*, docs/target-architecture/host/h6-k3s-suc.md),
+for a one-node guest (*Rehearsal in a drill guest*, docs/archive/host/h6-k3s-suc.md),
 then prints `target_version=<the Plan's version>`. `judge` reads one snapshot of the guest and
 prints `PASS ...` (exit 0) or `WAIT ...` (exit 1) with the reason.
 

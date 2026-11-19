@@ -49,8 +49,9 @@ import os
 import pwd
 import re
 import sys
+import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -86,15 +87,24 @@ _NOT_A_CONTINUATION = re.compile(r"^(== |VERDICT:)", re.MULTILINE)
 
 
 def log_path(pr: str, log_dir: Path | None = None) -> Path:
-    """Where this landing writes: `<dir>/land<pr>-<UTC stamp>.log`.
+    """Create the log this landing writes, `<dir>/land<pr>-<UTC stamp>.log`, and return it.
 
     The PR number leads, because that is what a session looking for its own log greps for, and
-    `fanout_lib/status.py` already globs `land*.log`.
+    `fanout_lib/status.py` already globs `land*.log`. The stamp counts seconds. When another
+    landing of the PR made its log in the same second, this one waits for the next, so no two
+    landings write one file and the newest name is still the newest landing.
     """
     base = log_dir or default_log_dir()
     base.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    return base / f"land{pr}-{stamp}.log"
+    while True:
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        path = base / f"land{pr}-{stamp}.log"
+        try:
+            path.touch(exist_ok=False)
+        except FileExistsError:
+            time.sleep(0.1)
+            continue
+        return path
 
 
 def default_log_dir() -> Path:
@@ -163,12 +173,13 @@ def fork(
     landing: Callable[[], int],
     scope_prefix: str = "land",
     spawn: Callable[[Callable[[], None]], int] = fork_detached,
+    keep: Iterable[int] = (),
 ) -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
     The grandchild is in its own session, outside the caller's process tree, and out of any
     fan-out unit's cgroup. It gets stdin on /dev/null, stdout/stderr on `log` and no other
-    inherited descriptor. It runs `landing`, writes the exit code to `rc_path(log)`, and leaves
+    inherited descriptor but `keep`. It runs `landing`, writes the exit code to `rc_path(log)`, and leaves
     through `os._exit` so none of the parent's frames unwind twice. The parent creates `log`
     first and records the pid in `pid_path(log)` before it returns, so a wait started straight
     after the return finds this landing and no earlier one.
@@ -179,6 +190,7 @@ def fork(
       landing: what the grandchild runs; its return value is the recorded exit code.
       scope_prefix: the name of the transient scope the landing moves into, before its pid.
       spawn: starts the detached body and returns its pid; a test passes one that delays it.
+      keep: descriptors the landing inherits, such as the PR lock's (`pr_lock.Held.keep`).
 
     Returns:
       The landing's pid. Only the parent ever returns from this function.
@@ -186,12 +198,14 @@ def fork(
     log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = spawn(lambda: _run_landing(log, landing, scope_prefix))
+    pid = spawn(lambda: _run_landing(log, landing, scope_prefix, keep))
     pid_path(log).write_text(f"{pid}\n")
     return pid
 
 
-def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> None:
+def _run_landing(
+    log: Path, landing: Callable[[], int], scope_prefix: str, keep: Iterable[int]
+) -> None:
     """The grandchild's body: rebind stdio, drop inherited fds, leave the unit, run, record."""
     code = 1
     try:
@@ -200,7 +214,7 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
         os.dup2(null, 0)
         os.dup2(out, 1)
         os.dup2(out, 2)
-        close_inherited()
+        close_inherited(keep)
         # Before `landing` starts anything: a child started while the move is pending stays
         # in the unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)

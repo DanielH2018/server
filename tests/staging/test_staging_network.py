@@ -9,7 +9,7 @@ that only parses the file they live in, because both are structurally valid: an 
 predates the group it needs. ansible-lint on the production profile, prek and the whole suite
 pass over both.
 
-Nothing else in the repo validates libvirt XML -- validate/k8s_manifests.py covers k8s
+Nothing else in the repo validates libvirt XML -- validate/render_lib/k8s.py covers k8s
 templates and validate-compose covers Compose. So this renders the template with the real
 defaults and parses the result, which is the only way a Jinja or XML mistake here fails
 anywhere but on daniel-server.

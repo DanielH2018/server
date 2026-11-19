@@ -12,7 +12,7 @@ and the swallowing case renders to output with the evidence already deleted. Nei
 to the render-then-lint validators beside this one.
 
 It is also the only validator scoped to every `.j2` in the tree. render_lib/compose.py covers
-the Pi's compose files, k8s_manifests.py `k8s/roles/**`, render_lib/shell.py `*.sh.j2` and
+the Pi's compose files, render_lib/k8s.py `k8s/roles/**`, render_lib/shell.py `*.sh.j2` and
 render_lib/units.py the systemd units — but a `${#` collision bites any template that carries
 shell, including a ConfigMap's embedded script and a compose `healthcheck.test`.
 

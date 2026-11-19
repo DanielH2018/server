@@ -134,15 +134,18 @@ directory in another root.
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path
 initialization][syspath]). `python -m scripts.dir.name` would put the current directory
 first instead, but that requires every cron and every hook to start from the repo root, and
-the role-shipped programs have no repo root at all. So a module that imports across a
-directory boundary carries its own insert:
+the role-shipped programs have no repo root at all. `scripts/` itself is the installed import
+root ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so a dotted import such as
+`from lib.repo_paths import REPO` needs no insert. A module that imports a sibling in another
+directory by bare name still carries its own insert of that directory, until its area is
+qualified:
 
 ```python
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from lib.repo_paths import REPO
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "dev"))
+import fanout_lib
 ```
 
 The bootstrap goes on the module that needs it, never on a shared module, because a single
@@ -275,10 +278,14 @@ guard in this tree.
 module 400. A code line holds a token that is neither a comment nor part of a docstring,
 so blank lines, comments and docstrings are free and the cap never argues for deleting
 documentation. A test module may patch no first-party module at all — a
-patch on the standard library is not counted, because no seam here can remove one. The files
-already past either limit are listed one per line in
-`tests/repo/module_length_allowlist.txt` and
-`tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
+patch on the standard library is not counted, because no seam here can remove one. A test
+module may hold no test whose body is a copy of another test's, in any module:
+`scripts/dev/duplicate_tests.py` defines a copy, and the remedy is one parametrized test or
+one census row. The files
+already past any of these limits are listed one per line in
+`tests/repo/module_length_allowlist.txt`,
+`tests/repo/monkeypatch_allowlist.txt` and
+`tests/repo/copied_tests_allowlist.txt`, with the number each stands at today, and
 `tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
 file over a cap has no line, when a file that has come back under its cap keeps one, and when
 a file has shrunk below its line without the line following it down — an entry records what
@@ -325,9 +332,9 @@ erases it.
 - **A task file has no render, so the structural read is a parse.** Read `tasks/*.yml` through
   `yaml_fast` or `_helpers.walk_tasks`. Convert a regex over YAML or TOML text to a parse only
   where its claim survives the parse unchanged.
-- **The two ratchet lists are a different subject.** `tests/repo/module_length_allowlist.txt`
-  and `tests/repo/monkeypatch_allowlist.txt` run on one harness, `tests/_ratchet.py`,
-  and neither records a textual read.
+- **The three ratchet lists are a different subject.** `tests/repo/module_length_allowlist.txt`,
+  `tests/repo/monkeypatch_allowlist.txt` and `tests/repo/copied_tests_allowlist.txt` run on
+  one harness, `tests/_ratchet.py`, and none records a textual read.
 
 ## Why the check rules exist
 

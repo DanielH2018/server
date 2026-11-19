@@ -17,7 +17,7 @@ from lib import yaml_fast
 
 ACTION = REPO / ".github" / "actions" / "pytest-tools" / "action.yml"
 CACHE_STEP = "Cache the age and apt-utils binaries"
-INSTALL_STEP = "Install sops, age and apt-utils for the tests"
+INSTALL_STEP = "Install age and apt-utils for the tests"
 IMAGE_VERSION = "steps.image.outputs.version"
 
 

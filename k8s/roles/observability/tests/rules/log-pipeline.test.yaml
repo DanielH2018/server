@@ -104,8 +104,8 @@ tests:
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason rate_limited.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
-                backfill problem. rate_limited, stream_limited and line_too_long are throughput
-                or limit problems. Read loki_discarded_samples_total by reason.
+                backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
+                Read loki_discarded_samples_total by reason.
 
   # Server side, the telemetry Loki: the same discards carry service=observability.
   - interval: 1m
@@ -154,8 +154,8 @@ tests:
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason rate_limited.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
-                backfill problem. rate_limited, stream_limited and line_too_long are throughput
-                or limit problems. Read loki_discarded_samples_total by reason.
+                backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
+                Read loki_discarded_samples_total by reason.
 
   # Past the 6h backlog window the same too_far_behind count pages. The node booted at time 0,
   # so 6h has passed at 400m.
@@ -179,8 +179,8 @@ tests:
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason too_far_behind.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
-                backfill problem. rate_limited, stream_limited and line_too_long are throughput
-                or limit problems. Read loki_discarded_samples_total by reason.
+                backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
+                Read loki_discarded_samples_total by reason.
 
   # The collector's export arm: one failed export in 15 minutes pages, and a collector that is
   # not scraped does not.

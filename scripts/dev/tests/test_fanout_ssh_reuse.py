@@ -5,14 +5,19 @@ Run: uv run pytest scripts/dev/tests/test_fanout_ssh_reuse.py
 
 import os
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.place import main
 from fanout_lib import headroom_probe, wait_probe
 from fanout_lib.transport import MUX_PERSIST_S, SSH_OPTS, _argv, control_dir
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
-ISSUES = [Issue(n, f"issue {n}", f"body {n}", ("claude",)) for n in (1, 2, 3, 4)]
+ISSUES = [
+    Issue(
+        n, f"issue {n}", IssueState.OPEN, body=f"body {n}", labels=frozenset({"claude"})
+    )
+    for n in (1, 2, 3, 4)
+]
 
 
 def test_a_control_directory_adds_the_reuse_options_to_a_remote_call():

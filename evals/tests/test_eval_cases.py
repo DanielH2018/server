@@ -266,6 +266,32 @@ def test_no_case_cites_a_missing_role_path():
     )
 
 
+def test_recurrence_cases_plant_a_finding_still_open_in_the_live_template():
+    planting = {
+        str(f.relative_to(CASES_DIR))
+        for f in _all_case_files()
+        if "valheim-stats" in f.read_text()
+    }
+    assert {
+        "homelab-review/008-recurrence-not-discovery.json",
+        "homelab-review/012-seam-surfaces.json",
+        "homelab-review/013-standing-list-foldback.json",
+    } <= planting
+    path = "k8s/roles/game-stats/templates/deployment-valheim.yaml.j2"
+    lines = (REPO / path).read_text().splitlines()
+    rebuild = (
+        f"{sorted(planting)} plant the valheim-stats /tmp sizeLimit gap as an open finding, "
+        f"and {path}:94 no longer shows it. A case whose premise is false scores on its "
+        "contradiction, not on its rubric (issue #8952): rebuild each on another finding "
+        "that is still open (evals/README.md, rule 4)."
+    )
+    assert lines[92].strip() == "- name: valheim-stats-tmp", rebuild
+    assert lines[93].strip() == "emptyDir: {}", rebuild
+    resources_macro = REPO / "k8s/templates/container-resources.yml.j2"
+    for source in (REPO / path, resources_macro):
+        assert "ephemeral-storage" not in source.read_text(), rebuild
+
+
 # A case that quotes a section of the root CLAUDE.md, because a hermetic run loads no CLAUDE.md
 # and the engine's own section loader (`load-rules.mjs`) reads only the chezmoi user file.
 _CLAUDE_MD_QUOTE_RE = re.compile(

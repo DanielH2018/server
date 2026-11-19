@@ -125,8 +125,8 @@ groups:
         annotations:
           summary: The kernel on {{ $labels.machine }} OOM-killed a process in the last hour.
           description: >-
-            The kernel on {{ $labels.machine }} logged {{ $value }} host-wide "Out of memory:
-            Killed process" lines in the last hour, so the node ran out of memory rather than a
+            The kernel on {{ $labels.machine }} logged {{ $value }} "Out of memory: Killed
+            process" lines in the last hour, so the node ran out of memory rather than a
             container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
             for the killed process and the memory report above it.
       # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first

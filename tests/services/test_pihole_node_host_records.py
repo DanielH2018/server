@@ -30,7 +30,7 @@ from functools import lru_cache
 
 from _k8s_render import render_role_template
 from lib.repo_paths import HOST_VARS
-from validate.k8s_manifests import load_yaml
+from lib.render_guard import load_yaml
 
 # The census this file asserts over, named rather than derived. A test that globbed for
 # `host-record=` lines and asserted over whatever it found would pass on an empty set the

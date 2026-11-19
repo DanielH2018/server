@@ -1,9 +1,10 @@
-"""The Vale binary the hosts install is the version CI installs.
+"""The Vale binary the hosts install is the version and the digest CI installs.
 
 The prek `vale` hook is `language = "system"`: it runs whatever binary sits on PATH. CI installs
 one itself (`.github/workflows/ci.yml`), so a host without it fails the hook at commit time with
 exit 127 while CI stays green. `hosts/packages/homelab-tools/package.yml` pins the binary the
-`vale` component puts on PATH, which makes the version a fact stored in two places.
+`vale` component puts on PATH, which makes the version and the amd64 digest facts stored in
+two places.
 
 Two places is the failure class `test_ci_tool_pins_do_not_move_backwards.py` records: a Renovate bump that rewrites one copy leaves
 the other behind, and both a green CI and a green local hook are consistent with the copies running
@@ -30,10 +31,8 @@ TOOLS_REL = "hosts/packages/homelab-tools/package.yml"
 # The CI patterns are `test_ci_tool_pins_do_not_move_backwards.py`'s, deliberately: this guard
 # reads the same two copies that one does, so a rename there that this file did not follow shows
 # up as a missing version here rather than as agreement over nothing.
-CI_PATTERNS = (
-    r"vale-cli/vale/releases/download/v([\d.]+)/",
-    r"vale_([\d.]+)_Linux",
-)
+CI_PATTERNS = (r"VALE_VERSION:\s*v([\d.]+)",)
+CI_DIGEST = re.compile(r"VALE_SHA256:\s*([0-9a-f]{64})")
 
 
 def versions_in(text: str, patterns: tuple[str, ...]) -> set[str]:
@@ -61,10 +60,8 @@ def pins_agree(ci: set[str], host: set[str]) -> bool:
         pytest.param({"3.20.0"}, {"3.20.0"}, True, id="matching-pins-are-clean"),
         # The bump Renovate wrote into ci.yml alone: CI lints with 3.21.0, the host with 3.20.0.
         pytest.param({"3.21.0"}, {"3.20.0"}, False, id="host-left-on-the-old-version"),
-        # The tag bumped, the asset name left behind — ci.yml names two versions, not one.
-        pytest.param(
-            {"3.21.0", "3.20.0"}, {"3.21.0"}, False, id="partially-rewritten-ci-url"
-        ),
+        # ci.yml names two versions, not one.
+        pytest.param({"3.21.0", "3.20.0"}, {"3.21.0"}, False, id="two-ci-versions"),
         pytest.param(set(), set(), False, id="neither-pattern-matches"),
         pytest.param({"3.20.0"}, set(), False, id="host-pattern-matches-nothing"),
     ],
@@ -87,4 +84,13 @@ def test_the_homelab_tools_pin_is_the_version_ci_installs():
     assert pins_agree(ci, tool_versions()), (
         f"Vale is pinned to {sorted(ci)} in {CI_REL} and {sorted(tool_versions())} in "
         f"{TOOLS_REL}. Bump both in one PR, with each architecture's digest"
+    )
+
+
+def test_the_ci_digest_is_the_homelab_tools_amd64_digest():
+    found = CI_DIGEST.findall((REPO / CI_REL).read_text())
+    host = yaml_fast.safe_load((REPO / TOOLS_REL).read_text())["tools"]["vale"]["amd64"]
+    assert found == [host["sha256"]], (
+        f"{CI_REL} pins the Vale digest {found}, and {TOOLS_REL} pins {host['sha256']} for "
+        f"amd64. Both name vale_<version>_Linux_64-bit.tar.gz, so they move together"
     )

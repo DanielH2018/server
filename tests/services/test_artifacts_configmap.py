@@ -1,6 +1,6 @@
 """Guards on the artifacts ConfigMap, which carries an embedded Python program.
 
-validate/k8s_manifests.py asserts every manifest parses as YAML. That is not enough for this
+validate/render_lib/k8s.py asserts every manifest parses as YAML. That is not enough for this
 one: an indented Jinja comment between two keys pushes the second key inside the first's `|`
 block scalar, so the rendered ConfigMap holds ONE key whose value is the script with
 `known_services.json: |` appended to it. That parses as valid YAML — there is nothing malformed

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """homelab-k3s-restart: restart one k3s unit once per changed config hash, behind the gates.
 
-H6 (docs/target-architecture/host/h6-k3s-suc.md, *`homelab-k3s-restart`*) is the design. Reconcile
+H6 (docs/archive/host/h6-k3s-suc.md, *`homelab-k3s-restart`*) is the design. Reconcile
 never restarts a `windowed` unit, so this oneshot, started by its timer inside the host's window,
 is the process that applies a k3s configuration change. SUC's upgrade container is the other.
 

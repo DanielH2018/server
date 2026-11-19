@@ -181,8 +181,8 @@ groups:
         annotations:
           summary: cAdvisor covers {{ $value | printf "%.0f" }} pods for the {{ $labels.arm }} check, under the floor of 20.
           description: >-
-            The {{ $labels.arm }} check reads a per-pod cAdvisor vector, and this one holds
-            {{ $value | printf "%.0f" }} pods where the live estate holds about 70 to 100. Empty
-            is the healthy answer for an offender filter, so a thin vector means the
-            kubernetes-cadvisor job or a selector is broken, and the restart, OOM and CPU rules
-            read green while it lasts. Read the kubernetes-cadvisor targets on Prometheus.
+            The {{ $labels.arm }} check reads a per-pod cAdvisor vector that holds
+            {{ $value | printf "%.0f" }} pods where the estate holds about 70 to 100. The
+            kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules
+            read green. Read the kubernetes-cadvisor targets on Prometheus.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall

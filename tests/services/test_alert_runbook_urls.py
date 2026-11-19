@@ -6,8 +6,9 @@ description that names `docs/<page>.md` gives a reader on a phone a path they ca
 each such alert also carries the URL. A URL may name a section as `<page>/#<anchor>`, and the
 anchor must be a heading on the page.
 
-Every critical rule links a runbook, and its description fits DESCRIPTION_CAP: a page that
-reaches a phone says what to do first, and the runbook (most often `docs/alert-runbooks.md`)
+Every critical rule links a runbook. Every alert's description fits DESCRIPTION_CAP, warnings
+included: a warning reaches Discord and, through `WarningUnresolved` after 48 hours, a phone.
+The notification says what to do first, and the runbook (most often `docs/alert-runbooks.md`)
 holds the edge cases.
 
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
@@ -31,7 +32,7 @@ ROLE = K8S_ROLES / "observability"
 RULE_FILES = sorted(K8S_ROLES.glob("*/files/rules/*.yaml")) + sorted(
     (ROLE / "tests" / "rules" / "fixtures").glob("*.yaml")
 )
-# The longest description a critical rule's source may carry, in characters. Past it the
+# The longest description an alert rule's source may carry, in characters. Past it the
 # notification turns into an essay on a phone, and the edge cases belong in the runbook.
 DESCRIPTION_CAP = 300
 # Non-vacuity: critical rules the census must find, one of them loki-homelab's.
@@ -111,15 +112,14 @@ def runbook_problems(alerts: list[tuple[str, dict]], base: str) -> list[str]:
     return problems
 
 
-def critical_problems(alerts: list[tuple[str, dict]]) -> list[str]:
-    """Why a critical rule pages without a runbook or past DESCRIPTION_CAP, or nothing."""
+def notification_problems(alerts: list[tuple[str, dict]]) -> list[str]:
+    """Why a critical rule has no runbook, or any alert runs past DESCRIPTION_CAP, or nothing."""
     problems = []
     for name, rule in alerts:
-        if (rule.get("labels") or {}).get("severity") != "critical":
-            continue
         where = f"{name}/{rule['alert']}"
         annotations = rule.get("annotations") or {}
-        if "runbook_url" not in annotations:
+        critical = (rule.get("labels") or {}).get("severity") == "critical"
+        if critical and "runbook_url" not in annotations:
             problems.append(f"{where}: a critical rule with no runbook_url")
         length = len(annotations.get("description", ""))
         if length > DESCRIPTION_CAP:
@@ -130,7 +130,7 @@ def critical_problems(alerts: list[tuple[str, dict]]) -> list[str]:
     return problems
 
 
-def test_every_critical_rule_links_a_runbook_and_fits_the_cap_is_clean():
+def test_every_critical_rule_links_a_runbook_and_every_alert_fits_the_cap_is_clean():
     alerts = _alerts()
     critical = {
         rule["alert"]
@@ -138,12 +138,12 @@ def test_every_critical_rule_links_a_runbook_and_fits_the_cap_is_clean():
         if (rule.get("labels") or {}).get("severity") == "critical"
     }
     assert CRITICAL <= critical, sorted(CRITICAL - critical)
-    assert critical_problems(alerts) == []
+    assert notification_problems(alerts) == []
 
 
 def test_a_critical_rule_with_no_runbook_url_is_flagged():
     rule = {"alert": "X", "labels": {"severity": "critical"}, "annotations": {}}
-    assert critical_problems([("x.yaml", rule)]) == [
+    assert notification_problems([("x.yaml", rule)]) == [
         "x.yaml/X: a critical rule with no runbook_url"
     ]
 
@@ -155,19 +155,27 @@ def test_a_critical_description_over_the_cap_is_flagged():
         "labels": {"severity": "critical"},
         "annotations": annotations,
     }
-    assert critical_problems([("x.yaml", rule)]) == [
+    assert notification_problems([("x.yaml", rule)]) == [
         f"x.yaml/X: the description is {DESCRIPTION_CAP + 1} characters, over the "
         f"{DESCRIPTION_CAP} cap; move the edge cases to the runbook"
     ]
 
 
-def test_a_warning_without_a_runbook_or_over_the_cap_is_clean():
+def test_a_warning_without_a_runbook_is_clean():
+    rule = {"alert": "X", "labels": {"severity": "warning"}, "annotations": {}}
+    assert notification_problems([("x.yaml", rule)]) == []
+
+
+def test_a_warning_description_over_the_cap_is_flagged():
     rule = {
         "alert": "X",
         "labels": {"severity": "warning"},
         "annotations": {"description": "a" * (DESCRIPTION_CAP + 1)},
     }
-    assert critical_problems([("x.yaml", rule)]) == []
+    assert notification_problems([("x.yaml", rule)]) == [
+        f"x.yaml/X: the description is {DESCRIPTION_CAP + 1} characters, over the "
+        f"{DESCRIPTION_CAP} cap; move the edge cases to the runbook"
+    ]
 
 
 def test_every_alert_links_the_runbook_its_description_cites_is_clean():

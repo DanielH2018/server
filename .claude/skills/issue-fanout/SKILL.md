@@ -266,8 +266,8 @@ landing's log. Any other verdict ends the batch. A daniel-server PR the pipeline
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
 head, with no operator step in its body. Run `probe.py lander` before
-landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
-arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
+landing a server batch's PR by hand: it shows whether the lander landed the PR and how that ended. `land.sh` refuses a
+second landing of a PR while one is live. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once on either host, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
 head, or lands again on daniel-box. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because
@@ -359,7 +359,9 @@ text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held 
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
-PR from this session with `land.sh`. A batch on either host whose CI stayed red after its one
+PR from this session with `land.sh`. A daniel-server batch whose PR the server lander holds
+for a person reads `needs-input: the server lander will not land #N`, with the next step
+and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`). A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
 
@@ -521,7 +523,7 @@ Each agent starts with none of this conversation's context, so its brief must ca
   the issue. Leave out the bookkeeping records `findings.py` and this skill post (claim,
   release, `Worked by`, `Re-observed`, defer and manual). An operator decision posted as a
   comment otherwise never reaches the agent: #3382's agent shipped the value the decision
-  had replaced. `transport.operator_comments` selects them for `fanout.py place launch`.
+  had replaced. `scripts/dev/fanout_lib/brief.py:operator_comments` selects them for `fanout.py place launch`.
 - That the issues are **already claimed** under the orchestrator's worktree, and it must not
   claim them again.
 - That its **first act** is to post a plain comment naming its own branch, so the thread

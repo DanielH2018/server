@@ -16,13 +16,7 @@ the tree without the ledger module runs `gh` uncounted, because the ledger must 
 reason a GitHub call fails.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(
-    0, str(_Path(__file__).resolve().parents[2] / "hosts/components/gh-quota/files")
-)
+from lib import host_modules  # noqa: F401
 
 import json
 import os

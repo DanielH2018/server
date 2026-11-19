@@ -360,6 +360,42 @@ def test_an_in_scope_pod_with_no_mapping_fails(world, tmp_path):
     assert run(world, tmp_path) == (1, "failed-services: unmapped\n")
 
 
+def test_an_unmapped_pod_whose_workload_is_in_scope_still_fails(world, tmp_path):
+    world.unmapped.add("authelia-1")
+    world.workload_services[("Deployment", "authelia", "authelia-1")] = "authelia"
+    assert run(world, tmp_path) == (1, "failed-services: unmapped\n")
+
+
+def test_an_unmapped_pod_of_an_out_of_scope_deployment_is_advisory(
+    world, tmp_path, capsys
+):
+    world.pods["authelia"].append(pod("authelia", "tdarr-x", ready=T0 + 200))
+    world.unmapped.add("tdarr-x")
+    world.workload_services[("Deployment", "authelia", "tdarr-x")] = "tdarr"
+    assert run(world, tmp_path) == (0, "")
+    assert world.now == T0 + 60 + W
+    assert (
+        "soak: advisory: pod authelia/tdarr-x has no homelab:pod_service:info mapping; "
+        "its workload is tdarr's, outside the scope"
+    ) in capsys.readouterr().err
+
+
+def test_an_unmapped_pod_of_an_out_of_scope_daemonset_is_advisory(world, tmp_path):
+    world.pods["authelia"].append(
+        pod("authelia", "plugin-x", owner=("DaemonSet", "plugin"))
+    )
+    world.unmapped.add("plugin-x")
+    world.workload_services[("DaemonSet", "authelia", "plugin")] = "dri-device-plugin"
+    assert run(world, tmp_path) == (0, "")
+
+
+def test_an_unmapped_pod_whose_workload_is_unmapped_too_fails(world, tmp_path):
+    world.pods["authelia"].append(pod("authelia", "tdarr-x"))
+    world.unmapped.add("tdarr-x")
+    world.workload_services[("Deployment", "authelia", "tdarr-x")] = "unmapped"
+    assert run(world, tmp_path) == (1, "failed-services: unmapped\n")
+
+
 def test_a_job_pod_with_no_mapping_passes(world, tmp_path):
     world.pods["authelia"].append(
         pod("authelia", "authelia-seed", owner=("Job", "seed"))

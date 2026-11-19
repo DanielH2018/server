@@ -13,7 +13,7 @@ import subprocess
 
 import pytest
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
@@ -21,7 +21,10 @@ from _fanout_fakes import HOST_KEY, fake_tools, ok
 PREFIXES = ("fanout.py: error: ", "fanout.py: warning: ")
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 FULL = f"12884901888\n12884901888\n12884901888\n12884901888\n0\n{HOST_KEY}\n"
-ISSUES = [Issue(n, str(n), "body", ("claude",)) for n in (1, 2)]
+ISSUES = [
+    Issue(n, str(n), IssueState.OPEN, body="body", labels=frozenset({"claude"}))
+    for n in (1, 2)
+]
 SSH_REFUSED = subprocess.CompletedProcess(
     [], 255, stdout="", stderr="ssh: connect to host\nConnection refused\n"
 )

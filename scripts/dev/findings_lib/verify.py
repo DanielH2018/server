@@ -21,14 +21,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.issue_model import parse_verify_by
+from dev.findings_lib.issue_model import Issue, parse_verify_by
 
 WRAP_WIDTH = 88
 
 
-def verification_instructions(issue: dict) -> str | None:
+def verification_instructions(issue: Issue) -> str | None:
     """The prose stored under `## Verify-by`, or None when the issue carries none."""
-    return parse_verify_by(issue.get("body") or "")
+    return parse_verify_by(issue.body)
 
 
 def _wrap(instructions: str, indent: str) -> list[str]:
@@ -48,7 +48,7 @@ def _wrap(instructions: str, indent: str) -> list[str]:
     return lines
 
 
-def verification_report(issues: list[dict]) -> str:
+def verification_report(issues: list[Issue]) -> str:
     """The whole `verify` report for ``issues``, ending in its two summary lines.
 
     Every issue carrying instructions gets a block; the rest are counted and named on the
@@ -61,12 +61,12 @@ def verification_report(issues: list[dict]) -> str:
     for issue in issues:
         instructions = verification_instructions(issue)
         if not instructions:
-            without.append(issue["number"])
+            without.append(issue.number)
             continue
         documented += 1
         if lines:
             lines.append("")
-        lines.append(f"#{issue['number']}  {issue['title']}")
+        lines.append(f"#{issue.number}  {issue.title}")
         lines.append("  How to verify:")
         lines += _wrap(instructions, "    ")
     if lines:

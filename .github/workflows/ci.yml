@@ -204,8 +204,13 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     env:
-      # The Vale release the `vale` hook runs, in job env so the cache key below can read it.
-      VALE_URL: https://github.com/vale-cli/vale/releases/download/v3.26.0/vale_3.26.0_Linux_64-bit.tar.gz
+      # The Vale release the `vale` hook runs. The custom manager in renovate.json reads this
+      # annotation and moves the version and the digest in one PR. The digest is the sha256 of
+      # vale_<version>_Linux_64-bit.tar.gz, equal to the amd64 `vale` pin in
+      # hosts/packages/homelab-tools/package.yml (tests/repo/test_vale_matches_the_ci_pin.py).
+      # renovate: datasource=github-release-attachments depName=vale-cli/vale
+      VALE_VERSION: v3.26.0
+      VALE_SHA256: 22aa69a556558e4a9dfc63c17030777383d8d3c48dcdfad655fa98e839d666ed
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -234,22 +239,18 @@ jobs:
       # the hooks rather than inside them. It is the hook's own entry, so CI and a developer's
       # worktree provision through one path and both write the stamp the guard reads.
       #
-      # `curl -f` is load-bearing. Without it a 404 (a Renovate bump that rewrote only part of
-      # the pinned URL, an upstream asset rename) exits 0 and writes the error body to
-      # /tmp/vale.tar.gz, so the step dies two lines down at `tar xzf` with "not in gzip
-      # format" — naming the tarball instead of the URL that was never fetched.
-      #
       # Each GitHub release download in this file sits behind an actions/cache keyed on its pin,
       # so it runs once per version bump and a release outage fails only the bump's run.
       # The cache holds the download, never the installed binary, and each run checks its digest
       # where it has one. A pinned binary with a sha256 comes through .github/actions/pinned-tool.
       # ENFORCED by tests/repo/test_ci_release_downloads_are_cached.py and
       # tests/repo/test_release_fetches_use_pinned_tool.py.
-      - name: Cache the Vale release
-        uses: actions/cache@v6.1.0
+      - name: Fetch the pinned Vale and check its sha256
+        uses: $/.github/actions/pinned-tool
         with:
-          path: ${{ runner.temp }}/pinned/vale
-          key: vale-${{ runner.os }}-${{ env.VALE_URL }}
+          tool: vale
+          version: ${{ env.VALE_VERSION }}
+          sha256: ${{ env.VALE_SHA256 }}
 
       # vale.sh's stamp skips `vale sync` when the restored package matches .vale.ini's pin.
       - name: Cache the Vale style package
@@ -258,22 +259,8 @@ jobs:
           path: styles/Google
           key: vale-styles-${{ runner.os }}-${{ hashFiles('.vale.ini') }}
 
-      - name: Install Vale
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/pinned/vale/vale.tar.gz"
-          if [[ -f "$archive" ]]; then
-            echo "Vale: cached $VALE_URL"
-          else
-            mkdir -p "$RUNNER_TEMP/pinned/vale"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o "$archive" "$VALE_URL"
-          fi
-          mkdir -p "$RUNNER_TEMP/bin"
-          tar xzf "$archive" -C "$RUNNER_TEMP/bin" vale
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          export PATH="$RUNNER_TEMP/bin:$PATH"
-          vale --version
-          scripts/validate/vale.sh
+      - name: Fetch the Vale style package
+        run: scripts/validate/vale.sh
 
       # promtool and amtool, at the tags of the observability role's Prometheus and Alertmanager
       # image pins, lokitool at the tag of loki-homelab's Loki image pin, and pint at the
@@ -449,12 +436,15 @@ jobs:
       - name: Run hooks (full sweep)
         # --skip static-ratchet-tests*: the `pytest` job runs those hooks' test files already, and
         # test_static_ratchet_hook.py holds this list equal to prek.toml's ratchet hook ids.
-        # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
-        # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
-        # `real_tree`), so the hook here would be a second render of every k8s role.
+        # RENDER_TEMPLATES_SKIP=k8s: the `pytest` job runs the k8s family of
+        # validate-render-templates over the real tree and asserts it reports no failure
+        # (scripts/validate/tests/test_render_k8s.py, `real_tree`), so the family here would be
+        # a second render of every k8s role. The hook's other families run.
         # --log-file: prek's trace log holds each hook's duration, which the next step tabulates.
         # Without --verbose the job log holds only a failing hook's output.
-        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        env:
+          RENDER_TEMPLATES_SKIP: k8s
+        run: prek run --all-files --log-file "$RUNNER_TEMP/prek.log" --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-landing --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
       - name: Write the slowest hooks to the job summary
         if: ${{ !cancelled() }}
         continue-on-error: true

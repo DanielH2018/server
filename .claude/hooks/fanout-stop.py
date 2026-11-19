@@ -77,7 +77,7 @@ import re
 import sys
 from pathlib import Path
 
-from _hook_common import read_payload, tagged
+from _hook_common import HookEvent, read_payload, tagged
 
 MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
@@ -187,16 +187,16 @@ def stands_down(root: Path, here: Path = Path(__file__)) -> bool:
     return here.resolve().is_relative_to(root.resolve())
 
 
-def decide(payload: dict) -> str | None:
+def decide(event: HookEvent) -> str | None:
     """The block reason for this Stop, or None to let the session end."""
-    root = fanout_root(str(payload.get("cwd") or "."))
+    root = fanout_root(str(event.cwd))
     if root is None or stands_down(root):
         return None
     running = phase(root)
     if running in UNBLOCKED_PHASES:
         return None
     item = open_item(
-        str(payload.get("last_assistant_message") or ""),
+        str(event.raw.get("last_assistant_message") or ""),
         root,
         owes_a_landing(root),
     )
@@ -223,10 +223,10 @@ def decide(payload: dict) -> str | None:
 
 
 def main(stdin=sys.stdin, stdout=sys.stdout) -> int:
-    payload = read_payload(stdin)
-    if payload is None:
+    event = read_payload(stdin)
+    if event is None:
         return 0
-    reason = decide(payload)
+    reason = decide(event)
     if reason:
         stdout.write(
             json.dumps({"decision": "block", "reason": tagged("fanout-stop", reason)})

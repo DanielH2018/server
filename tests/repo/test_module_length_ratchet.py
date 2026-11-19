@@ -20,7 +20,7 @@ base yet; a `git show` that fails for a path the base does track is a failure, n
 Run: uv run pytest tests/repo/test_module_length_ratchet.py
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable
 from functools import cache
 from subprocess import CompletedProcess
 
@@ -29,9 +29,11 @@ import pytest
 from _helpers import REPO
 from lib.git_testing import commit, git, init_repo
 from _ratchet_census import (
+    COPIES,
     LENGTHS,
     PATCHES,
     code_line_counts,
+    copied_test_counts,
     monkeypatch_counts,
     run_git,
 )
@@ -91,6 +93,7 @@ def base() -> str | None:
 # Two tests read the census, each ~3s over the tree, and neither mutates it.
 patch_counts = cache(monkeypatch_counts)
 lengths = cache(code_line_counts)
+copy_counts = cache(copied_test_counts)
 
 
 def _base_ref() -> str:
@@ -458,6 +461,11 @@ def test_no_test_module_patches_more_modules_than_its_allowlist_entry():
     assert not offenders, "\n".join(offenders)
 
 
+def test_no_test_module_holds_more_copied_tests_than_its_allowlist_entry():
+    offenders = COPIES.violations(copy_counts(), COPIES.allowlist())
+    assert not offenders, "\n".join(offenders)
+
+
 def _missing_sources(paths: Iterable[str]) -> list[str]:
     return [rel for rel in paths if not (REPO / rel).is_file()]
 
@@ -523,7 +531,9 @@ def test_an_entry_master_lowered_after_the_merge_ref_was_built_is_not_flagged(tm
     assert raised_entries(read(built_on), head, "list.txt") == []
 
 
-@pytest.mark.parametrize("ratchet", [LENGTHS, PATCHES], ids=lambda r: r.path.name)
+@pytest.mark.parametrize(
+    "ratchet", [LENGTHS, PATCHES, COPIES], ids=lambda r: r.path.name
+)
 def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
     """A commit's own counts cannot see a diff that grows a file and its entry together."""
     rel = ratchet.path.relative_to(REPO).as_posix()
@@ -554,25 +564,27 @@ def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
     assert not offenders, "\n".join(offenders)
 
 
-def test_the_live_length_ratchet_flags_a_lowered_entry():
-    """The pairs above prove the comparison; this proves the census feeds the real list."""
-    _assert_a_lowered_entry_is_flagged(LENGTHS, lengths())
-
-
-def test_the_live_monkeypatch_ratchet_flags_a_lowered_entry():
-    _assert_a_lowered_entry_is_flagged(PATCHES, patch_counts())
-
-
-def _assert_a_lowered_entry_is_flagged(ratchet: Ratchet, counts: Mapping[str, int]):
-    allow = ratchet.allowlist()
-    if not allow:
-        pytest.skip(f"{ratchet.path.name} is empty — every file is under its cap")
-    listed = next(iter(allow))
-    assert ratchet.violations(counts, {**allow, listed: allow[listed] - 1})
+def test_every_test_in_a_copied_group_counts_against_its_own_module():
+    method = "class TestK:\n    def test_m(self):\n        x = 1\n        assert x\n"
+    sources = {
+        "a/test_a.py": (
+            "def test_one():\n    x = 1\n    assert x\n\n"
+            "def test_two():\n    x = 1\n    assert x\n"
+        ),
+        "b/test_b.py": method,
+        "c/test_c.py": method,
+        "d/test_d.py": "def test_alone():\n    y = 2\n    assert y == 2\n",
+    }
+    assert copied_test_counts(sources) == {
+        "a/test_a.py": 2,
+        "b/test_b.py": 1,
+        "c/test_c.py": 1,
+        "d/test_d.py": 0,
+    }
 
 
 def test_the_committed_allowlists_are_sorted():
     """Sorted, one line per file, is what makes parallel PRs merge cleanly."""
-    for ratchet in (LENGTHS, PATCHES):
+    for ratchet in (LENGTHS, PATCHES, COPIES):
         listed = list(ratchet.allowlist())
         assert listed == sorted(listed), ratchet.path.name

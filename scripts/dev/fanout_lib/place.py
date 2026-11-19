@@ -339,7 +339,9 @@ def _launch_locked(
                 continue
         issues = [fetched[n] for n in numbers]
         rung = sizing.size([label for i in issues for label in i.labels], chosen)
-        brief = render_brief(issues, host, batch, holder, health, target, args.review)
+        brief = render_brief(
+            issues, host, batch, holder, health, target, args.review, tracked
+        )
         try:
             launched = launch_mod.launch(
                 tools, host, batch, brief, numbers, target, args.review, rung=rung
@@ -414,8 +416,8 @@ def cmd_runs(args, tools: Tools) -> int:
         print(f"no fan-out runs{whose} under {args.manifest_root}")
         return 0
     standing = [b for r in runs for b in r.batches if not b.removed_at]
-    parked = status_mod.parked_batches(standing, tools)
-    print("\n".join(runs_lines(runs, args.all, parked, one_line)))
+    held = status_mod.landing_holds(standing, tools)
+    print("\n".join(runs_lines(runs, args.all, held, one_line)))
     return 0
 
 

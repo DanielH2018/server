@@ -5,7 +5,7 @@ Runs apply_prefs.py's main() with `--dry-run --connect-wait 60` against the WebU
 prints one verdict line, `qbittorrent-prefs-check: <message>`, to stdout. The pod log is the
 evidence; `probe.py loki-query '{container="qbittorrent-prefs-check"}'` reads it. It replaced
 the daniel-box host cron `qbittorrent prefs drift check` at H2.5d
-(docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15).
+(docs/archive/host/h2-shrink-host-plane.md, Steps item 15).
 
 It never writes to qBittorrent and pages nobody: a low-urgency drift check does not earn an
 alert. Applying a changed DESIRED value stays a human decision, made by hand.

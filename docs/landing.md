@@ -16,8 +16,8 @@ is the authority rather than a grep for `VERDICT:`. `cc-wait`'s `land` source
 (`scripts/deploy_tools/land_lib/land_probe.py`) does the waiting.
 
 **`cc-wait` waits at most 570s, which fits a foreground Bash call.** It then exits 75 with the
-command that resumes the wait. Re-run that command, never `land.sh`, which would start a second
-landing. The predecessor, `--await-verdict`, waited up to 1200s, past the 600s foreground limit,
+command that resumes the wait. Re-run that command, never `land.sh`: a live landing of the PR
+refuses a second one (*One landing of a PR at a time*). The predecessor, `--await-verdict`, waited up to 1200s, past the 600s foreground limit,
 so the harness moved it to the background, where fan-out `claude -p` agents never woke.
 
 **`--since` is the PRE-merge tip.** It bounds the range the truncated-list fallback derives tags
@@ -91,6 +91,42 @@ the slots.
 - A landing waits for a slot only as long as its two merge budgets leave, which is what the
   lander units' `LAND_DEADLINE` counts. Then it goes on without one. The log reads `took a
   landing slot after <N>s`, or names why it went on without one.
+
+### One landing of a PR at a time
+
+**`land.sh` refuses a second landing of a PR while one is live.** A landing takes the PR's
+lock before it forks or merges, and holds it until its process ends. The lock is
+`/run/lock/homelab-land-pr-<n>.lock` on daniel-box, beside the turn. A landing on
+daniel-server holds it through an ssh session, so the rule covers both hosts and every user.
+`land_lib/pr_lock.py` owns it.
+
+- A second `land.sh --pr <n>` ends `VERDICT: refused` with exit 75. It merges nothing, takes
+  no place in the line and writes no log. Its `LAND-RESULT:` line carries
+  `cause=landing-live`, which is what a program reads.
+- The verdict names the live landing's host, pid, user and log, and the command that waits
+  on it: `cc-wait land <n> --log <its log>`. A landing run without `--detach` has no log, so
+  the verdict says to re-run once its pid has ended.
+- `--detach` takes the lock in the caller's process, and the detached landing inherits it.
+  The caller therefore reads the refusal in the foreground, and a chained
+  `&& cc-wait land <n>` does not run. Exit 75 is the code every other "nothing merged;
+  re-run safely" refusal uses. It is also the code after which a caller re-runs the command
+  the output prints, which here is the wait on the live landing.
+- The lock ends with its landing's process, so a landing that died, gave up or was refused
+  blocks no re-run. The lock file stays, holds the last landing's record and refuses
+  nothing. /run/lock is a tmpfs, so a reboot removes it.
+- A landing that hands its grading or its turn to a fresh checkout (`land_lib/fresh.py`)
+  keeps the lock, and the checkout's landing takes none.
+- The lock is not a safety gate. A landing that cannot reach daniel-box or open the file
+  goes on without it. A lock held over ssh ends when its ssh session does.
+- Under `LAND_HANDOFF_UNIT` the lander unit's `land.sh` takes the lock, not the caller's.
+  The caller reports the unit's `refused` as its own.
+- A refused start writes no annotation and no verdict record, because the live landing
+  writes the PR's. The fan-out server lander logs it as `another landing has it`, and a
+  review batch ends `parked` without resuming its agent
+  (`scripts/dev/fanout_lib/land_result.py:another_has_it`).
+
+`detach.log_path` creates each log by its own name, and waits for the next second when the
+name is taken. Two landings that go on without the lock therefore still write two logs.
 
 ### Rules that refuse a merge
 
@@ -416,6 +452,12 @@ master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 K
 Read the full log only for a job whose failure the summary does not explain. To survey red
 attempts across a date range, run `scripts/dev/ci_failures.py`.
 
+**To grep a raw log for the errors that fired, match `##[error]`, not `::error`.** GitHub
+writes an emitted `::error::` command into the log as a `##[error]` line. Each step's
+`##[group]Run` header prints that step's script source, so a `::error` grep also returns the
+guard lines of every step that ran, including the guards that passed. Most steps of
+`promote.yml` carry such guards.
+
 **A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct
 merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` reads anything
@@ -723,6 +765,8 @@ LAND-RESULT: verdict=<v> cause=<c> exit=<rc> pr=<n> sha=<8 hex> tags=<count> hol
 A field the landing never reached reads `-`.
 
 - `verdict`, `cause` and `exit` are the landing's verdict, its cause and its exit code.
+  Cause `landing-live` beside `refused` and exit 75 means no landing started, because
+  another landing of the PR is live (*One landing of a PR at a time*).
 - `sha` is the merge commit's first 8 characters, and `merge` is the whole commit. A landing
   that merged nothing prints `-` for both.
 - `tags` counts the tags the landing waited on. After the promotion wait that is every tag

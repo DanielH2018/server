@@ -11,11 +11,6 @@ than private to the validator.
 ``K8S_ROLES`` comes from ``lib.repo_paths`` rather than being derived a second time here.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import functools
 import os
 import re

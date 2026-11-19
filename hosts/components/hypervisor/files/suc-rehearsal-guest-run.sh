@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # suc-rehearsal-guest-run.sh — the in-guest half of the drill orchestrator's SUC rehearsal mode
-# (docs/target-architecture/host/h6-k3s-suc.md, "Rehearsal in a drill guest"). Copied into
+# (docs/archive/host/h6-k3s-suc.md, "Rehearsal in a drill guest"). Copied into
 # the throwaway guest by etcd-restore-drill-vm --rehearse-suc, which calls one subcommand per ssh
 # session so that no session stays open for the whole run.
 #

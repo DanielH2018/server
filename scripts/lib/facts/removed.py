@@ -7,13 +7,10 @@ rule a replay grades and the rule a commit meets are one function.
 """
 
 import re
-import sys as _sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git
 
 _TOKEN = re.compile(r"[A-Za-z0-9_./-]*[A-Za-z_][A-Za-z0-9_./-]*")

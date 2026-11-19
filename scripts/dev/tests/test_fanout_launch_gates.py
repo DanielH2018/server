@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 import pytest
 
 from fanout_lib import launch_lock
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
@@ -22,8 +22,8 @@ from _fanout_fakes import HOST_KEY, fake_tools, ok
 # rather than from placement or the signing gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 CLAIMED = [
-    Issue(1, "one", "body one", ("claude",)),
-    Issue(2, "two", "body two", ("claude",)),
+    Issue(1, "one", IssueState.OPEN, body="body one", labels=frozenset({"claude"})),
+    Issue(2, "two", IssueState.OPEN, body="body two", labels=frozenset({"claude"})),
 ]
 
 
@@ -200,7 +200,13 @@ def test_a_unit_state_that_cannot_be_read_counts_as_running(tmp_path, capsys):
 
 def test_a_dotfiles_launch_runs_here_and_reads_the_dotfiles_register(tmp_path):
     here = socket.gethostname()
-    issue = Issue(763, "dotfiles finding", "body", ("claude",))
+    issue = Issue(
+        763,
+        "dotfiles finding",
+        IssueState.OPEN,
+        body="body",
+        labels=frozenset({"claude"}),
+    )
     tools, run = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])
     assert (
         _launch(tools, tmp_path, "--repo", "DanielH2018/dotfiles", "--batch", "763")
@@ -215,7 +221,13 @@ def test_a_dotfiles_launch_runs_here_and_reads_the_dotfiles_register(tmp_path):
 
 
 def test_a_dotfiles_launch_pinned_to_another_host_is_refused(tmp_path, capsys):
-    issue = Issue(763, "dotfiles finding", "body", ("claude",))
+    issue = Issue(
+        763,
+        "dotfiles finding",
+        IssueState.OPEN,
+        body="body",
+        labels=frozenset({"claude"}),
+    )
     tools, run = fake_tools(issues=[issue])
     other = _another_host()
     argv = ["--repo", "DanielH2018/dotfiles", "--host", other, "--batch", "763"]
@@ -287,7 +299,16 @@ def _held_elsewhere(tmp_path, cited):
 
 def _citing(path):
     """Issue 1 for the new batch and issue 91 for the held one, both citing `path`."""
-    return [Issue(n, "t", f"`{path}` drops a row", ("claude",)) for n in (1, 91)]
+    return [
+        Issue(
+            n,
+            "t",
+            IssueState.OPEN,
+            body=f"`{path}` drops a row",
+            labels=frozenset({"claude"}),
+        )
+        for n in (1, 91)
+    ]
 
 
 @pytest.mark.parametrize("recorded", [(ALERTS,), None], ids=["recorded", "legacy"])

@@ -9,7 +9,7 @@ Run: uv run pytest scripts/grafana/tests/test_fetch_grafana_dashboards.py
 
 import urllib.request
 
-import fetch_grafana_dashboards as fg
+from grafana import fetch_grafana_dashboards as fg
 
 ENDPOINT = ("https://prometheus.example", "prometheus.example:443:10.0.0.240")
 

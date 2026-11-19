@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-# Imported from the module that DEFINES them, not from validate.k8s_manifests, which only
+# Imported from the module that DEFINES them, not from validate.render_lib.k8s, which only
 # re-exports them. A guard that reads a re-export passes just as happily when the
 # definition it means to police has moved somewhere else.
 from lib.k8s_roles import (

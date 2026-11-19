@@ -26,15 +26,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import REQUIRED_LABEL, Issue
+from fanout_lib.brief import REQUIRED_LABEL
 from fanout_lib.manifest import Batch, Manifest, live_batches, standing_batches
+from findings_lib.issue_model import Issue
 from fanout_lib.placement import HostReading
 from fanout_lib.status import BatchStatus, parse_status
 from fanout_lib.target import SERVER
 from fanout_lib.transport import Tools, error_text, read_host
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import solo_only_reasons
-from findings_lib.tracked_paths import resolve_fragments
 from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
 from lib.role_paths import CLUSTER_VARS_PREFIX, SECRETS_FILE
@@ -216,6 +216,12 @@ def fetch_issues(
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             error(f"could not fetch issue {number}: {error_text(exc)}")
             return None
+        except KeyError as exc:
+            error(f"could not read issue {number}: gh's answer has no {exc} field")
+            return None
+        except ValueError as exc:
+            error(f"could not read issue {number}: {exc}")
+            return None
     unlabelled = [
         n for n, issue in fetched.items() if REQUIRED_LABEL not in issue.labels
     ]
@@ -274,13 +280,7 @@ def batch_paths(
     `launch` records it on the batch.
     """
     return tuple(
-        sorted(
-            {
-                path
-                for issue in issues
-                for path in resolve_fragments(cited_paths(issue.body), tracked)
-            }
-        )
+        sorted({path for issue in issues for path in cited_paths(issue.body, tracked)})
     )
 
 

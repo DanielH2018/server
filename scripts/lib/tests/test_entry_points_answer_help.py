@@ -223,10 +223,9 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
 
 # The entry points the test above once waited on: each ignored `--help` and ran its whole check,
 # which still exits 0 with output, so the subprocess test passed while
-# `k8s_manifests.py --help` took 7s to print its summary line. The last three took no
+# `render_templates.py --help` took 7s to print its summary line. The last three took no
 # argv at all, so an explicit `--help` could not reach them.
 WORK_BEFORE_HELP = (
-    "validate.k8s_manifests",
     "validate.render_templates",
     "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
