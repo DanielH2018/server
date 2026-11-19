@@ -651,8 +651,10 @@ at its PR, and a review batch whose PR the rule holds.
 | A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |
 
 Before a sub-coordinator runs `land.sh` on any server batch's PR, it runs `probe.py
-lander`. `land.sh` holds no per-PR lock, so a second landing of a PR the server lander
-started would arm the merge twice.
+lander`, which shows what the server lander did with the PR and how that landing ended.
+The table above then says whose the PR is. The probe is not a guard against a second
+landing: `land.sh` refuses one while a landing of the PR is live (`docs/landing.md`, *One
+landing of a PR at a time*).
 
 A re-land of a PR that merged behind a hold starts no promotion, and clearing the hold
 starts none either (`docs/landing.md`, *A PR that merged behind a hold*). The skill states

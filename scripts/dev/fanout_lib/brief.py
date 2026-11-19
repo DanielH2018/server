@@ -215,7 +215,7 @@ forks the landing into its own logfile and returns, and `cc-wait land` waits on 
 Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect it, and do not
 end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
-`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which a live landing of the PR refuses.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and

@@ -18,13 +18,14 @@ never qualifies: flips are `--no-review` and need operator checks before the mer
 read from GitHub must then still be the one the record reviewed: open, not a draft, on
 `worktree-fanout-<batch>`, at the head the record names, with no operator step in its body.
 
-NO PER-PR LOCK. `land.sh` takes none: `land_lib/slots.py` locks only a count of landing slots,
-`land_lib/verdict_log.py` flocks only its own log, and `homelab-claude-land@` flocks one
-`/var/lock/claude-land.lock` for every PR it lands. So two landings of one PR would both arm
-the merge. This command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
-(a landing that ended `refused` or `ci-red` is the operator's to read, not to retry every ten
-minutes, unless a rule refused it before its merge with exit 75), and a PR that any live `land.py` process names with `--pr <n>`, which finds the
-landings an orchestrator started from another log directory.
+A PR IS STARTED ONCE. `land.sh` refuses a second landing of a PR while one is live, on
+either host (`land_lib/pr_lock.py`), and a start it refuses that way is logged as `another
+landing has it`, never as a failed handoff. The lock ends with its landing, so this command
+keeps its own rule for a landing that has ended: it skips a PR whose log directory already
+holds a `land<pr>-*.log` (a landing that ended `refused` or `ci-red` is the operator's to
+read, not to retry every ten minutes, unless a rule refused it before its merge with exit
+75). It also skips a PR that any live `land.py` process on this host names with `--pr <n>`,
+which spares the checkout a refused start would make and remove.
 
 THE CHECKOUT. Each landing runs from its own worktree at `origin/master` under the state
 directory, never from the primary checkout: one untracked file in the primary parks
@@ -67,7 +68,9 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import load_issues
 from fanout_lib import operator_waits, own_surface
+from deploy_tools.land_lib.detach import result_fields
 from fanout_lib.clean import sweep_runs
+from fanout_lib.land_result import another_has_it
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
 from fanout_lib.review.api import LAND_SH, VERDICT_LINE, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
@@ -515,7 +518,11 @@ def hand_off(
     label: str,
     out: Callable[[str], None],
 ) -> None:
-    """Start one landing. A failure is logged with its reason and leaves the PR untouched."""
+    """Start one landing. A failure is logged with its reason and leaves the PR untouched.
+
+    A start `land.sh` refused because another landing of the PR is live is logged as that,
+    and the next pass judges the PR again.
+    """
     try:
         checkout = b.prepare(primary, state, number)
     except (CheckoutFailed, OSError, subprocess.SubprocessError) as exc:
@@ -528,10 +535,13 @@ def hand_off(
         b.release(primary, checkout)
         return
     if done.returncode != 0:
-        out(
-            f"{label}: eligible, handoff failed (exit {done.returncode}): "
-            f"{refusal(done)}"
-        )
+        if another_has_it(result_fields(done.stdout or "") or {}):
+            out(f"{label}: eligible, another landing has it: {refusal(done)}")
+        else:
+            out(
+                f"{label}: eligible, handoff failed (exit {done.returncode}): "
+                f"{refusal(done)}"
+            )
         b.release(primary, checkout)
         return
     out(f"{label}: eligible, handed off to land.sh; log in {log_dir}")

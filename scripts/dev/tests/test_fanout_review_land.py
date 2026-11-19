@@ -13,6 +13,7 @@ import pytest
 
 from _review_fakes import PR, _pipeline, _report
 from deploy_tools.land_lib.ledger import Ledger, result_line
+from deploy_tools.land_lib import pr_lock
 from deploy_tools.land_lib.outcome import VERDICTS, Cause, Outcome
 from deploy_tools.promote_lib.wait import hold_owner
 from fanout_lib.review.review_land import (
@@ -144,6 +145,27 @@ def test_a_land_sh_refusal_is_needs_input_with_its_output(tmp_path):
     final = pipeline.run_all()
     assert final["result"].startswith("needs input: land.sh printed no VERDICT")
     assert "refused: bad body" in final["result"]
+    assert len(run.lands) == 1
+    assert "apply" not in [phase for _, _, phase in run.claude]
+
+
+def test_a_start_refused_for_a_live_landing_parks_and_resumes_no_one(tmp_path):
+    ledger = Ledger(pr="4000", t_start=0.0)
+    ledger.cause = Cause.LANDING_LIVE
+    holder = pr_lock.Holder("daniel-box", "41", "ubuntu", "/tmp/land4000-1.log")
+    refused = Outcome(75, holder.refusal("4000", "daniel-box"), "refused")
+    pipeline, run = _pipeline(tmp_path, _clean_review())
+    run.land_rc = 75
+    run.land_out = (
+        f"{result_line(ledger, refused)}\nVERDICT: refused ({refused.detail})\n"
+    )
+
+    final = pipeline.run_all()
+
+    assert final["result"].startswith(
+        "parked: another landing has it, so none started; do not re-land ("
+    )
+    assert "cc-wait land 4000 --log /tmp/land4000-1.log" in final["result"]
     assert len(run.lands) == 1
     assert "apply" not in [phase for _, _, phase in run.claude]
 
