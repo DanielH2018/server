@@ -274,12 +274,18 @@ MUTATIONS = {
 }
 
 
+def new_problems_for(row: str, mutated: dict[str, list[dict]]) -> list[str]:
+    """The problems naming `row` that `mutated` adds to those of the committed rules."""
+    added = set(row_problems(mutated)) - set(row_problems(groups()))
+    return sorted(p for p in added if p.startswith(f"{row}:"))
+
+
 @pytest.mark.parametrize("case", sorted(MUTATIONS))
 def test_a_rule_that_departs_from_its_row_is_flagged(case: str):
     row, mutate = MUTATIONS[case]
     rule_groups = copy.deepcopy(groups())
     mutate(rule_of(row, rule_groups))
-    assert row_problems(rule_groups)
+    assert new_problems_for(row, rule_groups)
 
 
 def test_a_dependent_outside_its_gates_group_is_flagged():
@@ -287,7 +293,7 @@ def test_a_dependent_outside_its_gates_group_is_flagged():
     [(group, rule)] = selecting("discord", rule_groups)
     rule_groups[group].remove(rule)
     rule_groups["elsewhere"] = [rule]
-    assert row_problems(rule_groups)
+    assert new_problems_for("discord", rule_groups)
 
 
 @pytest.mark.parametrize("gate_row", sorted(GATES))
