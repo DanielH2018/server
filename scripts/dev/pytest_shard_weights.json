@@ -278,6 +278,7 @@
  "hosts/tests/test_k3s_server_component.py": 1.74,
  "hosts/tests/test_k3s_server_flags_migration.py": 0.84,
  "hosts/tests/test_k3s_unit_logging.py": 1.02,
+ "hosts/tests/test_kubelet_shutdown_lock_check.py": 1.47,
  "hosts/tests/test_lander_deadlines_cover_the_soak.py": 11.5,
  "hosts/tests/test_legacy_cache_directories.py": 1.09,
  "hosts/tests/test_loki_route_witness.py": 0.02,
