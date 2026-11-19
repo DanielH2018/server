@@ -5,7 +5,7 @@ planes â€” which templates render the FSD-capable `nut_monitor_password` login â
 only scan template SOURCE, and a source scan cannot follow an alias: a template that reads the
 secret through a second variable holds it while the scan sees nothing.
 
-Each template renders from its OWN component's context, the one `validate/setup_templates.py`
+Each template renders from its OWN component's context, the one `validate/render_lib/setup_plane.py`
 gives it: `lib.render_context` with the host renderer's `inventory_hostname` on top.
 `overrides` go on top as well, so a guard can set a secret to a sentinel and look for it, and a
 default of `"{{ some_secret }}"` carries the sentinel rather than the secret's stub.
@@ -21,7 +21,7 @@ from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.host_outputs import COMPOSE_ROOT, TEMPLATE_ROOT
 from renderer.renderer_lib.host_package import Package
-from validate.setup_templates import (
+from validate.render_lib.setup_plane import (
     HOST_RENDER_CONTEXT,
     COMPONENTS,
     component_context,
@@ -47,7 +47,7 @@ def render_setup_texts(
 ) -> tuple[tuple[str, str, str], ...]:
     """(component, template name, rendered TEXT) for every template under `components`, uncached.
 
-    The template set is `validate/setup_templates.py:standalone_templates`, the gate's own set
+    The template set is `validate/render_lib/setup_plane.py:standalone_templates`, the gate's own set
     less the partials a sibling template loads, so each text is one the package renders. Raises
     on a render failure rather than skipping it: a template that stopped rendering would
     otherwise drop out of every census built on this. `components` is a parameter so a test can point it at a `tmp_path` tree.

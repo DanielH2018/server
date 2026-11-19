@@ -227,10 +227,7 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
 # argv at all, so an explicit `--help` could not reach them.
 WORK_BEFORE_HELP = (
     "validate.k8s_manifests",
-    "validate.setup_templates",
-    "validate.shell_templates",
-    "validate.unit_templates",
-    "validate.compose_templates",
+    "validate.render_templates",
     "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
     "home_assistant.validate_ha_config",

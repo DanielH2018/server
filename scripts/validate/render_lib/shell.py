@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
-"""Render every Jinja-templated shell script under k8s/roles/ and hosts/components/, then lint.
+"""The shell family of `render_templates.py`: every `*.sh.j2`, rendered, then linted.
 
-Renders with stubbed vars, then lints with `bash -n` + shellcheck. The prek
+Covers k8s/roles/ and hosts/components/. Renders with stubbed vars, then lints with `bash -n` +
+shellcheck. The prek
 `bash-syntax-check` / shellcheck hooks gate plain shell files (via identify's
 shebang-aware `types = ["shell"]`), but identify tags a `*.sh.j2` template as `{jinja, text}` —
 never `shell` — so a Jinja-templated script (e.g. an entrypoint or cron script) is invisible to
-both gates no matter how badly it's broken. This is the same render-then-lint pattern as
-`validate/compose_templates.py` / `validate/k8s_manifests.py`, extended from YAML parsing to
-shell linting: render structure with stubbed vars, then prove the OUTPUT is valid shell.
+both gates no matter how badly it's broken: render structure with stubbed vars, then prove the
+OUTPUT is valid shell.
 
 A render takes the inventory plus the template's own role defaults, laid under it the way
 Ansible's precedence does (`lib.render_context`). A host component's template takes its
@@ -20,21 +19,19 @@ script this gate lints.
 
 Structural check only: SOPS secrets and other runtime vars are stubbed (StubUndefined, plus a
 small override map for values that need to be shell-plausible — see SHELL_STUB_OVERRIDES), so no
-SOPS access is needed. Run directly or via the ``validate-shell-templates`` prek hook. Exits
-non-zero if any template fails to render, fails `bash -n`, fails shellcheck, or if shellcheck
-itself isn't available (a missing linter degrades the gate silently otherwise — fail loud
-instead of falling back to bash -n alone).
+SOPS access is needed. A template that fails to render, fails `bash -n` or fails shellcheck
+is a failure, and so is a missing shellcheck (a missing linter degrades the gate silently
+otherwise — fail loud instead of falling back to bash -n alone).
 
-This module is the entry point. It renders each template through
-`validate_lib/shipped_render.py`, the renderer's own environment, so the linters read the
-bytes the package ships. The lint pieces only this validator imports live in
+Each template renders through `validate_lib/shipped_render.py`, the renderer's own
+environment, so the linters read the bytes the package ships. The lint pieces live in
 `validate_lib/shell_lint.py` (`bash -n` and shellcheck).
 """
 
 import shutil
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -42,10 +39,8 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from validate.validate_lib.ok_lines import ok_printer
-from lib.cli_help import answer_help
 from lib.estate import role_defaults
 from lib.render_context import render_context
 from lib.render_guard import dump_numbered
@@ -155,44 +150,41 @@ def check_template(
     return None
 
 
-def main(
-    argv: Sequence[str] = (), which: Callable[[str], str | None] = shutil.which
-) -> int:
+def run(
+    ok: Callable[[str], None], which: Callable[[str], str | None] = shutil.which
+) -> tuple[int, int]:
     """Render every discovered shell template, then `bash -n` and shellcheck the output.
 
     Args:
-        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
-            template as an `[ok]` line; by default only failures and the summary print.
+        ok: Prints one clean template's `[ok]` line.
         which: the PATH lookup used to find shellcheck. A parameter rather than a module
             attribute so a test can prove the fail-closed branch without patching `shutil`.
 
     Returns:
-        0 if every template rendered clean and passed both linters, 1 otherwise (including
-        when shellcheck is missing from PATH or no templates were found).
+        (templates checked, failures). A missing shellcheck or an empty discovery is one
+        failure.
     """
-    answer_help(__doc__, list(argv))
-    ok = ok_printer(argv)
     shellcheck_bin = find_shellcheck(which)
     if not shellcheck_bin:
         print(
-            "[FAIL] shellcheck not found on PATH. It ships via the `shellcheck-py` dev "
+            "  [FAIL] shellcheck not found on PATH. It ships via the `shellcheck-py` dev "
             "dependency (pyproject.toml [dependency-groups] dev) — run through `uv run "
-            "python scripts/validate/shell_templates.py` (or any `uv run ...`) so uv's synced "
+            "python scripts/validate/render_templates.py` (or any `uv run ...`) so uv's synced "
             "venv is on PATH. Failing closed rather than silently degrading to bash -n alone.",
             file=sys.stderr,
         )
-        return 1
+        return 0, 1
 
     templates = discover_templates()
     if not templates:
         print(
-            f"No *.sh.j2 templates found under {K8S_ROLES} or {COMPONENTS}",
+            f"  [FAIL] no *.sh.j2 templates found under {K8S_ROLES} or {COMPONENTS}",
             file=sys.stderr,
         )
-        return 1
+        return 0, 1
 
     failures = 0
-    with tempfile.TemporaryDirectory(prefix="validate-shell-templates-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="render-templates-shell-") as tmp:
         out_dir = Path(tmp)
         # Render + `bash -n` per template; shellcheck once over everything
         # that got that far (see shellcheck_batch for why one process, not one per file).
@@ -217,10 +209,4 @@ def main(
                 )
             else:
                 ok(f"  [ok]   {rel}")
-
-    print(f"\n{len(templates)} shell template(s) checked, {failures} failure(s).")
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    return len(templates), failures

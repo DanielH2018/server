@@ -21,7 +21,7 @@ from _k8s_render import render_build_texts
 from _k8s_render import render_texts as k8s_render_texts
 from _setup_render import PI_COMPOSE, pi_compose_texts, pi_package, render_setup_texts
 from lib.repo_paths import K8S_ROLES
-from validate.setup_templates import COMPONENTS
+from validate.render_lib.setup_plane import COMPONENTS
 from _shell_render import render_shell_texts
 
 SHUTDOWN_CHAIN = frozenset({"k8s/nut", "components/nut-secondary"})

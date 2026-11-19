@@ -1,15 +1,14 @@
-"""Tests for scripts/validate/unit_templates.py — the render-then-`systemd-analyze verify` guard
-for `*.service.j2` / `*.timer.j2` templates that neither `shell_templates.py` nor
-`k8s_manifests.py` covers.
+"""Tests for scripts/validate/render_lib/units.py — the render-then-`systemd-analyze verify` guard
+for the systemd units that neither the shell family nor `k8s_manifests.py` covers.
 """
 
 import shutil
 
 import pytest
-from validate import unit_templates as v
+from validate.render_lib import units as v
 
 # Applied only to the tests that actually shell out to systemd-analyze — a module-wide skip
-# would also hide test_main_fails_closed_when_systemd_analyze_missing (which monkeypatches
+# would also hide test_run_fails_closed_when_systemd_analyze_missing (which monkeypatches
 # `which` and needs no real binary) and every pure discovery/render test below.
 requires_systemd_analyze = pytest.mark.skipif(
     shutil.which("systemd-analyze") is None,
@@ -225,9 +224,9 @@ def test_check_template_passes_a_clean_render(tmp_path):
     assert err is None
 
 
-def test_main_fails_closed_when_systemd_analyze_missing(monkeypatch):
+def test_run_fails_closed_when_systemd_analyze_missing(monkeypatch):
     monkeypatch.setattr(v.shutil, "which", lambda name: None)
-    assert v.main() == 1
+    assert v.run(print) == (0, 1)
 
 
 # ── sibling gap: the polkit rules (*.rules.j2, JavaScript) are content-checked by their roles'
@@ -281,29 +280,23 @@ def test_check_polkit_rule_catches_unbalanced_braces(tmp_path):
     assert "node --check" in err
 
 
-def test_main_skips_the_polkit_check_when_node_missing(monkeypatch):
+@requires_systemd_analyze
+def test_run_skips_the_polkit_check_when_node_missing(monkeypatch):
     real_which = v.shutil.which
     monkeypatch.setattr(
         v.shutil, "which", lambda name: None if name == "node" else real_which(name)
     )
     # A missing node must not fail the whole run closed — only a missing systemd-analyze does.
-    assert v.main() == 0
+    assert v.run(print)[1] == 0
 
 
-def test_main_fails_when_node_check_flags_the_rendered_rule(tmp_path, monkeypatch):
+@requires_systemd_analyze
+def test_run_fails_when_node_check_flags_the_rendered_rule(tmp_path, monkeypatch):
     broken = _broken_rule(tmp_path)
     monkeypatch.setattr(v, "discover_rules", lambda: [broken])
     if shutil.which("node") is None:
         pytest.skip("node not on PATH")
-    assert v.main() == 1
-
-
-@requires_systemd_analyze
-def test_all_real_unit_templates_render_and_verify_clean():
-    # The regression guard, mirroring shell_templates.test_all_real_shell_templates_render_and_lint_clean:
-    # every live *.service.j2 / *.timer.j2 must render with StubUndefined + its owning role's real
-    # defaults to a unit systemd-analyze reports no attributed diagnostic for.
-    assert v.main() == 0
+    assert v.run(print)[1] == 1
 
 
 # ── the host packages under hosts/, rendered by the host renderer ─────────────────────

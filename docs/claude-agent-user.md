@@ -230,7 +230,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
   the `worktree-claude+` prefix and a root-owned approval-paths file. The pins are literals in
   `templates/claude-land-pins.j2`, so no inventory value moves them. A polkit rule lets `claude`
   start only `homelab-claude-land@<n>.service`.
-  `scripts/validate/unit_templates.py` node-checks every `*.rules.j2`.
+  `scripts/validate/render_lib/units.py` node-checks every `*.rules.j2`.
   `claude_code_lander_enabled` switches the unit and the rule on.
 - **An approval-list PR lands when the operator's latest review approves its head SHA.** An
   approval of an older commit refuses, and so does a later `CHANGES_REQUESTED`.

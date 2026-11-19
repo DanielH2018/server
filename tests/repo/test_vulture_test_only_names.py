@@ -36,7 +36,7 @@ TEST_ONLY_NAMES = (
     ("scripts/deploy_tools/promote_lib/reboot_window.py", "end_cron"),
     ("scripts/diagnostics/grafana_panel_report.py", "worth_renavigating"),
     ("scripts/lib/role_installs.py", "no_project_spans"),
-    ("scripts/validate/setup_templates.py", "standalone_templates"),
+    ("scripts/validate/render_lib/setup_plane.py", "standalone_templates"),
     ("scripts/secrets_mgmt/git_dates.py", "historical_names"),
     ("scripts/secrets_mgmt/git_dates.py", "undeclared_departures"),
     ("scripts/secrets_mgmt/git_dates.py", "revived_departures"),

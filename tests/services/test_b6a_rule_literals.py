@@ -22,7 +22,7 @@ from jinja2 import StrictUndefined
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from lib.render_guard import render_or_error
-from validate.shell_templates import template_context
+from validate.render_lib.shell import template_context
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 # A bare `>` comparison: `>=` and `==` are not the stale-file arm.

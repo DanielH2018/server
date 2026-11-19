@@ -270,7 +270,7 @@ def finish(package: Package, host: str | None, sops_dir: Path) -> None:
         raise RenderRefused(
             f"{package.name}: a symlink and a file both install {clash}"
         )
-    # A shared package, such as `validate/unit_templates.py`'s wrapper around a component no
+    # A shared package, such as `validate/render_lib/units.py`'s wrapper around a component no
     # host lists yet, has no host to carry a ciphertext or a manifest for.
     if not package.secrets or host is None:
         return

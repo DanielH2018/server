@@ -3,7 +3,7 @@
 WHY THIS IS A TEST. `workflow_dispatch` is on ci.yml for one job: sweeping every hook against a
 branch whose own diff scopes them all out. A runner-image bump is the case: a
 workflow-only diff matches no hook's `files` regex, so the PR run is green without having run
-`validate-unit-templates` or gitleaks on that image at all.
+`validate-render-templates` or gitleaks on that image at all.
 
 The trigger buys that only while every job reads a dispatch as a push. Both scoping conditions
 key on `pull_request`, so a dispatch falls through to the full-sweep arm. Rewriting one as

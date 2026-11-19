@@ -235,7 +235,7 @@ editing the string Renovate produced.
 **A runner-image bump verifies by a full sweep on the branch, not by reading a release note.**
 CI scopes its hooks to the PR's changed files, and a workflow-only diff matches no hook's `files`
 regex — so the green run says nothing about the hooks that read what the image preinstalls
-(`validate-unit-templates` against its systemd-analyze and Node, gitleaks built with its Go). To
+(`validate-render-templates` against its systemd-analyze and Node, gitleaks built with its Go). To
 sweep the new image before merging, rebase the branch so it carries master's `workflow_dispatch`
 trigger, then dispatch CI on it:
 

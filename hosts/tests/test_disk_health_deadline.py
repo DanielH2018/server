@@ -23,7 +23,7 @@ from lib.render_guard import render_or_error
 from lib.repo_paths import K3S_HOST_CHECKS, K8S_ROLES
 from _shell_render import render_shell_script, shell_template_path
 from lib.estate import role_defaults
-from validate.shell_templates import template_context
+from validate.render_lib.shell import template_context
 
 TEMPLATE = ("components", "k3s-host-checks", "disk-health.sh.j2")
 K3S = role_defaults(K3S_HOST_CHECKS)

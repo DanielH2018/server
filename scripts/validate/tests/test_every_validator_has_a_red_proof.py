@@ -87,7 +87,7 @@ def test_every_validator_has_a_proof_it_can_go_red(validator: Path):
     assert RED_PROOF.search(tests.read_text(errors="replace")), (
         f"{tests.name} never asserts that {validator.name} reports a problem. Add the rejecting "
         f"half: an input the validator must flag, asserted on the problem list it returns. "
-        f"test_validate_compose_templates.py is the worked example — every rule there is a "
+        f"test_render_compose.py is the worked example — every rule there is a "
         f"`..._is_clean` / `..._is_flagged` pair."
     )
 

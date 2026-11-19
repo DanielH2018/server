@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate every file the renderer writes for a k8s tag, and assert each parses as valid YAML.
 
-The compose templates have the same guard (``validate/compose_templates.py``), and the k8s
+The compose templates have the same guard (``validate/render_lib/compose.py``), and the k8s
 manifests need it for the same reason. A Jinja indentation bug is exactly the class
 ``check-yaml`` misses — it does not render ``.j2`` — so it passes CI and first
 appears as ``error validating data`` partway through an apply, with some objects already applied
@@ -229,7 +229,7 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
         # helper script (registry's registry-gc.sh.j2) or a Dockerfile for
         # image-builder (homelab-mcp). Shell is rendered and linted by
-        # validate/shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
+        # validate/render_lib/shell.py; a Dockerfile is consumed by buildctl. Parsing
         # either here reports a comment line as malformed YAML.
         #
         # The glob is deliberately non-recursive, which is what makes templates/config/

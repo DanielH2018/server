@@ -63,7 +63,7 @@ ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
     "tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
     "scripts/validate/tests/test_validate_alert_rules.py": "k8s/roles/observability/files/rules/ingress-probes.yaml",
-    "scripts/validate/tests/test_validate_unit_templates.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
+    "scripts/validate/tests/test_render_units.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
 }
 
 NUMBER_WORDS = {

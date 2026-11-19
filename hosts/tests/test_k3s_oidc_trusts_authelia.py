@@ -14,7 +14,7 @@ why two of the checks below are about the flags NOT being there.
 
 The document is the component's own template rendered with the component's own defaults, the
 inputs host mode gives it. Before H6.4a it came from `_setup_render`, the harness
-`validate/setup_templates.py` renders the setup plane with, and the keys lived in
+`validate/render_lib/setup_plane.py` renders the setup plane with, and the keys lived in
 `hosts/components/k3s-server/defaults/main.yml`.
 
 See `hosts/components/k3s-server/component.yml` and `templates/authentication-config.yaml.j2`

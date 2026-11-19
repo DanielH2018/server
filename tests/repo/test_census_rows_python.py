@@ -103,7 +103,7 @@ YAML_FAST_USERS = frozenset(
     {
         "tests/_k8s_render.py",
         "scripts/lib/invocation_sites.py",
-        "scripts/validate/compose_templates.py",
+        "scripts/validate/render_lib/compose.py",
     }
 )
 

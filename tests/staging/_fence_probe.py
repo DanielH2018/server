@@ -130,7 +130,7 @@ def rendered_orchestrator():
     """The orchestrator as the shared accessor renders it, `hosts` repointed at three hosts.
 
     Everything else the template reads — the inventory, the role's own defaults — comes from
-    the accessor's own context, which is what `validate/shell_templates.py` renders and lints.
+    the accessor's own context, which is what `validate/render_lib/shell.py` renders and lints.
     `hosts` alone needs an override: the accessor's base stubs only one host
     (`daniel-server`), and two of the fence's dials are OTHER hosts' addresses
     (`hosts['daniel-box'].server_ip`, `hosts['daniel-pi'].server_ip`). Left at the

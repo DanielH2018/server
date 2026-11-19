@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-"""Render every Pi Compose service's compose.yaml.j2 and assert it parses as YAML.
+"""The compose family of `render_templates.py`: each Pi Compose service's compose.yaml.j2.
 
-This guards against template edits that silently produce malformed YAML or
+Renders every ``compose_services`` entry and asserts the output parses as YAML. This guards against template edits that silently produce malformed YAML or
 broken indentation. It renders structure, not values: secrets and other runtime
 variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.
@@ -12,14 +11,10 @@ project, H5), so each ``hosts/components/pi-compose/services/<name>/compose.yaml
 exercised with the same shape it is deployed with (port, hostname, networks,
 use_authelia). Commented-out services are skipped automatically (they are not in
 the parsed list).
-
-Run directly (``python3 scripts/validate/compose_templates.py``) or via the
-``validate-compose-templates`` prek hook. Exits non-zero if any template fails to
-render or produces invalid YAML.
 """
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -29,11 +24,9 @@ import yaml
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
-from lib.cli_help import answer_help
 from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context
 from lib.repo_paths import REPO
@@ -312,34 +305,26 @@ def _check_rendered(
     return None
 
 
-def main(argv: Sequence[str] = (), host_vars_dir: Path = HOST_VARS) -> int:
+def run(ok: Callable[[str], None], host_vars_dir: Path = HOST_VARS) -> tuple[int, int]:
     """Render every host's `compose_services` entries and report render/parse failures.
 
     Args:
-        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
-            template as an `[ok]` line; by default only failures and the summary print.
+        ok: Prints one clean template's `[ok]` line.
         host_vars_dir: The inventory's `host_vars` directory.
 
     Returns:
-        0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
-        were found.
+        (templates checked, failures). A tree with no host_vars file is one failure.
     """
-    answer_help(__doc__, list(argv))
-    ok = ok_printer(argv)
     host_files = sorted(host_vars_dir.glob("*.yml"))
     if not host_files:
-        print(f"No host_vars found under {host_vars_dir}", file=sys.stderr)
-        return 1
+        print(f"  [FAIL] no host_vars found under {host_vars_dir}", file=sys.stderr)
+        return 0, 1
 
     failures = 0
     checked = 0
     for host_file in host_files:
         host_vars = host_layer(host_file.parent, host_file.stem)
-        # The Pi package's services (H5).
-        packaged = host_vars.get("compose_services") or []
-        if packaged:
-            print(f"== {host_file.name} ({len(packaged)} packaged services) ==")
-        for ci in packaged:
+        for ci in host_vars.get("compose_services") or []:
             err = check_component_service(host_file.stem, ci)
             checked += 1
             if err:
@@ -347,10 +332,4 @@ def main(argv: Sequence[str] = (), host_vars_dir: Path = HOST_VARS) -> int:
                 print(f"  [FAIL] {ci['name']}: {err}", file=sys.stderr)
             else:
                 ok(f"  [ok]   {ci['name']}")
-
-    print(f"\n{checked} template(s) checked, {failures} failure(s).")
-    return 1 if failures else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    return checked, failures

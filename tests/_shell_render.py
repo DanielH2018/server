@@ -5,7 +5,7 @@
 `{{ ... }}` the moment a value it asserts on — a retry count, a URL, a threshold — moves into
 a role default, and a pattern that matches nothing passes (#3178).
 
-The render goes through `validate/shell_templates.py`, the gate that already renders these for
+The render goes through `validate/render_lib/shell.py`, the gate that already renders these for
 its `bash -n` and shellcheck pass, so what a guard asserts on cannot drift from what that gate
 lints. Secret values render as `STUB` (the `DECIDED:` rule in `lib/render_guard.py`), so a
 guard built on this keys on field names, never on credential-shaped values.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 
 from lib.repo_paths import K8S_ROLES
-from validate.shell_templates import COMPONENTS, discover_templates, template_context
+from validate.render_lib.shell import COMPONENTS, discover_templates, template_context
 from validate.validate_lib.shipped_render import render_shipped_text
 
 

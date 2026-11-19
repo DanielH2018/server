@@ -18,7 +18,7 @@ import test_entry_points_answer_help as help_census
 
 DOC_FIRST_LINE = "Check the compose templates against the shared macros."
 
-# What `compose_templates.py --help` printed while it ran its whole validation. It
+# What a template validator's `--help` printed while it ran its whole validation. It
 # shares no word with the docstring's first line and carries no `usage:`.
 WORK_OUTPUT = "4 template(s) checked, 0 failure(s)."
 

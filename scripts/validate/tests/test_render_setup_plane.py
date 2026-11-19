@@ -1,7 +1,7 @@
-"""Tests for validate.setup_templates — the host component render guard.
+"""Tests for validate.render_lib.setup_plane — the host component render guard.
 
 Every rule here is an accept/reject pair, the convention
-`scripts/validate/tests/test_validate_compose_templates.py` sets: a guard that fires on
+`scripts/validate/tests/test_render_compose.py` sets: a guard that fires on
 everything and one that fires on nothing look identical from the passing side alone.
 
 The census this guard runs over is a glob, so it also carries a non-vacuity assertion —
@@ -15,7 +15,7 @@ import yaml
 from lib import yaml_fast
 from renderer.renderer_lib.environment import render_file
 from renderer.renderer_lib.host_sources import confined_env
-from validate import setup_templates as v
+from validate.render_lib import setup_plane as v
 
 # Named members the glob must find. Renaming or moving one of these should fail HERE, with the
 # member named, rather than silently shrinking the set every other test runs over. One per
@@ -58,16 +58,6 @@ def test_the_census_finds_the_named_component_templates():
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
     assert len(found) >= 106
-
-
-def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
-    """The regression guard: every component template renders clean against the real tree."""
-    bad = {}
-    for tpl in v.discover_templates():
-        problems = v.check_role_template(tpl, known)
-        if problems:
-            bad[_rel(tpl)] = problems
-    assert not bad, f"component templates failed to render clean: {bad}"
 
 
 def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):

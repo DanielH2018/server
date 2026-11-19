@@ -204,13 +204,6 @@ ROWS = (
         ),
         # Four groups; the deployer's `gitops_*` family is not one.
         min_matches=4,
-        must_find=frozenset({"scripts/validate/*_templates.py"}),
-        allow={
-            "scripts/validate/*_templates.py": (
-                "each is the entry of its own prek hook, which runs it under its own `files` "
-                "filter in prek.toml"
-            ),
-        },
     ),
 )
 _IDS = [row.name for row in ROWS]
