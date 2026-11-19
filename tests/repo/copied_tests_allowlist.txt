@@ -1,0 +1,54 @@
+# Test modules that hold a test whose body is a copy of another test's, with the number of
+# such tests in each.
+#
+# Format: `<repo-relative-path> <max_copies>`, one line per file, in `LC_ALL=C sort` order.
+# The cap is 0. Two tests are copies when they take the same arguments, carry the same
+# decorators and their bodies parse to the same tree (scripts/dev/duplicate_tests.py), so a
+# copy is one check written twice. Parametrize the copies into one test, or make the shared
+# check one census row, and lower the entry; a file at 0 must lose its line. An entry may
+# only fall or be deleted, which tests/repo/test_module_length_ratchet.py enforces against
+# origin/master, and it has to MATCH the count.
+#
+# To see the groups, run `uv run python scripts/dev/duplicate_tests.py`.
+hosts/lib/tests/test_board_sync_component.py 1
+hosts/lib/tests/test_box_firewall_and_maintenance.py 1
+hosts/lib/tests/test_box_sshd_apt_and_tuning.py 1
+hosts/lib/tests/test_crowdsec_probe_component.py 1
+hosts/lib/tests/test_docs_refresh_component.py 1
+hosts/lib/tests/test_eval_sweep_component.py 1
+hosts/lib/tests/test_loki_route_witness_component.py 1
+hosts/lib/tests/test_secret_rotation_component.py 1
+hosts/lib/tests/test_server_firewall_and_maintenance.py 1
+hosts/lib/tests/test_server_sshd_apt_and_tuning.py 1
+hosts/tests/test_claude_fanout_server_lander.py 1
+hosts/tests/test_claude_pipeline_timeline.py 1
+hosts/tests/test_docs_refresh_failure_path.py 1
+hosts/tests/test_eval_run_failure_path.py 1
+k8s/roles/game-stats/tests/test_stats.py 1
+k8s/roles/game-stats/tests/test_valheim_stats.py 1
+k8s/roles/headlamp/tests/test_headlamp_verify.py 4
+k8s/roles/janitorr/tests/test_verify_janitorr.py 2
+k8s/roles/media-volume/tests/test_media_volume_verify.py 4
+k8s/roles/n8n/tests/test_n8n_verify.py 3
+k8s/roles/netpol-baseline/tests/test_netpol_baseline_verify.py 1
+k8s/roles/observability/tests/test_observability_verify.py 2
+k8s/roles/prowlarr/tests/test_prowlarr_verify.py 4
+k8s/roles/registry/tests/test_registry_verify.py 1
+k8s/roles/sonarr/tests/test_sonarr_verify.py 1
+k8s/roles/tdarr/tests/test_tdarr_verify.py 4
+scripts/renderer/tests/test_renderer_autofix_bridge_script.py 2
+scripts/renderer/tests/test_renderer_monitor_bridge_script.py 2
+scripts/renderer/tests/test_renderer_prepull.py 2
+scripts/renderer/tests/test_renderer_snapshot.py 2
+scripts/tests/test_census_rows_test_modules.py 1
+scripts/tests/test_census_rows_test_renders.py 1
+tests/repo/test_census_rows_layout.py 1
+tests/repo/test_census_rows_python.py 1
+tests/repo/test_census_rows_roles.py 1
+tests/repo/test_census_rows_suite.py 1
+tests/repo/test_census_rows_text.py 1
+tests/repo/test_census_rows_workflows.py 1
+tests/services/test_introskipper_install.py 1
+tests/services/test_mergeversions_install.py 1
+tests/staging/test_bootstrap_drill_mode.py 1
+tests/staging/test_suc_rehearsal_mode.py 1
