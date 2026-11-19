@@ -1,9 +1,9 @@
-"""`scripts/validate/renovate_config.sh` retries the Renovate install, never the validation.
+"""`scripts/validate/renovate_config.sh` retries the Renovate install, never a check.
 
 The install fails for a few minutes after every Renovate npm publish (a tarball 404 on a
-version `latest` already names), so it loops with a backoff. The validation is the verdict,
-so it runs once. `npm` and the installed `renovate-config-validator` are faked on PATH; each
-records its calls to a log the assertions read.
+version `latest` already names), so it loops with a backoff. A check is the verdict, so it
+runs once. `npm`, the installed `renovate-config-validator` and `renovate`, and `uv` are faked
+on PATH; each records its calls to a log the assertions read.
 
 Run: uv run pytest scripts/validate/tests/test_renovate_config_retry.py
 """
@@ -22,7 +22,8 @@ from lib.repo_paths import REPO
 SCRIPT = REPO / "scripts" / "validate" / "renovate_config.sh"
 
 # Fails until the call count reaches NPM_FAILURES, then "installs" a validator stub whose
-# exit code is VALIDATOR_EXIT. Records every call so the tests can count attempts.
+# exit code is VALIDATOR_EXIT and a renovate stub whose exit code is RENOVATE_EXIT. Records
+# every call so the tests can count attempts.
 FAKE_NPM = """#!/usr/bin/env bash
 set -euo pipefail
 echo "npm $*" >> "$CALL_LOG"
@@ -42,30 +43,46 @@ cat > "$prefix/node_modules/.bin/renovate-config-validator" <<EOF
 echo "validator \\$*" >> "$CALL_LOG"
 exit ${VALIDATOR_EXIT:-0}
 EOF
-chmod +x "$prefix/node_modules/.bin/renovate-config-validator"
+cat > "$prefix/node_modules/.bin/renovate" <<EOF
+#!/usr/bin/env bash
+echo "renovate \\$* config_file=\\${RENOVATE_CONFIG_FILE:-unset}" >> "$CALL_LOG"
+exit ${RENOVATE_EXIT:-0}
+EOF
+chmod +x "$prefix/node_modules/.bin/renovate-config-validator" "$prefix/node_modules/.bin/renovate"
+"""
+
+FAKE_UV = """#!/usr/bin/env bash
+echo "uv $*" >> "$CALL_LOG"
 """
 
 
 @pytest.fixture
 def sandbox(tmp_path):
-    fake_bin(tmp_path / "bin", npm=FAKE_NPM)
+    fake_bin(tmp_path / "bin", npm=FAKE_NPM, uv=FAKE_UV)
     shutil.copy2(SCRIPT, tmp_path / "renovate_config.sh")
     (tmp_path / "renovate.json").write_text("{}\n")
     return tmp_path
 
 
 def run(
-    sandbox: Path, *, npm_failures: int = 0, validator_exit: int = 0, attempts: int = 6
+    sandbox: Path,
+    *checks: str,
+    npm_failures: int = 0,
+    validator_exit: int = 0,
+    renovate_exit: int = 0,
+    attempts: int = 6,
 ):
     env = dict(os.environ)
     env["PATH"] = path_with(sandbox / "bin", env=env)
     env["CALL_LOG"] = str(sandbox / "calls.log")
     env["NPM_FAILURES"] = str(npm_failures)
     env["VALIDATOR_EXIT"] = str(validator_exit)
+    env["RENOVATE_EXIT"] = str(renovate_exit)
     env["RENOVATE_INSTALL_ATTEMPTS"] = str(attempts)
     env["RENOVATE_INSTALL_BACKOFF"] = "0"
     env["RUNNER_TEMP"] = str(sandbox / "tmp")
-    return launch([str(sandbox / "renovate_config.sh")], cwd=sandbox, env=env)
+    env.pop("RENOVATE_CONFIG_FILE", None)
+    return launch([str(sandbox / "renovate_config.sh"), *checks], cwd=sandbox, env=env)
 
 
 def calls(sandbox: Path) -> list[str]:
@@ -74,7 +91,7 @@ def calls(sandbox: Path) -> list[str]:
 
 
 def test_a_tarball_404_is_retried_and_the_validator_runs_once(sandbox):
-    result = run(sandbox, npm_failures=2)
+    result = run(sandbox, "validate", npm_failures=2)
     assert result.returncode == 0, result.stderr
     recorded = calls(sandbox)
     assert sum(c.startswith("npm ") for c in recorded) == 3
@@ -84,7 +101,7 @@ def test_a_tarball_404_is_retried_and_the_validator_runs_once(sandbox):
 
 
 def test_an_install_that_never_succeeds_stops_at_the_attempt_cap(sandbox):
-    result = run(sandbox, npm_failures=99, attempts=3)
+    result = run(sandbox, "validate", npm_failures=99, attempts=3)
     assert result.returncode == 1
     recorded = calls(sandbox)
     assert sum(c.startswith("npm ") for c in recorded) == 3
@@ -93,8 +110,39 @@ def test_an_install_that_never_succeeds_stops_at_the_attempt_cap(sandbox):
 
 
 def test_a_validation_failure_is_final_and_never_retried(sandbox):
-    result = run(sandbox, validator_exit=2)
+    result = run(sandbox, "validate", validator_exit=2)
     assert result.returncode == 2
     recorded = calls(sandbox)
     assert sum(c.startswith("npm ") for c in recorded) == 1
     assert sum(c.startswith("validator ") for c in recorded) == 1
+
+
+def test_extract_reads_the_config_once_and_hands_the_report_to_the_checker(sandbox):
+    """A RENOVATE_CONFIG_FILE beside the repository's renovate.json reports every dep twice."""
+    result = run(sandbox, "extract")
+    assert result.returncode == 0, result.stderr
+    report = sandbox / "tmp" / "renovate-extract.json"
+    assert [c for c in calls(sandbox) if not c.startswith("npm ")] == [
+        "renovate --platform=local --dry-run=extract --report-type=file "
+        f"--report-path={report} config_file=unset",
+        f"uv run python scripts/validate/renovate_extract.py check {report}",
+    ]
+
+
+def test_a_failed_extract_is_final_and_skips_the_checker(sandbox):
+    result = run(sandbox, "extract", renovate_exit=3)
+    assert result.returncode == 3
+    assert not any(c.startswith("uv ") for c in calls(sandbox))
+
+
+def test_no_check_named_runs_both_after_one_install(sandbox):
+    result = run(sandbox)
+    assert result.returncode == 0, result.stderr
+    ran = [c.split()[0] for c in calls(sandbox)]
+    assert ran == ["npm", "validator", "renovate", "uv"]
+
+
+def test_an_unknown_check_is_a_usage_error_before_any_install(sandbox):
+    result = run(sandbox, "lint")
+    assert result.returncode == 64
+    assert calls(sandbox) == []

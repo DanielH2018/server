@@ -22,12 +22,11 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from _renovate import (
-    _MANAGERS,
-    _PACKAGE_RULES,
-    _REPO,
-    _resolve_group_name,
-    _to_python_regex,
+from _renovate import _CONFIG_MANAGERS, _PACKAGE_RULES, _REPO, _resolve_group_name
+from lib.renovate_annotations import (
+    annotations_in,
+    is_annotation_manager,
+    to_python_regex,
 )
 
 
@@ -61,22 +60,17 @@ _APT_VERSION_FIXTURES = [
 _NON_APT_VERSION_FIXTURES = ["2.4.0", "v2.4.0", "29.8.1"]
 
 
-def _pi_docker_managers() -> list[dict]:
-    return [
-        m
-        for m in _MANAGERS
-        if any(
-            "components/pi-docker/component" in p.replace("\\", "")
-            for p in m["managerFilePatterns"]
-        )
-    ]
+def _pi_docker_pins() -> list[dict[str, str]]:
+    """Each `# renovate:` annotation in the component, as the annotation manager reads it."""
+    (manager,) = [m for m in _CONFIG_MANAGERS if is_annotation_manager(m)]
+    return annotations_in(manager, (_REPO / PI_DOCKER_COMPONENT).read_text())
 
 
-def test_managers_name_the_apt_packages_they_pin() -> None:
-    """Each manager's depName must be the apt package whose spec its var renders.
+def test_each_annotation_names_the_apt_package_its_var_renders() -> None:
+    """Each pin's depName must be the apt package whose spec its var renders.
 
-    The bug guarded is a manager tracking a version space its own consumer cannot install.
-    The pins template is that consumer: each row names an apt package and interpolates the
+    The bug guarded is a pin tracking a version space its own consumer cannot install. The
+    pins template is that consumer: each row names an apt package and interpolates the
     pinned var, so binding depName to the row's package is what makes the datasource and the
     glob name the same thing.
     """
@@ -88,36 +82,30 @@ def test_managers_name_the_apt_packages_they_pin() -> None:
     }
     assert {"docker-ce", "containerd.io"} <= set(package_versions), package_versions
 
-    managers = _pi_docker_managers()
-    assert {m["depNameTemplate"] for m in managers} == PI_DOCKER_DEB_PACKAGES, (
-        "the pi-docker managers no longer cover exactly the apt packages the Pi holds — "
-        f"got {sorted(m['depNameTemplate'] for m in managers)}"
+    pins = _pi_docker_pins()
+    assert {p["depName"] for p in pins} == PI_DOCKER_DEB_PACKAGES, (
+        "the pi-docker annotations no longer cover exactly the apt packages the Pi holds — "
+        f"got {sorted(p['depName'] for p in pins)}"
     )
-
-    for mgr in managers:
-        match = re.match(r"(\w+):", mgr["matchStrings"][0])
-        assert match, (
-            f"matchStrings[0] does not start with `<var>:` — {mgr['matchStrings'][0]!r}"
-        )
-        var = match.group(1)
-        owners = {k for k, v in package_versions.items() if var in v}
-        assert mgr["depNameTemplate"] in owners, (
-            f"{mgr['depNameTemplate']} is tracked against {var}, but "
-            f"the pins template renders that var into {sorted(owners)} — the "
-            "Renovate depName and the apt spec name different packages."
+    for pin in pins:
+        owners = {k for k, v in package_versions.items() if pin["variable"] in v}
+        assert pin["depName"] in owners, (
+            f"{pin['depName']} is tracked against {pin['variable']}, but the pins template "
+            f"renders that var into {sorted(owners)} — the Renovate depName and the apt spec "
+            "name different packages."
         )
 
 
-def test_managers_read_dockers_own_apt_index() -> None:
+def test_each_annotation_reads_dockers_own_apt_index() -> None:
     """Every one of the four resolves against Docker's noble/arm64 index, with all three
     query parameters the deb datasource requires. Omit one and the datasource is inert."""
-    managers = _pi_docker_managers()
-    assert len(managers) == len(PI_DOCKER_DEB_PACKAGES)
-    for mgr in managers:
-        assert mgr["datasourceTemplate"] == "deb", mgr["depNameTemplate"]
-        url = urlparse(mgr["registryUrlTemplate"])
+    pins = _pi_docker_pins()
+    assert len(pins) == len(PI_DOCKER_DEB_PACKAGES)
+    for pin in pins:
+        assert pin["datasource"] == "deb", pin["depName"]
+        url = urlparse(pin["registryUrl"])
         assert (url.netloc, url.path) == ("download.docker.com", "/linux/ubuntu"), (
-            f"{mgr['depNameTemplate']} resolves against {mgr['registryUrlTemplate']!r}, not "
+            f"{pin['depName']} resolves against {pin['registryUrl']!r}, not "
             "the repo apt actually installs from."
         )
         params = parse_qs(url.query)
@@ -128,12 +116,11 @@ def test_managers_read_dockers_own_apt_index() -> None:
 
 @pytest.mark.parametrize(("apt_version", "expected"), _APT_VERSION_FIXTURES)
 def test_extract_version_reads_every_apt_shape(apt_version: str, expected: str) -> None:
-    for mgr in _pi_docker_managers():
-        pattern = re.compile(_to_python_regex(mgr["extractVersionTemplate"]))
-        match = pattern.search(apt_version)
+    for pin in _pi_docker_pins():
+        match = re.search(to_python_regex(pin["extractVersion"]), apt_version)
         assert match is not None, (
-            f"{mgr['depNameTemplate']}'s extractVersionTemplate drops {apt_version!r} from the "
-            "version space — Renovate cannot offer a version it cannot parse."
+            f"{pin['depName']}'s extractVersion drops {apt_version!r} from the version "
+            "space — Renovate cannot offer a version it cannot parse."
         )
         assert match.group("version") == expected
 
@@ -142,11 +129,13 @@ def test_extract_version_reads_every_apt_shape(apt_version: str, expected: str) 
 def test_extract_version_rejects_a_bare_upstream_tag(not_an_apt_version: str) -> None:
     """The rejecting half: a bare upstream tag is what github-releases would serve, and it
     is exactly the version the Pi's apt has no package for."""
-    for mgr in _pi_docker_managers():
-        pattern = re.compile(_to_python_regex(mgr["extractVersionTemplate"]))
-        assert pattern.search(not_an_apt_version) is None, (
-            f"{mgr['depNameTemplate']}'s extractVersionTemplate accepts {not_an_apt_version!r}, "
-            "a tag with no Debian revision — the unbuildable version space #2341 closed."
+    for pin in _pi_docker_pins():
+        assert (
+            re.search(to_python_regex(pin["extractVersion"]), not_an_apt_version)
+            is None
+        ), (
+            f"{pin['depName']}'s extractVersion accepts {not_an_apt_version!r}, a tag with "
+            "no Debian revision — the unbuildable version space #2341 closed."
         )
 
 

@@ -76,7 +76,7 @@ can install the version.
 
 One limit survives that. The manager strips the Debian revision apt carries, so `2.3.4-1` and `2.3.4-2` are
 one version and a revision-only repackage offers no PR. ENFORCED by
-`scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin`
+`scripts/tests/test_renovate_docker_engine_pins.py::test_each_annotation_names_the_apt_package_its_var_renders`
 and its siblings: the `depName` is the apt package the spec renders, the `registryUrl` is Docker's
 index, and the group stays out of the `automerging` catch-all.
 

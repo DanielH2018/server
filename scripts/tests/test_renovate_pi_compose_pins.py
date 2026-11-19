@@ -2,11 +2,12 @@
 """Guard the Renovate manager and rules over the Pi's Compose images (target slice H5, PR H5.11).
 
 The manager reads `image:` lines in hosts/components/pi-compose/services/*/compose.yaml.j2.
-Its matchString starts at `image:` rather than at a line start, so the guards here check
-three things the generic census in `test_renovate_managers.py` cannot see:
+Renovate's extract, held against `scripts/validate/renovate_expected_deps.tsv` in CI, proves
+it reads every service's image with its digest and that its autoReplaceStringTemplate writes
+each live pin back unchanged. The guards here check two things the extract cannot see:
 
-- it matches every service's `image:` line and no other line, such as a comment;
-- its autoReplaceStringTemplate writes each live pin back unchanged;
+- the table extracts from exactly the four compose files, so a service that loses its manager
+  fails as a missing member;
 - the packageRules resolve as the operator ruled on 2026-10-29 (H5's Open question 1).
   Digest bumps to autoheal and docker-proxy automerge. wg-easy stays manual. The two alloy
   pins share one manual group.
@@ -14,19 +15,9 @@ three things the generic census in `test_renovate_managers.py` cannot see:
 Run: uv run pytest scripts/tests/test_renovate_pi_compose_pins.py
 """
 
-import re
-
 import pytest
 
-from _renovate import (
-    _MANAGERS,
-    _PACKAGE_RULES,
-    _REPO,
-    _file_pattern_to_regex,
-    _resolve_setting,
-    _to_python_regex,
-    render_auto_replace,
-)
+from _renovate import EXPECTED_DEPS, _PACKAGE_RULES, _resolve_setting
 from test_renovate_managers import _pin_digest_rule_for
 
 _SERVICES = "hosts/components/pi-compose/services"
@@ -43,76 +34,17 @@ PI_IMAGES = {
 LOKI_HOMELAB_DEFAULTS = "k8s/roles/loki-homelab/defaults/main.yml"
 
 
-def _pi_manager() -> dict:
-    found = [
-        m for m in _MANAGERS if any("pi-compose" in p for p in m["managerFilePatterns"])
-    ]
-    assert len(found) == 1, f"expected one manager over pi-compose, found {len(found)}"
-    return found[0]
-
-
-def _match_res(mgr: dict) -> list[re.Pattern]:
-    return [re.compile(_to_python_regex(ms)) for ms in mgr["matchStrings"]]
-
-
-def _line_mismatches(text: str, match_res: list[re.Pattern]) -> list[str]:
-    """Lines the manager matches that are not `image:` lines, and `image:` lines it misses."""
-    problems = []
-    for n, line in enumerate(text.splitlines(), 1):
-        is_image_line = line.strip().startswith("image:")
-        matched = any(r.search(line) for r in match_res)
-        if matched != is_image_line:
-            kind = "matched a non-image line" if matched else "missed an image line"
-            problems.append(f"{n}: {kind}: {line.strip()}")
-    return problems
-
-
-def test_the_manager_reads_exactly_the_four_compose_files(tracked: list[str]) -> None:
-    file_res = [_file_pattern_to_regex(p) for p in _pi_manager()["managerFilePatterns"]]
-    matched = {f for f in tracked if any(r.search(f) for r in file_res)}
-    assert matched == set(PI_IMAGES)
-
-
-@pytest.mark.parametrize("path", sorted(PI_IMAGES))
-def test_the_manager_matches_every_image_line_and_nothing_else(path: str) -> None:
-    match_res = _match_res(_pi_manager())
-    text = (_REPO / path).read_text()
-    assert not _line_mismatches(text, match_res)
-    dep_names = {m.group("depName") for r in match_res for m in r.finditer(text)}
-    assert dep_names == PI_IMAGES[path]
-
-
-def test_a_comment_carrying_an_image_reference_is_flagged() -> None:
-    """Proof the line check can go red: the unanchored matchString also hits a comment."""
-    text = "    image: a/b:1\n    # was image: a/b:0 before the bump\n"
-    assert _line_mismatches(text, _match_res(_pi_manager())) == [
-        "2: matched a non-image line: # was image: a/b:0 before the bump"
-    ]
-
-
-def test_the_template_round_trips_every_live_pin() -> None:
-    mgr = _pi_manager()
-    spans = [
-        m
-        for path in sorted(PI_IMAGES)
-        for r in _match_res(mgr)
-        for m in r.finditer((_REPO / path).read_text())
-    ]
-    assert len(spans) == 5, "alloy 1, autoheal 1, docker-proxy 2, wg-easy 1"
-    assert all(m.group("currentDigest") for m in spans)
-
-    def render(template: str, m: re.Match[str]) -> str:
-        return render_auto_replace(
-            template,
-            depName=m.group("depName"),
-            newValue=m.group("currentValue"),
-            newDigest=m.group("currentDigest"),
-        )
-
-    template = mgr["autoReplaceStringTemplate"]
-    assert [render(template, m) for m in spans] == [m.group(0) for m in spans]
-    # Red proof: without the literal prefix the template eats `image: ` from the line.
-    assert render(template.replace("image: ", "", 1), spans[0]) != spans[0].group(0)
+def test_the_table_extracts_each_compose_image_with_its_digest() -> None:
+    extracted: dict[str, set[str]] = {}
+    for d in EXPECTED_DEPS:
+        if d.file.startswith(f"{_SERVICES}/"):
+            assert (d.manager, d.datasource, d.digest) == (
+                "regex",
+                "docker",
+                "digest",
+            ), d
+            extracted.setdefault(d.file, set()).add(d.dep_name)
+    assert extracted == PI_IMAGES
 
 
 def _resolve(field: str, image: str, path: str, update_type: str, rules=_PACKAGE_RULES):

@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
-# Validate renovate.json against a freshly-resolved Renovate, riding out npm's publish window.
+# Install a freshly-resolved Renovate, riding out npm's publish window, and run the checks named.
 #
-# WHY THE INSTALL IS RETRIED AND THE VALIDATION IS NOT. Renovate publishes to npm roughly
+# Usage: renovate_config.sh [validate] [extract]   (both when none is named)
+#
+#   validate  renovate-config-validator --strict over renovate.json.
+#   extract   `renovate --platform=local --dry-run=extract`, whose report
+#             scripts/validate/renovate_extract.py checks against renovate_expected_deps.tsv.
+#             renovate.json is read as the repository's config, the way the hosted app reads
+#             it. Passing it as RENOVATE_CONFIG_FILE as well would merge it twice and report
+#             every custom manager's deps twice.
+#
+# Run it from the repository root.
+#
+# WHY THE INSTALL IS RETRIED AND THE CHECKS ARE NOT. Renovate publishes to npm roughly
 # eight times a day. For a few minutes after each publish the registry's `latest` tag already
 # names the new version while its tarball has not reached every CDN edge, so the fetch fails:
 #
@@ -9,8 +20,8 @@
 #
 # Such a failure appears 1.5-2 minutes after a publish, and a run six minutes later passes on
 # the same version. That is a transport failure, so the install loops with a backoff. A
-# validation failure is the verdict this script exists to deliver, so it runs once and its exit
-# code is final.
+# check failure is the verdict this script exists to deliver, so each check runs once and its
+# exit code is final.
 #
 # WHY `renovate@latest` AND NOT A PIN. The validator must match the hosted Mend app that
 # actually consumes the config, which tracks latest; the reasoning is on the `renovate-config`
@@ -30,8 +41,21 @@ fi
 
 attempts="${RENOVATE_INSTALL_ATTEMPTS:-6}"
 backoff="${RENOVATE_INSTALL_BACKOFF:-60}"
-prefix="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/renovate-config-validator"
-config="${1:-renovate.json}"
+tmp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+prefix="$tmp/renovate-config-validator"
+checks=("$@")
+if [ "${#checks[@]}" -eq 0 ]; then
+  checks=(validate extract)
+fi
+for check in "${checks[@]}"; do
+  case "$check" in
+    validate | extract) ;;
+    *)
+      echo "renovate_config.sh: unknown check '$check'; expected validate or extract" >&2
+      exit 64
+      ;;
+  esac
+done
 
 attempt=1
 until npm install --prefix "$prefix" --no-save --no-package-lock --no-audit --no-fund renovate@latest; do
@@ -45,4 +69,18 @@ until npm install --prefix "$prefix" --no-save --no-package-lock --no-audit --no
   sleep "$backoff"
 done
 
-exec "$prefix/node_modules/.bin/renovate-config-validator" --strict "$config"
+status=0
+for check in "${checks[@]}"; do
+  if [ "$check" = validate ]; then
+    "$prefix/node_modules/.bin/renovate-config-validator" --strict renovate.json || status=$?
+  else
+    report="$tmp/renovate-extract.json"
+    if LOG_LEVEL=warn "$prefix/node_modules/.bin/renovate" --platform=local --dry-run=extract \
+      --report-type=file --report-path="$report"; then
+      uv run python scripts/validate/renovate_extract.py check "$report" || status=$?
+    else
+      status=$?
+    fi
+  fi
+done
+exit "$status"
