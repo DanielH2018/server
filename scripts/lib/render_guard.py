@@ -36,7 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.git import git
 from lib.role_files import cluster_vars_source, repo_file, role_file
-from lib.inventory_lists import K8S_HOST, containers_entries_in, host_names
+from lib.container_entry import ContainerEntry, parse_containers_list
+from lib.inventory_lists import K8S_HOST, host_names
 from lib.repo_paths import (
     ALL_VARS,
     HOST_VARS,
@@ -59,7 +60,6 @@ __all__ = [
     "SHARED_TPL",
     "StrictChainableUndefined",
     "StubUndefined",
-    "containers_entries_in",
     "dump_numbered",
     "entry_tags",
     "entry_tags_at",
@@ -251,9 +251,13 @@ def host_layer(host_vars: Path, host: str) -> dict:
     return load_yaml(host_vars / f"{host}.yml")
 
 
-def k8s_services(path: Path = K8S_SERVICES) -> list[dict]:
-    """The named entries of the service list `path`, every k8s service, in file order."""
-    return containers_entries_in(load_yaml(path))
+def k8s_services(path: Path = K8S_SERVICES) -> tuple[ContainerEntry, ...]:
+    """The entries of the service list `path`, every k8s service, in file order.
+
+    Raises:
+        container_entry.ContainerEntryError: an entry is malformed.
+    """
+    return parse_containers_list(load_yaml(path).get("containers_list"))
 
 
 # host_vars as git names it: ``git show`` and ``git ls-tree`` address a path in a tree, not on
@@ -273,19 +277,22 @@ def entry_tags(entry: dict) -> list[str]:
     return list(entry.get("tags") or [entry["name"]])
 
 
-def k8s_services_at(ref: str, cwd: Path) -> list[dict]:
-    """The named entries of ``cluster/services.yml`` AT ``ref``, read with git.
+def k8s_services_at(ref: str, cwd: Path) -> tuple[ContainerEntry, ...]:
+    """The entries of ``cluster/services.yml`` AT ``ref``, read with git.
 
     A PR that adds a role and its service entry together is the case a checkout answers
     wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as one
     nobody registered (``land_lib/classify.py`` carries the argument). Raises
     ``CalledProcessError`` on an unreadable ref or a ref without the file, and
-    ``yaml_fast.UnparsableYaml`` on a file that does not load at ``ref``.
+    ``yaml_fast.UnparsableYaml`` on a file that does not load at ``ref``, and
+    ``ContainerEntryError`` on a malformed entry at ``ref``.
     """
     loaded = yaml_fast.parse_yaml(
         git("show", f"{ref}:{SERVICES_IN_TREE}", cwd=cwd).stdout
     )
-    return containers_entries_in(loaded if isinstance(loaded, dict) else {})
+    return parse_containers_list(
+        (loaded if isinstance(loaded, dict) else {}).get("containers_list")
+    )
 
 
 def entry_tags_at(ref: str, cwd: Path) -> dict[str, set[str]]:

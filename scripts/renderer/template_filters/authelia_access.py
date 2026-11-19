@@ -45,7 +45,7 @@ def authelia_service_rules(containers_list, domain, one_factor_networks):
     """
     by_tier = {tier: [] for tier in AUTH_TIERS}
     for entry in containers_list:
-        name = entry.get("name", "<unnamed>")
+        name = entry["name"]
         tier = entry.get("auth_tier")
         if not entry.get("use_authelia"):
             if tier is not None:

@@ -10,6 +10,7 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from lib.render_context import render_context
+from lib.container_entry import ContainerEntry
 from lib.render_guard import host_layer, k8s_services
 from jinja2 import Undefined
 
@@ -43,7 +44,7 @@ def _render(path: Path, **ctx) -> str:
     return env.get_template(path.name).render(**ctx)
 
 
-def _k8s_entries() -> list[dict]:
+def _k8s_entries() -> tuple[ContainerEntry, ...]:
     return k8s_services()
 
 

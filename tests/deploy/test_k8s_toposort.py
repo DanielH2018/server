@@ -42,10 +42,12 @@ Run: uv run pytest tests/deploy/test_k8s_toposort.py
 """
 
 import functools
+from collections.abc import Sequence
 import random
 from pathlib import Path
 
 import pytest
+from lib.container_entry import ContainerEntry
 from lib.render_guard import k8s_services
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
@@ -58,7 +60,7 @@ from renderer.template_filters.toposort import (
 )
 
 
-def _k8s_entries(path: Path) -> list[dict]:
+def _k8s_entries(path: Path) -> tuple[ContainerEntry, ...]:
     return k8s_services(path)
 
 
@@ -83,7 +85,7 @@ def traefik_crd_roles() -> frozenset[str]:
     )
 
 
-def _index(entries: list[dict]) -> dict[str, int]:
+def _index(entries: Sequence[dict]) -> dict[str, int]:
     return {c["name"]: i for i, c in enumerate(entries)}
 
 
@@ -367,7 +369,7 @@ def _host_dep_map(path: Path) -> dict[str, list[str]]:
 
 
 def _applies_last_ahead_of(
-    entries: list[dict], dep_map: dict[str, list[str]], name: str
+    entries: Sequence[dict], dep_map: dict[str, list[str]], name: str
 ) -> list[str]:
     """The K8S_APPLIES_LAST roles that still sort ahead of `name` on an adversarial list.
 

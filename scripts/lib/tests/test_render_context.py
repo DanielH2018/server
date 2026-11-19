@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from lib import render_context as rc
+from lib.container_entry import ContainerEntry, ContainerEntryError
 from lib.render_guard import StrictChainableUndefined
 
 
@@ -126,6 +127,26 @@ def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
     )
     assert (ctx["tunable"], ctx["alias"]) == ("default", "ubuntu/a")
     assert "unset_me" not in ctx
+
+
+def test_services_arrive_parsed_with_each_entrys_jinja_expanded(tree):
+    # The filters read `services` as parsed entries, so expanding a value must keep the type.
+    template, inv = tree({}, group={"vip": "10.0.0.5"}, plane="k8s")
+    inv.services.write_text(
+        yaml.safe_dump({"containers_list": [{"name": "dns", "ip": "{{ vip }}"}]})
+    )
+    services = rc.render_context(template, inventory=inv)["services"]
+    assert services == ({"name": "dns", "ip": "10.0.0.5"},)
+    assert type(services[0]) is ContainerEntry
+
+
+def test_a_malformed_service_entry_fails_the_context_read(tree):
+    template, inv = tree({}, plane="k8s")
+    inv.services.write_text(
+        yaml.safe_dump({"containers_list": [{"name": "dns"}, {"port": 53}]})
+    )
+    with pytest.raises(ContainerEntryError, match="item 1 has no `name`"):
+        rc.render_context(template, inventory=inv)
 
 
 def test_a_value_that_will_not_expand_is_dropped(tree, capsys):

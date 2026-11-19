@@ -18,6 +18,7 @@ import re
 
 from jinja2 import StrictUndefined, Undefined
 
+from lib.container_entry import ContainerEntry
 from lib.guard_jinja_env import ansible_bool
 from lib.render_guard import (
     SHARED_TPL,
@@ -185,6 +186,11 @@ def resolve_vars(
             )
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
+        # `k8s_services`' tuple of `ContainerEntry`, whose type the filters rely on.
+        if type(node) is tuple:
+            return tuple(expand(n, ctx) for n in node)
+        if isinstance(node, ContainerEntry):
+            return ContainerEntry({k: expand(v, ctx) for k, v in node.items()})
         if isinstance(node, dict):
             return {k: expand(v, ctx) for k, v in node.items()}
         return node
