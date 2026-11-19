@@ -9,10 +9,10 @@ is context-aware: it only inspects command/entrypoint/healthcheck.test, so the
 intentional `${GID-...}` interpolation some services use in `environment:` is not
 flagged.
 
-Run: uv run pytest scripts/validate/tests/test_validate_compose_templates.py
+Run: uv run pytest scripts/validate/tests/test_render_compose.py
 """
 
-from validate import compose_templates as vct
+from validate.render_lib import compose as vct
 
 
 def _docs(spec):
@@ -128,30 +128,15 @@ def test_non_watchtower_label_without_equals_is_ignored():
     assert vct.find_watchtower_label_bugs(docs) == []
 
 
-# The synthetic tests above only exercise the two detector functions. This is the ONLY pytest
-# coverage of the *real* render path (every service in the Pi's compose_services). Without it, a
-# Jinja-indent regression in a template that the prek `validate-compose-templates` hook's file
-# filter doesn't match would slip past CI entirely.
+# The Pi package's services (H5.2b): `wg-easy` and `autoheal` are the named members, so a scan
+# that stopped reading the component fails here.
 
 
-def test_real_templates_render_clean(capsys):
-    assert vct.main() == 0
-    # A clean template prints nothing by default, so a [FAIL] is not buried in a list.
-    assert "[ok]" not in capsys.readouterr().out
-
-
-def test_verbose_lists_each_clean_template(capsys):
-    assert vct.main(["-v"]) == 0
-    assert "  [ok]   wg-easy\n" in capsys.readouterr().out
-
-
-# The Pi package's services (H5.2b): the same checks run over hosts/components/pi-compose/services.
-# `autoheal` is the named member, so a scan that stopped reading the component fails here.
-
-
-def test_verbose_lists_a_packaged_service(capsys):
-    assert vct.main(["-v"]) == 0
-    assert "  [ok]   autoheal\n" in capsys.readouterr().out
+def test_run_passes_each_clean_packaged_service_to_ok(capsys):
+    assert vct.run(print)[1] == 0
+    out = capsys.readouterr().out
+    assert "  [ok]   wg-easy\n" in out
+    assert "  [ok]   autoheal\n" in out
 
 
 def _service(tmp_path, image):

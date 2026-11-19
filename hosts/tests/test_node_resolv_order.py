@@ -22,7 +22,7 @@ the file that carries it differs.
 
 The rendered file is checked in both cases, not just the variable, so a template that stops
 interpolating the list cannot pass on the strength of correct defaults. The render comes from
-`_setup_render`, the harness `validate/setup_templates.py` renders these with. A hand-stitched
+`_setup_render`, the harness `validate/render_lib/setup_plane.py` renders these with. A hand-stitched
 substitution would assert the template still spells the loop exactly as this module writes it,
 and the moment that stops matching the guard checks a file with `{{ ... }}` still in it.
 """
@@ -30,7 +30,7 @@ and the moment that stops matching the guard checks a file with `{{ ... }}` stil
 import re
 
 from _setup_render import rendered_component_text, role_context
-from validate.setup_templates import COMPONENTS
+from validate.render_lib.setup_plane import COMPONENTS
 from lib.repo_paths import K3S_HOST_DNS
 from renderer.renderer_lib import host as host_mode
 

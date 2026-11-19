@@ -3,7 +3,7 @@
 The shell half of `test_entry_points_outside_scripts_answer_help.py`. It covers two kinds of
 script: the tracked `.sh` files outside `scripts/` and every `tests/`, and every `*.sh.j2` template a
 role renders into a cron or timer script. A template runs as rendered, so the test renders it
-through `_shell_render`, the render `validate/shell_templates.py` lints, and runs that.
+through `_shell_render`, the render `validate/render_lib/shell.py` lints, and runs that.
 
 THE CONVENTION. `-h` or `--help` anywhere in argv prints the script's header comment block and
 exits 0, before any lock, network call or write. The usual form is
