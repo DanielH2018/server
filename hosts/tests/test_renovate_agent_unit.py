@@ -20,9 +20,13 @@ expression is spelled that way.
 Run: uv run pytest hosts/tests/test_renovate_agent_unit.py
 """
 
+import json
 import re
 
+import land_renovate_pr
 import pytest
+import renovate_agent
+import renovate_identity
 from lib import yaml_fast
 from _helpers import REPO, K8S_ROLES
 from _setup_render import COMPONENTS, render_component_text, role_context
@@ -90,20 +94,25 @@ def test_path_carries_the_user_local_bin() -> None:
 def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     """The contract's "never a PR by another author" is held twice: by the lander's own
     check, and by `land.sh --arm-merge`, which reads LAND_REQUIRE_AUTHOR from the lander's
-    unit. The login must be the one the wrapper's own census filters on (`RENOVATE_AUTHOR`),
-    read from its source rather than typed here."""
+    unit. The login must be gh's spelling of Renovate, the one `renovate_identity` owns and the
+    wrapper's census and the lander's check both read."""
     # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
     envs = directive(render("renovate-agent-land@.service.j2"), "Environment")
     required = [e for e in envs if e.startswith("LAND_REQUIRE_AUTHOR=")]
     assert required, "the unit sets no LAND_REQUIRE_AUTHOR"
-    wrapper = (COMPONENT / "files" / "renovate_agent.py").read_text()
-    census = re.search(r'^RENOVATE_AUTHOR = "([^"]+)"', wrapper, re.MULTILINE)
-    assert census, "the wrapper's RENOVATE_AUTHOR census filter is gone"
-    assert required[-1] == f"LAND_REQUIRE_AUTHOR={census.group(1)}"
-    lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
-    assert f'\nAUTHOR = "{census.group(1)}"\n' in lander, (
-        "the lander's own author check must name the login the census keys on"
+    pinned = required[-1].removeprefix("LAND_REQUIRE_AUTHOR=")
+    assert pinned == renovate_identity.GH_AUTHOR
+    lookalike = "renovate-fan"
+    for login, admitted in ((pinned, True), (lookalike, False)):
+        reasons = land_renovate_pr.refusals({"author": {"login": login}}, frozenset())
+        assert any("author" in r for r in reasons) is not admitted, login
+    listing = json.dumps(
+        [
+            {"number": 1, "author": {"login": pinned}},
+            {"number": 2, "author": {"login": lookalike}},
+        ]
     )
+    assert [pr.number for pr in renovate_agent._renovate_prs(listing)] == [1]
 
 
 def test_a_pre_merge_refusal_leaves_the_lander_unit_inactive() -> None:

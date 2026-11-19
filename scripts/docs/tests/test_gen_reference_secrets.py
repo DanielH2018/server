@@ -84,11 +84,12 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
     Two implementations would drift, and the page would then disagree with the audit cron that
     actually pages.
     """
+    from secrets_mgmt.secrets_lib.registry_model import Entry
     from secrets_mgmt.secrets_lib.secret_registry import due_date
 
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}
     expected = due_date(
-        "arr_autoblock_push_token", {"last_rotated": "2026-08-10", "tier": "assisted"}
+        "arr_autoblock_push_token", Entry("assisted", dt.date(2026, 8, 10))
     )
     assert expected is not None
     assert rows["arr_autoblock_push_token"]["due"] == expected.isoformat()
