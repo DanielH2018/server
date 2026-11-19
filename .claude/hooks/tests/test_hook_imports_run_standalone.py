@@ -271,8 +271,12 @@ def test_a_held_hook_imports_its_first_party_modules_from_the_held_copy(
     assert not found, f"{hook} cannot import from the held copy:\n" + "\n".join(found)
 
 
-def _held_footguns(root: Path, expr: str) -> str:
-    """`expr`, evaluated over block-footguns' globals as the copy at `root` loads them."""
+def _held_footguns(root: Path, expr: str, venv_root: bool = True) -> str:
+    """`expr`, evaluated over block-footguns' globals as the copy at `root` loads them.
+
+    `venv_root=False` runs with `-S`, so the venv's `.pth` does not put this checkout's
+    `scripts/` on the path: only then does a copy with no `scripts/` of its own find none.
+    """
     hooks = root / ".claude/hooks"
     code = (
         f"import runpy, sys; sys.path[0] = {str(hooks)!r}; "
@@ -282,7 +286,7 @@ def _held_footguns(root: Path, expr: str) -> str:
         k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "VIRTUAL_ENV"}
     }
     proc = subprocess.run(
-        [sys.executable, "-c", code],
+        [sys.executable, *([] if venv_root else ["-S"]), "-c", code],
         capture_output=True,
         text=True,
         timeout=60,
@@ -298,6 +302,15 @@ def test_the_held_ssh_guard_reads_the_inventory_hosts(held):
     assert "daniel-box" in _held_footguns(held, "_ssh_hosts()")
 
 
+def test_a_held_copy_reads_its_own_inventory_ahead_of_the_venvs_checkout(tmp_path):
+    # The venv's `.pth` names this checkout's `scripts/`; the copy's own root must win.
+    from fanout_lib.review.held_hooks import read_hooks, write_hooks
+
+    write_hooks(read_hooks(REPO), tmp_path)
+    (tmp_path / "inventory/host_vars/daniel-held-only.yml").write_text("{}\n")
+    assert "daniel-held-only" in _held_footguns(tmp_path, "_ssh_hosts()")
+
+
 @pytest.fixture
 def hooks_alone(tmp_path) -> Path:
     """A copy of the hooks with no `scripts/`, `k8s/` or `inventory/` beside it."""
@@ -310,7 +323,7 @@ def hooks_alone(tmp_path) -> Path:
 
 
 def test_a_held_copy_of_the_hooks_alone_cannot_read_the_inventory(hooks_alone):
-    assert _held_footguns(hooks_alone, "_ssh_hosts()") == "None"
+    assert _held_footguns(hooks_alone, "_ssh_hosts()", venv_root=False) == "None"
 
 
 # With no inventory the guard cannot tell a homelab host from any other, so it matches a
@@ -319,11 +332,14 @@ def test_the_remote_git_rule_fails_closed_when_the_inventory_is_unreadable(
     hooks_alone,
 ):
     denied = _held_footguns(
-        hooks_alone, "remote_git_problem(['ssh', 'daniel-box', 'git status'])"
+        hooks_alone,
+        "remote_git_problem(['ssh', 'daniel-box', 'git status'])",
+        venv_root=False,
     )
     assert "could not read the inventory" in denied
     allowed = _held_footguns(
         hooks_alone,
         "remote_git_problem(['ssh', 'daniel-box', 'cd /home/ubuntu/server; git status'])",
+        venv_root=False,
     )
     assert allowed == "None"

@@ -1,7 +1,7 @@
 """`lib.snapshot_uv` against a real `uv`, in a scratch `package = true` project.
 
-The repo's own project is `package = false`, which installs no `.pth` for the helper to
-protect, so each test builds a caller and a snapshot of it that share the caller's venv the
+A test must not rewrite the repo's own `.pth`, so each test builds a scratch caller and a
+snapshot of it that share the caller's venv the
 way `land_lib.tools.gate_snapshot` shares the primary's. `UV_OFFLINE` holds: uv builds a
 `uv_build` project with its own built-in backend, so nothing is downloaded.
 
