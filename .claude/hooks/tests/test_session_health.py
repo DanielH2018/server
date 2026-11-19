@@ -2,7 +2,8 @@
 """Tests for the SessionStart health-banner hook.
 
 The hook must: stay silent when all-green, surface down scrape targets when they exist, and
-never raise. We exercise the pure helpers directly and stub `_run` so the suite needs no live
+degrade a failed probe to a skip. A bug outside the probes exits non-zero, which
+`run-hook.sh` reports. We exercise the pure helpers directly and stub `_run` so the suite needs no live
 Prometheus.
 
 Run: uv run pytest .claude/hooks
@@ -31,6 +32,32 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 
+def test_a_crash_in_main_exits_non_zero_so_run_hook_can_report_it(tmp_path):
+    """`run-hook.sh` reports a crash only on a non-zero exit, so main's raise must escape.
+
+    The copy sits beside a stub `_hook_common` whose `read_payload` raises, the first call
+    `main` makes, so nothing on the host is read.
+    """
+    copy = tmp_path / "session-health.py"
+    shutil.copy(_HOOK, copy)
+    (tmp_path / "_hook_common.py").write_text(
+        "def primary_checkout():\n    return None\n\n"
+        "def tagged(hook, text):\n    return text\n\n"
+        "def read_payload():\n    raise RuntimeError('payload read broke')\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(copy)],
+        input="{}",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert proc.stderr.strip().splitlines()[-1] == "RuntimeError: payload read broke"
+
+
 def _result(stdout, returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
@@ -41,7 +68,7 @@ def test_banner_empty_when_no_problems():
 
 def test_banner_lists_problems_and_triage():
     out = _mod.format_banner(targets=["  ✗ target jellyfin [x] down"])
-    assert out[0] == "WARN: homelab health check found issues:"
+    assert out[0] == "Homelab health check found issues:"
     assert "jellyfin" in out[1]
     assert "triage" in out[-1]
 
@@ -49,7 +76,7 @@ def test_banner_lists_problems_and_triage():
 def test_a_branch_only_banner_prints_no_triage_line():
     out = _mod.format_banner(master_moved=["  ⚠ this branch is 3 commits behind"])
     assert out == [
-        "WARN: homelab health check found issues:",
+        "Homelab health check found issues:",
         "  ⚠ this branch is 3 commits behind",
     ]
 
@@ -313,6 +340,8 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
     assert "loki" in context
     assert context.splitlines()[-1].endswith("cut at the banner's 2000-byte budget")
     assert "merged worktree" in operator
+    assert context.startswith("[session-health] ")
+    assert operator.startswith("[session-health] ")
 
 
 # `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point

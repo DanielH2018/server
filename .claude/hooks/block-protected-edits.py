@@ -169,7 +169,7 @@ def main():
         repo_root = hook_root
     reason = classify(file_path, repo_root)
     if reason:
-        emit_pretooluse_decision("deny", reason)
+        emit_pretooluse_decision("block-protected-edits", "deny", reason)
     return 0
 
 
