@@ -33,7 +33,7 @@ ENTRY_POINT = "scripts/diagnostics/probe.py"
 
 
 def exits(ok, fail):
-    """The exit clause every verdict subcommand's help carries, so all of them read alike (#4454).
+    """The exit clause every verdict subcommand's help carries, so all of them read alike.
 
     Args:
         ok: what exit 0 means for this subcommand.

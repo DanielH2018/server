@@ -20,15 +20,15 @@ exits 75 for "gave up waiting; re-run land.sh", but cc-wait keeps 75 for "re-run
 a landing that gave up ends the wait with 3 instead, and its verdict line says which give-up it
 was.
 
-DEFERRED IS NOT A GIVE-UP (issue #3932). land.sh also exits 75 for `deferred` on a host whose
+DEFERRED IS NOT A GIVE-UP. land.sh also exits 75 for `deferred` on a host whose
 updater has yet to apply its package, where nothing is wrong and re-running land.sh achieves
 nothing the updater does not. That ends the wait as `deferred`, exit 4, so a caller can tell it
 from a resume point without reading the verdict text. A `deferred` whose log carries
 cause `promote-timeout` on its `LAND-RESULT:` line stays `gave-up`: no promotion covered a tag
 Flux applies, and a publish refusal does not clear on its own. So does one with cause
 `gate-unreadable`: the health gate could not read its store, or the promotion wait found no
-kubectl or kubeconfig, and nothing gates health again (#5543). So does one with cause
-`gate-stale`: the gate's tree was older than `origin/master` (#7816). The cause decides, never the note beside it (#7911, #7969); a log from before
+kubectl or kubeconfig, and nothing gates health again. So does one with cause
+`gate-stale`: the gate's tree was older than `origin/master`. The cause decides, never the note beside it; a log from before
 `LAND-RESULT:` existed falls back to the notes.
 """
 
@@ -121,7 +121,7 @@ def read(log: Path, now: float | None = None) -> dict:
                     "detail": f"the landing (pid {pid}) died without recording an exit code; "
                     f"read {log}",
                 }
-        # No pid and no code past the start grace: nothing will ever write the code (#4513).
+        # No pid and no code past the start grace: nothing will ever write the code.
         if pid is None and detach.never_started(log, now):
             return {
                 "state": "died",

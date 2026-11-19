@@ -8,7 +8,7 @@ The contexts render from each role among the render's tags that includes `k8s/im
 because a consumer reads only the images its own role builds (`role_tags`). A full render
 names every builder, so it writes all ten. A `--role` render writes the named builders'
 contexts alone, and no `DIR/images/` when it names none; `--all-images` renders all ten
-whatever it names, as the publish job's `images` job needs (#5374). Each renders with its role's play context and
+whatever it names, as the publish job's `images` job needs. Each renders with its role's play context and
 its `image_builder_builds` entry's vars (`task_inputs.image_contexts`). The consumer pass reads the
 same `ImageContext` tags (`render_tag`'s `built`), so a consumer's ref and `tags.json` come from
 one computation. `ref_mismatches` holds them equal, and `paths_into_images` holds that no

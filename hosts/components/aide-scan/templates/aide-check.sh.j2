@@ -14,9 +14,8 @@
 # aide.db.new over aide.db, so the next run reports against the accepted state. It scans nothing
 # and writes no verdict; the alert clears on the next run.
 #
-# WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
-# pipeline's exit status was logger's, and nothing read the tag, so every host exited
-# `ERROR: missing configuration` for weeks and nobody saw it (#4591). This script keeps AIDE's
+# WHY A SCRIPT. A cron that pipes `aide --check` into `logger -t aide` reports logger's exit
+# status, and nothing reads the tag, so a failing check goes unseen. This script keeps AIDE's
 # own exit code and reports it: an exit that is not a result pushes DOWN, and a run that never
 # happens trips the monitor's deadline.
 #
@@ -27,7 +26,7 @@
 # Anything outside 0-7 is treated as an error rather than enumerated, so a code AIDE adds later
 # still reads DOWN.
 #
-# WHAT PAGES (#4599). A completed run pushes DOWN when a difference falls in a paged tree and no
+# WHAT PAGES. A completed run pushes DOWN when a difference falls in a paged tree and no
 # package explains it:
 # - The system trees (/usr except /usr/local, /bin, /sbin, /lib*, /boot): any added or changed
 #   file a package does not own with this content, and any removed path a package still owns.
@@ -57,9 +56,7 @@
 #   those upgrade several times a day. Its content is then judged as for any other change.
 # A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
 # links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask), or is one of the
-# two exceptions above. Homes, /var, /opt
-# and the rest of /usr/local are logged and never page: the 2026-10-20 daniel-box report held 184
-# differences in six hours, and every one was in them.
+# two exceptions above. Homes, /var, /opt and the rest of /usr/local are logged and never page.
 set -uo pipefail
 
 MODE=check
@@ -78,8 +75,7 @@ source {{ aide_scan_host_lib_dir }}/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: the timer runs weekly (Monday 03:00,
 # hosts/components/aide-scan/units/homelab-aide-check.timer), 604800s, and the extra 6h
-# is the slack for a run that takes longer than the last. The deleted Uptime Kuma tile kept the
-# same 626400. Move it with the timer (#6168).
+# is the slack for a run that takes longer than the last. Move it with the timer.
 # hosts/tests/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=626400
 
@@ -101,11 +97,10 @@ SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
 
 # Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
 # awk through ENVIRON, because -v would read each backslash as an escape.
-# Login, privilege, startup and code-loading files that nothing here writes in an ordinary week:
-# between 2026-10-19 and 2026-11-02, daniel-box and daniel-server changed none of the first group
-# outside a package except through the claude-user migration. The second group is where an
-# unpackaged unit, apt source or key, MOTD script or PATH-first binary would take effect; the
-# files the roles write there are ROLE_WRITTEN's, and /usr/local/bin is judged by name below.
+# Login, privilege, startup and code-loading files that nothing here writes in an ordinary week.
+# The second group is where an unpackaged unit, apt source or key, MOTD script or PATH-first
+# binary would take effect; the files the roles write there are ROLE_WRITTEN's, and
+# /usr/local/bin is judged by name below.
 PERSIST='^/(etc/(sudoers$|sudoers\.d/|ssh/|pam\.d/|pam\.conf$|security/|ld\.so\.preload$|ld\.so\.conf$|ld\.so\.conf\.d/|crontab$|cron\.[a-z]+/|passwd$|shadow$|group$|gshadow$|environment$|profile$|profile\.d/|bash\.bashrc$|apt/apt\.conf\.d/|udev/rules\.d/|modprobe\.d/|modules-load\.d/|modules$|systemd/system/|apt/(sources\.list\.d/|trusted\.gpg\.d/|keyrings/)|update-motd\.d/|rc\.local$|init\.d/)|usr/local/sbin/|var/spool/cron/|root/\.(bashrc|profile|bash_profile)$|root/\.ssh/authorized_keys|home/[^/]+/\.ssh/authorized_keys|var/lib/[^/]+/\.ssh/authorized_keys)'
 SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
 # Unpackaged files under PERSIST that this repo's own tooling writes, so a deploy does not page.
@@ -117,9 +112,8 @@ ROLE_WRITTEN='^/etc/systemd/system/(k3s(-agent)?\.service(\.env)?|snap-[a-z0-9-]
 # DECIDED: snapd's generated udev rules are not ROLE_WRITTEN (#7929). A udev rule runs as root
 # on device events, so the name alone explains nothing. One is explained only while no package
 # owns it, it is a regular file, the same report adds a mount unit for a new revision of that
-# snap, and snapd_rule_verdict reads every key in it as inert. On daniel-server on 2026-11-11,
-# 70-snap.snapd.rules held snapd's 836-line copy of the ModemManager and oFono rules: match keys,
-# ENV, GOTO and LABEL only. It changed on 2026-11-06 07:02 beside snap-snapd-28332.mount.
+# snap, and snapd_rule_verdict reads every key in it as inert (70-snap.snapd.rules holds snapd's
+# copy of the ModemManager and oFono rules: match keys, ENV, GOTO and LABEL only).
 # A rule an edit or a connected interface changes outside a refresh still pages.
 SNAPD_UDEV='^/etc/udev/rules\.d/70-snap\.[a-z0-9_-]+\.rules$'
 SNAPD_MOUNT='^/etc/systemd/system/snap-[a-z0-9-]+-[0-9]+\.mount$'
@@ -129,15 +123,13 @@ SNAPD_UDEV_OWN='RUN\+="/usr/lib/snapd/snap-device-helper [^"]*"|TAG\+="snap_[a-z
 # DECIDED: /usr/local/bin pages on a name a package also installs, not on every unpackaged entry
 # the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a
 # packaged command replaces it for root. A list of the legitimate names would have to cover
-# pip installs, k3s's links, hand-installed tools and the roles' scripts: daniel-server held 30
-# unpackaged entries on 2026-11-02, of which one (jsonschema, from pip) had a packaged twin. That
-# one pages whenever it changes. A new entry with a unique name does not page; a unit, cron entry
-# or profile script that would run it does.
+# pip installs, k3s's links, hand-installed tools and the roles' scripts. A pip install with a
+# packaged twin pages whenever it changes. A new entry with a unique name does not page; a unit,
+# cron entry or profile script that would run it does.
 LOCAL_BIN='^/usr/local/bin/'
 # Written by package triggers and maintainer scripts, so no package lists them. Taken from every
-# unpackaged file in the system trees on all three hosts on 2026-11-02, so a trigger that ran
-# outside the measured fortnight is listed too. Each class below is explained by dpkg.log entries
-# for the packages named beside it, not by dpkg having run at all.
+# unpackaged file in the system trees on all three hosts. Each class below is explained by
+# dpkg.log entries for the packages named beside it, not by dpkg having run at all.
 # The top-level usr-merge links are maintainer-script output; only their target is judged.
 USRMERGE='^/(bin|sbin|lib|lib32|lib64|libx32)$'
 # The initrd, the kernel links and the module index: kernel, initramfs-tools or kmod runs.
@@ -153,8 +145,7 @@ PKGS_GRUB='^(grub|os-prober|shim|linux-(image|modules|generic|raspi)|initramfs-t
 DERIVED_EFI='^/boot/efi/EFI/'
 PKGS_EFI='^(grub-efi|shim)'
 # DECIDED: /boot/grub/grubenv is exempt from the dpkg.log requirement. GRUB rewrites it at every
-# boot, and the weekly reboot made it differ every week with no package run: on daniel-box its
-# mtime was 2026-11-01 07:38, the weekly reboot, and the dpkg log held no GRUB or kernel entry then.
+# boot, and the weekly reboot made it differ every week with no package run.
 # Only the exact path is exempt, and only as a regular file; the rest of /boot/grub/ is not.
 BOOT_ENV='^/boot/grub/grubenv$'
 # The Pi's firmware partition and device trees: flash-kernel and the Pi kernel packages.
@@ -187,7 +178,7 @@ report() {
 }
 
 # Moves aide.db.new over aide.db. Refuses when aide.db is missing, so a deleted baseline stays an
-# error exit instead of becoming a fresh, trusted one (#6674); bootstrap-host.sh owns the first.
+# error exit instead of becoming a fresh, trusted one; bootstrap-host.sh owns the first.
 advance_baseline() {
   [[ -e "$AIDE_DIR/aide.db" && -s "$AIDE_DIR/aide.db.new" ]] || return 1
   mv -f "$AIDE_DIR/aide.db.new" "$AIDE_DIR/aide.db"
@@ -195,7 +186,7 @@ advance_baseline() {
 
 # One scan at a time. A scan that outlives its week would otherwise have the next Monday's start a
 # second full scan beside it. The run that finds the lock held pushes DOWN, which also turns a scan
-# that never ends into a page a week after it started (#5785). --accept takes it too, so it cannot
+# that never ends into a page a week after it started. --accept takes it too, so it cannot
 # move a database a running scan is writing.
 LOCK_FILE=/run/lock/aide-check.lock
 exec 8>"$LOCK_FILE"
@@ -309,10 +300,12 @@ snapd_rule_verdict() {
     END { print (bad ? "active" : "inert") }' "$1"
 }
 
-# Prints the absolute path of each tmpfs output the host package's secrets manifest declares, one
-# per line, or nothing when the manifest is missing or unreadable, so every such link pages.
+# Prints `<link>><target>` for each symlinked tmpfs output the host package's secrets manifest
+# declares, space-separated, or nothing when the manifest is missing or unreadable, so every such
+# link pages.
 secret_links() {
-  jq -r '.outputs[] | select(.persist != true) | "/" + .destination' \
+  jq -r '.outputs[] | select(.persist != true and .link != null)
+    | .link + ">/run/homelab-secrets/" + .destination' \
     "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
 }
 
@@ -407,8 +400,8 @@ unexplained_entries() {
       # `systemctl enable` makes it.
       link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
       # The host package links each output its secrets manifest declares into the tmpfs its
-      # secrets unit fills, at the same relative path.
-      if (scope != "persist" && index(ENVIRON["SECRET_LINKS"], " " path " ") && $7 == "/run/homelab-secrets" path && owner_matches(p, "^homelab-")) link_ok = 1
+      # secrets unit fills, at the destination named in the row for that output.
+      if (scope != "persist" && index(ENVIRON["SECRET_LINKS"], " " path ">" $7 " ") && owner_matches(p, "^homelab-")) link_ok = 1
       # A distro link into a package that is not installed. Only a system-tree target, because a
       # file created there later pages on its own as unowned.
       if ($8 == "dangling" && $7 ~ ENVIRON["SYSTEM"] && $7 !~ /^\/usr\/local(\/|$)/ && owner_ran(p, touched)) link_ok = 1
@@ -433,7 +426,7 @@ unexplained_entries() {
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
       else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }
       # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
-      # Every installed package on daniel-server records md5sums (2026-11-02), so an owned regular
+      # Every installed package on daniel-server records md5sums, so an owned regular
       # file with no digest was a link or a directory in its package.
       else if (p in owned) { if (!link_ok) why = "a package owns it, but it is not the link the package installed" }
       else if (link_ok) next
@@ -450,9 +443,9 @@ unexplained_entries() {
 }
 
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
-# is how the old cron lost it. nice and ionice exit with the status of the command they run.
+# would lose AIDE's. nice and ionice exit with the status of the command they run.
 # --config is required: AIDE 0.18 has no default config path, and a bare `aide --check` exits
-# with "missing configuration" and checks nothing (#4591). --update reports exactly as --check
+# with "missing configuration" and checks nothing. --update reports exactly as --check
 # does and also writes aide.db.new, which advance_baseline moves into place. A stale aide.db.new
 # from a run nobody accepted goes first, so the database moved is always this run's.
 rm -f "$AIDE_DIR/aide.db.new"
@@ -477,11 +470,8 @@ summary_count() {
 }
 
 # DECIDED: page on a difference no package explains, and advance the baseline after every run
-# that has none (#4599, replacing #4594's "differences push UP"). Package upgrades land every
-# week, so the classifier rather than the exit code decides: measured on daniel-server's
-# 2026-11-02 report, all 18,556 changed package-owned files under /usr, /lib and /boot matched
-# their dpkg digests, and its complete /boot and /etc entries were packages, triggers, Longhorn's
-# /etc/iscsi and libvirt profiles. Advancing makes each report cover one week instead of
+# that has none. Package upgrades land every week, so the classifier rather than the exit code
+# decides. Advancing makes each report cover one week instead of
 # growing from the first baseline. A DOWN does not advance: the change stays in every report
 # until a human reads it and runs `aide-check --accept`, so one missed page does not bury it.
 # aide.db dates from the last advance, and dpkg.log entries after it (less the slack) are the

@@ -35,8 +35,8 @@
           # container. The pod netns outlives the container, so a restart inherits the dead
           # wg0, wg-quick's policy rules, the LAN routes and the kill-switch from the previous
           # one, and the mod cannot bring a tunnel up behind them; a failed tunnel start also
-          # deletes the pod's default route, which the reset restores — the 2026-08-16 (9h) and
-          # 2026-09-13 (3.5d) deadlocks, cleared both times by a pod delete. The reset makes a
+          # deletes the pod's default route, which the reset restores (otherwise the pod stays
+          # deadlocked until it is deleted). The reset makes a
           # container restart equivalent to that delete, and gates {{ app }}'s uid off eth0
           # while the tunnel is down. `exec` keeps /init as PID 1, which s6 requires.
           command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]
@@ -65,12 +65,11 @@
           volumeMounts:
             - name: {{ app }}-config
               mountPath: /config
-            # THE FIX FOR THE 9-HOUR OUTAGE, and it is one mount. LSIO's docker-mods script
-            # creates /modcache in the container and caches every downloaded mod there as
-            # `<name>.tar.xz`; on a registry failure it sets MOD_OFFLINE itself and applies the
-            # cached copy instead. That fallback already ran during the incident and found
-            # nothing, because /modcache was container-local and died with each pod. Persisting
-            # it means one successful start makes every later start survive an lscr.io outage.
+            # Persists LSIO's docker-mods cache. The script caches every downloaded mod in
+            # /modcache as `<name>.tar.xz`; on a registry failure it sets MOD_OFFLINE itself and
+            # applies the cached copy. A container-local /modcache dies with each pod and the
+            # fallback finds nothing; persisted, one successful start makes every later start
+            # survive an lscr.io outage.
             #
             # A subPath of the config claim rather than a PVC of its own: the tarball is a few MB
             # against 1Gi, and a second claim would add a storage-class decision and a backup

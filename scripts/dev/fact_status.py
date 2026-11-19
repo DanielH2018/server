@@ -33,7 +33,7 @@ from lib.repo_paths import REPO
 
 _USAGE = FACT_STATUS_BAD_ARGS
 
-# The next step each command prints after its findings, so a red run ends on what to do (#4448).
+# The next step each command prints after its findings, so a red run ends on what to do.
 FIX_LINT = (
     "fix: .claude/rules/facts.md describes each rule above and how to resolve it."
 )

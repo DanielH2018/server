@@ -479,7 +479,7 @@ def reconcile_once(cfg, sonarr=None):
                         "lastAction": int(time.time()),
                     }
                     # persist the grab NOW: a real download just started, so if a later search in
-                    # this same tick raises, the next tick must not re-grab it (H1).
+                    # this same tick raises, the next tick must not re-grab it.
                     _save_json(cfg["LEDGER_FILE"], ledger)
                     break
 

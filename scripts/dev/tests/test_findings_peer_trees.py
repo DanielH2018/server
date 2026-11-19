@@ -1,4 +1,4 @@
-"""The other host's worktree list, and the claims it holds when this host has no worktree (#6840).
+"""The other host's worktree list, and the claims it holds when this host has no worktree.
 
 `test_findings_reap_peer_host.py` covers `reap` holding a claim the peer registers. This module
 covers the reader itself, the failed-read direction, and `claim`'s reap on the way past.
@@ -107,7 +107,7 @@ def test_reap_reads_no_peer_when_every_stale_claim_has_a_local_worktree():
     tools = dataclasses.replace(tools, peer_worktrees=peer)
     assert main(["reap"], tools) == 0
     assert peer_calls == []
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert any("Released: `" in a for c in calls.gh for a in c)
 
 
 def test_claim_does_not_reap_a_claim_the_peer_registers(capsys):

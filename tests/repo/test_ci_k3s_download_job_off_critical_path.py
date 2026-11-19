@@ -1,4 +1,4 @@
-"""The non-gating k3s download case runs in its own CI job, off the host_packages legs (#7810).
+"""The non-gating k3s download case runs in its own CI job, off the host_packages legs.
 
 As a step of the `host_packages (26.04, ...)` leg it ran serially after the gating cases and
 added 80-109 s to the longest leg of the PR. A job of its own that needs only `prove` and

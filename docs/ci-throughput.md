@@ -80,6 +80,24 @@ every module (#8458, ruled by the operator on 2026-11-15).
   run after a selected pull-request run repeats only the `pytest` legs. A landing batch
   whose run was selected still records nothing on its members.
 
+## A nightly sweep runs every module
+
+`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head at 09:30 UTC, on
+one runner and with no selection. It finds a module whose row in the table is older than a
+dependency the module gained, which no selected run is told to run.
+
+- **It grades no commit.** No job in it carries the name of the `prek` gate, so
+  `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
+  (`tests/repo/test_pytest_sweep_workflow.py::test_a_job_under_the_gates_name_is_flagged`).
+- **It reports through one issue.** `scripts/dev/sweep_report.py` opens an issue titled
+  `Nightly pytest sweep is red` that names the failed modules, comments on it while the
+  sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
+  label, because the findings register drops an issue a bot opened.
+- **It shares its tool installs with the pytest legs.** Both call
+  `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
+- **To run the whole suite on a branch,** dispatch it there:
+  `gh workflow run pytest-sweep.yml --ref <branch>`. A dispatch off master reports nothing.
+
 **The saving is on the pull-request run, and the push run gives part of it back.** On
 2026-11-14 a run with no host change used a median 1,414 slot-seconds, about 1,020 of them
 in the six `pytest` legs. A pull request whose selection fits one leg saves most of those

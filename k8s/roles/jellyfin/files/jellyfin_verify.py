@@ -1,13 +1,12 @@
 """jellyfin's verify Job: prove the render node opens and the library sits where its database looks.
 
-`templates/verify/` holds the Job, and the renderer emits it into `jellyfin-verify` (target
-slice D5). It replaced two of `tasks/verify.yml`'s four `kubectl exec` checks at jellyfin's
-flip. The Job's pod requests the same `devic.es/dri` device, adds the same render-node
+`templates/verify/` holds the Job, and the renderer emits it into `jellyfin-verify`. The
+Job's pod requests the same `devic.es/dri` device, adds the same render-node
 group, mounts `media-data` read-only at the same two paths and runs as jellyfin's PUID and PGID.
 So it proves the wiring of a pod built like jellyfin's, not of the live jellyfin pod, which
 nothing here can reach without `pods/exec`.
 
-The library check asserts both directions, as the Ansible task did. The library roots must be
+The library check asserts both directions. The library roots must be
 present, and `torrents` must be absent from the mount: its presence is the signature of
 mounting the volume root instead of its `media` subdirectory. Then it reads 1 KiB of the first
 `.mkv` under the TV root, which is what a failing playback was doing when it raised its IO
@@ -16,8 +15,8 @@ error.
 The other two checks, a VAAPI encode and the HDR tone-mapping path through jellyfin's own
 ffmpeg, have no form this Job can take. The Job's image carries no ffmpeg, and the Job census
 forbids spawning a process and opening a socket, so an exec through the API is not open to it
-either. The operator ruled on #5451 that jellyfin drops both at the flip. The render-node open
-and M2's `K8sExtendedResourceMissing` remain as the hardware signal.
+either, so jellyfin has neither check. The render-node open and M2's
+`K8sExtendedResourceMissing` are the hardware signal.
 
 The Job reaches no Service and no API, so it imports no `flux_job_connect`. Inputs come from
 the Job's environment: `VERIFY_DEVICE`, the render node, and `VERIFY_DATA`, the library mount.

@@ -1,22 +1,12 @@
 """Pure decision core shared by the two Longhorn reapers behind `longhorn_reap.py`.
 
-Ported from the k3s role's longhorn-reap-orphan-backups.sh.j2 and
-longhorn-reap-orphan-snapshots.sh.j2 templates (retired in #2978), which carried this same logic as bash string
-processing over `kubectl -o jsonpath` output, with no test. FLOOR 1 of the backups reaper
-was inoperative from the day it shipped (2026-08-16): ownership was read with
-`-o jsonpath='{range .metadata.labels}...'`, and kubectl jsonpath does not iterate a MAP-valued
-field — `{range}` over one emits the whole label object as a single space-free token, so the
-prefix match never fired and the ownership map came back empty for every volume. That failed
-OPEN, not closed: the `$JOB == ${OWNER[$VOL]:-}` comparison then treated any backup with no
-RecurringJob label (a hand-triggered probe) as proof the volume's current tier was producing
-backups, which stands FLOOR 1 down. On wg-easy-config that would have deleted 3 of its 5
-backups while its tier had produced none. The dry run printed `0 reapable`, which reads as
-"nothing to do" and was the bug's own output.
-
-Both entry points now read Longhorn objects with `kubectl get ... -o json` and hand the parsed
+Both entry points read Longhorn objects with `kubectl get ... -o json` and hand the parsed
 `.items` lists to the classifiers below, which are plain functions over dicts/lists/sets — no
 subprocess, no kubectl, no jsonpath. That is what makes FLOOR 1 (and every other floor here)
-provable with a fixture instead of read off a dry-run line.
+provable with a fixture instead of read off a dry-run line. A jsonpath read cannot replace the
+parsed one: kubectl jsonpath does not iterate a MAP-valued field, so `{range}` over the labels
+emits the whole label object as one token and the ownership map comes back empty. FLOOR 1 then
+stands down and a dry run prints `0 reapable`, which reads as "nothing to do".
 
 Stdlib only. Imported by backups.py and snapshots.py beside it, the `longhorn_reap.py backups`
 and `snapshots` subcommands, which do the kubectl reads/writes and printing.
@@ -37,7 +27,7 @@ from lib.repo_paths import HOST_LIB_FILES
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 
-# The Backup CR reader and the group names, shared with the backup-health cron (#3735, #3737).
+# The Backup CR reader and the group names, shared with the backup-health cron.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 
@@ -60,7 +50,7 @@ def parse_kubectl_json_items(text: str, what: str) -> tuple[list, str]:
     A malformed body raises `ValueError` from `json.loads`, caught below. A WELL-FORMED but
     non-object body (`kubectl` occasionally prints a bare `null` -- an empty CRD list on some
     server versions) parses cleanly and then raises `AttributeError: 'NoneType' object has no
-    attribute 'get'` on the `.get("items", [])` a caller used to do inline: a traceback where
+    attribute 'get'` on the `.get("items", [])` a caller would do inline: a traceback where
     every other unreadable-input case here prints `ABORT: unparseable ...`. Folding both
     failure shapes into the same (items, error) return is what closes that gap. Returns
     (items, "") on success, ([], message) on failure; `what` names the object being read for
@@ -121,8 +111,8 @@ def readonly_kubeconfig_refusal(
 ) -> str | None:
     """None when a dry run may proceed; the ABORT message otherwise.
 
-    Shared for the same reason as `print_bucket`: the refusal text used to be near-verbatim in
-    both entry points, asserted separately by each suite. `apply_flags_hint` names this entry
+    Shared for the same reason as `print_bucket`: one refusal text for both entry points,
+    asserted once. `apply_flags_hint` names this entry
     point's apply flag(s) in the message, since the two scripts differ (`--apply` alone vs
     `--apply / --apply-deleted-volumes`).
     """

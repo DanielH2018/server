@@ -15,7 +15,7 @@ the template as applied either way:
    timeout is how a session starts a landing it has no budget to finish.
 
 Every template here is asserted on its RENDER: a substring match on the Jinja holds only while the
-expression is spelled that way (#3202).
+expression is spelled that way.
 
 Run: uv run pytest hosts/tests/test_renovate_agent_unit.py
 """
@@ -261,7 +261,7 @@ def test_the_session_unit_runs_the_session_script_under_its_wall_clock() -> None
 
 @pytest.mark.parametrize("template", [SESSION_RULE, LAND_RULE])
 def test_only_the_controller_may_start_the_units(template: str) -> None:
-    """dotfiles#967's I1: the session user starts nothing, whatever the inventory says."""
+    """The session user starts nothing, whatever the inventory says."""
     rule = render(template, {"renovate_agent_user": "session-sentinel"})
     assert 'subject.user !== "renovate-agent-ctl"' in rule
     assert '"renovate-agent"' not in rule
@@ -359,12 +359,11 @@ def test_the_deadline_straddles_the_daily_period(unit: str) -> None:
 
 RENOVATE = REPO / "renovate.json"
 
-# The tell is read out of renovate.json, not typed here: the manual rule's groupName is what
-# Renovate puts in the PR title, and a rename there that the prompt did not follow is exactly
-# the drift this guard exists to catch. The denylist rule leads its parenthetical
-# with the tell; a per-package rule whose pin a denied role owns ends its own with it (the
-# crowdsec bouncer plugin), so the tell is collected from anywhere inside a
-# `(manual …)` parenthetical and every rule must spell it the same way.
+# The tell is read out of renovate.json, not typed here: a groupName rename the prompt did not
+# follow is the drift this guard catches. The denylist rule leads its parenthetical with the
+# tell; a per-package rule whose pin a denied role owns ends its own with it (the crowdsec
+# bouncer plugin), so the tell is collected from anywhere inside a `(manual …)` parenthetical
+# and every rule must spell it the same way.
 _MANUAL_TELL = re.compile(r"\(manual[^)]*?(?P<tell>k8s_autodeploy: [a-z]+)")
 
 

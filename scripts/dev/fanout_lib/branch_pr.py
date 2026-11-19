@@ -1,9 +1,8 @@
 """Which PR is a batch's own: the one GitHub holds for its branch, never the first URL in its text.
 
-A final text names every PR the agent mentions. Batch 6309's body linked #6449, the landing it
-had measured, before its own #6523, so the first URL in the text sent the review, the ready flip
-and the `done` line to #6449 (#6551). The branch is the only key that cannot name another
-batch's PR, so `own_pr` takes the PR list for the branch and uses the text only to choose among
+A final text names every PR the agent mentions, and the first URL can be a PR the agent only
+measured, which would send the review, the ready flip and the `done` line to the wrong PR. The
+branch is the only key that cannot name another batch's PR, so `own_pr` takes the PR list for the branch and uses the text only to choose among
 them.
 
 A text that names a PR while GitHub holds none for the branch is a defect to report, not a PR
@@ -11,13 +10,13 @@ to review: `OwnPr.problem` says so, and both callers end `needs input:` on it.
 
 A closed PR that never merged is no batch's own. `fanout.py place abandon` leaves the remote
 branch and its closed PR behind, a relaunch reuses the branch name, and the closed PR's old CI
-then read as the new batch's (#6442). `parse_branch_prs` drops such PRs and lists an open PR
+then read as the new batch's. `parse_branch_prs` drops such PRs and lists an open PR
 before a merged one.
 
 A branch match alone does not make a merged PR the batch's own. `launch` names the branch from
-the batch id, so a relaunch of an issue whose PR merged reuses the name. The relaunched batch for
-#7291 opened nothing and cited #7295, its branch's merged PR from the day before, and the pipeline
-landed #7295 again (#7402). `own_pr` reads a citation of such a PR as no claim at all: the batch is
+the batch id, so a relaunch of an issue whose PR merged reuses the name. A relaunched batch
+that opened nothing can cite its branch's earlier merged PR, and the pipeline would land that
+PR again. `own_pr` reads a citation of such a PR as no claim at all: the batch is
 `no-pr`, not in conflict. The pipeline resolves its PR before anything has merged it, so it counts
 only open PRs as its own. `status` runs after the landing too, so it sets aside only the PRs that
 merged before the batch's `launched_at`.
@@ -59,7 +58,7 @@ def branch_pr_argv(branch: str, repo: str) -> list[str]:
 def parse_branch_prs(stdout: str, only: str = "") -> list[str] | None:
     """The branch's open then merged PR urls, newest first in each; None if unreadable.
 
-    A closed PR that never merged is dropped (#6442). A row with no `state` reads as open,
+    A closed PR that never merged is dropped. A row with no `state` reads as open,
     which `gh pr list --json state` never omits. `only` keeps one state, `OPEN` or `MERGED`.
     """
     try:

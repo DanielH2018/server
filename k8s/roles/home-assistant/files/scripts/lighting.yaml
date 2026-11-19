@@ -135,7 +135,7 @@ bedroom_apply_natural:
     # default). in_window is computed here (entity reads stay in the caller) and passed in; the
     # macro encodes the nightlight<->wake mutual exclusion (tested in test_lighting_macros.py).
     # DECIDED: the wake exception reads sensor.bedroom_wake_start only, never
-    # binary_sensor.bedroom_in_wake_window (#8383). On a fallback morning that sensor is on, but
+    # binary_sensor.bedroom_in_wake_window. On a fallback morning that sensor is on, but
     # bedroom_apply_wake halts without wake_start, so every natural apply would do nothing.
     - variables:
         exception: >-
@@ -172,14 +172,14 @@ bedroom_apply_natural:
 # HOLD ("reset to auto"); the manual taps call the ungated bedroom_apply_natural directly.
 # The sun term is the deterministic fix for illuminance reporting lag (a sleepy battery sensor):
 # right after a manual/voice off the bulbs go dark but the gate's illuminance sensor still
-# reads the STALE lights-on value, so the pure lux gate refused to relight on the first HOLD (it only
-# blipped — you had to hold a second time once the sensor caught up). The gate now reads the T1
-# (reports on change, ~5s detection period) rather than the FP300 (~100s), so the lag is shorter, but
-# the sun term stays: it also covers the T1 parking at `unknown` after a restart, which is the same
+# reads the STALE lights-on value, so the pure lux gate would refuse to relight on the first HOLD (it
+# would only blip — you would have to hold a second time once the sensor caught up). The gate reads
+# the T1 (reports on change, ~5s detection period) rather than the FP300 (~100s), so the lag is
+# shorter, but the sun term stays: it also covers the T1 parking at `unknown` after a restart, which is the same
 # fallback auto_light_allowed's `dark_fallback` argument takes. At night a stale-bright reading
 # is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
 # day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
-# the automatic presence gate (the binary_sensor, used by bedroom_presence_on) is unchanged. The
+# the automatic presence gate (the binary_sensor, used by bedroom_presence_on) has no sun term. The
 # button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
 bedroom_apply_natural_gated:
   alias: "Bedroom — apply natural lighting, lux-gated"
@@ -195,7 +195,7 @@ bedroom_apply_natural_gated:
 
 # Exit sleep mode: release the night/sleep state — clear the sleep-mode flag AND Adaptive Lighting's
 # sleep mode (the bedtime routine sets BOTH). Called FIRST by every Tap Dial LIGHT action that is NOT
-# on the Sleep button (button 2 since the 2026-07-18 remap): touching the normal lights means you're
+# on the Sleep button (button 2): touching the normal lights means you're
 # up, so sleep should release.
 # Running it FIRST matters — bedroom_apply_natural serves the nightlight exception while sleep_mode is
 # on, so clearing it beforehand is what lets a Button-1 tap give daytime light instead of amber. Mirrors

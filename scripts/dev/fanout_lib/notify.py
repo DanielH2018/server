@@ -1,4 +1,4 @@
-"""Page the operator when a fan-out batch's unit stops on any state but `done` (#4602).
+"""Page the operator when a fan-out batch's unit stops on any state but `done`.
 
 `launch.systemd_run_command` runs this as the unit's `ExecStopPost=`, with the batch's
 worktree as its cwd. It classifies the batch exactly as `fanout.py place status` would, from
@@ -59,7 +59,7 @@ NOTIFY_SCRIPT = "scripts/dev/fanout_lib/notify.py"
 # is gone. A batch whose tree vanished before its unit stopped was removed by the agent's own
 # tidy-up or by `clean` after its PR landed, which `status` reads as `no-report` and almost
 # always reconciles to `landed`. The `-` prefix makes the failed chdir harmless, and running
-# the host's primary checkout instead would run a copy that can lag `origin/master` (#3684).
+# the host's primary checkout instead would run a copy that can lag `origin/master`.
 # Its output goes to `.fanout/notify.log`, because systemd opens the unit's `file:` outputs
 # without truncating them: a line on stdout would overwrite the head of `report.json`.
 # Both behaviours were measured with transient user units on systemd 255.

@@ -141,7 +141,7 @@ class Landing:
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
         """Stop with a VERDICT line naming `msg` on stdout, or `land: <msg>` on stderr without one.
 
-        `rc` has no default: one of 2 collided with three other meanings of 2 (#4451), so
+        `rc` has no default: one of 2 collided with three other meanings of 2, so
         every caller names a code land.sh documents. An exit-1 stop with no `verdict` prints
         `refused` (`Outcome`); exit 64 prints no VERDICT line.
         """
@@ -168,7 +168,7 @@ class Landing:
         would otherwise propagate out of the phase and annotate as `aborted` with no line
         saying which PR read failed.
 
-        A timeout or a 5xx is retried first (`gh_read`, #5503).
+        A timeout or a 5xx is retried first (`gh_read`).
         """
         pr = self.opts.pr
         rest = rest_filter(fields)

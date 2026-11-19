@@ -1,0 +1,1 @@
+[FIRING:3] RkhunterScanFailed (daniel-box, daniel-pi, daniel-server)

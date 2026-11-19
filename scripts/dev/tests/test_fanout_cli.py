@@ -19,10 +19,8 @@ from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 # Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.
 # The plane side is as roomy as the fleet side on purpose: these tests measure call counts,
-# placement order and the ssh budget, so the plane must not become the binding cap and turn a
-# refusal meant to come from the budget into a NoHeadroom. The plane's own arithmetic is
-# test_fanout_placement.py's, and the key is one the fake registered set holds, so a test
-# that says nothing about signing passes the gate rather than being dropped by it.
+# placement order and the ssh budget, so the plane must not become the binding cap. The key is
+# one the fake registered set holds, so a test that says nothing about signing passes the gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 CLAIMED = [
     Issue(1, "one", "body one", ("claude",)),
@@ -191,7 +189,7 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     code = main(["stop", manifest.run_id, "--manifest-root", str(tmp_path)], tools)
     assert code == 0
     assert [c[1] for c in run.host_calls] == ["systemctl --user stop fanout-1"]
-    # The stopped batch's claims go back under the orchestrator's branch (#3925).
+    # The stopped batch's claims go back under the orchestrator's branch.
     assert (
         "findings",
         "release 1 --worktree o --reason fan-out batch 1 stopped",
@@ -201,7 +199,7 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     assert "1 on daniel-box: stopped" in out
     assert f"clean {manifest.run_id}" in out
     assert "once its PR merges" in out
-    # The stop leaves a landing in its own scope running (#3160), and says where to find it.
+    # The stop leaves a landing in its own scope running, and says where to find it.
     assert "on daniel-box: systemctl --user list-units 'land*' 'deploy-*'" in out
 
 
@@ -463,7 +461,7 @@ def test_a_reordered_or_narrowed_spec_cannot_slip_past_the_live_guard(tmp_path, 
 
 
 def test_an_interrupted_launch_leaves_a_manifest_naming_batch_1(tmp_path):
-    """#6341: batch 1 is running when the interrupt lands, so a manifest must name it."""
+    """Batch 1 is running when the interrupt lands, so a manifest must name it."""
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
     run.answers_by_call = [
         ok(HEADROOM),  # headroom read

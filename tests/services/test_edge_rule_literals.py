@@ -35,19 +35,16 @@ SCRAPE_WINDOW_S = 300  # the [5m] every rate in the rules and in the bridge chec
 # Traefik's histogram times a request until the RESPONSE COMPLETES. For a websocket, an SSE
 # stream or a Kubernetes watch that is the lifetime of the connection, so a healthy stream
 # lands past every bucket edge by design. No bucket fixes this: the buckets are
-# 0.1/0.3/1.2/5.0/+Inf and a stream outlives all of them. Measured on 2026-09-11, headlamp had
-# 94.2% of requests under 0.1s and 3.1% past 5.0s, with a mean of 1.7s over the whole service,
-# which puts the mean of that tail near 53s: Kubernetes watch streams. home-assistant and
-# uptime-kuma are the other two offenders in the 30-day history (5 and 4 episodes), and are
-# websocket UIs of the same shape.
+# 0.1/0.3/1.2/5.0/+Inf and a stream outlives all of them. headlamp serves Kubernetes
+# watch streams, and home-assistant and uptime-kuma are websocket UIs of the same shape.
 #
 # DELIBERATELY NOT HERE: bazarr and prowlarr, the other two names in that history. An *arr
 # indexer search genuinely takes 5-30s and the user genuinely waits for it, so it is exactly
 # the user-visible slowness the rule exists to catch. Excluding them would hide the signal
 # rather than the artifact.
 #
-# DECIDED: jellyfin is not exempt either (#6649). Its slow requests in the 168h soak to
-# 2026-10-30T18:32Z behind every DOWN episode were MKV font fetches
+# DECIDED: jellyfin is not exempt either (#6649). Its slow requests in the 168h soak
+# behind every DOWN episode were MKV font fetches
 # (`/Videos/<id>/<id>/Attachments/<n>`, 10 KB-8 MB, 5-8s each) at playback start, 23-45 per
 # episode: bounded responses the user waits on before subtitles render. Its `/socket`
 # WebSockets are streams (median 1204s), but at most 3 finished in any 300s window and none

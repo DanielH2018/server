@@ -70,7 +70,7 @@ _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 ACTION = re.compile(
     rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
-# A file here gets the `tmpfiles` action unasked, so a new line applies on install (#8267).
+# A file here gets the `tmpfiles` action unasked, so a new line applies on install.
 TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
 # The shapes `hosts/lib/reconcile_lib/ufw.py` reads.
 UFW_ID = re.compile(r"[a-z0-9][a-z0-9-]*")

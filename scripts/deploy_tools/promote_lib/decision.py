@@ -55,8 +55,8 @@ class Decision:
             (D7.5); `tag` then tags T `superseding` before it moves `prod`. Else empty.
         hold_read: the DEPLOY_HOLD value `decide` read: `none`, or the `failed=` hold the
             revert rule passed. `tag` moves `prod` only while DEPLOY_HOLD still reads it.
-        lost_settle: `prod`'s commit when the run that moved it ended without its `settle`
-            (#7863), for the `reconcile` job. Else empty.
+        lost_settle: `prod`'s commit when the run that moved it ended without its `settle`,
+            for the `reconcile` job. Else empty.
         lost_settle_digest: `prod`'s digest in that case, which `reconcile` requires `prod`
             to still name. Else empty.
     """
@@ -184,7 +184,7 @@ def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
 
     `prod`'s `no_reset` and `stateful` against `last-good` are taken as `_promotion` takes
     T's, so `reconcile` writes `settle`'s hold when the lost run's verdict status is missing
-    or names another digest (#7876). A read that fails makes the run `error`, so `reconcile`
+    or names another digest. A read that fails makes the run `error`, so `reconcile`
     never writes a hold that would invite a reset over a migration.
     """
     commit, digest = settled.lost_settle or ("", "")

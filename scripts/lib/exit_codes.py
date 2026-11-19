@@ -82,10 +82,10 @@ UNLANDED_PR_RED = 4
 # -- scripts/diagnostics/probe.py -------------------------------------------------------
 # Every verdict subcommand: 0 and 1 are what the probe observed, and 75 means it observed
 # nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
-# or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
+# or a read that came back empty). A caller retries on 75 and investigates on 1. 64 is
 # an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
-# was observed, so it names no verdict (#4471). 3 is `health` reporting that the tag names
-# nothing it can check, so a deploy gate skips the tag rather than grading it (#7895).
+# was observed, so it names no verdict. 3 is `health` reporting that the tag names
+# nothing it can check, so a deploy gate skips the tag rather than grading it.
 PROBE_OK = OK
 PROBE_FAILED = FAILED
 PROBE_NOT_APPLICABLE = 3
@@ -94,7 +94,7 @@ PROBE_UNREADABLE = TEMP_FAIL
 
 # -- scripts/dev/fanout_lib/place.py (`fanout.py place`) --------------------------------
 # `launch` and `status` share one vocabulary. 3 is "nothing was placed" and nothing else, so a
-# launch that started batches while dropping a refused claim exits 7 instead (#4452). A
+# launch that started batches while dropping a refused claim exits 7 instead. A
 # `status` read that timed out is 75, but only when no batch reports something worse: a failed
 # batch (5) or one that needs a hand (1) outranks "read again later" (`status.exit_tier`).
 FANOUT_PLACE_OK = OK
@@ -118,7 +118,7 @@ BUILD_DOCS_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/dev/findings.py ------------------------------------------------------------
 # 3 is the register refusing the write, which `fanout_lib.abandon` reads as "the claim was
-# already gone". A bad command line was 2 until #4443.
+# already gone".
 FINDINGS_OK = OK
 FINDINGS_FAILED = FAILED
 FINDINGS_REFUSED = 3
@@ -139,8 +139,7 @@ RUNBOOK_GATES_BAD_ARGS = USAGE_ERROR
 RUNBOOK_GATES_UNAVAILABLE = 69
 
 # -- scripts/secrets_mgmt/secret_rotation.py --------------------------------------------
-# A refused argument (a future date for `record`, a key the registry lacks) was 2 until #4443,
-# and is usage.
+# A refused argument (a future date for `record`, a key the registry lacks) is usage.
 SECRET_ROTATION_OK = OK
 SECRET_ROTATION_FAILED = FAILED
 SECRET_ROTATION_BAD_ARGS = USAGE_ERROR

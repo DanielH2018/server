@@ -3,8 +3,8 @@
 A test module does not re-derive what a shared helper already decides: its scratch git
 repository (`lib.git_testing`), or its fake binaries, `PATH` and deadline (`lib.proc_testing`).
 The Jinja environment, repo root and shell-template rules are the same shape, in
-`test_census_rows_test_renders.py`. Each rule was a test in one of three files of its own until
-#3430. The detectors are in `_test_module_rules.py`; a row's `reason` keeps what its file's
+`test_census_rows_test_renders.py`.
+The detectors are in `_test_module_rules.py`; a row's `reason` keeps what its file's
 docstring said a reader needs before changing the rule.
 
 Every row in both files reads one census, `pytest_only_modules()`: each tracked module
@@ -288,7 +288,7 @@ ROWS = (
 )
 
 # Every row here and in its sibling file reads the same census, so they judge each module in
-# one pass over one tree (#6437, #6465).
+# one pass over one tree.
 ROWS = share(ROWS)
 
 
@@ -307,7 +307,7 @@ def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census
 
 
 def test_the_census_hook_gate_matches_every_module_the_census_reads():
-    """These rows run in their own prek hook, gated on the census (#5599).
+    """These rows run in their own prek hook, gated on the census.
 
     A module the census judges that the gate misses can change alone and skip both files.
     """

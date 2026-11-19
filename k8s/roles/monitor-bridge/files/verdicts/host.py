@@ -5,7 +5,7 @@ config, which is what makes it safe to live here — see bridge/parsing.py's hea
 and why breaking it fails silently rather than loudly.
 
 The scrutiny arms are NOT here: they sit in `verdicts/host_smart.py`, which this module must not
-import (issue #1708).
+import.
 """
 
 from datetime import datetime, timezone
@@ -42,16 +42,15 @@ def speedtest_verdict(
     reads them.
 
     THE FLOOR ARM NEEDS `floor_consecutive` SUB-FLOOR RESULTS, the other arms judge `row` alone
-    (#2785). One slow result held the tile red for the full 6h until the next test, three times
-    in the 14 days to 2026-09-27 (11.6h in total), and a single Ookla run is not evidence the
-    link is slow. Consecutive means consecutive RESULTS, not consecutive bridge cycles: the
+    One slow result would hold the tile red for the full 6h until the next test, and a single
+    Ookla run is not evidence the link is slow. Consecutive means consecutive RESULTS, not consecutive bridge cycles: the
     cycles re-read the identical row. A run of results is genuinely new information; a run of
     cycles is not. With fewer results available than the knob asks for — a fresh app, or a
     single row in the window — the arm holds `up` and says so, because it cannot yet see a run.
 
     THE TIMESTAMP IS UTC DESPITE CARRYING NO OFFSET. /api/v1/results serializes `created_at` as
     a bare "2026-08-24 11:00:00", while /api/speedtest/latest serializes the SAME row as
-    "2026-08-24T06:00:00.000000-05:00" — verified against row id 780 on 2026-08-24. The bare
+    "2026-08-24T06:00:00.000000-05:00". The bare
     form is therefore UTC, not the DISPLAY_TIMEZONE local time it resembles, and
     datetime.fromisoformat returns it naive. Attaching UTC explicitly is what keeps the age
     arm from reading five hours off; a naive value compared against an aware `now` raises

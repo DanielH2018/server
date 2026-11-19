@@ -65,8 +65,8 @@ PLAIN_CASES = {"literal-reference": ("${HOME}", "${HOME}")}
 # The key `--red-proof` expects and no fixture holds.
 RED_PROOF_KEY = "red-proof-absent"
 
-# The type each `probe_n` value comes back as, measured against the pinned CLI v2.9.6 on CI
-# run 38426501907 and recorded in docs/homelab-render.md. Flux substitutes into a resource it
+# The type each `probe_n` value comes back as, measured against the pinned CLI v2.9.6 and
+# recorded in docs/homelab-render.md. Flux substitutes into a resource it
 # has already serialised without the template's quotes, so `0123` comes back as the YAML 1.1
 # octal integer 83 and `true` as a boolean. The round trip's second pass exists because of
 # this. A pin bump that keeps the quotes fails here, and that pass can then go. None measures
@@ -76,7 +76,7 @@ EXPECTED_TYPES: dict[str, str | None] = {"0123": "int", "true": "bool"}
 # The values the probe builds as a standalone `stringData` field to hold the guard's resolver
 # to the pinned CLI. The five values the plan measured, the integer, null and timestamp forms
 # around them, `08`, `1.e3` and `y`, which only the go-yaml port types, and three strings the
-# CLI keeps. Measured against v2.9.6 on daniel-server on 2026-10-13: `2001-12-14` comes back
+# CLI keeps. Against v2.9.6, `2001-12-14` comes back
 # as the string `2001-12-14T00:00:00Z`, so a value counts as kept only when it comes back as
 # the identical string, and `.inf` fails the build.
 RESOLVER_CORPUS = (

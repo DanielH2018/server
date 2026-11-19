@@ -3,11 +3,11 @@
 #
 # WHY THIS EXISTS: the ghcr-mirror Deployment (ghcr-mirror.yaml.j2) runs with REGISTRY_PROXY_TTL
 # 0s, so nothing expires an image it cached, and its store grows with every upgrade of any
-# ghcr.io image in the cluster until the 30Gi claim fills (#5541). The registry never collects
+# ghcr.io image in the cluster until the 30Gi claim fills. The registry never collects
 # on its own, so this weekly run prunes the store offline and garbage-collects it.
 #
 # TWO STORES, ONE AT A TIME. The dockerhub-mirror (dockerhub-mirror.yaml.j2) runs with a zero
-# TTL too (#6536): a TTL counts from the fetch, so it deleted an image a pod still ran one TTL
+# TTL too: a TTL counts from the fetch, so it would delete an image a pod still runs one TTL
 # after its first pull. Each store gets the same phase in turn: stamp, scale-down, prune Job,
 # restore, warm. The globals below describe the ghcr-mirror, and use_dockerhub_store points them
 # at the dockerhub-mirror between the two phases. A phase starts only once the previous mirror
@@ -21,16 +21,14 @@
 # A corrupt image still PULLS, and only crashloops the workload later, with nothing pointing back
 # at GC. Hence scale-to-0 for the duration. containerd falls back to ghcr.io meanwhile.
 #
-# THE PUSH STORE IS NOT COLLECTED. Its phase scaled deploy/registry, whose `replicas: 1` Flux
-# renders after registry's flip, so Flux would restore the pod mid-GC. No image-builder caller is
-# Ansible-owned any more, so no build reaches that store, and D5 retired its GC rather than
-# moving it (docs/target-architecture/deploy/d5-bulk-move.md, Wave D's registry bullet). The
-# verify Job's seed still adds about 20 MB per flux_job_image pin, which nothing reclaims (#5752).
+# THE PUSH STORE IS NOT COLLECTED. Scaling deploy/registry would let Flux restore the pod
+# mid-GC, because Flux renders its `replicas: 1`. No image-builder caller pushes to that store,
+# so no GC covers it. The verify Job's seed still adds about 20 MB per flux_job_image pin, which
+# nothing reclaims.
 #
 # Neither mirror's Deployment renders `replicas:`, so Flux's server-side apply does not own
-# `spec.replicas`, and this script is that field's only writer. The operator accepted that
-# exception to contract C4 on field ownership for deploy/ghcr-mirror (#5732), and #6536 extends
-# it to deploy/dockerhub-mirror.
+# `spec.replicas`, and this script is that field's only writer: an accepted exception to the
+# contract on field ownership, for deploy/ghcr-mirror and deploy/dockerhub-mirror.
 #
 # ROOT KUBECONFIG, unlike every sibling script deployed by this repo.
 # longhorn-backup-health.sh uses the read-only ServiceAccount precisely so a bug there cannot
@@ -39,7 +37,7 @@
 #
 # ONE LOCK FOR THE WHOLE RUN. The script holds an flock on registry_k8s_gc_lock_file from
 # before the scale-down until after the restore, so anything that restores a mirror under the
-# same lock can never put the pod back while this run prunes the store (#5736). The kernel drops
+# same lock can never put the pod back while this run prunes the store. The kernel drops
 # the lock when the process dies, however it dies.
 #
 # A STAMP THAT OUTLIVES THE RUN. /var/lib/registry-gc/ghcr-mirror-down, and dockerhub-mirror-down
@@ -51,9 +49,9 @@
 # missed: images a node pulled before the mirror existed, and pulls that fell back to ghcr.io
 # while a GC held the mirror at zero. A cold start during a WAN outage finds only what the store
 # already holds, and a cold blob fetched while GHCR is slow takes many minutes even though the
-# mirror's ghcr-resume sidecar now completes it (#5654, #6401). So a weekly warm fetches those
-# blobs ahead of need, at GHCR's normal speed (49 MB/s cold through the mirror, measured
-# 2026-10-24). The dockerhub-mirror's warm reads Docker Hub only for a manifest or blob its store
+# mirror's ghcr-resume sidecar completes it. So a weekly warm fetches those
+# blobs ahead of need, at GHCR's normal speed (about 49 MB/s cold through the mirror). The
+# dockerhub-mirror's warm reads Docker Hub only for a manifest or blob its store
 # lacks, and Docker Hub's anonymous limit counts manifest GETs, so a cold first warm may be
 # refused partway. Each refusal is a named failure that leaves the run up, and the refs warm in
 # a fixed order, so the store fills over the following weeks.
@@ -146,7 +144,7 @@ MSG="did not complete"
 finish() {
   mkdir -p "$STATE_DIR"
   # jq, not printf: MSG carries crane and kubectl error text, and a backslash, newline or
-  # control character in it made the file unreadable by the jq an operator reads it with (#4606).
+  # control character in it makes the file unreadable by the jq an operator reads it with.
   jq -nc --arg ts "$(date -Is)" --arg status "$STATUS" --arg msg "$MSG" \
     '{ts: $ts, status: $status, msg: $msg}' > "$STATE_FILE"
   # Explicit, because root's umask here renders this 0640 and the operator reading it after a
@@ -169,7 +167,7 @@ finish() {
   if [[ -n "$HC_PING_KEY" ]]; then
     local HC_URL="https://hc-ping.com/${HC_PING_KEY}/registry-gc"
     [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2.
     curl -fs --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null 2>&1 \
       || logger -t registry-gc "healthchecks ping failed (status=${STATUS})"
   fi
@@ -244,7 +242,7 @@ journal_mirror_prune() {
 }
 
 # ── keep set ─────────────────────────────────────────────────────────────────────────────────
-# Each mirror's store is pruned offline by its GC Job (files/ghcr-mirror-prune.sh, #5541), which
+# Each mirror's store is pruned offline by its GC Job (files/ghcr-mirror-prune.sh), which
 # has no API access. It reads the digests to keep from a ConfigMap this function writes before
 # the scale-down.
 #
@@ -254,8 +252,8 @@ journal_mirror_prune() {
 # Every sha256 digest in the JSON is kept, for either store, which can only keep more than
 # strictly needed.
 #
-# LSCR.IO REFS COUNT AS GHCR.IO REFS. registries.yaml points lscr.io at this same mirror
-# (#6257), and lscr.io serves ghcr.io's repositories under the same paths, so
+# LSCR.IO REFS COUNT AS GHCR.IO REFS. registries.yaml points lscr.io at this same mirror, and
+# lscr.io serves ghcr.io's repositories under the same paths, so
 # `lscr.io/linuxserver/x` is cached as `linuxserver/x` beside the ghcr.io refs. Both prefixes
 # strip to that one repo path.
 #
@@ -305,7 +303,7 @@ ghcr_refs() {
 }
 
 # Prints each docker.io ref in the JSON on stdin as `<repo>[:<tag>][@<digest>]`, the path the
-# dockerhub-mirror caches it under (#6536). A docker.io ref has no host to grep for, so this reads
+# dockerhub-mirror caches it under. A docker.io ref has no host to grep for, so this reads
 # every `image` and `imageID` value. A first path component holding `.` or `:`, or `localhost`,
 # names another registry. `docker.io/` and `index.docker.io/` are stripped, and a one-component
 # name such as `alpine` is `library/alpine`, as containerd asks the mirror for it.
@@ -379,7 +377,7 @@ report_mirror_job() {
 }
 
 # ── A mirror store's phase ───────────────────────────────────────────────────────────────────
-# Scales only deploy/${MIRROR_DEPLOY}, never the push store (operator ruling on #5680).
+# Scales only deploy/${MIRROR_DEPLOY}, never the push store.
 # containerd falls back to the upstream while it is down. The stamp goes down before the
 # scale-down, so a run killed at any point after it is one the next run repairs.
 collect_mirror_store() {
@@ -433,7 +431,7 @@ mirror_blob_digests() {
 # read and blob GET is bounded by the budget left, so the phase ends within its budget.
 # DECIDED: a blob that fails to warm is named in the journal and the message but leaves the run
 # up. It costs a cold pull later, never a corrupt store, and the likely cause is a slow GHCR
-# episode that a page cannot fix. #5654 has the measurements.
+# episode that a page cannot fix.
 warm_mirror() {
   local ref repo id blobs blob got left
   local -A seen=()

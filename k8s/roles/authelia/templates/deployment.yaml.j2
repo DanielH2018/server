@@ -23,8 +23,7 @@ spec:
         netpol-baseline: enforced
     spec:
       # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # (#3452); the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2
-      # has why.
+      # the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2 has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       # Edge/auth/DNS eviction ordering — see setup/k3s templates/priorityclass.yaml.j2.
@@ -46,9 +45,8 @@ spec:
         # claude-ui's TOTP registration lives in the SQLite database on the claim, not in the
         # rendered users_database.yml, so it is seeded through Authelia's own CLI before the
         # portal starts. `--force` rewrites the row from the fixed `authelia_claude_totp_secret`
-        # on every pod start, so a rotation lands when the changed Secret rolls the pod. This
-        # replaced an Ansible task that exec'd into the running pod (target slice D5, step 26),
-        # so neither Ansible nor Flux needs `pods/exec` on authelia.
+        # on every pod start, so a rotation lands when the changed Secret rolls the pod.
+        # Neither Ansible nor Flux needs `pods/exec` on authelia.
         #
         # `migrate up` runs first because `totp generate` refuses a schema older than its
         # binary (CheckSchema at v4.39.28), which is the state of the claim on the first start
@@ -136,29 +134,22 @@ spec:
         #
         # Authelia writes a startup probe to the session backend, retries it 19 times at 500ms
         # and then EXITS (internal/session/provider.go, StartupCheck at v4.39.21) — about 9.5s
-        # of tolerance. Deploying #1599 outran it: the portal restarted 7 times, blew the 300s
-        # rollout wait twice and took SSO down for ~7 minutes (#1626).
+        # of tolerance. The failure is not an image pull: the pod log names an `i/o timeout`,
+        # not `connection refused`, so packets are DROPPED. kube-router's source-pod lookup lags
+        # pod creation, and it recurs whenever the redis pod is recreated on a node (an eviction,
+        # a node reboot, a Renovate bump of authelia_k8s_redis_image). Each occurrence takes SSO
+        # down under Recreate, including the tools to fix it.
         #
-        # THE CAUSE IS NOT AN IMAGE PULL, which is what the comment beside the redis block in
-        # config-secret.yaml.j2 claimed until this container shipped. The pod's log named an
-        # `i/o timeout` rather than `connection refused`, and redis came up 1/1 on its first try
-        # and has never restarted — so the packets were DROPPED. That is kube-router's
-        # source-pod lookup lagging pod creation, already recorded in project memory, and it is
-        # not a first-deploy-only event: it recurs whenever the redis pod is recreated on a node
-        # (an eviction, a node reboot, a Renovate bump of authelia_k8s_redis_image). Each
-        # occurrence takes SSO down under Recreate, including the tools to fix it.
-        #
-        # `redis-cli`, not `nc -z`. The sibling gates in crowdsec and n8n use busybox's `nc` and
-        # justify it by their own image being busybox-based — that argument is about THEIR
-        # image, not redis:7.4-alpine, and under Recreate the old pod is already gone, so an
-        # init container that fails on a missing applet is an SSO outage rather than a retry.
-        # `redis-cli` is unambiguously in the redis image, and this role already wires
-        # REDISCLI_AUTH for the probes in deployment-redis.yaml.j2. Gate on PONG in the OUTPUT
-        # rather than on the exit code: redis-cli exits 0 on a NOAUTH reply.
+        # `redis-cli`, not `nc -z`: the sibling gates in crowdsec and n8n use busybox's `nc`
+        # because their images are busybox-based, which redis:7.4-alpine is not, and under
+        # Recreate an init container that fails on a missing applet is an SSO outage rather
+        # than a retry. This role already wires REDISCLI_AUTH for the probes in
+        # deployment-redis.yaml.j2. Gate on PONG in the OUTPUT rather than on the exit code:
+        # redis-cli exits 0 on a NOAUTH reply.
         #
         # Bounded, not unbounded — 60 x 2s, the same shape as crowdsec's wait-for-lapi. If redis
-        # is still unreachable after two minutes this fails and the pod backs off exactly as it
-        # does today, so it can only improve on the current behaviour, never mask a dead redis.
+        # is still unreachable after two minutes this fails and the pod backs off, so it never
+        # masks a dead redis.
         - name: wait-for-redis
           image: {{ authelia_k8s_redis_image }}
           imagePullPolicy: IfNotPresent
@@ -212,15 +203,10 @@ spec:
           # dies during provider construction — before a single startup check runs — and
           # logs only an aggregate with no detail, at every level including trace:
           #   level=fatal msg="Errors occurred performing startup checks"
-          # Measured on daniel-box: flipping this one field is the entire difference
-          # between that and "Startup complete ... Listening ... on '0.0.0.0:9091'".
-          # Config, the users database, /config's permissions, storage migration, DNS and
-          # NTP egress were each verified good independently, so none of them is the cause.
-          # It cannot be a plain permission problem either: as uid 1000 the process cannot
-          # write anywhere outside its mounts in the WORKING case either, which leaves
-          # EROFS-vs-EACCES on some path Authelia probes and never names.
-          # The Docker role this was ported from sets no read_only, so dropping it is not a
-          # regression against the instance being migrated — keeping it was the divergence.
+          # That one field is the entire difference between that and "Startup complete ...
+          # Listening ... on '0.0.0.0:9091'". It is not a plain permission problem: as uid 1000
+          # the process cannot write anywhere outside its mounts in the WORKING case either,
+          # which leaves EROFS-vs-EACCES on some path Authelia probes and never names.
 {{ hardened_security_context(non_root=true) }}
           volumeMounts:
             # Config and the users database come from the Secret, mounted OUTSIDE /config so
@@ -237,9 +223,8 @@ spec:
 {% endif %}
             - name: authelia-config
               mountPath: /config
-            # Kept even though the root filesystem is writable again: as uid 1000 the process
-            # can write nowhere else outside its mounts, so scratch space still has to come
-            # from somewhere.
+            # As uid 1000 the process can write nowhere else outside its mounts, so scratch
+            # space has to come from somewhere even with a writable root filesystem.
             - name: authelia-tmp
               mountPath: /tmp
             # Shared with the crowdsec-agent sidecar below.

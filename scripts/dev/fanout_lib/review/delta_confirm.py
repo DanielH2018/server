@@ -2,10 +2,10 @@
 
 The delta reviewer is asked to report each earlier finding the fix does not resolve. A model
 that answers from the first review's text, or from the tree before the fix, reports a finding
-the fix commit already fixed, and the pipeline used to take every reported finding as left
-(#6547: PR #6512 was held on two findings whose tests fail before the fix commit and pass at it).
+the fix commit already fixed, and taking every reported finding as left would hold the PR on
+findings whose tests fail before the fix commit and pass at it.
 
-A reported finding now counts as left only when its `evidence`, a line it quotes, is in the
+A reported finding counts as left only when its `evidence`, a line it quotes, is in the
 file at the fix head within `WINDOW` lines of the line it cites. Any other finding is carried
 as unverified: the PR comment and the local record name it, and it does not hold the PR.
 """
@@ -23,8 +23,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # `green_contest` judges it from the red tests themselves.
 from fanout_lib.review.red_gate import GREEN_FILE
 
-# A fix that adds or removes a few lines moves the cited line (#6512: 624 moved to 627 and
-# 643 to 647), so the quote is looked for around the line, not on it.
+# A fix that adds or removes a few lines moves the cited line, so the quote is looked for around the line, not on it.
 WINDOW = 10
 
 # Reads a file as the fix head holds it, or None when it does not exist there.

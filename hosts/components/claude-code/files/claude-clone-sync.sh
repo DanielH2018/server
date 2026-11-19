@@ -2,9 +2,9 @@
 # Fast-forward the claude agent user's clone to origin's master, when it is a clean master.
 #
 # The hook shim and the homelab-ui MCP launcher run from the clone's main working tree, so a
-# clone left behind runs old hooks and an old launcher (#4067, #4099).
+# clone left behind runs old hooks and an old launcher.
 # homelab-claude-clone-sync.timer runs it, because a merge that touches only scripts/diagnostics/
-# or .claude/hooks/ ships no host package version, so nothing else moves the clone for it (#4162).
+# or .claude/hooks/ ships no host package version, so nothing else moves the clone for it.
 #
 # Runs as the agent user, with HOME set to its home. Prints one line on stdout:
 #   skipped: <reason>   the clone is off master or has uncommitted changes: the agent's work
@@ -54,7 +54,7 @@ fi
 echo "advanced ${before:0:12}..${after:0:12}"
 
 # The hook shim runs every guard with `uv run --no-sync`, so a pull that moves the lock and
-# leaves the venv behind leaves guards that cannot import, and each falls back to `ask` (#3513).
+# leaves the venv behind leaves guards that cannot import, and each falls back to `ask`.
 if ! git diff --quiet "$before" "$after" -- uv.lock pyproject.toml; then
   "$HOME/.local/bin/uv" sync --frozen --compile-bytecode
 fi

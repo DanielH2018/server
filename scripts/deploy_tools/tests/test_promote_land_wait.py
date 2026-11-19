@@ -88,7 +88,7 @@ def test_a_change_that_raced_the_gate_onto_a_suspended_tag_waits_for_the_hold():
 
 
 def test_a_widened_set_attributes_a_hold_by_the_prs_services_alone():
-    """#6199 on a widened set: every listed name joins the tags, so it is no evidence."""
+    """On a widened set: every listed name joins the tags, so it is no evidence."""
     sim = Sim(
         polls=[at(P, "bento-pdf", "texbrain")],
         holds=[f"{P} failed=texbrain"],
@@ -157,7 +157,7 @@ def test_an_unreadable_kustomization_list_never_reads_as_settled():
 
 
 def test_a_host_with_no_readable_kubeconfig_gives_up_at_the_first_poll():
-    """#8295: four landings held every slot for an hour retrying a read no retry fixes."""
+    """Four landings held every slot for an hour retrying a read no retry fixes."""
     error = flux_host.KubectlSetupError("no readable kubeconfig (tried $KUBECONFIG)")
     sim = Sim(polls=[error, at(M)])
     result = sim.wait()

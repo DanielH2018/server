@@ -190,7 +190,7 @@ def test_prune_all_counts_no_failure_when_every_removal_succeeds(tmp_path):
 
 
 def test_prune_exits_1_when_a_removal_failed(monkeypatch, tmp_path):
-    # The weekly timer's invocation: a refused removal must not exit 0 (#4445).
+    # The weekly timer's invocation: a refused removal must not exit 0.
     for argv in (["--prune", "--brief"], ["--prune"]):
         rc, _, _ = _main_recording_removals(monkeypatch, tmp_path, argv, removes=False)
         assert rc == 1, argv
@@ -209,7 +209,7 @@ def _reaps_after(tmp_path, removed_ok):
 
 
 def test_prune_all_reaps_claims_after_a_removal(capsys, tmp_path):
-    # A removed tree's claims stay on the register until `reap` runs (#3928).
+    # A removed tree's claims stay on the register until `reap` runs.
     assert _reaps_after(tmp_path, removed_ok=True) == [str(tmp_path)]
     assert "released #1 (worktree-x)" in capsys.readouterr().out
 
@@ -370,7 +370,7 @@ def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
     tmp_path, monkeypatch, capsys
 ):
     # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
-    # #7949: one session running at 04:20 kept the sweep's check down for a week. The skip is
+    # One session running at 04:20 kept the sweep's check down for a week. The skip is
     # still named on stderr; the next run removes the tree once its holder exits.
     scrub_process_git_env(monkeypatch)
     repo = tmp_path / "repo"
@@ -436,7 +436,7 @@ def test_check_exits_1_for_a_branch_holding_unlanded_work(tmp_path, monkeypatch)
     assert done.stdout.strip() == "worktree-open: unlanded"
 
 
-# --- a registered worktree whose directory is gone (#4191) ---------------------------
+# --- a registered worktree whose directory is gone ---------------------------
 #
 # `git worktree list` keeps the registration, marked prunable, until `git worktree prune`
 # runs. survey() asked is_dirty() about it, which ran git with a cwd that does not exist, and

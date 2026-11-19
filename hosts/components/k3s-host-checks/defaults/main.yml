@@ -1,7 +1,7 @@
 # The tunables of the backup-health, disk-health and token-drift checks. The renderer loads this
 # file beneath component.yml's own defaults.
 
-# The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
+# The restore drill itself is the `longhorn-restore-drill` Flux role's: its schedule, its
 # volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
 # waiver are that role's defaults, and no `setup/` file reads them. What stays here is what a host
 # reader reads: the namespace and the two bounds of backup health's checks
@@ -15,7 +15,7 @@ k3s_longhorn_restore_drill_namespace: homelab
 
 # Where the B2-accounting cron line touches a stamp before its work runs, owned by sys_user so
 # that cron can write it and longhorn-backup-health can read it. Check 10 reads the stamp to tell "the cron fired and its run failed" from "the cron stopped firing",
-# which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
+# which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root.
 k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
 # How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
 # this allows two consecutive failed or skipped nights — short enough that a drill which has
@@ -47,7 +47,7 @@ k3s_longhorn_restore_drill_coverage_slack_days: 5
 k3s_longhorn_cron_evidence_window_hours: 26
 
 # The R2 (daily) and weekly volume lists, `k3s_longhorn_r2_volumes` and
-# `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
+# `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults.
 # That job is their only reader that applies them to the cluster.
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). A host cron writes a check
@@ -199,15 +199,14 @@ k3s_etcd_s3_cron_minute: "45"
 # DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
 # end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
 # on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's
-# header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
-# scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
-# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
-# list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the
-# `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes
-# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS
-# HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server
-# (`etcd_drill_full_cron` in group_vars, mechanism in the hypervisor's host half), where the guest's
-# disk is deleted after every run and so nothing accumulates anywhere.
+# header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly
+# harmful: cleanup() sets KEEP=1 on ANY non-zero exit and scratch dirs are swept only at +30
+# days, so a failing full drill holds restored etcd databases plus cluster-token copies in
+# /var/tmp as a steady state. The list-only arm exits at the drill's `--list-only` branch,
+# BEFORE the `install -d "$SCRATCH"` that creates the directory, so however often it fails it
+# writes nothing to /var/tmp. The full drill is scheduled monthly in a throwaway guest on
+# daniel-server (`etcd_drill_full_cron` in group_vars, mechanism in the hypervisor's host half),
+# where the guest's disk is deleted after every run.
 #
 # Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
 # clear of the 06:10 trim, and in an hour nothing else uses. Daytime

@@ -1,14 +1,11 @@
-"""Guards on the weekly AIDE check's textfile verdict (#4594).
+"""Guards on the weekly AIDE check's textfile verdict.
 
-The cron used to pipe `aide --check` into `logger`, so the pipeline's status was logger's and an
-AIDE that checked nothing for weeks read the same as one that passed (#4591). aide-check.sh keeps
-AIDE's exit code, logs it and writes it as a textfile verdict, and holds five properties. It
-pushed it to one Kuma tile per host until M6 batch B9's Cutover-2, so a test says "pushes DOWN"
-for a run whose logged status is `down`:
+aide-check.sh keeps AIDE's exit code, logs it and writes it as a textfile verdict, and holds
+five properties. A test says "pushes DOWN" for a run whose logged status is `down`:
 
 AN ERROR EXIT PUSHES DOWN. Anything outside 0-7 means the check did not complete.
 
-A DIFFERENCE NO PACKAGE EXPLAINS PUSHES DOWN (#4599). Package upgrades change files every week,
+A DIFFERENCE NO PACKAGE EXPLAINS PUSHES DOWN. Package upgrades change files every week,
 so a difference a package's digest accounts for, or one outside the paged trees, pushes UP with
 its counts; the script's `DECIDED:` marker has the measurement.
 
@@ -46,7 +43,7 @@ def aide_hosts() -> list[str]:
 
 
 def test_only_the_hosts_listing_aide_scan_ship_aide():
-    """daniel-pi's scan outgrew its 456 MB and reset it twice on 2026-11-12 (#8084)."""
+    """daniel-pi's scan outgrew its 456 MB and reset it twice on 2026-11-12."""
     assert aide_hosts() == ["daniel-box", "daniel-server"]
     assert [path for path in package("daniel-pi").files if "aide" in path] == []
 
@@ -69,7 +66,7 @@ def test_differences_push_up_with_their_counts(tmp_path):
 
 
 def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
-    """The #4591 failure: the check exits on its first line, so nothing was checked."""
+    """The check exits on its first line, so nothing was checked."""
     code, pushed, logged, _ = _run_check(tmp_path, ERROR_REPORT, rc=17)
     assert pushed[0] == "down", pushed
     assert "aide exited 17" in pushed[1]
@@ -81,7 +78,7 @@ def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
 
 
 def test_a_held_lock_pushes_down_without_starting_a_second_scan(tmp_path):
-    """A scan still running from last week holds the lock, so this week's run reports it (#5785)."""
+    """A scan still running from last week holds the lock, so this week's run reports it."""
     code, pushed, logged, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0, lock_held=True)
     assert not ran, "a second aide scan started beside the one holding the lock"
     assert pushed[0] == "down", pushed
@@ -99,7 +96,7 @@ def _textfile(root, check):
 
 
 def test_a_completed_check_writes_success_1_with_its_deadline(tmp_path):
-    """The textfile is the only verdict channel since the push left (#6168)."""
+    """The textfile is the only verdict channel since the push left."""
     _run_check(tmp_path, DIFF_REPORT, rc=1)
     series = _textfile(tmp_path, "aide-check")
     assert series["homelab_check_success"] == "1"
@@ -119,7 +116,7 @@ def test_a_free_lock_lets_the_scan_run(tmp_path):
     assert ran and pushed[0] == "up" and code == 0, pushed
 
 
-# Paths AIDE must skip, and paths beside them it must still check (#5785). The second list is
+# Paths AIDE must skip, and paths beside them it must still check. The second list is
 # what keeps an exclusion from widening: the primary checkout, the repo's hooks and the
 # executables under ~/.local all sit next to an excluded directory.
 EXCLUDED = (
@@ -290,7 +287,7 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
 
 
 def test_the_timer_runs_a_slot_it_missed():
-    """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it (#7920)."""
+    """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it."""
     for host in aide_hosts():
         assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
 

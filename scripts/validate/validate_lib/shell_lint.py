@@ -63,8 +63,8 @@ def shellcheck_batch(paths: list[Path], shellcheck_bin: str) -> dict[Path, str]:
     """Run shellcheck ONCE over every rendered script; {path: findings} for the ones it flags.
 
     One process rather than one per file: shellcheck's start-up is ~0.26s on daniel-box, so
-    the 20-template sweep spent ~5s launching it and well under a second checking anything
-    (measured 2026-09-01). Same severities as `shellcheck_check` — the repo default, matching
+    the 20-template sweep spends ~5s launching it and well under a second checking anything.
+    Same severities as `shellcheck_check` — the repo default, matching
     the prek hook. `-f gcc` prints one `path:line:col: level: message [SCnnnn]` per finding, so
     a batch verdict attributes cleanly to the file it belongs to; the default format groups by
     `In <path> line N:` blocks, which would need parsing.

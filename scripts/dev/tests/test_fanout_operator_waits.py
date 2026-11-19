@@ -1,4 +1,4 @@
-"""The waiting gauge `fanout.py land-server` writes (#5671): what counts as waiting on a person.
+"""The waiting gauge `fanout.py land-server` writes: what counts as waiting on a person.
 
 The reason table is driven through the real `autoland.problems`, so a rewording of a reason
 there fails here rather than silently dropping that reason to zero.
@@ -11,10 +11,12 @@ import re
 import subprocess
 
 from _fanout_fakes import fake_tools
+from _findings_fakes import operator_comment
 from test_fanout_autoland import _pr, _record
 
 from fanout_lib import autoland, operator_waits
 from fanout_lib.autoland import Boundaries
+from findings_lib.issue_model import claim_comment
 
 # 2026-10-18T01:00:00Z, the stamp `_record` puts in every record's file name.
 SAVED = 1792285200.0
@@ -25,8 +27,15 @@ SAMPLE = re.compile(
 )
 
 
-def _issue(number, *labels):
-    return {"number": number, "labels": [{"name": n} for n in ("claude", *labels)]}
+def _issue(number, *labels, claimed=False):
+    comments = (
+        [operator_comment(claim_comment("worktree-a", None, "t"))] if claimed else []
+    )
+    return {
+        "number": number,
+        "labels": [{"name": n} for n in ("claude", *labels)],
+        "comments": comments,
+    }
 
 
 def _no_issues():
@@ -150,13 +159,13 @@ def test_the_written_file_is_world_readable(tmp_path):
 def test_each_issue_lands_in_one_state_and_manual_wins():
     issues = [
         _issue(1),
-        _issue(2, "claimed"),
+        _issue(2, claimed=True),
         _issue(3, "not-before:2026-10-20"),
         _issue(4, "not-before:2026-10-17"),
-        _issue(5, "manual", "claimed"),
+        _issue(5, "manual", claimed=True),
         _issue(6, "manual", "not-before:2026-10-20"),
         {
-            **_issue(7, "claimed"),
+            **_issue(7, claimed=True),
             "blockedBy": {"nodes": [{"number": 9, "state": "OPEN"}]},
         },
         {**_issue(8), "blockedBy": {"nodes": [{"number": 9, "state": "CLOSED"}]}},
@@ -172,7 +181,7 @@ def test_each_issue_lands_in_one_state_and_manual_wins():
 
 def test_the_pass_writes_the_queue_and_each_hosts_capacity(tmp_path):
     gauge, _ = _gauge(
-        tmp_path, [], [], issues=lambda: [_issue(1), _issue(2, "claimed")]
+        tmp_path, [], [], issues=lambda: [_issue(1), _issue(2, claimed=True)]
     )
     text = gauge.read_text()
     assert 'findings_issues{state="free"} 1' in text

@@ -16,8 +16,7 @@ k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out ac
 #
 # DECIDED: separate from traefik_k8s_manage_crowdsec rather than one shared variable. The
 # surfaces are asymmetric: this pod carries only an agent and PRODUCES signals, where
-# Traefik carries a bouncer plugin and enforces bans. HISTORY — a shared variable would have
-# lived in group_vars/all.yml, which the retired GitOps deployer deferred as broad.
+# Traefik carries a bouncer plugin and enforces bans.
 #
 # Gating this out does NOT stop Authelia writing /var/log/authelia/authelia.log. Its config
 # names that path (config-secret.yaml.j2) and the emptyDir stays mounted; the init container
@@ -30,8 +29,7 @@ authelia_k8s_manage_crowdsec: true
 # configuration whose only effect is to demand four credentials
 # (`authelia_oidc_hmac_secret`, `authelia_oidc_rsa_key_content`,
 # `authelia_client_password_hash`, `grafana_oidc_client_secret_hash`) that such a cluster has
-# no reason to hold. Turning it off is what lets staging's secrets file stay small, which is the
-# point of Decision 5 in docs/archive/staging-cluster.md.
+# no reason to hold. Turning it off keeps staging's secrets file small.
 #
 # It gates the config block, not the portal: forward-auth, the session store and the user
 # database are unaffected, so a cluster with this false still proves the middleware chain
@@ -39,11 +37,10 @@ authelia_k8s_manage_crowdsec: true
 authelia_k8s_manage_oidc: true
 
 # The manifest whose Secret holds the OIDC signing key, a multi-line PEM block that no Flux
-# placeholder can carry. A placeholder render (scripts/renderer, target slice R2) leaves it
-# out, and D3 ships it as a SOPS-encrypted manifest instead. Ansible renders and applies it,
-# when authelia_k8s_manage_oidc is true, like any other secret file. `sops-manifest-entries`
-# in scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
-# `SOPS_MANIFEST_KEYS` keys.
+# placeholder can carry. A placeholder render leaves it out; it ships as a SOPS-encrypted
+# manifest instead, rendered and applied when authelia_k8s_manage_oidc is true.
+# `sops-manifest-entries` in scripts/renderer/renderer_lib/sops_entries.py holds the entry to
+# one Secret of `SOPS_MANIFEST_KEYS` keys.
 render_sops_manifests: [oidc-jwk-secret.yaml]
 
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
@@ -70,7 +67,7 @@ authelia_k8s_redis_sessions: true
 
 # repo:tag with no digest — the same shape as authelia_k8s_image above, so Renovate's docker
 # manager tracks it.
-authelia_k8s_redis_image: redis:8.10-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+authelia_k8s_redis_image: redis:8.10-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
 
 # Sessions are a CACHE with a one-month ceiling, not a record, so redis runs on an emptyDir and
 # persists nothing. A node reboot, an eviction or a Renovate bump of the image still logs
@@ -96,7 +93,7 @@ authelia_k8s_storage: 1Gi
 # labels on its own Volume CRs, and PVC labels do not propagate to them.
 authelia_k8s_storage_class: longhorn
 
-# The claim the renderer emits for this role, which the authelia Kustomization applies (#3387).
+# The claim the renderer emits for this role, which the authelia Kustomization applies.
 k8s_claims:
   - name: authelia-config
     storage_class: "{{ authelia_k8s_storage_class }}"
@@ -142,7 +139,7 @@ authelia_k8s_log_size: 512Mi
 # deploy rather than re-enrolling a phone. The operator's own login is untouched by both.
 #
 # Its groups match the operator's deliberately. The access_control rules here are
-# domain-scoped except karma.local's, which `admins` passes (#6689), so groups change
+# domain-scoped except karma.local's, which `admins` passes, so groups change
 # almost nothing about what this user can REACH — they change mainly what the apps behind
 # those routes render. A narrower set would have the UI tier assert against a degraded page
 # while still reporting green.
@@ -173,8 +170,8 @@ authelia_k8s_manage_claude_user: true
 authelia_claude_password_argon2: ''
 authelia_claude_totp_secret: ''
 
-# The agent user's own identity for the homelab-ui MCP server (docs/claude-agent-user.md,
-# slice 5). The Unix user `claude` logs in to the LAN portal as this account instead of
+# The agent user's own identity for the homelab-ui MCP server (docs/claude-agent-user.md).
+# The Unix user `claude` logs in to the LAN portal as this account instead of
 # borrowing the operator's login. The username is plaintext on purpose, like the one above, and
 # the claude_code role mirrors it in `claude_code_homelab_ui_username`; a test holds the two
 # equal. Its password, `authelia_agent_password`, is a SOPS value that Ansible decrypts as the
@@ -204,8 +201,7 @@ authelia_agent_password_argon2: ''
 # DECIDED: authelia stays off `manifests_prune` (#3388, operator decision 2026-10-05). An
 # armed prune deletes what the lever below drops, so turning `authelia_k8s_redis_sessions`
 # off would delete the live redis Deployment, Service and NetworkPolicy the lever exists to
-# keep. #3388 counts authelia as deliberately excluded. The prune is armed by default since
-# #3662, so this line is the opt-out.
+# keep. The prune is armed by default, so this line is the opt-out.
 manifests_prune: false
 
 # The redis pair is concatenated rather than listed, for the same reason crowdsec-secret is
@@ -244,12 +240,12 @@ manifests_secret_files: >-
      + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else [])
      + (['redis-secret.yaml'] if authelia_k8s_redis_sessions | bool else []) }}
 
-# `authelia-redis` is listed so the batch drain WAITS on its rollout (#4564). A redis image
+# `authelia-redis` is listed so the batch drain WAITS on its rollout. A redis image
 # bump rolls it through the apply, and under Recreate SSO has no session store until the new
 # pod is up, so a landing that did not wait read `settled` mid-pull.
 # DECIDED: redis restarts on `secret` only. Its `checksum/restart` hashes only the
 # `authelia-redis` Secret its own pod reads, so a portal config change never rolls the session
-# store, while a rotated `authelia_redis_password` or an edited redis.conf does (#7575). Gated
+# store, while a rotated `authelia_redis_password` or an edited redis.conf does. Gated
 # on the lever like the pair above: with it off on a cluster that never ran redis, `rollout
 # status` on a Deployment that does not exist would fail the drain.
 manifests_extra_rollouts: >-

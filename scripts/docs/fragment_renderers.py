@@ -152,9 +152,9 @@ def deadman_crons(
     monitor-bridge's console expectations to these same crons.
 
     `has_docker` is `{host: bool}` over every host. The weekly reboot
-    pings a slug per host, and the Docker prune pings one per host that installs it (#2806).
+    pings a slug per host, and the Docker prune pings one per host that installs it.
     `sweep_hosts` names each host whose package lists the `worktree-sweep` component; each
-    pings its own `<host>-worktree-sweep` slug (#4482, #6815).
+    pings its own `<host>-worktree-sweep` slug.
 
     `alertmanager-watchdog` has no cron: Alertmanager re-sends the always-firing Watchdog alert
     every `observability_alertmanager_watchdog_repeat_seconds`. Its cadence is `every <N>s`,

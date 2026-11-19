@@ -46,7 +46,7 @@ def test_the_render_produces_every_floor_file_is_clean():
     assert {"prometheus.yml", "alertmanager.yml", "homelab.tmpl"} <= alert_rules.FLOOR
     assert "scrape_configs:" in found["prometheus.yml"]
     assert "receivers:" in found["alertmanager.yml"]
-    assert '{{ define "homelab.title" }}' in found["homelab.tmpl"]
+    assert 'define "homelab.title"' in found["homelab.tmpl"]
     assert alert_rules.floor_problems(found) == []
 
 
@@ -149,7 +149,7 @@ def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
 
 
 def test_alloy_rejecting_the_rendered_config_is_flagged():
-    """The #6177 shape: Alloy's match-stage parser refusing a selector Loki accepts."""
+    """Alloy's match-stage parser refusing a selector Loki accepts."""
     problems = alert_rules.check_tree(
         run=lambda argv: (
             (1, "invalid selector syntax for match stage")

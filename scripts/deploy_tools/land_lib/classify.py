@@ -74,7 +74,7 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     """Die before `await_merge` merges the PR when land.py's checkout lags origin/master.
 
     `refuse_stale_code` runs after the merge, so on its own a stale checkout's merge wait
-    would merge the PR first (#7830). The base is all of master, the PR not yet on it. The
+    would merge the PR first. The base is all of master, the PR not yet on it. The
     fetch runs in the primary, and land.py's checkout reads it because it is a worktree of the
     primary and shares its refs.
     """
@@ -104,9 +104,8 @@ def refuse_stale_code(ln: Landing) -> None:
     stale too; land.sh squash-merges.
 
     DECIDED: after the merge, a stale checkout hands the grading to a fresh checkout without
-    asking (#8679). This reverses #7820's refusal that named `--fresh` (#7933): on 2026-11-14
-    three of one session's four landings ended `refused` here with the PR merged, and the
-    caller's answer was always that same `--fresh` re-run, which waited on master CI again.
+    asking. A refusal that named `--fresh` drew that same `--fresh` re-run every time, with
+    the PR already merged, and the re-run waited on master CI again.
     Before the merge the landing still refuses (`refuse_stale_code_before_merge`). A lander
     unit cannot take `--fresh`, and a comparison git could not make proves nothing, so both
     still refuse here.

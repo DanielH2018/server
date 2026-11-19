@@ -44,7 +44,7 @@ def _k3s_shell_scripts() -> dict[str, str]:
     """Every k3s-host-checks shell script as the host runs it, by template name.
 
     Rendered rather than read: a jsonpath expression assembled from a role default would reach
-    bash whole and read as `{{ ... }}` in the source, which is a guard over nothing (#3186).
+    bash whole and read as `{{ ... }}` in the source, which is a guard over nothing.
     """
     found = {
         name: text

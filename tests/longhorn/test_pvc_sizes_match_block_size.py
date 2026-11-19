@@ -14,10 +14,10 @@ something recreates it: a node rebuild, a restore, a disaster-recovery bring-up.
 precisely the path the 16 MiB change exists to make survivable, so a silent violation here
 converts a cost optimisation into a recovery failure.
 
-The census reads the RENDERED manifests (#3209). Reading the templates meant resolving each
+The census reads the RENDERED manifests. Reading the templates meant resolving each
 `storage: {{ var }}` against a hand-merged map of role defaults and group_vars, and reading the
 `pvc()` macro's third argument with a regex because a claim built through that macro (folded
-into `k8s/templates/claim-default.yaml.j2` by #3387) had no `storage:` line of its own. The render resolves both —
+into `k8s/templates/claim-default.yaml.j2` ) had no `storage:` line of its own. The render resolves both —
 Ansible's own context resolves the variable, and the macro expands — so the var map, the
 macro-call regex and the floor assertion that watched for their resolution falling over are all
 gone with their subject. What replaces them is `KNOWN_SIZED_ROLES`: a census that stops naming a

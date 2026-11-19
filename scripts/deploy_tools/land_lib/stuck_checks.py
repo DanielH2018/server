@@ -1,9 +1,9 @@
-"""A check run GitHub leaves pending under a completed check suite, which no wait outlasts (#7996).
+"""A check run GitHub leaves pending under a completed check suite, which no wait outlasts.
 
-PR #7975's image-smoke job "pull + boot changed images" stayed `queued` with no runner after
-its workflow run read `completed` / `failure`. The master CI gate requires that check, so GitHub
-refused every direct merge, and the landing polled for 75 minutes towards merge-timeout. Two
-remedies failed: `gh run rerun` refuses a completed run ("This workflow run cannot be
+An image-smoke job such as "pull + boot changed images" can stay `queued` with no runner after
+its workflow run reads `completed` / `failure`. The master CI gate requires that check, so GitHub
+refuses every direct merge, and the landing polls towards merge-timeout. Two
+remedies fail: `gh run rerun` refuses a completed run ("This workflow run cannot be
 retried"), and a `workflow_dispatch` run on the branch does not replace the PR's check. Only a
 new head commit gives the PR a fresh set of checks.
 

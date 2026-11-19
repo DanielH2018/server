@@ -10,8 +10,7 @@ rendered portal config against.
 THE CORE SCHEMAS COME FROM KUBERNETES ITSELF. They are the per-group files under
 ``api/openapi-spec/v3/`` in the kubernetes/kubernetes repo, at the tag ``k3s_version`` names, so
 the check validates against the API the cluster actually runs, and a new minor needs nothing but
-this script once k3s ships it. Until #2367 they came from the kubernetes-validate package, which
-went quiet after publishing 1.36 and so held the k3s upgrade behind it. Each file is cut to its
+this script once k3s ships it. Each file is cut to its
 ``components.schemas`` with every ``description`` dropped, which takes the eight files from
 5.5 MB to about 330 KB, and ``SOURCE.json`` beside them records the tag and the sha256 of each
 file as upstream served it.

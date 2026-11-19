@@ -1,6 +1,6 @@
 """Textual censuses of the tracked docs, templates, workflows and paths, one row each.
 
-Each row was a test file of its own until #3407. A row's `reason` keeps what that file's
+Each row replaces a test file of its own. A row's `reason` keeps what that file's
 docstring said a reader needs before changing the rule. The harness supplies the
 `subject gone` failure, the floor, the named members, the stale-allow check and the red/green
 proof (`tests/_row_table.py`). Python-source rows are in `test_census_rows_python.py`.

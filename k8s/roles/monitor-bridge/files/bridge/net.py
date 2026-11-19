@@ -3,7 +3,7 @@
 This is the transport. A check body never calls it: it queries through the `src` argument,
 `bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests.
 Every function that sends a request takes an `opener`, the `urllib.request.urlopen`-shaped callable that sends it, so a
-transport test hands in a fake opener rather than patching `urllib.request` (#3938). None means
+transport test hands in a fake opener rather than patching `urllib.request`. None means
 the real `urlopen`, resolved at call time. What the suite still patches on this module is
 `_get_json` in the Loki parsing tests. Callers reach it as `bridge.net._get_json`, never by
 from-import, because a from-import would copy the function into the caller's globals at import
@@ -179,7 +179,7 @@ def prom_scalar(
 
     `base` selects which Prometheus, and every caller in this tree leaves it unset: one
     instance remains, and the `prometheus` gate watches it for every check. The parameter
-    survives the CLUSTER_PROMETHEUS_URL deletion (#2825) because it is the seam a second
+    exists because it is the seam a second
     Prometheus would be reintroduced through — a caller that passes one also needs a
     reachability gate watching that instance, or it pages beside the gate that already did.
     """

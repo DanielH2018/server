@@ -119,7 +119,7 @@ from fanout_lib.transport import (
 
 
 def _readings(tools: Tools, hosts, root=None):
-    """Read each host's headroom; the unit states of `root`'s batches ride it (#5506)."""
+    """Read each host's headroom; the unit states of `root`'s batches ride it."""
     live = live_by_host(root) if root else {}
     good, bad = [], []
     for host in hosts:
@@ -332,7 +332,7 @@ def cmd_launch(args, tools: Tools) -> int:
             run.batches.append(launched)
             # Saved per batch, not once after the loop: a launch killed between batches
             # (a tool timeout, a ^C) otherwise leaves running agents no manifest names,
-            # so `status` and `clean` cannot find them (#6341).
+            # so `status` and `clean` cannot find them.
             manifest_mod.save(run, root=args.manifest_root)
         except launch_mod.LaunchError as exc:
             released = (
@@ -364,7 +364,7 @@ def cmd_launch(args, tools: Tools) -> int:
     # `findings.py release` names the holder, so print it where the orchestrator reads.
     held = f"; claims held under `{holder}`" if target.is_server else ""
     print(f"run {run.run_id}: {pairs}{held}")
-    # Not 3, which says nothing was placed: these batches are running (#4452).
+    # Not 3, which says nothing was placed: these batches are running.
     return FANOUT_PLACE_PARTLY_LAUNCHED if refused else FANOUT_PLACE_OK
 
 
@@ -379,7 +379,7 @@ def cmd_status(args, tools: Tools) -> int:
 
 
 def cmd_runs(args, tools: Tools) -> int:
-    """List the run manifests on this host, so a lost run-id is recoverable (#3923)."""
+    """List the run manifests on this host, so a lost run-id is recoverable."""
     runs = [
         r
         for r in manifest_mod.all_runs(args.manifest_root)

@@ -8,8 +8,8 @@ Run: uv run python scripts/dev/ci_slot_cost.py RUN_ID [RUN_ID ...]
 WHY. The account runs at most 20 hosted jobs at once, and a full sweep of ci.yml asks for 25.
 One run's wall in isolation therefore misses what an extra job costs: every job holds a runner
 slot for its whole duration, setup included, and every other run queued behind the pool waits
-for that slot. The shard counts in ci.yml are chosen on the two numbers this prints (#8456),
-and the per-leg setup it prints is what a cut to the setup steps is measured by (#8457).
+for that slot. The shard counts in ci.yml are chosen on the two numbers this prints,
+and the per-leg setup it prints is what a cut to the setup steps is measured by.
 
 For each run it prints:
 
@@ -18,12 +18,12 @@ For each run it prints:
 - the queue wait at p50 and p90 over the run's jobs, and each family's median wait;
 - the median time a pytest leg spent outside `Run the test suite`, and that time per step;
 - the pytest legs a pull request's selection left empty, against what a planning job would
-  cost instead (#8944).
+  cost instead.
 
 A job's queue wait is `started_at - created_at`. GitHub creates a job's record when the jobs
 it `needs` have finished, not when the run starts, so `created_at` already marks the moment
-it became ready (checked on master run 43594559130: every `host_packages_bootstrap` leg was
-created when `host_packages_build` completed). A skipped job never held a runner and is left
+it became ready (every `host_packages_bootstrap` leg is created when `host_packages_build`
+completes). A skipped job never held a runner and is left
 out.
 
 `--recent N` reads the newest N green `push` runs on master that ran at least one pytest leg,
@@ -57,8 +57,8 @@ CI_BRANCH = "master"
 PYTEST_PREFIX = "pytest (shard"
 SUITE_STEP = "Run the test suite"
 # How many green master runs `--recent` lists to find N that ran pytest. A push whose tree a
-# landing already proved skips every leg: 14 of the newest 60 ran pytest on 2026-11-15, and
-# the shard counts are read on 20.
+# landing already proved skips every leg, so most of the newest runs ran no pytest
+# and the window has to be wide.
 RUN_WINDOW = 200
 
 _ACTION_SHA = re.compile(r"@[0-9a-f]{40}\b")

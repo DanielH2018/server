@@ -1,8 +1,8 @@
 """traefik's CRDs come from the traefik-crds role's in-tree copy, pinned, never from a URL.
 
 D5 step 26's traefik bullet: no render may fetch a URL, so `traefik-crds` keeps upstream's
-CRD file under `files/upstream/`, and the renderer attaches it to that tag's bundle verbatim
-(#5666). `scripts/dev/vendor_manifest.py --check` holds the file to its sha256 pin
+CRD file under `files/upstream/`, and the renderer attaches it to that tag's bundle verbatim.
+`scripts/dev/vendor_manifest.py --check` holds the file to its sha256 pin
 (`tests/k8s/test_vendored_manifests_match_their_pins.py`). Two more things keep
 the copy honest:
 

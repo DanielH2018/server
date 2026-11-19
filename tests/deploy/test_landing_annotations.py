@@ -127,7 +127,7 @@ def _cause_expr() -> str:
 
 
 # The verdicts other than `deploy-failed` that carry a cause, with the cause each carries.
-# No table in outcome.py pairs them; ledger.py's docstring names the same one (#4998).
+# No table in outcome.py pairs them; ledger.py's docstring names the same one.
 _CAUSE_BESIDE_ANOTHER_VERDICT = [
     (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
     (Verdict.DEFERRED, Cause.GATE_UNREADABLE),
@@ -173,7 +173,7 @@ def _selects(expr: str, line: str) -> bool:
 
 
 def test_the_cause_panel_selects_on_a_non_empty_cause():
-    """Verify-by of #4998: the panel selects `cause!=""`, not `verdict="deploy-failed"`.
+    """The panel selects `cause!=""`, not `verdict="deploy-failed"`.
 
     The reader half too: writing `cause` into the annotation splits nothing on its own,
     so this asserts a panel reads it, not merely that the field can be parsed.
@@ -269,21 +269,18 @@ _FIXTURE_FILTER = '| pr !~ "^(939|999|999999|unknown)$"'
 
 
 def _exprs_without_the_fixture_filter(exprs: list[str]) -> list[str]:
-    """The board exprs that do not drop the land.sh suite's syslog fixtures (issue #1255).
+    """The board exprs that do not drop the land.sh suite's syslog fixtures.
 
     DECIDED: the discriminator is the PR id, never an empty `sha`. Until `_no_syslog` landed
     on 2026-09-03 every test that ran the real `land.sh` wrote its annotation to the host's
     syslog, carrying `pr=939`, `pr=999`, `pr=999999`, or `pr=unknown`. The last was an
     argparse failure, which reached the EXIT trap before the ledger had a PR, so those rows
-    carry no sha and no phase timing. Issue #1304 stopped the emitter writing those at all,
-    so the `unknown` rows are historic and the filter keeps dropping them for the rest of
-    the 744h window. Measured against live
-    Loki on 2026-09-06, those are 8,282 of the 8,777 records in the 744h retention window,
-    and they read the verdict mix as 72% `aborted` where the real figure is 8.7%.
+    carry no sha and no phase timing. The emitter no longer writes those, so the
+    `unknown` rows are historic and the filter keeps dropping them for the rest of the 744h
+    window.
 
-    Issue #1255 also proposed dropping `sha=""` rows. Measured, that is wrong: a real
-    landing that aborts before the merge leaves `sha` empty too (PRs 1266, 1256, 1236, 1205
-    and 1081 all did), so the board would lose most of its genuine `aborted` rows.
+    Dropping `sha=""` rows instead is wrong: a real landing that aborts before the merge
+    leaves `sha` empty too, so the board would lose most of its genuine `aborted` rows.
 
     The regex is anchored because LogQL's `!~` is not. Unanchored, `999` also matches
     `pr=999999` — which is how the two extra fixture rows were found — and would match a

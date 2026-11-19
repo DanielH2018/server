@@ -6,7 +6,7 @@ it. Anything that only reads the UPS takes the read-only `nut_ha_password` login
 
 The census renders every role and host component with the password set to a sentinel and
 counts the renders that carry it, so a template aliasing the secret through a second variable
-is caught where a scan of template source would miss it (#3183). Beside each plane's manifest
+is caught where a scan of template source would miss it. Beside each plane's manifest
 and config templates it renders every `*.sh.j2` and every k8s `Dockerfile*.j2`, the two
 classes `_k8s_render.render_texts` skips, and the Pi's Compose files from its host package, which
 keeps them outside any `templates/` directory.

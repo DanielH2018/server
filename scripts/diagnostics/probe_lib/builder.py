@@ -1,7 +1,7 @@
 """`probe.py builder` — the host-package builder's state, its recent builds and its failures.
 
 Sessions read `journalctl -u homelab-builder.service` by hand and counted `FAILURE` lines to
-learn whether the builder was publishing (#6324). This makes one read of daniel-box and prints:
+learn whether the builder was publishing. This makes one read of daniel-box and prints:
 
 - the builder's reason and the commit it names, from the `homelab_builder_unbuilt_since`
   gauge in `homelab_builder.prom`, and how long ago its last fetch succeeded;

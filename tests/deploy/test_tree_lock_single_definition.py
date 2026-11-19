@@ -1,7 +1,7 @@
 """Every host cron opens the git-tree lock through one macro, which renders its one path.
 
 `scripts/lib/tests/test_tree_lock.py` holds that path, `server_git_tree_lock`, equal to the
-Python readers' `TREE_LOCK` (#3276).
+Python readers' `TREE_LOCK`.
 
 Run: uv run pytest tests/deploy/test_tree_lock_single_definition.py
 """
@@ -9,7 +9,7 @@ Run: uv run pytest tests/deploy/test_tree_lock_single_definition.py
 from lib.repo_paths import REPO
 
 
-# The host crons that take the git-tree lock, and the one macro they all take it through (#3722).
+# The host crons that take the git-tree lock, and the one macro they all take it through.
 # Named rather than discovered, so a caller that stops importing the macro fails here by name.
 # The macro lives in the shared template directory, which the host renderer's loader also
 # searches. The two callers ship in their host components since H7.10.
@@ -27,7 +27,7 @@ def _opens_the_tree_lock_by_hand(source: str) -> bool:
 
 
 def test_the_hand_written_lock_idiom_is_what_the_check_flags():
-    # Red proof: the idiom every caller carried before #3722 is flagged, the macro call is not.
+    # Red proof: the hand-written idiom is flagged, the macro call is not.
     assert _opens_the_tree_lock_by_hand(
         "exec 9>{{ server_git_tree_lock }}\nflock -w 3840 9 || exit 1\n"
     )

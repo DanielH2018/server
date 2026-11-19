@@ -8,7 +8,7 @@ contract is C6's *Hosts* bullet in docs/target-architecture/contracts.md.
 at the merge commit and at its first parent, each in a snapshot from `tools.gate_snapshot`,
 and keeps the hosts whose trees differ. It renders every shared package under
 `hosts/packages/` the same way, and a host whose rendered `nfpm.yaml` depends on a shared
-package that differs is a target too (#6859): the host's updater installs that package. When a
+package that differs is a target too: the host's updater installs that package. When a
 snapshot or a render fails, every host with a `hosts/<host>/package.yml` at the merge commit
 is a target, so a failure waits rather than skips.
 
@@ -358,7 +358,7 @@ def _target(host: str, old: HostTree, at_parent: Path) -> HostTarget:
         triggers, delay = timer_settings(shared.read_text(), dropins)
         if poll and _links(old, POLL_TIMER):
             # An armed poll starts the updater on its own fires, so each of its triggers
-            # bounds the deadline beside the updater timer's own (#7065).
+            # bounds the deadline beside the updater timer's own.
             polls, poll_delay = timer_settings(poll[2].decode(), [])
             for key, values in polls.items():
                 triggers.setdefault(key, []).extend(values)

@@ -1,6 +1,5 @@
-# The generated-docs refresh on daniel-box (H7.10a, docs/target-architecture/host/h7-delete-ansible.md).
-# Until H7.36 initial_setup installed it as the "Refresh generated docs" cron. Now
-# homelab-docs-refresh.timer starts homelab-docs-refresh.service at 06:17 and 18:17, as sys_user.
+# The generated-docs refresh on daniel-box. homelab-docs-refresh.timer starts
+# homelab-docs-refresh.service at 06:17 and 18:17, as sys_user.
 #
 # The tmpfiles.d file creates `docs_host_site_dir`, the docs pod's hostPath (`type: Directory`),
 # and the commit-failure stamp directory. The service runs `systemd-tmpfiles --create` on it in
@@ -11,8 +10,8 @@
 # Autonomous-role contract — Generated docs refresh. Twice daily (06:17 and 18:17, daniel-box
 # only): docs-refresh regenerates the reference pages and the infra map, weights any unweighted
 # test module, re-measures one eighth of the recorded weights and rewrites those that drifted,
-# records what each test module depends on for one twelfth of the suite (#8458), rebuilds the
-# site, and publishes the diff through a PR that a detached landing merges (#3609).
+# records what each test module depends on for one twelfth of the suite, rebuilds the
+# site, and publishes the diff through a PR that a detached landing merges.
 #
 # - Scope: five derived paths and nothing else — `docs/reference/`, `docs/assets/generated/`,
 #   the two shard-weights tables `scripts/dev/pytest_shard_weights.json` and
@@ -35,7 +34,7 @@
 # ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
 # hosts/tests/test_docs_refresh_*.py, which read the rendered script.
 depends:
-  # `affected_tests.py record` traces each test module's reads with it (#8458).
+  # `affected_tests.py record` traces each test module's reads with it.
   - strace
 files:
   - {src: templates/docs-refresh.sh.j2, dst: /usr/lib/homelab/docs-refresh, mode: "0755"}
@@ -44,7 +43,7 @@ files:
   - {src: units/homelab-docs-refresh.timer, dst: /usr/lib/systemd/system/homelab-docs-refresh.timer}
 enable:
   homelab-docs-refresh.timer: timers.target
-# What initial_setup installed before H7.36. Reconcile retires each once the timer above has
+# The earlier install. Reconcile retires each once the timer above has
 # started, so the refresh never runs twice or not at all.
 legacy:
   - {cron_file: docs-refresh}

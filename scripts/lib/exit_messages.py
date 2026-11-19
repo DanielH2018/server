@@ -34,8 +34,6 @@ from lib.exit_codes import contract
 # prefix rather than under `VERDICT:`. A landing's logfile can carry its lines ABOVE its
 # verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report its line as the
 # landing's on every landing, with nothing failing. One format, a prefix per entry point, one renderer.
-# Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the
-# measurement.
 VERDICT_PREFIXES = {
     "scripts/deploy_tools/land.sh": "VERDICT",
     # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe

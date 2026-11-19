@@ -141,6 +141,10 @@ render_gid: 993
 renovate_agent_enabled: false
 # B3-0: the T2 session users' egress table, recording only (hosts/components/t2-egress).
 t2_egress_enabled: true
+# B3-1: the T2 egress proxy's listen address. The t2-egress component's squid binds it, and the
+# triage and Renovate session units point HTTPS_PROXY at it. Removing it takes the proxy out of
+# both sessions.
+t2_egress_proxy: "127.0.0.2:3128"
 
 # The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
 # An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,

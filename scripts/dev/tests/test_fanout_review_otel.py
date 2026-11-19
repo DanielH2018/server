@@ -1,4 +1,4 @@
-"""Each review phase's `claude -p` carries the batch and phase as OTEL resource attributes (#5673).
+"""Each review phase's `claude -p` carries the batch and phase as OTEL resource attributes.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_review_otel.py
 """
@@ -69,7 +69,7 @@ def test_the_assignment_has_one_shape_for_every_phase(tmp_path, monkeypatch):
 
 
 def test_a_user_settings_value_cannot_displace_the_batch_labels(tmp_path, monkeypatch):
-    """Claude Code applies a settings `env` over the process env, replacing the string (#5684)."""
+    """Claude Code applies a settings `env` over the process env, replacing the string."""
     calls = _raw_claude_calls(
         tmp_path,
         [_report("needs input: CI is red")],

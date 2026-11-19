@@ -1,10 +1,7 @@
-# The k3s server's same-path files (H6.4a, docs/target-architecture/host/h6-k3s-suc.md,
-# *Flags move from the unit to a package drop-in*). Ansible's tasks/server.yml wrote each one
-# until H6.4a deleted its task, so dpkg takes over the path on the first install. Since H6.4b
-# the component also carries the server's flags: `k3s_server_config` below, rendered into
-# config.yaml.d, and the `ExecStart` lines of 50-homelab.conf. Reverting H6.4b alone is safe:
-# dpkg removes the config drop-in and the `ExecStart` lines, and the installer's unit still
-# carries every flag.
+# The k3s server's same-path files, which dpkg owns from the first install. The component also
+# carries the server's flags: `k3s_server_config` below, rendered into config.yaml.d, and the
+# `ExecStart` lines of 50-homelab.conf. Reverting the flags alone is safe: dpkg removes the
+# config drop-in and the `ExecStart` lines, and the installer's unit still carries every flag.
 #
 # The package ships the files and applies nothing. Each file k3s reads at startup carries
 # `activate: manual:k3s.service`, which puts it in the hash homelab-k3s-restart takes
@@ -17,10 +14,9 @@
 # FORWARD-ONLY. A file here is named by a k3s flag (`audit-policy-file`, `authentication-config`)
 # or read at startup, and a missing authentication config wedges the API server on its next
 # start. Reverting the PR that added a file deletes it. Return a file to Ansible with the
-# attended procedure in the H6 plan's *Rollback*.
+# attended procedure in the k3s SUC plan's *Rollback*.
 #
-# The rest of the server's host half (H7.35, docs/target-architecture/host/h7-delete-ansible.md):
-# Longhorn's packages and multipath drop-in, the read-only kubeconfig, the inotify key, the join
+# The rest of the server's host half: Longhorn's packages and multipath drop-in, the read-only kubeconfig, the inotify key, the join
 # rules and the address pin. k3s-agent renders this component's defaults and the pin's
 # template through `component: k3s-server`. `k3s-host-dns` holds the resolver.
 #
@@ -34,7 +30,7 @@
 # an SSH session rides on, so a change goes live at the next boot.
 #
 # FORWARD-ONLY for the address pin as well. Reverting the PR that added it deletes the file, and a
-# server that boots while the gateway's DHCP is down cannot bind server_ip (#3882). A revert
+# server that boots while the gateway's DHCP is down cannot bind server_ip. A revert
 # therefore owes `k3s-bringup.yml --tags node-address` on daniel-box before the next reboot
 # (operator-only); the revert restores that task file's import.
 #
@@ -68,7 +64,7 @@ defaults:
     - "audit-log-maxage={{ k3s_audit_log_maxage }}"
     - "audit-log-maxbackup={{ k3s_audit_log_maxbackup }}"
     - "audit-log-maxsize={{ k3s_audit_log_maxsize }}"
-  # The k3s server's flags (H6.4b). templates/50-homelab.yaml.j2 renders this mapping as
+  # The k3s server's flags. templates/50-homelab.yaml.j2 renders this mapping as
   # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare
   # `k3s server`, so this mapping is the server's whole configuration. A key is a flag name
   # without `--`, and a list is a repeated flag. A key whose value is `false` is left out of the
@@ -105,17 +101,16 @@ defaults:
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
   #                      The image-gc pair starts image GC below Longhorn's 75% replica
   #                      scheduling floor, which the root filesystem shares: at the kubelet's
-  #                      85 every superseded image stayed (#8307). The kubelet refuses a low
+  #                      85 every superseded image stays. The kubelet refuses a low
   #                      threshold not below the high one, so the pair moves together.
   #                      system-reserved lowers node allocatable by memory pods use without
-  #                      requesting it (#8644). With enforce-node-allocatable at its default
+  #                      requesting it. With enforce-node-allocatable at its default
   #                      `pods`, the kubelet also lowers kubepods.slice memory.max to capacity
   #                      minus the reserve, so every pod together, instance-manager included,
   #                      shares that cap and an anon spike past it OOM-kills inside kubepods.
-  #                      Pod anon was 6.0 GB against the 22.8 GB cap. No cgroup caps k3s or the
-  #                      host's processes. Sum at 2026-11-14:
-  #                      Longhorn instance-manager's 7-day p95 working set 1565 MiB, system.slice
-  #                      anon 1.9 GiB (k3s-server, containerd), user.slice anon 3.7 GiB.
+  #                      No cgroup caps k3s or the host's processes. The 7Gi sums Longhorn
+  #                      instance-manager's 7-day p95 working set (1565 MiB), system.slice anon
+  #                      (1.9 GiB: k3s-server, containerd) and user.slice anon (3.7 GiB).
   #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
   #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
   #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
@@ -125,7 +120,7 @@ defaults:
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file
   #                      configures the JWT authenticator, which is mutually exclusive with the
   #                      --oidc-* flags: passing both makes the API server refuse to start.
-  #   etcd-s3,           k3s's native etcd snapshots upload to R2 (H2.8a). Every S3 value lives
+  #   etcd-s3,           k3s's native etcd snapshots upload to R2. Every S3 value lives
   #   etcd-s3-config-    in the Secret `longhorn-backup` renders into kube-system, which k3s
   #   secret             reads at each snapshot, so this file holds no credential. Any other
   #                      `etcd-s3-*` key here makes k3s ignore that Secret. To disarm the
@@ -142,7 +137,7 @@ defaults:
   #                      docs/k3s-etcd-restore.md transcludes this value.
   #
   # ENFORCED: hosts/tests/test_k3s_server_flags_migration.py holds the rendered flags
-  # equal to the ones `k3s_server_args` passed before this file existed, plus H2.8a's.
+  # equal to the ones `k3s_server_args` passed before this file existed, plus the etcd-s3 ones.
   k3s_server_config:
     cluster-init: true
     disable:
@@ -171,8 +166,7 @@ defaults:
   # `cluster_base_readonly_sa_*`; a test holds the three members of each triple equal.
   k3s_server_readonly_sa_name: homelab-readonly
   k3s_server_readonly_sa_namespace: kube-system
-  # The API server's JWT trust in Authelia. Moved from setup/k3s (the template was its only
-  # reader). `k3s_oidc_issuer_urls` lists both hostnames Authelia answers on, with NO trailing
+  # The API server's JWT trust in Authelia. `k3s_oidc_issuer_urls` lists both hostnames Authelia answers on, with NO trailing
   # slash, because the comparison against the token's `iss` is exact.
   k3s_oidc_issuer_urls:
     - "https://auth.local.{{ domain }}"
@@ -191,15 +185,17 @@ defaults:
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}
   # The server's flags. The only file in config.yaml.d, and nothing ships config.yaml. World-
-  # readable: it holds no secret, and H2.8b's backup-health check 12 reads it as `sys_user`.
+  # readable: it holds no secret, and backup-health check 12 reads it as `sys_user`.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s.service"}
   - {src: templates/audit-policy.yaml.j2, dst: /var/lib/rancher/k3s/server/audit.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/authentication-config.yaml.j2, dst: /var/lib/rancher/k3s/server/authentication-config.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s.service"}
+  # No activation: the postinst's daemon-reload applies the weight to the running unit.
+  - {src: templates/cpu-weight.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf}
   - {src: templates/logrotate-k3s.j2, dst: /etc/logrotate.d/k3s}
   - {src: templates/tmpfiles-k3s.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-server.conf}
   # An empty marker: the deploy controller skips an addon file whose name ends `.skip`, which
-  # releases k3s's bundled CoreDNS to Flux's `coredns` tag (H1.4). k3s reads it live.
+  # releases k3s's bundled CoreDNS to Flux's `coredns` tag. k3s reads it live.
   - {src: templates/coredns.yaml.skip, dst: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail: multipathd claims freshly
   # attached /dev/longhorn devices and every mount reads "already in use". The block Ansible wrote

@@ -5,9 +5,7 @@ Every rule is a `..._is_flagged` / `..._is_clean` pair. A guard that fires on ev
 one that fires on nothing are indistinguishable from the passing side alone, so each arm here
 carries the input it must act on AND the near miss it must leave alone.
 
-The flagged write cases are the shapes measured on 2026-08-29 against both existing PreToolUse
-Bash hooks, each of which returned no decision: an in-place `sed`, a heredoc redirect and a
-`tee`.
+The flagged write cases are an in-place `sed`, a heredoc redirect and a `tee`.
 
 Run: uv run pytest .claude/hooks/tests/test_block_protected_bash.py
 """
@@ -140,7 +138,7 @@ def _run_main(monkeypatch, capsys, payload):
 
 
 def test_a_payload_without_cwd_resolves_paths_in_the_process_cwd(monkeypatch, capsys):
-    """The `DECIDED` at `repo_root` (#2135): the shim's `cd` makes the process cwd the primary
+    """The `DECIDED` at `repo_root`: the shim's `cd` makes the process cwd the primary
     checkout, so arm 1 still has a tree to classify a relative path against."""
     monkeypatch.chdir(_REPO)
     out = _run_main(

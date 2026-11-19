@@ -1,4 +1,4 @@
-"""The suppression comments a red test may not add (#4439).
+"""The suppression comments a red test may not add.
 
 Pure source-to-source checks, so no case here starts git or pytest; the gate-level case is in
 `test_fanout_red_gate.py`.
@@ -9,7 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_suppressions.py
 from fanout_lib.review.red_tests import stale_suppressions
 
 BASE = "def test_old():\n    assert True\n"
-# The shape of #4403's red file: an in-body import of the module the fix creates.
+# A red file with an in-body import of the module the fix creates.
 ADDED = (
     "\n\ndef test_new():\n"
     "    from function_imports import scan  # ty: ignore[unresolved-import]\n\n"

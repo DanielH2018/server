@@ -2,8 +2,8 @@
 
 A `Recreate` Deployment stops its old pod before the new pod's image pull starts, so a role
 whose image is large and whose registry is slow is down for the whole pull. During a slow-GHCR
-episode, code-server pulled 851 MB at about 0.28 MB/s, about 50 minutes (#5525); GHCR's normal
-rate is 44-98 MB/s (#5654). A role that sets
+episode, code-server pulled 851 MB at about 0.28 MB/s, about 50 minutes; GHCR's normal
+rate is 44-98 MB/s. A role that sets
 `flux_prepull_timeout` in its `defaults/main.yml` gets `DIR/cluster/<tag>-prepull/`, which
 holds:
 
@@ -48,13 +48,13 @@ cordoned between the two still pays a cold pull. Every image must carry `sh`, wh
 script.
 
 A role that also sets `flux_prepull_workloads` pulls for the Deployments and StatefulSets it
-names and no others (`ordering.prepull_workloads`, #5875). Only those must name a node and
+names and no others (`ordering.prepull_workloads`). Only those must name a node and
 carry `sh`. observability names Grafana alone: its 482 MB image is the one large pull, and
 loki, tempo and kube-state-metrics pin no node and ship no shell.
 
 DECIDED: the no-op is a shell script, not Python. The kubelet runs each pulled image, so the
 interpreter must be in every image a workload names. n8n's image and the runners' `alpine`
-init container carry no `python3` (#5546), and a container that cannot start fails the Job
+init container carry no `python3`, and a container that cannot start fails the Job
 the way a deadline would. Every image the pre-pull Jobs pull carries `sh`. The script runs
 no network call, so the Job census holds it byte-identical to `SCRIPT` instead of reading it
 the way it reads a Python script.
@@ -94,7 +94,7 @@ SCRIPT = (
     'echo "image present on this node"\n'
 )
 COMMAND = ["sh", f"{MOUNT}/{SCRIPT_NAME}"]
-# How many failed Pods the Job replaces before it fails (#5552). The census holds this kind to it.
+# How many failed Pods the Job replaces before it fails. The census holds this kind to it.
 BACKOFF_LIMIT = 3
 
 

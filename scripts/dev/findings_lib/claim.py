@@ -137,7 +137,7 @@ def claim_is_live(
     every claim it makes would read as stale the moment it was written, and `reap` would
     release it while the fan-out was running. `classify` checks the live lock FIRST, which
     is exactly what that case needs. Once the orchestrator's session dies its lock is dead,
-    the worktree reads REMOVABLE, and this returns stale while its batches still run (#4601).
+    the worktree reads REMOVABLE, and this returns stale while its batches still run.
     The worktree cannot answer that, and the issue number is not known here, so the callers
     that hold an issue — `claim_states` and `stale_holder` — ask the run manifests through
     their `batch_holds` argument.
@@ -152,7 +152,7 @@ def claim_is_live(
     `git worktree prune`, because nothing else in the output points at a stale registration.
     """
     # Judged only by its own user: the other clone's worktrees are not in `trees`, so its
-    # live claims read "no worktree" here and `reap` released them (#4103). Held is the
+    # live claims read "no worktree" here and `reap` released them. Held is the
     # fail-safe direction; that user's own `reap` is the way to clear a stale one.
     owner = other_clone_owner(worktree_name)
     if owner is not None:
@@ -206,8 +206,8 @@ def stale_holder(
     """(holder, why) when this issue's claim is STALE, else None.
 
     A claim the worktree calls stale is still held while ``batch_holds`` names the issue: a
-    fan-out batch is working it under an orchestrator whose session died (#4601). One naming
-    no local worktree is held while ``peer_trees`` registers it or cannot be read (#6840).
+    fan-out batch is working it under an orchestrator whose session died. One naming
+    no local worktree is held while ``peer_trees`` registers it or cannot be read.
 
     What `cmd_claim` reaps before taking an issue. Takes the same three facts
     `claim_states` does rather than `worktree_facts`'s 4-tuple, so the caller keeps the
@@ -260,7 +260,7 @@ def claim_states(
 
     A claim the worktree calls stale reads live, under the batch's reason, while
     ``batch_holds`` names its issue. The reason says when the claim's holder is not the branch
-    the batch claimed under (#4688). It is called once, with every stale issue, and not at
+    the batch claimed under. It is called once, with every stale issue, and not at
     all when none is stale. ``peer_trees`` is likewise called once, before it, and only when a
     stale claim names no local worktree; see `stale_holder`.
     """
@@ -388,6 +388,6 @@ def free_issues(
     text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
     for r in rows:
         r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
-        # An orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
+        # An orchestrator reading `--json` told a free issue from one `claim` reaps.
         r["stale_claim_by"] = stale.get(r["number"])
     return rows, stale

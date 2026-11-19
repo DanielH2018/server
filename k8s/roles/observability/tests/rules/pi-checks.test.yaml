@@ -179,7 +179,7 @@ tests:
   # The exporter is down from minute 2: `up` reads 0 and the series is gone, as in the control
   # above. PiHostDown pages a dead exporter, so the `unless` clause keeps both NotReporting rules
   # quiet past the point the control fires. Both Failed rules read a verdict of 0 that goes stale
-  # with the scrape, so they too leave a dead Pi to PiHostDown (M6 batch B5 needs no inhibit).
+  # with the scrape, so they too leave a dead Pi to PiHostDown without an inhibit.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'

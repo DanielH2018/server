@@ -24,7 +24,7 @@ descends from the served one.
 at the artifact the source serves, and the source serves that commit. A DependencyNotReady
 row is `failed` too when a dependency it waits on, directly or through another held one, failed
 after an attempt at the artifact its source serves: Flux holds the row there until someone
-fixes that dependency (#6354). `suspended` (exit 3):
+fixes that dependency. `suspended` (exit 3):
 `spec.suspend` is set, so nothing will apply. Every other reading keeps the wait open:
 `absent` (no such Kustomization yet), `waiting` (the source serves no commit) and
 `progressing`. A `--revision` that no applied commit descends from waits until the budget

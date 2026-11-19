@@ -41,6 +41,14 @@ COMMANDS = {
     "ssh.service": ("sshd", "-t"),
     "fail2ban.service": ("fail2ban-client", "-t"),
     "rsyslog.service": ("rsyslogd", "-N1"),
+    # t2-egress's drop-in starts squid on this file, not on the stock /etc/squid/squid.conf.
+    "squid.service": (
+        "squid",
+        "-k",
+        "parse",
+        "-f",
+        "/usr/lib/homelab/t2-egress/t2-squid.conf",
+    ),
 }
 # The files reconcile parses itself, by the action kind or the unit, and the grammar of a line.
 PARSERS = {"sysctl": "sysctl", "systemd-journald.service": "ini"}
@@ -115,7 +123,7 @@ def perform(
     if kind == "reboot":
         REBOOT_PENDING.parent.mkdir(parents=True, exist_ok=True)
         # Never re-touch: the flag's mtime is when the host first owed a reboot since its last
-        # boot, which homelab_host_reboot_pending_since_seconds exports (#6166).
+        # boot, which homelab_host_reboot_pending_since_seconds exports.
         if not REBOOT_PENDING.exists():
             REBOOT_PENDING.touch()
         return True

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The variable context a role template renders with, in Ansible's precedence.
 
-Every render guard under ``scripts/validate/`` builds its context here. Before #3692 five
-validators each layered the base stubs, ``group_vars/all.yml``, host_vars and role defaults
-themselves, in three different orders, and a validator that renders with the wrong precedence
-checks a value no deploy produces (failure class 2 in ``docs/failure-classes.md``).
+Every render guard under ``scripts/validate/`` builds its context here, so no validator layers
+the base stubs, ``group_vars/all.yml``, host_vars and role defaults itself: a validator that
+renders with the wrong precedence checks a value no deploy produces (failure class 2 in ``docs/failure-classes.md``).
 
 The layers, weakest first::
 
@@ -31,7 +30,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from pathlib import Path
 
 # The layers and where they live are lib.estate's, which the docs generators read through too,
-# so a template render and a docs page cannot disagree about which value wins (#3899).
+# so a template render and a docs page cannot disagree about which value wins.
 from lib.cli_help import warn
 from lib.estate import (
     PLANE_HOSTS,
@@ -99,7 +98,7 @@ def render_context(
             host, or no host_vars layer for a plane without one.
         overrides: Values laid over every file layer. They go in before anything resolves as
             well as on top after, so a default aliasing an overridden name (``x: "{{ secret
-            }}"``) expands to the override rather than to the name's stub (#3191).
+            }}"``) expands to the override rather than to the name's stub.
         strict: Raise rather than drop a variable whose value will not expand.
         inventory: Where all.yml and host_vars live; the repo's own unless a test says not.
         host_vars: The host layer as a mapping, read in place of the host's file. A test
@@ -179,9 +178,9 @@ _HOSTS_KEYS = (
 def _hosts(inventory: Inventory) -> dict[str, dict]:
     """Each host's literal values of ``_HOSTS_KEYS``, keyed by host name.
 
-    ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
+    ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way, and
     observability's ``alloy-pi`` scrape job and artifacts' service index read the Pi's
-    ``compose_services`` (#3860, H5.1), so a strict render needs both. A value goes in only while
+    ``compose_services``, so a strict render needs both. A value goes in only while
     it holds no Jinja: here it would resolve against the rendered host's context, so a Pi value
     such as ``"{{ server_ip }}"`` would come out as daniel-box's address. A caller needing more
     passes its own ``hosts``.

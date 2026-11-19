@@ -1,4 +1,4 @@
-"""The claims `launch` and `claim` take under the orchestrator's own branch (#3695).
+"""The claims `launch` and `claim` take under the orchestrator's own branch.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_claim.py
 """
@@ -47,7 +47,7 @@ def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
     ]
     manifest = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
     assert manifest["orchestrator_branch"] == "worktree-orch"
-    # The dispatcher, not the agent, records which batch branch took each issue (#3962).
+    # The dispatcher, not the agent, records which batch branch took each issue.
     assert run.comments == [
         (n, "Worked by `worktree-fanout-1-2`", "DanielH2018/server") for n in (1, 2)
     ]
@@ -74,7 +74,7 @@ def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, refused_claims={2}
     )
-    # 7, not 3: batch 1 is running, and 3 says nothing was placed (#4452).
+    # 7, not 3: batch 1 is running, and 3 says nothing was placed.
     assert _launch(tools, tmp_path, "1,2") == 7
     launch_call = run.host_calls[-1][1]
     assert "fanout-1 " in launch_call and "fanout-1-2" not in launch_call

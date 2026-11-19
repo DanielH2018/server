@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Longhorn Backup CRs as records, and the backup group and target names, defined once.
 
-WHY ONE READER (#3735). The backup-health cron, the two reapers and probe.py each fetched
+WHY ONE READER. The backup-health cron, the two reapers and probe.py each fetched
 `backups.longhorn.io` and pulled the same `.status` fields out by hand, through `-o json` in
 some and pipe- or space-delimited jsonpath in others. The health cron alone fetched the list
 four times a run. `from_items` is that parsing done once, over the one `-o json` body every
 reader already handles; the field names and the `Completed` filter live here.
 
-WHY THE NAMES LIVE HERE TOO (#3737). The RecurringJob group labels and the BackupTarget names
+WHY THE NAMES LIVE HERE TOO. The RecurringJob group labels and the BackupTarget names
 are a contract with the cluster: the `longhorn-reconcile` role's `files/longhorn_reconcile.py`
 labels each volume with a group, and the readers select on it. Renaming a live group label drops its volumes out of their RecurringJob
 with nothing failing, so the Python readers take each name from here rather than retyping it.
 The Ansible tasks, the restore drill and `seed_volume_backup.yml` take them from here too,
-through `scripts/renderer/template_filters/longhorn_groups.py` (#3946). The static StorageClass file cannot
+through `scripts/renderer/template_filters/longhorn_groups.py`. The static StorageClass file cannot
 call a filter and still spells `no-backup` out.
 
 WHERE IT RUNS. The health timer imports it as `longhorn_lib.longhorn_backups`, shipped in

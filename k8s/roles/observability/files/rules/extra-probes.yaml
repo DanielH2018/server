@@ -1,25 +1,20 @@
-# The probes that replaced the retired hand-written non-push tiles and the Pi's port arm, read from
-# the `blackbox-extra` and `blackbox-pi-ports` scrape jobs. Plain YAML, never Jinja:
-# prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8".
+# The extra probes and the Pi's port arm, read from the `blackbox-extra` and
+# `blackbox-pi-ports` scrape jobs. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries
+# this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# "B0, B5, B7 and B8".
 #
-# THESE RULES PAGE since B8's Cutover-b. They ran with shadow="true" beside 14 hand-written
-# tiles and monitor-bridge's `pi_pressure` row until then. The 14 tiles are the 12 that became a
-# probe here, the Pi ping that became `PiHostDown`, and Loki's /ready, which ScrapeTargetDown
-# (service loki-homelab) covers. ExtraProbeFailedCritical is critical, so Discord and email; the
-# rest are warnings, so Discord alone.
+# ExtraProbeFailedCritical is critical, so Discord and email; the rest are warnings, so
+# Discord alone. ScrapeTargetDown (service loki-homelab) covers Loki's /ready.
 #
-# No target probes terraria. Its port tile was deleted on 2026-09-02 (#822): on Terraria 1.4.5.7 a
-# TCP connect that drops kills the server loop (`TcpSocket.IsConnected` throws
-# `ObjectDisposedException` on a stream the peer already closed, unhandled), and the old tile
-# crashed it 8 times in 51 minutes. 1.4.5.6 took the same probe for weeks. A tcp_connect target
-# needs an image past 1.4.5.7 first, and #822 carries the check. wg-easy's WireGuard listener is
-# UDP, which a TCP connect cannot probe.
+# No target probes terraria: on Terraria 1.4.5.7 a TCP connect that drops kills the server
+# loop (`TcpSocket.IsConnected` throws `ObjectDisposedException` on a stream the peer already
+# closed, unhandled). A tcp_connect target needs an image past 1.4.5.7 first. wg-easy's
+# WireGuard listener is UDP, which a TCP connect cannot probe.
 #
 # DECIDED: PiPortDead pages on a refused TCP connect and nothing else. Until 2026-09-18 a dead
 # port was attributed to its container's Docker state through glances' /api/4/containers, which
 # took 4.43s and then timed out on the next call, so polling it every cycle would have left the
-# arm failing open. Glances retired (#2004) and nothing the cluster can reach serves that view
+# arm failing open. Nothing the cluster can reach serves that view
 # (docker-proxy publishes no port), so the description names both causes and the operator reads
 # `docker ps` on the Pi. The verdict never depended on the attribution.
 #
@@ -31,7 +26,7 @@
 # sat inside a check that EXPORTER_DEPENDENT["node-pi"] suppressed while the Pi's exporter was
 # down, so a dead Pi paged as the host and not once per port. The inhibit has no `equal` list:
 # PiHostDown carries the exporter's `instance` and PiPortDead the port's, and the estate has one
-# Pi. wg-easy's ExtraProbeFailed is not held, as the retired WG Easy tile paged beside the ping tile.
+# Pi. wg-easy's ExtraProbeFailed is not held and pages beside PiHostDown.
 #
 # The per-target rules carry no literal `service`. Each series takes it from the scrape target
 # that `prometheus.yaml.j2` renders per probe, and scripts/validate/alert_rules.py accepts that
@@ -40,9 +35,8 @@
 groups:
   - name: extra-probes
     rules:
-      # `for: 2m` at the job's 60s interval keeps the tiles' three-strikes timing (interval 60,
-      # maxretries 2). The critical tier is the edge all-clear, which its retired tile tagged critical, and the
-      # mosquitto and pihole probes while their entries are home-critical.
+      # `for: 2m` at the job's 60s interval is three strikes. The critical tier is the edge
+      # all-clear and the mosquitto and pihole probes while their entries are home-critical.
       - alert: ExtraProbeFailedCritical
         expr: probe_success{job="blackbox-extra", page_tier="critical"} == 0
         for: 2m
@@ -66,8 +60,7 @@ groups:
             blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
             for 2 minutes. Read probe_http_status_code for this instance when the module is an
             http one, then the workload's own log.
-      # The port arm of monitor-bridge's pi_pressure row, ported. The row held a down streak of
-      # 2 cycles of 300s, so 10m is the same tolerance for a container that a deploy recreates.
+      # 10m tolerates a container that a deploy recreates (two 300s bridge cycles).
       # tests/services/test_extra_probe_targets.py pins the number.
       - alert: PiPortDead
         expr: probe_success{job="blackbox-pi-ports"} == 0
@@ -80,8 +73,8 @@ groups:
             {{ $labels.instance }} refused a TCP connect for 10 minutes. A container that is up
             with no port mapping after a Pi restart is detached and needs a RECREATE, not a
             restart. `ssh daniel-pi docker ps` tells a stopped container from a detached one.
-      # The Pi ping tile, ported. `up{job="node-pi"}` is the scrape of the Pi's node_exporter, so
-      # it reads 0 when the host is down or its exporter is, and the exporter is a host unit.
+      # `up{job="node-pi"}` is the scrape of the Pi's node_exporter, so it reads 0 when the
+      # host is down or its exporter is, and the exporter is a host unit.
       - alert: PiHostDown
         expr: up{job="node-pi"} == 0
         for: 2m

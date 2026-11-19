@@ -21,12 +21,11 @@ from lib.proc_testing import fake_bin
 
 HYPERVISOR = REPO / "hosts" / "components" / "hypervisor"
 ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
-# The orchestrator sources the check library (M6 batch B4) and writes a textfile verdict from
-# `report` and `report_fence`. A runner has no /usr/local/lib copy, and daniel-box does, so the
-# harness points the source at the role's copy and the textfile directory at tmp_path. Without
-# the second, a run on daniel-box would write the real collector directory. The harness asserts
-# on the literal first, the way _pi_health.py does, so a renamed library fails here instead of
-# quietly disarming the run under test.
+# The orchestrator sources the check library and writes a textfile verdict from `report` and
+# `report_fence`. A runner has no /usr/local/lib copy, so the harness points the source at the
+# role's copy and the textfile directory at tmp_path, which keeps a run on daniel-box off the
+# real collector directory. The harness asserts on the literal first, so a renamed library fails
+# here instead of quietly disarming the run under test.
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 ROLE_CHECK_LIB = (
     REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
@@ -131,8 +130,8 @@ def rendered_orchestrator():
     """The orchestrator as the shared accessor renders it, `hosts` repointed at three hosts.
 
     Everything else the template reads — the inventory, the role's own defaults — comes from
-    the accessor's own context, which is what `validate/shell_templates.py` renders and lints
-    (#3178). `hosts` alone needs an override: the accessor's base stubs only one host
+    the accessor's own context, which is what `validate/shell_templates.py` renders and lints.
+    `hosts` alone needs an override: the accessor's base stubs only one host
     (`daniel-server`), and two of the fence's dials are OTHER hosts' addresses
     (`hosts['daniel-box'].server_ip`, `hosts['daniel-pi'].server_ip`). Left at the
     accessor's default, either lookup renders the literal `STUB`, which no `DIAL_STUB` fixture

@@ -50,14 +50,11 @@ def test_manual_refuses_when_there_is_nothing_to_change(issue, clear, reason):
 
 def test_manual_cli_releases_a_claim_the_issue_carries(capsys, make_tools):
     """`reap` skips `manual` issues, so a claim not released here would never be cleared."""
-    held = make_issue(
-        2978, labels=["claimed"], comments=[claim_comment(_HOLDER, None, "t")]
-    )
+    held = make_issue(2978, comments=[claim_comment(_HOLDER, None, "t")])
     tools, calls = make_tools(Fakes(view=held))
     assert findings.main(["manual", "2978"], tools) == 0
     assert ["issue", "edit", "2978", "--add-label", "manual"] in calls.gh
     assert any(f"Released: `{_HOLDER}`" in a for c in calls.gh for a in c)
-    assert ["issue", "edit", "2978", "--remove-label", "claimed"] in calls.gh
     assert "#2978 marked manual" in capsys.readouterr().out
 
 

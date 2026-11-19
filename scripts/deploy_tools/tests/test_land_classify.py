@@ -64,7 +64,7 @@ def test_classify_fills_tags_and_plane(landing):
 
 
 def test_a_rotation_that_refreshed_every_copy_classifies_with_no_plane(landing):
-    """The PR's own range reaches `plane_note`, which a blanket note would ignore (#8369)."""
+    """The PR's own range reaches `plane_note`, which a blanket note would ignore."""
     ranges = []
 
     def read_stale(old, new, deployed):
@@ -255,7 +255,7 @@ def test_a_classification_helper_calling_die_itself_is_not_relabelled(landing):
 
 
 def test_a_truncated_file_list_without_since_exits_as_bad_arguments(landing):
-    """It is a usage error, so it takes land.sh's documented usage code, 64 (#4451)."""
+    """It is a usage error, so it takes land.sh's documented usage code, 64."""
     from lib.exit_codes import LAND_BAD_ARGS
 
     ln, _ = landing(Fakes(derived=([], "fallback")))

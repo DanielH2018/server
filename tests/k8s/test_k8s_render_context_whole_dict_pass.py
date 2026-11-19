@@ -13,7 +13,7 @@ import pytest
 import _k8s_render
 from lib import render_context as rc
 
-# Inventory keys that read a name only Ansible defines (#7845).
+# Inventory keys that read a name only Ansible defines.
 ALWAYS_UNDEFINED = frozenset({"k8s_no_mutate"})
 
 

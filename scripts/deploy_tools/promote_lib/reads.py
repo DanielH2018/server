@@ -130,7 +130,7 @@ def runs_past_decide(f: forge.Forge) -> list[dict]:
     """The other in-progress promote runs whose `promote` job has completed.
 
     A later run whose `promote` job is queued behind this `decide`, on the job's concurrency
-    group, is in progress too but has moved nothing, so it is left out (#7863).
+    group, is in progress too but has moved nothing, so it is left out.
     """
     own = os.environ.get("GITHUB_RUN_ID", "")
     return [

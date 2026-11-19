@@ -1,4 +1,4 @@
-"""Land the PRs of finished daniel-server fan-out batches that are safe to land unattended (#5496).
+"""Land the PRs of finished daniel-server fan-out batches that are safe to land unattended.
 
 WHY. A daniel-server batch stops at its PR, because the deploy path lives on daniel-box, and
 nothing landed it until an orchestrator ran `land.sh`. Measured over 2026-10-15 to 2026-10-17,
@@ -37,9 +37,9 @@ fails the merge instead of landing unchecked.
 
 NO START CAP. A run starts every eligible PR. Before its merge a landing waits for the landing
 turn, and only the holder runs its PR's CI; after the merge it waits for a landing slot. Those
-two order and bound the landings, so a cap here would only delay a PR by a run (#8823).
+two order and bound the landings, so a cap here would only delay a PR by a run.
 
-THE WORKTREE SWEEP (#8575). Nothing else cleans a landed batch's worktree unless an operator
+THE WORKTREE SWEEP. Nothing else cleans a landed batch's worktree unless an operator
 runs `place clean`, so a pass also runs `clean.sweep_runs` over this user's open run manifests,
 at most every `CLEAN_INTERVAL_S`. Its legs log lines and never change the exit status.
 
@@ -185,10 +185,11 @@ def read_open_prs() -> list[dict]:
 
 
 def read_open_issues() -> list[dict]:
-    """Every open `claude` issue with its labels and blockers, for the queue gauge; raises on a failed read."""
+    """Every open `claude` issue with its labels, blockers and comments, for the queue gauge; raises on a failed read."""
     out = gh(
         "issue", "list", "--repo", SERVER, "--label", "claude", "--state", "open",
-        "--limit", "1000", "--json", "number,labels,blockedBy", timeout=GH_TIMEOUT_S,
+        "--limit", "1000", "--json", "number,labels,blockedBy,comments",
+        timeout=GH_TIMEOUT_S,
     )  # fmt: skip
     data = json.loads(out.stdout)
     if not isinstance(data, list):
@@ -376,7 +377,7 @@ def refusal(done: subprocess.CompletedProcess) -> str:
 
     Its last `VERDICT:` line, else its last `land:` line, else the output's `tail`. uv's
     virtual-environment chatter comes first in a fresh checkout, so a plain tail cut the
-    deciding line short (#8810).
+    deciding line short.
     """
     output = f"{done.stdout or ''}\n{done.stderr or ''}"
     found = list(VERDICT_LINE.finditer(output)) or list(_LAND_LINE.finditer(output))
@@ -475,7 +476,7 @@ def write_waits(
 ) -> None:
     """Write the gauge of what waits on a person, from this pass's reads and two local ones.
 
-    With `stamps`, each PR held for a counted reason is also stamped there (#5682).
+    With `stamps`, each PR held for a counted reason is also stamped there.
     """
     box = {n: r for n, r in newest_per_pr(b.local_records()).items() if n in prs}
     if stamps is not None:

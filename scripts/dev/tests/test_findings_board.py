@@ -7,6 +7,9 @@ query text, so a test asserts which writes went out without restating the GraphQ
 import json
 import subprocess
 
+from _findings_fakes import operator_comment
+
+from dev.findings_lib.issue_model import claim_comment
 from dev.findings_lib.board import (
     DONE,
     IN_PROGRESS,
@@ -45,7 +48,10 @@ def _board(*, fields=("Status", "Severity", "Not before")) -> dict:
     }
 
 
-def _issue(number, *, labels=(), state="OPEN", prs=(), held=None) -> dict:
+CLAIMED = (claim_comment("worktree-a", None, "2026-11-18T10:00Z"),)
+
+
+def _issue(number, *, labels=(), state="OPEN", prs=(), held=None, comments=()) -> dict:
     items = []
     if held is not None:
         values = [
@@ -66,6 +72,7 @@ def _issue(number, *, labels=(), state="OPEN", prs=(), held=None) -> dict:
         "number": number,
         "state": state,
         "labels": {"nodes": [{"name": n} for n in labels]},
+        "comments": {"nodes": [operator_comment(c) for c in comments]},
         "closedByPullRequestsReferences": {"nodes": [{"state": s} for s in prs]},
         "projectItems": {"nodes": items},
     }
@@ -104,26 +111,28 @@ class FakeGh:
 
 
 def test_status_follows_the_claim_a_closing_pr_and_the_close():
-    assert wanted_fields("OPEN", {"claude"}, 0)["Status"] == TODO
-    assert wanted_fields("OPEN", {"claimed"}, 0)["Status"] == IN_PROGRESS
-    assert wanted_fields("OPEN", set(), 1)["Status"] == IN_PROGRESS
-    assert wanted_fields("CLOSED", {"claimed"}, 0)["Status"] == DONE
+    assert wanted_fields("OPEN", {"claude"}, 0, claimed=False)["Status"] == TODO
+    assert wanted_fields("OPEN", set(), 0, claimed=True)["Status"] == IN_PROGRESS
+    assert wanted_fields("OPEN", set(), 1, claimed=False)["Status"] == IN_PROGRESS
+    assert wanted_fields("CLOSED", set(), 0, claimed=True)["Status"] == DONE
 
 
 def test_severity_and_not_before_come_from_their_labels():
-    fields = wanted_fields("OPEN", {"severity/high", "not-before:2026-12-01"}, 0)
+    labels = {"severity/high", "not-before:2026-12-01"}
+    fields = wanted_fields("OPEN", labels, 0, claimed=False)
     assert fields["Severity"] == "high"
     assert fields["Not before"] == "2026-12-01"
-    assert wanted_fields("OPEN", set(), 0)["Severity"] is None
+    assert wanted_fields("OPEN", set(), 0, claimed=False)["Severity"] is None
 
 
-def test_a_claimed_issue_on_the_board_moves_to_in_progress():
+def test_a_claim_comment_moves_the_issue_to_in_progress():
     gh = FakeGh(
         [
             _issue(
                 7,
-                labels=["claimed", "severity/low"],
+                labels=["severity/low"],
                 held={"Status": TODO, "Severity": "low"},
+                comments=CLAIMED,
             )
         ]
     )
@@ -165,7 +174,7 @@ def test_an_agreeing_issue_writes_nothing():
 
 
 def test_a_dry_run_plans_but_writes_nothing():
-    gh = FakeGh([_issue(7, labels=["claimed"], held={"Status": TODO})])
+    gh = FakeGh([_issue(7, held={"Status": TODO}, comments=CLAIMED)])
 
     assert sync_board([7], None, dry_run=True, gh=gh)[7][0] == "updated"
     assert gh.mutations == []

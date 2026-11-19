@@ -50,28 +50,11 @@ def test_reap_closes_the_milestone_of_a_gone_worktree_and_keeps_a_live_ones():
     ]
 
 
-def test_claim_writes_a_comment_and_a_label():
-    issue = make_issue(1132)
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
-    assert main(["claim", "1132", "--worktree", WT], tools) == 0
-    assert calls.gh[-2][:3] == ["issue", "comment", "1132"]
-    assert calls.gh[-1] == ["issue", "edit", "1132", "--add-label", "claimed"]
-
-
-def test_claim_creates_the_claimed_label_before_it_adds_it():
-    # gh issue edit --add-label fails on a label the repo lacks; cmd_close already syncs
-    # for this reason. Without it the FIRST real claim posts its comment, fails the label
-    # edit, and the retry says "already claimed" — so the label is never added at all.
-    issue = make_issue(1132)
-    tools, calls = build_tools(
-        Fakes(issues=[issue], view=issue, labels=set(), worktree_facts=LIVE)
+def _released(calls, number: str) -> bool:
+    return any(
+        c[:3] == ["issue", "comment", number] and "Released: `" in c[4]
+        for c in calls.gh
     )
-    main(["claim", "1132", "--worktree", WT], tools)
-    created = [c for c in calls.gh if c[:2] == ["label", "create"]]
-    assert any(c[2] == "claimed" for c in created)
-    assert calls.gh.index(
-        next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(["issue", "edit", "1132", "--add-label", "claimed"])
 
 
 def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
@@ -106,24 +89,21 @@ def test_dry_run_writes_nothing():
     assert calls.gh == []
 
 
-def test_release_removes_the_label():
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
+def test_release_posts_the_release_comment():
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["release", "1132", "--worktree", WT], tools) == 0
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert _released(calls, "1132")
 
 
 def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
-    """Pairs with `test_release_removes_the_label` above, which exits 0.
+    """Pairs with `test_release_posts_the_release_comment` above, which exits 0.
 
     Only the plan-level refusal was covered, so nothing proved `cmd_release` turns a
     `ClaimRefused` into exit 3 rather than a traceback.
     """
     issue = make_issue(
         1132,
-        labels=["claimed"],
         comments=[claim_comment("worktree-someone-else", None, "t")],
     )
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
@@ -185,8 +165,8 @@ def test_reap_releases_a_stale_claim_and_leaves_a_live_one():
         Fakes(issues=[stale, live], worktree_facts=facts([tree], dirty=True))
     )
     assert main(["reap"], tools) == 0
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
-    assert ["issue", "edit", "1140", "--remove-label", "claimed"] not in calls.gh
+    assert _released(calls, "1132")
+    assert not _released(calls, "1140")
 
 
 def test_claim_loses_a_race_and_reports_who_won(capsys):
@@ -214,9 +194,7 @@ def test_claim_loses_a_race_and_reports_who_won(capsys):
 
 
 def test_release_dry_run_writes_nothing_and_says_so(capsys):
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["release", "1132", "--worktree", WT, "--dry-run"], tools) == 0
     assert calls.gh == []
@@ -241,7 +219,7 @@ def test_reap_refuses_to_release_anything_when_git_fails():
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=facts(ok=False)))
     assert main(["reap"], tools) != 0
-    assert not any(c[:2] == ["issue", "edit"] for c in calls.gh)
+    assert not _released(calls, "1132")
 
 
 def test_reap_releases_when_the_worktree_list_is_genuinely_empty():
@@ -254,7 +232,7 @@ def test_reap_releases_when_the_worktree_list_is_genuinely_empty():
     stale = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[stale], worktree_facts=STALE))
     assert main(["reap"], tools) == 0
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert _released(calls, "1132")
 
 
 def test_claims_warns_but_still_renders_when_git_fails(capsys):
@@ -280,12 +258,10 @@ def test_reap_dry_run_still_refuses_when_git_fails():
 
 
 def test_closing_a_claimed_issue_releases_the_claim():
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["close", "1132", "--fixed", "--pr", "1270"], tools) == 0
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert _released(calls, "1132")
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
 
 
@@ -298,19 +274,16 @@ def test_closing_an_unclaimed_issue_writes_no_release():
 
 def test_closing_a_claimed_issue_as_refuted_releases_before_it_closes():
     """The `if held:` branch is outcome-agnostic; --fixed alone doesn't prove that."""
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     argv = ["close", "1132", "--refuted", "--reason", "disproved"]
     assert main(argv, tools) == 0
-    assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
-    remove_claimed = calls.gh.index(
-        ["issue", "edit", "1132", "--remove-label", "claimed"]
+    released = next(
+        i for i, c in enumerate(calls.gh) if any(f"Released: `{WT}`" in a for a in c)
     )
     add_refuted = calls.gh.index(["issue", "edit", "1132", "--add-label", "refuted"])
     closed = next(i for i, c in enumerate(calls.gh) if c[:2] == ["issue", "close"])
-    assert remove_claimed < add_refuted < closed
+    assert released < add_refuted < closed
 
 
 # --- the stale-at-birth guard ---------------------------------
@@ -395,25 +368,23 @@ def test_close_releases_the_claim_it_closes():
     """
     issue = make_issue(
         1132,
-        labels=["claimed"],
         comments=[claim_comment(WT, None, "t")],
     )
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["close", "1132", "--fixed"], tools) == 0
     assert any(f"Released: `{WT}`" in a for c in calls.gh for a in c)
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert _released(calls, "1132")
 
 
 def test_close_keeps_the_issue_in_its_session_milestone():
     issue = make_issue(
         1132,
-        labels=["claimed"],
         comments=[claim_comment(WT, None, "t")],
     )
     issue["milestone"] = {"title": "Focus", "description": description_for(WT)}
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["close", "1132", "--fixed"], tools) == 0
-    assert ["issue", "edit", "1132", "--remove-label", "claimed"] in calls.gh
+    assert _released(calls, "1132")
     assert not any("--remove-milestone" in c for c in calls.gh)
 
 
@@ -472,53 +443,17 @@ def test_a_read_back_that_finds_no_claim_does_not_report_a_race(capsys):
     assert "lost the race" not in out
 
 
-def test_release_creates_the_claimed_label_before_it_removes_it():
-    """The accepting half: `--remove-label` fails on a label the repo lacks.
-
-    A claim can arrive with the label never created — hand-posted, or after an `--add-label`
-    that failed — and without this sync the release comment is posted and THEN the label
-    edit exits 1: released in the fold, labelled in GitHub.
-    """
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
-    tools, calls = build_tools(Fakes(issues=[issue], view=issue, labels=set()))
-    assert main(["release", "1132", "--worktree", WT], tools) == 0
-    created = [c for c in calls.gh if c[:2] == ["label", "create"]]
-    assert any(c[2] == "claimed" for c in created)
-    assert calls.gh.index(
-        next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(["issue", "edit", "1132", "--remove-label", "claimed"])
-
-
-def test_reap_creates_the_claimed_label_before_it_removes_it():
-    """The same for `reap`, which removes the label on every stale claim it clears."""
-    issue = make_issue(
-        1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")]
-    )
-    tools, calls = build_tools(
-        Fakes(issues=[issue], labels=set(), worktree_facts=STALE)
-    )
-    assert main(["reap"], tools) == 0
-    created = [c for c in calls.gh if c[:2] == ["label", "create"]]
-    assert any(c[2] == "claimed" for c in created)
-    assert calls.gh.index(
-        next(c for c in created if c[2] == "claimed")
-    ) < calls.gh.index(["issue", "edit", "1132", "--remove-label", "claimed"])
-
-
 def test_release_all_releases_only_the_claims_that_worktree_holds(capsys):
     mine = [
-        make_issue(n, labels=["claimed"], comments=[claim_comment(WT, None, "t")])
-        for n in (1132, 1133)
+        make_issue(n, comments=[claim_comment(WT, None, "t")]) for n in (1132, 1133)
     ]
-    other = make_issue(
-        1134, labels=["claimed"], comments=[claim_comment("worktree-other", None, "t")]
-    )
+    other = make_issue(1134, comments=[claim_comment("worktree-other", None, "t")])
     tools, calls = build_tools(Fakes(issues=[*mine, other]))
     assert main(["release", "--all", "--worktree", WT], tools) == 0
-    edits = [c[2] for c in calls.gh if c[:2] == ["issue", "edit"]]
-    assert edits == ["1132", "1133"]
+    assert [n for n in ("1132", "1133", "1134") if _released(calls, n)] == [
+        "1132",
+        "1133",
+    ]
 
 
 def test_release_all_with_nothing_held_says_so_and_writes_nothing(capsys):

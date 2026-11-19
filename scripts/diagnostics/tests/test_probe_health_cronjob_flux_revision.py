@@ -1,4 +1,4 @@
-"""`probe.py health` judges a Flux-owned CronJob role against the revision Flux applies (#5955).
+"""`probe.py health` judges a Flux-owned CronJob role against the revision Flux applies.
 
 A Flux-owned role has no release record, so its CronJob gate has no `applied_at`. The gate
 Job whose pod template's `homelab/role-digest8` equals Kustomization `<tag>`'s
@@ -162,7 +162,7 @@ def test_flux_revision_has_no_digest_without_the_annotation():
 
 
 def test_health_fails_when_the_newest_gate_job_predates_the_applied_revision():
-    """The Verify-by of #5955: the gate and a later firing both ran an earlier revision."""
+    """The gate and a later firing both ran an earlier revision."""
     jobs = [
         _gate("longhorn-reconcile", EARLIER, "2026-08-16T08:00:00Z", "aaaaaaaa"),
         _firing(
@@ -228,7 +228,7 @@ def test_health_fails_closed_when_the_kustomization_is_missing():
 
 
 def test_health_gates_configarr_on_its_own_gate_of_two_with_one_digest():
-    """The Verify-by of #5950: configarr's two CronJobs share the role digest."""
+    """Two CronJobs of `configarr` share the role digest."""
     content = "fd6466a0dc5fd1d74b774343052e3ce65443ea61ecbfa295533ace060b39b472"
     gates = [
         _gate("configarr", content[:8], "2026-08-16T11:31:00Z", "a0bce752"),

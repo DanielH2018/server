@@ -1,13 +1,12 @@
 """What a fix may change in a red test file, and what it may delete from a conftest.
 
-A patch registry is `red_registry`'s (#4875).
+A patch registry is `red_registry`'s.
 
-WHAT A FIX MAY CHANGE (#4214, #4517). `forbidden_change` says what the fix changed in a red
-test file that it may not. The green gate used to refuse any change to a red file. In #4213 the
-fix round appended the test a reviewer had asked for, changed no red node, and the batch ended
-unlanded. Hashing each red node instead would have let #4183's first fix through: it edited a
-pre-existing function the red node calls, which changes what the node checks without touching
-it.
+WHAT A FIX MAY CHANGE. `forbidden_change` says what the fix changed in a red
+test file that it may not. Refusing any change to a red file would end a batch unlanded when
+the fix round appends the test a reviewer asked for. Hashing each red node instead would let a
+fix through that edits a pre-existing function the red node calls, which changes what the node
+checks without touching it.
 
 THE RULE. A top-level statement is locked when the red commits wrote it, when a red node is
 collected from it, or when a fix could not append it under the rule below, such as an
@@ -22,13 +21,13 @@ when a red test reads it itself: when a statement the red commits wrote, a red n
 function, a locked statement that is not a function, or a locked constant names it.
 
 A fixture that a `conftest.py` fixture on the file's path requests counts as named too, as does
-whatever that one requests in turn, and whatever an autouse one requests (#4543). pytest
+whatever that one requests in turn, and whatever an autouse one requests. pytest
 resolves a conftest fixture's requests from the test's module, so the red file's own fixture of
 that name serves every red node that requests the conftest one.
 
 A builtin or plugin fixture's requests resolve the same way: a red node's `tmp_path` requests
-`tmp_path_factory`, so the file's own `tmp_path_factory` changes what `tmp_path` returns
-(#4548). The source cannot show them, so every name in a red node's fixture closure counts as
+`tmp_path_factory`, so the file's own `tmp_path_factory` changes what `tmp_path` returns.
+The source cannot show them, so every name in a red node's fixture closure counts as
 named too. The red gate reads each closure from `pytest --setup-plan` at the red commit, which
 lists a node's `item.fixturenames` and runs no fixture. That beats a table of pytest's builtin
 fixtures, which would miss every plugin's and go stale on each pytest upgrade. The conftest
@@ -46,50 +45,49 @@ refused, since each runs around every test in the module.
 
 DECIDED: a function or import that was in the file before the red commits, and that no red node
 reaches, is the fix's to change or delete. The same test in a file the red commits never touched
-was always the fix's, so the lock on it was an accident of where the red author appended. In
-#3675's judged records the append-only rule refused two edits the fix itself forced, which this
-rule lets through: the callers of a parameter the fix dropped (#4338), and a pre-existing test
-the red tests contradicted, whose restore left CI red (#4470). The reviewer and CI check such a
+is the fix's, so a lock on it would depend on where the red author appended. An append-only
+rule refuses edits the fix itself forces, which this rule lets through: the callers of a
+parameter the fix dropped, and a pre-existing test the red tests contradicted, whose restore
+leaves CI red. The reviewer and CI check such a
 test, as they check every test outside a red file.
 
-DECIDED: a constant may be built from another constant (#5229). There the fix appended
-`RENDERER_WITH_DOCS_AND_TESTS = RENDERER_ONLY + [...]`, which the lock refused as not data.
+DECIDED: a constant may be built from another constant (#5229). An appended
+`RENDERER_WITH_DOCS_AND_TESTS = RENDERER_ONLY + [...]` would otherwise be refused as not data.
 Reading a name runs no code, so `_literal` admits a plain name, but what the name holds can: an
 imported object's `__add__` is the fix's code, run at import. So a constant the fix adds or
 changes may read only a name a constant above it binds and nothing rebinds in between
 (`_reads_problems`). Admitting any name was rejected for that reason, and an attribute or a
 subscript can run code itself.
 
-DECIDED: a helper the issue names as its subject is the fix's to change (#5197). There the
-issue was about `_restarts_privately`, a helper in the red file that a red node calls.
+DECIDED: a helper the issue names as its subject is the fix's to change (#5197). For example, an
+issue about `_restarts_privately`, a helper in the red file that a red node calls.
 `forbidden_change` takes `subjects`, the names the issue spells in backticks
 (`red_tests.issue_subjects`), and frees one that binds a plain function: in the file before the
 red commits and unchanged by them, undecorated, not a red node and not a hook. What the freed
 helper names stays locked, so a second helper needs naming too. Freeing every function the
 issue's prose mentions was rejected, as it names tests and fixtures as often as the code under
-test. A red node is never freed, so #4183's weakened test is still refused.
+test. A red node is never freed, so a weakened test is still refused.
 DECIDED: a constant that only an older function's body names is the fix's to change (#4542). In
-#4372 the red test called the guard's `scheduled_reapers`, which reads the module's `REAPERS`,
-and the fix had to change `REAPERS`. No rule on the diff tells that from tampering with data an
-older helper checks, and the gate accepts the hole because it always accepted it one file over,
-in an imported helper module. An older function a red node calls stays locked, so #4183's true
-positive, a weakened pre-existing test the red node calls, is still refused. Only literal data
+a typical case the red test calls the guard's `scheduled_reapers`, which reads the module's
+`REAPERS`, and the fix has to change `REAPERS`. No rule on the diff tells that from tampering
+with data an older helper checks, and the gate accepts the hole because it accepts it one file
+over, in an imported helper module. An older function a red node calls stays locked, so a
+weakened pre-existing test the red node calls is still refused. Only literal data
 counts, because any other module-level statement runs code at import around every red test.
 
 DECIDED: a table the fix appends may hold lambdas when no red test reads its name (#5520).
-There the fix appended `_OTHER_READS = {...: ([...], lambda ln: ...)}`, read only by the test
-appended after it, and the lock refused it as not a constant. `_table` admits a value that
+A fix can append `_OTHER_READS = {...: ([...], lambda ln: ...)}`, read only by the test
+appended after it, which the lock would refuse as not a constant. `_table` admits a value that
 runs none of the fix's code at import: literals, containers, plain names and lambdas, whose
 default values must be inert too, since defining a lambda runs nothing else. Its names get
 `_constant_problem`'s rebinding rule. Admitting a call or an operator was rejected, because
 each can run the fix's code at import, which `_literal` already rules out for a constant.
 Only an addition qualifies: a table in the red version stays locked, as `_locked` leaves it.
 
-A CONFTEST.PY (#4542). `forbidden_conftest_change` lets a fix only delete from a `conftest.py`:
+A CONFTEST.PY. `forbidden_conftest_change` lets a fix only delete from a `conftest.py`:
 a fixture that is not autouse, that no red file names or requests through the conftests, and
 that is in no red node's fixture closure, a helper or constant nothing kept names, and an
-import only deleted statements used. In #4359 the red test demanded the deletion of a fixture
-nothing requested.
+import only deleted statements used.
 
 WHAT IT DOES NOT SEE. Code that runs at import time inside an allowed statement: a decorator
 argument, a default value, an annotation, or an import of a new module with side effects. A
@@ -295,7 +293,7 @@ def _table(stmt: ast.stmt) -> bool:
     """Whether `stmt` binds plain names to a value whose evaluation runs none of the fix's code.
 
     That is a constant that may also hold lambdas, since defining a lambda runs nothing but
-    its default values (#5520). A name read, an operator, a call, an attribute and a subscript
+    its default values. A name read, an operator, a call, an attribute and a subscript
     all stay out: each can run the fix's code at import. A dunder or a name in `PYTEST_NAMES`
     is never a table's, since pytest reads it.
     """
@@ -506,8 +504,8 @@ def _deletion_problem(stmt: ast.stmt, held: set[str], deleted: set[str]) -> str:
 def _hoistable(kept: list[ast.stmt]) -> frozenset[tuple]:
     """The imports a locked function makes in its body, which the fix may repeat at the top.
 
-    #4470's fix moved a red test's own `from lib.exit_codes import LAND_BAD_ARGS` to module
-    level for the pre-existing test it updated. Inside the red test the local import still
+    A fix can move a red test's own `from lib.exit_codes import LAND_BAD_ARGS` to module
+    level for a pre-existing test it updates. Inside the red test the local import still
     wins, so the copy changes nothing there. A name a locked statement binds at module level is
     left out, since the copy would rebind it.
     """

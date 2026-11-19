@@ -25,8 +25,8 @@ A PR is landed only when all of these hold:
 Then `land.sh` runs as an interactive session would run it, pinned to the head SHA these checks
 read, and only its `VERDICT:` line is written where the session can read it. land.sh also needs
 the operator's approval of that head when the PR changes a path on the T2 approval floor
-other than by a digest-only image bump, or when anyone but `renovate[bot]` pushed to its branch
-(dotfiles#967 slice 1). Stdlib only, like the rest of the agent.
+other than by a digest-only image bump, or when anyone but `renovate[bot]` pushed to its branch.
+Stdlib only, like the rest of the agent.
 
 Usage: land_renovate_pr.py <pr-number>
 
@@ -81,11 +81,11 @@ FILE_CAP = 100
 # land.sh waits on the PR's CI, the merge, master CI, the promotion and the health gate.
 # The unit's TimeoutStartSec sits above this plus its flock wait, so the script reports a
 # timeout before systemd kills it mid-deploy.
-# LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add (#5457).
+# LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add.
 LAND_TIMEOUT_S = 63660
 PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
 INVENTORY = "inventory/"
-# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
 REFUSED_EXIT = 3
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")

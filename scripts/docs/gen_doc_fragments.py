@@ -4,7 +4,7 @@
 WHY FRAGMENTS. The reference pages under docs/reference/ are generated whole, so a tunable
 they show is re-read from the tree on every docs-refresh run. The operations pages are
 prose, and prose quotes the same tunables: a retain count, the broad-prefix classes, the
-subset. Nothing regenerated those, and on 2026-09-02 five such figures were stale.
+subset. Nothing regenerates those, so such figures go stale.
 Moving a whole runbook into a generator would put its prose in Python; leaving it alone
 leaves the tables to rot. A fragment is the seam between the two: the generator emits ONLY
 the table, and the page pulls it in with a `pymdownx.snippets` include::
@@ -42,7 +42,7 @@ fragment this script emits; scripts/docs/tests/test_gen_doc_fragments.py checks 
 directions, so a fragment cannot go dead and a page cannot include a name nobody writes.
 
 The `regen-doc-fragments` prek hook runs `--fix` on every commit that touches a source this
-generator reads (#3827). It rewrites a stale fragment and exits 1 like a formatter, so the
+generator reads. It rewrites a stale fragment and exits 1 like a formatter, so the
 author stages it and commits again. A plain run always exits 0: the docs-refresh cron calls
 it through build_docs.py and commits whatever it wrote.
 

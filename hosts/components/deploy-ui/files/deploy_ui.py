@@ -52,7 +52,7 @@ from deploy_ui_lib.deploy_ui_reads import Unavailable
 from host_lib import logfmt
 
 # The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
-# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
+# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars.
 PAGE = Path(__file__).with_name("deploy_ui.html")
 
 
@@ -429,7 +429,7 @@ def content_length(headers) -> int | None:
 def request_line(
     method: str, path: str, status: int, user: str, event: str = "request"
 ) -> str:
-    """One logfmt line for one request, as journald keeps it for the usage count (#2864).
+    """One logfmt line for one request, as journald keeps it for the usage count.
 
     Every request gets one, the 10-second panel polls included, so the line carries the
     path: `path=/` is a page load and a POST is a write, and those two are what show a

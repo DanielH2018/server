@@ -1,4 +1,4 @@
-"""The D5 takeover check: a root wrapper that may only dry-run, behind one sudoers line (#5494).
+"""The D5 takeover check: a root wrapper that may only dry-run, behind one sudoers line.
 
 The wrapper runs here as an ordinary user against fake kubectl, flux and uv binaries, which
 record what they were called with. Nothing reaches a cluster. The root-only branch is exercised

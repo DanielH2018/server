@@ -107,7 +107,7 @@ FLUX_NAMESPACE = "flux-system"
 # names it until a Kustomization in the same bundle generates it.
 CLUSTER_VARS_SECRET = "homelab-cluster-vars"
 FLUX_API_VERSION = "kustomize.toolkit.fluxcd.io/v1"
-# Kustomization `<tag>`'s `own` digest, C6's `content_digest` and C7's flux reference (#5338).
+# Kustomization `<tag>`'s `own` digest, C6's `content_digest` and C7's flux reference.
 CONTENT_DIGEST = "homelab/content-digest"
 
 # The shared kind that delivers `CLUSTER_VARS_SECRET` (D3.3a), and the name its directory
@@ -174,8 +174,8 @@ def reserved_tags(
 
     A reserved name is the root's, a shared kind's, one in `RESERVED_NAMES`, or any name
     ending in a per-tag kind's suffix, so no tag's Kustomization can collide with another
-    tag's `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify` one (D4.2, D5.1a1,
-    #5719).
+    tag's `-deferred`, `-snapshot`, `-prepull`, `-precheck` or `-verify` one
+    (D4.2, D5.1a1).
     """
     names = {ROOT} | set(kinds) | RESERVED_NAMES
     return sorted(t for t in set(tags) if t in names or t.endswith(TAG_KIND_SUFFIXES))
@@ -376,7 +376,7 @@ def flux_files(
                 # DECIDED: `flux_prune` reaches `<tag>` alone, and `<tag>-deferred` keeps
                 # `prune: true`, while `timeout` reaches both. H1's text is "prune: false on
                 # that Kustomization, and prune: true everywhere else", and the operator ruled
-                # it so on 2026-10-22 for D5 step 29: `flux-deferred`'s prune is what deletes
+                # it so for D5 step 29: `flux-deferred`'s prune is what deletes
                 # `verify-drill` once the drill is off. The consequence: a plumbing role that
                 # adds deferred files later gets prunable deferred objects, so a deferred
                 # object that must never be pruned belongs in the role's own directory.
@@ -419,7 +419,7 @@ def own_digests(cluster: Mapping[str, str], tags: Iterable[str]) -> dict[str, st
     """Each tag's `own` digest over the `cluster/` files in `cluster`, as `digests` computes it.
 
     DECIDED: `CONTENT_DIGEST` carries `own`, not `footprint`, which covers the annotation's
-    own file. A missed `<tag>-deferred` change leaves C7's reference earlier (#5338).
+    own file. A missed `<tag>-deferred` change leaves C7's reference earlier.
     """
     held = {path: _name_of(path) for path in cluster}
     return {

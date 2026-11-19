@@ -418,10 +418,10 @@ def check_pins(
     """Check each pin, print a line per failure, and return the count that failed.
 
     A failing pin prints a `FAIL` status line on `out` and the `[FAIL] <source>: <name>:
-    <reason>` line every validator shares on stderr (#4480).
+    <reason>` line every validator shares on stderr.
 
     A pin that matches prints an `ok` line only when `verbose` is set, matching the template
-    validators' `-v` (#4448).
+    validators' `-v`.
     """
     failures = 0
     for pin in pins:

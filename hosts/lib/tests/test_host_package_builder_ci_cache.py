@@ -1,4 +1,4 @@
-"""The builder's CI cache never outlives a re-run that turns a red commit green (#5786).
+"""The builder's CI cache never outlives a re-run that turns a red commit green.
 
 GitHub's check-runs API returns the latest run per name, so `gh run rerun --failed` replaces a
 failure with a success for the same SHA. checkout-sync's gate asks afresh every run and sees

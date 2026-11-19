@@ -1,4 +1,4 @@
-"""The deploy-pipeline exporter reports the weekly reboot's no-promotion window (#5458).
+"""The deploy-pipeline exporter reports the weekly reboot's no-promotion window.
 
 `promote.py decide` defers every promotion inside the window `promote_lib/reboot_window.py`
 derives from the `weekly_reboot_*` variables, so a green commit merged early on Sunday waits

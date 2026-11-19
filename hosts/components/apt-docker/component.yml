@@ -1,5 +1,5 @@
-# Docker's apt source and key (H7.24a, docs/target-architecture/host/h7-delete-ansible.md, old
-# step H7.1). Only daniel-pi installs Docker, so only its package lists this component. The files
+# Docker's apt source and key. Only daniel-pi installs Docker, so only its package lists this
+# component. The files
 # land at the paths docker_install wrote, so dpkg takes them over; none is a conffile, so an
 # existing copy is overwritten without a prompt.
 #

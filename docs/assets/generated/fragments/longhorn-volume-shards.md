@@ -11,6 +11,7 @@
 | `jellyfin-config` | Weekly | B2 | Monday |
 | `tdarr-server` | Weekly | B2 | Monday |
 | `valheim-stats-data` | Weekly | B2 | Monday |
+| `vaultwarden-data` | Weekly | B2 | Monday |
 | `radarr-config` | Weekly | B2 | Tuesday |
 | `tdarr-configs` | Weekly | B2 | Tuesday |
 | `valheim-config` | Weekly | B2 | Tuesday |

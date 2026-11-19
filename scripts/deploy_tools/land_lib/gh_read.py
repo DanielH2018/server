@@ -1,14 +1,12 @@
-"""A read-only `gh` call retried through a transient failure before the landing refuses (#5503).
+"""A read-only `gh` call retried through a transient failure before the landing refuses.
 
-From 2026-10-15 to 2026-10-17, one GitHub GraphQL i/o timeout each refused four landings, and
-every one was re-run by hand. The verdict was `refused`, which reads as a policy refusal rather
-than a network blip. `read` therefore retries a timeout or a 5xx after each wait in
+One GitHub GraphQL i/o timeout would otherwise refuse a landing, and the verdict `refused`
+reads as a policy refusal rather than a network blip. `read` therefore retries a timeout or a 5xx after each wait in
 `BACKOFF_S`, three attempts in all. A 4xx, or any answer gh parsed, is GitHub saying no, so it
 fails at once.
 
 A rate-limit 403 is the exception to that: it says nothing about the request, so `read` waits
-until the quota resets (`lib.gh_rate_limit`) and asks again, up to `RATE_LIMIT_WAITS` times
-(#7993).
+until the quota resets (`lib.gh_rate_limit`) and asks again, up to `RATE_LIMIT_WAITS` times.
 """
 
 import re

@@ -145,10 +145,10 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(fake_k8s_endpoint):
 
 # --- Two Loki stores ------------------------------------------------------------------
 #
-# `{service_name="claude-code"}` lives only in observability's Loki; `loki-homelab` returned a
-# well-formed empty result for it that read as "the OTEL stream is gone". The default store
-# stays `homelab` so every existing call is unchanged; `--loki observability` reaches the other
-# by its pinned ClusterIP, and the one selector with a known home is refused at the wrong one.
+# `{service_name="claude-code"}` lives only in observability's Loki; `loki-homelab` returns a
+# well-formed empty result for it that reads as "the OTEL stream is gone". The default store is
+# `homelab`; `--loki observability` reaches the other by its pinned ClusterIP, and the one
+# selector with a known home is refused at the wrong one.
 
 
 def _fake_cluster_ip():
@@ -225,7 +225,7 @@ def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(fake_k8s_en
 )
 def test_pick_loki_store_is_flagged(logql):
     assert core.pick_loki_store(logql, None)[0] == "observability"
-    # A contradiction in the arguments: a retry can never clear it, so it exits 64 (#4471).
+    # A contradiction in the arguments: a retry can never clear it, so it exits 64.
     with pytest.raises(core.UsageError) as exc:
         core.pick_loki_store(logql, "homelab")
     assert exc.value.code == USAGE_ERROR
@@ -253,10 +253,10 @@ def test_observability_loki_ip_reads_the_role_default():
     assert ip.startswith("10.43."), ip
 
 
-# #4332: `plan()` reaches every service through `k8s_endpoint` or `observability_loki_ip`, so
-# the Docker `resolve_ip` lookup it used to take is a parameter no branch calls. The calls below
+# `plan()` reaches every service through `k8s_endpoint` or `observability_loki_ip`, so
+# the Docker `resolve_ip` lookup it takes is a parameter no branch calls. The calls below
 # omit it on purpose, so they go through an untyped alias the type checker does not hold to the
-# old signature.
+# signature.
 _plan = cast(Callable[..., Any], curl_pipeline.plan)
 
 
@@ -336,7 +336,7 @@ def test_no_plan_caller_passes_a_resolve_lookup():
                 if isinstance(arg, ast.Name) and "resolve" in arg.id:
                     offenders.append(f"{rel}:{node.lineno} passes {arg.id}")
         for node in ast.walk(tree):
-            # A stand-in for plan() that still accepts the resolver keeps the old contract.
+            # A stand-in for plan() that still accepts the resolver keeps the resolver contract.
             if isinstance(node, ast.FunctionDef) and node.name.endswith("plan"):
                 offenders += [
                     f"{rel}:{node.lineno} {node.name} accepts {a.arg}"
@@ -359,7 +359,7 @@ def test_curl_pipeline_module_names_no_resolve_ip():
 
 
 # `loki-query --json` streams the raw Loki body, which carries Prowlarr's `apikey=` from every
-# *arr Torznab line shipped before the Alloy stage (#6276). The key is 32 hex chars of no entropy.
+# *arr Torznab line shipped before the Alloy stage. The key is 32 hex chars of no entropy.
 _TORZNAB_JSON = (
     '{"values": [["1", "Torznab failed: http://prowlarr:9696/21/api?apikey='
     + "f" * 32

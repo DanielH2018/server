@@ -1,4 +1,4 @@
-"""Whether the builder has published a host's package at the merge commit or after it (#7024).
+"""Whether the builder has published a host's package at the merge commit or after it.
 
 `host_wait.wait_for_hosts` asks before it ends a landing `deferred` on a host's updater. An
 updater fire installs only what the builder has published, so a deferral on a host whose

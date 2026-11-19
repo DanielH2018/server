@@ -1,9 +1,7 @@
-# The k3s agent's same-path files (H6.5a, docs/target-architecture/host/h6-k3s-suc.md, *Steps, as
-# PRs*, item 13). Ansible's tasks/agent.yml wrote each one until H6.5a deleted its task, so dpkg
-# takes over the path on the first install. Since H6.5b the component also carries the agent's
-# flags: `k3s_agent_config` below, rendered into config.yaml.d, and the `ExecStart` lines of
-# 50-homelab.conf. Reverting H6.5b alone is safe: dpkg removes the config drop-in and the
-# `ExecStart` lines, and the installer's unit still carries every flag.
+# The k3s agent's same-path files, which dpkg owns from the first install. The component also
+# carries the agent's flags: `k3s_agent_config` below, rendered into config.yaml.d, and the
+# `ExecStart` lines of 50-homelab.conf. Reverting the flags alone is safe: dpkg removes the config
+# drop-in and the `ExecStart` lines, and the installer's unit still carries every flag.
 #
 # The package ships the files and applies nothing. Each file k3s reads at startup carries
 # `activate: manual:k3s-agent.service`, and the host package marks k3s-agent.service `windowed`,
@@ -14,15 +12,15 @@
 #
 # FORWARD-ONLY for registries.yaml. Reverting the PR that added a file deletes it, and an agent
 # that starts without registries.yaml pulls every in-cluster image over HTTPS and fails. Return a
-# file to Ansible with the attended procedure in the H6 plan's *Rollback*.
+# file to Ansible with the attended procedure in the k3s SUC plan's *Rollback*.
 #
-# The rest of the agent's host half (H7.34): the Longhorn packages, the multipath drop-in, the
+# The rest of the agent's host half: the Longhorn packages, the multipath drop-in, the
 # inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. The
 # k3s defaults and the pin's template are k3s-server's, loaded through `component: k3s-server`, so
 # the two nodes cannot fork them.
 #
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
-# `netplan generate` fails on a dangling link in that directory (measured 2026-11-07), so a
+# `netplan generate` fails on a dangling link in that directory, so a
 # missing SOPS key would take every link down at the next boot. `homelab-netplan-wifi` installs
 # the rendered file only after it passes the generator, and leaves the old file otherwise. The
 # copy has no owner in dpkg, so emptying `k3s_node_wifi_link` is the way back: the next package
@@ -33,11 +31,11 @@
 # link an SSH session rides on, so a change goes live at the next boot.
 #
 # FORWARD-ONLY for the address pin. Reverting the PR that added it deletes the file, and an agent
-# that boots while the gateway's DHCP is down cannot bind server_ip (#3882). A revert therefore owes
+# that boots while the gateway's DHCP is down cannot bind server_ip. A revert therefore owes
 # `k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address` on daniel-server before
 # the next reboot (operator-only); the revert restores that play's tasks.
 #
-# The read-only kubeconfig (#8261) is k3s-server's script, unit, token output and shell profile,
+# The read-only kubeconfig is k3s-server's script, unit, token output and shell profile,
 # borrowed whole. Sessions and landings run on this node too, and without it every cluster read
 # here fails. The token cannot read Secrets, and this node already holds the join token.
 #
@@ -57,7 +55,7 @@ defaults:
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
   # one literal on every node; tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
   k3s_log_file: /var/log/k3s.log
-  # The k3s agent's flags (H6.5b). templates/50-homelab.yaml.j2 renders this mapping as
+  # The k3s agent's flags. templates/50-homelab.yaml.j2 renders this mapping as
   # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare `k3s agent`.
   # Each key is a flag name without `--`; a repeatable flag is a list. A change goes live at the
   # agent's next start, because daniel-server's package lists no `k3s-restart`.
@@ -71,39 +69,33 @@ defaults:
     node-label:
       - node.longhorn.io/create-default-disk=false
     # The image-gc pair starts image GC below Longhorn's 75% replica scheduling floor, which the
-    # root filesystem shares: at the kubelet's 85 every superseded image stayed (#8307). The
+    # root filesystem shares: at the kubelet's 85 every superseded image stays. The
     # kubelet refuses a low threshold not below the high one, so the pair moves together.
-    # system-reserved lowers node allocatable by memory pods use without requesting it (#8644),
-    # and also caps kubepods.slice at capacity minus the reserve; the k3s-server component's
-    # flag comment says how. Pod anon was 3.7 GB against the 29.0 GB cap. Sum at 2026-11-14:
-    # Longhorn instance-manager's 7-day p95 working set 1272 MiB, system.slice anon 0.65 GiB,
-    # user.slice anon 1.8 GiB.
+    # system-reserved lowers node allocatable by memory pods use without requesting it, and also
+    # caps kubepods.slice at capacity minus the reserve; the k3s-server component's flag comment
+    # says how. The 4Gi sums Longhorn instance-manager's 7-day p95 working set (1272 MiB),
+    # system.slice anon (0.65 GiB) and user.slice anon (1.8 GiB).
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
       - image-gc-high-threshold=65
       - image-gc-low-threshold=55
       # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
       - system-reserved=memory=4Gi
-  # Kubelet's graceful node shutdown (#8296), rendered into kubelet.conf.d. Without it every
-  # shutdown of this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems:
-  # open-iscsi's stop runs logout-all.sh while the pods still hold the mounts, and each of the
-  # three boots before 2026-11-11 logged its `Aborting journal` lines in its last minute. kubelet
+  # Kubelet's graceful node shutdown, rendered into kubelet.conf.d. Without it every shutdown of
+  # this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems: open-iscsi's stop
+  # runs logout-all.sh while the pods still hold the mounts, and the journals abort. kubelet
   # instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
   # then Longhorn, then the system-critical pods.
   #
   # kubelet takes that lock only when logind's delay covers the groups' sum, which the logind
-  # drop-in under `files:` sets. Before it shipped, the shutdown manager failed at every agent
-  # start, and the 2026-11-15 weekly reboot aborted every journal again. To see that it holds,
-  # run `systemd-inhibit --list`, which names a kubelet `shutdown` lock in `delay` mode.
+  # drop-in under `files:` sets. Without the drop-in the shutdown manager fails at every agent
+  # start. To see that it holds, run `systemd-inhibit --list`, which names a kubelet `shutdown`
+  # lock in `delay` mode.
   #
-  # The boot side needs no iSCSI setting. iscsid.conf already sets `node.startup = manual`, and on
-  # 2026-11-11 open-iscsi's `--loginall=automatic` ran at 13:49:18 without starting iscsid. The
-  # logins at 13:49:33 followed instance-manager's tgtd (13:49:27) and a fresh sendtargets
-  # discovery, which is Longhorn's attach path, not a stale restore. The read-only remounts at
-  # 13:50-13:54 followed an ungraceful shutdown at 13:45:59. If a boot after a graceful shutdown
-  # still logs them, the cause is in Longhorn's engine or replica state, not here. The 2026-11-15
-  # boot logged no remount, and its sessions went to a new instance-manager address after the
-  # agent started.
+  # The boot side needs no iSCSI setting: iscsid.conf already sets `node.startup = manual`, and
+  # the logins after boot follow instance-manager's tgtd and a fresh sendtargets discovery, which
+  # is Longhorn's attach path. If a boot after a graceful shutdown still logs read-only remounts,
+  # the cause is in Longhorn's engine or replica state, not here.
   #
   # Each group opens at its priority and runs to the next one. 1000000000 is the value of
   # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
@@ -121,13 +113,15 @@ defaults:
     - {priority: 2000000000, seconds: 15}
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
+  # No activation: the postinst's daemon-reload applies the weight to the running unit.
+  - {src: "component:templates/cpu-weight.conf.j2", dst: /usr/lib/systemd/system/k3s-agent.service.d/60-homelab-cpu-weight.conf}
   # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
   # kubelet reads its config only at start, so the first shutdown it governs is the one after the
   # agent's next start.
   - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s-agent.service"}
-  # Without this file kubelet's shutdown manager never starts (#8296): logind keeps the 30 s that
+  # Without this file kubelet's shutdown manager never starts: logind keeps the 30 s that
   # unattended-upgrades sets, and kubelet logs `Failed to start node shutdown manager` once at
   # start. The reload makes the delay live at install; the manager starts at the agent's next start.
   # DECIDED: a name that sorts last, not a same-name /etc file that masks unattended-upgrades' own.

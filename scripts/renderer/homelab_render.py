@@ -33,12 +33,12 @@ One with snapshot claims gets its snapshot Job in `DIR/cluster/<tag>-snapshot/` 
 One whose role sets `flux_prepull_timeout` gets its pre-pull Jobs in `DIR/cluster/<tag>-prepull/`
 (`prepull.py`); one setting `flux_cronjob_gates`, its gate Jobs in `<tag>-verify/` (`cronjob_gate.py`).
 One whose role ships `templates/precheck/` gets those check Jobs in `<tag>-precheck/`, which the
-tag waits on (#5719).
+tag waits on.
 A placeholder render also writes the context of each image its tags' roles build with
 `k8s/image-builder`: `DIR/images/<name>/` and `DIR/images/tags.json`, whose content tags each
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
 writes all ten. `--all-images` writes all ten whatever `--role` names, or beside `--shared-only`,
-which the publish job passes because its `images` job builds every context (#5374, #5593).
+which the publish job passes because its `images` job builds every context.
 In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `secrets/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
@@ -463,7 +463,7 @@ def _shared_cluster(
 
     The publish job calls it when no tag is flux-owned, because `cluster` without `--role`
     renders every tag. Under `--all-images` it also writes every image context and
-    `tags.json`, which the `images` job refuses to run without (#5593).
+    `tags.json`, which the `images` job refuses to run without.
     """
     try:
         built = render([], secret_keys()).images

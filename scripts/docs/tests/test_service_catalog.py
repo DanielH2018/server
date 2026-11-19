@@ -231,7 +231,7 @@ def test_markdown_ends_with_exactly_one_newline():
 
 
 def test_stability_check_survives_a_minute_boundary(monkeypatch, request):
-    """#4178: the stability test must not depend on both renders landing in one minute.
+    """The stability test must not depend on both renders landing in one minute.
 
     generated_banner stamps the clock to the minute, so two renders that straddle a
     minute boundary differ in the banner alone. A clock that advances a minute per

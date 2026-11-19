@@ -3,8 +3,8 @@
   module under its flat key. The Deployment's projected `monitor-bridge-script` volume mounts
   every one back at its path under /app.
 
-  Rendered here rather than staged on the node and applied by a task (D5's imperative-ConfigMap
-  row, #5536), so the ConfigMaps are part of this role's manifests. Under Ansible a module edit
+  Rendered here rather than staged on the node and applied by a task, so the ConfigMaps are
+  part of this role's manifests. Under Ansible a module edit
   changes the render and the shared role's rollout restart rolls the pod. Under Flux the
   renderer's `checksum/restart` hashes every ConfigMap the pod's projected volume names.
   scripts/renderer/tests/test_renderer_monitor_bridge_script.py holds both halves.

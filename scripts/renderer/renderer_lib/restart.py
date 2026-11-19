@@ -22,7 +22,7 @@ A target's value is one SHA-256 over:
 - for a Secret shipped as a SOPS manifest, the `.source` digest of its key, never its
   ciphertext;
 - for a Secret another role renders, the `.source` digest of each key the tag's
-  `manifests_outside_secrets` entry for it lists (`outside_secrets`, #5416). pihole-exporter
+  `manifests_outside_secrets` entry for it lists (`outside_secrets`). pihole-exporter
   reads `pihole_password` from the pihole role's `pihole-env` this way.
 
 A ConfigMap whose name matches `RELOADED_IN_PLACE` is never an input: its reader re-reads
@@ -81,7 +81,7 @@ TRIGGER_KINDS = {"config": "ConfigMap", "secret": "Secret"}
 # provisioner re-reads each `grafana-dashboards-<folder>` every `updateIntervalSeconds` (30).
 # Prometheus reloads `prometheus-rules` under `--config.auto-reload` (the `DECIDED: rules reload
 # in place` marker in observability's prometheus.yaml.j2). Under Ansible neither edit rolled its
-# pod (#5679). `pod_references` still reports them, for the outside-role reference test.
+# pod. `pod_references` still reports them, for the outside-role reference test.
 RELOADED_IN_PLACE = ("grafana-dashboards-*", "prometheus-rules")
 
 Ref = tuple[str, str]

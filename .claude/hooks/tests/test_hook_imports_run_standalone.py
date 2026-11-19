@@ -3,8 +3,8 @@
 An in-process test proves nothing about these imports: pytest's `pythonpath` puts `scripts/`
 and `.claude/hooks` on `sys.path`, so any import resolves however stale the hook's own insert
 is. A hook catches its own ImportError and fails open, so a broken insert does not show at
-runtime either. session-health's insert went stale after the #443 regroup and emptied the
-other-sessions banner for 7 days (#718). This file extends that subprocess check to every hook.
+runtime either. A stale insert in session-health empties the other-sessions banner. This file
+extends that subprocess check to every hook.
 
 The hook set is derived: every `.py` under `.claude/hooks/` that imports anything outside the
 stdlib, with the `run-hook.sh` mode of each `settings.json` entry that reaches it.
@@ -210,7 +210,7 @@ def test_a_hook_imports_its_first_party_modules_from_its_own_checkout(
 
 
 def _stale_session_health(scratch: Path) -> str:
-    """A copy of session-health whose `scripts/` inserts point one directory off, as in #718."""
+    """A copy of session-health whose `scripts/` inserts point one directory off."""
     text = (scratch / ".claude/hooks/session-health.py").read_text()
     stale = 'os.path.join(REPO, "scripts")'
     assert text.count(stale) >= 2, "session-health no longer inserts scripts/ this way"

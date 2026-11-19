@@ -1,4 +1,4 @@
-"""The held Docker engine's container case, without a container (#6590).
+"""The held Docker engine's container case, without a container.
 
 H7's *Verification* names a proof that runs in the CI container: a dummy `docker-ce` at version
 A is installed and held, the real `homelab-daniel-pi` carries pins for version B, and after a

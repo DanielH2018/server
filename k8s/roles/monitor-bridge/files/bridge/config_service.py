@@ -80,12 +80,11 @@ def service_config(
         # per-workflow flood).
         N8N_SYSTEMIC_STREAK=_int("N8N_SYSTEMIC_STREAK"),
         N8N_SYSTEMIC_MAX=_int("N8N_SYSTEMIC_MAX"),
-        # Sonarr/Radarr queue warnings: the 2026-07-01 incident — an indexer served a poisoned
-        # fake-episode .exe, sonarr itself blocked the import and flagged the queue item
-        # trackedDownloadStatus "warning" (message: "Caution: Found executable file with
-        # extension: '.exe'") — but nothing paged, so the release sat seeding for a full day
-        # before a manual review caught it. Polled directly (X-Api-Key header), same "internal
-        # REST API, empty key disables" idiom as N8N_API_KEY.
+        # Sonarr/Radarr queue warnings: when an indexer serves a poisoned fake-episode .exe,
+        # sonarr blocks the import and flags the queue item trackedDownloadStatus "warning"
+        # (message: "Caution: Found executable file with extension: '.exe'"), and nothing else
+        # pages, so the release sits seeding until a manual review. Polled directly (X-Api-Key
+        # header), same "internal REST API, empty key disables" idiom as N8N_API_KEY.
         SONARR_URL=_env("SONARR_URL").rstrip("/"),
         SONARR_API_KEY=_env("SONARR_API_KEY"),
         RADARR_URL=_env("RADARR_URL").rstrip("/"),
@@ -93,34 +92,31 @@ def service_config(
         # Consecutive cycles an *arr API must stay UNREACHABLE before check_arr_queue pages —
         # the fetch alone; a queue item needing review still pages on the cycle it is seen.
         # A rolling radarr refuses connections for as long as its pod takes to come back, and
-        # three of this monitor's DOWN episodes in the 30 days to 2026-09-11 were exactly that,
-        # each co-timed with a k3s Workload Health `radarr(1)` episode. 3 cycles = 15 min at
+        # that is a rollout, not a queue fault. 3 cycles = 15 min at
         # INTERVAL=300, which outlasts a rollout and still names a genuinely dead *arr inside
-        # the hour. This REPLACED arr_queue's STARTUP_GRACE membership rather than stacking on
-        # it: that grace covered the same transient at 2 cycles and covered the queue verdict
-        # too, which this deliberately does not.
+        # the hour. This stands in for arr_queue's STARTUP_GRACE membership: that grace covered
+        # the same transient at 2 cycles and covered the queue verdict too, which this
+        # deliberately does not.
         ARR_FETCH_CONSECUTIVE=_int("ARR_FETCH_CONSECUTIVE"),
         # Hours a queue item on Sonarr's own self-clearing title hold is held before it pages
-        # (#2786). 48 is upstream's OWN window, not a taste: EpisodeTitleSpecification stops
+        # 48 is upstream's OWN window, not a taste: EpisodeTitleSpecification stops
         # applying the rule once the episode's `airDateUtc` is more than 48h old, so an item
         # still carrying "Episode has a TBA title and recently aired" past that is stuck rather
-        # than waiting. Measured 2026-09-27: three of arr_queue's seven DOWN episodes over the
-        # preceding 14 days were this hold (2.9h, 7.4h, 2.9h) and named no action an operator
-        # could take; the other four were Custom Format rejections and still page on sight. The
+        # than waiting. The hold names no action an operator could take; Custom Format
+        # rejections still page on sight. The
         # grace is narrow by construction — see verdicts/service.py's queue_warnings for the
         # four conditions that turn it off.
         ARR_TITLE_HOLD_GRACE_H=_num("ARR_TITLE_HOLD_GRACE_H"),
         # Bazarr's link to Sonarr and Radarr. Bazarr holds its OWN copies of their API keys, in
         # its config on the bazarr-config PVC and entered through its UI — so no Ansible
-        # template carries them and no deploy updates them. On 2026-08-29 a rotation swept the
-        # eight templated consumers, missed Bazarr, and its SignalR client dropped into a
-        # reconnect loop that leaked 173 MiB to its 1Gi cap in 90 minutes and OOM-killed it. The
-        # ONLY signal was the "k3s Container OOM" tile, which clears one hour after the kill and
-        # takes the evidence with it, leaving Bazarr fetching no subtitles, silently.
+        # template carries them and no deploy updates them. A rotation that sweeps the
+        # templated consumers misses Bazarr, whose SignalR client then drops into a reconnect
+        # loop that leaks memory to its 1Gi cap and OOM-kills it. The ONLY signal is the "k3s
+        # Container OOM" tile, which clears one hour after the kill and takes the evidence with
+        # it, leaving Bazarr fetching no subtitles, silently.
         #
         # NOTE the header spelling: `X-API-KEY`, not the `X-Api-Key` Sonarr and Radarr take.
-        # Verified against the live app 2026-08-29 — a request with no key returns 401, so the
-        # key is doing work.
+        # A request with no key returns 401, so the key is doing work.
         BAZARR_URL=_env("BAZARR_URL").rstrip("/"),
         BAZARR_API_KEY=_env("BAZARR_API_KEY"),
         # Prowlarr sustained-indexer watchdog: Prowlarr's in-app health notification is binary —
@@ -147,7 +143,7 @@ def service_config(
         # over 7 days means a scheduled run did not happen or did not pass. 8 gives one day of
         # slack for the run itself and for a check that evaluates just before the window, and no
         # more: a wider grace and the monitor clears the very miss it exists to catch, which is
-        # how a 24h grace against a 23h gap read green on 2026-08-25. Move this ONLY together
+        # how a 24h grace against a 23h gap reads green. Move this ONLY together
         # with the cron; the two are pinned to each other by
         # test_etcd_drill_grace_is_derived_from_the_cron.
         ETCD_DRILL_MAX_AGE_S=_num("ETCD_DRILL_MAX_AGE_DAYS", "8") * 86400,
@@ -180,10 +176,10 @@ def service_config(
         HA_CONSECUTIVE=_int("HA_CONSECUTIVE"),
         # ip_ban arm of the HA monitor. HA's ban middleware runs on every request and keys on
         # the peer address, so a burst of unauthenticated /api/ calls can ban an INFRASTRUCTURE
-        # ip rather than an attacker — on 2026-08-23 five bad calls from the node's pod-network
-        # gateway (10.42.0.1) banned it, and the probes then arriving from that IP got 403 and
-        # crash-looped the pod. The probes no longer arrive from a bannable address (they exec
-        # curl to 127.0.0.1), which fixes the crash loop but makes a ban SILENT: HA keeps
+        # ip rather than an attacker — five bad calls from the node's pod-network
+        # gateway (10.42.0.1) ban it, and kubelet httpGet probes then arriving from that IP get
+        # 403 and crash-loop the pod. The probes exec
+        # curl to 127.0.0.1 instead, which avoids the crash loop but makes a ban SILENT: HA keeps
         # serving, while whatever shares that source IP stays locked out. This arm is the
         # visibility half.
         #
@@ -204,10 +200,9 @@ def service_config(
         HA_BAN_WINDOW=_env("HA_BAN_WINDOW", "1h"),
         # `container=`, NOT `app=`. Promtail's k8s stream carries
         # container/pod/job/machine/namespace/service_name/stream — there is no `app` label, so
-        # `app="home-assistant"` matched no stream and the arm reported "no ip_ban events"
-        # forever: a monitor green because it is blind. It shipped that way and was caught the
-        # same day (2026-08-23) by running the selector against live Loki over a window
-        # containing a KNOWN ban. Same lesson as the kube-state-metrics label trap in this role's
+        # `app="home-assistant"` matches no stream and the arm reports "no ip_ban events"
+        # forever: a monitor green because it is blind. Verify the selector against live Loki
+        # over a window containing a KNOWN ban. Same lesson as the kube-state-metrics label trap in this role's
         # CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong
         # question".
         HA_BAN_SELECTOR='{namespace="homelab",container="home-assistant"} |~ "Banned IP"',

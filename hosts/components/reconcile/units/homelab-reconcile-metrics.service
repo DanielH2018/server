@@ -1,7 +1,7 @@
 # Shipped by every host package. At boot it rewrites homelab_host_reconcile.prom from reconcile's
 # record, so homelab_host_reboot_pending reads 0 once the boot has cleared
-# /run/homelab/reboot-pending (#6188). The updater runs reconcile only when a package changes, so
-# without this unit the file kept the 1 until the next package. It starts and restarts nothing.
+# /run/homelab/reboot-pending. The updater runs reconcile only when a package changes, so
+# without this unit the file keeps the 1 until the next package. It starts and restarts nothing.
 [Unit]
 Description=Rewrite reconcile's textfile metrics for this boot
 

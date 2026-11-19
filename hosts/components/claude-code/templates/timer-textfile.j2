@@ -1,4 +1,4 @@
-{#- The textfile line each claude_code timer's service writes after a clean run (#6165).
+{#- The textfile line each claude_code timer's service writes after a clean run.
 
 A timer that stops firing pages nothing through OnFailure=, and node_exporter's systemd
 collector is off, so the file this line writes is the only signal that the timer still runs.
@@ -9,8 +9,8 @@ crash writes nothing and is paged by OnFailure=. The `+` runs the line as root p
 User= and sandboxing, because only root writes the textfile directory. `%%s` keeps systemd from
 expanding `%s` to the user's shell.
 
-The deadline is two timer periods plus `slack_s` plus 300s (M3's rule,
-docs/target-architecture/monitoring/m3-textfile-timer.md). One period is the normal gap, the
+The deadline is two timer periods plus `slack_s` plus 300s
+(docs/target-architecture/monitoring/m3-textfile-timer.md). One period is the normal gap, the
 second covers one failed or skipped run, `slack_s` is the longest legitimate run, and the 300s
 covers the 1m `node` scrape and the 1m rule evaluation. `period` is an `<N>min` timespan. Any
 other shape fails the render rather than publish a guessed deadline.

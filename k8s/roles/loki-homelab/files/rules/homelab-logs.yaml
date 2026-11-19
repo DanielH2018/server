@@ -13,15 +13,14 @@
 # file is never rendered. No annotation templates a log line's text, so no line content
 # reaches Discord or email.
 #
-# Each alert pages through Alertmanager. monitor-bridge's Loki Log Ingestion and Kuma
-# Notification Delivery tiles are gone (M5's PR 4a), so M1 convention 5's one pager is this file.
+# Each alert pages through Alertmanager; this file is the only pager for Loki log ingestion.
 groups:
   - name: homelab-logs
     interval: 5m
     rules:
       # The host file-tail arm. The `machine` matcher keeps daniel-pi's syslog stream out: a
       # Pi stream in this union would hold the count above zero through a total cluster
-      # outage, and the rule would never fire (#3739).
+      # outage, and the rule would never fire.
       - alert: LokiHostLogsSilent
         expr: absent_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h])
         labels:
@@ -56,14 +55,11 @@ groups:
           description: >-
             No container log line from daniel-pi reached loki-homelab in 3 hours. Read the
             alloy container on daniel-pi with `probe.py pi containers`.
-      # The log-pattern arm of the bridge's Workload Log Errors row, ported by M6's batch A7. It
-      # counts, per container, the lines that match `LOG_ERROR_PATTERN` over `LOG_ERROR_WINDOW` in
-      # the cluster pod and daniel-pi container streams, and fires when one container exceeds
-      # `LOG_ERROR_MAX`. `error` is deliberately absent from the pattern: it appears in ordinary
-      # output constantly, and an alert on it gets ignored. These four mean the process gave up.
-      # `for: 5m` replaces the row's `startup_grace`. The bridge's empty `LOG_ERROR_IGNORE`
-      # carried over, so no container is excluded. The rule has paged since M6's batch A7
-      # Cutover-b dropped its `shadow` label.
+      # Counts, per container, the lines that match the pattern over 1h in the cluster pod and
+      # daniel-pi container streams, and fires when one container exceeds 20. `error` is
+      # deliberately absent from the pattern: it appears in ordinary output constantly, and an
+      # alert on it gets ignored. These four mean the process gave up. `for: 5m` is the startup
+      # grace. No container is on an ignore list.
       #
       # DECIDED: stays at 20, and home-assistant stays OUT of any ignore list. #1784 proposed
       # raising this or ignoring that container, after `fatal log lines in 1h: home-assistant (23)`
@@ -71,9 +67,9 @@ groups:
       # measurement: over the 4 days to 2026-09-11 this selector and pattern matched home-assistant
       # ZERO times, so the burst is episodic rather than chronic, and a permanent ignore would blind
       # the arm on a container that is normally silent. The 7d query times out against Loki, so "no
-      # matches in 4d" cannot see the 09-02/03 burst itself; it establishes that HA is not
-      # chronically noisy, NOT that those lines were benign. Raise this only from a window that
-      # contains a burst and a reason to call it ordinary.
+      # matches in 4d" cannot see a burst; it establishes that HA is not chronically noisy, NOT
+      # that those lines were benign. Raise this only from a window that contains a burst and a
+      # reason to call it ordinary.
       - alert: WorkloadLogErrors
         expr: sum by (container) (count_over_time({job=~"k8s|pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [1h])) > 20
         for: 5m
@@ -86,31 +82,24 @@ groups:
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
             reads Ready. Read that container's log in loki-homelab to see the lines.
-      # The host counterpart of WorkloadLogErrors (#6163): the same pattern over the cluster
-      # hosts' syslog, keyed by the rsyslog program tag that config.alloy.j2's
-      # `loki.process "host"` stage extracts into `program`.
+      # The host counterpart of WorkloadLogErrors: the same pattern over the cluster hosts'
+      # syslog, keyed by the rsyslog program tag that config.alloy.j2's `loki.process "host"`
+      # stage extracts into `program`.
       #
       # The window is 6h, not WorkloadLogErrors' 1h. A failing `uv run` cron writes one
       # `Traceback` line per run, so an hourly cron that fails every run reaches 4 lines inside
       # one window and pages, where a 1h window would hold it at 1 forever. `> 3` keeps a single
-      # transient failure quiet. Measured 2026-10-24 over the five rotated syslog files (from
-      # 2026-09-20) on both cluster hosts, the program-windows above 3 were:
-      #   - daniel-box `uv`, 2026-10-05 to 10-08: 49038 tracebacks, about 4200 per window;
-      #   - daniel-box `flock` and a release-drift check since deleted: git's `fatal: unable to access`
-      #     during GitHub outages, a handful of windows;
-      #   - daniel-server `kernel`, 2026-09-24 and 09-28: 34 and 29 `Memory cgroup out of
-      #     memory` lines, a container OOM storm against its limits.
-      # `uv` merges every `uv run` cron into one key, so the line itself names the script.
+      # transient failure quiet. `uv` merges every `uv run` cron into one key, so the line
+      # itself names the script.
       #
       # Only `syslog`, and only the cluster hosts. Authlog stays out because sudo's `COMMAND=`
       # lines echo their arguments, so a `grep fatal` run under sudo would count. daniel-pi's
       # `pi_health` stream also carries job="syslog" but never passes the stage, so it has no
       # `program` and the `machine` matcher keeps it out.
       #
-      # Not shadow: the label exists for a rule that runs beside another pager, and no other
-      # pager covers host syslog. `service` is a literal, as on every rule here, because
-      # test_alertmanager_routing.py routes each rule by its own labels; the alert's `machine`
-      # label names the host.
+      # No `shadow` label: no other pager covers host syslog. `service` is a literal, as on
+      # every rule here, because test_alertmanager_routing.py routes each rule by its own
+      # labels; the alert's `machine` label names the host.
       - alert: HostLogErrors
         expr: sum by (machine, program) (count_over_time({job="syslog", machine!="daniel-pi"} |~ `(?i)(panic:|fatal|traceback|out of memory)` [6h])) > 3
         labels:
@@ -126,8 +115,7 @@ groups:
       # Killed process" line per kill, which HostLogErrors' `> 3` would never reach. The match is
       # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
       # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
-      # ContainerOOMKilled covers. Measured 2026-10-24, neither cluster host logged a host-wide
-      # kill since 2026-09-20.
+      # ContainerOOMKilled covers.
       - alert: HostOutOfMemoryKill
         expr: >-
           sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h])) > 0
@@ -142,14 +130,13 @@ groups:
             container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
             for the killed process and the memory report above it.
       # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first
-      # line (#8212). It catches a remount that clears before Prometheus scrapes again after its
-      # own node boots: on 2026-11-11 four Longhorn devices on daniel-server stayed read-only for
-      # 2 to 6 minutes, inside the 11 minutes Prometheus had no samples, and the lines reached
-      # this Loki once Alloy resumed. It shares that node, so a remount of this Loki's own claim
-      # that never clears stores no line; KubeletCSIMountReadOnly pages on that one instead.
-      # The 1h range keeps a post-boot remount firing past the weekly reboot's Alertmanager mute,
-      # which ends `weekly_reboot_mute_recovery_minutes` (40) after the reboot. Measured
-      # 2026-11-13 over 14 days, including two weekly reboots, the line appeared only on 11-11.
+      # line. It catches a remount that clears before Prometheus scrapes again after its own node
+      # boots: Longhorn devices on daniel-server can stay read-only for minutes while Prometheus
+      # has no samples, and the lines reach this Loki once Alloy resumes. It shares that node, so
+      # a remount of this Loki's own claim that never clears stores no line;
+      # KubeletCSIMountReadOnly pages on that one instead. The 1h range keeps a post-boot remount
+      # firing past the weekly reboot's Alertmanager mute, which ends
+      # `weekly_reboot_mute_recovery_minutes` (40) after the reboot.
       - alert: HostFilesystemRemountedReadOnly
         expr: >-
           sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Remounting filesystem read-only" [1h])) > 0
@@ -164,16 +151,14 @@ groups:
             and its workload cannot write until the volume detaches and reattaches. Read
             {job="syslog", program="kernel"} in loki-homelab for the device and the errors before
             it, then scale the workload to 0, wait for the volume to detach, and scale back.
-      # kubelet's graceful node shutdown failed to arm (#8910). kubelet logs this E-level line
-      # once per start when logind's InhibitDelayMaxSec stays below the sum of the shutdown
-      # groups (hosts/components/k3s-agent/component.yml's k3s_agent_graceful_shutdown), and
-      # the next host shutdown is then ungraceful for Longhorn's iSCSI volumes. The state lasts
-      # until the next kubelet start, so the 8d range holds the alert across one weekly-reboot
-      # cycle: a shorter range would send a RESOLVED while kubelet is still unarmed. kubelet
-      # logs nothing on success, so after a fix by hand restart the alert stays up until the
-      # line ages out, and the operator silences it once `systemd-inhibit --list` shows
-      # kubelet's delay lock. Measured 2026-11-15: the 8d query ran in 0.08s, and daniel-server
-      # logged the line once in 8 days, at that day's 07:39 reboot.
+      # kubelet's graceful node shutdown failed to arm. kubelet logs this E-level line once per
+      # start when logind's InhibitDelayMaxSec stays below the sum of the shutdown groups
+      # (hosts/components/k3s-agent/component.yml's k3s_agent_graceful_shutdown), and the next
+      # host shutdown is then ungraceful for Longhorn's iSCSI volumes. The state lasts until the
+      # next kubelet start, so the 8d range holds the alert across one weekly-reboot cycle: a
+      # shorter range would send a RESOLVED while kubelet is still unarmed. kubelet logs nothing
+      # on success, so after a fix by hand restart the alert stays up until the line ages out,
+      # and the operator silences it once `systemd-inhibit --list` shows kubelet's delay lock.
       - alert: KubeletNodeShutdownManagerFailed
         expr: >-
           sum by (machine) (count_over_time({job="k3s"} |= "Failed to start node shutdown manager" [8d])) > 0
@@ -190,10 +175,10 @@ groups:
             cat-config systemd/logind.conf`, then restart k3s-agent. Once `systemd-inhibit
             --list` shows kubelet's delay lock, silence this alert: kubelet logs nothing on
             success, so it stays up until the line is 8 days old.
-      # Home Assistant's Cast connect-back loop (#8206). pychromecast logs "Heartbeat timeout,
+      # Home Assistant's Cast connect-back loop. pychromecast logs "Heartbeat timeout,
       # resetting connection" at INFO each time it drops the Nest Hub's socket, and nothing else
-      # signals the loop. Measured 2026-11-13: the 2026-11-11/12 storms logged 57-119 per hour,
-      # and every other hour from 2026-11-06 logged at most 19, so 30 sits between them.
+      # signals the loop. Storms log 57-119 per hour and an ordinary hour at most 19, so 30 sits
+      # between them.
       - alert: HomeAssistantCastHeartbeatStorm
         expr: >-
           sum(count_over_time({job="k8s", container="home-assistant"} |= "Heartbeat timeout" [1h])) > 30
@@ -207,28 +192,20 @@ groups:
             hour, so the Cast connect-back loop is running and dashboard casts to the Nest Hub
             fail. k8s/roles/home-assistant/docs/platform.md describes the loop and the
             quit-app fallback.
-      # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
-      # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
-      # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)
-      # or, on a real change, "Updated an outdated" or "Added a new". A failed cycle logs "Could
-      # not confirm update" or "No valid IPv4 addresses were detected" and none of the three, so
-      # 15m (three cycles) without one is a dead or failing updater. The filter deliberately
-      # leaves out the "Successfully sent a ping to Uptime Kuma" line, which stopped with the Kuma
-      # push at Cutover-2, and the "Checking the IP addresses in about" line, which prints
-      # whether or not the update worked. The Kuma tiles waited 6 minutes and paged on one missed
-      # beat, so these rules are slower by design: a single failed cycle is a retry, not a page.
-      # The two Deployments share the `cloudflare-ddns` container name, so the pod name separates
-      # them; the `pod` regex is the Deployment name plus the ReplicaSet and pod suffixes.
+      # The update line of each cloudflare-ddns Deployment. favonia's image serves no metrics,
+      # so the log is the only evidence an update cycle succeeded. Every 5m cycle logs, per
+      # domain, either "are already up to date" (a cached or a checked no-op) or, on a real
+      # change, "Updated an outdated" or "Added a new". A failed cycle logs "Could not confirm
+      # update" or "No valid IPv4 addresses were detected" and none of the three, so 15m (three
+      # cycles) without one is a dead or failing updater. The filter deliberately leaves out the
+      # "Checking the IP addresses in about" line, which prints whether or not the update worked.
+      # A single failed cycle is a retry, not a page. The two Deployments share the
+      # `cloudflare-ddns` container name, so the pod name separates them; the `pod` regex is the
+      # Deployment name plus the ReplicaSet and pod suffixes.
       #
-      # Three costs the rules carry (docs/target-architecture/monitoring/m6-retire-kuma.md, B7).
       # Their alerts never reach Prometheus `ALERTS`, so `probe.py health cloudflare-ddns` cannot
       # see them; CloudflareDdnsUnavailable in observability's `pods` group covers a dead pod
-      # instead. LogQL has no promtool test, so the red proof is a lokitool parse, the census
-      # entries in tests/services/test_loki_stream_labels.py and a live evaluation. Every
-      # edit of this file restarts Loki.
-      #
-      # These two page since B7's Cutover-1b dropped the `shadow` label, after Cutover-1a
-      # deleted the Kuma tiles they replace.
+      # instead. Every edit of this file restarts Loki.
       - alert: CloudflareDdnsDirectUpdateSilent
         expr: absent_over_time({job="k8s", container="cloudflare-ddns", pod=~"cloudflare-ddns-direct-.*"} |~ `are already up to date|Updated an outdated|Added a new` [15m])
         labels:

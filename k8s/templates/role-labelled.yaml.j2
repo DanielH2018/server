@@ -1,5 +1,5 @@
 {#
-  The render for a role that arms `manifests_prune` (#3388): the role's own
+  The render for a role that arms `manifests_prune`: the role's own
   template, rendered, then passed through the `homelab_role_label` filter
   (scripts/renderer/template_filters/role_label.py), which stamps `homelab/role: <manifests_service>` onto
   every document and refuses an empty render.

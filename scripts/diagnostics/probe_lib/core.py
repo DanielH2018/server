@@ -72,7 +72,7 @@ def ha_base():
 def domain(group_vars_path=None):
     """The homelab's domain, read from inventory (plaintext, not a secret).
 
-    The operator ruled on 2026-10-14 that `domain` is not a secret, so this needs no age key.
+    `domain` is not a secret, so this needs no age key.
 
     Args:
         group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
@@ -115,7 +115,7 @@ def pi_ssh_argv(remote, hostname=None):
     """The argv that runs the shell command `remote` on daniel-pi from this host.
 
     Only `LANDING_HOST` holds a key daniel-pi accepts, so from any other host the command
-    runs through an ssh session on `LANDING_HOST` (#8773). `remote` is parsed by the Pi's
+    runs through an ssh session on `LANDING_HOST`. `remote` is parsed by the Pi's
     shell either way.
 
     Args:
@@ -319,7 +319,7 @@ def print_dry_run(url, resolve=None):
 
 
 class Unreadable(SystemExit):
-    """The probe could not read its source, so it observed nothing (#4444).
+    """The probe could not read its source, so it observed nothing.
 
     A failed curl, ssh or kubectl read, or a read that came back empty. It exits
     `PROBE_UNREADABLE` (75) rather than 1, because 1 is the verdict "the probe looked and saw
@@ -343,7 +343,7 @@ class Unreadable(SystemExit):
 
 
 class UsageError(SystemExit):
-    """An argument the probe cannot act on, such as `--since 3x` (#4471).
+    """An argument the probe cannot act on, such as `--since 3x`.
 
     It exits `PROBE_USAGE_ERROR` (64) rather than 75, because a retry of the same invocation can
     never succeed, and rather than 1, because the probe observed nothing. Like `Unreadable`,
@@ -419,7 +419,7 @@ class NonJsonResponse(Unreadable):
     response, so a rejected query would reach `json.loads` and die as a JSONDecodeError that
     names the probe rather than the server. As an `Unreadable` it prints the server's own words
     to stderr and exits `PROBE_UNREADABLE` (75): the server answered, but not with anything the
-    probe could read (#4471). A caller that can read the body (alerts' cap clamp) catches it
+    probe could read. A caller that can read the body (alerts' cap clamp) catches it
     and does.
     """
 
@@ -523,7 +523,7 @@ def sops_extract(key_name):
 _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 
 # Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
-# as `apikey=<32 hex>` (#6276). The Alloy stage strips it from new records; `loki-query` prints
+# as `apikey=<32 hex>`. The Alloy stage strips it from new records; `loki-query` prints
 # the older ones through here. It needs no separator before `apikey`, because `loki-query --json`
 # filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
 _APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)

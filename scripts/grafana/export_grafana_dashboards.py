@@ -93,7 +93,7 @@ def parse_reply(path, proc):
     """The JSON body of one `gapi` call, or a SystemExit that says what failed and what to try.
 
     A failed `kubectl exec` leaves stdout empty, and `json.loads("")` raised a bare
-    JSONDecodeError that named neither the API path nor kubectl's own error (#4448).
+    JSONDecodeError that named neither the API path nor kubectl's own error.
     """
     if proc.returncode != 0 or not proc.stdout.strip():
         detail = (proc.stderr or "").strip().splitlines()[-1:] or ["no output"]

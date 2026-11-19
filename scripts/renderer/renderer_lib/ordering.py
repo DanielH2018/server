@@ -13,14 +13,14 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   documents names, by the same flux-owned rule;
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
   applies only after its snapshot is taken (D5.2a). `<tag>-prepull` does the same, so the role
-  applies only after its images are on the node (#5525). The two are siblings, never a chain,
+  applies only after its images are on the node. The two are siblings, never a chain,
   so the longer of them, not their sum, sits on the path. `<tag>-precheck`, the role's own
-  pre-apply checks, does the same, so a failing check holds the role (#5719). It also depends
+  pre-apply checks, does the same, so a failing check holds the role. It also depends
   on the role that creates a namespace one of its documents names, as `<tag>-deferred` does.
   `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the tag
   renders one, `<tag>` otherwise (D5.1a1). It also depends on the last Kustomization of each
   tag its role names in `flux_verify_after`, by the same flux-owned rule, so its Jobs probe
-  that tag's rolled workload rather than the one it replaces (#5999);
+  that tag's rolled workload rather than the one it replaces;
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
   `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
   D5.3b2's `soak` keeps no edge at all (D5 Open question 19), and `soak.py` routes every tag's
@@ -61,10 +61,10 @@ DEFERRED_SUFFIX = "-deferred"
 SNAPSHOT_SUFFIX = "-snapshot"
 VERIFY_SUFFIX = "-verify"
 # A role's pre-pull Job, which pulls the tag's images onto its node before `<tag>` applies
-# (`prepull.py`, #5525).
+# (`prepull.py`).
 PREPULL_SUFFIX = "-prepull"
-# A role's own pre-apply check Jobs, such as pihole's sibling guard, which `<tag>` waits on
-# (#5719).
+# A role's own pre-apply check Jobs, such as pihole's sibling guard,
+# which `<tag>` waits on.
 PRECHECK_SUFFIX = "-precheck"
 # Every per-tag kind's suffix, in the order its document follows `<tag>`'s in
 # `flux/<tag>.yaml`. The publish census expects exactly this order.
@@ -90,7 +90,7 @@ VERIFY_DEADLINE_MARGIN_S = 60
 VERIFY_TEMPLATES_DIR = "verify"
 # A role's pre-apply check Jobs, with whatever they need beside them, are its
 # `templates/precheck/*.yaml.j2`. They render into `cluster/<tag>-precheck/`, which `<tag>`
-# depends on, so a check that fails holds the role at its previous revision (#5719). Ansible
+# depends on, so a check that fails holds the role at its previous revision. Ansible
 # never renders them, as it never renders `templates/verify/`.
 PRECHECK_TEMPLATES_DIR = "precheck"
 # The role default that opts a role's CronJobs into gate Jobs in `<tag>-verify`, and the two
@@ -98,7 +98,7 @@ PRECHECK_TEMPLATES_DIR = "precheck"
 CRONJOB_GATES = "flux_cronjob_gates"
 GATE_KINDS = frozenset({"verify", "mutation"})
 # The role default that names the other tags whose rolled workload `<tag>-verify` probes
-# (`verify_after`, #5999).
+# (`verify_after`).
 VERIFY_AFTER = "flux_verify_after"
 
 
@@ -190,7 +190,7 @@ def precheck_files(
     """The pre-apply check manifests each tag's role ships, as `verify_files` reads verify ones.
 
     A role ships them as `templates/precheck/<name>.j2`, and a non-empty list calls for
-    `<tag>-precheck` (#5719). Nothing else does.
+    `<tag>-precheck`. Nothing else does.
     """
     return verify_files(tags, roles, PRECHECK_TEMPLATES_DIR)
 
@@ -200,7 +200,7 @@ def prepull_timeouts(
 ) -> tuple[dict[str, str], list[str]]:
     """Each tag whose role sets `flux_prepull_timeout` mapped to it, and one line per problem.
 
-    The value calls for `<tag>-prepull` and is that Kustomization's `timeout` (#5525). The
+    The value calls for `<tag>-prepull` and is that Kustomization's `timeout`. The
     renderer (`prepull.py`, `bundle.bundle_files`) and the publish census read this one
     function, as they read `verify_files`. A value must be a literal Go duration, as
     `role_fields` requires of `manifests_rollout_timeout`; any other value is a problem and
@@ -232,7 +232,7 @@ def prepull_workloads(
 ) -> tuple[dict[str, tuple[str, ...]], list[str]]:
     """Each tag whose role sets `flux_prepull_workloads` mapped to it, and one line per problem.
 
-    The value names the workloads `<tag>-prepull` pulls for; unset pulls for all (#5875).
+    The value names the workloads `<tag>-prepull` pulls for; unset pulls for all.
     It must be a non-empty list sitting beside `flux_prepull_timeout`.
     """
     found, problems = {}, []
@@ -305,8 +305,8 @@ def verify_after(
     """Each tag whose role sets `flux_verify_after` mapped to it, and one line per problem.
 
     The value lists the other tags whose rolled workload the role's verify Jobs probe, so
-    `<tag>-verify` waits on each one's last Kustomization as well as on its own tag's
-    (#5999). crowdsec's `crowdsec-verify` names `traefik`: its ban proof reads the edge's
+    `<tag>-verify` waits on each one's last Kustomization as well as on its own tag's.
+    crowdsec's `crowdsec-verify` names `traefik`: its ban proof reads the edge's
     answer, and without the edge it can pass against the Traefik pod a `Recreate` roll is
     about to replace. A value must be a literal non-empty list of tag names; any other value
     is a problem and its tag is left out.

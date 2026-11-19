@@ -8,7 +8,7 @@
 d {{ pins.ctl_home }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
 d {{ pins.report_dir }} 2750 {{ pins.ctl_user }} {{ sys_user }} -
 # The inbox, the records and the lock, written by the controller. Under operator_read the
-# operator's group gets traverse and no listing, so the operator can stat the inbox (#6452). It is
+# operator's group gets traverse and no listing, so the operator can stat the inbox. It is
 # the units' UMask=0027 that keeps what they write out of the operator's read, not the group.
 d {{ pins.state_dir }} {{ '0710' if claude_code_agent_operator_read else '0750' }} {{ pins.ctl_user }} {{ sys_user if claude_code_agent_operator_read else pins.ctl_user }} -
 d {{ pins.state_dir }}/inbox 0750 {{ pins.ctl_user }} {{ pins.ctl_user }} -

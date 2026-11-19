@@ -1,12 +1,11 @@
-# The Loki read-route witness as a packaged timer (H7.10c, docs/target-architecture/host/
-# h7-delete-ansible.md). Both cluster nodes list it, H7.36 on daniel-box and H7.59 on daniel-server,
-# because which source address a host arrives as depends on where traefik runs. daniel-pi is not in
-# the route's ClientIP set, so it never lists this component.
+# The Loki read-route witness as a packaged timer. Both cluster nodes list it, because which
+# source address a host arrives as depends on where traefik runs. daniel-pi is not in the
+# route's ClientIP set, so it never lists this component.
 #
 # The unit writes loki-read-route-health.prom and exits 1 after a `down` verdict, so
 # Restart=on-failure reruns it every 15 minutes until the route answers.
 # homelab-loki-route-witness-boot.service reruns it once at boot while the last verdict was not
-# up (#4495). It loads no credential.
+# up. It loads no credential.
 #
 # Autonomous-role contract (the witness reports a verdict every hour with no human in the loop).
 # It changes no state: it reads the route and reports.
@@ -28,7 +27,7 @@
 # - Next-run review: a down verdict for the route means a broken ClientIP grant or a dead
 #   loki-homelab route. Read the syslog line's message before changing the route. Both nodes
 #   must witness it, because which source address a host arrives as depends on where traefik
-#   runs (#1712).
+#   runs.
 #
 # ENFORCED: hosts/tests/test_loki_route_witness.py (the script's behaviour against
 # stubs), hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries)
@@ -48,7 +47,7 @@ enable:
 # only if the timer starts outside reconcile while the host holds (docs/host-packages.md). The two
 # manifest fragments
 # carry the names the role's stamp tasks give them, which differ: the render stamp is
-# `loki-route-witness` and the deployed stamp is `loki-route-health` (#6279).
+# `loki-route-witness` and the deployed stamp is `loki-route-health`.
 legacy:
   - {unit: kuma-check-loki-read-route.timer}
   - {unit: kuma-check-loki-read-route.service}

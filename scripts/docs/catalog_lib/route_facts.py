@@ -43,7 +43,7 @@ from lib.repo_paths import ALL_VARS as GROUP_VARS
 # `public=false` in a role's own macro call opts the service out of the public Host rule
 # whatever k8s_public_route says. See k8s/templates/ingressroute.yml.j2. Matched against
 # comment-stripped text: three roles explain the argument in a `{# #}` above the call that
-# passes it, and `k8s/roles/docs/` explained one it does NOT pass (#3148).
+# passes it, and `k8s/roles/docs/` explained one it does NOT pass.
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
 # Only the `ingressroute()` macro renders the public Host rule. A role whose templates call
 # `monitoring_route()` alone (ical-proxy, loki-homelab) is LAN-only by construction, and a

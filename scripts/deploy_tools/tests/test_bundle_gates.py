@@ -139,7 +139,7 @@ def test_a_deferred_document_substituting_from_an_ungenerated_secret_is_flagged(
 def test_a_deferred_document_without_post_build_over_a_secret_key_is_flagged(
     tmp_path, inputs
 ):
-    """#5172: the gate read only the file's first document and walked only `cluster/<tag>/`."""
+    """The gate read only the file's first document and walked only `cluster/<tag>/`."""
     assert _gates(tmp_path, inputs, _deferring()) == [
         "source: cluster/bento-pdf-deferred/configmap.yaml holds ${email}, a key of "
         "secrets.yml, and the Kustomization bento-pdf-deferred in flux/bento-pdf.yaml has "

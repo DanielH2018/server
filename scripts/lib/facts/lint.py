@@ -262,7 +262,7 @@ def _version_facts(
     """A ``version-as-fact`` warning per backticked ``image:tag`` span naming a pinned image.
 
     A warning, never an error: a Renovate bump that makes the span stale cannot edit prose, and
-    #4012 ruled that a Renovate PR must not arrive red over documentation. When several pins
+    a Renovate PR must not arrive red over documentation. When several pins
     share the image, the span is stale only if its tag matches none of them, and the message
     names the pin nearest the doc. speedtest's upstream `v1.14.7` is out of scope: it is not an
     ``image:tag`` span, and its pin is ``latest@sha256``, which no tag in prose can match.

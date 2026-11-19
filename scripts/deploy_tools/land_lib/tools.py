@@ -169,7 +169,7 @@ def await_ci_verdict(
     """await_ci.wait with its CLI's exit contract: 0 green, 1 red, 75 pending, 2 disarmed.
 
     An anonymous wait polls every 90s, not 20s, and walks no descendants
-    (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A zero budget is one poll that never sleeps or
+    (`await_ci.ANONYMOUS_INTERVAL_S`). A zero budget is one poll that never sleeps or
     reaches the dropped-push grace, so the merge loop's per-poll call skips the lookup.
 
     Raises:

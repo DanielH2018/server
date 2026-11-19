@@ -1,26 +1,25 @@
-# The worktree holder scan as a packaged socket (H7.61,
-# docs/target-architecture/host/h7-delete-ansible.md, item 35). A worktree removal connects to
+# The worktree holder scan as a packaged socket. A worktree removal connects to
 # /run/worktree-holders.sock to ask root which processes hold a tree
 # (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan). The sweep runs as
 # sys_user, and /proc refuses that uid another user's cwd and environ, so root does the scan.
 #
-# daniel-server lists it since H7.61 and daniel-box since H7.62. The helper is
-# files/worktree_holders.py, which scripts/lib/worktrees.py also imports.
+# daniel-server and daniel-box list it. The helper is files/worktree_holders.py, which
+# scripts/lib/worktrees.py also imports.
 #
 # The helper is root-owned and outside the checkout, because sys_user and every agent can write
 # the repo, and a root unit naming a file there is root for whoever edits it. fanout_lib.clean
 # connects with `nc -U` from a shell chain, so netcat-openbsd is a Depends.
 #
 # Each file and the enable link carry `has_claude_code`, so a host that stops running Claude
-# sessions loses the root service with its next package version, as the role's teardown did.
+# sessions loses the root service with its next package version.
 #
-# The units keep their Ansible-era names, so reconcile's shadow handoff removes the /etc copies,
+# The units keep the names the Ansible role gave them, so reconcile's shadow handoff removes the /etc copies,
 # reloads once and restarts the socket. /run/worktree-holders.sock does not change.
 depends:
   - netcat-openbsd
 defaults:
   # DECIDED: a copy of the agent users the host packages declare, not a read of the claude-code
-  # component's defaults (#6831). Each host's list copies the `users:` entry of that host's
+  # component's defaults. Each host's list copies the `users:` entry of that host's
   # package.yml; a clone is `<home>/server`. Dropping an agent here revokes its scan at the next
   # package version, though it keeps the group: the service refuses a uid the map does not name.
   worktree_holders_agents_by_host:
@@ -35,8 +34,7 @@ files:
   - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service, when: has_claude_code}
 enable:
   worktree-holders.socket: {target: sockets.target, when: has_claude_code}
-# What initial_setup installed. Each host package's legacy list retires the old sudoers rule
-# (H7.60).
+# What initial_setup installed. Each host package's legacy list retires the old sudoers rule.
 legacy:
   - {path: /etc/systemd/system/worktree-holders.socket}
   - {path: /etc/systemd/system/worktree-holders@.service}

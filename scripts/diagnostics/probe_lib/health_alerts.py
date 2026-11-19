@@ -62,7 +62,7 @@ def gated_selectors(tag):
 
 # Rules evaluate every minute (prometheus.yaml.j2 sets no evaluation_interval). An alert that
 # was already firing when Prometheus started reads an activation within one evaluation of the
-# start: 6.4s after it on 2026-10-16 for the Watchdog, which had fired throughout.
+# start: the Watchdog, which fires throughout, reads one 6.4s after it.
 RESTART_SLACK_S = 120
 
 # One 1m scrape interval plus slack, the plan's bound on waiting for a fresh probe sample.
@@ -77,7 +77,7 @@ FLUX_LOOKBACK = "7d"
 
 
 # The query door's Traefik `rate-limit` is 300/min per client, and every gate on a host shares
-# one client address, so concurrent landings drain it together (#7721).
+# one client address, so concurrent landings drain it together.
 RATE_LIMITED = 429
 RETRY_DELAYS_S = (2, 4, 8, 16)
 # `detach_notify.PROBE_TIMEOUT_S`, restated: probe_lib may not import deploy_tools. Its expiry
@@ -220,7 +220,7 @@ def _when(ts):
 
 # The C6 label carrying the digest of a tag's own rendered directory, `cluster/<tag>/`. The
 # renderer stamps it on Kustomization `<tag>` (bundle.py:CONTENT_DIGEST), so a master commit
-# that leaves the tag unchanged keeps it while `revision` moves (#5338).
+# that leaves the tag unchanged keeps it while `revision` moves.
 CONTENT_LABEL = "content_digest"
 
 
@@ -305,7 +305,7 @@ def unprobed_route(tag, query):
     series means the probe stopped reporting (blackbox-exporter down reads `up` 0), which
     fails. With the job loaded and the target absent, Flux has not applied the `observability`
     render that carries the route yet, so a new service's first gate would otherwise fail a
-    healthy rollout (#5346). That passes with a note. With no `up` series for the job at all, the job is broken, which fails.
+    healthy rollout. That passes with a note. With no `up` series for the job at all, the job is broken, which fails.
 
     `/api/v1/targets` would answer the same question, but Prometheus' IngressRoute admits
     `/api/v1/query` alone.

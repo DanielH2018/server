@@ -1,7 +1,7 @@
 """Every read `k3s_gates.py` makes as `k3s-plan` has an operator-only `can-i` command.
 
 Impersonation needs more than the read-only ServiceAccount holds, so the operator runs
-`kubectl auth can-i --as=...:k3s-plan` before the Plan first selects a node (H6.3c). The
+`kubectl auth can-i --as=...:k3s-plan` before the Plan first selects a node. The
 commands are derived from the script's own API path constants, so a read added to the script
 without a row here fails, and `docs/k3s-upgrade.md` must print each command verbatim.
 
@@ -20,7 +20,7 @@ TEMPLATE = (
     "--as=system:serviceaccount:system-upgrade:k3s-plan{ns}"
 )
 # path constant -> (verb, resource, namespace), or None for a read only the `host` mode makes,
-# as the read-only account (`homelab-readonly`), which the H6.3b verification already covers.
+# as the read-only account (`homelab-readonly`).
 READS: dict[str, tuple[str, str, str] | None] = {
     "VOLUMES_PATH": ("list", "volumes.longhorn.io", ""),
     "BACKUPS_PATH": ("list", "backups.longhorn.io", ""),

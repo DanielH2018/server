@@ -20,5 +20,5 @@ SyslogIdentifier=github-ruleset-drift
 Restart=on-failure
 RestartSec=30min
 # The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and gates
-# homelab-github-ruleset-drift-boot.service (#4495). `$$` hands the variable to the shell.
+# homelab-github-ruleset-drift-boot.service. `$$` hands the variable to the shell.
 ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/github-ruleset-drift.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/github-ruleset-drift.down; fi'

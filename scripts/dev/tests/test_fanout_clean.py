@@ -182,7 +182,7 @@ def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_
     )
     # The interpreter leg is the else of the tree-exists test (Ruling 30), and runs from
     # the primary checkout's cwd against the primary checkout's copy of the script, never the
-    # batch worktree's, which is frozen at launch and cannot carry a later fix (#6571).
+    # batch worktree's, which is frozen at launch and cannot carry a later fix.
     assert (
         "else cd /home/ubuntu/server && "
         "uv run --no-project --no-python-downloads --python 3.15.2 python "

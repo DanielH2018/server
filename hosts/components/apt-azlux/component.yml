@@ -1,4 +1,4 @@
-# Azlux's apt source and key, for the Pi's log2ram package (H7.24a, old step H7.1). Only daniel-pi
+# Azlux's apt source and key, for the Pi's log2ram package. Only daniel-pi
 # installs log2ram, so only its package lists this component. The files land at the paths
 # optimize_pi wrote, so dpkg takes them over; none is a conffile.
 #

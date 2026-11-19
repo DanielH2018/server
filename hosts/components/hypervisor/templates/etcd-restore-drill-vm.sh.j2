@@ -16,7 +16,7 @@
 # k3s (its header lists five structural reasons), so this script gives it a host with no k3s at
 # all: a transient libvirt guest built from the reviewed cloud image, made to look like a k3s
 # server node whose k3s is stopped — the binary, the cluster token and the R2 env file placed at
-# the paths the drill already reads. The drill runs there unmodified (issue #1175, path 1).
+# the paths the drill already reads. The drill runs there unmodified.
 #
 # LIFECYCLE, and why every step is where it is:
 #   1. lock, prune old evidence, preflight      — fail fast, and never two guests
@@ -37,10 +37,9 @@
 # Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
 # it; the syslog line says which. Each verdict is written to
 # $TEXTFILE_DIR/<etcd-restore-drill-vm|etcd-restore-drill-egress-fence>.prom for node_exporter's
-# textfile collector, which the EtcdRestoreDrill* rules in other-setup-checks.yaml read (M6 batch
-# B4). B4's Cutover-2 removed its two Kuma pushes.
+# textfile collector, which the EtcdRestoreDrill* rules in other-setup-checks.yaml read.
 #
-# --rehearse-suc (H6.1b2) is the operator's rehearsal of the system-upgrade Plan, never scheduled.
+# --rehearse-suc is the operator's rehearsal of the system-upgrade Plan, never scheduled.
 # It builds the same guest behind the same fence, installs k3s at --guest-version (default: the
 # repo's k3s pin) and applies the system-upgrade bundle rendered at --rendered (`homelab_render.py
 # cluster --out DIR --role flux --role system-upgrade`) through Flux from a registry inside the
@@ -49,7 +48,7 @@
 # fails and the Kustomization is not Ready. The guest is handed no token and no R2 credential, and
 # the run writes no stamp and no textfile, so the monthly drill's evidence is untouched. docs/hypervisor-libvirt-internals.md has the long form.
 #
-# --rehearse-bootstrap (H7.15c's host half) is the operator's guest drill of daniel-box's rebuild,
+# --rehearse-bootstrap is the operator's guest drill of daniel-box's rebuild,
 # never scheduled. It renders daniel-box's packages from --repo to learn which units to mask, then
 # builds the same guest behind the same fence, names it daniel-box, clones the repository from
 # GitHub at --repo's HEAD and runs bootstrap-host.sh in it with the three guest-local deviations
@@ -101,7 +100,7 @@ GUEST_HOSTKEY_PUB="{{ hypervisor_etcd_drill_vm_hostkey }}.pub"
 IDENTITY="/home/{{ sys_user }}/.ssh/id_ed25519"
 BOOT_TIMEOUT="{{ hypervisor_etcd_drill_vm_boot_timeout }}"
 S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
-# K3S_TOKEN lives here since the agent join (hosts/bootstrap-host.sh). k3s writes the same
+# K3S_TOKEN lives here (hosts/bootstrap-host.sh). k3s writes the same
 # value to server/token and server/node-token when no --agent-token is set, so this IS the token
 # a rebuilt server would need; a mismatch fails the restore stage loudly rather than passing.
 AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
@@ -142,8 +141,8 @@ TAG=etcd-restore-drill-vm
 # The run writes two textfile verdicts: the drill's own under the script's name and the egress
 # fence's under its own, because the syslog tag is shared and a check file takes one verdict.
 # DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
-# slack (etcd_drill_full_kuma_interval_s, named for the Kuma tile that carried it until M6 batch
-# B4). hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
+# slack (etcd_drill_full_kuma_interval_s). hosts/tests/test_b4_rule_literals.py pins the rules'
+# literals to this value.
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
 DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
@@ -244,8 +243,8 @@ prune_old_evidence() {
 }
 
 # One argv for every ssh to the guest, so the timed drill call below can hand it to `timeout`
-# — which execs a program and cannot run a shell function (the first run failed with
-# "timeout: failed to run command 'ssh_guest'"). KNOWN_HOSTS is set before the first use.
+# — which execs a program and cannot run a shell function. KNOWN_HOSTS is set before the first
+# use.
 ssh_argv() {
   printf '%s\n' ssh -i "$IDENTITY" -o IdentitiesOnly=yes \
       -o UserKnownHostsFile="$KNOWN_HOSTS" -o StrictHostKeyChecking=yes \
@@ -260,20 +259,16 @@ ssh_guest() {
   "${argv[@]}" "$@"
 }
 
-# ── The egress-fence leg ─────────────────────────────────────────────────────────────────────
-# Dials every production range the staging nwfilter drops, plus an internet control target, from
-# INSIDE the guest — in the window between "the guest answers ssh" and "the guest is handed the
-# cluster token and the R2 write credentials", which is the only point where a broken fence can
-# still be acted on.
+# The egress-fence leg dials every production range the staging nwfilter drops, plus an internet
+# control target, from INSIDE the guest — in the window between "the guest answers ssh" and "the
+# guest is handed the cluster token and the R2 write credentials", which is the only point where
+# a broken fence can still be acted on.
 #
 # WHY IT RUNS FROM INSIDE THE GUEST. A filter that is present and INERT reads exactly like a
 # working one from the host: `virsh nwfilter-dumpxml` lists it either way, and whether it is
 # attached to the live tap device is not in that output. Reachability from the far side is the
-# only signal that separates the two — which is the failure the fence was added after (the inert
-# ufw `route deny`, #508). tests/staging/test_staging_egress_fence.py holds the filter's
-# SHAPE; this leg is the half that measures whether it FIRES. It replaces
-# scripts/diagnostics/staging_egress_probe.py, which dialled these same targets from the
-# persistent daniel-stage guest and was retired with it (#2941, restored here as #2943).
+# only signal that separates the two. tests/staging/test_staging_egress_fence.py holds the
+# filter's SHAPE; this leg is the half that measures whether it FIRES.
 #
 # WHY THE CONTROL TARGET IS LOAD-BEARING. A fence that severed all egress makes every production
 # target fail too, and that reads as a pass to anyone skimming. INTERNET must stay REACHABLE for
@@ -293,13 +288,10 @@ ssh_guest() {
 # run's own status line as `fence=hold,unproven=<labels>`.
 #
 # DECIDED: the fence verdict is a check of its own, etcd-restore-drill-egress-fence, which the
-# EtcdRestoreDrillEgressFence* rules read (a Kuma tile of its own until M6 batch B4's Cutover-2).
-# This reverses the "there is no separate tile; the drill's own tile carries it" decision this
-# marker used to carry (#2943), on the evidence of #3021: the drill's verdict cannot express the
-# non-fatal half. An unproven range leaves the drill PASSING, so the drill's verdict is `up` and
-# the only record that a fenced range went unmeasured is the message text of a green verdict —
-# which alerts nobody. The leg exists so that an unmeasured fence does not read as a held one, and
-# at the monitor layer it did. report_fence above carries the wiring.
+# EtcdRestoreDrillEgressFence* rules read. The drill's verdict cannot express the non-fatal half:
+# an unproven range leaves the drill PASSING, so the only record that a fenced range went
+# unmeasured would be the message text of a green verdict, which alerts nobody. The leg exists so
+# that an unmeasured fence does not read as a held one. report_fence above carries the wiring.
 
 fence_curl() { printf 'curl -sk --max-time %s -o /dev/null %s' "$FENCE_PROBE_TIMEOUT" "$1"; }
 
@@ -315,8 +307,8 @@ fence_targets() {
   printf '%s|%s|\n' PRODVIP "$(fence_curl http://{{ k3s_metallb_ingress_vip }})"
   printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hosts['daniel-box'].server_ip }}:6443/version)"
   printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hosts['daniel-pi'].server_ip }}:51821)"
-  # k3s_service_cidr. Longhorn's frontend Service is the thing actually found exposed on
-  # 2026-08-28, answering unauthenticated with a mutating `diskUpdate` action in its payload.
+  # k3s_service_cidr. Longhorn's frontend Service is the one found exposed, answering
+  # unauthenticated with a mutating `diskUpdate` action in its payload.
   printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"
   # k3s_pod_cidr. Discovered rather than pinned, because a pod IP is ephemeral: whichever pod on
   # this host's CNI bridge the neighbour table currently holds. Read from `ip neigh` and not
@@ -337,18 +329,17 @@ fence_targets() {
     printf '%s|%s|%s\n' PODNET "ping -c1 -W3 $pod_ip" "ping -c1 -W3 $pod_ip"
   else
     # Emitted rather than skipped. A row that is simply absent leaves no evidence line and no
-    # label, so the run reports a clean `hold` with the pod CIDR never dialled — this issue's own
-    # failure, one level down. The sentinel makes it an `unproven` target instead.
+    # label, so the run reports a clean `hold` with the pod CIDR never dialled. The sentinel makes
+    # it an `unproven` target instead.
     printf '%s|%s|\n' PODNET "SKIP: no usable neighbour on cni0 to dial"
   fi
   return 0
 }
 
 # Every dial in ONE ssh session, reading the table on stdin and printing `LABEL rc` per target.
-# Not one session per target: six sessions are six chances to hang, and this orchestrator has
-# already paid for a hung session once (run 20260911T135526Z). `na` is printed when the dial
-# needs a tool the guest does not have — a missing tool must never read as `refused`, which is
-# the same bug shape as an inert fence.
+# Not one session per target: six sessions are six chances to hang. `na` is printed when the
+# dial needs a tool the guest does not have — a missing tool must never read as `refused`, which
+# is the same bug shape as an inert fence.
 fence_dial_guest() {
   local -a argv script
   mapfile -t argv < <(ssh_argv)
@@ -470,7 +461,6 @@ boot_guest() {
   fence_check
 }
 
-# ── The SUC rehearsal mode (H6.1b2) ──────────────────────────────────────────────────────────
 # One bounded ssh call per guest-side step. `timeout` execs a program and cannot run ssh_guest,
 # so it takes the argv ssh_guest takes.
 rh() {
@@ -566,7 +556,6 @@ rehearse_suc() {
   fail "SUC rehearsal FAILED (expect $RH_EXPECT, Plan $RH_PLAN, guest k3s $from): ${verdict:-no verdict in ${RH_DEADLINE}s}"
 }
 
-# ── The bootstrap drill mode (H7.15c's host half) ────────────────────────────────────────────
 # The units the guest keeps unmasked. coredns-host.service is the fourth beside the three *The
 # proofs* names: step 6 refuses to stop systemd-resolved until it answers on 127.0.0.1.
 BD_UNMASKED=(k3s.service homelab-reconcile.service homelab-secrets.service coredns-host.service)
@@ -747,11 +736,10 @@ main() {
   tar -C "$WORK/root" -cf - . | ssh_guest sudo tar -C / --warning=no-timestamp -xpf - || fail "staging into the guest failed"
   rm -rf "$WORK"; WORK=""
 
-  # The drill runs DETACHED in the guest and this side polls for its exit file. Holding one ssh
-  # session open for the whole run is what the first design did, and run 20260911T135526Z hung
-  # that session for 20 minutes after the drill's own k3s had already been killed — with the
-  # guest still answering a fresh ssh throughout. A detached run cannot take the orchestrator
-  # down with it, its exit code survives in a file, and drill.out is pulled whatever happened.
+  # The drill runs DETACHED in the guest and this side polls for its exit file. One ssh session
+  # held open for the whole run can hang while the guest still answers a fresh ssh. A detached
+  # run cannot take the orchestrator down with it, its exit code survives in a file, and
+  # drill.out is pulled whatever happened.
   log "starting the drill in the guest (log: $LOG_DIR/drill.out)"
   ssh_guest sudo /usr/local/bin/etcd-drill-guest-run --detached \
     || fail "could not start the drill in the guest"

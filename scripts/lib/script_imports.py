@@ -13,7 +13,6 @@ stdlib ``secrets``.
 # DECIDED: a separate module despite one production importer (`lib.script_classify`).
 # Its interface is two functions over ~200 lines of import resolution, so it is deep rather
 # than a pass-through seam, and folding it in would push `script_classify` past 650 lines.
-# Weighed and kept in the #3667 deep-modules pass.
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -106,7 +105,7 @@ def _path_inserts(nodes: list[ast.AST], path: Path) -> list[Path]:
     # DECIDED: an insert whose argument is a name (`HOST_LIB_FILES`) is skipped rather than
     # evaluated. Every such insert in the tree points
     # outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only
-    # such an insert explains resolves outside the tree, so it credits nothing here (#3038).
+    # such an insert explains resolves outside the tree, so it credits nothing here.
     found: list[Path] = []
     for node in nodes:
         if not (

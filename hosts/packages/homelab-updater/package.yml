@@ -1,4 +1,4 @@
-# The shared package every host installs (H3, *The updater*). It ships the archive keyring
+# The shared package every host installs. It ships the archive keyring
 # that `homelab.sources` names in `Signed-By:`, so apt on every host trusts the signer's key.
 description: Installs the newest homelab packages and runs reconcile
 # The updater reads reconcile's record with python3.

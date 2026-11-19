@@ -1,6 +1,6 @@
 """The runner carries out a session's request files, and refuses the ones it must not read.
 
-#967's I3: session output is untrusted data. These plant each shape the plan names (a symlink,
+Session output is untrusted data. These plant each shape the plan names (a symlink,
 a FIFO, a file over the cap, a PR outside the census) in a real directory, and read what the
 runner would hand `gh` from `AgentTools.run`.
 
@@ -325,7 +325,7 @@ def test_a_pr_the_session_nominates_lands_and_reaches_the_digest(tmp_path):
 
 
 def test_the_journal_line_for_a_request_carries_no_session_text(tmp_path):
-    """A file name or a refused value is session text; only fixed words reach the log (#8676)."""
+    """A file name or a refused value is session text; only fixed words reach the log."""
     requests, _ = _run(tmp_path)
     _write(requests, "x: status=down.json", {"action": "x: status=down", "pr": 71})
     _nominate(requests, 71)

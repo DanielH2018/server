@@ -137,7 +137,7 @@ RETIRED: frozenset[str] = frozenset(
         # role's files/staging-gate-retired/ so every host withdrew the authorization.
         "staging_gate_ssh_key",
         # The self-hosted Healthchecks' admin password and Django signing key, retired with
-        # the app (#2806, #3499).
+        # the app.
         "healthchecks_password",
         "healthchecks_secret_key",
         # Published as an inventory variable by the operator's 2026-10-14 ruling;
@@ -259,12 +259,12 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_speedtest_push_token",
         "monitor_bridge_swallowed_verdicts_push_token",
         "monitor_bridge_wan_reachable_push_token",
-        # R4: its only reader was the render_records role, which #7478 deleted.
+        # R4: its only reader was the render_records role, since deleted.
         "render_records_push_token",
-        # Flux's github-status Provider moved to the GitHub App (#8023, #8087), and the
-        # operator revoked this fine-grained token and unset the key (#8093).
+        # Flux's github-status Provider moved to the GitHub App, and the
+        # operator revoked this fine-grained token and unset the key.
         "flux_github_status_token",
-        # The B2 bucket name, which the BackupTarget renders from inventory since #8942.
+        # The B2 bucket name, which the BackupTarget renders from inventory.
         "longhorn_b2_bucket",
     }
 )

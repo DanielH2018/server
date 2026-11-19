@@ -13,7 +13,7 @@ data:
 {% set prune_script %}{% include 'files/ghcr-mirror-prune.sh' %}{% endset %}
 {{ prune_script | indent(4, true) }}
 ---
-# Prune and collect the dockerhub-mirror store (#6536), as ghcr-mirror-gc-job.yaml.j2 does the
+# Prune and collect the dockerhub-mirror store, as ghcr-mirror-gc-job.yaml.j2 does the
 # ghcr-mirror's. That template's comments hold for each line here. registry-gc.sh scales only
 # deploy/dockerhub-mirror to zero around this Job.
 apiVersion: batch/v1

@@ -1,4 +1,4 @@
-"""The fix phase and the delta review that judges it, run once or twice (#7687).
+"""The fix phase and the delta review that judges it, run once or twice.
 
 Of 13 `needs-input` batches between 2026-10-25 and 2026-11-08 that ended with findings left
 after the single fix round, 12 left a real defect. A second round runs only when the first
@@ -78,7 +78,7 @@ def fix_rounds(
                 record.remaining = unresolved
             else:
                 # A reported finding is left only if the fix head's file holds the line it
-                # quotes (#6547); the rest are carried unverified and hold nothing.
+                # quotes; the rest are carried unverified and hold nothing.
                 record.remaining, record.unverified = split_confirmed(
                     actionable(left), partial(pipe._read_at, after)
                 )

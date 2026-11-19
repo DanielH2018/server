@@ -1,6 +1,6 @@
 """`probe.py flux [tag...]` — each Flux Kustomization's Ready, applied commit and suspension.
 
-Sessions read this by hand with `kubectl get kustomization` about ten times a day (#6322),
+Sessions read this by hand with `kubectl get kustomization` about ten times a day,
 because `health <tag>` reads a Kustomization only to gate a CronJob.
 
 One kubectl read lists every Kustomization and OCIRepository in `flux-system`. Each row prints:
@@ -15,13 +15,13 @@ One kubectl read lists every Kustomization and OCIRepository in `flux-system`. E
 rows that are not settled, then a count; `--all` prints every Kustomization. It exits 1 when a printed row is not Ready, is suspended or applied a commit
 other than the one its source serves, and when a named tag has no Kustomization.
 
-A row that is not Ready for a reason in `NOT_YET_REASONS` is mid-reconcile, not failed
-(#6337). Examples are `<tag>` at Ready=Unknown/Progressing, and its `-verify` sibling at
+A row that is not Ready for a reason in `NOT_YET_REASONS` is mid-reconcile, not failed.
+Examples are `<tag>` at Ready=Unknown/Progressing, and its `-verify` sibling at
 Ready=False/DependencyNotReady while it waits on `<tag>`. Such a row prints under PENDING and
 does not by itself fail the probe, whatever commit it has applied so far. The exception is a
 DependencyNotReady row whose `spec.dependsOn` names a Kustomization that failed. Flux holds
 that row until someone fixes the dependency, so it fails even when the dependency is not
-printed (#6340). A caller that needs
+printed. A caller that needs
 the row settled waits on it with `cc-wait flux <name>`. Any other not-Ready row exits 1,
 including one with no Ready condition at all, which is what a stopped kustomize-controller
 leaves on an object it never reconciled.
@@ -406,15 +406,15 @@ def wait_state(
 
     `expected` is a commit or a prefix of one; None means the commit the source serves.
     With no `expected`, `ready` needs the applied commit to equal the served one. After master
-    is reset to an older commit, the applied commit still descends from it but is stale
-    (#6336). An explicit `expected` is `ready` once the applied commit is it or descends from
+    is reset to an older commit, the applied commit still descends from it but is stale.
+    An explicit `expected` is `ready` once the applied commit is it or descends from
     it, because a later promotion can land before Flux applies `expected` and carry its
     change. `failed`
     requires the source to serve `expected` itself, so a failure at another commit keeps the
     wait open rather than ending it.
 
     A DependencyNotReady row is `failed` when `failed_dependency` names a dependency, because
-    Flux holds it there until someone fixes that dependency (#6354). The dependency at the end
+    Flux holds it there until someone fixes that dependency. The dependency at the end
     of that chain must have attempted the artifact its source serves, so a failure left over
     from an older commit keeps the wait open.
 

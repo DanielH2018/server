@@ -78,7 +78,7 @@ def render(template: str, **overrides: object) -> str:
 
     Through `_setup_render` rather than a synthetic context of this module's own: the context
     this module carried drifted to a fleet cap of 12G while defaults/main.yml moved to 14G, so
-    every assertion below was checking a number the host never renders (#3202).
+    every assertion below was checking a number the host never renders.
     """
     return render_component_text(COMPONENT, template, overrides)
 
@@ -139,6 +139,20 @@ def test_parent_cap_renders_from_the_fleet_variables(
         "MemorySwapMax in fleet-slice-caps.conf.j2 is hardcoded — changing "
         "claude_code_fleet_swap_max would do nothing"
     )
+
+
+def test_parent_cpu_weight_follows_its_variable_and_ranks_below_system_slice(
+    defaults: dict[str, object],
+) -> None:
+    """system.slice, where k3s runs, keeps systemd's default weight of 100."""
+    weight = defaults["claude_code_fleet_cpu_weight"]
+    assert f"CPUWeight={weight}" in render(FLEET_CONF)
+    assert "CPUWeight=7" in render(FLEET_CONF, claude_code_fleet_cpu_weight=7)
+    assert int(str(weight)) < 100, (
+        f"a fleet weight of {weight} ranks the sessions level with or above k3s, so a test "
+        "fan-out can starve etcd"
+    )
+    assert "CPUQuota=" not in render(FLEET_CONF)
 
 
 def test_parent_cap_does_not_render_a_plane_variable() -> None:
