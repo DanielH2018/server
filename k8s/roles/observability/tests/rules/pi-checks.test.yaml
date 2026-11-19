@@ -42,12 +42,11 @@ tests:
             exp_annotations:
               summary: daniel-pi's container-recovery heartbeat has stopped reporting.
               description: >-
-                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
-                textfile collector, so nothing confirms the Pi's containers are being watched.
-                Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
-                /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
-                optimize_pi_recovery_restart_enabled false drops the timer and fires this on
-                purpose.
+                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi,
+                so nothing confirms its containers are watched. Read
+                `systemctl status homelab-pi-recovery.timer` there. Setting
+                optimize_pi_recovery_restart_enabled false drops the timer and fires this on purpose.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pirecoverynotreporting
       - eval_time: 30m
         alertname: PiRecoveryFailed
         exp_alerts: []
@@ -127,12 +126,11 @@ tests:
             exp_annotations:
               summary: daniel-pi's container-recovery heartbeat has stopped reporting.
               description: >-
-                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
-                textfile collector, so nothing confirms the Pi's containers are being watched.
-                Read `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
-                /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
-                optimize_pi_recovery_restart_enabled false drops the timer and fires this on
-                purpose.
+                No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi,
+                so nothing confirms its containers are watched. Read
+                `systemctl status homelab-pi-recovery.timer` there. Setting
+                optimize_pi_recovery_restart_enabled false drops the timer and fires this on purpose.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pirecoverynotreporting
 
   # A healthy heartbeat writes every 5 minutes, so the timestamp keeps up and neither rule fires.
   - interval: 1m
@@ -241,11 +239,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's watchdog.service is not active.
               description: >-
-                watchdog.service on daniel-pi has not been active for 30 minutes. wd_keepalive holds
-                the device, so the board keeps its hardware watchdog, but the `max-load-1 = 24` load
-                test is off. A stop or a daemon that died is the cause, because a restart leaves the
-                daemon running. Run `sudo systemctl start watchdog` on daniel-pi. The
-                `pi-watchdog-health` lines in /var/log/pi-health/health.log date the stop.
+                watchdog.service on daniel-pi has not been active for 30 minutes, so the
+                `max-load-1 = 24` load test is off. wd_keepalive still holds the hardware watchdog.
+                Run `sudo systemctl start watchdog` on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#piwatchdogfailed
       - eval_time: 46m
         alertname: PiWatchdogFailed
         exp_alerts: []
@@ -348,11 +345,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's auditd is not writing its log.
               description: >-
-                pi-audit-health on daniel-pi has read status=down for 30 minutes. auditd.service is
-                not active, or it is active and /var/log/audit/audit.log has had no write for an
-                hour. auditd suspends logging when /var/log runs out of space, and only a restart
-                resumes it. Read `df -m /var/log` on daniel-pi, then run `sudo systemctl restart
-                auditd`. The `pi-audit-health` lines in /var/log/pi-health/health.log date the stop.
+                pi-audit-health on daniel-pi has read status=down for 30 minutes: auditd.service is not
+                active, or /var/log/audit/audit.log has had no write for an hour. Read
+                `df -m /var/log` on daniel-pi, then run `sudo systemctl restart auditd`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#piauditfailed
       - eval_time: 46m
         alertname: PiAuditFailed
         exp_alerts: []
