@@ -19,6 +19,15 @@ class _FakeResp:
         return False
 
 
+class _FakeJson(_FakeResp):
+    def __init__(self, payload):
+        super().__init__(200)
+        self._body = json.dumps(payload).encode()
+
+    def read(self, *a):
+        return self._body
+
+
 def test_discord_post_sends_user_agent(monkeypatch):
     """Discord sits behind Cloudflare, which 403s the default Python-urllib User-Agent
     (error code 1010). discord() must set an explicit User-Agent or every post silently
@@ -35,6 +44,35 @@ def test_discord_post_sends_user_agent(monkeypatch):
     assert captured["req"].get_header("User-agent"), (
         "discord() POST must set a User-Agent (Cloudflare 403s the urllib default)"
     )
+
+
+def test_the_dashboard_is_found_past_the_first_page_of_issues(monkeypatch):
+    dashboard = {
+        "title": "Dependency Dashboard",
+        "user": {"login": "renovate[bot]"},
+        "body": "## Pending Status Checks\n",
+    }
+    filler = [{"title": "issue %d" % n, "user": {"login": "x"}} for n in range(100)]
+    pages = {"1": filler, "2": [dashboard]}
+
+    def fake_urlopen(req, timeout=None):
+        page = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)["page"]
+        return _FakeJson(pages[page[0]])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    issues = rn.get_open("o/r", "issues", until_dashboard=True)
+    assert notify_logic.dashboard_body(issues) == dashboard["body"]
+
+
+def test_every_page_of_open_pulls_is_read(monkeypatch):
+    pages = {"1": [{"number": n} for n in range(100)], "2": [{"number": 100}]}
+
+    def fake_urlopen(req, timeout=None):
+        page = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)["page"]
+        return _FakeJson(pages[page[0]])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert len(rn.get_open("o/r", "pulls")) == 101
 
 
 def test_discord_returns_true_on_2xx(monkeypatch):

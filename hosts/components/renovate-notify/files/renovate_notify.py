@@ -86,6 +86,9 @@ DASHBOARD_STALE_MSG = (
 )
 
 
+MAX_OPEN_PAGES = 20
+
+
 def cfg() -> dict[str, str]:
     return parse_env_file(CONFIG)
 
@@ -268,6 +271,22 @@ def write_pending_seen(path: str, seen: dict[str, float]) -> None:
     atomic_write(path, json.dumps(seen, sort_keys=True))
 
 
+def get_open(repo: str, kind: str, until_dashboard: bool = False) -> list[dict]:
+    """Return every open item of `kind` ("pulls" or "issues"), paging newest first.
+
+    One page misses the oldest items once more than 100 are open, and the oldest are the
+    stuck PRs and the Dependency Dashboard. Stops at a short page or MAX_OPEN_PAGES, and
+    with `until_dashboard` also at the page holding the dashboard.
+    """
+    items: list[dict] = []
+    for page in range(1, MAX_OPEN_PAGES + 1):
+        batch = get("repos/%s/%s?state=open&per_page=100&page=%d" % (repo, kind, page))
+        items += batch
+        if len(batch) < 100 or (until_dashboard and find_dashboard(batch) is not None):
+            break
+    return items
+
+
 def main() -> int:
     """Fetch open Renovate PRs and the dashboard, and post a digest on a fingerprint change.
 
@@ -288,7 +307,7 @@ def main() -> int:
     state_dir = c.get("STATE_DIR", "/var/lib/renovate-notify")
     state_file = os.path.join(state_dir, "last_notified")
 
-    pulls = get("repos/%s/pulls?state=open&per_page=100" % repo)
+    pulls = get_open(repo, "pulls")
     prs = [build_pr(repo, p) for p in pulls if is_renovate(p)]
     items = actionable(prs)
 
@@ -296,7 +315,7 @@ def main() -> int:
     # stale/missing dashboard means Renovate itself stopped (broken App or renovate.json) —
     # a state with NO PRs, which the digest alone would read as a healthy "backlog cleared".
     # Fold it into the fingerprint so it notifies on transition, not every daily tick.
-    issues = get("repos/%s/issues?state=open&per_page=100" % repo)
+    issues = get_open(repo, "issues", until_dashboard=True)
     stale = dashboard_stale(find_dashboard(issues))
     # Repository Problems (per-package lookup failures, config warnings) get no PR and
     # don't touch dashboard staleness — a package can silently stop updating forever
