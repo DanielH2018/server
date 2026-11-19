@@ -1,8 +1,18 @@
 """The slot-seconds, queue waits and pytest-leg setup `ci_slot_cost.py` reads off a run's jobs."""
 
+import subprocess
+
 import pytest
 
-from ci_slot_cost import empty_leg_line, head_line, p90, recent_runs, run_cost
+from ci_slot_cost import (
+    empty_leg_line,
+    head_line,
+    main,
+    p90,
+    read_jobs,
+    recent_runs,
+    run_cost,
+)
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 
@@ -181,3 +191,46 @@ def test_recent_pull_request_runs_are_listed_on_any_branch():
     command = " ".join(listed[0])
     assert "--event pull_request" in command
     assert "--branch" not in command
+
+
+def _failing_gh(failures: int):
+    calls: list = []
+
+    def gh_json(*args):
+        calls.append(args)
+        if len(calls) <= failures:
+            raise subprocess.CalledProcessError(
+                1, ["gh", *args], stderr="gh: HTTP 403\nsecondary rate limit\n"
+            )
+        return {"jobs": []}
+
+    return gh_json, calls
+
+
+def test_a_failed_jobs_fetch_is_retried_once():
+    gh_json, calls = _failing_gh(1)
+
+    assert read_jobs(7, gh_json, retry_pause=0) == []
+    assert len(calls) == 2
+
+
+def test_two_failed_jobs_fetches_name_the_run_and_the_stderr_line():
+    gh_json, _ = _failing_gh(2)
+
+    with pytest.raises(RuntimeError, match="run 7: secondary rate limit"):
+        read_jobs(7, gh_json, retry_pause=0)
+
+
+@pytest.mark.parametrize(
+    ("argv", "named"),
+    [
+        (["7"], "the jobs of run 7"),
+        (["--recent", "1"], "the run list"),
+    ],
+)
+def test_a_failing_gh_prints_one_stderr_line_and_exits_1(argv, named, capsys):
+    gh_json, _ = _failing_gh(2)
+
+    assert main(argv, gh_json, retry_pause=0) == 1
+    err = capsys.readouterr().err
+    assert err == f"ci_slot_cost: gh could not read {named}: secondary rate limit\n"
