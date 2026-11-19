@@ -28,8 +28,6 @@ services:
       - VOLUMES=1
       - NETWORKS=1
       - EVENTS=1
-      # haproxy logs every request at info, so this also hides a 403 denial and a 503.
-      - LOG_LEVEL=warning
     networks:
 {% for net in container_item.networks %}
       - {{ net }}

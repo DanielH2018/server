@@ -132,6 +132,38 @@ def test_the_guard_can_go_red():
     assert not [f for f in REQUIRED_FRAGMENTS if "{{" in f]
 
 
+# --- the docker-proxy request drop ------------------------------------------------------------
+
+_PROXY_LINE = (
+    "::ffff:172.18.0.4:56040 [19/Nov/2026:13:56:51.699] proxy docker/socket 0/0/0/5/5 {status} "
+    '8371 - - ---- 7/7/5/5/0 0/0 "GET /v1.55/containers/6533eef1daba/json HTTP/1.1"'
+)
+
+
+def _proxy_drop(config: str) -> re.Pattern:
+    block = re.search(
+        r'stage\.match \{\s*selector = "\{container=\\"docker-proxy\\"\}"\s*'
+        r'stage\.drop \{\s*expression\s*=\s*"((?:[^"\\]|\\.)*)"',
+        config,
+    )
+    assert block, "no stage.drop scoped to the docker-proxy container"
+    return re.compile(re.sub(r"\\(.)", r"\1", block.group(1)))
+
+
+@pytest.mark.parametrize("status", [200, 201, 204])
+def test_a_proxy_success_line_is_dropped(config, status):
+    assert _proxy_drop(config).search(_PROXY_LINE.format(status=status))
+
+
+@pytest.mark.parametrize("status", [403, 503])
+def test_a_proxy_denial_or_dead_socket_line_still_ships(config, status):
+    assert not _proxy_drop(config).search(_PROXY_LINE.format(status=status))
+
+
+def test_the_container_streams_pass_through_the_drop(config):
+    assert re.search(r"forward_to\s*=\s*\[loki\.process\.pi\.receiver\]", config)
+
+
 # --- storage and resolver ---------------------------------------------------------------------
 
 

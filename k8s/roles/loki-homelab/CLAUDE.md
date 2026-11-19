@@ -102,8 +102,10 @@ verbatim-prompts store this role's LAN route
   global warn level hides them. Each drop names one success shape; Flux's applies that changed
   an object, its dispatched failure events and CrowdSec's non-2xx LAPI calls still ship.
   `tests/k8s/test_alloy_drops_routine_success_lines.py` holds each shape both ways, through
-  `dropped_by` in `tests/k8s/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr, karakeep
-  and the Pi's docker-proxy run at warn in their own config instead.
+  `dropped_by` in `tests/k8s/_alloy_pods_pipeline.py`. blackbox-exporter, exportarr and
+  karakeep run at warn in their own config instead. The Pi's Alloy drops docker-proxy's 2xx
+  request lines and keeps its 403s and 503s
+  (`hosts/lib/tests/test_pi_compose_alloy.py::test_a_proxy_denial_or_dead_socket_line_still_ships`).
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
