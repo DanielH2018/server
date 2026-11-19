@@ -72,6 +72,11 @@ A failed lookup leaves the title blank and is retried on the next poll; it
 never makes the lock panel unavailable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_inflight_title_lookup_failure_leaves_panel_up_is_flagged`).
 The page links each PR number to its GitHub page (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_page_links_pr_numbers_to_github_is_clean`).
 
+The *process* column names the script a row runs, not its interpreter, so
+`uv run python scripts/deploy_tools/land.py --pr 1` reads `land.py`. The full command line is
+the label's hover text, and the log shows as its file name
+(`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_process_names_the_script_not_its_interpreter_is_clean`).
+
 Only a `land` row is cancellable (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_cancel_lock_row_is_flagged`).
 
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
@@ -92,7 +97,12 @@ makes the panel unavailable, because `cancel` reads the panel for its pids
 (`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_inflight_unreadable_log_leaves_step_blank_and_panel_up_is_flagged`).
 
 The rows sort furthest step first, then longest running
-(`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_page_renders_the_landing_queue_from_the_inflight_rows_is_clean`).
+(`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_queue_lists_the_furthest_step_first_then_the_longest_running_is_clean`).
+Both tables show elapsed time as minutes and seconds, `54m 03s`, and keep counting minutes past
+the hour
+(`hosts/components/deploy-ui/tests/test_deploy_ui_page_js.py::test_elapsed_reads_as_minutes_and_seconds_is_clean`).
+`test_deploy_ui_page_js.py` runs the page's own script under node against a stubbed DOM, so
+it tests the code the browser loads; it skips where node is absent.
 That is a display order, not a turn order. The landing turn and slot locks are taken by
 polling, not FIFO, so the page numbers no positions. The queue reads only the logs; the lock
 panel still watches the tree lock alone.
