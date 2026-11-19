@@ -1,4 +1,4 @@
-"""The n8n defaults that 2.41.6 warns will change are pinned, on both pods (#3255).
+"""The n8n defaults that 2.41.6 warns will change are pinned, on both pods.
 
 n8n logs five deprecation warnings at boot. Each names a default that a future version
 changes, and an unset variable would take that change silently through a Renovate digest bump.
@@ -9,9 +9,9 @@ changes, and an unset variable would take that change silently through a Renovat
   both.** The launcher warns for any runner whose `allowed-env` lacks one. `env-overrides`
   does not silence it, whatever the warning text says. `allowed-env` passes only what the
   launcher's own environment holds, so an entry with no value behind it pins nothing.
-- **Both pods hold one `N8N_RUNNERS_TASK_TIMEOUT`** (#3258). The runner aborts at its own
+- **Both pods hold one `N8N_RUNNERS_TASK_TIMEOUT`**. The runner aborts at its own
   timeout, so a broker value that differs only misstates the cap.
-- **The two warnings 2.41.6 adds are cleared** (#3260): `N8N_RUNNERS_ENABLED` is not set, and
+- **The two warnings 2.41.6 adds are cleared**: `N8N_RUNNERS_ENABLED` is not set, and
   `N8N_MIGRATE_FS_STORAGE_PATH=true` moves `binaryData` to `storage`.
 
 Run: uv run pytest tests/services/test_n8n_deprecated_defaults_are_pinned.py

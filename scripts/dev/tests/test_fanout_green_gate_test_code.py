@@ -17,7 +17,7 @@ CODE = "def double(x):\n    return x\n"
 FIXED = "def double(x):\n    return 2 * x\n"
 CONFIG = {"pyproject.toml": "[tool.pytest.ini_options]\n"}
 # Each fixture of the scratch conftest, by name. `repo` requests `workdir`, which pytest
-# resolves from the requesting test's module (#4543).
+# resolves from the requesting test's module.
 FIXTURES = {
     "workdir": "@pytest.fixture\ndef workdir(tmp_path):\n    return tmp_path\n",
     "repo": (
@@ -70,7 +70,7 @@ def test_an_appended_fixture_passes_unless_a_conftest_fixture_requests_it(
     assert green_gate(run, repo, red, gate) == (STANDS_ON + reason if reason else "")
 
 
-# #4548: pytest's builtin `tmp_path` requests `tmp_path_factory` from the red test's module,
+# Pytest's builtin `tmp_path` requests `tmp_path_factory` from the red test's module,
 # so an appended pass-through `tmp_path_factory` would serve the red node and pass.
 TMP_TEST = (
     "def test_doubles_in_tmp(tmp_path):\n    from mod import double\n\n"
@@ -102,7 +102,7 @@ def test_an_appended_fixture_passes_unless_a_builtin_fixture_requests_it(
     assert green_gate(run, repo, red, gate) == (STANDS_ON + reason if reason else "")
 
 
-# `pytest --setup-plan -q` with pytest 9.1.1, measured on 2026-10-12: a node with fixtures, one
+# `pytest --setup-plan -q` with pytest 9.1.1: a node with fixtures, one
 # with none, a parametrize id holding a space, and a fixture's SETUP line with the same suffix.
 PLAN = """\
 SETUP    S tmp_path_factory
@@ -143,7 +143,7 @@ def test_the_red_gate_refuses_a_new_test_the_setup_plan_does_not_list(tmp_path):
     )
 
 
-# #4359: the red test demanded that the conftest drop a fixture nothing requests.
+# The red test demanded that the conftest drop a fixture nothing requests.
 CENSUS = (
     "from pathlib import Path\n\n\ndef test_no_unused_fixture(repo):\n"
     "    conftest = (Path(__file__).parent / 'conftest.py').read_text()\n"
@@ -219,7 +219,7 @@ def test_a_new_or_deleted_conftest_is_refused(tmp_path, files, reason):
     assert green_gate(run, repo, red, gate) == STANDS_ON + reason
 
 
-# #4372: the guard's red test reaches its constant only through an older helper.
+# The guard's red test reaches its constant only through an older helper.
 GUARD = """NAMES = frozenset({"old.py"})
 
 
@@ -246,7 +246,7 @@ def test_the_green_gate_passes_a_guard_constant_the_red_test_needs_changed(tmp_p
     assert green_gate(run, repo, red, gate) == ""
 
 
-# #5397: the red commits registered their patching module, and the fix raised its count.
+# The red commits registered their patching module, and the fix raised its count.
 REGISTRY = "tests/repo/monkeypatch_allowlist.txt"
 LISTED = "tests/test_listed.py 2\n"
 RED_LINE = "tests/test_new.py 8\n"
@@ -283,7 +283,7 @@ def test_a_patch_registry_may_change_only_the_red_modules_lines(tmp_path, head, 
     assert green_gate(run, repo, red, gate) == (STANDS_ON + refusal if reason else "")
 
 
-# #5197: the code under test was `_restarts_privately`, a helper already in the red file, and
+# The code under test was `_restarts_privately`, a helper already in the red file, and
 # the fix restricted it so that a comment saying "rollout restart" no longer counts.
 SUBJECT_BASE = (
     "def _flagged(command):\n    return 'rollout restart' in command\n\n\n"

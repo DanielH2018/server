@@ -1,7 +1,4 @@
-# crowdsec's edge probe timer on daniel-pi (H5.14, docs/target-architecture/host/h5-pi-compose.md).
-# D5's first crowdsec conversion PR (#5650) installed it through setup/k8s_host_files with
-# `delegate_to: daniel-pi`. The package owns it since H5.14, and the PR that added this component
-# deleted those tasks, so one side writes each path.
+# crowdsec's edge probe timer on daniel-pi.
 #
 # The evidence half of crowdsec's off-cluster verify (D5, *crowdsec's verify from outside the
 # cluster*): the timer probes the edge VIP once a minute and appends `<UTC time> http=<code>` to
@@ -44,7 +41,7 @@ files:
   - {src: units/homelab-crowdsec-probe.timer, dst: /usr/lib/systemd/system/homelab-crowdsec-probe.timer}
 enable:
   homelab-crowdsec-probe.timer: timers.target
-# What D5's conversion installed through k8s_host_files. Reconcile retires each once the timer
+# The earlier install through k8s_host_files. Reconcile retires each once the timer
 # above has started, and keeps each while that start fails, so the probe still runs. Both run only
 # if the timer starts outside reconcile while the host holds (docs/host-packages.md).
 legacy:

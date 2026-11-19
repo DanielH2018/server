@@ -56,7 +56,7 @@ from deploy_tools.land_lib.pin_reads import Unreadable as HoldUnreadable
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
 from lib.repo_paths import HOST_LIB_FILES
 
-# The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
+# The Backup CR reader the backup-health cron ships; it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
@@ -102,7 +102,7 @@ def deploy_hold(read: Callable[[], str | None]) -> list[str]:
 
     Raises:
         Unreadable: the variable could not be read. The runner then exits `EX_UNAVAILABLE`
-            rather than this gate's number, which would claim a hold is set (#4468).
+            rather than this gate's number, which would claim a hold is set.
     """
     try:
         value = read()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for how `prune_worktrees.py --prune` treats orphan directories under .claude/worktrees/.
 
-An orphan is a directory git no longer registers as a worktree (#4425). One with no regular
+An orphan is a directory git no longer registers as a worktree. One with no regular
 files, or whose every file's content is already in the object store, holds nothing git lacks
 and `--prune` removes it. One holding content git never stored is kept and reported with each
 such file named. Each test runs the script's `main` against a scratch repo, so the
@@ -154,7 +154,7 @@ def test_prune_skips_an_orphan_a_process_still_uses(tmp_path, monkeypatch, capsy
         holder.kill()
         holder.wait()
 
-    # The held orphan is a skip, not a failure: the run names it and exits 0 (#7949).
+    # The held orphan is a skip, not a failure: the run names it and exits 0.
     assert done.returncode == 0, done.stderr
     assert f"could not remove {held}: in use" in done.stderr
     assert not idle.exists(), done.stdout + done.stderr

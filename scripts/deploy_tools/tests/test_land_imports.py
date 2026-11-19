@@ -55,11 +55,11 @@ ALLOWED = {
     "options": set(),
     # `cause`'s vocabulary lives beside `verdict`'s, and the Ledger validates against it.
     "ledger": {"outcome"},
-    # The classifier libraries the Tools defaults wrap (#4349 moved them in from beside land.py).
+    # The classifier libraries the Tools defaults wrap.
     "tools": {
         "land_flux",
         "own_checkout",
-        # `Tools.fresh_landing`, the checkout `--fresh` lands from (#7933).
+        # `Tools.fresh_landing`, the checkout `--fresh` lands from.
         "fresh",
         "land_tags",
         "land_tested_base",
@@ -96,10 +96,11 @@ ALLOWED = {
         "stale_base",
         "stuck_checks",
     },
-    # What makes a green head stale against master, and the one branch update (#4013).
+    # What makes a green head stale against master, and the one branch update.
     "stale_base": {"landing", "outcome", "gh_read", "policy", "pr_json"},
-    # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge.
-    "turn": {"landing", "outcome", "line"},
+    # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge;
+    # `fresh` names the variable a landing handed the turn reads it from.
+    "turn": {"landing", "outcome", "line", "fresh"},
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.
     "slots": {"landing", "outcome", "live_limit", "pin_gate", "turn"},
     # The drafts whose landings wait for the turn, which its holder reads; boundaries only.
@@ -117,7 +118,7 @@ ALLOWED = {
         "stale_base",
         "turn",
     },
-    # The read that ends --await-merge on a check GitHub never finishes (#7996).
+    # The read that ends --await-merge on a check GitHub never finishes.
     "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
     "pin_gate": {"landing", "outcome", "pin_reads"},

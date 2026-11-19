@@ -4,87 +4,18 @@ Run: uv run pytest hosts/components/gh-quota/tests/test_gh_quota.py
 """
 
 import dataclasses
-import hashlib
 import json
 import os
 import sqlite3
-import subprocess
 from collections import Counter
 from contextlib import closing
 from pathlib import Path
 
 import pytest
-from gh_quota import KEEP_S, Ledger, Window, classify, main, render, session_key
+from gh_quota import Ledger, Window, classify, main, render, session_key
 from lib.proc_testing import write_exec
 
-NOW = 1_794_668_400.0  # 15:00:00 UTC
-RESET = int(NOW) + 1200
-SESSION = "7c1e90aa-0000-4000-8000-000000000001"
-
-
-class FakeGh:
-    """Stands in for `gh`: names its stored token and answers `gh api rate_limit`.
-
-    `logins` maps a `GH_CONFIG_DIR`, None when the caller sets none, to the token
-    `gh auth token` prints there. A directory it does not name is not logged in.
-    `fail` makes the rate-limit call fail the way `gh` can.
-    """
-
-    def __init__(self):
-        self.logins: dict[str | None, str] = {None: "gho_operator"}
-        self.graphql_used = 100
-        self.core_used = 0
-        self.fail: Exception | None = None
-        self.env: dict[str, str] = {}
-
-    def __call__(self, argv, *, env, check=False, **_kwargs):
-        self.env = env
-        if argv == ["gh", "auth", "token"]:
-            token = self.logins.get(env.get("GH_CONFIG_DIR"))
-            if token is not None:
-                return subprocess.CompletedProcess(argv, 0, f"{token}\n", "")
-            if check:
-                raise subprocess.CalledProcessError(1, argv)
-            return subprocess.CompletedProcess(argv, 1, "", "no oauth token found\n")
-        assert argv == ["gh", "api", "rate_limit"]
-        if self.fail is not None:
-            raise self.fail
-        resources = {
-            "graphql": {"used": self.graphql_used, "limit": 5000, "reset": RESET},
-            "core": {"used": self.core_used, "limit": 5000, "reset": RESET + 60},
-        }
-        return subprocess.CompletedProcess(
-            argv, 0, json.dumps({"resources": resources}), ""
-        )
-
-
-class Clock:
-    def __init__(self):
-        self.t = NOW
-
-    def __call__(self) -> float:
-        return self.t
-
-
-def _ledger(
-    tmp_path: Path, mode: str, env: dict[str, str]
-) -> tuple[Ledger, Clock, FakeGh]:
-    conf = tmp_path / "gh-quota.conf"
-    conf.write_text(f"mode={mode}\n")
-    root = tmp_path / "ledger"
-    root.mkdir()
-    clock, gh = Clock(), FakeGh()
-    return Ledger(root=root, conf=conf, env=env, now=clock, run=gh), clock, gh
-
-
-def _identity_of(token: str) -> str:
-    return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]
-
-
-@pytest.fixture
-def recording(tmp_path: Path):
-    """A ledger in `record` mode, with the pieces a test moves: (ledger, clock, gh)."""
-    return _ledger(tmp_path, "record", {"CLAUDE_CODE_SESSION_ID": SESSION})
+from _gh_quota_fakes import RESET, SESSION, identity_of, make_ledger
 
 
 @pytest.mark.parametrize(
@@ -151,7 +82,7 @@ def test_record_counts_each_call_against_its_session(recording):
 
 
 def test_record_writes_nothing_when_the_host_does_not_record(tmp_path: Path):
-    ledger, _clock, _gh = _ledger(tmp_path, "off", {})
+    ledger, _clock, _gh = make_ledger(tmp_path, "off", {})
 
     ledger.record(["pr", "list"])
 
@@ -174,14 +105,53 @@ def test_github_is_sampled_once_per_interval(recording):
     assert window.used == 180
 
 
+def test_a_reset_reported_seconds_later_is_the_same_window(recording):
+    ledger, clock, gh = recording
+    ledger.record(["pr", "list"])
+
+    clock.t += 31
+    gh.graphql_reset = RESET + 45
+    gh.graphql_used = 180
+    ledger.record(["pr", "list"])
+
+    (window,) = ledger.windows()
+    assert (window.reset, window.used) == (RESET, 180)
+
+
+def test_status_and_new_calls_follow_the_freshest_sample_not_the_latest_reset(
+    recording,
+):
+    ledger, clock, gh = recording
+    gh.graphql_reset, gh.graphql_used = RESET + 1260, 1853
+    ledger.record(["pr", "list"])
+
+    clock.t += 31
+    gh.graphql_reset, gh.graphql_used = RESET, 2219
+    ledger.record(["pr", "list"])
+    ledger.record(["pr", "view"])
+
+    (window,) = ledger.windows()
+    assert (window.reset, window.used) == (RESET, 2219)
+    (path,) = ledger.root.glob("*.sqlite")
+    with closing(sqlite3.connect(path)) as db:
+        spend = db.execute(
+            "SELECT window, argv_class, n FROM spend ORDER BY window, argv_class"
+        ).fetchall()
+    assert spend == [
+        (RESET, "pr list", 1),
+        (RESET, "pr view", 1),
+        (RESET + 1260, "pr list", 1),
+    ]
+
+
 def test_a_token_caller_gets_a_ledger_named_by_fingerprint(tmp_path: Path):
     token = "ghp_notarealtoken"
-    ledger, _clock, gh = _ledger(tmp_path, "record", {"GH_TOKEN": token})
+    ledger, _clock, gh = make_ledger(tmp_path, "record", {"GH_TOKEN": token})
 
     ledger.record(["pr", "list"])
 
     (path,) = ledger.root.glob("*.sqlite")
-    assert path.name.startswith(f"{_identity_of(token)}@")
+    assert path.name.startswith(f"{identity_of(token)}@")
     assert gh.env["GH_TOKEN"] == token
 
 
@@ -203,8 +173,8 @@ def test_two_logins_of_one_uid_are_counted_in_separate_ledgers(recording):
         if w.bucket == "graphql"
     }
     assert calls == {
-        _identity_of("gho_operator"): {SESSION: 1},
-        _identity_of("gho_agent"): {"agent": 2},
+        identity_of("gho_operator"): {SESSION: 1},
+        identity_of("gho_agent"): {"agent": 2},
     }
 
 
@@ -223,7 +193,7 @@ def test_each_sample_names_its_caller_by_session_gh_path_and_variable_names(
         "GITHUB_REPOSITORY": "o/r",
         "HOME": "/home/x",
     }
-    ledger, _clock, gh = _ledger(tmp_path, "record", env)
+    ledger, _clock, gh = make_ledger(tmp_path, "record", env)
     gh.core_used = 7
 
     ledger.record(["pr", "list"])
@@ -264,7 +234,7 @@ def test_each_sample_names_its_process_by_cgroup_and_ancestor_comm_names(
         (proc / pid / "stat").write_text(stat + "\n")
     cgroup = "0::/user.slice/user-1000.slice/user@1000.service/tmux-spawn-1.scope"
     (proc / "self" / "cgroup").write_text(cgroup + "\n")
-    ledger, _clock, gh = _ledger(tmp_path, "record", {})
+    ledger, _clock, gh = make_ledger(tmp_path, "record", {})
     ledger = dataclasses.replace(ledger, proc=proc)
     gh.core_used = 7
 
@@ -305,7 +275,7 @@ def test_a_comm_cut_inside_a_multibyte_character_does_not_fail_the_sample(
 
 
 def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Path):
-    ledger, _clock, gh = _ledger(tmp_path, "record", {})
+    ledger, _clock, gh = make_ledger(tmp_path, "record", {})
     gh.logins.clear()
 
     ledger.record(["pr", "list"])
@@ -343,83 +313,6 @@ def test_status_lists_only_the_sessions_over_the_share_until_asked_for_all():
     ]
 
 
-@pytest.mark.parametrize(
-    "failure",
-    [
-        OSError("gh is not installed"),
-        subprocess.CalledProcessError(1, ["gh", "api", "rate_limit"]),
-    ],
-    ids=["gh-missing", "gh-exits-nonzero"],
-)
-def test_a_failed_sample_is_counted_and_the_call_is_still_recorded(recording, failure):
-    ledger, clock, gh = recording
-    gh.fail = failure
-
-    ledger.record(["pr", "list"])
-
-    assert ledger.failures() == 1
-    gh.fail = None
-    clock.t += 31
-    (window,) = ledger.windows()
-    assert window.sessions == {SESSION: {"pr list": 1}}
-
-
-def test_record_lets_the_call_through_when_the_ledger_file_is_corrupt(recording):
-    ledger, _clock, _gh = recording
-    ledger.record(["pr", "list"])
-    (path,) = ledger.root.glob("*.sqlite")
-    path.write_bytes(
-        b"not a database, and longer than a SQLite header needs to be to say so"
-    )
-
-    ledger.record(["pr", "list"])
-
-    assert ledger.failures() == 1
-
-
-def test_a_failure_older_than_the_ledger_keeps_its_rows_is_not_counted(recording):
-    ledger, clock, gh = recording
-    gh.fail = OSError("gh is not installed")
-    ledger.record(["pr", "list"])
-    gh.fail = None
-
-    clock.t += KEEP_S - 60
-    assert ledger.failures() == 1
-    clock.t += 120
-    assert ledger.failures() == 0
-
-
-def test_a_failure_log_at_its_size_limit_drops_its_old_lines_and_takes_the_new_one(
-    recording,
-):
-    ledger, _clock, gh = recording
-    log = ledger.root / f"failures.{os.getuid()}"
-    recent = f"{int(NOW) - 60} OSError: disk full"
-    log.write_text(
-        f"{int(NOW) - KEEP_S - 60} OSError: disk full\n" * 4000 + f"{recent}\n"
-    )
-    gh.fail = OSError("gh is not installed")
-
-    ledger.record(["pr", "list"])
-
-    assert log.read_text().splitlines() == [
-        recent,
-        f"{int(NOW)} {SESSION} OSError: gh is not installed",
-    ]
-
-
-def test_a_failure_log_full_of_recent_lines_takes_no_new_line(recording):
-    ledger, _clock, gh = recording
-    log = ledger.root / f"failures.{os.getuid()}"
-    full = f"{int(NOW) - 60} OSError: disk full\n" * 4000
-    log.write_text(full)
-    gh.fail = OSError("gh is not installed")
-
-    ledger.record(["pr", "list"])
-
-    assert log.read_text() == full
-
-
 def test_the_command_prints_status_as_one_line_of_json(recording, capsys):
     ledger, _clock, _gh = recording
     ledger.record(["pr", "list"])
@@ -439,7 +332,7 @@ def test_the_command_prints_status_as_one_line_of_json(recording, capsys):
 
 
 def test_the_command_says_so_when_the_host_does_not_record(tmp_path: Path, capsys):
-    ledger, _clock, _gh = _ledger(tmp_path, "off", {})
+    ledger, _clock, _gh = make_ledger(tmp_path, "off", {})
 
     assert main(["mode"], ledger) == 0
     assert main(["status"], ledger) == 0

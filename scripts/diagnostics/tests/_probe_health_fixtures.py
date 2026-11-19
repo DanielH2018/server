@@ -50,7 +50,7 @@ def pods(*containers):
 
 
 def current_checkout(role, roles_dir, on_origin):
-    """A `stale_reason` for `run_health` that judges every checkout current (#5912).
+    """A `stale_reason` for `run_health` that judges every checkout current.
 
     For a case that reads the repo's own roles. CI tests a PR's head, which sits behind
     origin/master whenever master moved, so the real refusal would read 75 for any role master

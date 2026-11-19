@@ -26,11 +26,12 @@ the rows which would are older than the file, and the table cannot tell the two 
 ## What a row can miss
 
 DECIDED: a row is compared with the pull request's own diff, not with every change since the
-row was recorded (#8458, the operator's ruling of 2026-11-15). Six commits a day touch a file
+row was recorded. Six commits a day touch a file
 every module reads, so a rule that distrusted a row after any such change would select the
 whole suite on almost every run. The cost is that a module can gain a dependency on master
 after its row was recorded, and a pull request that changes the dependency then leaves the
-module out. The push run on master runs every module and catches it there.
+module out. The nightly sweep in `.github/workflows/pytest-sweep.yml` runs every module and
+catches it there.
 
 A row also holds only what the recording host ran. A test that skips there and runs on a CI
 runner reads files the row lacks, so `record.py` gives a module that skipped a test no row.

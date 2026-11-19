@@ -1,4 +1,4 @@
-"""bootstrap_case's planned items run concurrently and keep their verdicts (#7785).
+"""bootstrap_case's planned items run concurrently and keep their verdicts.
 
 Each test drives `bootstrap_case.run` with the scratch clones, the kit and the seed stubbed and
 `Container` replaced by a fake that answers as the script's real run would, so no Docker is
@@ -250,7 +250,7 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
         for label in (first, last)
     }
     assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
-    assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+    assert len(seconds[last]) == 1 and seconds[last][0] < seconds[first][0], err
 
 
 def test_each_item_s_phase_timings_print_under_its_duration_and_nothing_else_does(

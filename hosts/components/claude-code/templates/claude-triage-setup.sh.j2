@@ -55,8 +55,11 @@ fi
 
 # The session's kubeconfig: the operator's read-only one, root-owned, readable by the session's
 # group, outside every home the session writes. Copied on every run so a re-issued token reaches it.
+# It names the API by the host's LAN address, so the session reaches it through the T2 egress
+# proxy like any other destination, and no loopback port stays open to the session.
 if [[ -f "$operator/.kube/config" ]]; then
   install -o root -g "$session" -m 0640 "$operator/.kube/config" {{ pins.kubeconfig }}
+  sed -i 's#^\([[:space:]]*server: \)https://127\.0\.0\.1:6443$#\1https://{{ server_ip }}:6443#' {{ pins.kubeconfig }}
 fi
 
 # The toolchain and the clone change only while no run holds the lock: a refresh under a live

@@ -13,7 +13,7 @@ groups:
     rules:
       # A hold stops every promotion until it clears, and only the operator clears one while the
       # revert rule stays off. The 15m hold rides over a hold that settle writes and the next run
-      # clears. Alertmanager's DeployHoldActive route repeats it every 24h rather than 6h.
+      # clears. Its escalate label sends it to Alertmanager's daily repeat rather than every 6h.
       - alert: DeployHoldActive
         expr: homelab_deploy_hold_active{job="deploy-pipeline"} == 1
         for: 15m
@@ -32,7 +32,7 @@ groups:
       # hold to explain it: promote is not running, or its runs end without moving prod. The
       # first `and on()` drops the alert while a hold stands, which DeployHoldActive already
       # pages. The second drops it inside the weekly reboot's no-promotion window, where
-      # promote.py decide defers every promotion on purpose (#5458). The exporter derives that
+      # promote.py decide defers every promotion on purpose. The exporter derives that
       # gauge from the weekly_reboot_* variables, so this file holds no literal hour. The
       # `unless` keeps the alert quiet for 30 minutes after the window ends. The scheduled
       # promote run that moves prod fires at the end, and GitHub often starts a schedule: run
@@ -74,12 +74,13 @@ groups:
             promote moved it, or promote moved it and failed to write PROD_DIGEST. Compare
             probe.py landing's prod line with gh variable get PROD_DIGEST, and read the
             package's version history for who pushed the tag.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#the-deploy-pipeline-alerts
       # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
       # job, which no other check can see. The second pages a scrape that works but lacks any one
       # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
       # series for what they feed, never a 0. It is conjoined with up == 1, because
-      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5) since M6's
-      # batch A3. The 15m hold rides over two failed cycles.
+      # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5). The 15m
+      # hold rides over two failed cycles.
       - alert: DeployPipelineExporterAbsent
         expr: >-
           absent(up{job="deploy-pipeline"})

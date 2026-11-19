@@ -13,6 +13,11 @@ from karakeep_python_api import KarakeepAPI
 VERSION: str = "1.3.0"
 
 
+def not_library_record(record) -> bool:
+    """Reject records from karakeep_python_api, whose own sink already prints them."""
+    return not (record["name"] or "").startswith("karakeep_python_api")
+
+
 class AddTimeToRead:
     """Class to add time-to-read tags to bookmarks based on content length."""
 
@@ -29,7 +34,7 @@ class AddTimeToRead:
         try:
             existing_lists = self.karakeep.get_all_lists()
             existing_list_names = {lst.name for lst in existing_lists}
-            logger.info(f"Found {len(existing_lists)} existing lists")
+            logger.debug(f"Found {len(existing_lists)} existing lists")
         except Exception as e:
             logger.error(f"Failed to fetch existing lists: {e}")
             return
@@ -68,14 +73,14 @@ class AddTimeToRead:
 
             # Skip if list already exists
             if list_name in existing_list_names:
-                logger.info(f"List '{list_name}' already exists, skipping creation")
+                logger.debug(f"List '{list_name}' already exists, skipping creation")
                 continue
 
             tag_name = config["tag"]
             description = config["description"]
             query = f"#{tag_name} -is:archived"
 
-            logger.info(f"Creating smart list '{list_name}' with query '{query}'")
+            logger.debug(f"Creating smart list '{list_name}' with query '{query}'")
 
             try:
                 result = self.karakeep.create_a_new_list(
@@ -85,7 +90,7 @@ class AddTimeToRead:
                     list_type="smart",
                     query=query,
                 )
-                logger.info(
+                logger.debug(
                     f"Successfully created list '{list_name}' with ID: {result.id if hasattr(result, 'id') else 'unknown'}"
                 )
 
@@ -93,18 +98,12 @@ class AddTimeToRead:
                 logger.error(f"Failed to create list '{list_name}': {e}")
 
     def setup_logging(self, verbose: bool = False):
-        """Setup loguru logging with file output and console output based on verbosity."""
-        # Remove default logger
-        # logger.remove()
-
-        # Add file logger with debug level
-        logger.add("karakeep-time-tagger.log", level="DEBUG", rotation="10 MB")
-
-        # Add console logger based on verbosity
+        """Set up one stderr handler, at DEBUG when verbose and INFO otherwise."""
+        logger.remove()
         if verbose:
-            logger.add(sys.stderr, level="DEBUG")
+            logger.add(sys.stderr, level="DEBUG", filter=not_library_record)
         else:
-            logger.add(sys.stderr, level="INFO")
+            logger.add(sys.stderr, level="INFO", filter=not_library_record)
 
     def extract_content_text(self, bookmark) -> str:
         """
@@ -284,19 +283,19 @@ class AddTimeToRead:
         # Setup logging
         self.setup_logging(verbose)
 
-        logger.info(f"Starting AddTimeToRead with wpm={wpm}, reset_all={reset_all}")
+        logger.debug(f"Starting AddTimeToRead with wpm={wpm}, reset_all={reset_all}")
 
         # Connect to Karakeep
         try:
             self.karakeep = KarakeepAPI()
-            logger.info("Connected to Karakeep API")
+            logger.debug("Connected to Karakeep API")
         except Exception as e:
             logger.error(f"Failed to connect to Karakeep API: {e}")
             return
 
         # Create smart lists if requested
         if create_lists:
-            logger.info("Creating smart lists for time-to-read tags...")
+            logger.debug("Creating smart lists for time-to-read tags...")
             self.create_time_reading_lists()
 
         # Determine cache file name based on reset_all mode
@@ -313,23 +312,25 @@ class AddTimeToRead:
         # As the loading can be pretty long, we store it to a local file
         if reset_all:
             if Path(cache_file_final).exists():
-                logger.info(f"Loading bookmarks from cache file: {cache_file_final}")
+                logger.debug(f"Loading bookmarks from cache file: {cache_file_final}")
                 with Path(cache_file_final).open("rb") as f:
                     bookmarks = pickle.load(f)
-                logger.info(f"Loaded {len(bookmarks)} bookmarks from cache")
+                logger.debug(f"Loaded {len(bookmarks)} bookmarks from cache")
             else:
-                logger.info("Cache file not found, fetching bookmarks from API...")
+                logger.debug("Cache file not found, fetching bookmarks from API...")
 
                 # Fetch all bookmarks when reset_all is True
                 try:
                     n = self.karakeep.get_current_user_stats()["numBookmarks"]
-                    logger.info(f"Total bookmarks to fetch: {n}")
+                    logger.debug(f"Total bookmarks to fetch: {n}")
                 except Exception as e:
                     logger.error(f"Failed to get bookmark count: {e}")
                     return
 
-                logger.info("Fetching all bookmarks with content...")
-                pbar = tqdm(total=n, desc="Fetching bookmarks")
+                logger.debug("Fetching all bookmarks with content...")
+                pbar = tqdm(
+                    total=n, desc="Fetching bookmarks", disable=not sys.stderr.isatty()
+                )
                 bookmarks = []
                 batch_size = 100  # Maximum allowed batch size to avoid crashing the karakeep instance
 
@@ -361,7 +362,7 @@ class AddTimeToRead:
                     return
 
             # Save bookmarks to cache file
-            logger.info(
+            logger.debug(
                 f"Saving {len(bookmarks)} bookmarks to cache file: {cache_file_final}"
             )
             with Path(cache_file_final).open("wb") as f:
@@ -369,7 +370,7 @@ class AddTimeToRead:
         else:
             # Use search to find bookmarks without time tags when reset_all is False
             search_query = "-#0-5m -#5-10m -#10-15m -#15-30m -#30m+"
-            logger.info(
+            logger.debug(
                 f"Searching for bookmarks without time tags using query: {search_query}"
             )
 
@@ -383,7 +384,7 @@ class AddTimeToRead:
                     limit=batch_size,
                 )
                 bookmarks.extend(page.bookmarks)
-                logger.info(f"Found {len(page.bookmarks)} bookmarks in first page")
+                logger.debug(f"Found {len(page.bookmarks)} bookmarks in first page")
 
                 while page.nextCursor:
                     page = self.karakeep.search_bookmarks(
@@ -393,15 +394,15 @@ class AddTimeToRead:
                         cursor=page.nextCursor,
                     )
                     bookmarks.extend(page.bookmarks)
-                    logger.info(f"Found {len(page.bookmarks)} additional bookmarks")
+                    logger.debug(f"Found {len(page.bookmarks)} additional bookmarks")
 
-                logger.info(f"Total untagged bookmarks found: {len(bookmarks)}")
+                logger.debug(f"Total untagged bookmarks found: {len(bookmarks)}")
 
             except Exception as e:
                 logger.error(f"Error searching for untagged bookmarks: {e}")
                 return
 
-        logger.info(f"Total bookmarks fetched: {len(bookmarks)}")
+        logger.debug(f"Total bookmarks fetched: {len(bookmarks)}")
 
         # Process bookmarks
         processed = 0
@@ -409,7 +410,9 @@ class AddTimeToRead:
         skipped_by_type = 0
         errors = 0
 
-        for bookmark in tqdm(bookmarks, desc="Processing bookmarks"):
+        for bookmark in tqdm(
+            bookmarks, desc="Processing bookmarks", disable=not sys.stderr.isatty()
+        ):
             try:
                 # Check bookmark type first
                 if bookmark.content.type not in ["link", "text"]:
@@ -443,7 +446,7 @@ class AddTimeToRead:
         if Path(cache_file_final).exists():
             try:
                 Path(cache_file_final).unlink()
-                logger.info(f"Cleaned up cache file: {cache_file_final}")
+                logger.debug(f"Cleaned up cache file: {cache_file_final}")
             except Exception as e:
                 logger.warning(f"Failed to delete cache file {cache_file_final}: {e}")
 

@@ -10,7 +10,7 @@ Run: uv run pytest scripts/lib/tests/test_longhorn_skipped_volumes.py
 from longhorn_lib import longhorn_skipped_volumes_logic as logic
 from host_lib import rfc3339_to_epoch
 
-# The 2026-10-08 d4 line as `kubectl logs --prefix` printed it, nanosecond timestamp included.
+# The d4 line as `kubectl logs --prefix` printed it, nanosecond timestamp included.
 SKIP_LINE = (
     "[pod/weekly-backup-d4-29857230-cnd4h/weekly-backup-d4] "
     'time="2027-01-14T21:55:26.299183893Z" level=warning '

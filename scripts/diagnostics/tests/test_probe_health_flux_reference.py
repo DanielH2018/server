@@ -1,4 +1,4 @@
-"""C7's reference time for an `owner: flux` tag, against a revision that leaves the tag unchanged (#5338).
+"""C7's reference time for an `owner: flux` tag, against a revision that leaves the tag unchanged.
 
 Every per-tag Kustomization tracks the shared `homelab` source, so its `revision` label moves
 on every master commit. The reference must move only when the tag's own rendered content does.

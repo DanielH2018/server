@@ -17,14 +17,8 @@
 # cannot page about its own breakage.
 # The substitute that needs no host — querying the receiver's `otelcol_receiver_accepted_*`
 # throughput instead — is refused by observability's CLAUDE.md "The trap: an idle stack is
-# indistinguishable from a broken one": the stack has run 47h with nothing wrong and nothing
-# flowing, so a throughput query reads the same for a quiet host as for a dead door.
-#
-# What is deliberately not here any more: the four Deployments plus the DaemonSet readiness arm,
-# which the `k8s-workloads` rules in observability now page (`K8sDeploymentZeroAvailable` and
-# its siblings), and the `otelcol_exporter_send_failed_*` arm, which observability's
-# `OtelCollectorExportFailing` rule pages. Nothing here reads Prometheus or the cluster any more,
-# which is why the kubeconfig and the ClusterIP resolution are gone with them.
+# indistinguishable from a broken one": a throughput query reads the same for a quiet host as
+# for a dead door.
 #
 # Push, not poll: this is a host timer that reports its own verdict, as a journal line and a
 # textfile.
@@ -45,8 +39,7 @@ for arg in "$@"; do
   esac
 done
 
-# The textfile library: a host that misses it fails the run loudly instead of reporting green
-# (M6 batch B6).
+# The textfile library: a host that misses it fails the run loudly instead of reporting green.
 # shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t claude-otel-health "homelab-check-lib.sh missing — install homelab-daniel-box on this host"

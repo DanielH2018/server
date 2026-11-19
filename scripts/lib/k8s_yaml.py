@@ -145,7 +145,7 @@ def make_lookup(ctx: dict):
     ``vars`` reads a variable named at render time from the calling template's own context, so
     an undefined one comes back as that environment's undefined (``STUB``, or a named stub), the
     way a plain ``{{ name }}`` would. monitor-bridge's env-secret names each push token through
-    it, from the check table in that role's defaults (#3659).
+    it, from the check table in that role's defaults.
     """
 
     @pass_context

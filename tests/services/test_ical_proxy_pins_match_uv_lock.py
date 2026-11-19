@@ -5,7 +5,7 @@ The ical-proxy test suite (`k8s/roles/ical-proxy/tests/test_app.py`) imports
 pins for the `dev` group. The runtime image installs them via `pip install flask==X requests==Y`
 in `templates/Dockerfile.j2`. If those versions drift, the test certifies a flask the container
 never runs. Read off the RENDERED Dockerfile — the text k8s/image-builder stages for the
-build — so a pin moved into a role default is still read (#3175). This fails the instant they diverge, forcing the Dockerfile pin
+build — so a pin moved into a role default is still read. This fails the instant they diverge, forcing the Dockerfile pin
 to be bumped in lockstep whenever lockFileMaintenance moves uv.lock.
 """
 

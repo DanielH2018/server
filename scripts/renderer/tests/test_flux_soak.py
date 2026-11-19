@@ -39,7 +39,7 @@ def test_a_clean_promotion_waits_w_past_the_first_ready_and_passes(world, tmp_pa
     assert world.now == T0 + 60 + W
 
 
-# The pass line (#5419) and the deploy annotation (D5.3b3), both on stdout.
+# The pass line and the deploy annotation, both on stdout.
 
 ANNOTATION = f"event=deploy services=flux sha={R[:8]} result=ok source=flux"
 
@@ -70,7 +70,7 @@ def test_nothing_to_judge_keeps_its_own_line_and_names_no_service(
 def test_a_failing_soak_prints_a_fail_annotation_and_no_pass_line(
     world, tmp_path, capsys
 ):
-    """The failure reaches the dashboards too (#6164), naming the service that failed."""
+    """The failure reaches the dashboards too, naming the service that failed."""
     restart(world.pods["authelia"][0], T0 + 100)
     assert run(world, tmp_path)[0] == 1
     assert re.fullmatch(
@@ -86,7 +86,7 @@ _ADR = "docs/adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md"
 def test_adr_0020_records_the_result_a_failed_or_errored_soak_prints(
     world, tmp_path, capsys
 ):
-    """ADR-0020's account of Grafana's deploy markers names the failure line the soak prints (#5881).
+    """ADR-0020's account of Grafana's deploy markers names the failure line the soak prints.
 
     The oracle is the line a failing and an erroring soak print, not text copied from the doc.
     """
@@ -164,7 +164,7 @@ def test_every_kustomization_ready_at_r_proceeds_without_polling(world, tmp_path
 def test_a_reset_that_moves_homelab_off_r_ends_the_wait_within_one_poll(
     world, tmp_path
 ):
-    # The 2026-10-18 shape (#5704): the Kustomizations apply last-good, so none names R.
+    # The Kustomizations apply last-good, so none names R.
     world.kustomizations[0] = kustomization("authelia", revision=OTHER)
     world.on_sleep = lambda w: setattr(w, "homelab_revision", OTHER)
     code, message = run(world, tmp_path, wait_seconds=100_000)
@@ -185,7 +185,7 @@ def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp
     assert "not Ready at R by the deadline: authelia, authelia-verify" in message
 
 
-# A k3s upgrade restarts the API server under the wait (#7586).
+# A k3s upgrade restarts the API server under the wait.
 
 
 def _api_error_while_waiting(world, error):
@@ -231,7 +231,7 @@ def test_a_503_that_outlasts_the_deadline_fails_naming_it(world, tmp_path):
 def test_a_kustomization_the_root_prunes_after_the_scope_read_settles(
     world, tmp_path, capsys
 ):
-    # The 2026-11-04 shape (#7088): no digests.json keys the name, and the Job's first read
+    # No digests.json keys the name, and the Job's first read
     # landed before the root's garbage collection.
     world.kustomizations += [
         kustomization("retired-prepull", revision=OTHER, depends=["authelia"]),
@@ -304,7 +304,7 @@ def test_a_suspended_kustomization_never_blocks_the_wait(world, tmp_path):
 
 
 def test_the_same_tag_unsuspended_and_not_ready_blocks_the_wait(world, tmp_path):
-    """The red half of #5317's Job leg: without the suspend, the soak waits on sonarr."""
+    """The red half of the Job leg: without the suspend, the soak waits on sonarr."""
     world.new["sonarr"] = {"footprint": "2"}
     world.kustomizations[1] = kustomization("sonarr", ready=False)
     code, message = run(world, tmp_path, wait_seconds=60)

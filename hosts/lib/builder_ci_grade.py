@@ -1,6 +1,6 @@
 """Grade a commit's CI check runs the way `ci_verdict.py` does, for the builder.
 
-Split from host_package_builder.py (H3.12), which imports it. The
+Split from host_package_builder.py, which imports it. The
 builder ships stdlib-only modules, so this module carries its own copy of `ci_verdict` and the
 two conclusion sets, and a test holds the copy equal to `hosts/lib/ci_verdict.py`.
 Stdlib only, because the builder ships beside it with nothing else. checkout_sync.py imports
@@ -56,7 +56,7 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     """Every entry of `key` across a paged check-runs listing, up to `_CHECK_PAGES_MAX` pages.
 
     GitHub pages the listing at 100 runs, so a failing re-run of a required check can sit on
-    page 2 only (#5991). `fetch_page(query)` returns the parsed body for the `?per_page=&page=`
+    page 2 only. `fetch_page(query)` returns the parsed body for the `?per_page=&page=`
     string this walk builds. A read short of `total_count` raises rather than returning a
     partial list, and the caller reads that as `pending`.
 

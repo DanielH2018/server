@@ -3,8 +3,8 @@
 `fanout_lib.launch` locks each batch worktree with the batch's systemd user unit name as the
 reason (`fanout-<batch>`, or `fanout-<repo>-<batch>` for another repo). That reason carries
 no pid, so `session_is_alive` cannot judge it and reads it as live. Read that way, a tree
-`fanout.py place clean` never removed survived every weekly sweep: daniel-server held 152 of
-them, 24 GiB of its root filesystem, on 2026-11-14 (#8529).
+`fanout.py place clean` never removed survives every weekly sweep, and such trees accumulate
+on the host's root filesystem.
 
 The lock's owner is the unit, so the unit's state decides. Every doubt reads as live: a
 manager that cannot be asked, a tree another user owns (its units sit under that user's

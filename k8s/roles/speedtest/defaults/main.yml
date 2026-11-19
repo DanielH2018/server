@@ -1,7 +1,7 @@
 ---
 # The tag stays alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:b7833e43bcf53859efd08605a48740a5cfa741916019373e4dbe730fc59bedf0
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:2bab9283fb51ac866048028516e542da3bdb7d1858fa2a6b2009972143716433
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Auto-deploy is on although strategy is Recreate and speedtest_k8s_claim below is seeded
@@ -36,3 +36,12 @@ k8s_claims:
   - name: "{{ speedtest_k8s_claim }}"
     storage_class: "{{ speedtest_k8s_storage_class }}"
     size: "{{ speedtest_k8s_size }}"
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: speedtest
+    string_data:
+      # Laravel's APP_KEY, which decrypts values stored in database.sqlite. A new
+      # key leaves the seeded database present but unreadable.
+      APP_KEY: speedtest_app_key

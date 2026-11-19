@@ -1,10 +1,10 @@
 """Notification-path checks for monitor-bridge — Discord webhook delivery and the SMTP backstop.
 
-Slice 7 of the check.py split. Reads config as `cfg.X`, every query through the `src` argument
+Reads config as `cfg.X`, every query through the `src` argument
 (`bridge.sources.Sources`) and its streak counters as `src.state` (`bridge.streaks.State`), so a
 test hands in a fake `src` and gets zeroed streaks with it; `discord_webhook_ok` is from-imported and patched on THIS module, where it is bound.
 `email_backstop` takes its cache as an argument, `src.state.email_probe` in production, and the
-SMTP login as `login`, so a test hands in a stub rather than patching `_smtp_login_ok` (#3938).
+SMTP login as `login`, so a test hands in a stub rather than patching `_smtp_login_ok`.
 Rule and enforcement: bridge/config.py's header.
 """
 
@@ -31,8 +31,8 @@ def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
     delivery); Arr's carries the *arr apps' own onHealthIssue alerts (direct POST from their
-    in-app Discord Connect, config only in the app DBs); Healthchecks' was the self-hosted healthchecks
-    app's check-down/up webhook. That app retired in #2806; whether the healthchecks.io account's
+    in-app Discord Connect, config only in the app DBs); Healthchecks' is the retired self-hosted
+    healthchecks app's check-down/up webhook. Whether the healthchecks.io account's
     own integrations post to the same webhook is recorded nowhere, so it stays verified.
     No other check reads any of them, so all five are verified together.
     """
@@ -56,8 +56,7 @@ def _redact(text: str, secrets: list[str]) -> str:
     to it — so it must never reach an alert message or the pod log. An exception raised while
     fetching one can quote it back verbatim: a URL configured with no scheme makes
     `urllib.request.Request` raise `ValueError: unknown url type: '<the whole URL>'`, and
-    check_discord's generic branch used to format that straight into the msg, which check.py
-    then logs.
+    formatting that straight into the msg would reach check.py's log.
 
     Both forms of every configured URL are redacted — as configured, and with the scheme
     stripped — because urllib quotes the scheme-less remainder in some of its own errors. Every

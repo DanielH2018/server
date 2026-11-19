@@ -2,11 +2,11 @@
 #
 # rkhunter reads this file after /etc/rkhunter.conf on every run. It allowlists the warnings every
 # host raised every week from benign causes, so that rkhunter-check.sh can page on any warning
-# that is left (#4638). Add a line here only for a warning whose cause you have confirmed.
+# that is left. Add a line here only for a warning whose cause you have confirmed.
 
-# Both are written by systemd packaging, and rkhunter reported both as hidden files on all three
-# hosts in every weekly run kept on 2026-10-12: /etc/.updated is the systemd-update-done stamp,
-# and the backup is left by the systemd-resolved package.
+# Both are written by systemd packaging, and rkhunter reports both as hidden files:
+# /etc/.updated is the systemd-update-done stamp, and the backup is left by the
+# systemd-resolved package.
 ALLOWHIDDENFILE=/etc/.updated
 ALLOWHIDDENFILE=/etc/.resolv.conf.systemd-resolved.bak
 

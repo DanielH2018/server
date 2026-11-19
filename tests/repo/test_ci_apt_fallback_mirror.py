@@ -1,7 +1,7 @@
 """Every apt install on a CI runner happens after the setup action adds its fallback mirror.
 
 The runner's apt sources list only ubuntu.com hosts, so a DNS outage there failed all six pytest
-shards at their `age` install (#7957). `.github/actions/setup` appends a kernel.org mirror as
+shards at their `age` install. `.github/actions/setup` appends a kernel.org mirror as
 its first step, which helps only a step that runs after it.
 
 Run: uv run pytest tests/repo/test_ci_apt_fallback_mirror.py
@@ -14,7 +14,23 @@ SETUP = "$/.github/actions/setup"
 ACTION = REPO / ".github" / "actions" / "setup" / "action.yml"
 WORKFLOWS = REPO / ".github" / "workflows"
 # (workflow, job) pairs the census must find, so a reshaped workflow cannot pass empty.
-KNOWN_APT_JOBS = {("ci.yml", "pytest"), ("bootstrap-drill.yml", "drill")}
+KNOWN_APT_JOBS = {
+    ("ci.yml", "pytest"),
+    ("pytest-sweep.yml", "sweep"),
+    ("bootstrap-drill.yml", "drill"),
+}
+# The composite action that installs age and apt-utils for the pytest legs and the sweep.
+PYTEST_TOOLS = "$/.github/actions/pytest-tools"
+PYTEST_TOOLS_ACTION = REPO / ".github" / "actions" / "pytest-tools" / "action.yml"
+
+
+def _runs_apt(step: dict) -> bool:
+    """Whether the step installs from the runner's apt sources."""
+    if str(step.get("uses", "")) == PYTEST_TOOLS:
+        return True
+    run = str(step.get("run", ""))
+    # apt inside `docker run` reads the container's sources, which the runner's list never reaches.
+    return "apt-get" in run and "docker run" not in run
 
 
 def apt_steps_before_setup(job: dict) -> list[str]:
@@ -23,10 +39,10 @@ def apt_steps_before_setup(job: dict) -> list[str]:
     for step in job.get("steps") or []:
         if str(step.get("uses", "")) == SETUP:
             return found
-        run = str(step.get("run", ""))
-        # apt inside `docker run` reads the container's sources, which the runner's list never reaches.
-        if "apt-get" in run and "docker run" not in run:
-            found.append(str(step.get("name", run.splitlines()[0])))
+        if _runs_apt(step):
+            found.append(
+                str(step.get("name") or step.get("uses") or step["run"].splitlines()[0])
+            )
     return found
 
 
@@ -36,10 +52,14 @@ def _apt_jobs() -> dict[tuple[str, str], dict]:
         for name, job in (
             yaml_fast.safe_load(path.read_text()).get("jobs") or {}
         ).items():
-            runs = [str(s.get("run", "")) for s in job.get("steps") or []]
-            if any("apt-get" in r and "docker run" not in r for r in runs):
+            if any(_runs_apt(s) for s in job.get("steps") or []):
                 jobs[(path.name, name)] = job
     return jobs
+
+
+def test_the_pytest_tools_action_is_an_apt_step():
+    steps = yaml_fast.safe_load(PYTEST_TOOLS_ACTION.read_text())["runs"]["steps"]
+    assert any("apt-get" in str(s.get("run", "")) for s in steps)
 
 
 def test_the_fallback_mirror_is_the_setup_actions_first_step():

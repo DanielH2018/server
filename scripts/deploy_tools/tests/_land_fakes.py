@@ -38,18 +38,10 @@ PIN_FILE = "k8s/roles/system-upgrade/defaults/main.yml"
 
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made
 # once per session rather than per test, so `cwd=PRIMARY` assertions stay comparable.
-#
-# TemporaryDirectory rather than mkdtemp: mkdtemp leaves the directory behind for good, and
-# `-n auto` makes one per xdist worker on every run. The object is held at module scope so
-# its finalizer runs at interpreter exit and not before.
-#
-# The cleanup is done via an explicit atexit hook rather than relying on TemporaryDirectory's
-# own implicit finalizer. That finalizer fires from a `weakref.finalize` callback and emits a
-# `ResourceWarning` first, which `filterwarnings = ["error"]` (pyproject.toml) turns into an
-# exception raised inside atexit processing -- non-deterministically, since it depends on
-# whether pytest's warnings plugin has already restored the original filters by the time the
-# interpreter tears this module down. An explicit `.cleanup()` registered here runs first and
-# removes the directory, so the implicit finalizer finds nothing left to warn about.
+# TemporaryDirectory rather than mkdtemp, which leaves one behind per xdist worker. The explicit
+# atexit `.cleanup()` runs before TemporaryDirectory's own finalizer, whose `ResourceWarning`
+# `filterwarnings = ["error"]` (pyproject.toml) turns into an exception when it fires after
+# pytest restores the warning filters.
 _PRIMARY_TMP = tempfile.TemporaryDirectory(
     prefix="land-primary-", ignore_cleanup_errors=True
 )
@@ -415,8 +407,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         freed = "release_serial" if serial else "release_slot"
         return (lambda: calls.append((freed, (), {}))) if answer else None
 
-    def fresh_landing(primary, argv):
-        calls.append(("fresh_landing", (primary, argv), {}))
+    def fresh_landing(primary, argv, turn_fd=None):
+        calls.append(("fresh_landing", (primary, argv), {"turn_fd": turn_fd}))
         if f.fresh_fails:
             raise fresh.CheckoutFailed(f.fresh_fails)
         return f.fresh_rc

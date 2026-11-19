@@ -4,7 +4,7 @@
 `homelab-checkout-sync.service` runs this as `sys_user` every 10 minutes, inside `flock` on the
 git-tree lock, so it never runs beside another tree job. The design
 is docs/target-architecture/host/h7-delete-ansible.md, *The deployer retires last, and
-checkout-sync replaces its fast-forward* (H7.51). The run:
+checkout-sync replaces its fast-forward*. The run:
 
   1. refuses an empty `CI_CONTEXTS`, or a walk bound that is not a positive integer
      (reason `ci`), and a missing `github_token` credential (reason `token`), before any request;
@@ -64,8 +64,8 @@ CHECK = "checkout-sync"
 STATE_DIR = "/var/lib/homelab-checkout-sync"
 TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
 PROM = "checkout_sync.prom"
-# Two hours: twelve 10-minute runs, so a docs-refresh or eval sweep holding the tree lock for
-# its whole run does not read as a stopped sync.
+# Two hours: twelve 10-minute runs, so an eval sweep holding the tree lock for its commit does
+# not read as a stopped sync.
 DEADLINE_S = 7200
 REASONS = ("dirty", "branch", "ci", "token", "ancestry")
 # Seconds of grading before the walk stops, under the unit's TimeoutStartSec=150.

@@ -2,7 +2,7 @@
 
 WHY. Every phase of a server fan-out batch runs in a worktree the implementer can write, and
 this repo's `.claude/settings.json` registers every project hook from that tree. A phase that
-loaded both after the implementer ran would run whatever it left there (#3794, #3810). The
+loaded both after the implementer ran would run whatever it left there. The
 pipeline reads the files once at start with `read_hooks`, rewrites a copy outside the worktree
 before every phase with `write_hooks`, and hands a resumed phase the start-time settings with
 every hook command pointed at that copy (`pointed_settings`). The SessionStart hook is the
@@ -11,11 +11,11 @@ exception: a held phase does not register it (`UNHELD_EVENTS` says why).
 DECIDED: in this repo's batch, every phase that starts after the implementer ran (review, fix,
 review-delta, land, file) runs with `--setting-sources user`. Another repo's batch keeps its
 project settings: the pipeline holds no copy of that repo's hooks, so dropping the source would
-drop its guards. A probe on 2026-10-09 showed that the flag also drops the project `CLAUDE.md`
+drop its guards. The flag also drops the project `CLAUDE.md`
 and the project skills from a fresh session. A resumed session already holds `CLAUDE.md` in its
 transcript, except a red batch's, which gets the start-time copy again (below). The land text
 carries the whole `land.sh` command. The reviewer is a fresh session, so the pipeline appends
-the `CLAUDE.md` it read at start to the review prompt (#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
+the `CLAUDE.md` it read at start to the review prompt. The reviewer loses the project skills and `.claude/rules/`; it reads files rather
 than following a procedure, and its prompt names the role `CLAUDE.md` files to check. A held phase
 gets `.claude/rules/` as text (`rules_text`): the reviewer and each resumed phase get the rules
 whose globs match a path in the batch's range, and the implement phase after a red phase gets
@@ -26,7 +26,7 @@ Without one it starts from the tree `worktree add` checked out, which no agent h
 and a fresh implementer needs the project skills and `.claude/rules/`. After a red phase the
 red author has had the worktree, and the red gate reads only the tracked range `base..red`. An
 ignored `.claude/settings.local.json`, a hook edit hidden with `--skip-worktree` or a planted
-`.pyc` is outside that range (#3846). That implement phase therefore runs on the held settings
+`.pyc` is outside that range. That implement phase therefore runs on the held settings
 and gets the start-time `CLAUDE.md` as text, and so does every phase that resumes it. Like the reviewer, it loses the project skills and
 rules.
 """
@@ -51,17 +51,16 @@ UNSNAPSHOTTED = frozenset({"tests", "__pycache__"})
 PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 # Hook events a held phase does not register. `session-health` reports on the checkout its own
 # file sits in: it imports `lib` from that tree's `scripts/` and runs git and `probe.py` there.
-# The held copy is a hooks directory with no tree around it, so every held phase's banner read
-# "detection is broken: No module named 'lib'" three times (#4393; 164 sessions carried that
-# banner by 2026-10-11). Pointing it at the worktree instead would import code the
+# The held copy is a hooks directory with no tree around it, so a held phase's banner would read
+# "detection is broken: No module named 'lib'" three times. Pointing it at the worktree instead would import code the
 # implementer can write, which is what holding the hooks prevents. The implementer phase
 # still gets the banner from its own project settings; a resumed phase already holds it in
 # its transcript.
 UNHELD_EVENTS = ("SessionStart",)
 # The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
 # held from each: `block-footguns.py` imports from `scripts/`, and the
-# inventory is data `lib.inventory_lists` reads (#4420). `block-protected-bash.py` reads the
-# agents' frontmatter for the set it holds to read-only (#4617).
+# inventory is data `lib.inventory_lists` reads. `block-protected-bash.py` reads the
+# agents' frontmatter for the set it holds to read-only.
 HELD_TREES = (
     (Path("scripts"), "*.py"),
     (Path("inventory"), "*"),
@@ -70,8 +69,8 @@ HELD_TREES = (
 
 # The xdist worker ceiling every phase's pytest runs under: a quarter of the host's cores,
 # between 2 and 4. The user settings pin 4 for every session, and `--settings` overrides that
-# for one phase. Measured on 2026-10-18, the guard set took 48s at 4 workers and 80s at 2, and
-# a whole-suite run held 2.3 GiB at 4. daniel-server has 8 cores and fits the most batches by
+# for one phase. The guard set takes 48s at 4 workers and 80s at 2, and
+# a whole-suite run holds 2.3 GiB at 4. daniel-server has 8 cores and fits the most batches by
 # memory, so its batches run at 2; daniel-box has 16 and keeps 4. Interactive sessions keep
 # the host's `claude_code_rc_pytest_workers`, which this does not read.
 PYTEST_WORKERS_ENV = "PYTEST_XDIST_AUTO_NUM_WORKERS"
@@ -95,7 +94,7 @@ def with_batch_env(settings: dict, cores: int | None = None) -> dict:
 
 
 def labelled(argv: list[str], assignment: str) -> list[str]:
-    """`argv` run under the env `assignment`, which its `--settings` env carries as well (#5684).
+    """`argv` run under the env `assignment`, which its `--settings` env carries as well.
 
     Claude Code applies a settings `env` over the process environment and replaces the whole
     value, so the agent user's own `OTEL_RESOURCE_ATTRIBUTES` would displace the batch labels

@@ -135,7 +135,7 @@ def test_validate_passes_two_boards_with_distinct_uids(tmp_path):
     assert [e for e in vgd.validate(dashboards_dir=tmp_path) if "claimed by" in e] == []
 
 
-# ── the failure marker (#4480) ──────────────────────────────────────────────────────────────
+# ── the failure marker ──────────────────────────────────────────────────────────────
 
 
 def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):

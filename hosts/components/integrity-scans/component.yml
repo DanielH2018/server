@@ -1,14 +1,12 @@
-# The weekly rkhunter scan (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
-# initial_setup installed rkhunter and AIDE, wrote their config and scripts, and ran each from a
-# root cron. This component ships rkhunter's files and runs its script from a timer at the cron's
-# slot. AIDE is the aide-scan component, which a host package lists only where the scan fits.
-# The legacy entries below retire both Ansible-era crons on every host, AIDE's included.
+# The weekly rkhunter scan: this component ships rkhunter's files and runs its script from a
+# timer. AIDE is the aide-scan component, which a host package lists only where the scan fits.
+# The legacy entries below retire the old root crons for both scans on every host.
 #
 # No unit loads a credential: the scan writes a textfile, and that is its only verdict.
 #
 # What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs the first baseline,
 # `rkhunter --propupd`, once on a host whose package ships the timer, guarded by the file it
-# creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
+# creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package.
 # Bootstrap refuses a missing database on a host whose rkhunter log survives, unless its own
 # `.pending` marker shows the log is its unfinished first init; that case needs `--rebaseline`.
 #
@@ -20,7 +18,7 @@
 # Autonomous-role contract (the scan runs weekly with no human in the loop, and the baseline
 # refresh runs after every dpkg run). The scan reads the filesystem and reports. The refresh
 # advances rkhunter's baseline, outside apt's lock, by the same `rkhunter --propupd` that
-# rkhunter's APT_AUTOGEN hook ran inside it (#7680).
+# rkhunter's APT_AUTOGEN hook would run inside it.
 #
 # - Scope / exclusions: `rkhunter --check` and `rkhunter --propupd` at idle CPU and IO priority,
 #   and the `rkhunter-check` textfile in node_exporter's textfile directory. Nothing reaches
@@ -31,7 +29,7 @@
 #   alone cannot say.
 # - Abort valves: the scan advances no baseline.
 # - Required evidence, every run: an `rkhunter-check` line in the journal and the textfile the
-#   `host-checks` rule group reads (#6168). Each refresh logs a `rkhunter baseline refreshed`
+#   `host-checks` rule group reads. Each refresh logs a `rkhunter baseline refreshed`
 #   line under the `rkhunter-propupd` tag, and each skipped one a `rkhunter baseline kept` line.
 #
 # DECIDED: a dpkg run that changed only homelab-* packages keeps rkhunter's baseline (#8650).
@@ -42,10 +40,10 @@
 defaults:
   integrity_scans_host_lib_dir: /usr/lib/homelab
   # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
-  # The role read the file on every apply; a package renders before it reaches the host, so the
-  # hosts whose main file carries the line are listed instead. daniel-server's sshd hardening sat
-  # in /etc/ssh/sshd_config itself (`ssh_config_path`) and daniel-box's main file carries the line;
-  # the Pi's does not, and its live rkhunter.conf.local reads `unset` (2026-10-30).
+  # A package renders before it reaches the host, so the hosts whose main file carries the line
+  # are listed: daniel-server's sshd hardening sits in /etc/ssh/sshd_config itself
+  # (`ssh_config_path`) and daniel-box's main file carries the line; the Pi's does not, and its
+  # rkhunter.conf.local reads `unset`.
   integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
   integrity_scans_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
 depends:
@@ -56,21 +54,21 @@ files:
   - {src: templates/rkhunter-check.sh.j2, dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
   - {src: units/homelab-rkhunter-check.service.j2, dst: /usr/lib/systemd/system/homelab-rkhunter-check.service}
   - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
-  # The baseline refresh after every package change (#7680). The hook starts the unit without
+  # The baseline refresh after every package change. The hook starts the unit without
   # blocking. The unit needs no enable link, because only the hook starts it.
   - {src: templates/91homelab-rkhunter-propupd, dst: /etc/apt/apt.conf.d/91homelab-rkhunter-propupd}
   - {src: files/rkhunter-propupd, dst: /usr/lib/homelab/rkhunter-propupd, mode: "0755"}
   - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
   # needrestart, run by apt's hook after a library upgrade, restarts the active refresh unit and
   # waits for it, while the unit waits for the dpkg lock that apt holds. The override stops that
-  # restart (2026-11-14, daniel-box: the lock stayed held for 3+ hours).
+  # restart.
   - {src: files/needrestart-rkhunter-propupd.conf, dst: /etc/needrestart/conf.d/homelab-rkhunter-propupd.conf}
 enable:
   homelab-rkhunter-check.timer: timers.target
 lines:
   # The weekly scan flags only changes no package event explains, because the refresh unit above
   # rebaselines after every dpkg run. rkhunter's own 90rkhunter hook ran that refresh inside apt
-  # and held the dpkg lock for about 2 minutes on the Pi (#7680), so APT_AUTOGEN stays off.
+  # and held the dpkg lock for about 2 minutes on the Pi, so APT_AUTOGEN stays off.
   # No package owns the file.
   - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="false"', regexp: '^APT_AUTOGEN='}
 legacy:

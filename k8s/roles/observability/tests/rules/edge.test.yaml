@@ -95,6 +95,7 @@ tests:
                 Traefik serves a certificate for soon.example.com that expires in 9.992 days.
                 Read Traefik's ACME log for a failed renewal, and `probe.py cert <host>` for the
                 chain it serves.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#certexpiringsoon
       - eval_time: 11m
         alertname: EdgeMetricsMissing
         exp_alerts: []
@@ -171,8 +172,8 @@ tests:
         alertname: TraefikLatencyBucketMissing
         exp_alerts: []
 
-  # A burst that dips for three minutes still pages: the A4 soak's jellyfin counters from
-  # 2026-10-30 14:31, rebased to 0. The condition holds 4 minutes, fails 3, then holds 3, so a
+  # A burst that dips for three minutes still pages. The condition holds 4 minutes, fails 3,
+  # then holds 3, so a
   # `for: 5m` hold never fires, and the 5-of-10 count fires at the second run's third minute.
   - interval: 1m
     input_series:
@@ -199,8 +200,7 @@ tests:
                 5.0s histogram bucket. The backend is slow, not the edge. Its own log and its
                 resource use are the next reads.
 
-  # A single 4-minute burst stays quiet: the soak's jellyfin counters from 2026-10-30 00:46,
-  # rebased to 0. The bridge paged this one on one sample, and the rule drops it by design.
+  # A single 4-minute burst stays quiet: the rule drops it by design.
   - interval: 1m
     input_series:
       - series: 'traefik_service_request_duration_seconds_count{job="traefik-k8s", instance="traefik-metrics:8080", service="homelab-bursty-app-80@kubernetescrd"}'

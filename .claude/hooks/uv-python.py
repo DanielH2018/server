@@ -13,7 +13,9 @@ session ran the suite bare anyway, which is what this arm makes structurally imp
 than merely documented.
 
 It rewrites the command instead of denying it, so the session gets the answer it asked for
-rather than a round-trip. `uv run` resolves the venv from the *caller's* working directory, so a
+rather than a round-trip. Auto mode is the exception: its classifier refuses a call a hook
+changed after its review, so there `bash-pretool.py` denies with this arm's rewrite as the
+command to send instead. `uv run` resolves the venv from the *caller's* working directory, so a
 worktree keeps its own checkout — which is why this rewrites the command rather than pinning a
 PATH at the primary checkout's `.venv/bin`.
 
@@ -77,12 +79,9 @@ _SEGMENT_PROG = re.compile(rf"^(\s*){_PROGS}{_TERMINATOR}")
 # walk below.
 _INTERESTING = re.compile(r"python|pytest|py\.test|\.py")
 
-# What must follow `<<` for it to open a heredoc: an optional `-`, optional blanks, then a
-# character a delimiter word can start with. It is checked before the delimiter parse because the
-# two disagree about how to fail. A `<<` that names no delimiter is not a heredoc at all, and
-# `_parse_heredoc_delimiter` reports that by bailing on the WHOLE command — correct for a heredoc
-# it cannot read, wrong for a `<<` that was never one. Screening here lets those fall through to
-# the ordinary walk instead.
+# What must follow `<<` for it to open a heredoc. Screened before `_parse_heredoc_delimiter`,
+# which bails on the whole command: right for an unreadable heredoc, wrong for a `<<` that
+# never was one.
 _HEREDOC_OPENER = re.compile(r"^-?[ \t]*[^ \t\n;&|<>()]")
 
 _DELIMITER_END = frozenset(";&|<>()")

@@ -36,20 +36,17 @@ _RELEASE_URL_CORPUS_FLOOR = frozenset(
 # Files that hold a release-download URL no manager scans, and legitimately so. Two rules,
 # not a skip list — a new entry needs a reason of the same shape:
 #   * Markdown is prose. A release URL in a doc is a citation, nothing renders or executes it,
-#     and pointing a manager at a .md file would be the bug (docs/archive/anilist-integration.md
-#     names the ani-sync releases 11 times while discussing them).
+#     and pointing a manager at a .md file would be the bug.
 #   * A file whose "URLs" are matchString regexes rather than pins: renovate.json itself, and
 #     this module, whose release URLs are the synthetic fixtures of the red proofs below.
 _RELEASE_URL_EXEMPT_FILES = frozenset(
     {"renovate.json", "scripts/tests/test_renovate_release_urls.py"}
 )
 
-# A version occurrence inside a COMMENT is prose, not a pin. No manager rewrites a comment, so
-# demanding coverage there is unsatisfiable — jellyfin's defaults explain the pin in a comment
-# that names the version, and that sentence must not be a CI failure. Every file type the
-# corpus can hold comments the same way: YAML (workflows, role defaults), INI (.vale.ini),
-# TOML, Dockerfile, and the shell inside a workflow's `run:` block all take `#` to end of line.
-# Anchored to start-of-line or a preceding space, so a `#` fragment inside a URL is not one.
+# A version inside a COMMENT is prose, not a pin: no manager rewrites a comment, so demanding
+# coverage there is unsatisfiable. Every file type in the corpus (YAML, INI, TOML, Dockerfile,
+# workflow `run:` shell) takes `#` to end of line. Anchored to start-of-line or a preceding
+# space, so a `#` fragment inside a URL is not one.
 _COMMENT_RE = re.compile(r"(?m)(?:(?<=^)|(?<=\s))#[^\n]*")
 
 
@@ -152,9 +149,7 @@ def test_every_release_download_version_occurrence_is_tracked(
     as `tar xzf`'s "not in gzip format" (the curl carries `-f`), and the bump rides in a shared
     automerge group where it stalls every other non-major update bundled with it.
 
-    The corpus was a hardcoded two-entry tuple until the 2026-09-01 review, which found the
-    jellyfin-ani-sync pin untracked in a file the tuple never named. The corpus is derived:
-    every tracked file that holds a release-download URL AND that some customManager scans. A
+    The corpus is derived: every tracked file that holds a release-download URL AND that some customManager scans. A
     file no manager scans has nothing to be PARTIALLY covered, so it is a different defect — the
     scanned-or-exempt test below is the one that catches it.
 

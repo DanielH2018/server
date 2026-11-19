@@ -25,8 +25,7 @@ UNIT = "/usr/lib/systemd/system/node_exporter.service"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-node-exporter.conf"
 TOOLS = REPO / "hosts/packages/homelab-tools/package.yml"
 # The container's collector flags, minus its `--path.*` remaps, as `collector_flags` parsed them
-# from the retired compose template. #2385 deleted that template; read it with
-# `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/templates/docker-compose.yml.j2`.
+# from the retired compose template.
 CONTAINER_FLAGS = frozenset(
     {
         "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/)",
@@ -70,7 +69,7 @@ def _shipped(path: str) -> str:
 def test_the_unit_runs_the_collector_set_the_container_ran() -> None:
     # The RENDERED unit: the listen address interpolates the Pi's LAN IP, so a source read
     # already had to be told to drop a `--web.listen-address={{ ... }}` rather than an
-    # address, and any collector flag that moves into a variable goes the same way (#3202).
+    # address, and any collector flag that moves into a variable goes the same way.
     unit_flags = collector_flags(_shipped(UNIT), UNIT_ONLY)
     assert unit_flags == UNIT_FLAGS, (
         f"unit-only: {sorted(unit_flags - UNIT_FLAGS)}; "
@@ -90,7 +89,7 @@ def test_the_host_binary_pins_the_version_the_cluster_pins() -> None:
     image = yaml_fast.safe_load(CLUSTER_DEFAULTS.read_text())["node_exporter_k8s_image"]
     # The cluster pin may carry a `@sha256:` digest after the tag; the host binary has no digest.
     # The tag keeps its `v`: Renovate looks the host pin up as a release tag, and a bare
-    # `1.12.1` 404s (#6850).
+    # `1.12.1` 404s.
     cluster = image.split("@", 1)[0].rsplit(":", 1)[1]
     assert set(versions.values()) == {cluster}, (
         f"homelab-tools pins node_exporter {versions}, the cluster DaemonSet {cluster}; "

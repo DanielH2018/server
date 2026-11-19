@@ -1,8 +1,7 @@
 """The `static-ratchet-tests` prek hook runs the static tests that turned PRs red, and CI skips it.
 
-Twelve static test modules caused most of the PR reds that the author's own code did not
-(#3605, #4008, #4904), and eleven more cheap ones failed 15 PR runs across 13 PRs between
-2026-10-15 and 2026-10-17 (#5481). The hook runs them at commit time so the failure and its
+Twelve static test modules caused most of the PR reds that the author's own code did not,
+and eleven more cheap ones did too. The hook runs them at commit time so the failure and its
 repair arrive before CI. This guard holds three things a later edit could quietly lose: every module the
 hook names still exists, its `files` gate matches the edits those tests react to, and CI's two
 `prek run` steps skip it, because the `pytest` job runs the same modules.
@@ -23,7 +22,7 @@ from _helpers import REPO
 HOOK_ID = "static-ratchet-tests"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# The four modules #3605 measured, the four #4008 added and the four #4904 added. A module
+# The static modules that turned PRs red. A module
 # dropped from the entry fails here by name.
 EXPECTED_MODULES = {
     "tests/repo/test_module_length_ratchet.py",
@@ -40,7 +39,7 @@ EXPECTED_MODULES = {
     "tests/repo/test_census_rows_layout.py",
 }
 
-# The cheap ratchet and census modules #5481 measured failing PR CI, each with a path whose edit
+# The cheap ratchet and census modules that failed PR CI, each with a path whose edit
 # reintroduced or can reintroduce its failure. The two Renovate-rule modules are the ones whose
 # recorded weights (0.66s and 0.0s) the issue quotes. `test_gen_reference_scripts` (31.09s) and
 # `test_guard_tests_read_renders_not_templates` (10.12s) stay out: the equality pin below fails
@@ -290,8 +289,7 @@ def test_the_lander_gate_skips_a_k8s_role_doc():
 SESSION_CEILING = 4
 
 # A multi-module pytest hook that `-n auto` still runs on one worker, with the PR that pins it.
-# `static-ratchet-tests` sat here for #5919 until the width came from recorded seconds (#5967),
-# which gives it 4.
+# `static-ratchet-tests` is not here: its width comes from recorded seconds, which gives it 4.
 UNPINNED: dict[str, str] = {}
 
 
@@ -341,7 +339,7 @@ def _left_to_auto(
 
 
 def test_no_multi_module_pytest_hook_leaves_its_width_to_auto():
-    """`-n auto` once gave one worker per 15 modules, which serialised five (#5917).
+    """`-n auto` gives one worker per 15 modules, which serialises five.
 
     An explicit `-n`, `-n0` included, is a measured choice; the defect is the silent fallback.
     """
@@ -376,7 +374,7 @@ def test_the_guard_flags_only_an_unpinned_multi_module_entry(entry, flagged):
     assert _left_to_auto(hooks, weights) == (["h"] if flagged else [])
 
 
-# #5599's bar: the hook takes under 15s on daniel-server at a load average near 3.
+# The bar: the hook takes under 15s on daniel-server at a load average near 3.
 SERVER_BUDGET_SECONDS = 15.0
 NEAR_LOAD_3 = 4.0
 _RANGE = r"(\d+(?:\.\d+)?)(?:[-–](\d+(?:\.\d+)?))?"
@@ -424,7 +422,7 @@ CENSUS_SIBLING = "static-ratchet-tests-test-modules"
 
 
 def _census_modules() -> set[str]:
-    """The two census files over the pytest-only modules, which #5599 moved to the sibling."""
+    """The two census files over the pytest-only modules, which live in the sibling hook."""
     return {
         "scripts/tests/test_census_rows_test_modules.py",
         "scripts/tests/test_census_rows_test_renders.py",
@@ -436,7 +434,7 @@ def _sibling(hook_id: str) -> dict:
 
 
 def test_the_test_module_censuses_run_in_their_own_sibling():
-    """They bounded the main hook under `--dist loadscope`, so they run apart from it (#5599)."""
+    """They bounded the main hook under `--dist loadscope`, so they run apart from it."""
     assert _modules(_sibling(CENSUS_SIBLING)) == _census_modules()
     assert not _modules(_hook()) & _census_modules()
 

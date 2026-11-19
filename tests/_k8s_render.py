@@ -211,22 +211,26 @@ def _template_context(role: str, overrides: dict | None, host: str) -> dict:
     }
 
 
-def render_pod_env(
-    role: str,
-    overrides: dict | None = None,
-    *,
-    secret: str = "env-secret.yaml.j2",
-    deployment: str = "deployment.yaml.j2",
-) -> dict[str, str]:
+def render_pod_env(role: str, overrides: dict | None = None) -> dict[str, str]:
     """The environment a role's first container receives, rendered: env var -> value.
 
-    The Deployment's `env` values over the env Secret's `stringData`, the precedence Kubernetes
-    gives `env` over `envFrom`. Since #5574 the bridges keep only credentials in the Secret and
-    every setting in `env`, so a guard reading either alone sees half the pod's environment.
+    The `deployment.yaml` Deployment's `env` values over the `<role>-env` Secret's
+    `stringData`, the precedence Kubernetes gives `env` over `envFrom`. The bridges keep only
+    credentials in the Secret and every setting in `env`, so a guard reading either alone sees
+    half the pod's environment.
     """
-    data = yaml_fast.safe_load(render_role_template(role, secret, overrides))
-    assert data.get("kind") == "Secret", f"{role}/{secret} renders no Secret"
-    workload = yaml_fast.safe_load(render_role_template(role, deployment, overrides))
+    files = render_tag(role, _stubs(overrides)).files
+    secrets = [
+        doc
+        for text in files.values()
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict)
+        and doc.get("kind") == "Secret"
+        and doc["metadata"]["name"] == f"{role}-env"
+    ]
+    assert len(secrets) == 1, f"{role} renders {len(secrets)} Secrets named {role}-env"
+    data = secrets[0]
+    workload = yaml_fast.safe_load(files["deployment.yaml"])
     container = workload["spec"]["template"]["spec"]["containers"][0]
     plain = {e["name"]: e["value"] for e in container.get("env", []) if "value" in e}
     return {**data["stringData"], **plain}
@@ -234,7 +238,7 @@ def render_pod_env(
 
 # `_render_all` skips `Dockerfile*` because its output feeds a YAML parse. A build pin is still
 # a rendered value — code-server's Dockerfile names its node URL and every extension URL
-# through a role default — so the build files get their own accessor and their own cache (#3175).
+# through a role default — so the build files get their own accessor and their own cache.
 def traefik_static_config(
     overrides: dict | None = None, *, host: str = "daniel-box"
 ) -> dict:
@@ -310,7 +314,7 @@ def rendered_build_texts() -> tuple[tuple[str, str, str], ...]:
 def render_build_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
     """`rendered_build_texts()` with `overrides` laid over every role's context, uncached.
 
-    The build-file counterpart of `render_texts`, for a census at a sentinel value (#3191).
+    The build-file counterpart of `render_texts`, for a census at a sentinel value.
     """
     return tuple(_render_build_files(overrides))
 

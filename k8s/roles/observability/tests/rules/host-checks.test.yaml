@@ -12,8 +12,8 @@
 #
 # fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
 # fixture-host at 11400s, which gives the rule's shape cases that name no shipped host.
-# host-checks.yaml carries daniel-pi's rule (job node-pi, 90000s) since H3.9c, and the cases
-# after the fixture's own exercise it.
+# host-checks.yaml carries daniel-pi's rule (job node-pi, 90000s), and the cases after the
+# fixture's own exercise it.
 rule_files:
   - ../../files/rules/host-checks.yaml
   - fixtures/host-update-stale.yaml
@@ -56,6 +56,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
       - eval_time: 26m
         alertname: DiskHealthFailed
         exp_alerts: []
@@ -132,6 +133,7 @@ tests:
                 df failed. Longhorn stops scheduling replicas on the node at 75%.
                 homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and
                 the `disk-health` syslog tag holds the run's message.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthfailed
       - eval_time: 4m
         alertname: DiskHealthNotReporting
         exp_alerts: []
@@ -165,6 +167,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
 
   # The file is gone from minute 6, so the series goes stale while the exporter stays up. The
   # absent_over_time arm fires once 1500s pass with no sample, after minute 30 and not
@@ -195,6 +198,7 @@ tests:
                 textfile collector, so nothing is watching the root disk. Read the `daniel-box
                 disk health` cron and the `disk-health` syslog tag, then
                 /var/lib/node-exporter-textfile/disk-health.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#diskhealthnotreporting
 
   # The exporter is down from minute 6: `up` reads 0 and the series is gone, as in the
   # control above. The bridge's `targets` check pages the dead exporter, so the `unless`
@@ -210,7 +214,7 @@ tests:
         alertname: DiskHealthNotReporting
         exp_alerts: []
 
-  # M6 batch B1. The zero-series case: no input at all, so no k3s cron has written a verdict
+  # The zero-series case: no input at all, so no k3s cron has written a verdict
   # inside its deadline. Each NotReporting rule fires through absent_over_time, once the
   # longest deadline (90000s) has passed. The Failed rules read a series and stay quiet.
   - interval: 10m
@@ -227,10 +231,10 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
-                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
-                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+                Read the `longhorn-backup-health` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than
+                25 minutes reached Prometheus, so nothing watches the Longhorn backup plane.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornbackuphealthnotreporting
       - eval_time: 26h
         alertname: LonghornBackupHealthFailed
         exp_alerts: []
@@ -245,15 +249,16 @@ tests:
             exp_annotations:
               summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
               description: >-
-                No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing is comparing the cluster token with its
-                stamp. Read the `etcd token drift` cron and the `etcd-snapshot-offbox` syslog tag,
-                then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
+                Read the `etcd-snapshot-offbox` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom. No verdict newer than 25
+                hours reached Prometheus, so nothing compares the cluster token with its off-box
+                stamp.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#etcdsnapshotoffboxnotreporting
       - eval_time: 26h
         alertname: EtcdSnapshotOffboxFailed
         exp_alerts: []
 
-  # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
+  # Every check turns red from minute 3 while its file stays fresh. Each Failed
   # rule fires at once and no NotReporting rule does.
   - interval: 1m
     input_series:
@@ -316,7 +321,7 @@ tests:
         alertname: EtcdSnapshotOffboxNotReporting
         exp_alerts: []
 
-  # M6 batch B1. The file stops being refreshed: node_exporter keeps serving the timestamp
+  # The file stops being refreshed: node_exporter keeps serving the timestamp
   # written at 0. The first arm fires once the timestamp is more than the deadline old, so
   # longhorn-backup-health (1500s) fires between minutes 25 and 26.
   - interval: 1m
@@ -342,12 +347,12 @@ tests:
             exp_annotations:
               summary: daniel-box's longhorn-backup-health check has stopped reporting.
               description: >-
-                No longhorn-backup-health verdict newer than 25 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
-                Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
-                then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
+                Read the `longhorn-backup-health` syslog tag on daniel-box, then
+                /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than
+                25 minutes reached Prometheus, so nothing watches the Longhorn backup plane.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#longhornbackuphealthnotreporting
 
-  # M6 batch B1. The exporter is down from minute 0 and every file is gone, so the bridge's
+  # The exporter is down from minute 0 and every file is gone, so the bridge's
   # `targets` check pages the dead exporter and the `unless` clause keeps both
   # NotReporting rules quiet past the point the zero-series case fires them.
   - interval: 10m
@@ -415,13 +420,11 @@ tests:
               summary: >-
                 node_exporter on daniel-box cannot read a textfile, candidates: bad.prom.
               description: >-
-                node_exporter's textfile collector on daniel-box has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): bad.prom.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in the node-exporter pod's log.
+                Read the node-exporter log on daniel-box for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # The same failure on daniel-server fires its own rule, with daniel-server as `service`.
   - interval: 1m
@@ -445,13 +448,11 @@ tests:
               summary: >-
                 node_exporter on daniel-server cannot read a textfile, candidates: none known.
               description: >-
-                node_exporter's textfile collector on daniel-server has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in the node-exporter pod's log.
+                Read the node-exporter log on daniel-server for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # daniel-pi's reconcile reads 0 from minute 0, so the host holds. HostReconcileFailed is
   # pending at 14 minutes and fires for daniel-pi alone at 16, past its 15-minute hold.
@@ -475,14 +476,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-pi and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-pi, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-pi installs no newer
+                homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # daniel-pi's engine pins moved, and no run applied them. The pending series reads 0 for 2h,
@@ -601,14 +598,10 @@ tests:
             exp_annotations:
               summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-box and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-box, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-box installs no newer
+                homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
           - exp_labels:
               instance: daniel-server
@@ -619,14 +612,10 @@ tests:
             exp_annotations:
               summary: daniel-server's homelab package reconcile failed, so it installs no newer package.
               description: >-
-                homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
-                holds and installs no newer homelab package. Read `journalctl -u
-                homelab-updater -u homelab-reconcile` on daniel-server and docs/host-packages.md,
-                "Host-plane pages". Once the cause is fixed, `sudo
-                /usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile and clears the
-                hold if it passes, and `sudo /usr/lib/homelab/homelab-updater --clear-hold
-                --install-newest` clears the hold and then installs the newest packages as a
-                timer run does.
+                Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server, fix the
+                cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
+                homelab_host_reconcile_ok has read 0 for 15 minutes, so daniel-server installs no
+                newer homelab package.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The fixture host's last success stays at 0 while its exporter is up. HostUpdateStale is
@@ -653,12 +642,10 @@ tests:
             exp_annotations:
               summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                its exporter is up and serves no success timestamp. The runbook lists what leaves it
+                stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps HostUpdateStale quiet.
@@ -691,12 +678,10 @@ tests:
             exp_annotations:
               summary: fixture-host has had no successful homelab update for 3 hours 10 minutes.
               description: >-
-                No homelab-updater run on fixture-host has succeeded in 3 hours 10 minutes, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                fixture-host. No homelab-updater run there has succeeded in 3 hours 10 minutes, or
+                its exporter is up and serves no success timestamp. The runbook lists what leaves it
+                stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The exporter is down, so every series of the target is stale and the success timestamp
@@ -713,7 +698,7 @@ tests:
   # daniel-pi's last success stays at 0 while node-pi answers (`up` at 1). HostUpdateStale is
   # quiet at 1491 minutes (89460s) and fires at 1501 (90060s) for daniel-pi alone: the
   # fixture host has no series here. 1491 minutes is one day between the daily 03:05 fires,
-  # then the next fire's delay and full run (H3.13).
+  # then the next fire's delay and full run.
   - interval: 1m
     input_series:
       - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
@@ -736,12 +721,9 @@ tests:
             exp_annotations:
               summary: daniel-pi has had no successful homelab update for 25 hours.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 25 hours, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                daniel-pi. No homelab-updater run there has succeeded in 25 hours, or its exporter
+                is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # A success timestamp that follows the clock keeps daniel-pi's rule quiet. This is the
@@ -774,12 +756,9 @@ tests:
             exp_annotations:
               summary: daniel-pi has had no successful homelab update for 25 hours.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 25 hours, or its exporter is
-                up and serves no success timestamp. A failed fetch, a stopped
-                homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
-                timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
-                "Host-plane pages".
+                Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
+                daniel-pi. No homelab-updater run there has succeeded in 25 hours, or its exporter
+                is up and serves no success timestamp. The runbook lists what leaves it stale.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # node-pi fails its scrape (`up` at 0, a 30s-timeout miss on the Zero 2 W), so the success
@@ -978,7 +957,7 @@ tests:
       - eval_time: 6m
         alertname: IscsiSessionsNotReporting
         exp_alerts: []
-  # B6a's two daniel-box crons, paging since Cutover-1b. A failing verdict fires both Failed
+  # The two daniel-box crons. A failing verdict fires both Failed
   # rules and leaves both NotReporting rules quiet.
   - interval: 1m
     input_series:
@@ -1138,6 +1117,7 @@ tests:
         exp_alerts:
           - exp_labels:
               check: aide-check
+              escalate: "false"
               instance: daniel-box
               job: node
               origin: daniel-box
@@ -1149,9 +1129,12 @@ tests:
                 aide-check on daniel-box ended with status=down: a file changed that no package
                 explains, AIDE exited with an error and checked nothing, or the previous week's
                 run still held the lock. Run `journalctl -t aide-check` on daniel-box; once every
-                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
+                `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
+                clears this alert and the unit's failed state together.
           - exp_labels:
               check: aide-check
+              escalate: "false"
               instance: daniel-server
               job: node
               origin: daniel-server
@@ -1161,9 +1144,11 @@ tests:
               summary: daniel-server's weekly AIDE check failed or found an unexplained change.
               description: >-
                 aide-check on daniel-server ended with status=down: a file changed that no package
-                explains, AIDE exited with an error and checked nothing, or the previous week's
-                run still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
-                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
+                explains, AIDE exited with an error and checked nothing, or the previous week's run
+                still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
+                `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
+                clears this alert and the unit's failed state together.
 
   # No AIDE file on any host, and every exporter is up. The absent_over_time arm fires for the
   # two k3s nodes and not for daniel-pi, which carries no AIDE rule.
@@ -1322,13 +1307,11 @@ tests:
               summary: >-
                 node_exporter on daniel-pi cannot read a textfile, candidates: none known.
               description: >-
-                node_exporter's textfile collector on daniel-pi has failed for 10 minutes, so a
-                file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
-                series in it is gone.
-                Textfiles seen in the last 7 days and missing now (a rejected file drops out of
-                node_textfile_mtime_seconds, but so does a file a retired check stopped writing): none known.
-                A file that was malformed from its first write never reported an mtime, so the
-                list can omit it. Confirm in `journalctl -u node_exporter` on daniel-pi.
+                Read the node-exporter log on daniel-pi for the textfile it rejects: a file in
+                /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
+                gone. The summary lists candidates, and the runbook says which files the list
+                misses.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#textfilecollectorerror
 
   # The Pi's compose run reads 1, then 0 from minute 3. ComposeUpFailed fires with no hold.
   - interval: 1m
@@ -1463,7 +1446,7 @@ tests:
         exp_alerts: []
 
   # Reconcile restarted homelab-compose.service at 1000, after a digest bump, and compose-run
-  # wrote nothing: the result still ends at 500 (#6342). The rule is quiet at 4m inside its
+  # wrote nothing: the result still ends at 500. The rule is quiet at 4m inside its
   # 5m `for` and fires at 10m. Another unit's start time is ignored.
   - interval: 1m
     input_series:
@@ -1513,7 +1496,7 @@ tests:
   # its reconcile file every minute without moving that time. It crosses the 691200s bound at
   # 20m, is quiet at 30m inside the 15m `for`, and fires at 40m. daniel-server has owed its
   # reboot for longer than 8 days, then reboots at 5m, and homelab-reconcile-metrics.service
-  # rewrites its 1 to 0 at 10m (#6188). Its rule stays quiet, because the 1 never lasts 15m.
+  # rewrites its 1 to 0 at 10m. Its rule stays quiet, because the 1 never lasts 15m.
   - interval: 1m
     input_series:
       - series: 'homelab_host_reboot_pending{host="daniel-box", instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1561,6 +1544,7 @@ tests:
         exp_alerts:
           - exp_labels:
               check: rkhunter-check
+              escalate: "false"
               instance: daniel-box
               job: node
               origin: daniel-box
@@ -1571,10 +1555,12 @@ tests:
               description: >-
                 rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a
                 warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
-                account change clears when the script is run again by hand. Read
-                /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box.
+                account change clears on the next run: `sudo systemctl start
+                homelab-rkhunter-check.service` runs it now and clears the unit's failed state
+                with it, which running the script by hand does not. Read /var/log/rkhunter.log
+                and `journalctl -t rkhunter-check` on daniel-box.
 
-  # The claude_code timers (#6165). Every check file stopped being refreshed at 0 while both
+  # The claude_code timers. Every check file stopped being refreshed at 0 while both
   # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
   # minute: claude-triage-poll at 660s, the three syncs at 2100s, the lander at 3300s. The two
   # syncs that run on both hosts fire once per host. The absent_over_time arm is the
@@ -1769,7 +1755,7 @@ tests:
                 homelab-claude-fanout-server-lander` on daniel-box. If
                 `claude_code_fanout_server_lander_enabled` was set false on purpose, delete this rule.
 
-  # The weekly host-maintenance crons (#6179). Every check file holds a green verdict taken
+  # The weekly host-maintenance crons. Every check file holds a green verdict taken
   # 611000s before time 0, so each NotReporting rule's first arm stays quiet at 10m (611600s old)
   # and fires at 20m, past the 612000s deadline, once per host that runs the cron. The
   # verdicts are green, so the Failed rules stay quiet.
@@ -2254,10 +2240,10 @@ tests:
                 `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
                 claude-guardrail-ack`, then
                 /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
-  # SystemdUnitsFailed (#8219): every host counts a failed unit from minute 0. The 10m `for`
-  # holds the page through the 9th minute, and each host's rule fires at the 10th. The summary
-  # names daniel-box's two units sorted, daniel-server's escaped unit, and "none named" for
-  # daniel-pi, which writes no per-unit series.
+  # SystemdUnitsFailed: every host counts a failed unit from minute 0. The 10m `for`
+  # holds the page through the 9th minute, and each failed unit fires its own alert at the 10th:
+  # daniel-box's two units, daniel-server's escaped unit, and one unnamed alert for daniel-pi,
+  # which writes no per-unit series.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -2301,17 +2287,33 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
+              unit: nut-monitor.service
             exp_annotations:
               summary: >-
-                Failed system units on daniel-box: homelab-claude-pipeline-timeline.service, nut-monitor.service.
+                nut-monitor.service has failed on daniel-box.
               description: >-
-                systemd-units-check on daniel-box found each unit above in the failed state. For each
-                one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box. Once
-                the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-                clears the state, and the next check resolves this alert. "none named" means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-box.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              unit: homelab-claude-pipeline-timeline.service
+            exp_annotations:
+              summary: >-
+                homelab-claude-pipeline-timeline.service has failed on daniel-box.
+              description: >-
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
           - exp_labels:
               check: systemd-units
               instance: daniel-server
@@ -2319,17 +2321,16 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
+              unit: "systemd-fsck@dev-disk-by\\x2duuid-1.service"
             exp_annotations:
               summary: >-
-                Failed system units on daniel-server: systemd-fsck@dev-disk-by\x2duuid-1.service.
+                systemd-fsck@dev-disk-by\x2duuid-1.service has failed on daniel-server.
               description: >-
-                systemd-units-check on daniel-server found each unit above in the failed state. For each
-                one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server. Once
-                the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-                clears the state, and the next check resolves this alert. "none named" means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-server.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server, fix
+                the cause, then run `systemctl reset-failed <unit>`; the next check resolves this
+                alert. A summary that names no unit means the check named none, so run `systemctl
+                --failed` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
           - exp_labels:
               check: systemd-units
               instance: daniel-pi
@@ -2339,15 +2340,13 @@ tests:
               service: daniel-pi
             exp_annotations:
               summary: >-
-                Failed system units on daniel-pi: none named.
+                daniel-pi has failed system units that its check did not name.
               description: >-
-                systemd-units-check on daniel-pi found each unit above in the failed state. For each
-                one, read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi. Once
-                the cause is fixed, `systemctl reset-failed <unit>` or a clean run of the unit
-                clears the state, and the next check resolves this alert. "none named" means
-                the host wrote no homelab_systemd_unit_failed series: either systemctl could not
-                list the units (`journalctl -t systemd-units`) or the host package predates the
-                per-unit series, so run `systemctl --failed` on daniel-pi.
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
   # SystemdUnitsNotReporting's stale arm: a timestamp frozen at 0 crosses the 900s deadline
   # after the 15th minute, while the verdict stays green.
   - interval: 1m
@@ -2591,3 +2590,71 @@ tests:
                 `journalctl -t claude-weekly-summary`, then
                 /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
                 `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
+  # KubeletShutdownLockMissing: the lock is missing from minute 0 and kubelet takes it at minute
+  # 20. The 15m `for` holds the page through the 14th minute, and the next verdict of 1 resolves
+  # it with no silence. The check keeps writing, so NotReporting stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'homelab_check_success{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x20 1x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts:
+          - exp_labels:
+              check: kubelet-shutdown-lock
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
+              description: >-
+                Without the lock, a shutdown stops pods without draining them and can abort
+                Longhorn's ext4 journals. Read {job="k3s"} in loki-homelab for "Failed to start node
+                shutdown manager" and the logind value it names, check `systemd-analyze cat-config
+                systemd/logind.conf`, then restart k3s-agent. The next check resolves this alert.
+      - eval_time: 21m
+        alertname: KubeletShutdownLockMissing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts: []
+  # KubeletShutdownLockNotReporting: the check writes until minute 5 and then stops, so the
+  # verdict is older than 900s from minute 21.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x30'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x5 300x25'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: KubeletShutdownLockNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: kubelet-shutdown-lock
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's kubelet shutdown-lock check has stopped reporting.
+              description: >-
+                No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from
+                daniel-server's textfile collector, so nothing reads kubelet's shutdown lock. Read
+                `systemctl status homelab-kubelet-shutdown-lock.timer` and `journalctl -t
+                kubelet-shutdown-lock` on daniel-server, then
+                /var/lib/node-exporter-textfile/kubelet-shutdown-lock.prom on the host.

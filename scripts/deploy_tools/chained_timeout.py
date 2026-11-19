@@ -43,18 +43,7 @@ CONCURRENT = 5
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
 # (tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
-# (#5868: 37032s with 124 Kustomizations, against 19800s; it was 36912s until #8370 added
-# `lidarr-verify`, 36732s until #8192 added
-# `slskd`, 36480s until #8190 added
-# `lidarr` and `lidarr-snapshot`, which lidarr waits on, 36360s until #8194 added
-# `navidrome-snapshot`, which navidrome waits on, 35646s until #6095 added
-# `traefik-precheck`, which traefik waits on and which waits on traefik's own edges, 33246s
-# until H6.1b added `system-upgrade`, whose 100m `flux_timeout` is the longest of any tag, 33126s until #5875 added
-# `observability-prepull`, which observability waits on, 33006s until H2.3b added
-# `longhorn-restore-drill`, which waits on `homelab-namespace` and `longhorn`, 32256s until D5 step 30 added
-# `homelab-namespace`, which every tag rendering into `homelab` depends on, 32016s until D5
-# step 29 added `flux` and `flux-deferred`, and 31920s until Longhorn v1.13.0 raised the
-# `longhorn` timeout from 2m to 10m, #5972). `verify`'s own wait is the same
+# (#5868: 37152s with 125 Kustomizations, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would
 # let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no
 # promotion. The soak's wait cannot shrink to the chain of what changed either: the render
@@ -91,7 +80,7 @@ def queueing_s(timeouts: list[int], concurrent: int) -> int:
     - Graham's: the last job to finish, of length p, starts once every worker is busy no
       later than (sum - p) / concurrent, and so ends by (sum - max) / concurrent + max. It is
       the smaller when one long timeout sits among short ones, which rounds would price
-      into every round (#5482).
+      into every round.
 
     `promote_timeout` adds this to the longest `dependsOn` path, and the sum stays a bound
     under precedence: the path is at least the critical path L, and Graham's bound for

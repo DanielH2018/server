@@ -70,7 +70,7 @@ def _suite_files():
 
     The glob is every `*.py`, not `test_*.py` + `conftest.py`. A shared helper module —
     monitor-bridge's `_fake_sources.py`, which every `run_once` suite shares — can
-    patch a runtime module exactly as a test does (a predecessor patched `bridge.net.push` until #3938),
+    patch a runtime module exactly as a test does,
     and under the narrower glob those patches would be invisible to this rule, so a from-import
     of one of those names would pass.
     """
@@ -182,8 +182,8 @@ def _unqualified_binds(patched, modules):
 
 def test_the_census_reads_the_real_suites():
     # Without this every assertion over `_patched_names_by_module()` passes vacuously if the
-    # census stops reading the real suites. monitor-bridge's tests patch no runtime module since
-    # #3986, so the member is autofix-bridge's `autofix`, which its test loads by path with
+    # census stops reading the real suites. monitor-bridge's tests patch no runtime module,
+    # so the member is autofix-bridge's `autofix`, which its test loads by path with
     # `importlib.util.module_from_spec` and patches through that binding.
     patched = _patched_names_by_module()
     assert {"autofix"} <= patched.keys(), sorted(patched)
@@ -208,9 +208,8 @@ def test_the_census_binds_a_module_loaded_by_path(tmp_path):
 
 def test_the_suite_census_sees_shared_helper_modules():
     # Non-vacuity for the `*.py` glob above, naming members rather than counting.
-    # `_fake_sources.py` is not named `test_*`, as `_check_gate_helpers.py` was not, and that
-    # helper once held seven of monitor-bridge's transport patches; the narrower glob that missed it read exactly as green as one that sees
-    # it. `test_helper_patch_extraction_can_go_red` proves a helper's patches are read out of it.
+    # `_fake_sources.py` is not named `test_*`, and the narrower glob that missed such a helper
+    # reads exactly as green as one that sees it. `test_helper_patch_extraction_can_go_red` proves a helper's patches are read out of it.
     names = {p.name for p in _suite_files()}
     assert {"_fake_sources.py", "conftest.py"} <= names, sorted(names)
 
@@ -349,7 +348,7 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
 def test_helper_patch_extraction_can_go_red(tmp_path):
     """A helper module's patches are extracted: one helper it must read, one it must come up empty on.
 
-    No helper in the tree patches a runtime module since #3938, so this synthetic pair is the
+    No helper in the tree patches a runtime module, so this synthetic pair is the
     only proof that a non-`test_*` module's patches reach the census.
     """
     seen = tmp_path / "_wire_helpers.py"

@@ -26,7 +26,7 @@ def _declared() -> dict[str, list[str]]:
     """Each package's `maintainer_scripts`, read from its spec rather than rendered.
 
     A render at import time costs every xdist worker ~9s of collection, which no
-    `--durations` phase or shard weight sees (#7710).
+    `--durations` phase or shard weight sees.
     """
     specs = {
         spec.parent.name: spec

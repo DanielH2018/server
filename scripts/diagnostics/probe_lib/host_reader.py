@@ -192,7 +192,7 @@ def reader_argv(host: str, here: str) -> list[str]:
     """The command that runs `READER` on `host`, seen from the host named `here`.
 
     Only `LANDING_HOST` holds a key daniel-pi accepts, so a read of the Pi from anywhere else
-    hops through it, as `core.pi_ssh_argv` does (#8773).
+    hops through it, as `core.pi_ssh_argv` does.
     """
     here = here.split(".")[0]
     if here == host:

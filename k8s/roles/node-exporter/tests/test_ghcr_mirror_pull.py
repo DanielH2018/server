@@ -1,4 +1,4 @@
-"""ghcr-mirror-pull.sh reports whether a node's ghcr.io mirror serves nut's manifest (#5542).
+"""ghcr-mirror-pull.sh reports whether a node's ghcr.io mirror serves nut's manifest.
 
 The script runs as the node-exporter DaemonSet's `ghcr-mirror-pull` sidecar and writes a
 textfile check file the exporter reads from a third `--collector.textfile.directory`. These

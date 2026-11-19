@@ -77,7 +77,7 @@ def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> No
 
 
 def test_a_landing_that_fails_or_is_refused_pages_through_its_alert() -> None:
-    """A refused landing waits on the operator, and the session that asked may be gone (#4602)."""
+    """A refused landing waits on the operator, and the session that asked may be gone."""
     assert directive(unit(), "OnFailure") == ["homelab-alert@%n.service"]
 
 
@@ -234,34 +234,34 @@ FLOOR = [
     f"hosts/components/claude-code/templates/{PATHS}",
     f"hosts/components/claude-code/templates/{UNIT}",
     f"hosts/components/claude-code/templates/{RULE}",
-    # The pins and the component that ships the lander joined with H7.40's second slice.
+    # The pins and the component that ships the lander.
     f"hosts/components/claude-code/templates/{PINS}",
     "hosts/components/claude-code/component.yml",
-    # Alert-triggered triage joined the floor on 2026-10-15 (test_claude_triage.py).
+    # Alert-triggered triage (test_claude_triage.py).
     "hosts/components/claude-code/templates/claude-triage",
     "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
     "hosts/components/claude-code/files/claude_triage_run.py",
     "hosts/components/claude-code/files/claude_triage_session.py",
     "hosts/components/claude-code/files/claude-triage-settings-overlay.json",
     "hosts/components/claude-code/files/claude_triage_poll.py",
-    # The root inspector joined the floor with its grant (#6323).
+    # The root inspector and its grant.
     "hosts/components/claude-code/files/homelab_rootq.py",
     "hosts/components/claude-code/files/rootq.sh",
     "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
-    # The agent's socket to the same inspector joined it on 2026-10-29 (#6350).
+    # The agent's socket to the same inspector.
     "hosts/components/claude-code/files/homelab_rootq_socket.py",
     "hosts/components/claude-code/files/rootq_socket.py",
     "hosts/components/claude-code/templates/homelab-rootq.socket.j2",
     "hosts/components/claude-code/templates/homelab-rootq@.service.j2",
-    # The dotfiles root mirror's signer key and verifier joined it on 2026-11-13 (dotfiles#967 D13).
+    # The dotfiles root mirror's signer key and verifier.
     "hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2",
     "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
-    # The render of T2's config from that tag joined it on 2026-11-15 (dotfiles#967 I7).
+    # The render of T2's config from that tag.
     "hosts/components/claude-code/files/claude_config_render.py",
     "hosts/components/claude-code/files/claude-config-render-chezmoi.toml",
     "hosts/components/claude-code/units/homelab-claude-config-render.",
     "hosts/lib/claude_config_lock.py",
-    # The Renovate agent's grant points joined it on 2026-11-13 (guardrails plan B1).
+    # The Renovate agent's grant points.
     "hosts/components/renovate-agent/files/t2-approval-floor",
     "hosts/components/renovate-agent/files/renovate_floor.py",
     "hosts/components/renovate-agent/files/land_renovate_pr.py",
@@ -283,7 +283,7 @@ FLOOR = [
     "hosts/components/renovate-agent/templates/prompt.txt.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.service.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent.timer.j2",
-    # The session's Claude Code settings and what installs them joined it on 2026-11-14 (#8392).
+    # The session's Claude Code settings and what installs them.
     "hosts/components/renovate-agent/files/claude-settings-overlay.json",
     "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2",
     "hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j2",
@@ -298,7 +298,7 @@ FLOOR = [
     "hosts/components/sshd/",
     "secrets/.sops.yaml",
     "secrets/secrets.yml",
-    # The agent's cluster RBAC joined the floor on 2026-10-16 (H1 Open question 7).
+    # The agent's cluster RBAC.
     "k8s/roles/cluster-base/",
 ]
 
@@ -468,10 +468,10 @@ def test_the_agents_claude_md_names_the_approval_list_the_lander_reads() -> None
 
 
 def test_land_sh_ends_its_landing_before_systemd_kills_the_unit() -> None:
-    """The flock wait comes out of TimeoutStartSec before land.sh starts its own clock (#5199).
+    """The flock wait comes out of TimeoutStartSec before land.sh starts its own clock.
 
     The reboot window can move the promotion wait's cap past LAND_DEADLINE by up to
-    LAND_WINDOW_GRACE (#5457), so the unit's limit covers both.
+    LAND_WINDOW_GRACE, so the unit's limit covers both.
     """
     rendered = unit()
     (timeout,) = directive(rendered, "TimeoutStartSec")

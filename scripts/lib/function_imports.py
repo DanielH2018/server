@@ -1,10 +1,10 @@
-"""Whether each entry point's function-local imports execute, under each way it is loaded (#4403).
+"""Whether each entry point's function-local imports execute, under each way it is loaded.
 
 `test_entry_points_answer_help.py` catches a broken top-level import, but an import inside a
-subcommand never runs under `--help`. #674 shipped that way: `ha_state_model refresh` raised
-`ModuleNotFoundError: probe_core` while `--help` passed.
+subcommand never runs under `--help`: `ha_state_model refresh` can raise
+`ModuleNotFoundError: probe_core` while `--help` passes.
 
-`importlib.util.find_spec` is not enough either. It passes #674, because the function-local
+`importlib.util.find_spec` is not enough either. It passes there, because the function-local
 `diagnostics.probe_ha` itself resolved; what failed was probe_ha's own top-level
 `import probe_core`. So this module EXECUTES each function-local import, which runs everything
 below it, in a fresh interpreter that has only the `sys.path` the real load would have:
@@ -127,7 +127,7 @@ def _entry_points(scripts_root: Path = SCRIPTS) -> list[Path]:
 
     Stated here rather than borrowed from the `--help` census: that census starts from
     `script_classify`, which labels a module `library` once something imports it, and
-    `ha_state_model.py` (#674's module) is both imported and run (#4405).
+    `ha_state_model.py` is both imported and run.
     """
     return [
         p

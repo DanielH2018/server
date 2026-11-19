@@ -3,7 +3,7 @@
 `ci_verdict` reduces GitHub's check-runs for ONE commit to `pass`, `pending` or `fail` over the
 required contexts, and `ci_walk_candidates` bounds the ancestor walk that runs when the tip is
 not green. Stdlib only and importing nothing first-party, because the host packages' builder grades the
-same rule and `homelab-checkout-sync` grades the fetched tip with it (H7.51).
+same rule and `homelab-checkout-sync` grades the fetched tip with it.
 """
 
 from __future__ import annotations
@@ -25,18 +25,17 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 )
 
 # DECIDED: the verdict readers apply the gate job's own rule to the jobs' check-runs when the gate
-# job has not concluded (#5507). The gate aggregates its `needs` in about 3 seconds but needs a
-# runner of its own: master run 39074978426 finished every real job at 22:39:45Z, and the gate then
-# sat queued past 22:51, so two landings gave up with `ci-timeout`. GitHub has no queue priority,
-# so creating the gate job earlier would not help. The gate job stays, for branch protection, and
-# a concluded gate is believed, with one exception (#5931): a gate that failed only because its own
+# job has not concluded. The gate aggregates its `needs` in about 3 seconds but needs a
+# runner of its own: it can sit queued for minutes after every real job finished, so landings
+# give up with `ci-timeout`. GitHub has no queue priority, so creating the gate job earlier
+# would not help. The gate job stays, for branch protection, and a concluded gate is believed,
+# with one exception: a gate that failed only because its own
 # run was cancelled. The gate is `if: always()`, so a cancelled run still runs it, and it fails on
-# the cancelled needs. PR #5922's run 39791122833 attempt 1 did that: its jobs were cancelled at
-# 13:57Z, gate check-run 119868712075 concluded `failure`, and `land.sh` ended `pr-ci-red` on a head
-# that no job had failed on. `ci_verdict` leaves that gate out once its `read_suites` reader shows
+# the cancelled needs, so `land.sh` ends `pr-ci-red` on a head that no job failed on.
+# `ci_verdict` leaves that gate out once its `read_suites` reader shows
 # the gate's check suite concluded `cancelled`. A cancelled need alone does not prove it: GitHub
 # reports a job past its `timeout-minutes` as `cancelled` too, on a run nobody cancelled. Both
-# readers pass `read_suites`: `await_ci.verdict_for` and `CheckoutSync.verdict` (#6007).
+# readers pass `read_suites`: `await_ci.verdict_for` and `CheckoutSync.verdict`.
 # The rule lives in THIS module because it is the one module both runtimes import: the
 # checkout-sync component ships `hosts/lib/` modules only, so a rule under `scripts/` would not
 # exist on the host, while `scripts/deploy_tools/await_ci.py` already imports this file.
@@ -44,7 +43,7 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.
 CI_GATE_NAME = "prek (lint + validate + tests + secrets)"
-# The check-run name of the `prove` job, whose `proven` and `pytest-proven` outputs the gate reads.
+# The check-run name of the `prove` job, whose `proven` output the gate reads.
 CI_PROVE_JOB = "prove the pushed tree was tested"
 # The check-run name of every other job in the gate's `needs`. GitHub names a matrix leg's
 # check-run after the leg, so each leg is listed.
@@ -94,15 +93,10 @@ def _legs(prefix: str) -> frozenset[str]:
     return frozenset(n for n in CI_GATE_NEEDS_JOBS if n.startswith(prefix))
 
 
-# The `pytest` legs, which skip on `pytest-proven` where every other dependent skips on `proven`.
-# A record from a pull-request run whose legs ran a selection proves every job but these (#8943).
-CI_PYTEST_JOBS = _legs("pytest (shard ")
-
-
 # GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
 # after its legs: the `name:` template with its expressions unexpanded, or the job id when it has
-# no `name:`. Run 43354559178 (2026-11-13) reported `host_packages` and the bootstrap template
-# below as skipped, and no leg of either. Each name stands for every leg it maps to.
+# no `name:`. A run can report `host_packages` and the bootstrap template below as skipped, and
+# no leg of either. Each name stands for every leg it maps to.
 CI_SKIPPED_MATRIX_JOBS = {
     "pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})": _legs(
         "pytest (shard "
@@ -134,10 +128,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
-    `proven` was true, and a check-run cannot show that output itself. The `pytest` legs skip on
-    `pytest-proven` instead, which is never true while `proven` is false. So a run whose
-    dependents all skipped except the `pytest` legs, which passed, is the push after a selected
-    pull-request run, and passes too (#8943). `prove` is skipped on a
+    `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
     run that is neither a push nor a labelled pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
@@ -154,7 +145,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
             for leg in CI_SKIPPED_MATRIX_JOBS[name]:
                 states.setdefault(leg, set()).add("skipped")
         if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
-            # A cancelled or failed `prove` broke on the runner, and every dependent ran (#5783).
+            # A cancelled or failed `prove` broke on the runner, and every dependent ran.
             unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
                 "cancelled",
                 "failure",
@@ -173,28 +164,22 @@ def jobs_verdict(check_runs: list[dict]) -> str:
         job = states.get(name)
         if job is None or "pending" in job:
             return "pending"
-        # A draft run's skip beside the ready run's pass on the same head is a pass (#5563).
+        # A draft run's skip beside the ready run's pass on the same head is a pass.
         if "skipped" in job and "pass" not in job:
             if built and name in CI_BUILD_READER_JOBS:
                 continue
             skipped += 1
     if not skipped:
         return "pass"
-    # The proven path skips EVERY dependent, or every dependent but the `pytest` legs. A lone
-    # skip beside a success is not a state the workflow produces, so it is not read as proof.
+    # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
+    # workflow produces, so it is not read as proof.
     if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
-        return "pass"
-    if (
-        prove == {"pass"}
-        and skipped == len(CI_GATE_NEEDS_JOBS - CI_PYTEST_JOBS)
-        and all("pass" in states[leg] for leg in CI_PYTEST_JOBS)
-    ):
         return "pass"
     return "pending"
 
 
 def cancellation_suspects(check_runs: list[dict]) -> set:
-    """The check-suite ids of the failed gates that a cancelled run may explain (#5931).
+    """The check-suite ids of the failed gates that a cancelled run may explain.
 
     A suspect gate concluded `failure`, its own suite holds a cancelled need, and no need in
     that suite failed outright. The last clause keeps fail-fast red: one pytest shard fails and
@@ -244,9 +229,9 @@ def ci_verdict(
     the caller defers the tick and retries in 30 minutes.
 
     The gate job's own name is the exception to "missing or still running is pending": while it
-    has not concluded, `jobs_verdict` decides from the jobs it aggregates (#5507). A skipped gate
-    has not concluded either: only a draft PR's run skips it (#5563). Nor has a gate that failed
-    only because its own run was cancelled (#5931): a `cancellation_suspects` gate whose suite
+    has not concluded, `jobs_verdict` decides from the jobs it aggregates. A skipped gate
+    has not concluded either: only a draft PR's run skips it. Nor has a gate that failed
+    only because its own run was cancelled: a `cancellation_suspects` gate whose suite
     `read_suites()` reports `cancelled`. It is called only when a suspect exists, so an ordinary
     verdict costs no check-suites read, and a read that fails is `pending`. A caller that passes
     no reader keeps such a gate red.
@@ -267,7 +252,7 @@ def ci_verdict(
         name = run.get("name")
         if name not in required:
             continue
-        # The gate skips only on a draft PR (#5563), and a draft run tested nothing. Its gate is
+        # The gate skips only on a draft PR, and a draft run tested nothing. Its gate is
         # left out, so a head whose only gate is a draft's reads as the jobs decide: pending.
         if name == CI_GATE_NAME and run.get("conclusion") == "skipped":
             continue

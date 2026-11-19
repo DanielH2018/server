@@ -1,7 +1,7 @@
 # Managed by Ansible (k8s/roles/home-assistant) — YAML-mode dashboard.
 # Registered under `lovelace: dashboards:` in configuration.yaml (url path `lovelace`, sidebar
-# title "Bedroom"), NOT as the root `lovelace: mode: yaml` this header used to claim — the root
-# dashboard remains storage-mode/UI-managed. Edit here + deploy
+# title "Bedroom"), NOT as the root `lovelace: mode: yaml` — the root
+# dashboard is storage-mode/UI-managed. Edit here + deploy
 # (recreates HA), or for a faster loop edit the rendered file and use
 # Developer Tools → YAML → "Reload Lovelace" to apply without an HA restart.
 # Built-in cards only (no HACS resources required).
@@ -10,9 +10,9 @@ views:
   - title: Bedroom
     path: bedroom
     icon: mdi:bed
-    # No view theme, by operator choice on 2026-09-30 (#2800). With `theme: nest_dark` pinned
-    # here, the cast receiver threw `Cannot read properties of null (reading 'themes')` on every
-    # connect-back cycle, because it builds each `hass` with null themes. Unpinned, the phone and
+    # No view theme. With `theme: nest_dark` pinned here, the cast receiver throws
+    # `Cannot read properties of null (reading 'themes')` on every connect-back cycle,
+    # because it builds each `hass` with null themes. Unpinned, the phone and
     # browser keep their per-user theme, and the Nest Hub renders light: the receiver has no
     # logged-in user, so it ignores dark mode. To re-pin, add `theme: nest_dark` on this view;
     # the theme is still defined in configuration.yaml.
@@ -47,8 +47,8 @@ views:
             icon: mdi:power-plug
             entities:
               # NUT disables most sensors by default (disabled_by: integration); only
-              # enabled apc_ups sensors are used here. Runtime was enabled in the UI
-              # 2026-06-17 (disabled by default) — keep it enabled or this row breaks.
+              # enabled apc_ups sensors are used here. Runtime is enabled in the UI
+              # (disabled by default) — keep it enabled or this row breaks.
               - entity: sensor.apc_ups_status
                 name: Status
               - entity: sensor.apc_ups_battery_runtime
@@ -158,8 +158,8 @@ views:
               - entity: input_boolean.bedroom_sleep_mode
                 name: Sleep mode
       # ── Room sensors ─────────────────────────────────────────────────────
-      # Illuminance is the T1's: the lights dominate the FP300's reading, and the lux gate has read
-      # the T1 since 2026-09-01. "Auto-light" shows whether that gate lets presence turn the lights on.
+      # Illuminance is the T1's: the lights dominate the FP300's reading, and the lux gate reads
+      # the T1. "Auto-light" shows whether that gate lets presence turn the lights on.
       - type: glance
         title: Room sensors
         columns: 3

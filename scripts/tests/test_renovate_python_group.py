@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Guard that one Renovate PR moves every Python pin together (#5479).
+"""Guard that one Renovate PR moves every Python pin together.
 
 Three managers report the repo's Python as packageName `python`: the custom regex manager for
 the CI setup action, the built-in pyenv manager for `.python-version`, and the built-in
 dockerfile manager for `FROM python:` tags. Without a shared group each opened its own PR.
-Renovate PR #5363 bumped only the CI pin to 3.15.0, so `test_python_version_pins_in_lockstep`
-and `test_python_version_consistency.py` failed on it for good. Renovate rebased it onto every
-master move: 44 red CI runs in about 46 hours.
+A bump of only the CI pin fails `test_python_version_pins_in_lockstep` and
+`test_python_version_consistency.py`, and Renovate rebases it onto every master move.
 
 Run: uv run pytest scripts/tests/test_renovate_python_group.py
 """
@@ -20,7 +19,7 @@ PYTHON_PIN_SITES = [
     ("k8s/roles/ical-proxy/templates/Dockerfile.j2", "dockerfile", "docker"),
     ("k8s/roles/homelab-mcp/templates/Dockerfile.j2", "dockerfile", "docker"),
     # One role on the k8s_autodeploy denylist and one off it: the denylist rule and the plain
-    # automerge path each claimed these pins before #8532.
+    # automerge path each claim these pins.
     ("k8s/roles/monitor-bridge/defaults/main.yml", "custom.regex", "docker"),
     ("k8s/roles/sonarr/defaults/main.yml", "custom.regex", "docker"),
 ]
@@ -67,7 +66,7 @@ def test_the_manual_group_admits_no_patch_or_digest_bump() -> None:
 
 
 def test_a_k8s_python_image_minor_bump_never_automerges() -> None:
-    """Before #8532 sonarr's pin automerged a minor bump, so pods could run ahead of CI."""
+    """An automerged minor bump would let pods run ahead of CI."""
     for site in PYTHON_PIN_SITES[-2:]:
         path, manager, datasource = site
         automerge = _resolve_setting(

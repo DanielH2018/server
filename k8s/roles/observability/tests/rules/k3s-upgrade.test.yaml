@@ -7,7 +7,7 @@
 # condition is false, and a failed Job in another namespace. K3sNodeVersionSkew has the family's
 # zero-series case, which fires it after its 2h hold, a skew case that fires it, and one with a
 # single version that keeps it silent. Promtool uses synthetic series, so it cannot prove
-# kube-state-metrics emits them; the H6.1b landing queries kube_job_failed for namespace
+# kube-state-metrics emits them; the landing queries kube_job_failed for namespace
 # `homelab` live.
 rule_files:
   - ../../files/rules/k3s-upgrade.yaml
@@ -168,11 +168,11 @@ tests:
             exp_annotations:
               summary: homelab-k3s-restart failed to restart k3s on daniel-box.
               description: >-
-                The last windowed restart of k3s.service on daniel-box did not end with the unit
-                active, under a new MainPID, and the node Ready past its restart, or a run was
-                killed after it restarted k3s. The unit makes one attempt per config hash. Read
-                `journalctl -u homelab-k3s-restart -p notice` on daniel-box, recover the node by
-                hand if it is down, then `sudo rm /var/lib/homelab-k3s-restart/failed.sha256`.
+                Read `journalctl -u homelab-k3s-restart -p notice` on daniel-box and recover the
+                node by hand if it is down. The last windowed restart of k3s.service did not end
+                active, under a new MainPID, with the node Ready. The runbook says how to allow
+                another attempt.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#k3sconfigrestartfailed
 
   # K3sConfigRestartPending fires only after 72 hours of `pending 1`. An absent series fires
   # nothing here: K3sConfigRestartMetricsAbsent owns that case.

@@ -13,7 +13,7 @@ expensive three a human reads the PR as well as deploying it.
 
 # DECIDED: the class is accepted for the services whose regression is cheap, and fenced by the
 # auto-deploy denylist for the ones whose regression is not. Censused 2026-09-10: of the 13 k8s
-# roles carrying this pin shape, the three #1524 named as expensive — qbittorrent, tdarr,
+# roles carrying this pin shape, the three expensive ones — qbittorrent, tdarr,
 # healthchecks — were ALREADY denied auto-deploy, as were cloudflare-ddns and dri-device-plugin.
 # The eight that remain eligible are stateless front-ends and probes on `:latest`, where a
 # backwards step costs a redeploy and no data. Option 3 in the issue (a CI job resolving each
@@ -41,7 +41,7 @@ _PIN = re.compile(
 
 # The roles that are the expensive subset: a torrent client mid-transfer. Named rather than
 # derived — "expensive" is a judgement about what a regression costs, which no file states.
-# tdarr left the set when its pin moved to a version tag (#4555), the second remedy the
+# tdarr left the set when its pin moved to a version tag, the second remedy the
 # parametrized test below names.
 _EXPENSIVE = frozenset({"qbittorrent"})
 

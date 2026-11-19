@@ -1,7 +1,7 @@
 """`lib.k8s_roles.resolved_manifest_files` derives a role's file lists.
 
 A role that sets no `manifests_files` gets one derived from its own `templates/` and its
-containers_list entry (#3662). The validator, the render corpus and the prune guards read it.
+containers_list entry. The validator, the render corpus and the prune guards read it.
 
 Run: uv run pytest tests/k8s/test_derived_manifest_files.py
 """
@@ -100,7 +100,7 @@ def test_no_role_renders_a_secret_world_readable_is_clean():
     renders = rendered_texts()
     assert {
         ("cluster-base", "readonly-rbac.yaml.j2"),
-        ("sonarr", "secret-exportarr.yaml.j2"),
+        ("pihole", "secret.yaml.j2"),
     } <= {(role, name) for role, name, _text in renders}, (
         "the render corpus no longer carries the two Secret templates this guard is sized on"
     )

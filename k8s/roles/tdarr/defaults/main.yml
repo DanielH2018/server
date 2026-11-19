@@ -11,7 +11,7 @@
 # digest-only pin slips its regex and would age forever with no update signal, which
 # test_every_k8s_role_image_is_renovate_tracked refuses. A bump never merges itself: renovate.json
 # turns automerge off for every role the auto-deploy denylist holds, this one included.
-tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.00.00@sha256:7ba5325ea64951181a30f2a8d5bbc4fc0985e4c275ea1d09d15491b47b4cd8d6
+tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.08.00@sha256:84743e5ae433a5b49cb463b2dff2679eb02f0cac24fb88c830f49bf8aa9f1c04
 
 # The rollout budget, declared once. Read as Flux's health-check `timeout` and by
 # `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. 600s is

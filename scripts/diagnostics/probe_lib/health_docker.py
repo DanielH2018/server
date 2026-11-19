@@ -60,7 +60,7 @@ def k8s_service_ip_args(service, namespace):
 # DECIDED: `starting` with FailingStreak 0 passes the gate rather than polling until it
 # settles. A deploy recreates the container, so the gate reads it before its healthcheck has
 # completed a single probe and Docker reports `starting` — which failed the gate on a correct
-# deploy (#1601). Polling instead is not available here: `deploy_detach_notify.PROBE_TIMEOUT_S`
+# deploy. Polling instead is not available here: `deploy_detach_notify.PROBE_TIMEOUT_S`
 # capped one `probe.py health` run at 30s, and daniel-pi sets `container_healthcheck_interval:
 # 60s`, so no bounded poll inside that budget could reach the first probe result. M6 B-1 raised
 # the cap to 300s for the k8s alert plane; this ruling was not reopened then. What bounds the

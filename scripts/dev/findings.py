@@ -51,20 +51,21 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py new-issues [--after N] [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
-THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes an issue, `main` makes
-that issue's item on the "Server Issue Tracking" Project agree with it: Status (Todo, In
-Progress while `claimed` or while an open PR will close it, Done once closed), Severity and
-Not before. `findings_lib/board.py` owns the mapping. A board write that fails prints one
-warning and leaves the exit code alone, because nothing reads the board back; `sync-board`
-repairs it, and with no numbers it checks every open issue. Another repo's register has no
-board, so `--repo` other than this one skips it.
+THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an
+issue, `main` makes that issue's item on the "Server Issue Tracking" Project agree with it:
+Status (Todo, In Progress while a worktree holds its claim or an open PR will close it, Done
+once closed). It also sets the issue's own Severity and Not Before issue fields from its
+`severity/` and `not-before:` labels. `findings_lib/board.py` owns the mapping. A board
+write that fails prints one warning and leaves the exit code alone, because nothing reads the
+board back; `sync-board` repairs it, and with no numbers it checks every open issue. Another
+repo's register has no board, so `--repo` other than this one skips it.
 
 WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
 protocol it has here. Every gh call carries the flag, reads included: a dedup read against
 this repo while the create went elsewhere would re-file the finding on every run, and issue
-numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #750
-for a server PR that closes #750. `claim`, `claims`, `reap` and `next` also judge each claim
+numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #12
+for a server PR that closes #12. `claim`, `claims`, `reap` and `next` also judge each claim
 against that repo's local checkout and its default branch (`REGISTER_CHECKOUTS` in
 `findings_lib/boundaries.py`), because a claim names a branch in the repo that owns the issue.
 They refuse a repo that table does not list, with exit 2. `issue-fanout` has the dotfiles
@@ -82,9 +83,9 @@ whoever holds it — `close` and `open`'s reopen path alike, both through `plan_
 `next` read OPEN issues, so a claim left on a closed one is invisible to every view at once rather than merely
 wrong, and a reopen brings it back LIVE.
 
-CLAIMING AN ISSUE. `claim` posts a `Claim:` comment and adds the `claimed` label, so a
-worktree fanning out several issues at once knows which are its own; `release` reverses
-that. A claim only counts from the operator's own comment — this repo is public, so any
+CLAIMING AN ISSUE. `claim` posts a `Claim:` comment, which moves the issue's board Status to
+In Progress, so a worktree fanning out several issues at once knows which are its own;
+`release` reverses that. A claim only counts from the operator's own comment — this repo is public, so any
 account can post a `Claim:` or `Released:` trailer and none of them decide anything. `claim`
 refuses an issue another worktree LIVE-holds, refuses `manual` issues, closed issues and
 issues outside the `claude` register, RELEASES a claim it finds stale and takes the issue,
@@ -252,7 +253,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if args.review_leftover:
         labels.append("review-leftover")
     if tools.repo is None and red_green_eligible(cited_paths(body)):
-        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase (#3950)
+        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase
     # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
     # first, and a dated label or `red-green` the first time it is used.
     have = _existing_labels(tools)
@@ -564,7 +565,7 @@ def cmd_sync_board(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 1 if counts[FAILED] else 0
 
 
-_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create"})
+_ISSUE_WRITES = frozenset({"edit", "close", "reopen", "create", "comment"})
 
 
 def _recording_writes(tools: FindingsTools) -> tuple[FindingsTools, set[int]]:

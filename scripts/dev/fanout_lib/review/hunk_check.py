@@ -2,18 +2,18 @@
 
 WHY. The red gate proves each red test fails on the unchanged code, which the test author's
 own loop makes true almost by construction: it reruns its tests until they fail. That says
-nothing about whether the tests pin the fix. In #4213 a red test for "reports instead of
-raising" asserted only that the script exited 0, and the reviewer, not the gate, found that it
-missed the behaviour. This module measures the property directly, in the style of
+nothing about whether the tests pin the fix: a red test for "reports instead of raising" can
+assert only that the script exits 0 and pass the gate while missing the behaviour. This module measures the property directly, in the style of
 mutation-guided test checking: a fix hunk no red test notices is a part of the fix the red
 tests do not check.
 
 HOW. After the last green gate passes, in a clean clone of HEAD (`hardened_runs.clone_at`), each
 hunk of the PR's non-test diff from the merge base is reverted on its own with `git apply -R`
 and the red nodes run. The merge base, not the red commit, because a batch branch that merged
-master in, as #4182's and #4183's did, would otherwise count master's hunks as the fix's. A hunk is noticed when any red node stops passing. It is noticed "by absence" when
-no node fails on an assertion, which is how a hunk that adds a name other hunks or the tests
-import shows up; `red_tests.red_by_absence` is the classifier. A Python hunk whose revert leaves the module's
+master in would otherwise count master's hunks as the fix's. A hunk is noticed when any red
+node stops passing. It is noticed "by absence" when no node fails on an assertion, which is
+how a hunk that adds a name other hunks or the tests import shows up;
+`red_tests.red_by_absence` is the classifier. A Python hunk whose revert leaves the module's
 AST unchanged once docstrings are dropped, such as a comment or a docstring, is skipped, since
 no test could notice it, and so is every hunk in a file `runnable` refuses, such as a doc.
 
@@ -108,7 +108,7 @@ def red_detection(run: Runner, worktree: Path, start: str, gate: Gate) -> HunkCh
 def runnable(path: str) -> bool:
     """Whether a test could notice a change to `path`: Python, or a file the suite covers.
 
-    A doc or a YAML file can change in a fix, as `.claude/rules/facts.md` did in #4182's, but
+    A doc or a YAML file can change in a fix, such as `.claude/rules/facts.md`, but
     no red test reads it, so counting its hunk as missed would only dilute the measure.
     """
     return path.endswith(".py") or suite_covered(path)

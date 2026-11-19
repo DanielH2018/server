@@ -28,8 +28,7 @@ from renderer.template_filters.py_table import py_table
 
 BRIDGE_ROLE = K8S_ROLES / "monitor-bridge"
 CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"
-# The settings the Deployment renders into its `env`; the env-secret holds only credentials
-# since #5574.
+# The settings the Deployment renders into its `env`; the env-secret holds only credentials.
 ENV_SETTINGS = BRIDGE_ROLE / "templates" / "config" / "env.yaml.j2"
 
 # The gate value that names no gate row: a reach-out check whose rule carries `for: 10m`, so it

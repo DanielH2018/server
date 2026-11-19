@@ -1,8 +1,7 @@
-# fail2ban's jails (H7.7a, docs/target-architecture/host/h7-delete-ansible.md). initial_setup
-# installed the package, wrote /etc/fail2ban/jail.d/homelab.conf and started the service. The jail
-# file is templates/fail2ban_homelab.conf.j2.
+# fail2ban's jails: /etc/fail2ban/jail.d/homelab.conf, rendered from
+# templates/fail2ban_homelab.conf.j2.
 #
-# The path stays the one Ansible wrote. No package owns it (`dpkg -S` on the Pi, 2026-10-30), so
+# No package owns the jail file (`dpkg -S` on the Pi), so
 # the first install takes the file over. A changed jail file restarts fail2ban only after
 # `fail2ban-client -t` accepts it (reconcile's activation step), so a jail fail2ban rejects leaves
 # the running daemon alone and holds the host.

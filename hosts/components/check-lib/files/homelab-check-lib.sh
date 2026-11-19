@@ -57,7 +57,7 @@ reachout_verdict() {
 # detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root.
 # homelab_check_duration_seconds is CHECK_DURATION_S when the caller sets it, else bash's $SECONDS,
 # which counts from the start of the sourcing script: a cron or timer script's run time up to its
-# verdict, with no change to the caller (#6166). Atomic: mktemp's
+# verdict, with no change to the caller. Atomic: mktemp's
 # suffix never ends in .prom, chmod 0644 because mktemp makes 0600 and the collector reads as
 # uid 65534, then one mv. Returns non-zero on failure and removes its temp file; the caller logs.
 write_check_textfile() {

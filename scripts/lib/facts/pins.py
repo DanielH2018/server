@@ -11,7 +11,7 @@ top-level key it sits under. A citation of a nested selector is flagged when its
 is a managed key, so a sibling of a pin inside the same mapping reads as managed too.
 
 Renovate's built-in managers also rewrite YAML, and their file selection lives inside Renovate
-rather than in this repo's config (#4158). ``_BUILT_IN`` restates the default
+rather than in this repo's config. ``_BUILT_IN`` restates the default
 ``managerFilePatterns`` of the one that selects a tracked YAML file here, copied from
 ``lib/modules/manager/<name>/index.ts`` upstream, with the value lines it extracts:
 ``github-actions`` reads ``uses:``, ``runs-on:``, ``container:`` and ``image:`` in workflow

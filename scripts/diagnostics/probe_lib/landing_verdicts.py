@@ -1,7 +1,7 @@
 """`probe.py landing-verdicts [<pr>]` — the newest recorded `VERDICT:` line of each landed PR.
 
 Orchestrators read a landing's verdict by grepping the harness's background-task output files,
-over 60 times in five sessions (#6325). Those files are harness internals and disappear with
+over 60 times in five sessions. Those files are harness internals and disappear with
 the session. This reads `land_lib/verdict_log.py`'s record instead, which every landing appends
 to as it exits. The record is this user's on this host: a landing run on daniel-box reads back
 only there.

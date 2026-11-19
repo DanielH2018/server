@@ -379,7 +379,7 @@ def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
 
 
 def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
-    """The line is host_lib's logfmt (#6202): a path with a space stays one `path` value."""
+    """The line is host_lib's logfmt: a path with a space stays one `path` value."""
     # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     assert deploy_ui.request_line("GET", "/a b", 404, "u") == (
         'request method=GET path="/a b" status=404 user=u'
@@ -399,7 +399,7 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
     app, capsys, error
 ):
     """A disconnect raised out of the handler, and socketserver printed its traceback,
-    which HostLogErrors counts (#7921)."""
+    which HostLogErrors counts."""
     # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
     handler = object.__new__(deploy_ui.make_handler(app))
     handler.rfile = io.BytesIO(b"GET / HTTP/1.1\r\nRemote-User: daniel\r\n\r\n")
@@ -412,6 +412,43 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
         "request method=GET path=/ status=200 user=daniel",
         "client-disconnected method=GET path=/ status=200 user=daniel",
     ]
+
+
+class _Sink(io.BytesIO):
+    def close(self):
+        pass
+
+
+def _request_lines(app, capsys, raw: bytes) -> list[str]:
+    handler = object.__new__(deploy_ui.make_handler(app))
+    handler.rfile = io.BytesIO(raw)
+    handler.wfile = _Sink()
+    handler.client_address = ("10.42.0.113", 40000)
+    handler.close_connection = False
+    handler.handle_one_request()
+    return capsys.readouterr().err.splitlines()
+
+
+def test_a_panel_poll_writes_no_request_line_is_clean(app, capsys):
+    """Each open tab polled four panels every 10 seconds, about 2,600 journal lines a day."""
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Usage count
+    assert _request_lines(app, capsys, b"GET /api/games HTTP/1.1\r\n\r\n") == []
+
+
+@pytest.mark.parametrize(
+    ("raw", "line"),
+    [
+        (b"GET / HTTP/1.1\r\n\r\n", "request method=GET path=/ status=200 user=-"),
+        (
+            b"GET /api/nope HTTP/1.1\r\n\r\n",
+            "request method=GET path=/api/nope status=404 user=-",
+        ),
+    ],
+)
+def test_a_page_load_or_a_non_200_read_still_writes_its_line_is_flagged(
+    app, capsys, raw, line
+):
+    assert _request_lines(app, capsys, raw) == [line]
 
 
 def test_the_games_routes_reach_the_game_control_is_clean(app):

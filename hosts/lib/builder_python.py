@@ -2,8 +2,8 @@
 
 The builder runs on its unit's `HOMELAB_PYTHON`, but the render of a commit runs on that
 commit's own `host_python_version`. The unit carrying a new pin ships in `homelab-daniel-box`,
-which only the render builds, so a render on the unit's pin deadlocks an interpreter cutover
-(#7023). `host_package_builder.Builder.render` calls `render_python` before every render.
+which only the render builds, so a render on the unit's pin deadlocks an interpreter cutover.
+`host_package_builder.Builder.render` calls `render_python` before every render.
 """
 
 from __future__ import annotations

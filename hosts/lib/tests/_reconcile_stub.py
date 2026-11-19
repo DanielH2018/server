@@ -28,8 +28,8 @@ State keys:
     A unit's "limit": true makes `start` and `restart` fail until `reset-failed` clears it. A
     unit's "invocation" is what `systemctl show -p InvocationID` prints, and a start, restart or
     try-restart changes it.
-    commands: command -> stderr. `sysctl`, `systemd-tmpfiles`, `sshd`, `fail2ban-client` and
-        `rsyslogd` exit 1 with that text.
+    commands: command -> stderr. `sysctl`, `systemd-tmpfiles`, `sshd`, `fail2ban-client`,
+        `squid` and `rsyslogd` exit 1 with that text.
     ufw: {"active": bool, "rules": [[spec, comment], ...], "fail": ["<argv joined>", ...]}. The
         stub replays what `ufw` 0.36.2-6 did when measured (docs/host-packages.md, *The ufw
         arm*): appending a spec that exists relabels it in place, `insert` of one skips, a delete
@@ -175,7 +175,7 @@ def systemctl(state: dict, args: list[str]) -> int:
 
 
 def _reset_failed(units: dict, names: list[str]) -> int:
-    """Clear each name's start limit, as systemd 255 did when measured on 2026-11-14 (#8670).
+    """Clear each name's start limit, as systemd 255 does.
 
     It carries on past a name that is not loaded and exits 1 at the end. With no name it would
     clear every failed unit on the host, which reconcile must never ask for.
@@ -288,6 +288,10 @@ def fail2ban_client(state: dict, args: list[str]) -> int:
     return refusing(state, "fail2ban-client")
 
 
+def squid(state: dict, args: list[str]) -> int:
+    return refusing(state, "squid")
+
+
 def udevadm(state: dict, args: list[str]) -> int:
     if f"udevadm {args[0]}" in state["fail"]:
         print(f"udevadm {args[0]} failed.", file=sys.stderr)
@@ -397,6 +401,7 @@ HANDLERS = {
     "systemd-tmpfiles": systemd_tmpfiles,
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
+    "squid": squid,
     "rsyslogd": rsyslogd,
     "ufw": ufw,
     "iptables": iptables,

@@ -1,4 +1,4 @@
-"""A master push whose tree a green PR run already tested skips the repeated jobs (#5489).
+"""A master push whose tree a green PR run already tested skips the repeated jobs.
 
 WHY THIS IS A TEST. Three properties hold the design together, and each fails silently:
 
@@ -27,18 +27,14 @@ from lib.proc_testing import fake_bin, path_with
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 GATE_NAME = "prek (lint + validate + tests + secrets)"
-# The draft arm skips every job on a draft PR (#5563); `test_ci_skips_draft_prs` below says why.
+# The draft arm skips every job on a draft PR; `test_ci_skips_draft_prs` below says why.
 DRAFT_ARM = "github.event.pull_request.draft != true"
 PROOF_CONDITION = (
     "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
-# `pytest` skips on its own output, so a record from a selected PR run repeats it alone (#8943).
-PYTEST_PROOF_CONDITION = PROOF_CONDITION.replace(
-    "outputs.proven", "outputs.pytest-proven"
-)
-# The jobs that read the build's artifacts also skip when it did not succeed (#7439), and when
+# The jobs that read the build's artifacts also skip when it did not succeed, and when
 # it had no work for them. The gate and `ci_verdict.jobs_verdict` pass that second skip, so a
 # job here may skip for no reason beyond the arm named for it.
 BUILD_ARM = "needs.host_packages_build.result == 'success'"
@@ -119,9 +115,6 @@ def _evaluate(condition: str, event: str, **facts: object) -> bool:
         .replace(QUEUE_BRANCH, str(facts.get("queue", False)))
         .replace("needs.prove.result", repr(facts.get("prove", "skipped")))
         .replace("needs.prove.outputs.proven", repr(facts.get("proven", "")))
-        .replace(
-            "needs.prove.outputs.pytest-proven", repr(facts.get("pytest_proven", ""))
-        )
         .replace("needs.pytest.outputs.scope", repr(facts.get("scope", "full")))
         .replace("github.event_name", repr(event))
         .replace("!(", "not (")
@@ -187,9 +180,7 @@ def test_a_push_asks_about_its_tree_and_a_pull_request_about_its_head(tmp_path):
 def test_the_prove_job_reads_statuses_and_publishes_its_answer():
     prove = _jobs()["prove"]
     assert prove["outputs"]["proven"] == "${{ steps.prove.outputs.proven }}"
-    assert (
-        prove["outputs"]["pytest-proven"] == "${{ steps.prove.outputs.pytest-proven }}"
-    )
+    assert set(prove["outputs"]) == {"proven"}
     assert set(prove["permissions"]) == {"contents", "pull-requests", "statuses"}
     assert prove["permissions"]["statuses"] == "read"
 
@@ -198,7 +189,7 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     jobs = _jobs()
     for job in DEPENDENTS:
         # `host_tools_arm64` and the `host_packages` jobs also wait for `host_packages_build`, whose
-        # build they read (H3.11, #6151).
+        # build they read.
         needs = (
             [jobs[job]["needs"]]
             if isinstance(jobs[job]["needs"], str)
@@ -210,8 +201,6 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
         )
         if job in BUILD_CONSUMERS:
             want = f"{PROOF_CONDITION} && {BUILD_ARM} && {BUILD_CONSUMERS[job]}"
-        elif job == "pytest":
-            want = PYTEST_PROOF_CONDITION
         else:
             want = PROOF_CONDITION
         assert _normal(jobs[job].get("if")) == want, (
@@ -230,19 +219,16 @@ def _dependent_runs(
     proven: str,
     cancelled: bool,
     build: str = "success",
-    pytest_proven: str | None = None,
 ) -> bool:
     """Evaluate a dependent's `if:` as GitHub would, for one `prove` outcome on a push.
 
     The build has work for every job that reads it, so only the proof and the build's result
-    decide. `pytest_proven` defaults to `proven`, as a full record sets it.
+    decide.
     """
-    pytest_proven = proven if pytest_proven is None else pytest_proven
     python = (
         condition.replace(f" && {DRAFT_ARM}", "")
         .replace("needs.prove.result", repr(prove))
         .replace("needs.prove.outputs.proven", repr(proven))
-        .replace("needs.prove.outputs.pytest-proven", repr(pytest_proven))
         .replace("needs.host_packages_build.result", repr(build))
         .replace("needs.host_packages_build.outputs.run-cases", repr("true"))
         .replace("needs.host_packages_build.outputs.arm64-tools", repr("true"))
@@ -258,7 +244,7 @@ def _dependent_runs(
 @pytest.mark.parametrize(
     ("prove", "proven", "cancelled", "runs"),
     [
-        # A timed-out `prove` runs the sweep, even when it had set `proven=true` (#5783), and
+        # A timed-out `prove` runs the sweep, even when it had set `proven=true`, and
         # whether or not GitHub reads the dependent as cancelled.
         ("cancelled", "true", False, True),
         ("cancelled", "true", True, True),
@@ -281,18 +267,6 @@ def test_a_dependent_runs_when_prove_timed_out_and_skips_on_the_proof(
         assert _dependent_runs(condition, prove, proven, cancelled) is runs, job
 
 
-def test_a_push_after_a_selected_pr_run_repeats_only_pytest():
-    jobs = _jobs()
-    running = {
-        job
-        for job in DEPENDENTS
-        if _dependent_runs(
-            _normal(jobs[job]["if"]), "success", "true", False, pytest_proven="false"
-        )
-    }
-    assert running == {"pytest"}
-
-
 @pytest.mark.parametrize("build", ["failure", "cancelled"])
 def test_a_build_that_did_not_succeed_skips_the_jobs_that_read_its_artifacts(build):
     for job in BUILD_CONSUMERS:
@@ -301,7 +275,7 @@ def test_a_build_that_did_not_succeed_skips_the_jobs_that_read_its_artifacts(bui
 
 
 def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
-    """A draft PR runs no job, and `ready_for_review` starts its first real run (#5563).
+    """A draft PR runs no job, and `ready_for_review` starts its first real run.
 
     A fan-out batch opens its PR as a draft and pushes while it is reviewed. A job without the
     draft arm would run on every such push. Without `ready_for_review` in `types`, marking the
@@ -338,25 +312,7 @@ def test_only_a_same_repo_pr_run_records_the_tested_tree():
     steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
     record = steps["Record the tested tree on the PR head"]
     assert record["continue-on-error"] is True
-    for context in (tested_tree.CONTEXT, tested_tree.CONTEXT_BUT_PYTEST):
-        assert f"context={context} ;;" in record["run"], context
-
-
-@pytest.mark.parametrize(
-    ("scope", "context"),
-    [("full", tested_tree.CONTEXT), ("selected", tested_tree.CONTEXT_BUT_PYTEST)],
-)
-def test_the_record_names_the_context_the_pytest_scope_earned(tmp_path, scope, context):
-    steps = {s["name"]: s for s in _jobs()["prek"]["steps"] if "name" in s}
-    step = steps["Record the tested tree on the PR head"]
-    assert step["env"]["SCOPE"] == "${{ needs.pytest.outputs.scope }}"
-    seen = tmp_path / "argv"
-    gh = f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> {seen}\necho tree\n"
-    env = {name: name for name in step["env"]} | {"SCOPE": scope}
-    env |= {"PATH": path_with(fake_bin(tmp_path / "bin", gh=gh))}
-    env |= {"GITHUB_SHA": "m", "GITHUB_REPOSITORY": "o/r"}
-    subprocess.run(["bash", "-c", step["run"]], env=env, timeout=30, check=True)
-    assert f"context={context}" in seen.read_text().split()
+    assert f"context={tested_tree.CONTEXT} " in record["run"]
 
 
 @pytest.mark.parametrize(
@@ -366,11 +322,11 @@ def test_the_record_names_the_context_the_pytest_scope_earned(tmp_path, scope, c
         ("pull_request", {"prove": "success", "proven": "false"}, True),
         # A proven run ran no job on the tree it would record.
         ("pull_request", {"prove": "success", "proven": "true"}, False),
-        # A `prove` that said `true` and was then cancelled ran the sweep (#5783).
+        # A `prove` that said `true` and was then cancelled ran the sweep.
         ("pull_request", {"prove": "cancelled", "proven": "true"}, True),
         ("pull_request", {"same_repo": False}, False),
         ("push", {"prove": "success", "proven": "false"}, False),
-        # A run that left test modules out records that every other job ran (#8943).
+        # A run that left test modules out records that every other job ran.
         ("pull_request", {"scope": "selected"}, True),
         (
             "pull_request",
@@ -467,7 +423,6 @@ def _gate_exit(prove: str, proven: str, results: dict[str, str]) -> int:
     gate = _jobs()["prek"]
     check = next(s for s in gate["steps"] if "env" in s and "HOOKS" in s["env"])
     env = {"PROVE": prove, "PROVEN": proven, "PATH": "/usr/bin:/bin"}
-    env["PYTEST_PROVEN"] = proven
     env.update(
         {name: results[job] for name, job in zip(GATE_ENV, DEPENDENTS, strict=True)}
     )
@@ -493,7 +448,7 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         ("success", "false", _all("success"), True),
         ("success", "", _all("success"), True),
         ("skipped", "", _all("success", hooks="failure"), False),
-        # The build's own result reds the gate, so the jobs that skip after it cannot hide it (#7439).
+        # The build's own result reds the gate, so the jobs that skip after it cannot hide it.
         ("skipped", "", _all("success", host_packages_build="failure"), False),
         # The proven path: every dependent skipped, and the gate is green.
         ("success", "true", _all("skipped"), True),
@@ -505,7 +460,7 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         # `proven` alone is not a proof when the job that wrote it did not succeed.
         ("failure", "true", _all("skipped"), False),
         ("cancelled", "", _all("cancelled"), False),
-        # A timed-out `prove` proved nothing, so the full sweep decides (#5783).
+        # A timed-out `prove` proved nothing, so the full sweep decides.
         ("cancelled", "", _all("success"), True),
         ("cancelled", "true", _all("success"), True),
         ("cancelled", "true", _all("skipped"), False),

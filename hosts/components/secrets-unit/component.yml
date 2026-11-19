@@ -1,8 +1,7 @@
-# The secrets unit (H4, docs/target-architecture/host/h4-secrets-unit.md, *homelab-secrets.service*).
-# A host package that lists this component decrypts its own SOPS file with its own age key, writes
+# The secrets unit. A host package that lists this component decrypts its own SOPS file with its own age key, writes
 # each credential to /run/credstore and each declared output under /run/homelab-secrets or
 # /var/lib/homelab-secrets, and queues the dependents owed a restart. The script calls no
-# systemctl: reconcile owns every restart (*The restart contract*).
+# systemctl: reconcile owns every restart.
 #
 # The renderer adds the rest of what the unit reads (renderer_lib/host_outputs.py):
 #   - /usr/lib/homelab/secrets.json, the manifest the script reads. Its schema is the docstring

@@ -1,13 +1,12 @@
 ---
-home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.1-ls264@sha256:29bdfa746fb4426b265d80f3dbb307d5c01215bde705a6951e86abb5f81665ea
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.2-ls267@sha256:9b260b889d67a21d1bef7b260090e03bf17e9b94ea85d5a26627a69a1de73538
 
 # The budget of the home-assistant-prepull Kustomization, whose Job pulls this role's images onto
 # its node before the home-assistant Kustomization applies
 # (scripts/renderer/renderer_lib/prepull.py). The Deployment is `Recreate`, so without it the old
 # pod stops before the new pod's pull starts, and HA is down for the whole pull. With it, the old
-# pod keeps serving while the image arrives. MEASURED 2026-10-22 (#5855): the pinned amd64 image
-# is 720.85 MB compressed, and GHCR, which serves lscr.io, has served this homelab at 0.145-0.53
-# MB/s. 4500s, code-server's budget, covers a full re-pull down to 0.16 MB/s. The Job has no
+# pod keeps serving while the image arrives. The pinned amd64 image is 720.85 MB compressed,
+# and GHCR, which serves lscr.io, serves this homelab at 0.145-0.53 MB/s. 4500s, code-server's budget, covers a full re-pull down to 0.16 MB/s. The Job has no
 # deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling, and
 # Flux applies home-assistant on a later retry. Only Flux reads it: the renderer adds the
 # Kustomization for a published tag alone, so an Ansible deploy ignores it.
@@ -26,13 +25,13 @@ flux_prepull_timeout: 4500s
 k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the home-assistant-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
-# list into the home-assistant-snapshot Kustomization, whose Job snapshots it before home-assistant applies
-# (D5.2a). The snapshot is the recovery point this role's auto-deploy depends on.
+# list into the home-assistant-snapshot Kustomization, whose Job snapshots it before home-assistant applies.
+# The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [home-assistant-config]
 
 # The manifests whose Secret holds a multi-line key, which no Flux placeholder can carry. A
-# placeholder render (scripts/renderer, target slice R2) leaves each out, and D3 ships it as a
-# SOPS-encrypted manifest instead. Ansible renders and applies it like any other secret file.
+# placeholder render leaves each out; it ships as a SOPS-encrypted manifest instead, which
+# Ansible renders and applies like any other secret file.
 # `sops-manifest-entries` in scripts/renderer/renderer_lib/secret_checks.py holds each entry
 # to one Secret of `SOPS_MANIFEST_KEYS` keys.
 render_sops_manifests: [google-sa-secret.yaml]
@@ -95,17 +94,15 @@ home_assistant_script_files:
   - test-harness.yaml
   - wake-and-sleep.yaml
 
-# Memory limit 2Gi: across 9 pod generations the working set ran 949Mi-1414Mi, with the
-# peak pod at 1387Mi. 2Gi puts steady state near 65% and leaves room for recorder growth.
-# Don't trim the recorder further to buy headroom; purge_keep_days is already 7.
-# The request is the 7-day p95 working set (1412Mi on 2026-11-14) rounded up to 64Mi.
+# Memory limit 2Gi: the working set runs 949Mi-1414Mi, so 2Gi puts steady state near 65% and
+# leaves room for recorder growth. Don't trim the recorder further to buy headroom;
+# purge_keep_days is already 7. The request is the 7-day p95 working set rounded up to 64Mi.
 home_assistant_k8s_cpu_limit: "1"
 home_assistant_k8s_mem_limit: 2Gi
 home_assistant_k8s_cpu_request: "100m"
 home_assistant_k8s_mem_request: 1472Mi
 
-# 140 M at planning (71 M of it the recorder SQLite); sized for recorder growth. `longhorn`
-# (backed up): .storage carries the device/entity registries — the highest-value,
+# Sized for recorder growth. `longhorn` (backed up): .storage carries the device/entity registries — the highest-value,
 # hardest-to-rebuild tree in the homelab, per the kopia restore-drill's own comment.
 home_assistant_k8s_claim: home-assistant-config
 home_assistant_k8s_storage_class: longhorn

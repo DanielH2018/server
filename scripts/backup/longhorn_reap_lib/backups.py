@@ -58,7 +58,7 @@ re-decides against `probe.py b2-budget` instead of discovering the cap as a wall
 mid-loop. A large backlog is meant to be reaped across several days.
 
 ONE CAP FOR THREE MODES, CALIBRATED ON THE MOST EXPENSIVE. MAX_DELETIONS_DEFAULT comes from the
-strays mode's ~520 Class C per deletion. A seed is cheaper -- the eleven-seed campaign measured
+strays mode's ~520 Class C per deletion. A seed is cheaper -- about
 ~103 each -- so a seeds sweep that would fit inside a day's cap still refuses at four and asks
 for `--max-deletions 11` deliberately. A per-mode cap table would be the wrong trade: the cap
 exists so a human reads `probe.py b2-budget` before a bulk deletion, and the refusal prints the
@@ -70,18 +70,14 @@ differs only in the timeout bound to its runner. `--timeout` is the SERVER-side 
 honours, and the subprocess cap sits DELETE_TIMEOUT_MARGIN_S above it so the client can never
 fire first and turn a delete that is still legitimately running into a false FAILED. Neither
 bound cancels anything: kubectl has already issued the DELETE, and exceeding --timeout only
-gives up WAITING for the finalizer while the server carries on. Bash had no bound at all, and
-the sibling snapshot reaper hung that way for 23 minutes on 2026-08-16 with the process holding
-no socket to the API server -- a run that neither finishes nor reports.
+gives up WAITING for the finalizer while the server carries on. An unbounded run can hang
+with the process holding no socket to the API server -- a run that neither finishes nor
+reports.
 
-WHY A FAILED `kubectl get volumes` ABORTS HERE rather than falling through, unlike bash. Bash's
-volume read and its VOLUME_COUNT read were two separate `kubectl` calls, both swallowing stderr
-(`2>/dev/null`); if the first failed, the second usually failed the same way, so VOLUME_COUNT
-came back 0 too and the `VOLUME_COUNT>0 && OWNER_COUNT==0` abort check never fired (0>0 is
-false) -- bash fell through with an EMPTY `existing_volumes`, so every completed, labelled
-backup read as orphaned and became a candidate under --apply-deleted-volumes. Aborting
-explicitly on a failed read is a deliberate improvement, not a port: it refuses instead of
-silently reclassifying every backup as belonging to a deleted volume.
+WHY A FAILED `kubectl get volumes` ABORTS HERE rather than falling through with an EMPTY
+`existing_volumes`: every completed, labelled backup would read as orphaned and become a
+candidate under --apply-deleted-volumes. Aborting explicitly on a failed read refuses instead
+of silently reclassifying every backup as belonging to a deleted volume.
 
 Run from the repo root on a k3s host. The dry run reads through the read-only kubeconfig:
     LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config \
@@ -316,7 +312,7 @@ def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
     The cost paragraph is the reason this prints at all: the reapable list reads as cheap
     because it is short, while the spend is per stored block, so the deletion cost has to
     survive someone reading only this output. The flag table is in `--help`; a 20-line
-    banner on every dry run buried the count (#4448). ENFORCED:
+    banner on every dry run buries the count. ENFORCED:
     scripts/backup/tests/test_longhorn_reap_backups_cli.py
     ::test_every_modes_dry_run_prints_the_per_block_cost
     """

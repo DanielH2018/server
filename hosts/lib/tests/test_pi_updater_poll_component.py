@@ -1,4 +1,4 @@
-"""The `pi-updater-poll` component: daniel-pi starts its updater when the builder publishes (#7065).
+"""The `pi-updater-poll` component: daniel-pi starts its updater when the builder publishes.
 
 The render tests hold the paths, the enable link and the 15-minute schedule. The script runs
 against stub `curl`, `dpkg-query`, `systemctl` and `hostname`, with the real `dpkg` comparing
@@ -76,7 +76,7 @@ IO_CLASSES = {"realtime": 1, "best-effort": 2, "idle": 3}
     "unit", ["homelab-updater-poll.service", "homelab-updater.service"]
 )
 def test_the_updater_units_outrank_the_aide_scans_io_class(package, unit):
-    """On 2026-11-10 an idle-class AIDE scan held the idle-class updater's apt steps in D state (#7941)."""
+    """An idle-class AIDE scan must not hold the idle-class updater's apt steps in D state."""
     source = (
         package
         if unit.startswith("homelab-updater-poll")
@@ -204,7 +204,7 @@ def test_a_newer_publish_starts_the_updater_once(pi):
     assert (
         pi.root / "var/lib/homelab-updater-poll/triggered"
     ).read_text() == f"{NEWER}\n"
-    # The next poll, before the updater installed it, must not start a second run (#6911).
+    # The next poll, before the updater installed it, must not start a second run.
     again = pi.poll()
     assert again.returncode == 0, again.stderr
     assert pi.starts() == 1
@@ -276,7 +276,7 @@ def test_a_failed_fetch_exits_1_and_starts_nothing(pi):
 
 
 def test_many_published_versions_cost_a_handful_of_dpkg_compares(pi):
-    """On 2026-11-15 the index listed 134 daniel-pi versions, each one a dpkg fork (#8884)."""
+    """An index of 134 daniel-pi versions must not cost one dpkg fork each."""
     pi.installed.write_text("0.149+g000000000095")
     # The highest sits in the middle, so neither the first nor the last row wins.
     pi.publish(*(f"0.{n}+g{n:012x}" for n in (*range(1, 75), 150, *range(75, 150))))

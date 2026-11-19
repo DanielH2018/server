@@ -21,8 +21,7 @@ EMPTY_LEG_GUARD = "steps.select.outputs.count != '0'"
 # The census names members it must find: a renamed step would otherwise leave the check.
 GUARDED_STEPS = frozenset(
     {
-        "Install sops, age and apt-utils for the tests",
-        "Deploy the dotfiles packages the hooks and the pruner import",
+        "Install the tools the tests run",
         "Restore pytest's rewritten test modules",
         "Run the test suite",
         "Save pytest's rewritten test modules",

@@ -9,16 +9,12 @@ from dataclasses import dataclass
 
 # DECIDED: 2.0 GiB per agent (#5667, 2026-10-29). Over the 7 days to 2026-10-29, 177 batches
 # on the per-batch series (`claude_fanout_batch_memory_bytes{kind="anon"}`, 30s samples)
-# peaked at 1781 MiB of anon on daniel-server (112 batches, p50 843 MiB, p95 1042 MiB) and
-# 1544 MiB on daniel-box (65 batches, p50 900 MiB, p95 1330 MiB). The 2473 MiB peaks that
-# sized the earlier 2.5 GiB reservation were whole-suite runs, which #5722 refuses inside a
-# batch. 2.0 GiB sits 267 MiB above the largest batch, and the margin is there because 30s
-# sampling understates a short pytest spike. Raise it if a week of that query passes 2 GiB.
-# The `peak` kind counts page cache (p95 about 6 GiB) and is not what this reserves.
-# The change is nearly inert, and that is measured, not hoped: headroom subtracts the whole
-# cgroup's memory.current, page cache included, so what binds is the cache and not the
-# reservation. Box's login plane had less than one reservation free 17.3% of the week at
-# 2.5 GiB and 15.0% at 2.0 GiB; daniel-server's had 0.03%, so its live cap binds first.
+# peaked at 1781 MiB of anon on daniel-server and 1544 MiB on daniel-box. Whole-suite runs peak
+# at 2473 MiB and are refused inside a batch. 2.0 GiB sits 267 MiB above the largest batch, and
+# the margin is there because 30s sampling understates a short pytest spike. Raise it if a week
+# of that query passes 2 GiB. The `peak` kind counts page cache and is not what this reserves.
+# The reservation rarely binds: headroom subtracts the whole cgroup's memory.current, page
+# cache included, so the cache binds first, and daniel-server's live cap binds before either.
 # Do not read a launch refusal on daniel-box as a reservation problem.
 RESERVATION_BYTES = 2_147_483_648
 
@@ -44,7 +40,7 @@ RESERVATION_BYTES = 2_147_483_648
 #
 # The uid is the reading user's own, never a constant. The `claude` agent user (uid 996 on
 # daniel-box) launches into its own slice, and a read pinned to uid 1000 scored the
-# operator's login plane for it (#4098).
+# operator's login plane for it.
 READ_COMMAND = (
     "u=$(id -u); "
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "

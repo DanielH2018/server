@@ -47,7 +47,7 @@ def build_annotation(
         "iconColor": "purple",
         "target": {"expr": expr, "refId": ref_id, "queryType": "range"},
         "textFormat": "{{services}}",
-        # `result` is ok, fail or rollback (#6164), so a failed deploy never reads as a success.
+        # `result` is ok, fail or rollback, so a failed deploy never reads as a success.
         "titleFormat": "deploy {{result}}",
     }
 

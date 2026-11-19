@@ -63,7 +63,7 @@ def test_view_dies_when_a_field_has_the_wrong_type(landing):
     ln.tools.gh_json = lambda *a, **k: {"headRefOid": ["not", "a", "sha"]}
     with pytest.raises(Outcome) as exc:
         ln.view("headRefOid")
-    # The field name is the one detail that says what broke (#4516).
+    # The field name is the one detail that says what broke.
     assert exc.value.rc == 1 and "headRefOid: expected a string" in exc.value.error
 
 
@@ -99,7 +99,7 @@ def test_fakes_defaults_are_fresh_per_instance():
 
 
 def test_die_takes_no_default_exit_code():
-    """A default of 2 collided with three other meanings of 2 (#4451): every caller names one."""
+    """A default of 2 collided with three other meanings of 2: every caller names one."""
     import inspect
 
     from deploy_tools.land_lib.landing import Landing

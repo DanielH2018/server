@@ -254,12 +254,9 @@ def test_a_hand_triggered_probe_backup_cannot_stand_in_as_tier_evidence():
     kept = {name for name, *_ in result.kept}
     assert kept == {"stray-newest", "stray-b", "stray-c", "stray-oldest"}
 
-    # Named for the record, not asserted against a second implementation: drop the `if not job:
-    # continue` skip from the counting pass (`labelled = completed` instead of filtering on
-    # JOB) and the probe's job="" satisfies `job == owner.get(vol, "")` (both ""), setting
-    # CURRENT_TIER_COUNT["wg-easy-config"] = 1. FLOOR 1 then stands down, FLOOR 2 keeps only
-    # stray-newest, and stray-b/stray-c/stray-oldest — 3 of the volume's 5 backups — become
-    # reapable. That is the exact regression `result.candidates == []` above catches.
+    # Dropping the `if not job: continue` skip from the counting pass lets the probe's job=""
+    # equal `owner.get(vol, "")`, so FLOOR 1 stands down and 3 of the volume's 5 backups become
+    # reapable. The `result.candidates == []` assertion above catches that.
 
 
 def test_non_completed_backups_are_never_bucketed():
@@ -494,18 +491,12 @@ def test_a_removed_newest_snapshot_does_not_consume_the_floor_slot():
     assert result.kept == []  # live-newest claims FLOOR 1, not even reported
 
 
-def test_an_unpopulated_markremoved_is_treated_as_not_removed():
-    # R14, ported: status.markRemoved absent (a snapshot read moments after creation) must be
-    # treated the same as an explicit False, not silently excluded.
-    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
-    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+@pytest.mark.parametrize("removed", [None, False], ids=["absent", "false"])
+def test_an_unpopulated_markremoved_is_treated_as_not_removed(removed):
+    # status.markRemoved is absent on a snapshot read moments after creation.
     owner: dict[str, str] = {}
-    snaps = [
-        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
-        _snapshot(
-            "stale", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"
-        ),  # no `removed` key
-    ]
+    stale = _snapshot("stale", "vol-a", "2026-08-10T00:00:00Z", "daily-backup", removed)
+    snaps = [_snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"), stale]
     result = logic.classify_snapshots(
         snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
     )

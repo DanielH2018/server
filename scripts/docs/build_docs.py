@@ -281,7 +281,7 @@ def run_generators() -> list[str]:
             failed.append(script)
             print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
     # One line for the whole pass: each generator already reports its own page, so a
-    # per-generator "ok" here only doubled the log (#4448).
+    # per-generator "ok" here only doubled the log.
     print(
         f"build_docs: {len(GENERATORS) - len(failed)}/{len(GENERATORS)} generator(s) ok"
     )
@@ -319,7 +319,7 @@ def stderr_tail(text: str, limit: int) -> str:
     """The last `limit` characters of `text`, cut at a line start.
 
     mkdocs and rsync print the error that decides a failure last, so a cap keeps the tail.
-    The head that it replaced dropped exactly that line on a long log (#4448).
+    The head that it replaced dropped exactly that line on a long log.
     """
     text = text.strip()
     if len(text) <= limit:
@@ -336,8 +336,8 @@ def _write_build_stamp(site: Path, generators: str = "ok") -> None:
     and degrades silently when it is missing.
 
     `generators` is what makes the stamp honest. There is NO DEADMAN here by design -- this
-    file IS the liveness signal -- but two of docs-refresh.sh's three paths (dirty tree, open
-    PR) rebuild the site with --skip-generators and still refreshed the timestamp, so the only
+    file IS the liveness signal -- but docs-refresh.sh's open-PR path rebuilds the site with
+    --skip-generators and still refreshed the timestamp, so the only
     freshness signal read fresh while the pages behind it were not regenerated at all.
     `skipped` and `failed` are what a reader needs to distinguish "current" from "merely
     rebuilt".

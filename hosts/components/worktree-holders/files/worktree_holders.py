@@ -2,19 +2,19 @@
 """List every process that holds a path under the caller's Claude worktrees, as root.
 
 The weekly worktree sweep runs as the checkout owner, and `/proc/<pid>/cwd` and `environ`
-refuse that uid for another user's process. `lib.worktrees.processes_using` used to see
-another uid only inside the caller's own login slice (#3994), so a `claude` process started
-through `su`, `runuser -l` or `systemd-run --uid` could hold a worktree unseen (#4170).
+refuse that uid for another user's process. `lib.worktrees.processes_using` alone sees
+another uid only inside the caller's own login slice, so a `claude` process started
+through `su`, `runuser -l` or `systemd-run --uid` could hold a worktree unseen.
 
 Installed root-owned at /usr/lib/homelab/worktree-holders and run by
 `worktree-holders@.service`, one instance per connection to `worktree-holders.socket`
 (`Accept=yes`), with the connection on stdin. A socket needs no setuid, so a caller with
-`NoNewPrivileges=yes`, such as a claude-rc.service session, can ask it too (#4297). The
+`NoNewPrivileges=yes`, such as a claude-rc.service session, can ask it too. The
 socket's group decides who may connect. The kernel names the caller through `SO_PEERCRED`,
 and the root this reports under is that uid's user's entry in /etc/worktree-holders.json.
 initial_setup renders that map from the same list it puts in the socket's group: the
-operator's checkout, and each present agent user's own clone (#4295). So a `claude` removal
-in /var/lib/claude/server sees an `ubuntu` process there (#4021). A uid with no entry is
+operator's checkout, and each present agent user's own clone. So a `claude` removal
+in /var/lib/claude/server sees an `ubuntu` process there. A uid with no entry is
 refused. The caller sends nothing; it cannot point the scan at another path.
 
 The answer is a header line, one line per holder, and a terminator:
@@ -32,8 +32,8 @@ must not read as "no holders".
 Every value is escaped with Python's `unicode_escape` codec, so a line holds only printable
 ASCII with no tab. A cwd whose directory name holds a line break (`\\n`, U+2028 and the rest
 `str.splitlines()` breaks on) or a tab therefore stays one line, and the caller decodes it
-back to the real path (#4294). The cwd cannot be dropped the way an unprintable value
-once was (#4272), because the cwd is the hold.
+back to the real path. The cwd cannot be dropped the way an unprintable value
+can be, because the cwd is the hold.
 
 An `unreadable` line is a process root itself could not read. The caller counts it as a
 holder of every tree, because it could be any of them. Nothing else from `environ` is ever
@@ -67,7 +67,7 @@ OK = "ok"
 END = "end"
 REFUSED = "refused"
 
-# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487). Each
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import. Each
 # misuse `main` refuses is an invocation the socket unit never makes.
 USAGE_ERROR = 64
 

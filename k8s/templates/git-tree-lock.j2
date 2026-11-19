@@ -1,15 +1,14 @@
 {#
-The one way a host cron in this role takes the shared git-tree lock (#3722).
+The one way a host cron in this role takes the shared git-tree lock.
 
-docs-refresh and eval-run each mutate the primary checkout, and so does
-homelab-checkout-sync.service, whose unit wraps `flock` itself. The lock makes those mutations
+eval-run mutates the primary checkout, and so does homelab-checkout-sync.service, whose unit
+wraps `flock` itself. docs-refresh works in its own worktree and takes no lock. The lock makes those mutations
 mutually exclusive; fd 9 is held for the calling script's whole life, so the lock releases only
 when the script exits.
 
 THE WAIT must outlast the longest hold of any holder, not a round number. A waiter that gives up
 early does not fail safe: it fires its unit's OnFailure= for ordinary contention AND skips the
-run. docs-refresh holds longest: its `timeout` steps and build_docs.py's own time budget under
-the lock. The wait covers that sum plus headroom for publish_pr's per-call-bounded git and gh
+run. The wait covers the longest holder's bound plus headroom for publish_pr's per-call-bounded git and gh
 calls. ENFORCED by hosts/tests/test_tree_lock_wait_covers_holders.py, which reads each holder's
 bound from its RENDERED template and the wait from each caller's rendered script.
 

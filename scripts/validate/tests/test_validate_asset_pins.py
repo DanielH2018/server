@@ -320,7 +320,7 @@ def test_an_annotated_depname_with_no_digest_has_nothing_to_refresh():
     assert "nothing to refresh: vendor/digestless pins no digest" in out.getvalue()
 
 
-# ── the failure marker (#4480) ──────────────────────────────────────────────────────────────
+# ── the failure marker ──────────────────────────────────────────────────────────────
 
 
 def _fail_lines(err: str) -> list[str]:

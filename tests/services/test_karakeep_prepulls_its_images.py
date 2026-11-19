@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""karakeep's images are on its node before the apply that triggers the Recreate (#5778).
+"""karakeep's images are on its node before the apply that triggers the Recreate.
 
 `karakeep` and `karakeep-meilisearch` are `Recreate`, so the apply stops the old pod before the
 kubelet pulls the new image. On 2026-10-19 a digest bump of the 511 MB app image pulled from
@@ -66,7 +66,7 @@ def test_karakeep_waits_on_its_prepull_for_the_roles_timeout(rendered) -> None:
 
 def test_the_prepull_job_pulls_every_image_karakeeps_deployments_run(rendered) -> None:
     deployments = _deployments(rendered)
-    # The two Recreate Deployments the #5778 outage came from, so a render that lost one
+    # The two Recreate Deployments, so a render that lost one
     # cannot pass by comparing an empty set with an empty set.
     names = {d["metadata"]["name"] for d in deployments}
     assert {"karakeep", "karakeep-meilisearch"} <= names

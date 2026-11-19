@@ -5,7 +5,7 @@ Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every do
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
 module per phase; this file holds ``main`` and the docstring ``--help`` prints from.
 ``--help`` prints the summary line above and everything from ``Usage::`` on. The sections
-between are rationale for whoever edits this file, so they print nowhere (#4448).
+between are rationale for whoever edits this file, so they print nowhere.
 
 WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
 control flow and command substitution defeat the worktree containment check, which refuses with
@@ -21,7 +21,7 @@ exits with the landing's code. ``--detach`` covers two steps a caller would othe
 hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when the flag is absent,
 before the merge is armed, so it is still the PRE-merge tip) and the redirect. The landing runs
 as a detached grandchild outside the caller's process tree, so a harness that kills the waiting
-call leaves it running to its verdict (issue #3158). The mechanics are ``land_lib/detach.py``.
+call leaves it running to its verdict. The mechanics are ``land_lib/detach.py``.
 
 THE WAIT IS cc-wait's, NOT THIS SCRIPT'S. ``cc-wait`` is the one wait loop every repo shares (the
 dotfiles ``cc-wait`` package), and ``land_probe.py`` is this repo's ``land`` source for it. A
@@ -144,7 +144,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
-from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline
+from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
@@ -195,9 +195,7 @@ def main(
     # DECIDED: a usage error is not a landing, so it annotates nothing. argparse raises
     # SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is
     # `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same
-    # stream the Landings board counts. The bash original annotated it because its EXIT trap
-    # was installed before the arg loop, and this port reproduced that until issue #1304
-    # measured 592 such rows in Loki's 744h window. The wrapper below still annotates
+    # stream the Landings board counts. The wrapper below annotates
     # nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched.
     #
     # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with two other meanings a caller sees
@@ -215,11 +213,11 @@ def main(
         return _hand_off(opts, unit, tools)
     if opts.detach:
         opts = _resolve_since(opts)
+    child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
     if opts.fresh:
-        child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
         landing = functools.partial(_land_fresh, opts.primary, tools, child)
     else:
-        landing = functools.partial(_land, opts, tools, classifier)
+        landing = functools.partial(_land, opts, tools, classifier, child)
     if opts.detach:
         return _detached(opts, landing)
     return landing()
@@ -314,15 +312,18 @@ def _land_fresh(primary: Path, tools: Tools, argv: list[str]) -> int:
         return 1
 
 
-def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
+def _land(
+    opts: Options, tools: Tools, classifier: Classifier | None, child: list[str]
+) -> int:
     """Run one landing to its verdict; its exit code.
 
-    The path every invocation took before `--detach` existed, unchanged: a caller that passes
-    neither new flag reaches this from `main` directly.
+    A caller that passes neither `--detach` nor `--fresh` reaches this from `main` directly.
 
     A merged PR whose grading moves to a fresh checkout (`fresh.GradeFresh`) gets its verdict,
     record and annotation from that checkout's landing, so this one writes none of them. When
     that landing never starts (`fresh.CheckoutFailed`), this one ends `refused` and records it.
+    A landing that hands its turn over (`turn.HandOver`) runs `child`, its own arguments,
+    from a fresh checkout the same way, and that landing inherits the turn.
     """
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
@@ -355,8 +356,26 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
             print(result_line(ln.ledger, refused))
             refused.emit()
             line = refused.file_line()
+    except turn.HandOver as handed:
+        print(f"land: {handed}", file=sys.stderr)
+        try:
+            rc = tools.fresh_landing(opts.primary, child, handed.fd)
+            graded_here = False
+        except fresh.CheckoutFailed as failed:
+            refused = Outcome(
+                1,
+                f"PR #{opts.pr} — {handed}, but {failed}; nothing is merged; re-run the "
+                "same land.sh command",
+            )
+            ln.ledger.verdict = refused.verdict or ""
+            rc = refused.rc
+            print(result_line(ln.ledger, refused))
+            refused.emit()
+            line = refused.file_line()
+        finally:
+            os.close(handed.fd)
     except Exception as exc:
-        # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
+        # Still one VERDICT line, as every exit-1 end prints, and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
         # the annotation below stays `aborted`, so the board keeps a crash apart from a
         # refusal.

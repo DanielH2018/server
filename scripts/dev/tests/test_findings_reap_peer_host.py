@@ -1,8 +1,8 @@
-"""`reap` on one host against a claim made from the other host's checkout (#6840).
+"""`reap` on one host against a claim made from the other host's checkout.
 
 Both hosts' operator checkouts make unprefixed branches, so `other_clone_owner` cannot tell a
 daniel-server claim from a daniel-box one, and the local `git worktree list` does not name the
-peer's worktrees. The fix reads the peer's list through a new `FindingsTools` field,
+peer's worktrees. The peer's list comes through a `FindingsTools` field,
 `peer_worktrees`: called with the register (None for this repo, as `running_batch_holds`
 takes it), it returns the `lib.worktrees.Worktree`s the other host's checkout registers. The
 fake below accepts any arguments, so only the field name and the returned list are fixed.
@@ -24,7 +24,7 @@ GONE_WT = "worktree-issue-6841"
 
 def test_reap_holds_a_claim_whose_worktree_the_peer_host_registers(monkeypatch, capsys):
     # Unset, both branches read as the running user's own, which is the operator-on-both-hosts
-    # case the issue describes rather than the other-clone case #4103 already holds.
+    # case the issue describes rather than the other-clone case the staleness tests hold.
     monkeypatch.delenv("CLAUDE_WORKTREE_PREFIX", raising=False)
     assert PEER_FIELD in {f.name for f in dataclasses.fields(FindingsTools)}, (
         f"FindingsTools has no `{PEER_FIELD}` field, so `reap` judges a claim only against "
@@ -46,8 +46,7 @@ def test_reap_holds_a_claim_whose_worktree_the_peer_host_registers(monkeypatch, 
 
     assert main(["reap"], tools) == 0
 
-    assert ["issue", "edit", "6840", "--remove-label", "claimed"] not in calls.gh
     assert not any(c[:3] == ["issue", "comment", "6840"] for c in calls.gh)
     # The rejecting half: a claim neither host registers is still released.
-    assert ["issue", "edit", "6841", "--remove-label", "claimed"] in calls.gh
+    assert any(c[:3] == ["issue", "comment", "6841"] for c in calls.gh)
     assert "reap: 1 stale claim(s) released" in capsys.readouterr().out

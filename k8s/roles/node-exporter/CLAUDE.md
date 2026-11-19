@@ -34,14 +34,15 @@ had while daniel-server's LAN-published 9100 retires.
 ## Notable
 - **CPU limit is 1 core, not the usual 200m**
   (`k8s/roles/node-exporter/templates/daemonset.yaml.j2`). node-exporter renders ~320 metric families per
-  request; under a tighter limit it was throttled on 42% of CFS periods, and kubelet's probes
-  read a bounded prefix of `/metrics` and close early — a slow render meant the probe cut off
-  mid-body, logging a `connection reset by peer` line per unwritten family. That flood was 97%
-  of all `k8s`-namespace Loki ingest before the CPU limit and probe changes below.
-- **Liveness probe interval is 300s, not 30s**, and still hits `/metrics` — the only probe that
-  can catch a wedged collector (a dead NFS mount). Readiness instead hits `/` (200, no
-  collector work) at the usual 10s, since it only needs to prove the listener is up before
-  the Kustomization's `wait` calls the DaemonSet ready.
+  request, and under a tighter limit it was throttled on 42% of CFS periods.
+- **The liveness probe execs busybox `wget` on `/metrics` every 60s, never an `httpGet`.**
+  kubelet's HTTP prober reads a bounded prefix of the body and closes, and node_exporter then
+  logs one `connection reset by peer` ERROR per unwritten family, about 280 per probe. `wget`
+  reads the whole body. The probe stays on `/metrics` because only a render times out on a
+  wedged collector (a dead NFS mount). Readiness hits `/` (200, no collector work) at the usual 10s, since
+  it only proves the listener is up before the Kustomization's `wait` calls the DaemonSet ready.
+  The `no-http-probe-on-a-metrics-route` and `node-exporter-keeps-a-metrics-probe` rows of
+  `tests/k8s/test_rendered_properties.py` hold both.
 
 ## The textfile collector directory
 

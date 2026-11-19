@@ -2,12 +2,9 @@
 """Generate the mechanical half of every role's `## At a glance` block, in place.
 
 WHY. A role's CLAUDE.md opens with an "At a glance" block a session reads before touching the
-service, and until 2026-09-19 every line of it was typed by hand: the deploy tag, the image,
-the route, the claims. Each is declared once elsewhere — the
+service: the deploy tag, the image, the route, the claims. Each is declared once elsewhere — the
 `containers_list` entry, `defaults/main.yml`, the templates — and a hand copy drifts the day
-the source moves (#2058: homepage's doc pinned `:latest` while its defaults pinned a digest).
-The only guard checked that the heading existed. This generator writes the fields that have a
-single reader in the tree, and a pytest gate keeps the committed block equal to what it writes.
+the source moves. This generator writes the fields that have a single reader in the tree, and a pytest gate keeps the committed block equal to what it writes.
 
 WHAT IT WRITES, and what it leaves alone. The block sits between two HTML-comment markers
 directly under the heading; everything after the closing marker is hand-written and untouched.
@@ -15,7 +12,7 @@ It carries only facts with one source each. A judgement — why a claim is on th
 on, what a route bypasses, why a pin is held back — stays in the prose below the block.
 
 DECIDED: the blocks stay, rather than moving these facts into `docs/reference/services.md`.
-Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving them gains no
+Re-examined 2026-09-28. Both renders share one derivation, so moving them gains no
 single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
@@ -45,7 +42,7 @@ deliberate PR, where regenerating is one command. The tag is one `grep` away in 
 the line names.
 
 RUN AT COMMIT TIME, NOT BY THE DOCS-REFRESH CRON. The `regen-role-glance` prek hook runs
-`--fix` on every commit that touches a source this generator reads (#3698). It rewrites a
+`--fix` on every commit that touches a source this generator reads. It rewrites a
 stale block and exits 1 like a formatter, so the author stages the rewritten doc and commits
 again. The block therefore lands in the same commit as the change that moved it, with no
 hand step. The cron stages `docs/reference` and `docs/assets/generated` only, and a write
@@ -54,7 +51,7 @@ under `k8s/roles/` would leave the primary checkout dirty, which parks
 commit that skipped prek.
 
 DECIDED: the hook regenerates at commit time rather than `inject-nested-docs` generating
-the block when a doc is read (#3698). The harness loads a role doc natively on Read, Edit
+the block when a doc is read. The harness loads a role doc natively on Read, Edit
 and Write, and the hook skips any doc the harness already loaded, so a block that exists
 only at injection time is absent from most sessions. It would also be absent on GitHub, in
 an editor, on the MkDocs site and in a PR diff, where a reviewer sees a route or claim move.

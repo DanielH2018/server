@@ -49,8 +49,8 @@ def _parsed(path: Path) -> object:
 
 
 # Keyed on the text rather than the path, as `render_guard._parsed_mapping` is, so an edit
-# between two renders reaches the second one. A render reads a role's defaults more than once
-# (#5900).
+# between two renders reaches the second one. A render reads a role's defaults more than
+# once.
 @functools.lru_cache(maxsize=512)
 def _parsed_text(text: str) -> object:
     return yaml_fast.safe_load(text)

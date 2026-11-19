@@ -80,6 +80,7 @@ wrong is worth more than the record of one that did not.
 | [0033](0033-game-server-replicas-are-runtime-state.md) | A game server's replica count is runtime state, set from deploy.local | Accepted | 2026-11-14 |
 | [0034](0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) | GitHub quota is budgeted per session, inside the wrappers that already run gh | Accepted | 2026-11-14 |
 | [0035](0035-skeptic-and-implementer-carry-no-maxturns.md) | The skeptic and implementer agents carry no turn cap | Accepted | 2026-11-14 |
+| [0036](0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md) | A selected pull-request run proves its tree, and a nightly sweep is the net for a stale row | Accepted | 2026-11-19 |
 
 ## The long-form behind a record
 

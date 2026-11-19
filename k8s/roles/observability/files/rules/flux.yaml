@@ -9,7 +9,7 @@ groups:
     rules:
       # ScrapeTargetDown{job="flux"} reads the same up == 0 as a warning after 10 minutes. This
       # rule pages it as critical after 5, and an Alertmanager inhibit with `equal: [job,
-      # instance]` holds the warning back while this fires, so one outage pages once (#6654).
+      # instance]` holds the warning back while this fires, so one outage pages once.
       # It shares its name with the rule below so that the soak reads one alert for "a
       # controller is down".
       - alert: FluxControllerDown
@@ -24,6 +24,7 @@ groups:
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
             namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       # The family's zero-series alert, and what ScrapeTargetDown cannot see. Pod discovery finds no
       # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
       # schedules leaves no up series at all. One absent() per controller, because a job-wide
@@ -51,25 +52,26 @@ groups:
             gone or the flux scrape job is missing from prometheus.yml, or it has been scraped
             with no controller_runtime_reconcile_total series. Read the Deployment in the
             flux-system namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#recovering-flux-by-hand
       # The max by() drops the labels that change while an object stays unhealthy. A failing
       # Kustomization's Ready flips between False and Unknown on every retry, and a label change
       # starts a new series, which would restart the 15-minute hold each time. The
       # OCIRepository arms name `homelab` and `last-good`, the base the soak Job diffs against,
       # so a stalled base pages as the source does. Neither arm names the drill's verify-drill,
-      # which is meant to read Ready=False, so it never fires. An absent `ready` label, before the first condition is
-      # written, also reads as not Ready.
+      # which is meant to read Ready=False, so it never fires. An absent `ready` label, before
+      # the first condition is written, also reads as not Ready.
       # last_over_time bridges a gap in kube-state-metrics' scrape. A failed scrape or a roll of
       # its pod stale-marks every series it exports, and an instant read would then return
       # nothing for one evaluation and restart the hold. The `unless` drops an object as soon as
       # it reads Ready=True, so the 10m window never keeps a recovered object pending.
-      # The absent() arm is this family's zero-series alert for gotk_resource_info (#4809).
-      # Without it, a kube-state-metrics upgrade that changes the custom-resource-state format,
-      # a ClusterRole that loses list/watch on a Flux kind, or a Flux CRD version the config no
+      # The absent() arm is this family's zero-series alert for gotk_resource_info. Without it,
+      # a kube-state-metrics upgrade that changes the custom-resource-state format, a
+      # ClusterRole that loses list/watch on a Flux kind, or a Flux CRD version the config no
       # longer matches leaves both readiness arms and FluxSuspended with no series, so they stay
       # quiet. ScrapeTargetDown in scrape-targets.yaml pages the kube-state-metrics job's
-      # up == 0, so M1 convention 5 conjoins the arm with up == 1. A
-      # failed kube-state-metrics scrape therefore returns nothing from this arm for that
-      # evaluation and restarts its hold, as with M1's AlertmanagerMetricsMissing. The arm
+      # up == 0, so M1 convention 5 conjoins the arm with up == 1. A failed kube-state-metrics
+      # scrape therefore returns nothing from this arm for that evaluation and restarts its
+      # hold, as with M1's AlertmanagerMetricsMissing. The arm
       # names the root Kustomization alone, the one object that exists whenever Flux is
       # installed. Its alert carries no exported_namespace, which is how the annotations tell
       # the two cases apart.
@@ -96,23 +98,19 @@ groups:
             {{ $labels.name }} has not been Ready for 15 minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
             root Kustomization for 15 minutes.{{ end }}
           description: >-
-            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
-            {{ $labels.name }} in {{ $labels.exported_namespace }} has had a Ready condition
-            other than True for 15 minutes. Its status conditions name the failing
-            step.{{ else }}kube-state-metrics is scraped, but for 15 minutes it has exported no
-            gotk_resource_info series for the Kustomization {{ $labels.name }}, so FluxNotReady
-            and FluxSuspended cannot see any Flux object. Read the kube-state-metrics log in
-            the observability namespace for a Forbidden or a custom-resource-state config
-            error, and compare the Flux CRD versions with
-            observability_ksm_flux_resource_state.{{ end }}
+            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }} {{ $labels.name }}
+            in {{ $labels.exported_namespace }} is not Ready after 15 minutes; read its conditions.
+            {{- else }}kube-state-metrics exports no gotk_resource_info for {{ $labels.name }}; read
+            its log.{{ end }}
+          runbook_url: https://docs.local.daniel-hunter.com/flux-deploy-plane/#alerts
       # kube-state-metrics drops a label whose field is absent, and the renderer writes
-      # spec.suspend only when it is true (D5.1b), so suspension matches suspended="true". A
-      # role's flux_suspend and a hand suspend both count; the renderer refuses
-      # flux_sync_suspend: true (D5 step 29). The max by() keeps
-      # the hold across a change of the other labels, and last_over_time across a gap in
-      # kube-state-metrics' scrape, as in FluxNotReady. Without it, a 24h hold would fire only
-      # after a whole day with no failed scrape and no roll of that pod. The `unless` drops a
-      # Kustomization once it reads as resumed.
+      # spec.suspend only when it is true, so suspension matches suspended="true". A role's
+      # flux_suspend and a hand suspend both count; the renderer refuses
+      # flux_sync_suspend: true. The max by() keeps the hold across a change of the other
+      # labels, and last_over_time across a gap in kube-state-metrics' scrape, as in
+      # FluxNotReady. Without it, a 24h hold would fire only after a whole day with no failed
+      # scrape and no roll of that pod. The `unless` drops a Kustomization once it reads as
+      # resumed.
       #
       # The same label drop means Prometheus holds no series with a `suspended` label at all
       # while nothing is suspended, so pint's live promql/series check reports the first
@@ -144,7 +142,7 @@ groups:
       # the fix for a failing one included. An unchanged Kustomization that is unhealthy holds a
       # worker for its whole `timeout` on every retry, and `verify`'s timeout leaves those out.
       # The design is docs/target-architecture/deploy/d4-ordering.md, "Saturated reconcile
-      # workers". The maximum comes from its gauge, because `--concurrent` changes in D5.1. The
+      # workers". The maximum comes from its gauge, because `--concurrent` is configurable. The
       # two worker gauges share one label set, so `==` matches them whole and the alert keeps
       # app, instance and pod; an on() there would drop them. The queue's series also carry
       # `name` and `priority`, so its join names its labels. A broad revision fills the workers

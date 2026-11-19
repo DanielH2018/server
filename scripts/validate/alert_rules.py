@@ -94,7 +94,7 @@ take away by rewriting the expression:
 
 THE ALLOY LOAD. loki-homelab's `config.alloy` holds stage selectors that Alloy parses itself,
 and neither Loki nor lokitool parses them the same way. A backtick LogQL string after `!~` is
-valid to both and crash-looped the DaemonSet on 2026-10-29 (#6177). `alloy validate` accepts
+valid to both and crash-loops the DaemonSet. `alloy validate` accepts
 that selector too, because it never builds the components. Only `alloy run` builds them, and
 a config it rejects at the initial load ends the process. The script renders the role's
 ConfigMap and boots the pinned Alloy on the `config.alloy` key for `ALLOY_LOAD_SECONDS`. An
@@ -209,7 +209,7 @@ ALLOY_CONFIG_TEMPLATE = "configmap.yaml.j2"
 ALLOY_CONFIGMAP = "loki-homelab-config"
 ALLOY_CONFIG_KEY = "config.alloy"
 # How long a booted Alloy may run before the load counts as accepted. A config Alloy rejects
-# ends the process in under a second (measured 2026-10-29 on daniel-box, v1.20.1), so the
+# ends the process in under a second (Alloy v1.20.1), so the
 # window only bounds the passing case.
 ALLOY_LOAD_SECONDS = 8
 # `discovery.kubernetes` builds its client when the component loads, and in-cluster it reads

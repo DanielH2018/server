@@ -30,8 +30,8 @@
 {%- endif -%}
 {%- endmacro -%}
 
-{# The CLOSE direction — the mirror of ventilation_advice, added when the SNZB-04 contact sensor
-   made "is the window actually open?" knowable (2026-08-25). Same split: pure decision math here,
+{# The CLOSE direction — the mirror of ventilation_advice, possible because the SNZB-04 contact
+   sensor makes "is the window actually open?" knowable. Same split: pure decision math here,
    entity reads stay in the caller (bedroom_window_close_advisor, files/automations/fan-and-air.yaml). Returns
    'smoke' (outdoor air went over the caps), 'rain' (weather turned wet), 'cold' (the room is being
    chilled) or 'none'.

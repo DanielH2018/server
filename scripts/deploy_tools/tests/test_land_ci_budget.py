@@ -1,4 +1,4 @@
-"""land.sh's master CI budget covers the longest `timeout-minutes` chain into the gate (#6857).
+"""land.sh's master CI budget covers the longest `timeout-minutes` chain into the gate.
 
 `await_ci` waits on the `prek` gate alone, and the gate starts only once every job it
 `needs` has ended. So the longest chain of job timeouts ending at the gate bounds how long
@@ -63,6 +63,6 @@ def test_land_shs_budget_covers_ci_ymls_chain_into_the_gate():
 
 
 def test_land_shs_merge_wait_covers_ci_ymls_chain_into_the_gate():
-    """A PR's own CI runs the same chain, so a shorter wait ends `merge-timeout` too early (#7129)."""
+    """A PR's own CI runs the same chain, so a shorter wait ends `merge-timeout` too early."""
     workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
     assert budget_problem(workflow["jobs"], options.Options.merge_timeout) is None

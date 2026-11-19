@@ -1,5 +1,5 @@
-"""`land-wait`'s deadline: a substituting promotion (#5155), and an earlier commit's
-verification in flight (#5164).
+"""`land-wait`'s deadline: a substituting promotion, and an earlier commit's
+verification in flight.
 
 `Sim` is in `_land_wait_fakes.py`; the other outcomes are tested in
 test_promote_land_wait.py.
@@ -33,11 +33,11 @@ from _promote_fakes import FakeTransport, digest_of
 
 SUNDAY = datetime(2026, 10, 18, tzinfo=UTC)
 
-# -- the timeout against a substituting bundle (#5155) --------------------------------------
+# -- the timeout against a substituting bundle --------------------------------------
 
 
 def test_the_land_wait_timeout_covers_a_substituting_promotion_plus_the_publish_pipeline():
-    """The Verify-by of #5155, against the default `land.sh` reaches through `run_land_wait`."""
+    """Against the default `land.sh` reaches through `run_land_wait`."""
     margin = promote_wait.LAND_WAIT_TIMEOUT_S - substituting_promote_timeout()
     assert margin >= publish_pipeline_s(), (
         f"land-wait gives up {margin}s after verify would, inside the "
@@ -76,8 +76,8 @@ _SOAK_DIGESTS = {
 }
 for _found in _SOAK_DIGESTS.values():
     _found["bento-pdf"]["suspended"] = False
-# The soak's `timeout` two queueing rounds past the nine tags published on 2026-10-17, whose
-# bundle rendered 2910s. The constant, derived from a one-tag bundle, no longer covers it.
+# The soak's `timeout` two queueing rounds past a nine-tag bundle that rendered 2910s. The
+# constant, derived from a one-tag bundle, does not cover it.
 _GROWN_SOAK = "4110s"
 
 
@@ -101,7 +101,7 @@ def test_a_promotion_verify_still_counts_on_time_settles_only_with_the_soak_dead
     """M promotes after the publish pipeline and `verify`'s full wait on a grown soak.
 
     The red half lists `soak` with no `timeout`, which leaves the one-tag constant: the wait
-    gives up first, the #5155 shape.
+    gives up first.
     """
     covered_at = 4110 + 180 + publish_pipeline_s()
     assert covered_at > promote_wait.LAND_WAIT_TIMEOUT_S
@@ -112,7 +112,7 @@ def test_a_promotion_verify_still_counts_on_time_settles_only_with_the_soak_dead
     assert result.verdict == expected, result.detail
 
 
-# -- an earlier commit's verification in flight (#5164) -------------------------------------
+# -- an earlier commit's verification in flight -------------------------------------
 
 
 def _polls_until(seconds: int) -> int:
@@ -126,7 +126,7 @@ def test_the_in_flight_wait_is_decides():
 
 
 def test_a_promotion_after_decides_full_in_flight_wait_settles():
-    """The Verify-by of #5164: M's `decide` waits out P's verification, then M promotes.
+    """M's `decide` waits out P's verification, then M promotes.
 
     P stays in flight for `IN_FLIGHT_WAIT_S`, and M is covered a substituting promotion and
     the publish pipeline after that.
@@ -229,7 +229,7 @@ def test_the_live_reboot_read_takes_the_schedule_from_its_own_checkout(
     "in_flight", [P, None], ids=["an-earlier-commit-in-flight", "nothing-in-flight"]
 )
 def test_the_cap_ends_the_wait_whatever_is_in_flight(in_flight):
-    """A lander killed at a fixed time passes what its deadline leaves (#5199)."""
+    """A lander killed at a fixed time passes what its deadline leaves."""
     sim = Sim(polls=[at(P)], in_flight=[in_flight])
     result = promote_wait.land_wait(sim.reads(), M, [], cap_s=1800)
     assert (result.verdict, result.cause) == ("gave-up", "promote-timeout")

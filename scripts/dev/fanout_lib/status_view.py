@@ -1,7 +1,7 @@
 """The text view of `place status` and `place runs`: a count line, then what needs attention.
 
 An orchestrator polls `place status` hundreds of times, and a batch that landed or was
-cleaned reads the same on every poll (#7897). The default view counts those and lists the
+cleaned reads the same on every poll. The default view counts those and lists the
 rest. `--all` restores one line per batch.
 """
 

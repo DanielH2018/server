@@ -1,8 +1,8 @@
 """`verify` during a Longhorn hop: when another name's failure is provisional, not final.
 
-THE STORAGE ROLLOUT (#5997). Longhorn's admission webhook, which every PersistentVolumeClaim's
-dry run calls, is served by the longhorn-manager pods. Since #6009 the manager DaemonSet rolls
-one pod at a time, so the routine window in which no pod serves the webhook is gone. A residual
+THE STORAGE ROLLOUT. Longhorn's admission webhook, which every PersistentVolumeClaim's
+dry run calls, is served by the longhorn-manager pods. The manager DaemonSet rolls
+one pod at a time, so the webhook keeps a serving pod through a roll. A residual
 window remains: a call can still fail while the one serving pod is busy, or on a node loss. A
 Kustomization holding a claim that reconciles in that window fails its dry run and posts
 `failure`, then recovers on its next retry.

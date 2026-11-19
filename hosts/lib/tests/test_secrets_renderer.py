@@ -1,6 +1,6 @@
 """The host renderer's secret-bearing files: declared outputs, compose files and `secrets.json`.
 
-Each case is one of H4's *Verification* cases for H4.1a3. A render reads a fixture `hosts/` tree
+A render reads a fixture `hosts/` tree
 under `tmp_path` against the repo's own inventory, so no case touches a real key or ciphertext.
 The round trip runs the renderer's output through `hosts/lib/homelab-secrets` itself.
 
@@ -273,6 +273,7 @@ def test_the_secrets_json_names_the_ciphertext_credentials_and_outputs(tree):
                 "persist": False,
                 "dependents": ["a.service", "b.service"],
                 "keys": ["alpha_token"],
+                "link": "/etc/app/app.conf",
             }
         ],
     }

@@ -105,12 +105,13 @@ tests:
                 https://edge-selfcheck.local.example.com/.well-known/traefik-edge-selfcheck has
                 failed for 2 minutes. Read probe_http_status_code or probe_dns_lookup_time_seconds
                 for this instance, then the workload's own log.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#extraprobefailedcritical
       - eval_time: 6m
         alertname: ExtraProbeFailed
         exp_alerts: []
 
-  # A Pi port closes at minute 3 and stays closed. PiPortDead fires after its 10m hold, the
-  # streak the retired pi_pressure row held, and not before.
+  # A Pi port closes at minute 3 and stays closed. PiPortDead fires after its 10m hold and not
+  # before.
   - interval: 1m
     input_series:
       - series: 'probe_success{job="blackbox-pi-ports", instance="10.0.0.139:51821", service="wg-easy", module="tcp_connect"}'

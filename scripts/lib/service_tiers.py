@@ -1,7 +1,7 @@
 """The sets derived from each service entry's ``tier``, for readers outside Ansible.
 
-``k3s_longhorn_r2_volumes`` is a Jinja expression over ``services`` (#3389), and so are
-``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes`` (#4207). The three live
+``k3s_longhorn_r2_volumes`` is a Jinja expression over ``services``, and so are
+``k3s_longhorn_weekly_volumes`` and ``k3s_longhorn_nobackup_volumes``. The three live
 in the ``longhorn-reconcile`` role's defaults (``repo_paths.LONGHORN_RECONCILE_ROLE``) since
 H1.7a. The schedule, retain and arm keys are the ``longhorn-backup`` role's since H1.7b
 (``repo_paths.LONGHORN_BACKUP_ROLE``). A raw YAML read of those defaults returns the expressions

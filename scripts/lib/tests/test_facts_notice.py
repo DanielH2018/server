@@ -125,8 +125,7 @@ def test_an_unchanged_doc_is_split_once_across_revisions(tmp_path):
 def test_the_revision_backend_finds_this_repos_docs():
     """The backend half of the notice's non-vacuity floor, read from this repository's HEAD.
 
-    A reader that listed no docs would make every later notice empty and green. HEAD held 87
-    `CLAUDE.md` files on 2026-10-11 and 78 once H7.55 deleted the setup roles; a slice that deletes
+    A reader that listed no docs would make every later notice empty and green. A slice that deletes
     role trees lowers this floor in the same PR.
     """
     with Tree(REPO, "HEAD") as tree:
@@ -359,7 +358,7 @@ def test_the_summary_counts_every_citation_even_when_the_diff_is_empty():
     """The citation-count half of the non-vacuity floor, read from this repository's HEAD.
 
     An empty diff still parses every section, so the CI summary line shows how much it read.
-    HEAD parsed 894 citations on 2026-10-12, and CI's delivery check reads a floor of 300.
+    CI's delivery check reads a floor of 300 citations.
     Both backends must also list the same docs, or the working tree and a revision disagree.
     """
     _, summary = scan(REPO, "HEAD", "HEAD")

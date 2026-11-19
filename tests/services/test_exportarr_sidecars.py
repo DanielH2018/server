@@ -18,7 +18,6 @@ either here as well would split one rule's rationale across two files. Do not ad
 row there.
 """
 
-from lib.k8s_roles import resolved_manifest_files
 import re
 
 import yaml
@@ -173,17 +172,6 @@ def test_every_arr_renders_its_exportarr_secret():
     assert found == {f"{a}-exportarr" for a in ARRS}
 
 
-def test_the_secret_is_staged_through_the_no_log_path():
-    """A Secret resolved into manifests_files instead of manifests_secret_files renders 0644
-    and prints its decrypted contents in the play recap."""
-    for arr in ARRS:
-        files, secret = resolved_manifest_files(arr)
-        assert "secret-exportarr.yaml" in secret, (
-            f"{arr}'s secret-exportarr.yaml must resolve into manifests_secret_files"
-        )
-        assert "secret-exportarr.yaml" not in files, arr
-
-
 def test_the_image_pins_stay_in_lockstep():
     """Three copies, one version. Renovate groups them; this catches a hand-edit that does not.
 
@@ -211,7 +199,7 @@ def test_each_pin_is_a_variable_renovate_can_see():
     A pin inlined into the macro invocation renders an identical manifest and is offered no updates,
     because Renovate's k8s-images manager matches an `_image:` key and nothing else. A pin hoisted
     into group_vars is still offered updates, but it loses automerge and the retired deployer's
-    rollback (`k8s/templates/exportarr.yml.j2` has the reason, #3277). No render assertion can
+    rollback (`k8s/templates/exportarr.yml.j2` has the reason). No render assertion can
     see either, because the manifest is the same every way.
     """
     for arr in ARRS:

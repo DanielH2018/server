@@ -1,4 +1,4 @@
-"""The red phase made reachable (#3950): `open` labels a suite-covered finding `red-green`, and
+"""The red phase made reachable: `open` labels a suite-covered finding `red-green`, and
 a review record says why a batch ran no red phase.
 
 Run: uv run pytest scripts/dev/tests/test_findings_red_green.py
@@ -60,7 +60,7 @@ def test_open_leaves_a_finding_citing_a_doc_unlabelled(tmp_path, make_tools):
 
 
 def test_a_fragment_resolves_to_the_one_tracked_file_that_ends_with_it():
-    """#4232: #4116 cited `fanout_lib/clean.py`, meaning `scripts/dev/fanout_lib/clean.py`."""
+    """An issue citing `fanout_lib/clean.py` means `scripts/dev/fanout_lib/clean.py`."""
     tracked = {"scripts/dev/fanout_lib/clean.py", "a/lib/x.py", "b/lib/x.py"}
     cited = ["fanout_lib/clean.py", "lib/x.py", "docs/gone.md"]
     assert resolve_fragments(cited, tracked) == [

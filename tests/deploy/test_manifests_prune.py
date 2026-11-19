@@ -1,7 +1,7 @@
 """Guards for the prune label an armed role renders.
 
 An armed role renders through `k8s/templates/role-labelled.yaml.j2`, whose
-`homelab_role_label` filter stamps the label onto every document (#3388). Flux's own inventory
+`homelab_role_label` filter stamps the label onto every document. Flux's own inventory
 decides what it prunes, so the label names the role on each live object.
 
 Run: uv run pytest tests/deploy/test_manifests_prune.py
@@ -14,14 +14,16 @@ from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import (
+    CLAIM_TEMPLATE,
     MANIFESTS_PRUNE_DEFAULT,
+    SECRET_TEMPLATE,
     k8s_tags,
 )
 from renderer.template_filters.role_label import ROLE_LABEL, _Loader, homelab_role_label
 
 
 # The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker
-# in its defaults (#3388). Every other role is armed.
+# in its defaults. Every other role is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 
 
@@ -101,7 +103,7 @@ def test_an_ordinary_string_and_the_keys_stay_plain() -> None:
 
 
 def test_the_filter_parses_with_libyaml() -> None:
-    """PyYAML's own parser was a quarter of every full k8s render, which each CI leg pays (#7710).
+    """PyYAML's own parser was a quarter of every full k8s render, which each CI leg pays.
 
     The plain-scalar cases above run through this parser, whose plain style is "" not None.
     """
@@ -143,8 +145,9 @@ def test_the_filter_adds_the_label_and_nothing_else() -> None:
 
     Each document gains the label and nothing else: a Deployment's selector and pod-template
     labels, a quoted string and a multi-line value all read back as rendered, and the host's
-    stdlib reader declares the same objects from the new bytes. A claim renders per entry, so
-    it is out of this walk, and `test_every_armed_render_carries_the_label` holds it.
+    stdlib reader declares the same objects from the new bytes. A claim and a declared Secret
+    render per entry, so they are out of this walk, and
+    `test_every_armed_render_carries_the_label` holds them.
     """
     armed = _armed_roles()
     seen = set()
@@ -152,7 +155,7 @@ def test_the_filter_adds_the_label_and_nothing_else() -> None:
         deferred = armed.get(role, {}).get("manifests_deferred_files") or []
         if (
             role not in armed
-            or name == "claim-default.yaml.j2"
+            or name in (CLAIM_TEMPLATE.name, SECRET_TEMPLATE.name)
             or name.removesuffix(".j2") in deferred
         ):
             continue

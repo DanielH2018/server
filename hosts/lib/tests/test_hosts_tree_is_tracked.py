@@ -1,4 +1,4 @@
-"""The root `.gitignore` admits `hosts/`, the source tree of the host packages (H3).
+"""The root `.gitignore` admits `hosts/`, the source tree of the host packages.
 
 `.gitignore` denies every root path it does not re-allow. A file under a denied root stages
 nothing and lands nothing, through a green CI and a clean merge.

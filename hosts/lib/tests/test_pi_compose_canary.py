@@ -1,9 +1,9 @@
-"""The real Pi package runs its services through the Compose project (H5.2b).
+"""The real Pi package runs its services through the Compose project.
 
 The censuses in `test_pi_compose_census.py` run over fixture services. This file runs them over
-the real render of `hosts/daniel-pi/package.yml`, which runs docker-proxy (H5.6), autoheal
-(H5.7), alloy (H5.8) and wg-easy (H5.9). H5.2b's `pi-canary` ran here until H5.10 removed it, and
-the file keeps its name. A plain inventory variable such as `domain` renders at build time
+the real render of `hosts/daniel-pi/package.yml`, which runs docker-proxy, autoheal
+alloy and wg-easy.
+A plain inventory variable such as `domain` renders at build time
 (operator ruling 2026-10-24, recorded in ADR-0013). The package's Compose env file
 holds only the keys autoheal and alloy read.
 
@@ -53,7 +53,7 @@ def test_the_real_project_passes_the_project_and_bind_censuses(package):
 
 
 def test_every_packaged_compose_file_asks_the_daemon_for_at_least_6_mib(package):
-    """The daemon refused the canary's 2M reservation at `up` (the Pi's first run, 2026-10-24).
+    """The daemon refused the canary's 2M reservation at `up`.
 
     The census reads every compose file the package installs and finds docker-proxy's own values,
     so a census that read no file, or no memory field, would fail here rather than pass.
@@ -81,7 +81,7 @@ def test_wg_easy_gets_the_domain_at_build_time(package):
 
 
 HOME = "/home/ubuntu"
-# A data directory that a container created as root, and whose line copies the live owner (H5.9).
+# A data directory that a container created as root, and whose line copies the live owner.
 # Every other directory under the home is created as ubuntu.
 ROOT_OWNED_DATA = frozenset({f"{HOME}/server/containers/wg-easy/config"})
 

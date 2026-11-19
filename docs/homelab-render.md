@@ -230,8 +230,15 @@ The renderer writes a tag's files by these rules:
   A listed name with no template stops the render.
 - **The claims.** Each `k8s_claims` entry renders `claim-default.yaml.j2` to
   `claim-<name>.yaml`, with the entry as `manifests_claim`.
+- **The declared Secrets.** Each `render_secrets` entry renders `secret-default.yaml.j2` to
+  `secret-<name>.yaml`, with the entry as `manifests_secret`. An entry is `{name,
+  string_data}` with an optional `namespace`, and `string_data` maps each Secret field to the
+  SOPS key its value comes from. `scripts/renderer/renderer_lib/cluster.py:secret_entries`
+  refuses any other shape, a value that is no SOPS key, and a file name the role's templates
+  already render. A Secret with a literal field, a conditional field or a payload stays a
+  template of the role's own, as does one whose source text another template hashes.
 - **The labelling wrapper.** A role that arms `manifests_prune`, the default, renders its
-  files, its secret files and its claims through `role-labelled.yaml.j2`. The wrapper stamps
+  files, its secret files, its claims and its declared Secrets through `role-labelled.yaml.j2`. The wrapper stamps
   `homelab/role: <tag>` on every document. authelia and nut opt out in their defaults.
 - **The deferred files.** `manifests_deferred_files` render from the role's own templates,
   unlabelled, into `DIR/cluster/<tag>-deferred/`. pihole, headlamp and netpol-baseline defer
@@ -453,7 +460,7 @@ Prometheus's config block, which output `domain`
 Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
 `${email}` in traefik's `traefik-static` ConfigMap, rule 1 a placeholder in authelia's config
 Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
-`SOPS_MANIFEST_KEYS` key in `secrets/secrets.yml`, and rule 5 at least 46 templates that
+`SOPS_MANIFEST_KEYS` key in `secrets/secrets.yml`, and rule 5 at least 40 templates that
 name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4 only
 for the tags it rendered. Rule 5 reads the whole tree on every run.
 
@@ -776,26 +783,27 @@ installed in an xdist worker would outlive the test.
 
 The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
 renderer reaches for it, and the four modules together render every tag that way.
-`scripts/renderer/tests/test_renderer_ansible_free.py`
-holds the validator and a host package to the same condition, and proves the condition can fail:
-a shim that makes `renderer_lib/jinja_filters.py` import `ansible` ends the render.
+`tests/repo/test_ansible_core_census.py` reads every tracked Python file for an import of
+`ansible`, executed or not, which holds the validator and the host packages to the same rule.
 
-In CI, each module writes one `digest_line` per directory it rendered to two places. The job
-log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
-`gh run view --log` prints without a sign-in. The job summary carries them under a `render
+In CI, each module writes one `digest_line` per directory it rendered to two places. Each
+pytest shard uploads a `render-digests-shard<n>` artifact holding each as a line
+`render digest at <sha> (position <k> of 4): <line>`, which `gh run download` fetches. The job
+log carries only one count line per shard. The job summary carries the lines under a `render
 digest at <sha>` heading, but only a signed-in viewer can read it, and `gh` has no API for it.
 
-The log line takes a path of its own, because CI runs each shard under xdist. A test runs in a
-worker, and a worker's stdout never reaches the job log. So the test records its lines on its
-report with `record_property`, xdist carries the report back to the controller, and the
-`pytest_terminal_summary` hook in `scripts/renderer/tests/conftest.py` prints them there.
+The artifact's lines take a path of their own, because CI runs each shard under xdist. A test
+runs in a worker, and only the controller sees the whole session. So the test records its lines
+on its report with `record_property`, xdist carries the report back to the controller, and the
+`pytest_terminal_summary` hook in `scripts/renderer/tests/conftest.py` writes them to the file
+`RENDER_DIGEST_FILE` names.
 `test_renderer_digest_log.py` runs a pytest session of its own under `-n 2` to prove that path.
 
 A directory's line depends on its own files alone, so the four modules' lines together hold
 every directory, whichever shards the modules ran on. None writes the `total` line. On a pull
 request the SHA is a synthetic merge commit, so compare the lines from the push run on master.
 To check them on daniel-box, render that commit in full and diff its `digest` against the
-log. Replace `<run>` with the push run's id, which `gh run list --branch master --event push
+artifacts. Replace `<run>` with the push run's id, which `gh run list --branch master --event push
 --commit <sha>` prints.
 
 ```bash
@@ -804,7 +812,8 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1 \
   --secret-stubs /tmp/r1-stubs.yml
 uv run python scripts/renderer/shadow_diff.py digest /tmp/r1 | grep -v '^total ' \
   | LC_ALL=C sort > /tmp/r1-box.txt
-gh run view <run> --log | grep -o 'render digest at .*' | sed 's/^[^:]*: //' \
+gh run download <run> --pattern 'render-digests-*' --dir /tmp/r1-digests
+cat /tmp/r1-digests/*/render-digests.txt | sed 's/^[^:]*: //' \
   | LC_ALL=C sort > /tmp/r1-ci.txt
 diff /tmp/r1-ci.txt /tmp/r1-box.txt
 ```

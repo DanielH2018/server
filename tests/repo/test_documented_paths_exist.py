@@ -230,13 +230,11 @@ def test_the_test_citation_walk_finds_citations_to_check():
 
 # --- `file.py::test_name` node ids -----------------------------------------------------
 #
-# A runtime module that says "pinned by test_x.py::test_the_thing" is telling the next reader
-# which check holds an invariant closed. That claim rots the way a `file:line` citation does,
-# and neither pattern above sees it: a node id carries no line number, and most are cited
-# from context (`test_check_streaks.py::...` inside the same directory) rather than from the
-# repo root. This corpus is wider than DOCS because the citation
-# lives in two places: docs cite from prose with backticks, runtime modules from a docstring
-# or a comment with none. `node_citations` reads both shapes; its docstring has the grammar.
+# A runtime module that says "pinned by test_x.py::test_the_thing" claims which check holds an
+# invariant closed, and that claim rots like a `file:line` citation. Neither pattern above sees
+# it: a node id carries no line number, and most are cited from context rather than from the
+# repo root. The corpus is wider than DOCS because docs cite from prose with backticks and
+# runtime modules from a docstring or comment with none. `node_citations` reads both shapes.
 
 
 def _runtime_modules() -> list[Path]:

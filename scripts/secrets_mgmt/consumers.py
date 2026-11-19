@@ -97,7 +97,7 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
                 continue
             corpus.append((text, role, K8S_PLANE))
             # A k8s role that `lookup()`s this file from another role renders what it holds,
-            # so it is a consumer too (#3781).
+            # so it is a consumer too.
             rel = os.path.relpath(os.path.join(dirpath, filename), repo)
             for reader in sorted(lookups.get(rel, ())):
                 corpus.append((text, reader, K8S_PLANE))

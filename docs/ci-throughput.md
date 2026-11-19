@@ -32,9 +32,7 @@ A job with a false job-level `if:` reads `skipped` and takes no runner. A job th
 steps one by one still waits for a slot.
 
 **The `prek` gate passes a skipped need on two paths only.** The first is the proven path:
-`prove` said the pushed tree was tested, and every dependent skipped. On that path a
-skipped `pytest` passes only when `prove` also said `pytest-proven=true`, because a record
-from a selected run proves every job but `pytest`. The second is a job that
+`prove` said the pushed tree was tested, and every dependent skipped. The second is a job that
 reads the build's artifacts and had nothing to run. That job skipped, `host_packages_build`
 succeeded, and the build's output said `false` for it: `run-cases` for the cases legs and
 `arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
@@ -43,7 +41,9 @@ skipped required job as a pass.
 ## A pull request runs the test modules its diff can affect
 
 A pull-request run's `pytest` legs run a selection, and a push to master and a dispatch run
-every module (#8458, ruled by the operator on 2026-11-15).
+every module (#8458, ruled by the operator on 2026-11-15). A push whose tree a
+pull-request run tested runs nothing
+([ADR-0036](adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md)).
 
 - **The table.** `scripts/dev/affected_tests.json` holds, for each test module, the tracked
   files its own run resolved, the directories it listed, the paths it asked for and did not
@@ -63,31 +63,39 @@ every module (#8458, ruled by the operator on 2026-11-15).
   --pull-requests` prints the empty legs' slot-seconds beside what one planning job on every
   run would cost instead (#8944). A planning job pays off only once enough pull requests run
   a selection, and on 2026-11-16 none of the 20 newest green pull-request runs had.
-- **A selection has to save legs.** `scripts/dev/pytest_shard.py:worthwhile` runs the whole
-  census when the selection needs more than half the legs. Such a run records its tested
-  tree as a full run does, so its push run still skips as proven. Every run takes this path
-  while the table holds few rows, because a module with no row always runs: with 121 of
-  1,466 rows recorded, a one-file change selected 1,347 to 1,403 modules and needed all six
-  legs.
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
-  A pull request that changes the dependency then leaves the module out, and the module
-  fails on master, where a red run parks every landing. The operator accepted that cost.
-- **A selected run proves every job but `pytest`.** A run that left modules out did not
-  test its tree with `pytest`, but every other job ran in full on it. The `prek` gate
-  records `ci/tested-tree` when `needs.pytest.outputs.scope` is `full`, and
-  `ci/tested-tree-but-pytest` when it is `selected` (#8943). `scripts/dev/tested_tree.py
-  prove` answers `proven=true` and `pytest-proven=false` for the second record, so master's
-  run after a selected pull-request run repeats only the `pytest` legs. A landing batch
-  whose run was selected still records nothing on its members.
+  A pull request that changes the dependency then leaves the module out, and nothing runs
+  it until the nightly sweep below. The operator accepted that cost.
+- **A selected run proves its tree.** The `prek` gate records `ci/tested-tree` on the
+  pull request's head whether the legs ran the whole census or a selection. The push run of
+  the same tree would diff it against the same base with the same table, so its selection
+  would be the one the pull-request run already ran, and it skips every job
+  (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
+  A landing batch whose run was selected still records nothing on its members.
 
-**The saving is on the pull-request run, and the push run gives part of it back.** On
-2026-11-14 a run with no host change used a median 1,414 slot-seconds, about 1,020 of them
-in the six `pytest` legs. A pull request whose selection fits one leg saves most of those
-1,020. Its push run repeats the `pytest` legs, which costs about 1,050, where a proven push
-costs about 394. A landing that takes one pull-request run therefore uses about the same
-slot-seconds as one that runs in full, and a pull request that runs CI several times before
-it merges uses fewer. `scripts/dev/ci_slot_cost.py --recent 20`
-prints the measured figure.
+## A nightly sweep runs every module
+
+`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head at 09:30 UTC, on
+one runner and with no selection. It finds a module whose row in the table is older than a
+dependency the module gained, which no selected run is told to run.
+
+- **It grades no commit.** No job in it carries the name of the `prek` gate, so
+  `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
+  (`tests/repo/test_pytest_sweep_workflow.py::test_a_job_under_the_gates_name_is_flagged`).
+- **It reports through one issue.** `scripts/dev/sweep_report.py` opens an issue titled
+  `Nightly pytest sweep is red` that names the failed modules, comments on it while the
+  sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
+  label, because the findings register drops an issue a bot opened.
+- **It shares its tool installs with the pytest legs.** Both call
+  `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
+- **To run the whole suite on a branch,** dispatch it there:
+  `gh workflow run pytest-sweep.yml --ref <branch>`. A dispatch off master reports nothing.
+
+**The saving is on the pull-request run, and the push run keeps it.** On 2026-11-14 a run
+with no host change used a median 1,414 slot-seconds, about 1,020 of them in the six
+`pytest` legs. A pull request whose selection fits one leg saves most of those 1,020, and
+its push run skips as proven. The nightly sweep costs one runner for about ten minutes a
+day. `scripts/dev/ci_slot_cost.py --recent 20` prints the measured figure.
 
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
 `run-cases` output is true on a `workflow_dispatch` run, and when the render reports `changed`
@@ -348,13 +356,24 @@ B3 lands in four steps, each one exercised before the next:
       because the cluster-pin gate refuses a pin bump that shares its PR. A member merges
       under its PR's title, whatever `--subject` its own landing was given.
 
-      A landing compares its own code with master once, when it forms the batch, and a
-      landing whose code is older forms none (`classify.code_lags_master`). It does not
-      compare again before a member's merge. Until the last member merges, master moves
-      only by the batch's own merges, and the batch's run tested those. On 2026-11-14 the
-      landing of PR 8550 compared before each member: its own merge changed
-      `scripts/renderer/renderer_lib/cluster.py`, which a landing imports, so it refused
-      the two PRs stacked behind it and they cost a second run.
+      A landing compares its own code with master once, when it forms the batch
+      (`classify.code_lags_master`). It does not compare again before a member's merge.
+      Until the last member merges, master moves only by the batch's own merges, and the
+      batch's run tested those. On 2026-11-14 the landing of PR 8550 compared before each
+      member: its own merge changed `scripts/renderer/renderer_lib/cluster.py`, which a
+      landing imports, so it refused the two PRs stacked behind it and they cost a second
+      run.
+
+      A holder whose code is older hands the turn to a landing of its PR from a fresh
+      checkout of origin/master, which forms the batch (`turn.HandOver`). The new landing
+      inherits the turn's locked descriptor, so no other landing takes the turn in
+      between. A turn held over ssh, a lander unit's turn and a turn already handed over
+      are not handed on: that holder lands its PR alone. Before the hand-over, a holder
+      whose code was older formed no batch at all. A landing waits 30 to 60 minutes for
+      the turn under load, and master's landing code changes in that time, so most holders
+      formed none. On the night of 2026-11-18, 12 of the 17 holders that checked the line
+      for a batch logged `no batch ... its landing code is older than master's`. Each such holder held the turn for one full run per PR, so the line moved
+      one PR per run, and the waits for the turn reached 3060 to 4950 s.
 
       The landing pushes nothing. A `merges` call makes a commit with two parents where
       the squash merge makes one, and both make the same tree: for two open heads on

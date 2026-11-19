@@ -138,8 +138,8 @@ def test_a_state_dropped_from_the_allow_list_is_flagged():
 
 
 # Claims nothing reclaims, so the fullness page is their only bound. registry's push store has
-# had no garbage collection since D5 retired it, and its verify Job's seed adds one python image
-# per `flux_job_image` pin (#5752). The exclusion is read off `PVCFull` itself, the rule that
+# has no garbage collection, and its verify Job's seed adds one python image
+# per `flux_job_image` pin. The exclusion is read off `PVCFull` itself, the rule that
 # pages on a full claim.
 UNCOLLECTED_CLAIMS = frozenset({"registry-data"})
 
@@ -293,7 +293,7 @@ def disk_floor_problems(text: str) -> list[str]:
 
     Both encode Longhorn's replica scheduling floor (100 minus its 25%
     storage-minimal-available-percentage): disk-health.sh pages daniel-box's root at it, and
-    the rule pages each node's Longhorn disk at it (#8214). One moved alone would page the two
+    the rule pages each node's Longhorn disk at it. One moved alone would page the two
     nodes at different lines.
     """
     match = re.search(

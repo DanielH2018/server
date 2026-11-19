@@ -3,7 +3,7 @@
 The monitors were created by hand in the Uptime Robot console, and
 `docs/uptime-robot-monitors.md` is the only record of them. A monitor deleted or paused there
 leaves no trace in git: `803270234`, the disaster-recovery backstop two runbooks named, was
-deleted at a time nothing recorded (#8525). This reads the account's monitors back through
+deleted at a time nothing recorded. This reads the account's monitors back through
 Uptime Robot's API and fails when a documented id is missing or paused.
 
 The doc's *What is configured* table is the oracle, parsed here and nowhere else:

@@ -103,7 +103,7 @@ monitor_bridge_healthchecks_expected:
   - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 7200}
   # initial_setup's three pinging crons: the weekly reboot pings one slug per host, the Docker
   # prune one per has_docker host, and the worktree sweep one per host whose package lists the
-  # worktree-sweep component (#6815).
+  # worktree-sweep component.
   - {slug: weekly-reboot-daniel-box, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-server, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-pi, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
@@ -112,3 +112,48 @@ monitor_bridge_healthchecks_expected:
   - {slug: daniel-server-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
 
 manifests_rollout: monitor-bridge
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The credentials check.py reads from files. This Secret is mounted, never consumed by
+  # `envFrom`, which injects every key as an env var. Nothing here may move to
+  # monitor-bridge-env, and nothing `envFrom` needs may move here.
+  - name: monitor-bridge-credentials
+    string_data:
+      # An unscoped Home Assistant long-lived token: full control of the house.
+      ha_token: monitor_bridge_ha_token
+      # The B2 credential Longhorn's backup target uses.
+      b2_probe_application_key: longhorn_b2_application_key # gitleaks:allow — a SOPS key NAME, not a value
+      cf_analytics_token: cloudflare_analytics_token
+      # Reads speedtest-tracker's full result history.
+      speedtest_api_token: speedtest_api_token
+      # The Healthchecks.io project's read-only API key:
+      # check settings and ping history, never ping URLs.
+      healthchecks_api_read_only_key: healthchecks_api_read_only_key
+  # The bridge's API keys, webhooks and SMTP login, consumed by `envFrom`, so every key
+  # becomes an env var. A credential that must stay out of the environment goes in
+  # monitor-bridge-credentials. Every other setting is a plain `env:` value from
+  # config/env.yaml.j2, because a Secret's quoted numeric literal fails Flux's typed patch.
+  - name: monitor-bridge-env
+    string_data:
+      # Actions read and Variables read on this repository
+      # only, so it can neither clear a hold nor move a tag.
+      DEPLOY_PIPELINE_GITHUB_TOKEN: monitor_bridge_deploy_pipeline_github_token
+      N8N_API_KEY: n8n_api_key
+      SONARR_API_KEY: sonarr_api_key
+      RADARR_API_KEY: radarr_api_key
+      # Bazarr's own key. SONARR_API_KEY and RADARR_API_KEY are the keys
+      # other apps authenticate with.
+      BAZARR_API_KEY: bazarr_api_key
+      PROWLARR_API_KEY: prowlarr_api_key
+      B2_PROBE_KEY_ID: longhorn_b2_key_id
+      DISCORD_WEBHOOK_URL: monitor_discord_webhook_url
+      DISCORD_CROWDSEC_WEBHOOK_URL: crowdsec_discord_webhook_url
+      DISCORD_GITOPS_WEBHOOK_URL: discord_alert_webhook
+      DISCORD_ARR_WEBHOOK_URL: arr_discord_webhook_url
+      DISCORD_HEALTHCHECKS_WEBHOOK_URL: healthchecks_discord_webhook_url
+      SMTP_USER: email
+      SMTP_PASSWORD: smtp_notify_app_password
+      CF_ACCOUNT_ID: r2_account_id
+      R2_BUCKET: r2_bucket

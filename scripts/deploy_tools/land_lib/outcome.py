@@ -37,19 +37,19 @@ class Verdict(StrEnum):
     # GitHub never ran CI for the merge commit, and no later master commit stands in for it:
     # none has run CI either, or the nearest is red with a green one after it. No re-run
     # converges on its own, so this is not a resume point. The detail names the tip and the
-    # way out. See `await_ci.wait` (#4641, #4649).
+    # way out. See `await_ci.wait`.
     CI_UNPROVEN = "ci-unproven"
     # The landing stopped on a refusal or an error of its own before it reached any other
     # verdict: the landing policy, a PR closed unmerged or with changes requested, a read
     # that failed. `Outcome` gives every exit-1 end this verdict when its site named none,
-    # so no exit-1 landing ends without a `VERDICT:` line (#4451). The detail says which.
+    # so no exit-1 landing ends without a `VERDICT:` line. The detail says which.
     REFUSED = "refused"
     # land.sh handed the landing to a lander unit (`handoff.py`) and stopped waiting on it
     # before it ended. The unit may still be running, and a re-run waits on it again.
     HANDOFF_TIMEOUT = "handoff-timeout"
     # A host the landing would wait on has no package at or after the merge, and the builder
     # reports a failing reason, so no updater fire can apply it. A re-run converges once the
-    # builder publishes. See `host_published.unbuilt_hosts` (#7024).
+    # builder publishes. See `host_published.unbuilt_hosts`.
     UNBUILT = "unbuilt"
 
 
@@ -69,7 +69,7 @@ class Cause(StrEnum):
     again from each poll that reads an earlier commit's verification in flight. It rides beside
     `deferred`: the promotion applies this PR itself, and a later one may still cover it.
 
-    GATE_* NAME A HEALTH GATE THAT GRADED NOTHING, beside `deferred` from step 6 (#7911).
+    GATE_* NAME A HEALTH GATE THAT GRADED NOTHING, beside `deferred` from step 6.
     `gate-unreadable` is a gate that could not read its store, and `gate-stale` a gate whose
     tree was older than `origin/master`. Nothing gates health again after either, so
     `land_probe` reads them as a give-up rather than a plain deferral. A promotion wait that
@@ -94,7 +94,7 @@ class Outcome(Exception):
 
     An exit-75 outcome must name a verdict, or the Landings board buckets it as
     `aborted` and it reads as lock contention. An exit-1 outcome that names none takes
-    `refused`, so every exit-1 end prints a `VERDICT:` line too (#4451). Exit 64, a usage
+    `refused`, so every exit-1 end prints a `VERDICT:` line too. Exit 64, a usage
     error, prints none.
 
     `recorded` is the detail `--verdict-file` records when it differs from the printed one,
@@ -176,7 +176,7 @@ PROMOTE_TIMEOUT_NOTE = (
 
 
 # What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
-# could not read its store for a tag and found no other tag unhealthy (#5543). Nothing re-gates
+# could not read its store for a tag and found no other tag unhealthy. Nothing re-gates
 # health, so this deferral never ends on its own. The landing records `Cause.GATE_UNREADABLE`,
 # and `land_probe` reports it as `gave-up`, a resume point, as it does for `promote-timeout`.
 UNREADABLE_GATE_NOTE = (
@@ -188,7 +188,7 @@ UNREADABLE_GATE_NOTE = (
 
 
 # What a `deferred` from step 6 means when the probe refused the gate's tree as older than
-# `origin/master` (#7816). The gate advances its tree to `origin/master`, so this is a master
+# `origin/master`. The gate advances its tree to `origin/master`, so this is a master
 # that moved while the gate ran, and a re-run reads the newer tip. The landing records
 # `Cause.GATE_STALE`, and `land_probe` reports it as `gave-up`, a resume point.
 STALE_GATE_NOTE = (
@@ -202,7 +202,7 @@ def disarmed(where: str, consequence: str) -> str:
     """The message for await_ci's CI_DISARMED, shared by ci.py's step 3 and merge.py's direct merge.
 
     Not a CI result: await_ci refused to report one because its required-context set is
-    empty. Waiting or re-running changes nothing; re-arming the gate does (#4464).
+    empty. Waiting or re-running changes nothing; re-arming the gate does.
     """
     return (
         f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "

@@ -452,7 +452,7 @@ pod rolls, and the old credential still works. The registry marks them `source: 
   plaintext, so a changed `authelia_password` is inert on its own. A rotation mints the new
   digest and stores both, as *Authelia user passwords* above describes.
 - `bazarr_api_key` — the only reference in the tree is a reader,
-  `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
+  `k8s/roles/monitor-bridge/defaults/main.yml:render_secrets`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
   alone breaks the checker with an HTTP 401 that reads as a monitoring fault.
 - `promote_token` — the GitHub `PROMOTE_TOKEN` repository secret holds the credential: a

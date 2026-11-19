@@ -1,4 +1,4 @@
-"""The root inspector's socket helper and client, against a socketpair and a real unix socket (#6350).
+"""The root inspector's socket helper and client, against a socketpair and a real unix socket.
 
 The helper runs the real `homelab_rootq.py` through `sys.executable`, rooted under a scratch
 directory by the seam the script ignores as root, so nothing here runs as root. A request that

@@ -4,7 +4,8 @@ One coverage run of the whole pytest suite, with per-test contexts, measured on 
 commit `ec7b15021` (#8516). It ran outside CI and gates nothing. Coverage is not part of CI and
 has no threshold. The counts and lists leave out `test_terraria_stats_follows_the_server.py`, which
 master deleted after that commit (f5c1c8636b). They also leave out `test_jsonpath_quoting.py`,
-deleted later because no Ansible command task remained for it to scan.
+deleted later because no Ansible command task remained for it to scan, and
+`test_renderer_ansible_free.py`, deleted once `test_ansible_core_census.py` covered it.
 
 This page lists deletion candidates for later issues. An entry is not a verdict: a later issue
 reads each test file before it deletes anything.
@@ -434,7 +435,6 @@ the other test files that cover at least one of those lines.
 | `scripts/lib/tests/test_facts_pins.py` | 77 | 586 |
 | `tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` | 77 | 661 |
 | `tests/k8s/test_traefik_netpol_https_origin_lock.py` | 75 | 462 |
-| `scripts/renderer/tests/test_renderer_ansible_free.py` | 73 | 1095 |
 | `scripts/renderer/tests/test_renderer_template_census.py` | 73 | 914 |
 | `tests/k8s/test_checksum_annotations_documented.py` | 73 | 438 |
 | `scripts/lib/tests/test_guard_jinja_env_py_table_retired.py` | 72 | 998 |

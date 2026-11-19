@@ -3,7 +3,7 @@
 # behind its own Mullvad WireGuard tunnel (k8s/templates/wireguard-sidecar.yml.j2).
 slskd_k8s_image: slskd/slskd:0.26.2@sha256:d0963a3e5b16facd295bf4f2156dad0182f246b1b21a032cae12f5494c694843
 slskd_k8s_soularr_image: ghcr.io/mrusse/soularr:1.2.3@sha256:e448d49d0ca6091a35653ff9198ebb4a3acf42abfc2f2056490a9a0f0cffd210
-slskd_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:236f9a9a89c701bc83f6d41007157dc77361114d14e56a08e846bb4499622e97
+slskd_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:10db56ad834f94541307d5dfdbe87370e26d155bb341a5bf65789f970f24ab5c
 
 # Renovate stance, qbittorrent's: a first start that fails its tunnel gate sets DEPLOY_HOLD for
 # the whole fleet, so a bump lands by hand through land.sh.
@@ -72,3 +72,18 @@ k8s_claims:
   - name: "{{ slskd_k8s_claim }}"
     storage_class: "{{ slskd_k8s_storage_class }}"
     size: "{{ slskd_k8s_size }}"
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The Soulseek network login slskd connects with.
+  - name: slskd-soulseek
+    string_data:
+      username: soulseek_username
+      password: soulseek_password
+  # slskd's own Mullvad device key, a second device on qbittorrent's account. Read as a file
+  # through FILE__MULLVAD_PRIVATE_KEY. Store it without surrounding whitespace: init-envfile
+  # keeps a trailing newline, and a newline corrupts the key.
+  - name: slskd-mullvad
+    string_data:
+      key: slskd_wireguard_private_key

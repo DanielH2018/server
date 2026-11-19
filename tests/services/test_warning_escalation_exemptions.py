@@ -13,6 +13,7 @@ Run: uv run pytest tests/services/test_warning_escalation_exemptions.py
 import re
 
 from lib import yaml_fast
+from lib.repo_paths import ALL_VARS
 from _helpers import K8S_ROLES
 from test_alertmanager_host_check_inhibit import (
     MATCHER,
@@ -20,11 +21,16 @@ from test_alertmanager_host_check_inhibit import (
     inhibit_rules,
     inhibited,
 )
-from test_alertmanager_routing import reached, route_tree
+from test_alertmanager_routing import inherited, reached, route_tree
 
 RULES = K8S_ROLES / "observability" / "files" / "rules"
 ESCALATION = "WarningUnresolved"
-HOLDS_BY_DESIGN = {"DeployHoldActive", "FluxSuspended"}
+HOLDS_BY_DESIGN = {
+    "DeployHoldActive",
+    "FluxSuspended",
+    "AideCheckFailed",
+    "RkhunterScanFailed",
+}
 SELECTOR = re.compile(r"ALERTS\{([^}]*)\}")
 
 
@@ -100,6 +106,25 @@ def test_an_escalation_pages_discord_and_email():
         "discord",
         "email",
     ]
+
+
+def test_an_escalation_links_karma_filtered_to_the_warning_it_escalates():
+    domain = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+    link = f"Karma: https://karma.local.{domain}/?q=alertname%3DSystemdUnitsFailed\n"
+    renders = K8S_ROLES / "observability" / "tests" / "alertmanager"
+    for body in ("message", "email"):
+        assert link in (renders / f"escalation.homelab.{body}.txt").read_text(), body
+
+
+def test_an_escalation_groups_by_the_warning_it_escalates():
+    target = escalated(
+        {
+            "alertname": "SystemdUnitsFailed",
+            "severity": "warning",
+            "service": "daniel-box",
+        }
+    )
+    assert inherited("group_by", target) == [["alertname", "escalated_from"]] * 2
 
 
 def sample(matchers: list[str]) -> dict[str, str]:

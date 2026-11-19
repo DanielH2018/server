@@ -15,10 +15,9 @@ data:
 {% set observability_grafana_config %}
   datasources.yaml: |
     apiVersion: 1
-    # Provisioning keys on NAME, so renaming the alias (loki -> loki-homelab, E1) needs
-    # the old record deleted or the insert hits "same uid already exists" — CrashLooped
-    # the pod at first deploy, 2026-08-12. Lowercase `loki` is the retired alias name;
-    # the stack's own `Loki` (uid loki) is untouched.
+    # Provisioning keys on NAME, so the old lowercase `loki` alias record must be deleted or
+    # the loki-homelab insert hits "same uid already exists" and crash-loops the pod. The
+    # stack's own `Loki` (uid loki) is untouched.
     deleteDatasources:
       - name: loki
         orgId: 1
@@ -54,11 +53,10 @@ data:
             customQuery: false
           nodeGraph:
             enabled: true
-      # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
-      # Every dashboard in k8s/roles/observability/files/dashboards references its datasource
-      # by UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by
-      # NAME, so these aliases are free to be named whatever reads clearly. D6's lever is that a
-      # matching uid makes all of them work here with no edit at all.
+      # Aliases carrying daniel-server's Grafana uids. Every dashboard in
+      # k8s/roles/observability/files/dashboards references its datasource by UID —
+      # `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by NAME,
+      # so the alias names are free, and a matching uid makes every board work with no edit.
       #
       # ADDITIVE rather than renaming the two above. The two cluster-native uids are still in
       # use — `prometheus` is the default datasource and `loki` is what the Tempo datasource's
@@ -67,7 +65,6 @@ data:
       #
       # Names must differ from the two above: Grafana keys update-vs-insert on orgId+name, so
       # reusing `Prometheus` would UPDATE that datasource's uid rather than insert a second.
-      # (`loki` vs `Loki` already differ, but only by case — spelled out to keep it obvious.)
       - name: Prometheus (daniel-server uid)
         uid: EGdsQqhVk
         type: prometheus
@@ -78,9 +75,8 @@ data:
           # Load-bearing, and the reason to have a second datasource rather than one shared:
           # daniel-server's series are scraped at 1m, this cluster's at 15s. Grafana derives
           # $__rate_interval from this, and at the 15s default every rate() panel over
-          # 1m-scraped data returns EMPTY — which in B4 would read as "missing series" and be
-          # recorded as a migration gap that is really a datasource setting. The cluster-native
-          # datasource above correctly leaves it unset.
+          # 1m-scraped data returns EMPTY. The cluster-native datasource above correctly leaves
+          # it unset.
           timeInterval: "1m"
       - name: loki-homelab
         uid: bf4q19tuivta8e
@@ -88,8 +84,8 @@ data:
         access: proxy
         # The HOMELAB Loki, cross-namespace — NOT this stack's own loki (that one keeps
         # uid `loki` for tracesToLogsV2). The ported dashboards bake this uid into their
-        # panels, and pointing it at the observability Loki left Logs, Loki — Internals
-        # and Alert History's log half empty (E1 parity audit, 2026-08-12).
+        # panels, and pointing it at the observability Loki leaves Logs, Loki — Internals
+        # and Alert History's log half empty.
         url: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
   dashboards.yaml: |
     apiVersion: 1
@@ -97,9 +93,7 @@ data:
       # Every board, from k8s/roles/observability/files/dashboards — one provider, because
       # foldersFromFilesStructure derives the Grafana folder from the directory name and so
       # reproduces the AI/Apps/Infrastructure/Logs/Networking/Security layout without naming any
-      # of them here. The Claude Code board had its own provider until the two copies were
-      # reconciled (2026-08-07); it now arrives through this one like everything else, which is
-      # why it moved from the "Claude Code" folder to "AI".
+      # of them here.
       - name: homelab
         orgId: 1
         type: file
@@ -129,8 +123,7 @@ spec:
       annotations:
         # Rolls THIS workload alone when its own ConfigMap changes. The role skips the
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
-        # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
-        # under `## One config change, one restart`.
+        # the pod. See this role's CLAUDE.md, `## One config change, one restart`.
         {{ checksum_annotation('config', observability_grafana_config | hash('sha1')) }}
       labels:
         app: grafana
@@ -154,11 +147,10 @@ spec:
         #
         # No server runs beside it: grafana is Recreate, so the old pod is gone before this
         # one's init runs, and the CLI's own `Migrate` pass has the SQLite file to itself.
-        # Checked on grafana/grafana:13.2.3 (2026-10-18): against a DB a stopped server had
-        # initialised, the CLI exited 0 and the next boot accepted the new password and
-        # refused the old one, though the server's env still carried the old. On an empty
-        # data directory it creates the DB and the admin user, so a fresh PVC boots too.
-        # Peak RSS was 196 MiB.
+        # Against a DB a stopped server had initialised, the CLI exits 0 and the next boot
+        # accepts the new password and refuses the old one, though the server's env still
+        # carries the old. On an empty data directory it creates the DB and the admin user,
+        # so a fresh PVC boots too.
         #
         # The password goes in on stdin, not argv, so it never appears in the process list.
         #
@@ -290,17 +282,12 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 6
-          # 2Gi, raised from 512Mi on 2026-08-30 after measuring what rendering these
-          # dashboards actually costs. Idle is ~390 MiB, but a browser opening four of
-          # them OOMKilled the container (exit 137) at 512Mi and again at 1Gi, six
-          # restarts and one more — with nothing but ordinary 200s in the log, so the pod
-          # read CrashLoopBackOff for a memory ceiling rather than a fault. This is not a
-          # cost the `ui` tier invented: four dashboards is an ordinary afternoon, and an
-          # earlier pod had already peaked at 485 MiB against the 512Mi limit unaided.
-          # The working set peaked at 1084 MiB across three clean tier runs — past 1Gi,
-          # which is why that limit was not enough either. daniel-box carries 28.2 GiB
-          # and sits at 44%, so the headroom is free. The request is the 7-day p95 working
-          # set (563Mi on 2026-11-14) rounded up to 64Mi.
+          # 2Gi. Idle is ~390 MiB, but a browser opening four dashboards OOMKills the container
+          # (exit 137) at 512Mi and at 1Gi, with nothing but ordinary 200s in the log, so the
+          # pod reads CrashLoopBackOff for a memory ceiling rather than a fault. Four dashboards
+          # is an ordinary afternoon, and the working set peaks at 1084 MiB, past 1Gi.
+          # daniel-box carries 28.2 GiB and sits at 44%, so the headroom is free. The request is
+          # the 7-day p95 working set (563Mi) rounded up to 64Mi.
 {{ container_resources(cpu_limit='1', mem_limit='2Gi', cpu_request='50m', mem_request='576Mi') }}
       volumes:
         # The provisioning ConfigMap carries both files, but they mount at different paths,
@@ -320,9 +307,8 @@ spec:
               - key: dashboards.yaml
                 path: dashboards.yaml
         # One ConfigMap per dashboard folder, not one for all of them. A ConfigMap is capped at
-        # 1 MiB and the ported set is ~730 KB, with Infrastructure alone at 538 KB — a single
-        # object would fit today and silently stop fitting the first time a large board is
-        # added. grafana-dashboards.yaml.j2 renders them from the JSON files, one per
+        # 1 MiB and the set is ~730 KB, with Infrastructure alone at 538 KB — a single object
+        # would silently stop fitting the first time a large board is added. grafana-dashboards.yaml.j2 renders them from the JSON files, one per
         # `observability_dashboard_folders` entry.
 {% for folder in observability_dashboard_folders %}
         - name: dashboards-{{ folder | lower }}

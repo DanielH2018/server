@@ -3,7 +3,7 @@
 `files/rules/host-checks.yaml` is plain YAML, so each `Claude<Check>NotReporting` rule names
 its deadline twice: the `>` threshold of the stale-file arm and the `[Ns]` window of the
 absent_over_time arm. Each unit renders the deadline from its own timer period through
-`hosts/components/claude-code/templates/timer-textfile.j2` (#6165). A timer moved to a slower period
+`hosts/components/claude-code/templates/timer-textfile.j2`. A timer moved to a slower period
 without its rule would page on every healthy gap (M1 convention 1).
 
 The rules also name exactly the hosts whose inventory arms each timer. A host that arms one

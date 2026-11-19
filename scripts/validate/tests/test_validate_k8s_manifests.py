@@ -28,11 +28,9 @@ from validate import k8s_manifests as vkm
 def real_tree():
     """Run the validator over the real tree ONCE per worker: (exit code, stdout, stderr).
 
-    A full run renders every k8s role through the renderer and costs ~20s (2026-11-07).
-    Six guards below assert on different parts of the same run's output, and until 2026-09-01
-    two fixtures each paid for their own run — one capturing stderr, one stdout — so every
-    worker rendered the tree twice. The run is a pure function of the repo tree, so one
-    capture of both streams serves all of them.
+    A full run renders every k8s role through the renderer and costs ~20s.
+    Six guards below assert on different parts of the same run's output. The run is a pure
+    function of the repo tree, so one capture of both streams serves all of them.
 
     # DECIDED: redirect_stderr/redirect_stdout, not capsys. capsys is function-scoped and
     # pytest refuses to inject it into a module-scoped fixture; main() writes with
@@ -90,7 +88,7 @@ _UNCOVERED = "matched neither the v"
 
 
 def test_a_clean_run_lists_no_template_without_v(real_tree_stdout):
-    """About 150 `[ok]` lines buried the `[FAIL]` ones; they print only under `-v` (#4448)."""
+    """About 150 `[ok]` lines buried the `[FAIL]` ones; they print only under `-v`."""
     rc, out = real_tree_stdout
     assert rc == 0
     assert "[ok]" not in out

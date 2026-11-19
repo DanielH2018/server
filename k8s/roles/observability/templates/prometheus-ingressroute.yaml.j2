@@ -1,11 +1,11 @@
 ---
 # The one door that lets monitor-bridge (daniel-server) query this cluster's Prometheus.
 #
-# Slice 3, D8. Prometheus' node-side listener is pinned to 127.0.0.1 by observability_query_host_ip
+# Prometheus' node-side listener is pinned to 127.0.0.1 by observability_query_host_ip
 # — deliberately, so `otelq` can reach it while the LAN cannot — and its Service is ClusterIP.
 # Both are correct and neither is changed here: monitor-bridge runs on daniel-server, so it can
-# reach neither, and the k3s API server's own :6443 is firewalled off from daniel-server too
-# (measured 2026-08-07: connect fails outright). This route is the deliberate exception.
+# reach neither, and the k3s API server's own :6443 is firewalled off from daniel-server too.
+# This route is the deliberate exception.
 #
 # Modelled on the n8n-monitoring route (k8s/roles/n8n/templates/ingressroute.yaml.j2), which
 # exists for exactly this problem and is the pattern to copy rather than invent from: LAN-only
@@ -22,12 +22,12 @@
 #      has an authenticated route.
 #
 # LAN-ONLY, and unlike the shared ingressroute() macro this does NOT honour k8s_public_route.
-# That is intentional: when slice 6 flips that flag for the app routes, this one must not follow
-# them onto the public internet. There is no authentication in front of it. Since 2026-08-13
-# the read rule also carries ClientIP({{ lan_subnet }}) — deliberately the whole LAN, not a
-# host pin (operator decision: any LAN computer may query), but pods (10.42/16) and WireGuard
-# peers (10.8/24) present their real source IPs here and are excluded, closing the two
-# non-LAN populations that could otherwise read infra topology and Claude Code usage metrics.
+# That is intentional: this one must not follow the app routes onto the public internet. There
+# is no authentication in front of it. The read rule carries ClientIP({{ lan_subnet }}) —
+# deliberately the whole LAN, not a host pin (any LAN computer may query), but pods (10.42/16)
+# and WireGuard peers (10.8/24) present their real source IPs here and are excluded, closing
+# the two non-LAN populations that could otherwise read infra topology and Claude Code usage
+# metrics.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -38,45 +38,27 @@ spec:
     - https
   routes:
     - kind: Rule
-      # LAN-wide by operator decision (2026-08-13): any LAN computer may query; pods and
-      # WireGuard peers are excluded. The two /31s are the NODE-owned flannel.1/cni0
-      # addresses (10.42.0.0-1 = daniel-box, 10.42.1.0-1 = daniel-server): a host-originated
-      # query to the VIP takes kube-proxy's cluster-policy path and SNATs to one of them
-      # (measured via authelia's remote_ip: daniel-box curls arrive as 10.42.0.1,
-      # daniel-server's as 10.42.1.0). Pods are always .2+ and stay excluded. (The
-      # vip-kube-bypass, which once LAN-masqueraded daniel-server's Docker-container
-      # traffic to 10.0.0.161, retired 2026-08-14 with the Docker uninstall — no
-      # forwarded VIP client remains on that host.) OR'd matchers, NOT ClientIP(a, b): the
-      # multi-arg form fails rule parsing on this Traefik and the router vanishes.
-      # /api/v1/targets joined /api/v1/query* 2026-08-14: probe.py's `targets` command
-      # repointed here when the Docker prometheus retired — same read-only surface,
-      # same LAN gate.
+      # LAN-wide: any LAN computer may query; pods and WireGuard peers are excluded. The two
+      # /31s are the NODE-owned flannel.1/cni0 addresses (10.42.0.0-1 = daniel-box, 10.42.1.0-1
+      # = daniel-server): a host-originated query to the VIP takes kube-proxy's cluster-policy
+      # path and SNATs to one of them (daniel-box curls arrive as 10.42.0.1, daniel-server's as
+      # 10.42.1.0). Pods are always .2+ and stay excluded. OR'd matchers, NOT ClientIP(a, b):
+      # the multi-arg form fails rule parsing on this Traefik and the router vanishes.
+      # /api/v1/targets is admitted beside /api/v1/query*, for probe.py's `targets` command:
+      # same read-only surface, same LAN gate.
       match: "Host(`prometheus.local.{{ domain }}`) && (PathPrefix(`/api/v1/query`) || PathPrefix(`/api/v1/targets`)) && (ClientIP(`{{ lan_subnet }}`) || ClientIP(`10.42.0.0/31`) || ClientIP(`10.42.1.0/31`))"
       middlewares:
         - name: rate-limit
       services:
         - name: prometheus
           port: 9090
-    # The northbound write door (slice 3, B3) was here until 2026-08-16: /api/v1/write guarded
-    # by ClientIP(k8s_bridge_client_ip/32), i.e. daniel-server. Its only sender was that host's
-    # Docker Prometheus, whose five scrape jobs were removed in the Phase E2 change on
-    # 2026-08-12 — see prometheus.yaml.j2, which records that this left "no remaining
-    # remote-write source for these job names". The host's LAN-published node-exporter followed
-    # in Phase F on 2026-08-14.
+    # No remote-write door: remote-write is an UNAUTHENTICATED append to a TSDB that
+    # monitor-bridge alerts from, so a door onto it with no live sender is pure surface.
     #
-    # Removed rather than left standing: remote-write is an UNAUTHENTICATED append to a TSDB
-    # that monitor-bridge alerts from, so a door onto it with no live sender is pure surface.
-    # A census on 2026-08-16 found no write-route series at all in
-    # traefik_router_requests_total across the 30-day retention (the only prometheus-router
-    # series was a single GET on the read route).
-    #
-    # If remote-write is needed again, note what made the old guard real, both checked
-    # 2026-08-07: Traefik matches ClientIP against the TCP peer address rather than
-    # X-Forwarded-For, so a LAN host cannot claim to be another by setting a header; and the
-    # Traefik Service is externalTrafficPolicy=Local, without which kube-proxy would SNAT the
-    # source to a node IP and the matcher would match nothing. It also deliberately carried no
-    # rate-limit, because a sender replaying a backlog would take 429s and drop samples,
-    # turning a brief outage into permanent gaps.
+    # A ClientIP guard on one is only real because Traefik matches the TCP peer address rather
+    # than X-Forwarded-For, and the Traefik Service is externalTrafficPolicy=Local, without
+    # which kube-proxy would SNAT the source to a node IP. It would also need no rate-limit:
+    # a sender replaying a backlog would take 429s and drop samples.
   tls:
 {% if k8s_tls_cert_resolver %}
     certResolver: {{ k8s_tls_cert_resolver }}

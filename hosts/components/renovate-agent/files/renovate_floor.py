@@ -1,6 +1,6 @@
 """The paths a Renovate PR may change only with the operator's approval, and its exceptions.
 
-dotfiles#967 slice 1. Renovate's content is app-authored version bumps, so approving every PR
+Renovate's content is app-authored version bumps, so approving every PR
 would block routine updates. A PR needs the operator's approval of its head only when it
 changes a path on the T2 approval floor other than by a digest-only image bump, or when anyone but
 `renovate[bot]` pushed to its branch. The lander also refuses a soak status that

@@ -20,7 +20,7 @@ in front of that is more machinery than the check is worth.
 THE ONE EXCEPTION is a cc-wait repo probe asked for `--describe` (`.claude/wait-sources/`).
 cc-wait runs `<probe> --describe <args>` and parses its stdout as JSON, and `<args>` is
 whatever followed the source name, so `cc-wait land --help` runs `land --describe --help`.
-Help on stdout with exit 0 reached cc-wait as a malformed description (#4376).
+Help on stdout with exit 0 reached cc-wait as a malformed description.
 `refuse_help_under_describe` makes that a usage error instead, which cc-wait prints. A probe
 asked for `--help` alone still answers with exit 0.
 
@@ -35,7 +35,7 @@ MESSAGES carry argparse's prefix. `warn` and `error` print `<prog>: warning: ...
 `<prog>: error: ...` on stderr, the shape `parser.error` already gives a bad argument, so one
 grep pattern finds every complaint a script makes and the line names the script it came from.
 A helper module in `lib/` uses them too: it has no name of its own worth printing, and the
-running script's name is the one an operator can act on (#4447).
+running script's name is the one an operator can act on.
 
 Typical usage example:
 

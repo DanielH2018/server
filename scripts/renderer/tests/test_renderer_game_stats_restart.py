@@ -1,4 +1,4 @@
-"""game-stats' rendered script ConfigMaps and the `checksum/restart` that covers them (#5444).
+"""game-stats' rendered script ConfigMaps and the `checksum/restart` that covers them.
 
 Each game's pod runs a script from a ConfigMap the role renders with `lookup('file')`. The
 script imports `stats_lib`, so the ConfigMap must carry both keys, and an edit to either file

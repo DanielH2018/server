@@ -1,6 +1,6 @@
 """Which findings `open` labels `red-green`, so a `--review` fan-out gives them a red phase.
 
-WHY (#3950). The red phase runs only for a batch whose every issue carries the label, and
+WHY. The red phase runs only for a batch whose every issue carries the label, and
 nothing applied it: the phase ran in 0 of 68 review batches. A finding qualifies when every
 path it cites lies in code this repo's suite runs, because the red gate proves the new tests
 fail by running them. The operator can still add or remove the label by hand.
@@ -48,7 +48,7 @@ def red_green_eligible(paths: list[str], repo: Path = REPO) -> bool:
     """Whether a finding citing `paths` gets the label: it cites some, all suite-covered.
 
     A path cited from a subdirectory, such as `fanout_lib/clean.py`, is first resolved to the
-    one tracked file it names (#4232).
+    one tracked file it names.
     """
     resolved = resolve_fragments(paths, tracked_files(repo))
     return bool(resolved) and all(suite_covered(p, repo) for p in resolved)

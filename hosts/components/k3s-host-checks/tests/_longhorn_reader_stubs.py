@@ -292,7 +292,7 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     Dispatches on argv (after stripping the `-n <namespace>` host_lib.kubectl_runner inserts),
     not on raw text matching, so it stays exact even though several distinct queries all target
     `volumes.longhorn.io` with different -o jsonpath shapes. The backup list is one `-o json`
-    fetch (#3735); any other backup query is an UNEXPECTED ARGS failure. Two volumes:
+    fetch; any other backup query is an UNEXPECTED ARGS failure. Two volumes:
     `pvc-web-data` in the daily tier and `pvc-weekly-data` in weekly shard d4, each with one
     backup from its own job. Every other tier's label selector matches nothing.
 

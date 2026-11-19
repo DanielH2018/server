@@ -141,7 +141,7 @@ def test_a_pr_that_is_not_stalled_is_left_to_its_landing(view):
     ids=["check-run-failed", "check-run-timed-out", "status-context-error"],
 )
 def test_an_open_pr_with_a_failed_check_is_the_red_code(red):
-    """#6588: a red PR read as 2, which the crons report up, while it blocked every run.
+    """A red PR read as 2, which the crons report up, while it blocked every run.
 
     Another check still running does not soften it: one failure already stops the landing.
     """
@@ -188,7 +188,7 @@ _SHARD = sorted(CI_GATE_NEEDS_JOBS)[0]
     ids=["cancelled-run-excuses-the-gate", "failed-need-keeps-the-gate-red"],
 )
 def test_a_failed_gate_is_red_only_when_no_cancellation_explains_it(need, rc):
-    """#5931: the gate is `if: always()`, so a cancelled run fails it on a head no job failed."""
+    """The gate is `if: always()`, so a cancelled run fails it on a head no job failed."""
     rec = Recorder(
         {
             "git ls-remote": cp(0, out=_HEAD),
@@ -230,7 +230,7 @@ def _app_only_view(mergeable: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_a_conflicting_pr_is_the_red_code():
-    """#6847: GitHub runs no CI on a conflicting PR, so it read as 2 while blocking every run."""
+    """GitHub runs no CI on a conflicting PR, so it read as 2 while blocking every run."""
     rec = Recorder(
         {
             "git ls-remote": cp(0, out=_HEAD),
@@ -262,7 +262,7 @@ def test_a_pr_github_has_not_marked_conflicting_stays_the_benign_code(mergeable)
 
 
 def test_a_rollup_without_the_ci_gate_is_not_merged():
-    """#6847: an app's lone passing check is a PR whose CI never ran, not a green one."""
+    """An app's lone passing check is a PR whose CI never ran, not a green one."""
     rec = Recorder(
         {
             "git ls-remote": cp(0, out=_HEAD),

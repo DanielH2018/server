@@ -34,8 +34,7 @@ Each row also carries what a change cost to get right, and what CI cost to judge
 - `first_ci` is the conclusion of the PR's first CI run that reached a verdict. A draft's
   `skipped` run and a `cancelled` one are not verdicts. `ci_runs` counts the runs that were.
 - `ci_queue_min` is the longest any job of the final head's run waited for a runner, and
-  `ci_wall_min` that run's span from the first job queued to the last done. #5526 measured
-  the queue once at a median 6m12s against the 20-job cap, more than the run itself.
+  `ci_wall_min` that run's span from the first job queued to the last done.
 - `reverted_by` is the merged PR that reverted this one (`reverts` has the two forms).
 - `review_findings` and `fix_rounds` come from the batch's review record.
 - `ci_rerun`, `ci_rerun_outcome` and `ci_rerun_jobs` say whether the CI gate re-ran the
@@ -43,7 +42,7 @@ Each row also carries what a change cost to get right, and what CI cost to judge
 
 After the PR rows, the summary lists every batch in the window that ended `needs-input` or
 `failed`, read from the review records whether or not it opened a PR, with the `blocker` line
-the agent stopped on (#7686).
+the agent stopped on.
 
 The summary prints the first-time-green rate, the share reverted with each pair listed,
 and the CI queue and wall medians. The pairs are listed because a planned drill's revert
@@ -275,8 +274,7 @@ def reverts(prs: list[dict]) -> dict[int, int]:
 
     GitHub's revert button writes `Reverts <repo>#<n>` in the body. A revert written by hand,
     as most here are, has a title starting `Revert` and names its target as the first
-    `#<n>` in the title, else in the body: #5390 "Revert the images job ..." names #5378
-    first. A planned drill's revert counts too, so the summary lists every pair for a
+    `#<n>` in the title, else in the body. A planned drill's revert counts too, so the summary lists every pair for a
     person to judge rather than calling the count a failure rate on its own.
     """
     out: dict[int, int] = {}

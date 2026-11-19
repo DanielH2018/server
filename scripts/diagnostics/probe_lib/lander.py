@@ -1,7 +1,7 @@
 """`probe.py lander` — what the daniel-server batch lander did with each PR, and how it ended.
 
 Sessions read the lander's journal by hand, 54 times in two weeks, to
-learn what the lander did with a wave's PRs (#6324). This makes one read of daniel-box and
+learn what the lander did with a wave's PRs. This makes one read of daniel-box and
 prints:
 
 - the newest pass: when it ran, how its unit run ended, and its one line per candidate PR,

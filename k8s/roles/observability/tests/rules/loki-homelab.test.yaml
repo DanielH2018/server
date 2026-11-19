@@ -28,8 +28,7 @@ tests:
                 metrics can fire until the series is back.
 
   # A failed scrape. The job still exists, so LokiHomelabMetricsMissing stays quiet.
-  # ScrapeTargetDown pages the failed scrape (scrape-targets.test.yaml), and LokiHomelabDown,
-  # which paged it from here, went in M6's batch A3 Cutover-b.
+  # ScrapeTargetDown pages the failed scrape (scrape-targets.test.yaml).
   - interval: 1m
     input_series:
       - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
@@ -176,9 +175,8 @@ tests:
         alertname: LokiRulerNotEvaluating
         exp_alerts: []
 
-  # A broken delivery path with one alert firing: each 5m send fails and adds 1, the step
-  # M5's PR 2a measured live. The second failed send crosses the threshold at 10m, and the
-  # alert fires after its 5m hold.
+  # A broken delivery path with one alert firing: each 5m send fails and adds 1. The second
+  # failed send crosses the threshold at 10m, and the alert fires after its 5m hold.
   - interval: 1m
     input_series:
       - series: 'loki_prometheus_notifications_errors_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", alertmanager="http://alertmanager.observability.svc:9093/api/v2/alerts"}'
@@ -205,6 +203,7 @@ tests:
                 minutes, so every firing log rule reaches no one. Read the loki-homelab pod's log
                 for "Error sending alerts", and the alertmanager-callers NetworkPolicy in the
                 observability namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#lokirulernotificationsfailing
 
   # One refused send carrying four alerts, as a new Loki pod's first send can be while
   # kube-router admits it. The counter steps by 4 at once, which is one change, so the alert

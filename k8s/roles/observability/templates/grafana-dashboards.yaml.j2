@@ -3,19 +3,14 @@
   that folder's boards under their file names. grafana.yaml.j2 mounts each one at
   /var/lib/grafana/dashboards/homelab/<folder>.
 
-  Rendered here rather than staged on the node and built by a task (D5's imperative-ConfigMap
-  row), so the ConfigMaps are a render that Flux can apply once observability is flux-owned.
   Each board passes through `grafana_deploy_annotated`
   (scripts/renderer/template_filters/grafana_dashboards.py), which adds the two deploy-annotation queries
   and writes the JSON with sorted keys, so an unchanged board renders the same bytes.
 
-  `manifests_exclude_files` keeps this file out of the shared role's client-side apply, which
-  copies each object into a `last-applied-configuration` annotation capped at 262144 bytes.
-  The Infrastructure folder is about 600 KB as JSON, so `tasks/dashboards.yml` renders it to
-  its own directory and applies it server-side, which writes no such annotation. The flip PR
-  drops the exclusion: Flux applies server-side too, and the file then renders into the
-  `observability` bundle. tests/services/test_dashboard_configmaps.py holds every
-  ConfigMap under the 1 MiB object cap.
+  Flux applies these server-side, which writes no `last-applied-configuration` annotation. A
+  client-side apply would copy each object into one capped at 262144 bytes, and the
+  Infrastructure folder is about 600 KB as JSON. tests/services/test_dashboard_configmaps.py
+  holds every ConfigMap under the 1 MiB object cap.
 
   `lookup('file')` strips trailing whitespace, which the JSON parse ignores. The `|` block keeps
   exactly one trailing newline, so each key equals the filter's output byte for byte.

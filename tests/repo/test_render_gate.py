@@ -2,8 +2,8 @@
 
 `_render_gate.py` resolves a template path through nine spellings, and the gate it feeds —
 `test_guard_tests_read_renders_not_templates.py` — is only as good as that resolution. Each
-assertion below is one spelling a guard in this repo actually used; three of them were invisible
-until #3209, #3210 and #3211, and four more until #3219.
+assertion below is one spelling a guard in this repo actually used; three of them hide the template path
+from a plain glob check, and four more split the glob from the read.
 
 The two negative tests matter as much: a hand-rolled render and a `tmp_path` fixture both read a
 template and neither is the thing the gate forbids.
@@ -25,27 +25,27 @@ FLAGGED_SPELLINGS = (
     'A = K8S_ROLES / "a/templates/x.j2"\nB = K8S_ROLES / "b/templates/y.j2"\n'
     "for t in (A, B):\n    t.read_text()\n",
     'open(K8S_ROLES / "a" / "templates" / "x.j2")\n',
-    # The wrapped glob of #3209: `sorted()` sat where the detector looked for the `glob`.
+    # The wrapped glob: `sorted()` sits where the detector looked for the `glob`.
     'for tpl in sorted(role_dir.glob("templates/*.j2")):\n    tpl.read_text()\n',
-    # #3211's spelling: the pattern names no template, and the directory it globs does.
+    # The pattern names no template, and the directory it globs does.
     'tdir = role / "templates"\nfor t in sorted(tdir.glob("*.j2")):\n    t.read_text()\n',
     # The same read with a pattern that names nothing at all, which the unwrap alone misses:
     # only the bound DIRECTORY says these are templates.
     'tdir = role / "templates"\nTEXT = {t.name: t.read_text() for t in tdir.glob("*")}\n',
-    # The helper parameter of #3209: no template path at the read site.
+    # The helper parameter: no template path at the read site.
     "def f(p):\n    return p.read_text()\n\n\n"
     'for tpl in K.glob("*/templates/*.j2"):\n    f(tpl)\n',
-    # #3219, first spelling: the glob is in a function, the read in its caller.
+    # The glob is in a function, the read in its caller.
     "def _manifest_files():\n"
     '    return sorted(K8S_ROLES.glob("*/templates/*.j2"))\n\n\n'
     "for p in _manifest_files():\n    p.read_text()\n",
     # The same, with the glob one level further in — inside the comprehension the function
-    # returns, which is how three of the four modules #3219 named spell it.
+    # returns, which is the common spelling.
     "def _manifest_files():\n"
     '    return sorted(p for p in ROLES.rglob("templates/*.j2") if "archive" not in p.parts)\n'
     "\n\n"
     "for path in _manifest_files():\n    path.read_text()\n",
-    # #3219, second spelling: a `+` of globs, with the template glob on the RIGHT. A detector
+    # A `+` of globs, with the template glob on the RIGHT. A detector
     # that looked only at the left operand would pass this while the mirrored form went unseen.
     'for p in list(role.rglob("*.yaml")) + list(role.rglob("*.j2")):\n    p.read_text()\n',
     # A census that yields `(label, path)` pairs, unpacked by the caller's `for`.
@@ -67,7 +67,7 @@ def test_a_template_source_read_is_flagged_in_each_spelling():
 
 
 def test_a_template_path_imported_from_a_sibling_module_is_flagged():
-    """#3210: the path is bound in one module and read in another.
+    """The path is bound in one module and read in another.
 
     `staging/test_staging_egress_fence.py` read `_fence_probe.ORCHESTRATOR` that way, and the
     census named the module as reading three templates while missing the fourth. The sibling is
@@ -99,7 +99,7 @@ def test_a_template_path_imported_from_a_sibling_module_is_flagged():
 
 
 def test_the_3219_clauses_do_not_fire_on_a_non_template_census():
-    """The accept half of each #3219 clause: the same shapes over files that are not templates.
+    """The accept half of each clause: the same shapes over files that are not templates.
 
     A function returning a glob, a `+` of two globs and a `parametrize` over one are all
     ordinary ways to enumerate files. Each must stay silent unless the glob itself names

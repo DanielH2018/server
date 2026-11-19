@@ -3,7 +3,9 @@
   verbatim with lookup('file'), so Jinja never parses it.
 
   homelab.title is the Discord title and the email subject: the status, the firing count, the
-  alert name and its C7 `service` label.
+  alert name and its C7 `service` label. A host-plane group spans hosts, so when the alerts
+  share no `service` the title lists each one they carry. A WarningUnresolved group is titled
+  by the warning it escalates, `escalated_from`, and lists its `escalated_service` values.
 
   homelab.message is the Discord body and homelab.email the email body. Both list the firing
   alerts first, each with its severity, summary, start time and runbook. A notification can
@@ -12,14 +14,32 @@
   its description, because the description says what to fix. When two or more firing alerts
   share one description, it prints once after the list rather than once per alert. A single
   firing alert keeps its description under its summary, because .CommonAnnotations of a
-  one-alert group is that alert's own annotations.
+  one-alert group is that alert's own annotations. A firing group ends with a Karma link filtered
+  to its alert name and shared service, or to the escalated warning's for a WarningUnresolved
+  group.
 
   Discord renders <t:UNIX:R> as a relative time in the reader's own timezone. Email cannot,
   so homelab.email prints UTC. k8s/roles/observability/tests/alertmanager/ holds the
-  rendered output for four groups, which scripts/validate/alert_rules.py compares against
+  rendered output for six groups, which scripts/validate/alert_rules.py compares against
   amtool's render of this file.
 */}}
-{{ define "homelab.title" }}[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} ({{ . }}){{ end }}{{ end }}
+{{ define "homelab.title" -}}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]
+{{- $key := "service" }}
+{{- if .CommonLabels.escalated_from }} {{ .CommonLabels.escalated_from }} unresolved for 48h{{ $key = "escalated_service" }}
+{{- else }} {{ .CommonLabels.alertname }}{{ end }}
+{{- with index .CommonLabels $key }} ({{ . }})
+{{- else }}
+{{- $seen := "" }}
+{{- range .Alerts }}
+{{- $value := index .Labels $key }}
+{{- if and $value (not (match (printf "(^|, )%s(, |$)" $value) $seen)) }}
+{{- if $seen }}{{ $seen = printf "%s, %s" $seen $value }}{{ else }}{{ $seen = $value }}{{ end }}
+{{- end }}
+{{- end }}
+{{- with $seen }} ({{ . }}){{ end }}
+{{- end }}
+{{- end }}
 
 {{ define "homelab.message" -}}
 {{ $shared := "" }}{{ if gt (len .Alerts.Firing) 1 }}{{ $shared = .CommonAnnotations.description }}{{ end -}}
@@ -36,6 +56,9 @@ Started <t:{{ .StartsAt.Unix }}:R>
 {{ end }}
 {{ end -}}
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
+
+{{ end -}}
+{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
 
 {{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}**Resolved ({{ len .Alerts.Resolved }})**
@@ -64,6 +87,9 @@ Started {{ .StartsAt.UTC.Format "2006-01-02 15:04 MST" }}
 {{ end }}
 {{ end -}}
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
+
+{{ end -}}
+{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
 
 {{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}RESOLVED ({{ len .Alerts.Resolved }})

@@ -1,6 +1,4 @@
-# pi-peer-backup's half on daniel-pi (H7.25, old step H7.4; docs/target-architecture/host/
-# h7-delete-ansible.md). D5 moved both writes into setup/k8s_host_files with `delegate_to:
-# daniel-pi`; this component replaces them, and the same PR deletes them.
+# pi-peer-backup's half on daniel-pi.
 #
 # The k8s CronJob pulls the Pi's wg-easy peer configs over ssh with a dedicated key that sshd
 # pins to one forced command. Both halves of the pin live on the Pi:
@@ -8,9 +6,9 @@
 # - The wrapper ships as /usr/local/bin/pi-peer-backup-shell, root-owned 0755, so the key holder,
 #   who reaches only this script, cannot rewrite what it allows. It re-derives one
 #   `sudo rsync --server --sender` of the pinned directory from SSH_ORIGINAL_COMMAND and refuses
-#   everything else (issue #1927).
+#   everything else.
 # - The key joins the Pi user's authorized_keys through the line arm, anchored on the key comment
-#   `pi-peer-backup-cronjob`, with the options the Ansible task set. `restrict` drops pty, port,
+#   `pi-peer-backup-cronjob`. `restrict` drops pty, port,
 #   agent and X11 forwarding and user-rc; `command=` replaces whatever the client asked for. The
 #   arm keeps the file's owner and mode when it rewrites it, and creates a missing file 0600,
 #   because sshd's StrictModes rejects a key file with the wrong ones, and the same file holds the

@@ -1,28 +1,28 @@
 """Filters rendering the Longhorn RecurringJob group labels from `longhorn_backups`.
 
 `scripts/lib/longhorn_lib/longhorn_backups.py` names the backup groups once for every Python
-reader (#3737). The k3s role's label tasks and RecurringJob template used to spell the same
+reader. The k3s role's label tasks and RecurringJob template used to spell the same
 names out, and a one-byte difference renames a live group: its volumes drop out of their
 RecurringJob and nothing fails. These filters let the tasks take each name from the module
-instead (#3946).
+instead.
 
 - `backup_group_label`: the volume label key for a group, `recurring-job-group.longhorn.io/<group>`.
 - `weekly_backup_group`: the group of weekly shard N, `weekly-backup-d<N>`.
 - `weekly_backup_shard`: the shard a weekly-tier volume belongs to, as its entry declares it.
 - `longhorn_weekly_claims` and `longhorn_nobackup_claims`: the k3s role's weekly and no-backup
   volume sets, derived from each `containers_list` entry's `weekly_backup_claims` and
-  `no_backup_claims` the way `tier_backup_claims` derives the R2 set (#4207).
+  `no_backup_claims` the way `tier_backup_claims` derives the R2 set.
 - `longhorn_backup_name`: a bare name by key — the label prefix, a group or a BackupTarget —
   for a template that matches on a name rather than writing one label, such as the restore
   drill's jq selector and `seed_volume_backup.yml`.
 
 DECIDED: a task names a group by its own spelling, `'no-backup' | backup_group_label`, not by
 a key. The filter refuses any group the module does not define, so a typo fails the render the
-same way a key would, and the task still reads as the label it writes (#3946).
+same way a key would, and the task still reads as the label it writes.
 
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
 render instead of writing a label no RecurringJob selects. `lib.guard_jinja_env` registers each
-so the `ValueError` reaches the operator as `FilterError("<filter>: ...")` (#4505).
+so the `ValueError` reaches the operator as `FilterError("<filter>: ...")`.
 """
 
 import sys as _sys
@@ -85,7 +85,7 @@ def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
 
     DECIDED: the shard is declared per claim, never derived from a position. It was the
     claim's index mod 7 in a hand list, so one deletion moved every volume below it to another
-    weekday and could stack two heavy volumes on one B2 cap-day (#4207).
+    weekday and could stack two heavy volumes on one B2 cap-day.
 
     `namespace` is the default for an entry that names none; pass `k8s_namespace`. Raises
     `ValueError` on a shard outside 0 to 6 or a claim two entries declare.

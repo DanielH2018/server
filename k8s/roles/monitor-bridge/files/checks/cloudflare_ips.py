@@ -1,16 +1,14 @@
 """Cloudflare published IP ranges against the `cloudflare_ips` allowlist, for monitor-bridge.
 
 That allowlist is baked into traefik's static config as the forwardedHeaders.trustedIPs of both
-entrypoints, and since #1974 its IPv4 half into netpol-baseline's ipBlock allow on traefik's
-:8443 (the cluster is single-stack IPv4, #6495). A range Cloudflare adds that the list lacks is
+entrypoints, and its IPv4 half into netpol-baseline's ipBlock allow on traefik's
+:8443 (the cluster is single-stack IPv4). A range Cloudflare adds that the list lacks is
 DENIED at the policy and untrusted at the proxy, with no error anywhere: CrowdSec bans land on
 an edge IP, Authelia logs the edge as the client, Home Assistant's X-Forwarded-For trust chain
 reads the edge. This check alerts on the drift; it never applies a fetched list.
 
-It ran as a daily root cron on daniel-box from 2026-08-15 to 2026-09-19 (k8s/traefik's
-cloudflare-ip-drift.sh), pushing its tile directly. Moved here because it needs no host state
-at all — two anonymous fetches against a list the env carries — and the bridge already has the
-shape a slow-moving, cheap probe wants: a SUCCESS is cached for CLOUDFLARE_IPS_PROBE_INTERVAL_S
+It needs no host state at all — two anonymous fetches against a list the env carries — and
+the bridge has the shape a slow-moving, cheap probe wants: a SUCCESS is cached for CLOUDFLARE_IPS_PROBE_INTERVAL_S
 (a day; Cloudflare changes these ranges on a multi-year cadence), and a FAILURE is never cached,
 so a red tile re-probes every 300 s cycle and clears within one cycle of the list being fixed
 rather than at the next day's slot. Same idiom as `checks/r2.py`; the rationale for the pair of
@@ -35,7 +33,7 @@ from bridge.parsing import describe_fetch_failure
 IPS_URLS = ("https://www.cloudflare.com/ips-v4", "https://www.cloudflare.com/ips-v6")
 
 # Below this many published ranges the fetch is treated as bad rather than as a shrunken list:
-# Cloudflare publishes 15 IPv4 and 7 IPv6 ranges as of 2026-09, and a page that answers 200
+# Cloudflare publishes about 15 IPv4 and 7 IPv6 ranges, and a page that answers 200
 # with a stub body must not read as "Cloudflare dropped its ranges".
 MIN_PLAUSIBLE_RANGES = 10
 

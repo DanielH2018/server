@@ -1,8 +1,7 @@
 """Guard: the CoreDNS image the cluster runs is the one k3s bundles at `k3s_version` (H1.4).
 
 WHY. The `coredns.yaml.skip` marker stops k3s applying its bundled CoreDNS addon, image
-included, so the Deployment ran 1.14.4 through two k3s bumps that bundled 1.14.6 and 1.14.7
-(#3257). Flux now applies the `coredns` role, and `coredns_image` in its defaults is the only
+included, so the Deployment would stay on an old image through a k3s bump. Flux applies the `coredns` role, and `coredns_image` in its defaults is the only
 thing that moves the image. Nothing reads the staged `manifests/coredns.yaml` on the host any
 more, so this test ties the pin to the manifest by an excerpt of the manifest's image line,
 labelled with the k3s version it came from.

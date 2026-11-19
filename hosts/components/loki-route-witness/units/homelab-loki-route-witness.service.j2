@@ -1,7 +1,7 @@
 # Started by homelab-loki-route-witness.timer.
 #
-# THE CONTRACT IS THE EXIT CODE (the form the Ansible-era check timers had). The check writes its verdict to loki-read-route-health.prom and then
-# exits 1 after `down`, 0 after `up`. Restart=on-failure reruns it every RestartSec until it exits
+# THE CONTRACT IS THE EXIT CODE. The check writes its verdict to loki-read-route-health.prom and
+# then exits 1 after `down`, 0 after `up`. Restart=on-failure reruns it every RestartSec until it exits
 # 0, so LokiReadRouteFailed clears as soon as the route answers rather than at the next slot.
 [Unit]
 Description=Loki read-route witness
@@ -20,6 +20,6 @@ Restart=on-failure
 RestartSec=15min
 # The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and
 # gates homelab-loki-route-witness-boot.service, which reruns the check once at boot while the
-# last verdict was not up (#4495). `+` runs it as root whatever User= is, and `$$` hands the
+# last verdict was not up. `+` runs it as root whatever User= is, and `$$` hands the
 # variable to the shell rather than to systemd's own substitution.
 ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/loki-route-witness.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/loki-route-witness.down; fi'

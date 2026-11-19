@@ -1,4 +1,4 @@
-"""daniel-box ships the same three `initial_setup` subjects as the Pi (H7.29).
+"""daniel-box ships the same three `initial_setup` subjects as the Pi.
 
 The components are host-neutral and `test_pi_sshd_apt_and_tuning.py` holds their content. These
 tests hold what is specific to this host: the package names the components, its sysctl edits

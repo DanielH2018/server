@@ -22,9 +22,9 @@
 #
 # THE CACHE IS IN THE GIT COMMON DIR, SO EVERY WORKTREE OF A CLONE SHARES IT. The tools live in
 # `$(git rev-parse --git-common-dir)/alert-tools/`, which is `.git/alert-tools/` of the main
-# checkout. A cache inside each checkout made every fresh worktree download about 150 MB on its
-# first alert-plane commit, 6m36s on daniel-box on 2026-10-12, and fail that commit offline
-# (#4705). Each user on a host has its own clone, so one uid owns the cache. Outside a git
+# checkout. A cache inside each checkout would download about 150 MB per fresh worktree on its
+# first alert-plane commit, and fail that commit offline. Each user on a host has its own
+# clone, so one uid owns the cache. Outside a git
 # checkout the script fails rather than fall back to a per-checkout cache.
 #
 # THE LOCK IS ON THE alert-tools/ DIRECTORY, NOT ON A VERSION DIRECTORY. The critical section
@@ -39,7 +39,7 @@
 # ALERT_TOOLS_ARCHIVES KEEPS THE DOWNLOADS. When it names a directory, each verified archive and
 # its sums file are copied to `$ALERT_TOOLS_ARCHIVES/<name>-<version>/`, and a later fetch of
 # that version reads them from there instead of curling. The digest is checked either way. CI
-# points it at a cached directory for Alloy, whose unpacked tree is too large to cache (#7653).
+# points it at a cached directory for Alloy, whose unpacked tree is too large to cache.
 #
 # With no arguments the script provisions the four other tools and exits 0. That is how CI
 # provisions before the hooks run. With `promtool ...`, `amtool ...`, `pint ...`,
@@ -122,7 +122,7 @@ provision() {
   exec 9<"$cache"
   # -w rather than an indefinite block: a wedged commit with no output is worse than a loud
   # failure. The holder fetches one tarball, 112 MB for Prometheus v3.15.0, and that fetch
-  # took about 6 minutes on daniel-box on 2026-10-12, so the bound sits well above it.
+  # can take about 6 minutes, so the bound sits well above it.
   if ! flock -w 1200 9; then
     echo "alert_tools.sh: timed out waiting for the $cache lock" >&2
     return 1
@@ -169,7 +169,7 @@ provision() {
 }
 
 # Renovate's cloudflare/pint manager rewrites this line; keep it a literal.
-pint_version="0.89.4"
+pint_version="0.90.0"
 prometheus_version="$(image_version "$defaults" observability_k8s_prometheus_image)"
 alertmanager_version="$(image_version "$defaults" observability_k8s_alertmanager_image)"
 loki_version="$(image_version "$loki_defaults" loki_homelab_k8s_image)"

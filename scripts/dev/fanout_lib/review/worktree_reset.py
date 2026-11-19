@@ -1,6 +1,6 @@
 """The reset that returns a red batch's worktree to one commit.
 
-`reset_worktree` says what the reset clears and why (#3852, #3871, #3884). Every git call
+`reset_worktree` says what the reset clears and why. Every git call
 here runs through `hardened_runs.worktree_must`, which pins the settings the agent could
 have planted in the worktree's repo.
 """
@@ -46,7 +46,7 @@ def unhide_index(run: Runner, worktree: Path) -> list[str]:
 # `fanout-stop.py` finds the worktree by `brief.md`. `red.json` is the red session's report,
 # which nothing reads back. Everything else there is the pipeline's own and is rewritten
 # before it is next read, or is a file the red author planted, such as a `land1.log` whose
-# `VERDICT:` line `status` would report (#3871). A red batch is this repo's, so there is no
+# `VERDICT:` line `status` would report. A red batch is this repo's, so there is no
 # `.fanout/server` snapshot to keep.
 FANOUT_KEPT = ("brief.md", "report.json", "stderr.log", "red.json")
 
@@ -56,7 +56,7 @@ def neutral_attributes(run: Runner, worktree: Path, sha: str) -> list[str]:
 
     The checkout falls back to the working tree's `.gitattributes`, so an untracked one in a
     subdirectory, or an edit to a tracked one, changes the bytes the reset writes: a
-    `working-tree-encoding` or `eol` line is enough (#3884). Each untracked one is deleted,
+    `working-tree-encoding` or `eol` line is enough. Each untracked one is deleted,
     ignored ones included, and each tracked one is checked out from `sha` first.
 
     Returns:
@@ -79,7 +79,7 @@ def reset_worktree(run: Runner, worktree: Path, sha: str) -> None:
     """Make `worktree` hold exactly `sha`'s tree, plus `FANOUT_KEPT`.
 
     The red author had the worktree before the red gate and the implementer, and neither gate
-    nor the reviewer reads anything outside the commit range (#3852, #3871). A skip-worktree
+    nor the reviewer reads anything outside the commit range. A skip-worktree
     edit to a script a later phase runs, an untracked root `.mcp.json` or `CLAUDE.local.md`,
     and an ignored file the red author created or overwrote would each outlive the red phase.
     So the bits go first, then the tree is reset, then every untracked and ignored file is

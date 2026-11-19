@@ -1,4 +1,4 @@
-"""daniel-box's package carries the deploy UI daemon with its in-flight panel (H7.50).
+"""daniel-box's package carries the deploy UI daemon with its in-flight panel.
 
 The daemon's behaviour has its own tests under `hosts/components/deploy-ui/tests/`. These hold what
 the move added: the unit and its enable link, the port's ufw allows, and the legacy entries that hand
@@ -55,6 +55,7 @@ def test_the_daemon_runs_from_the_package_as_the_operator_on_the_hosts_address(
     assert f"Environment=DEPLOY_UI_BIND={context['server_ip']}\n" in unit
     assert f"Environment=DEPLOY_UI_PORT={DEFAULTS['deploy_ui_port']}\n" in unit
     assert f"{DEFAULTS['deploy_ui_dir']}/deploy_ui.py\n" in unit
+    assert "SyslogIdentifier=deploy-ui\n" in unit, "syslog would tag the daemon `uv`"
     assert f"{DEFAULTS['deploy_ui_dir']}/deploy_ui.py" in package.files
     assert "deploy-ui.service" in manifest["enable_links"]
 
@@ -128,8 +129,10 @@ def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
-    # H7.60's filter restarts rsyslog, which the Pi fixture masks.
+    # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
+    # t2-egress restarts squid, a dependency the Pi fixture never installed.
+    live_unit(node, "squid.service")
     declared = [r for r in manifest["ufw"]["rules"] if r.get("keep")]
     others = [r for r in manifest["ufw"]["rules"] if not r.get("keep")]
     port_rules = _port_rules(manifest)

@@ -10,10 +10,9 @@
 # RkhunterScanNotReporting read it. Running it by hand is safe; a scan takes two to three minutes,
 # and it rewrites the textfile.
 #
-# WHY A SCRIPT (#4598). The cron used to pipe `rkhunter --check` straight into
-# `logger -t rkhunter`. The pipeline's exit status was logger's, and nothing read the tag, so a
-# scan that failed outright read the same as one that passed. AIDE had the same fault and checked
-# nothing for weeks (#4591, fixed by #4594).
+# WHY A SCRIPT. A cron that pipes `rkhunter --check` into `logger -t rkhunter` reports logger's
+# exit status, and nothing reads the tag, so a scan that failed outright reads the same as one
+# that passed.
 #
 # THE EXIT CODE CANNOT TELL A WARNING FROM AN ERROR. rkhunter 1.4.6 exits 1 when the scan found a
 # warning and also on every error path (a bad option, an unreadable config, a missing command).
@@ -36,8 +35,7 @@ source {{ integrity_scans_host_lib_dir }}/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: the timer runs weekly (Wednesday
 # 02:00, hosts/components/integrity-scans/units/homelab-rkhunter-check.timer), 604800s, and the
-# extra 2h is the slack for a run that takes far longer than the last. The deleted Uptime Kuma
-# tile kept the same 612000. Move it with the timer (#6168).
+# extra 2h is the slack for a run that takes far longer than the last. Move it with the timer.
 # hosts/tests/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=612000
 
@@ -46,7 +44,7 @@ DEADLINE_S=612000
 RKHUNTER_LOG=/var/log/rkhunter.log
 
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
-# is how the old cron lost it. --report-warnings-only keeps the journal to the warnings and any
+# would lose rkhunter's. --report-warnings-only keeps the journal to the warnings and any
 # error rkhunter prints; the full report stays in the log file.
 printf -v START_EPOCH '%(%s)T' -1
 START=$SECONDS
@@ -67,17 +65,15 @@ summary_count() {
 }
 
 # DECIDED: any warning, any suspect file and any possible rootkit pushes DOWN (#4638). Measured on
-# 2026-10-12 over daniel-server's journal (18 weekly runs) and the rotated logs on all three hosts,
-# the warnings fell into three classes. Two hidden files under /etc appeared on every host in every
-# run, and daniel-pi reported PermitRootLogin unset in every run. Both classes are allowlisted in
-# /etc/rkhunter.conf.local (rkhunter.conf.local.j2), which leaves a healthy week with no warnings
-# at all. The third class is a passwd or group change: daniel-server had one in 5 of its 18 weeks,
-# and daniel-box and daniel-pi one week each, every one a package or the operator adding an
-# account. It pages, because a new account is what this scan exists to catch. rkhunter stores its
-# copy of passwd and group on every run, so running this script again by hand acknowledges the
-# change and clears the alert. Suspect files read 0 in every log kept, because a refresh after every
-# dpkg run rebaselines package upgrades (homelab-rkhunter-propupd.service since #7680), so a
-# suspect file is a binary that changed outside apt.
+# all three hosts' journals and rotated logs, the warnings fell into three classes. Two hidden
+# files under /etc appeared on every host in every run, and daniel-pi reported PermitRootLogin
+# unset; both are allowlisted in /etc/rkhunter.conf.local (rkhunter.conf.local.j2), which leaves
+# a healthy week with no warnings at all. The third class is a passwd or group change, every one
+# a package or the operator adding an account. It pages, because a new account is what this scan
+# exists to catch. rkhunter stores its copy of passwd and group on every run, so running this
+# script again by hand acknowledges the change and clears the alert. Suspect files read 0
+# because a refresh after every dpkg run (homelab-rkhunter-propupd.service) rebaselines package
+# upgrades, so a suspect file is a binary that changed outside apt.
 if [[ -z "$SUMMARY" ]]; then
   STATUS=down
   # The first line that names an error, else the first line of output at all.

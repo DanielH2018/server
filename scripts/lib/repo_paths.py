@@ -57,7 +57,7 @@ K8S = REPO / "k8s"
 K8S_ROLES = K8S / "roles"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
-# pod; the runbook gates import it from here (#3668).
+# pod; the runbook gates import it from here.
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
 # `host_lib.py` and `ci_verdict.py`, the modules the host packages ship beside a host script (H7.2e
 # moved them out of `setup/common/files/`). A tool under `scripts/` that imports `host_lib` or

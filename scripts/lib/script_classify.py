@@ -295,7 +295,7 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
 
     roles = repo / "k8s" / "roles"
     # `files/*/*` reaches a package a role ships from a subdirectory, such as the retired
-    # gitops_deploy role's `files/deployer_lib/` (#4355).
+    # gitops_deploy role's `files/deployer_lib/`.
     patterns = (
         "**/templates/*",
         "**/files/*",
@@ -363,7 +363,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     verdicts: dict[str, tuple[str, str]] = {}
     # Each script is read once per question for this call. Three checks below ask its
     # `_main_shape`, and a dispatch target is asked what it invokes twice; the repeats were
-    # a sixth of this function's time (#5564).
+    # a sixth of this function's time.
     shape = functools.cache(lambda path: _main_shape(file_text(path)))
 
     def record(script: str, kind: str, evidence: str) -> bool:
@@ -401,7 +401,7 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
             runs_in_process.setdefault(caller, set()).add(f"{stem}.py")
 
     # A dispatcher's target has a module-level `main` and no guard. It stays a library itself,
-    # since no person runs it, but what it runs is credited to its importer (#4347).
+    # since no person runs it, but what it runs is credited to its importer.
     for stem, stem_callers in imported.items():
         path = by_path.get(f"{stem}.py")
         # A dispatch target: a module-level `main` and no `__main__` guard.

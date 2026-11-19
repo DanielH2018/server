@@ -31,8 +31,8 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import closing
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -42,6 +42,12 @@ CONF = Path("/etc/gh-quota.conf")
 BUCKETS = ("graphql", "core")
 SAMPLE_EVERY_S = 30
 KEEP_S = 8 * 24 * 3600
+# GitHub's reported reset for one core window moves by up to 45 s between samples, and its
+# two graphql counters for one token reset about 21 minutes apart.
+RESET_DRIFT_S = 120
+# How long a ledger write waits for another writer before the call goes unrecorded. Every
+# counted `gh` call can wait this long, so it stays a few seconds.
+LOCK_WAIT_S = 5.0
 # `status` lists a session at or above this share of a bucket's limit.
 ATTENTION_SHARE = 0.2
 _FAILURE_LOG_MAX = 64 * 1024
@@ -186,6 +192,37 @@ class Window:
         )
 
 
+@dataclass
+class _Sample:
+    """One claimed `GET /rate_limit`, read before any ledger lock is taken.
+
+    Attributes:
+        taken: the clock when the sample was claimed.
+        counts: (bucket, used, limit, reset) for each bucket GitHub counted, empty when the
+            sample failed.
+        caller: the sampler's session key, `gh` path and variable names.
+        process: the sampler's cgroup line and process ancestry.
+    """
+
+    taken: float
+    counts: list[tuple[str, int, int, int]] = field(default_factory=list)
+    caller: tuple[str, str, str] = ("", "", "")
+    process: tuple[str, str] = ("", "")
+
+
+@contextmanager
+def _write(db: sqlite3.Connection) -> Generator[None, None, None]:
+    # IMMEDIATE takes the write lock at BEGIN, where the busy timeout applies. A deferred
+    # transaction that reads first can fail its upgrade to a write without waiting at all.
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        yield
+    except BaseException:
+        db.execute("ROLLBACK")
+        raise
+    db.execute("COMMIT")
+
+
 @dataclass(frozen=True)
 class Ledger:
     """The ledger files under one directory, read and written as one caller.
@@ -239,35 +276,40 @@ class Ledger:
         bucket, argv_class = call
         try:
             with closing(self._open()) as db:
-                self._sample_if_due(db)
-                db.execute(
-                    "INSERT INTO spend VALUES (?, ?, ?, ?, 1) "
-                    "ON CONFLICT (window, session, bucket, argv_class) DO UPDATE SET n = n + 1",
-                    (
-                        self._window(db, bucket),
-                        session_key(self.env),
-                        bucket,
-                        argv_class,
-                    ),
-                )
+                sample = self._take_sample(db)
+                with _write(db):
+                    self._store_sample(db, sample)
+                    db.execute(
+                        "INSERT INTO spend VALUES (?, ?, ?, ?, 1) "
+                        "ON CONFLICT (window, session, bucket, argv_class) "
+                        "DO UPDATE SET n = n + 1",
+                        (
+                            self._window(db, bucket),
+                            session_key(self.env),
+                            bucket,
+                            argv_class,
+                        ),
+                    )
         except (sqlite3.Error, OSError) as exc:
             self._failed(exc)
 
     def windows(self) -> list[Window]:
         """Every identity's open window per bucket, after a fresh sample of the caller's own."""
         with closing(self._open()) as db:
-            self._sample_if_due(db)
+            sample = self._take_sample(db)
+            with _write(db):
+                self._store_sample(db, sample)
         now = self.now()
         found: dict[tuple[str, str], Window] = {}
         for path in sorted(self.root.glob("*@*.sqlite")):
             identity = path.name.split("@", 1)[0]
             with closing(
-                sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1.0)
+                sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=LOCK_WAIT_S)
             ) as db:
                 for bucket in BUCKETS:
                     truth = db.execute(
                         "SELECT window, used, quota FROM truth WHERE bucket = ? AND window > ? "
-                        "ORDER BY window DESC LIMIT 1",
+                        "ORDER BY sampled DESC LIMIT 1",
                         (bucket, now),
                     ).fetchone()
                     if truth is None:
@@ -365,7 +407,7 @@ class Ledger:
         if not path.exists():
             path.touch()
             path.chmod(0o644)
-        db = sqlite3.connect(path, timeout=1.0, isolation_level=None)
+        db = sqlite3.connect(path, timeout=LOCK_WAIT_S, isolation_level=None)
         try:
             db.executescript(_SCHEMA)
         except sqlite3.Error:
@@ -374,15 +416,28 @@ class Ledger:
         return db
 
     def _window(self, db: sqlite3.Connection, bucket: str) -> int:
-        # GitHub's own reset time names the window. Until a sample has one, the hour's end does.
+        # The freshest sample's window, because GitHub can answer one token from two counters.
+        # Until a sample has named a reset, the hour's end does.
         now = self.now()
-        (reset,) = db.execute(
-            "SELECT MAX(window) FROM truth WHERE bucket = ? AND window > ?",
+        row = db.execute(
+            "SELECT window FROM truth WHERE bucket = ? AND window > ? "
+            "ORDER BY sampled DESC LIMIT 1",
             (bucket, now),
         ).fetchone()
-        return reset or (int(now) // 3600 + 1) * 3600
+        return row[0] if row else (int(now) // 3600 + 1) * 3600
 
-    def _sample_if_due(self, db: sqlite3.Connection) -> None:
+    def _named_window(self, db: sqlite3.Connection, bucket: str, reset: int) -> int:
+        # A reset within RESET_DRIFT_S of a stored one is that window, reported late or early.
+        row = db.execute(
+            "SELECT window FROM truth WHERE bucket = ? AND ABS(window - ?) <= ? "
+            "ORDER BY ABS(window - ?) LIMIT 1",
+            (bucket, reset, RESET_DRIFT_S, reset),
+        ).fetchone()
+        return row[0] if row else reset
+
+    def _take_sample(self, db: sqlite3.Connection) -> _Sample | None:
+        # Claims the next sample in one short write, then asks GitHub while holding no lock:
+        # the subprocess can take its full 10 s, and every other writer would wait on it.
         now = self.now()
         claimed = db.execute(
             "INSERT INTO meta VALUES ('next_sample', ?) "
@@ -390,7 +445,8 @@ class Ledger:
             (now + SAMPLE_EVERY_S, now),
         ).rowcount
         if not claimed:
-            return
+            return None
+        sample = _Sample(now)
         try:
             out = self.run(
                 [self.gh, "api", "rate_limit"],
@@ -401,26 +457,16 @@ class Ledger:
                 env=self._gh_env(),
             ).stdout
             resources = json.loads(out)["resources"]
-            process = self._process()
-            for bucket in BUCKETS:
-                seen = resources[bucket]
-                # An unused bucket reports a reset an hour ahead of every sample, so it has no
-                # window to name yet.
-                if seen["used"]:
-                    db.execute(
-                        "INSERT INTO truth VALUES (?, ?, ?, ?, ?) "
-                        "ON CONFLICT (window, bucket) DO UPDATE SET "
-                        "used = excluded.used, quota = excluded.quota, sampled = excluded.sampled",
-                        (seen["reset"], bucket, seen["used"], seen["limit"], now),
-                    )
-                    db.execute(
-                        "INSERT OR REPLACE INTO sampler VALUES (?, ?, ?, ?, ?)",
-                        (seen["reset"], bucket, *self._caller()),
-                    )
-                    db.execute(
-                        "INSERT OR REPLACE INTO sampler_process VALUES (?, ?, ?, ?)",
-                        (seen["reset"], bucket, *process),
-                    )
+            seen = [(bucket, resources[bucket]) for bucket in BUCKETS]
+            # An unused bucket reports a reset an hour ahead of every sample, so it has no
+            # window to name yet.
+            sample.counts = [
+                (bucket, int(s["used"]), int(s["limit"]), int(s["reset"]))
+                for bucket, s in seen
+                if s["used"]
+            ]
+            sample.caller = self._caller()
+            sample.process = self._process()
         except (
             OSError,
             subprocess.SubprocessError,
@@ -429,10 +475,30 @@ class Ledger:
             TypeError,
         ) as exc:
             self._failed(exc)
-        db.execute("DELETE FROM spend WHERE window < ?", (now - KEEP_S,))
-        db.execute("DELETE FROM truth WHERE window < ?", (now - KEEP_S,))
-        db.execute("DELETE FROM sampler WHERE window < ?", (now - KEEP_S,))
-        db.execute("DELETE FROM sampler_process WHERE window < ?", (now - KEEP_S,))
+        return sample
+
+    def _store_sample(self, db: sqlite3.Connection, sample: _Sample | None) -> None:
+        if sample is None:
+            return
+        for bucket, used, limit, reset in sample.counts:
+            window = self._named_window(db, bucket, reset)
+            db.execute(
+                "INSERT INTO truth VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (window, bucket) DO UPDATE SET "
+                "used = excluded.used, quota = excluded.quota, sampled = excluded.sampled",
+                (window, bucket, used, limit, sample.taken),
+            )
+            db.execute(
+                "INSERT OR REPLACE INTO sampler VALUES (?, ?, ?, ?, ?)",
+                (window, bucket, *sample.caller),
+            )
+            db.execute(
+                "INSERT OR REPLACE INTO sampler_process VALUES (?, ?, ?, ?)",
+                (window, bucket, *sample.process),
+            )
+        oldest = sample.taken - KEEP_S
+        for table in ("spend", "truth", "sampler", "sampler_process"):
+            db.execute(f"DELETE FROM {table} WHERE window < ?", (oldest,))
 
     def _failed(self, exc: Exception) -> None:
         log = self.root / f"failures.{os.getuid()}"

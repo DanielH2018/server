@@ -147,7 +147,7 @@ def test_a_claim_from_a_roles_own_template_is_flagged():
 
 
 def test_every_claim_renders_from_k8s_claims():
-    """`k8s_claims` is the one path that creates a claim (#3387); a role template is not.
+    """`k8s_claims` is the one path that creates a claim; a role template is not.
 
     A claim outside it misses the snapshot-ordering apply and the Longhorn tier census
     that read `k8s_claims`.

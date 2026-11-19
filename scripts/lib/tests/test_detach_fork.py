@@ -24,7 +24,7 @@ _FANOUT = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/fanout-315
     "ignore:This process .* is multi-threaded:DeprecationWarning"
 )
 def test_the_detached_run_is_not_a_child_of_its_caller(tmp_path):
-    """Issue #3159: a single fork leaves the run a child, so a kill of the caller's tree reaches it."""
+    """A single fork leaves the run a child, so a kill of the caller's tree reaches it."""
     marker = tmp_path / "ran"
 
     def body():
@@ -79,7 +79,7 @@ def test_outside_a_user_service_nothing_is_asked_of_systemd():
         run=lambda argv: calls.append(argv) or _completed(0),
     )
     assert calls == []
-    # Issue #6864: a run trapped in a system unit says so in its log rather than nothing.
+    # A run trapped in a system unit says so in its log rather than nothing.
     assert line is not None
     assert "inside system unit gitops-deploy.service" in line
 

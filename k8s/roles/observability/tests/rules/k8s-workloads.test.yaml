@@ -9,8 +9,8 @@
 # an alert does when a mapping rule yields nothing.
 #
 # The kube-state-metrics series carry the labels v2.20 gives them (job, instance, uid), so a
-# join that ignores one of them fails here as it would live. No alert carries `shadow`: M2's
-# PR 4b dropped it, so every case asserts the labels of a live rule.
+# join that ignores one of them fails here as it would live. No alert carries `shadow`, so
+# every case asserts the labels of a live rule.
 rule_files:
   - ../../files/rules/k8s-workloads.yaml
 evaluation_interval: 1m
@@ -84,9 +84,8 @@ tests:
               summary: The rollout of homelab/sonarr has stalled.
               description: sonarr has had fewer updated replicas than it wants for 15 minutes.
 
-  # A 2-minute good dip inside a long outage, the shape home-assistant showed on 2026-10-17
-  # (11 bad minutes, 2 good, 10 bad; the dip is spec_replicas == 0, which falsifies the
-  # expression). The bridge's 300s cycle never saw the dip, so the alert must stay firing
+  # A 2-minute good dip inside a long outage (11 bad minutes, 2 good, 10 bad; the dip is
+  # spec_replicas == 0, which falsifies the expression). The bridge's 300s cycle never saw the dip, so the alert must stay firing
   # across it, which `keep_firing_for: 5m` does and a bare `for: 10m` does not.
   - interval: 1m
     input_series:

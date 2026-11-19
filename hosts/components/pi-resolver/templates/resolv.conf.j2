@@ -15,9 +15,7 @@
 # server", and it warns that "listed DNS servers per lookup scope must be equivalent in the
 # zones they serve". Pi-hole and Cloudflare are NOT equivalent — one blocks and answers the
 # local zone, the other does neither — so a resolved DNS= list yields a coin flip rather than
-# a preference. Measured on daniel-pi 2026-09-01, 45 minutes after exactly that config was
-# applied by PR #693: `Current DNS Server` read 1.1.1.1 at 15:12 and 10.0.0.243 at 15:14,
-# unprompted. PR #697 replaced it with this file.
+# a preference: `Current DNS Server` flips between them unprompted.
 #
 # glibc has no such state. resolv.conf(5): "the resolver library queries them in the order
 # listed", and the `rotate` option — which this file deliberately does NOT set — is documented
@@ -35,8 +33,8 @@
 # gives up its DNS cache — nothing else on these hosts caches, so every lookup goes over the
 # wire. That is the trade against running a health-checking forwarder here.
 #
-# daniel-server has run exactly this file since 2026-08-10 and is the in-fleet evidence that
-# the end state is stable, on a k3s node and with Docker containers forwarding to it.
+# daniel-server runs exactly this file, which is the in-fleet evidence that the end state is
+# stable, on a k3s node and with Docker containers forwarding to it.
 {% for server in common_resolver_nameservers %}
 nameserver {{ server }}
 {% endfor %}

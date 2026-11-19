@@ -18,7 +18,7 @@ from lib.repo_paths import PRIMARY_CHECKOUT
 
 MERGE_POLL_S = 30
 # The master CI wait: ci.yml's longest `timeout-minutes` chain into the `prek` gate, 82 min
-# through host_packages, plus 10 min of runner queueing (#6857). A shorter budget times out
+# through host_packages, plus 10 min of runner queueing. A shorter budget times out
 # while CI can still go green. test_land_ci_budget.py holds it to the workflow.
 CI_TIMEOUT_S = 5520
 
@@ -37,10 +37,10 @@ REQUIRE_APPROVAL_ENV = "LAND_REQUIRE_APPROVAL"
 HANDOFF_ENV = "LAND_HANDOFF_UNIT"
 # Seconds after land.sh starts by which the landing must print its verdict. A lander whose
 # caller kills it at a fixed time sets it, so a long promotion wait ends `deferred` rather than
-# in a kill that writes no verdict (#5199).
+# in a kill that writes no verdict.
 DEADLINE_ENV = "LAND_DEADLINE"
 # Seconds the weekly reboot's no-promotion window may add to LAND_DEADLINE's promotion wait,
-# so a landing that merges into the window waits out the deferral (#5457). A lander sets it
+# so a landing that merges into the window waits out the deferral. A lander sets it
 # only when its caller's kill leaves that much room past LAND_DEADLINE.
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 # A landing that takes the turn with a draft tests the drafts in the line with its own

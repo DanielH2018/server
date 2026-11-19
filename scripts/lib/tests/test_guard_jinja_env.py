@@ -207,7 +207,7 @@ def test_the_light_tier_loads_no_ansible_core():
     ],
 )
 def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tuple):
-    """The guard env registers the wrapped filters, so its refusal reads as a deploy's (#4505)."""
+    """The guard env registers the wrapped filters, so its refusal reads as a deploy's."""
     env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
     with pytest.raises(aje.FilterError) as caught:
         env.filters[name](*args)

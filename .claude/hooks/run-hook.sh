@@ -1,12 +1,11 @@
 #!/bin/bash
 # gen-hooks: library
-#   reason: the one shell entry point for every hook here; a `.py` register block renders as `run-hook.sh <stem> <args>` (#3278)
+#   reason: the one shell entry point for every hook here; a `.py` register block renders as `run-hook.sh <stem> <args>`
 #
 # Usage: run-hook.sh <name> [--project] [--ask-on-cd[=<guards>]]
 #
 # Runs `.claude/hooks/<name>.py` beside this script, under the one interpreter pin these hosts
-# have. Six per-hook shims in three variants were 134 lines of near-duplicate bash, and the
-# interpreter pin was written out three times (#3278). The variants are now flags:
+# have. The flags select one of three postures:
 #
 #   run-hook.sh session-health
 #       uv run --no-project, stderr quieted, always exit 0. The posture for an observability
@@ -28,29 +27,18 @@
 # resolve some other project.
 #
 # DECIDED: the `cd` arm and a missing `.py` both ask under `--ask-on-cd`; every other failure
-# stays fail-open. Issue #1014 made all three failure paths fail-open so that a broken guard
-# does not brick every tool call, and gave the `cd` arm the stderr line the other two already
-# had. An `ask` is a prompt, not a brick: the operator reads why a DENY guard could not run and
-# decides once, where a bare `exit 0` disarmed it in silence (#2171). #2394 made one shim carry
-# a posture that used to be split: three of the five PreToolUse:Bash arms asked on a failed
-# `cd` and two stayed silent, and a single process can only do one thing, so it asks and the
-# reason names every guard that did not run. The two silent arms cost a missed approval
-# and a missed doc injection, which is a prompt and a re-read, not a bypass.
+# stays fail-open, so a broken guard never bricks every tool call. An `ask` is a prompt, not a
+# brick, while a bare `exit 0` from a DENY guard disarms it in silence. One process serves
+# several PreToolUse:Bash guards, so it asks and the reason names every guard that did not run.
+# The script is tested for before the `exec`, because no `ask` can follow a failed `exec`.
 #
-# What #3278 changed: a missing `.py` sibling now asks too, where it used to exit non-zero
-# through a failed `exec`. The old note said no `ask` could follow a failed `exec` — true, and
-# the fix is to not exec. The file is tested for first, so the decision is still available.
+# `$HOOKS_DIR` is the session checkout's hooks directory, the one its `settings.json` was
+# rendered from. The `cd` names the primary checkout instead: it supplies the `.venv`, which a
+# fresh worktree has not built. When that venv cannot run, the session checkout's venv stands
+# in; with neither, the guards ask. A missing `uv` exits non-zero with its own stderr line.
 #
-# Each session registers this file from its own checkout, as `$CLAUDE_PROJECT_DIR/.claude/
-# hooks/run-hook.sh` (#3394), so `$HOOKS_DIR` is that checkout's hooks directory and the `.py`
-# beside it is the one the session's `settings.json` was rendered from. The `cd` below still
-# names the primary checkout: it supplies the `.venv` `uv run` uses, which a fresh worktree has
-# not built yet. When that venv's interpreter cannot run, the session checkout's venv is used
-# instead, and with neither the guards ask (#6969).
-# `uv` itself missing still exits non-zero with its own stderr line.
-#
-# This file cannot report its own absence. When the session's `$CLAUDE_PROJECT_DIR` is deleted,
-# the `--ask-on-cd` registrations deny through `gen_hook_settings.py`'s `GUARD_SUFFIX` (#3887).
+# This file cannot report its own absence: when `$CLAUDE_PROJECT_DIR` is deleted, the
+# `--ask-on-cd` registrations deny through `gen_hook_settings.py`'s `GUARD_SUFFIX`.
 
 set -u
 
@@ -97,14 +85,9 @@ if [[ -z "$name" ]]; then
     exit 0
 fi
 
-# Both arguments reach the `ask` reason, which is a JSON string, so each is constrained to what
-# a hook name can hold rather than escaped. A reason is prose for an operator; it is not worth
-# a JSON escaper, and unparsable output from a DENY guard reads to the harness as no decision —
-# a silent allow, which is what #2171's `ask` exists to prevent.
-#
-# The name bails rather than falling back, because there is nothing to fall back TO: a name
-# carrying a quote or a slash is no `.py` basename this directory could hold, so running on is
-# a guess about which hook the operator meant.
+# Both arguments reach the `ask` reason, a JSON string, so each is constrained rather than
+# escaped: unparsable output from a DENY guard reads to the harness as a silent allow.
+# The name bails rather than falling back, since a quote or slash names no `.py` here.
 if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     echo "run-hook.sh: '$name' is not a hook name — nothing ran" >&2
     exit 0
@@ -126,13 +109,10 @@ did_not_run() {
     printf '%s\n' "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"run-hook.sh $name: $what ($why), so this call was checked by none of: $ask_guards. Review it yourself.\"}}"
 }
 
-# The checkout whose `.venv` `uv run --no-sync` uses, and the uv that runs it. Both default to
-# the running user's own: `$HOME/server` and `$HOME/.local/bin/uv`, which are the operator's
-# checkout and uv for `ubuntu`. The unattended Renovate agent runs as its own user, which
-# cannot read the operator's home, so its unit points both at its own run worktree and its own
-# uv. An override outside the path charset is ignored rather than trusted, because the
-# directory reaches the `ask` reason, which is a JSON string. A `$HOME` outside it is dropped
-# for the same reason, which leaves `/server`: the `cd` fails and the guard asks.
+# The checkout whose `.venv` `uv run --no-sync` uses, and the uv that runs it, default to the
+# running user's own. The Renovate agent's user cannot read the operator's home, so its unit
+# overrides both. A value outside the path charset is dropped, since it reaches the JSON `ask`
+# reason; a dropped `$HOME` leaves `/server`, so the `cd` fails and the guard asks.
 home=${HOME:-}
 [[ "$home" =~ ^/[A-Za-z0-9_./-]+$ ]] || home=
 project_dir=${RUN_HOOK_PROJECT_DIR:-$home/server}
@@ -154,8 +134,7 @@ fi
 
 # `fanout-stop` acts only at or above a `.fanout/brief.md` (`fanout_root` in fanout-stop.py),
 # and every session's Stop runs it, so the same walk runs here first and an ordinary session's
-# Stop starts no interpreter (#6154). A payload whose `cwd` this cannot read falls through to
-# the hook, which decides as before. The here-string hands the payload on as the hook's stdin.
+# Stop starts no interpreter. A payload whose `cwd` this cannot read falls through to the hook.
 if [[ "$name" == fanout-stop ]]; then
     payload=$(cat)
     cwd_re='"cwd"[[:space:]]*:[[:space:]]*"([^"\]*)"'
@@ -171,12 +150,10 @@ if [[ "$name" == fanout-stop ]]; then
 fi
 
 # `--no-sync` keeps a venv whose interpreter mismatches the pin, but uv deletes and recreates one
-# whose `bin/python` cannot run, `--no-sync` or not. A sandboxed session cannot write the
-# primary checkout, so that rebuild fails with EACCES and every guard call errors (#6969). A
-# project with no `.venv` at all is the same write, since uv creates one. In both cases the
-# session checkout's venv stands in; its `bin/python` runs, so uv uses it as it is. With neither,
-# the guards ask: the project-free interpreter lacks PyYAML, which block-protected-bash's
-# secret-path arm needs. A cd target that is no project gets no venv from uv, so it runs as is.
+# whose `bin/python` cannot run, and so creates a missing one. A sandboxed session cannot write
+# the primary checkout, so that rebuild fails with EACCES; the session's own venv stands in.
+# With neither, the guards ask: the project-free interpreter lacks PyYAML, which
+# block-protected-bash's secret-path arm needs. A cd target with no project runs as is.
 if [[ -n "$project" ]]; then
     if [[ -x .venv/bin/python || ! -f pyproject.toml ]]; then
         exec "$uv" run --no-sync --quiet python "$script"

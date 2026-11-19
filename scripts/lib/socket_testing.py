@@ -4,7 +4,7 @@ WHY A SHARED MODULE. Linux's `sun_path` holds 107 bytes plus the terminator, and
 under pytest's `tmp_path` reaches 108 on daniel-box. `TMPDIR` there is `/tmp/user/1000`, and
 xdist workers gw10 to gw15 add a second digit to `popen-gwN`. The bind then fails with
 `AF_UNIX path too long`, but only on the runs where `--dist loadscope` hands the module to
-one of those workers (#4763). `short_socket_path` roots the socket in `/tmp` itself, so its
+one of those workers. `short_socket_path` roots the socket in `/tmp` itself, so its
 length no longer depends on the temp root, the worker number or the test's name.
 
 A bind that raises inside a bare `socket.socket()` leaves the socket for the garbage

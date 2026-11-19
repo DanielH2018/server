@@ -10,9 +10,7 @@
 groups:
   - name: ingress-probes
     rules:
-      # The ingress pager since M4's PR 5, which dropped `shadow` once PR 4 deleted the
-      # generated ingress tiles. `for: 2m` at the job's 60s interval keeps the tiles'
-      # three-strikes timing (interval 60, maxretries 2).
+      # The ingress pager. `for: 2m` at the job's 60s interval is three strikes.
       - alert: IngressProbeFailedCritical
         expr: probe_success{job="blackbox-ingress", page_tier="critical"} == 0
         for: 2m
@@ -21,10 +19,11 @@ groups:
         annotations:
           summary: The ingress probe of {{ $labels.service }} is failing.
           description: >-
-            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
-            2 minutes. {{ $labels.service }} is home-critical. A probe behind SSO expects Authelia's
-            302 and never reaches the backend, so a failure there is in Traefik or Authelia. Read
-            probe_http_status_code for this instance, then the Traefik and Authelia logs.
+            Read probe_http_status_code for {{ $labels.instance }}, then the workload's log.
+            blackbox_exporter's {{ $labels.module }} probe has failed for 2 minutes. A probe behind
+            SSO expects Authelia's 302 and never reaches the backend, so read Traefik and Authelia
+            first there.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ingressprobefailedcritical
       # The same, for every service outside home-critical.
       - alert: IngressProbeFailed
         expr: probe_success{job="blackbox-ingress", page_tier="warning"} == 0
@@ -40,7 +39,7 @@ groups:
             then the Traefik and Authelia logs.
       # This family's zero-series alert. A job dropped from prometheus.yml leaves both rules
       # above evaluating to nothing. ScrapeTargetDown fires on a member at 0, and a removed job
-      # leaves no member, so only this rule watches it and it never carried a shadow label.
+      # leaves no member, so only this rule watches it.
       - alert: IngressProbesMissing
         expr: absent(up{job="blackbox-ingress"})
         for: 10m
@@ -53,12 +52,10 @@ groups:
             No up{job="blackbox-ingress"} series exists, so the blackbox-ingress job is gone
             from prometheus.yml or renders no target. No ingress probe can fire until the
             series is back.
-      # The exporter pager since M6's batch A3 Cutover-b. Every target at 0 at once means the
-      # exporter itself is down or unreachable, not one ingress. The job's up series carry no
-      # `origin` label, so the Cluster Scrape Targets tile paged this until Cutover-a1 deleted
-      # it. A single target at 0 is a failed scrape, which ScrapeTargetDown pages alone, and an
-      # Alertmanager inhibit holds that page back while this one fires. Restores the 5-minute
-      # critical page for a dead exporter that M4's PR 5 deferred to A3.
+      # The exporter pager. Every target at 0 at once means the exporter itself is down or
+      # unreachable, not one ingress. The job's up series carry no `origin` label. A single
+      # target at 0 is a failed scrape, which ScrapeTargetDown pages alone, and an Alertmanager
+      # inhibit holds that page back while this one fires.
       - alert: BlackboxExporterDown
         expr: max(up{job="blackbox-ingress"}) == 0
         for: 5m
@@ -72,3 +69,4 @@ groups:
             is down or unreachable from Prometheus and no ingress probe runs. The per-service
             ingress alerts go quiet while it lasts. Read the blackbox-exporter pod's events and
             log in the homelab namespace.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#blackboxexporterdown

@@ -1,4 +1,4 @@
-"""Guards on the AIDE check's explanations that read what a package run did (#7919).
+"""Guards on the AIDE check's explanations that read what a package run did.
 
 The classifier credits a package's own activity in the window: an install or upgrade explains
 an owner, group or mode change on a path it owns, a dpkg event explains a distro link it left
@@ -9,13 +9,17 @@ the fake dpkg database `_aide_check_run._fake_host` writes.
 Run: uv run pytest hosts/tests/test_aide_check_package_activity.py
 """
 
+import json
+
 import pytest
+from renderer.renderer_lib import host as host_mode
 from _aide_check_run import (
     CHANGED_CONTENT,
     CHANGED_MODE,
     LINK_ADDED,
     LINK_CHANGED,
     LINK_CHANGED_MODE,
+    RENAMED_SECRET_LINK,
     SECRET_LINK,
     SECRET_TARGET,
     SECRETS_MANIFEST,
@@ -41,6 +45,10 @@ EXPLAINED = {
     ),
     "the host package's /usr/lib link into its secrets tmpfs": (
         f"{LINK_CHANGED}: {SYSTEM_SECRET_LINK}",
+        {},
+    ),
+    "the host package's link to an output its manifest renames": (
+        f"{LINK_CHANGED}: {RENAMED_SECRET_LINK}",
         {},
     ),
     "a secret file the host package's upgrade turned into a link": (
@@ -120,6 +128,11 @@ FLAGGED = {
         {"relink": {SYSTEM_SECRET_LINK: SECRET_TARGET}},
         NOT_THE_LINK,
     ),
+    "the host package's renamed-output link pointed at its own path in the secrets tmpfs": (
+        f"{LINK_CHANGED}: {RENAMED_SECRET_LINK}",
+        {"relink": {RENAMED_SECRET_LINK: "/run/homelab-secrets" + RENAMED_SECRET_LINK}},
+        NOT_THE_LINK,
+    ),
     "the host package's link while its secrets manifest is unreadable": (
         f"{LINK_CHANGED}: {SYSTEM_SECRET_LINK}",
         {"rewrite": {SECRETS_MANIFEST: "not json"}},
@@ -155,3 +168,21 @@ def test_a_change_no_package_run_explains_is_flagged(tmp_path, entry, setup, rea
     assert pushed[0] == "down", pushed
     assert f"{path} ({reason})" in pushed[1], pushed[1]
     assert code == 1
+
+
+def test_every_secret_link_the_package_installs_is_one_its_manifest_names():
+    """The check accepts a link into the secrets tmpfs only for the pair its manifest row names."""
+    package = host_mode.render_host("daniel-server")
+    rows = json.loads(package.files[SECRETS_MANIFEST][0])["outputs"]
+    named = {
+        r["link"]: f"/run/homelab-secrets/{r['destination']}"
+        for r in rows
+        if not r["persist"] and "link" in r
+    }
+    installed = {
+        path: target
+        for path, target in package.links.items()
+        if target.startswith("/run/homelab-secrets/")
+    }
+    assert "/etc/homelab/etcd-drill-s3.env" in installed
+    assert installed == named

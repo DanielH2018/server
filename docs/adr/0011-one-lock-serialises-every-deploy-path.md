@@ -22,8 +22,9 @@ Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansibl
 2026-11-12. The decision stands: `scripts/lib/tree_lock.py` still names the tree lock. The
 holders that *Context* and *Decision* name, the GitOps timer and `./scripts/deploy.sh`, are
 gone: H7.52 retired the timer, and H7.53 deleted `deploy.sh` and the deployer. The holders
-are `homelab-checkout-sync` and the two crons that write the tree, docs-refresh and
-eval-run. The deploy-ui panel reads the lock and holds none.
+are `homelab-checkout-sync` and the eval-run cron. The deploy-ui panel reads the lock and
+holds none. Since 2026-11-19 docs-refresh works in its own worktree, writes the primary
+checkout not at all, and takes no lock.
 
 ADR-0029 also supersedes ADR-0017, so the ADR-0017 note above is history: nothing holds the
 tree lock for a snapshot, and nothing takes a per-service lock. Slices H7.53 to H7.57 make

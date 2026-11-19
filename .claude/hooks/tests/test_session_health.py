@@ -77,8 +77,7 @@ def _run_main(
 
     Every probe is a fake, because each real one reads live state that would make a main()
     assertion depend on the host: this checkout's distance from origin/master, the PRIMARY
-    checkout's `git status` (genuinely dirty while docs-refresh runs the suite over the pages
-    it just staged), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
+    checkout's `git status` (dirty while anyone edits it by hand), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
     main()'s keyword seams rather than as patches, because the monkeypatch ratchet
     (tests/_ratchet.py) caps a test module at zero patches on a first-party module.
     """
@@ -157,7 +156,7 @@ def test_main_is_flagged_when_the_parked_checkout_probe_reports(monkeypatch, cap
 
 
 def test_a_parked_checkout_only_banner_names_probe_landing(monkeypatch, capsys):
-    """A banner holding only the parked-checkout line prints `probe.py landing` (#3936)."""
+    """A banner holding only the parked-checkout line prints `probe.py landing`."""
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
@@ -259,7 +258,7 @@ def test_stale_worktree_lines_swallows_a_timeout():
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
 # buffers — the whole banner, parked-checkout warning included. The worktree read is
-# the slow step (it reaches GitHub), so its own cap sits inside that budget. Since #6153 every
+# the slow step (it reaches GitHub), so its own cap sits inside that budget. Every
 # probe runs before anything prints, under `TOTAL_DEADLINE_S` (test_session_health_deadline.py
 # pins the deadline).
 
@@ -330,7 +329,7 @@ def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
     `prune_worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
     the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
     CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
-    That recorded shard weight then tripped CI's over-recorded check (#5432). Every other `uv`
+    That recorded shard weight then tripped CI's over-recorded check. Every other `uv`
     call, such as `probe.py targets`, still runs for real.
     """
     real_uv = shutil.which("uv")

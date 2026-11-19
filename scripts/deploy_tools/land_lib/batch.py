@@ -35,6 +35,10 @@ A batch never makes a landing fail. A batch that cannot be formed, a run that is
 member that cannot merge each leave the PRs concerned to land alone, as they would have
 without the batch. The holder's own landing goes on with its own PR either way.
 
+A holder whose landing code is older than master's forms its batch from master's code: it hands
+the turn to a landing of its PR from a fresh checkout (`turn.HandOver`), which forms the batch.
+When the turn cannot be handed over, the holder lands its PR alone.
+
 The time a batch takes. Its run counts in the holder's merge wait, which still ends inside
 two merge budgets. The members' merges come out of what that wait left of those two budgets,
 up to `MEMBER_TIMEOUT_S` each, so a batch adds nothing to what `LAND_DEADLINE` counts. A
@@ -68,10 +72,10 @@ from lib.json_types import JsonValue, as_object
 LABEL = "landing-batch"
 # How many PRs one batch holds, the holder's own included; the batch's gate reads no more.
 MAX_STACKED = 4
-# The seconds the batch's one full run may take. A run took 993 s under a saturated pool.
+# The seconds the batch's one full run may take. A run can take 993 s under a saturated pool.
 RUN_TIMEOUT_S = 2700
-# The seconds one member's merge may take: its own run is two short jobs, which took 164 s
-# from the ready flip on 2026-11-14 with the runner pool saturated.
+# The seconds one member's merge may take: its own run is two short jobs, which can take 164 s
+# from the ready flip with the runner pool saturated.
 MEMBER_TIMEOUT_S = 600
 
 # What GitHub failing to answer looks like, for a call the batch makes.
@@ -173,7 +177,15 @@ def _members(ln: Landing) -> list[Member]:
     # DECIDED: the landing's code is compared with master here, once, and not again before a
     # member's merge. Until the last member merges, master moves only by this batch's own
     # merges, so a member merges under the code and the policy that admitted it.
-    why = _alone(ln, ln.opts.pr, reads) or classify.code_lags_master(ln)
+    why = _alone(ln, ln.opts.pr, reads)
+    if not why:
+        why = classify.code_lags_master(ln)
+        if why and ln.hand_over_turn:
+            ln.hand_over_turn(
+                f"this landing holds the landing turn, and {why}; a landing of PR "
+                f"#{ln.opts.pr} from a checkout of origin/{BRANCH} takes the turn over to "
+                "test the drafts in the line"
+            )
     if why:
         say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
         return []
@@ -465,6 +477,8 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)
+            except turn.HandOver:
+                raise
             except Exception as exc:
                 # DECIDED: a batch never fails the landing that forms it.
                 say(f"the landing batch failed ({exc!r}); PR #{ln.opts.pr} lands alone")

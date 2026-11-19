@@ -52,7 +52,7 @@ from deploy_ui_lib.deploy_ui_reads import Unavailable
 from host_lib import logfmt
 
 # The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
-# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
+# DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars.
 PAGE = Path(__file__).with_name("deploy_ui.html")
 
 
@@ -429,11 +429,11 @@ def content_length(headers) -> int | None:
 def request_line(
     method: str, path: str, status: int, user: str, event: str = "request"
 ) -> str:
-    """One logfmt line for one request, as journald keeps it for the usage count (#2864).
+    """One logfmt line for one request, as journald keeps it for the usage count.
 
-    Every request gets one, the 10-second panel polls included, so the line carries the
-    path: `path=/` is a page load and a POST is a write, and those two are what show a
-    person used the page. A poll only shows a tab was open. The query string is dropped,
+    The line carries the path: `path=/` is a page load and a POST is a write, and those two
+    are what show a person used the page. A poll only shows a tab was open, so
+    `log_request` writes no line for one (`is_poll`). The query string is dropped,
     and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
     `event` is the line's first word; the usage count matches only `request`.
     """
@@ -443,6 +443,12 @@ def request_line(
     url = urllib.parse.urlsplit(path).path or "-"
     fields = {"method": method, "path": url, "status": int(status), "user": who}
     return f"{event} {logfmt(fields)}"
+
+
+def is_poll(method: str, path: str, status: int) -> bool:
+    """Whether a request is a panel's successful read, which gets no request line."""
+    url = urllib.parse.urlsplit(path).path
+    return method == "GET" and status == 200 and url.startswith("/api/")
 
 
 def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
@@ -490,7 +496,10 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
             )
 
         def log_request(self, code="-", size="-") -> None:
-            self._log(code if isinstance(code, int) else 0, "request")
+            status = code if isinstance(code, int) else 0
+            method = getattr(self, "command", None) or "-"
+            if not is_poll(method, getattr(self, "path", ""), status):
+                self._log(status, "request")
 
         def _log(self, status: int, event: str) -> None:
             # A request line that failed to parse leaves `command`, `path` and `headers`

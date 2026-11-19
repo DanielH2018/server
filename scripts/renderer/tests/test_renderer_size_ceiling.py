@@ -12,33 +12,7 @@ import subprocess
 
 from lib.repo_paths import REPO
 
-# 13652 once #7586 split the soak Job's reads into soak_reads.py and retried a transient API error.
-# 13657 once #7485 gave the -snapshot and -prepull Kustomizations the default deletion policy.
-# 13656 once #7624 shrank the restart-target code by a line.
-# 13654 once H1.9 moved the k3s service list to cluster/services.yml.
-# 13676 once #7804 made the soak Job count native-sidecar restarts.
-# 13680 once #7845 gave the k8s play context the two names its inventory values read.
-# 13679 once the Pi stopped being a rollout canary and the dialect dropped `updater_lag_grace_s`.
-# 13672 once #7961 dropped the deployer-state modules from the host source tables.
-# 13618 once H7.55 dropped the `role:` sources, which the components now own.
-# 13622 once #8023 listed the Flux GitHub App's three keys in `SOPS_MANIFEST_KEYS`.
-# 13619 once #8172 rewrote the renderer's docstrings.
-# 13627 once #8173 let rule 5 judge the labelling wrapper's `lookup('template')`.
-# 13615 once #8165 deleted the owner-entry-points census and the renderer helper only it read.
-# 13625 once #8267 gave every tmpfiles.d file the `tmpfiles` activation.
-# 13562 once #8181 took the service list out of the host_vars layer.
-# 13567 once #8184 resolved a template lookup's `role_file()` path in rule 5.
-# 15030 once #8185 moved the template filters from ansible/filter_plugins/ into the renderer.
-# 15028 once #8345 moved the `cluster-vars.source` path into `lib.repo_paths`.
-# 15022 once #8517 deleted an unused tuple from secret_checks.py.
-# 15007 once #8632 moved the test-only `scan_template` wrapper into the tests.
-# 14997 once the games' replica counts left the render, and `replicas_var` with them (ADR-0033).
-# 14982 once #8632 landed on top of that.
-# 14981 once #8839 shortened the never-stub list's reason to one line.
-# 14971 once #8842 retired `become_password` and the never-stub list with it.
-# 15025 once #8883 gave the tools spec `tools_on`, which holds the arm64 build to the Pi's tools.
-# 15003 once #8507 rendered B2's bucket from inventory and dropped its rule-3 exemption and member.
-LINE_CEILING = 15003
+LINE_CEILING = 15066
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

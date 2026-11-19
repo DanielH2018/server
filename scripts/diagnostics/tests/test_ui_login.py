@@ -322,7 +322,7 @@ def test_totp_parameters_match_the_seed_init_container():
 
 # Both tiers mint without a typed code. A hint still naming `--totp <code>` is not merely
 # stale — it sends the reader to a phone to solve a problem a flag solves, which is the
-# exact failure the dedicated identity was added to remove. These strings are the only
+# exact failure the dedicated identity removes. These strings are the only
 # place a person meets that instruction, so they get a guard.
 
 

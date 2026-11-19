@@ -2,8 +2,7 @@
 
 A hook `run-hook.sh` runs `--no-project`, a cc-wait source and fan-out's review unit all run
 outside the project venv, so a third-party import anywhere they reach dies at import behind a
-green suite whose venv has the package. #4167 was one: fan-out review died on `yaml`. Each such
-break got its own one-path test after the fact (#4404).
+green suite whose venv has the package.
 
 The contract these tests pin, in `scripts/lib/stdlib_only.py`:
 

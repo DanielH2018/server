@@ -16,7 +16,7 @@
    rather than sharing one var in `group_vars/all.yml`. Renovate does read group_vars, but its
    no-automerge `k8s_autodeploy: false` rule names that file. All three *arr roles are
    auto-deployable, so a shared pin would turn an automerged bump into a hand-merged one
-   (#3277). Renovate's per-depName grouping already bumps the three copies in one PR, and
+   Renovate's per-depName grouping already bumps the three copies in one PR, and
    `test_the_image_pins_stay_in_lockstep` fails if they drift apart.
 
    Invoke at the container-list indent, e.g.:
@@ -84,19 +84,16 @@
             limits:
               # Without an explicit cpu limit the namespace LimitRange default applies, and
               # that default is `cpu: "2"` (group_vars/all.yml) -- 400x this container's own
-              # request, on the fleet's only container that was inheriting it.
+              # request.
               #
               # DECIDED: size this cap against the CFS quota per PERIOD, never against the
               # average rate. The average is misleading here: the sidecar idles between scrapes
               # and does all of its work in one burst every 60s, so a 24h mean of ~0.5
               # millicores hides a burst that a per-period quota throttles. 100m is 10ms of
-              # CPU per 100ms period; sonarr's scrape costs 25-86ms of CPU (24h mean x 60s,
-              # and the 5m peak, measured 2026-09-18), so it spilled across 4-7 periods and
-              # was throttled in ~48% of them: 0.08-0.34s of throttled time per scrape,
-              # against a scrape_duration of 0.53s vs 0.015-0.03s for radarr and prowlarr.
-              # (Issue #2017.) 500m is 50ms per period -- most sonarr scrapes fit in one, and
-              # radarr/prowlarr (throttled 1-5% at 100m) never hit it. One shared value keeps
-              # the three from drifting; it is a limit, so an idle sidecar costs nothing more.
+              # CPU per 100ms period and sonarr's scrape costs 25-86ms, so it spills across 4-7
+              # periods and is throttled. 500m is 50ms per period, so most sonarr scrapes fit in
+              # one. One shared value keeps the three from drifting; it is a limit, so an idle
+              # sidecar costs nothing more.
               cpu: 500m
               memory: 64Mi
 {%- endmacro %}

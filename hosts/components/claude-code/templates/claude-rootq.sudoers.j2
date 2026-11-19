@@ -1,6 +1,6 @@
 # Shipped by the homelab host package (hosts/components/claude-code). Do not edit.
 # One read-only command, no arguments listed: the script validates its own arguments, runs only
-# fixed reads and redacts what it prints. Issue #6323.
+# fixed reads and redacts what it prints.
 {% for user in claude_code_rootq_users %}
 {{ user }} ALL=(root) NOPASSWD: {{ claude_code_rootq_script }}
 {% endfor %}

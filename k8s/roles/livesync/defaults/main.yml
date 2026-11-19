@@ -1,5 +1,5 @@
 ---
-livesync_k8s_image: couchdb:3.5.2@sha256:5fc596110eac7f412173a7d9de14f70aa5d3e816790fb6e70642755d4a4cf464
+livesync_k8s_image: couchdb:3.5.3@sha256:907eab5b7e55ab7cfd241d39b90b2a335ea40bef82acee5a37388c08bf201dda
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # DENIED — state coupling, not missing recovery. The volume's state is coupled to something
@@ -40,3 +40,13 @@ k8s_claims:
 # No IngressRoute, though the entry carries a `hostname`: traefik's file-provider gate
 # (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2) routes it.
 manifests_exclude_files: [ingressroute.yaml]
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  - name: livesync
+    string_data:
+      # CouchDB's admin password. The seeded _users and _dbs shards carry
+      # its hash, and the entrypoint writes it into local.d/docker.ini only when no admin is
+      # configured, so a new value leaves the Obsidian clients' stored login rejected.
+      COUCHDB_PASSWORD: livesync_db_password

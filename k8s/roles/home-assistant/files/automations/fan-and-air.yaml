@@ -103,10 +103,8 @@
 
 # Temperature → fan: drive fan.tower_fan from the AirGradient temperature via script.bedroom_apply_fan.
 # The curve, the deadband and the caps all live in fan_target_level (custom_templates/fan.jinja) —
-# TUNE THEM THERE, not here. This comment used to restate them as discrete bands (off <72 / Low 72-74 /
-# Medium 74-76 / High >=76 °F; Medium cap 22:00-06:00; 0.5 °F deadband); every one of those numbers was
-# superseded by the continuous (t-71)/1.3 curve with a ±0.7-level deadband, an L4 night cap and the
-# sleep-mode seasonal floor / L5 ceiling, so a tuner following them would have changed the wrong thing.
+# TUNE THEM THERE, not here. (The curve is continuous, (t-71)/1.3, with a ±0.7-level deadband, an L4
+# night cap and the sleep-mode seasonal floor / L5 ceiling.)
 # Re-evaluates on every temperature change and at the night-cap boundaries (22:00 / 06:00) so the cap
 # engages/releases even when the temperature is steady. Skipped while the manual override is on.
 - id: bedroom_fan_temperature
@@ -191,7 +189,7 @@
 # input_boolean.bedroom_fan_manual + input_number.bedroom_fan_expected_level helpers when they changed
 # within ~15 min of the restart (the restore_state dump cycle) — so a fan speed you just dialed by hand
 # is restored STALE (override off, old expected level) and bedroom_fan_temperature re-applies the auto
-# level on the first post-boot temp report (observed: a hand-set L3 bumped back to L5 after a deploy).
+# level on the first post-boot temp report.
 # This rebuilds the override from the PHYSICAL fan, whose speed the DREO cloud keeps across an HA
 # restart. It captures the restored level BEFORE the temp sensor reports (so the capture can't be
 # polluted by an auto re-apply racing in), then once temp is known compares it to the hysteresis-free
@@ -330,8 +328,8 @@
                 message: "It's {{ out_temp }}°F outside ({{ temp_delta }}° cooler) & clean — open up instead of the fan."
                 tag: window_advice
 
-# Close-the-window advisor — the mirror of bedroom_window_advisor above, possible only since the
-# SNZB-04 contact sensor made "is it actually open?" knowable (2026-08-25). Every branch is gated on
+# Close-the-window advisor — the mirror of bedroom_window_advisor above, possible only because the
+# SNZB-04 contact sensor makes "is it actually open?" knowable. Every branch is gated on
 # the window being CONFIRMED open, so it can never tell you to close a window that is already shut.
 # The verdict math (which reason wins, and the PM caps) lives in close_window_advice
 # (custom_templates/ventilation.jinja) — TUNE IT THERE, not here.

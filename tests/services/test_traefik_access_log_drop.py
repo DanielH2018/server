@@ -1,7 +1,8 @@
 """The Alloy drop rule for Traefik access logs, proved against real log lines.
 
 The rule discards routine, fast Traefik access lines before they reach Loki — ~172 MB/day
-of 200/204/304 measured 2026-08-29, dominated by homepage's own widget polling. It is a
+of 200/204/304 measured 2026-08-29, dominated by homepage's own widget polling, and the 302s
+blackbox-exporter's SSO probes draw from the pod CIDR. It is a
 REGEX over a JSON line, which is the fragile kind of rule: a field-order change upstream, or
 an edit that widens one alternation, silently starts dropping the errors this is supposed to
 keep, and the only symptom is logs that are not there.
@@ -16,8 +17,8 @@ So every assertion below is a pair: a line this MUST drop, and a line it MUST ke
 that stopped matching entirely would pass a keep-only suite while saving nothing, and a rule
 that matched everything would pass a drop-only suite while blinding the operator.
 
-The config is read out of the RENDERED ConfigMap, not out of `templates/config/config.alloy.j2`
-(#3107). Reading the template proved the rule was written; it could not prove the rule ships.
+The config is read out of the RENDERED ConfigMap, not out of `templates/config/config.alloy.j2`.
+Reading the template proved the rule was written; it could not prove the rule ships.
 `configmap.yaml.j2` pulls the file in through one `lookup('template', …)` line, and deleting
 that line left every assertion here green while the Alloy pod ran with no drop stage at all.
 The file is not conditional-free either — the k8s audit-log stages sit behind
@@ -34,11 +35,14 @@ which both engines read identically. Anything reaching for a backreference or a 
 would need a live Alloy to verify, and should not be written here in the first place.
 """
 
+import ipaddress
 import re
 
 import pytest
 
 from _k8s_render import rendered_docs
+from lib.render_context import render_context
+from lib.repo_paths import REPO
 
 # The sidecar whose stdout carries the access log. CrowdSec tails the FILE instead, so this
 # label is what keeps the drop away from the WAF's input — see the config's own comment.
@@ -52,6 +56,17 @@ _MATCH_BLOCK = re.compile(
     re.DOTALL,
 )
 _DROP_EXPRESSION = re.compile(r'expression\s*=\s*"(?P<expr>(?:\\.|[^"\\])*)"')
+
+# A person's address on the LAN, and one inside the pod CIDR, where blackbox-exporter probes from.
+_LAN_CLIENT = "10.0.0.140"
+_POD_CLIENT = str(
+    next(
+        ipaddress.ip_network(
+            render_context(REPO / "k8s/roles/loki-homelab")["k3s_pod_cidr"]
+        ).hosts()
+    )
+    + 300
+)
 
 
 @pytest.fixture(scope="module")
@@ -75,8 +90,8 @@ def alloy_config() -> str:
     )
 
 
-def _drop_expression(config: str) -> str:
-    """Pull the drop stage's expression out of the rendered Alloy config."""
+def _drop_expressions(config: str) -> list[str]:
+    """Pull the access-log match stage's drop expressions out of the rendered Alloy config."""
     matches = list(_MATCH_BLOCK.finditer(config))
     scoped = [
         m
@@ -87,13 +102,16 @@ def _drop_expression(config: str) -> str:
     assert len(scoped) == 1, "more than one drop stage claims the access-log sidecar"
 
     drops = _DROP_EXPRESSION.findall(scoped[0]["body"])
-    assert len(drops) == 1, "the access-log match stage should hold exactly one drop"
+    assert drops, "the access-log match stage holds no drop"
     # River string escapes: `\"` is a literal quote in the regex Alloy compiles.
-    return drops[0].replace('\\"', '"')
+    return [d.replace('\\"', '"') for d in drops]
 
 
 def _line(
-    status: int, duration_ns: int, host: str = "homepage.local.example.com"
+    status: int,
+    duration_ns: int,
+    host: str = "homepage.local.example.com",
+    client: str = _LAN_CLIENT,
 ) -> str:
     """A Traefik JSON access line, fields in the order Traefik actually emits them.
 
@@ -103,7 +121,7 @@ def _line(
     a broken pattern pass.
     """
     return (
-        '{"ClientAddr":"10.42.1.92:46302","ClientHost":"10.42.1.92","ClientPort":"46302",'
+        f'{{"ClientAddr":"{client}:46302","ClientHost":"{client}","ClientPort":"46302",'
         '"ClientUsername":"-","DownstreamContentSize":19,'
         f'"DownstreamStatus":{status},"Duration":{duration_ns},'
         '"GzipRatio":0,"OriginContentSize":0,"OriginDuration":0,"OriginStatus":0,'
@@ -113,7 +131,7 @@ def _line(
 
 
 def _drops(config: str, line: str) -> bool:
-    return re.search(_drop_expression(config), line) is not None
+    return any(re.search(e, line) for e in _drop_expressions(config))
 
 
 # ── routine traffic: must be dropped ────────────────────────────────────────────────────
@@ -152,6 +170,22 @@ def test_a_500_is_kept(alloy_config):
 def test_a_302_is_kept(alloy_config):
     """Authelia redirects. Cheap, and the first evidence of a redirect loop."""
     assert not _drops(alloy_config, _line(302, 2_769_115))
+
+
+def test_a_302_through_cloudflare_is_kept(alloy_config):
+    """ClientHost is the whole forwarded chain, and a chain is never a bare pod address."""
+    chain = f"{_POD_CLIENT}, 203.0.113.7"
+    assert not _drops(alloy_config, _line(302, 2_769_115, client=chain))
+
+
+def test_a_302_from_a_pod_is_dropped(alloy_config):
+    """blackbox-exporter's http_sso_302 probes: ~35,000 of ~37,000 302s a day."""
+    assert _drops(alloy_config, _line(302, 3_006_790, client=_POD_CLIENT))
+
+
+def test_a_401_from_a_pod_is_kept(alloy_config):
+    """Only the probe's expected redirect is routine; a pod's auth failure still ships."""
+    assert not _drops(alloy_config, _line(401, 3_006_790, client=_POD_CLIENT))
 
 
 def test_a_slow_200_is_kept(alloy_config):
