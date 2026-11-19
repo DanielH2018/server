@@ -75,6 +75,7 @@ RUNS_PER_DAY = 96
 DAILY_LINE_BUDGET = 1000
 SHIPPED_LEVELS = {"info", "success", "warning"}
 PER_BOOKMARK_METHODS = {"process_bookmark"}
+FILTER = "not_library_record"
 
 
 def _tree() -> ast.Module:
@@ -326,9 +327,6 @@ def test_every_slot_the_estimate_returns_is_a_tag_the_script_recognises():
         f"estimate_reading_time returns {sorted(returned - set(recognised))}, which "
         "TIME_TAGS does not list, so those bookmarks are re-tagged on every run"
     )
-
-
-FILTER = "not_library_record"
 
 
 def _filter_function():
