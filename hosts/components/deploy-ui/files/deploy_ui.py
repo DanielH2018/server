@@ -200,7 +200,24 @@ class App:
         for r in runs:
             if r["kind"] == "land" and r["log"]:
                 self._remember(Path(r["log"]))
+            r["step"] = self._step(r["log"]) if r["kind"] == "land" else None
         return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
+
+    def _step(self, log: str) -> dict | None:
+        """The landing's current step from its whole log; None when it has no readable one.
+
+        A failed read never makes the panel unavailable: `cancel` reads this panel for its pids.
+        """
+        path = Path(log)
+        if not log or not reads.landing_log(
+            path, self.cfg.landing_window_s, time.time()
+        ):
+            return None
+        try:
+            with path.open(encoding="utf-8", errors="replace") as f:
+                return reads.landing_step(f)
+        except OSError:
+            return None
 
     def _pr_title(self, pr: str) -> str:
         """The PR's title, cached for the daemon's life; "" while `gh` cannot answer.
