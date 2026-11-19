@@ -17,6 +17,10 @@ The arm never deletes a user. A user that leaves the list is expired with `userm
 1`, and removing its home is an operator step. The arm expires only a name its own record
 holds, and it expires nothing while the declared list is empty, so a revert to a version that
 declares no users leaves them alone. Each name the floor kept is drift.
+
+The record is {"names": [...], "expired": [...]}. `names` holds the declared users and the
+ones the arm has yet to expire. `expired` holds each name the arm expired that the package does
+not declare again. The weekly AIDE check reads it to explain the expiry date `usermod` writes.
 """
 
 import re
@@ -96,12 +100,15 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
             log("systemd-sysusers did not leave every declared user in place", ERR)
     names = {user["name"] for user in users}
     stale = sorted(set((prev or {}).get("names") or []) - names)
+    expired = set((prev or {}).get("expired") or []) - names
     drift = 0
     for name in stale:
         if not users:
             names.add(name)
             drift += 1
-        elif not expire(name):
+        elif expire(name):
+            expired.add(name)
+        else:
             names.add(name)
             ok = False
-    return ok, {"names": sorted(names)}, drift
+    return ok, {"names": sorted(names), "expired": sorted(expired)}, drift

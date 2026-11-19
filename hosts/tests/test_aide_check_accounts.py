@@ -17,6 +17,7 @@ from _aide_check_run import (
     CHANGED_MODE,
     CLEAN_REPORT,
     HOST_MANIFEST,
+    RECONCILE_RECORD,
     _report,
     _run_check,
 )
@@ -27,6 +28,9 @@ SVC_PASSWD = "svc:x:906:906:Svc:/var/lib/svc:/usr/sbin/nologin\n"
 SVC_GROUP = "svc:x:906:\n"
 SVC_SHADOW = "svc:!*:20400::::::\n"
 SVC_GSHADOW = "svc:!::\n"
+# oldsvc left the users list, so the arm expired it and its record in applied.json names it.
+OLDSVC_SHADOW = "oldsvc:!*:20000::::::"
+OLDSVC_EXPIRED = "oldsvc:!*:20000:::::1:"
 # A password hash the fake shadow file holds; no logged line may carry it.
 HASH = "$6$NEWSECRETHASH"
 
@@ -69,6 +73,10 @@ ACCEPTED = {
                 PASSWD, ("claude:x:900:985:Claude agent:", "claude:x:1001:985::")
             ),
         },
+    ),
+    "an expired user's expiry date set to 1, as usermod --expiredate 1 writes it": (
+        (SHADOW,),
+        {"rewrite": _with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED))},
     ),
     "a declared user's group moved, with its passwd gid": (
         (PASSWD, GROUP),
@@ -193,6 +201,39 @@ REJECTED = {
         GSHADOW,
         {"rewrite": _with(GSHADOW, ("claude:!::", "claude:!::ubuntu"))},
         "declared group claude has an administrator or a member in gshadow",
+    ),
+    "an expired user's expiry with its password changed too": (
+        SHADOW,
+        {"rewrite": _with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED.replace("!*", HASH)))},
+        "changes the line of an account the host package does not declare: oldsvc",
+    ),
+    "an expired user's expiry date set to another day": (
+        SHADOW,
+        {
+            "rewrite": _with(
+                SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED.replace(":1:", ":2:"))
+            )
+        },
+        "changes the line of an account the host package does not declare: oldsvc",
+    ),
+    "an expiry on an account the arm's record does not list": (
+        SHADOW,
+        {
+            "rewrite": _with(
+                SHADOW, ("root:!*:20000:0:99999:7:::", "root:!*:20000:0:99999:7::1:")
+            )
+        },
+        "changes the line of an account the host package does not declare: root",
+    ),
+    "an expiry with no readable reconcile record": (
+        SHADOW,
+        {
+            "rewrite": {
+                **_with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED)),
+                RECONCILE_RECORD: "{",
+            }
+        },
+        "changes the line of an account the host package does not declare: oldsvc",
     ),
     "a shadow line with no colon, all of it a hash": (
         SHADOW,

@@ -67,7 +67,7 @@ def test_a_missing_user_is_created_by_sysusers_and_a_second_run_changes_nothing(
 
     assert first.returncode == 0, first.stderr
     assert node.state["users"] == {"claude": 1001}
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": []}
     assert commands(node) == [], "the second run found the user and ran no change"
     assert second.returncode == 0, second.stderr
     assert f"{DRIFT} 0" in metrics(node)
@@ -161,9 +161,23 @@ def test_a_user_that_leaves_the_list_is_expired_and_never_deleted(node):
         ["usermod", "--expiredate", "1", "bot"]
     ]
     assert "bot" in node.state["users"], "the account stays"
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": ["bot"]}
     assert node.run().returncode == 0
     assert node.calls("usermod") == [], "the next run expires nothing again"
+    assert node.applied()["users"]["expired"] == ["bot"], (
+        "the next run keeps the record"
+    )
+
+
+def test_a_user_declared_again_leaves_the_expired_record(node):
+    two_users_then_one(node)
+    assert node.run().returncode == 0
+    declare(node, CLAUDE, BOT)
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
 
 
 def test_a_user_that_left_the_list_and_is_gone_is_dropped_without_usermod(node):
@@ -174,7 +188,7 @@ def test_a_user_that_left_the_list_and_is_gone_is_dropped_without_usermod(node):
 
     assert result.returncode == 0, result.stderr
     assert node.calls("usermod") == []
-    assert node.applied()["users"] == {"names": ["claude"]}
+    assert node.applied()["users"] == {"names": ["claude"], "expired": ["bot"]}
 
 
 def test_a_failed_expiry_fails_the_run_and_the_name_stays_recorded(node):
@@ -184,7 +198,7 @@ def test_a_failed_expiry_fails_the_run_and_the_name_stays_recorded(node):
     result = node.run()
 
     assert result.returncode == 1
-    assert node.applied()["users"] == {"names": ["bot", "claude"]}
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
 
 
 def revert_expires_nobody(node: Node) -> None:
@@ -199,7 +213,7 @@ def revert_expires_nobody(node: Node) -> None:
     assert result.returncode == 0, result.stderr
     assert node.calls("usermod") == [], "an empty declared set expires nothing"
     assert node.applied()["result"]["ok"] is True
-    assert node.applied()["users"] == {"names": ["bot", "claude"]}
+    assert node.applied()["users"] == {"names": ["bot", "claude"], "expired": []}
     assert f"{DRIFT} 2" in metrics(node)
 
 

@@ -54,7 +54,8 @@
 #   shadow or gshadow is explained only when every line that differs from the copy the baseline
 #   advanced to is an account the host package's users arm declares, with its declared uid,
 #   home and shell (not its comment, which the arm never sets), the gid of its own group, no
-#   password and no undeclared member.
+#   password and no undeclared member. One more shadow line is explained: the expiry date set to
+#   1, and nothing else changed, on an account the arm's record in applied.json lists as expired.
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
@@ -105,6 +106,8 @@ FS_ROOT=""
 SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
 # The host package's manifest, read under FS_ROOT for the users its users arm declares.
 HOST_MANIFEST=/usr/lib/homelab/manifest.json
+# homelab-reconcile's record, read under FS_ROOT for the users its users arm expired.
+RECONCILE_RECORD=/var/lib/homelab-reconcile/applied.json
 
 # Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
 # awk through ENVIRON, because -v would read each backslash as an escape.
@@ -349,11 +352,12 @@ secret_links() {
 # baseline advanced to names an account the host package's users arm declares, as it declares
 # it, and a reason otherwise. A line is keyed by its name, so a uid move is one changed line. A
 # declared user's gid must be its same-named group's, and that group's gid must be its own and
-# not 0. Its members must be declared users. Every other line pages, and so does a removal,
+# not 0. Its members must be declared users. A shadow line of a user the arm expired may change
+# its expiry date to 1 and nothing else. Every other line pages, and so does a removal,
 # since the arm only expires a user. Prints account names only, never another field, because
 # shadow and gshadow hold hashes.
 accounts_verdict() {
-  local name=${1#/etc/} declared
+  local name=${1#/etc/} declared expired
   if [[ ! -r "$AIDE_DIR/accounts/$name" ]]; then
     echo "no copy of it from the run the baseline advanced to, so its change cannot be judged"
     return
@@ -363,12 +367,15 @@ accounts_verdict() {
     echo "the host package's users declaration is unreadable"
     return
   fi
-  DECLARED="$declared" awk -F ':' -v file="$name" '
+  expired=$(jq -r '.users.expired[]?' "$FS_ROOT$RECONCILE_RECORD" 2>/dev/null)
+  DECLARED="$declared" EXPIRED="$expired" awk -F ':' -v file="$name" '
     BEGIN {
       n = split(ENVIRON["DECLARED"], rows, "\n")
       for (i = 1; i <= n; i++) {
         split(rows[i], f, "\t"); uid[f[1]] = f[2]; home[f[1]] = f[3]; shell[f[1]] = f[4]
       }
+      n = split(ENVIRON["EXPIRED"], rows, "\n")
+      for (i = 1; i <= n; i++) expired[rows[i]] = 1
     }
     FNR == 1 { part++ }
     part == 1 { old[$1] = $0; next }
@@ -377,7 +384,13 @@ accounts_verdict() {
     { if ($1 in cur) twice = $1; cur[$1] = $0 }
     # A line with no colon is all one field, a hash included, so only a valid name is printed.
     function shown(k) { return k ~ /^[a-z_][a-z0-9_.-]*[$]?$/ ? k : "one whose name is not a valid account name" }
+    function only_expired(was, now,    a, b, i) {
+      if (split(was, a, ":") != 9 || split(now, b, ":") != 9 || b[8] != "1") return 0
+      for (i = 1; i <= 9; i++) if (i != 8 && a[i] != b[i]) return 0
+      return 1
+    }
     function judge(k, line,    f, nf, m, members, i) {
+      if (file == "shadow" && (k in expired) && (k in old) && only_expired(old[k], line)) return ""
       if (!(k in uid)) return "changes the line of an account the host package does not declare: " shown(k)
       nf = split(line, f, ":")
       if (file == "passwd") {
