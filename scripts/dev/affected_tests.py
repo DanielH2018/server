@@ -12,8 +12,7 @@ the selection rule and what a row can miss. It needs `strace` on the host, and i
 modules, so it takes minutes: 122 modules took 265s at six jobs on daniel-server, about 54
 minutes for all of them. The docs-refresh cron therefore runs `record --slices 12 --budget
 540` on every tick. That records each module with no current row first, then one twelfth of
-the rest, chosen by the 12-hour period as `pytest_shard.py --refresh-drifted` chooses its
-slice, so every row is recorded again within six days.
+the rest, chosen by the 12-hour period, so every row is recorded again within six days.
 
 Usage:
     uv run python scripts/dev/affected_tests.py record --slices 12 --budget 540  # the cron's
@@ -23,6 +22,7 @@ Usage:
     uv run python scripts/dev/affected_tests.py select --base HEAD^1 --list
 """
 
+import hashlib
 import random
 import shutil
 import sys
@@ -37,6 +37,15 @@ import pytest_shard
 from affected_lib import record, table
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import REPO
+
+# The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
+# consecutive periods of this length, so successive runs visit successive slices.
+_SLICE_PERIOD_SECONDS = 12 * 60 * 60
+
+
+def _slice(module: str, slices: int) -> int:
+    """The 0-based slice of `slices` a module is recorded again in, by a hash of its path."""
+    return int(hashlib.sha256(module.encode()).hexdigest(), 16) % slices
 
 
 def due(
@@ -53,11 +62,9 @@ def due(
     same modules unrecorded on every visit.
     """
     stale = sorted(m for m in census if not rows.current(m, blobs))
-    index = pytest_shard.slice_at(seconds, slices)
+    index = int(seconds // _SLICE_PERIOD_SECONDS) % slices
     visit = sorted(
-        m
-        for m in census
-        if rows.current(m, blobs) and pytest_shard.refresh_slice(m, slices) == index
+        m for m in census if rows.current(m, blobs) and _slice(m, slices) == index
     )
     random.Random(int(seconds)).shuffle(visit)
     return stale + visit

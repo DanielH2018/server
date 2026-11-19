@@ -14,7 +14,7 @@ import xdist_width
 
 # A literal rather than `xdist_width.WEIGHTS_TABLE`, so these tests run against a module that
 # never read the table and fail on its behaviour rather than on a missing name.
-WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
+WEIGHTS_TABLE = "scripts/dev/pytest_shard_runner_weights.json"
 
 
 def _tree(root: Path, modules: int, weights: dict[str, float] | None = None) -> Path:
@@ -56,19 +56,13 @@ def test_a_path_it_cannot_see_or_the_repo_root_is_left_to_xdist(tmp_path):
 @pytest.mark.parametrize(
     ("seconds", "cap", "workers"),
     [
-        # The rows of the 2026-10-25 table: recorded seconds, heaviest module included.
-        (
-            [1.88, 0.01, 1.59, 2.22, 0.0],
-            16,
-            3,
-        ),  # the `-python` hook's five ran fastest on 3
-        (
-            [8.07, 8.0, 8.0, 8.0],
-            16,
-            4,
-        ),  # scripts/lib/tests: 32.1s, heaviest 8.07s, on 4
+        # The `-python` hook's modules in runner seconds, which ran fastest on 3.
+        ([6.28, 1.17, 7.02, 5.48], 16, 3),
+        # Every module under the floor: a worker per floor's worth, not per module.
+        ([2.5, 2.5, 2.5, 2.5], 16, 3),
+        ([8.07, 8.0, 8.0, 8.0], 16, 4),  # a worker per heaviest module's worth
         ([0.27, 0.01, 0.01, 0.01], 16, 1),  # four light files
-        ([21.55] + [1.0] * 100, 16, 6),  # the guard set: 121s, heaviest 21.55s
+        ([21.55] + [1.0] * 100, 16, 6),  # 121s, heaviest 21.55s
         ([21.0] + [1.0] * 219, 4, 4),  # a CI shard on a 4-core runner keeps every core
         ([1.0] * 30, 4, 4),  # the session ceiling of 4 still binds
         ([], 16, 1),

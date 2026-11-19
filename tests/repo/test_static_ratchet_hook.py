@@ -118,7 +118,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/fact_status.py",
         "CLAUDE.md",
         "k8s/roles/traefik/CLAUDE.md",
-        "scripts/dev/pytest_shard_weights.json",
+        "scripts/dev/pytest_shard_runner_weights.json",
         "tests/repo/module_length_allowlist.txt",
         "k8s/roles/traefik/defaults/main.yml",
         "inventory/host_vars/daniel-box.yml",
@@ -448,7 +448,7 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
     census's shared pass runs before its tests, so no weight carries it and it is added here.
     """
     weights = xdist_width.load_weights(REPO)
-    assert weights, "scripts/dev/pytest_shard_weights.json did not load"
+    assert weights, "scripts/dev/pytest_shard_runner_weights.json did not load"
     main = sorted(_modules(_hook()))
     seconds = xdist_width.module_seconds([REPO / m for m in main], REPO, weights)
     moved = xdist_width.module_seconds(
