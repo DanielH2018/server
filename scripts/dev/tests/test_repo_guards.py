@@ -92,7 +92,7 @@ def test_drop_candidates_prints_the_quiet_guard_and_runs_nothing(capsys):
 
     windows = []
 
-    def survey(since, until):
+    def survey(since, until, branch):
         windows.append((until - since).days)
         return {"failing_test.py"}, 0
 
@@ -105,7 +105,7 @@ def test_drop_candidates_prints_the_quiet_guard_and_runs_nothing(capsys):
 
 
 def test_drop_candidates_fails_when_the_survey_cannot_reach_github(capsys):
-    def survey(since, until):
+    def survey(since, until, branch):
         raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 401")
 
     assert (
@@ -117,7 +117,7 @@ def test_drop_candidates_fails_when_the_survey_cannot_reach_github(capsys):
 
 
 def test_drop_candidates_warns_when_a_red_attempt_had_no_readable_log(capsys):
-    def survey(since, until):
+    def survey(since, until, branch):
         return set(), 2
 
     assert (
@@ -127,3 +127,16 @@ def test_drop_candidates_warns_when_a_red_attempt_had_no_readable_log(capsys):
     assert "2 red attempts since" in out
     assert "had no readable log" in out
     assert "quiet_test.py: no CI failure since" in out
+
+
+def test_only_a_file_citing_an_issue_or_a_date_is_a_cited_candidate(tmp_path):
+    checks = tmp_path / "tests" / "repo"
+    checks.mkdir(parents=True)
+    (checks / "test_issue.py").write_text('"""Guards the #1620 outage."""\n')
+    (checks / "test_dated.py").write_text("# The 2026-11-18 audit found it.\n")
+    (checks / "test_plain.py").write_text('"""Holds every unit to a level."""\n')
+    (checks / "_helper.py").write_text("# #4508\n")
+    assert repo_guards.citing_checks(tmp_path) == {
+        "tests/repo/test_dated.py": ["2026-11-18"],
+        "tests/repo/test_issue.py": ["#1620"],
+    }

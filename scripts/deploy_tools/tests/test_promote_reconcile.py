@@ -17,7 +17,7 @@ import pytest
 from lib import yaml_fast
 from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run
-from test_promote_settle import FAKE_CURL, REPO_URL, WORKFLOW, _fake, _step
+from test_promote_settle import FAKE_CURL, REPO_URL, WORKFLOW, _fake, _functions, _step
 
 COMMIT = "c" * 40
 DIGEST = "sha256:" + "1" * 64
@@ -73,9 +73,7 @@ def _run(tmp_path, script: str, **env: str):
         "GH_TOKEN": "promote-token",
         "RUNNER_TEMP": str(tmp_path),
         "PATH": "/usr/bin:/bin",
-        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))[
-            "env"
-        ]["RETRY_FUNCTIONS"],
+        **_functions(),
     }
     result = proc_run(["bash", "-c", script], env={**base, **env}, stub_bin=stub)
     lines = calls.read_text().splitlines()
@@ -98,7 +96,12 @@ def _statuses(*entries: tuple[str, str]) -> str:
 
 def _reconcile(tmp_path, jobs, **env: str):
     script = _step(jobs["reconcile"], "Apply the lost run's verdict")["run"]
-    defaults = {"COMMIT": COMMIT, "DIGEST": DIGEST, "FAKE_PROD_DIGEST": DIGEST}
+    defaults = {
+        "COMMIT": COMMIT,
+        "DIGEST": DIGEST,
+        "FAKE_PROD_DIGEST": DIGEST,
+        "HOLD_FORM": "reset",
+    }
     result, calls = _run(tmp_path, script, **{**defaults, **env})
     return result, [c for c in calls if not c.startswith("gh api")]
 
@@ -189,6 +192,16 @@ def test_a_run_settle_would_not_reset_holds_in_settles_form_and_tags_held(
     ]
 
 
+@pytest.mark.parametrize("form", ["", "stateful-ish"], ids=["empty", "unknown"])
+def test_a_missing_status_with_a_hold_form_decide_never_writes_holds_nothing(
+    tmp_path, jobs, form
+):
+    result, calls = _reconcile(tmp_path, jobs, HOLD_FORM=form)
+    assert result.returncode != 0
+    assert calls == []
+    assert "is not stateful, no-reset or reset" in result.stdout
+
+
 def test_a_standing_hold_is_left_in_place(tmp_path, jobs):
     result, calls = _reconcile(tmp_path, jobs, FAKE_HOLD=f"{'b' * 40} failed=bento-pdf")
     assert (result.returncode, calls) == (0, [])
@@ -225,10 +238,10 @@ def test_an_unread_prod_writes_nothing_and_fails(tmp_path, jobs):
 # -- verdict-status --------------------------------------------------------------------------
 
 
-def _post(tmp_path, jobs, verdict: str, stateful: str = "", no_reset: str = ""):
+def _post(tmp_path, jobs, verdict: str, hold_form: str = "reset"):
     script = _step(jobs["verdict-status"], "Post the verdict status")["run"]
     env = {"TARGET": COMMIT, "DIGEST": DIGEST, "VERDICT": verdict, "RUN_URL": "u"}
-    return _run(tmp_path, script, STATEFUL=stateful, NO_RESET=no_reset, **env)
+    return _run(tmp_path, script, HOLD_FORM=hold_form, **env)
 
 
 @pytest.mark.parametrize(
@@ -251,21 +264,19 @@ def test_each_verdict_posts_its_status_on_t_with_the_digest(
     ]
 
 
-@pytest.mark.parametrize(
-    ("stateful", "no_reset", "form"),
-    [
-        ("sonarr", "", "stateful"),
-        ("sonarr", "longhorn", "stateful"),
-        ("", "longhorn", "no-reset"),
-    ],
-    ids=["snapshot-role", "both", "forward-only"],
-)
-def test_the_status_names_the_hold_form_settle_would_write(
-    tmp_path, jobs, stateful, no_reset, form
-):
-    result, calls = _post(tmp_path, jobs, "failed", stateful, no_reset)
+@pytest.mark.parametrize("form", ["stateful", "no-reset"])
+def test_the_status_names_decides_hold_form(tmp_path, jobs, form):
+    result, calls = _post(tmp_path, jobs, "failed", form)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"-f description=failed {DIGEST} {form} " in calls[0]
+
+
+@pytest.mark.parametrize("form", ["", "stateful-ish"], ids=["empty", "unknown"])
+def test_a_hold_form_decide_never_writes_posts_nothing(tmp_path, jobs, form):
+    result, calls = _post(tmp_path, jobs, "failed", form)
+    assert result.returncode != 0
+    assert calls == []
+    assert "is not stateful, no-reset or reset" in result.stdout
 
 
 def test_a_superseded_verdict_posts_nothing(tmp_path, jobs):

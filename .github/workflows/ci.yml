@@ -480,6 +480,12 @@ jobs:
       - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
+      # The editable install's `.pth` is the import root in project mode (docs/adr/0039). `-P`
+      # keeps the cwd off sys.path, so only the `.pth` can supply `scripts/`.
+      - name: scripts/ is installed as the import root
+        if: github.event_name == 'pull_request'
+        run: .venv/bin/python -P -c "import lib.repo_paths"
+
       # The render-diff gates. They refuse an edge added beside a change to its dependent.
       # docs/landing.md says how to split a refused PR, and there is no bypass. Their removal
       # arms refuse an object a flux-owned tag drops without a `Removes-Object:` line in the
