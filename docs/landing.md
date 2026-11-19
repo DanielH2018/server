@@ -402,6 +402,12 @@ checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps 
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
+**To read why a CI run went red, start with `ghread run failures`.** It takes a run ID, a SHA
+or `--pr <n>`, and prints each failed job's test IDs, error lines and annotations. For one
+master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 KB to 380 KB.
+Read the full log only for a job whose failure the summary does not explain. To survey red
+attempts across a date range, run `scripts/dev/ci_failures.py`.
+
 **A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct
 merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` reads anything
