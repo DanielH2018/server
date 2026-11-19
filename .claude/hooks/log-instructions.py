@@ -69,15 +69,16 @@ def main():
 
     Ignores any other hook event. A failure raises; `run-hook.sh` keeps it from blocking.
     """
-    d = read_payload()
-    if d is None or d.get("hook_event_name") != "InstructionsLoaded":
+    event = read_payload()
+    if event is None or event.hook_event_name != "InstructionsLoaded":
         return
-    cwd = d.get("cwd") or ""
+    d = event.raw
+    cwd = str(event.cwd)
     raw = d.get("file_path")
     fp = rel(raw or "?", cwd)
     reason = d.get("load_reason") or "?"
     mtype = d.get("memory_type") or "?"
-    sid = (d.get("session_id") or "")[:8]
+    sid = event.session_id[:8]
     extra = ""
     if d.get("trigger_file_path"):
         extra += " trigger=" + rel(d["trigger_file_path"], cwd)
@@ -86,8 +87,8 @@ def main():
     if d.get("parent_file_path"):
         extra += " parent=" + rel(d["parent_file_path"], cwd)
     # A subagent shares its parent's session id; inject-nested-docs tells the two apart by this.
-    if d.get("agent_id"):
-        extra += " agent=" + d["agent_id"]
+    if event.agent_id:
+        extra += " agent=" + event.agent_id
     if raw:
         extra += size_field(raw, cwd)
     append_row(reason, mtype, fp, sid, extra)

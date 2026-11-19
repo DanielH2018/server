@@ -5,7 +5,7 @@ The issue-fanout skill's required-contents list (its step 3) is the source; keep
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -215,7 +215,7 @@ forks the landing into its own logfile and returns, and `cc-wait land` waits on 
 Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect it, and do not
 end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
-`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+`cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which a live landing of the PR refuses.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
@@ -379,6 +379,7 @@ def render_brief(
     health: Sequence[str],
     target: Target = SERVER_TARGET,
     review: bool = False,
+    tracked: Collection[str] = (),
 ) -> str:
     """Render the stdin brief a headless fan-out agent reads on launch.
 
@@ -397,6 +398,7 @@ def render_brief(
             the PR.
         review: the batch runs `fanout_lib.review.review`'s pipeline. The agent stops at the PR
             on every host, and the pipeline hands it the landing after the review.
+        tracked: the target repo's tracked files, which the cited paths resolve against.
 
     Returns:
         The full brief text.
@@ -411,7 +413,7 @@ def render_brief(
     )
     holder = orchestrator_branch if target.is_server else branch
     # Only this repo's paths mean anything to `land.sh`'s classifier and this tree's tests.
-    cited = sorted({p for i in issues for p in cited_paths(i.body)})
+    cited = sorted({p for i in issues for p in cited_paths(i.body, tracked)})
     facts = _precomputed(cited) if target.is_server else ""
     # Unconditional for this repo: `_precomputed` is empty when the issues cite no path, and a
     # new file trips these guards wherever it lands. Another repo has its own suite.

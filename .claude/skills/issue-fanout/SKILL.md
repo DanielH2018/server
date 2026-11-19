@@ -266,8 +266,8 @@ landing's log. Any other verdict ends the batch. A daniel-server PR the pipeline
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:
 a reviewed batch with a passed CI gate and no leftover finding, whose PR is open, still at the reviewed
 head, with no operator step in its body. Run `probe.py lander` before
-landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and a second landing would
-arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
+landing a server batch's PR by hand: it shows whether the lander landed the PR and how that ended. `land.sh` refuses a
+second landing of a PR while one is live. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once on either host, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
 head, or lands again on daniel-box. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because

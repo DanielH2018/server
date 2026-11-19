@@ -253,9 +253,6 @@ ROWS = (
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
             ),
-            "tests/repo/test_vale_matches_the_ci_pin.py": (
-                "a join of ci.yml's Vale pin against the homelab-tools package's"
-            ),
             "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
                 "a join of the writer script's metrics against the alert rules and the "
                 "Grafana board that read them"
