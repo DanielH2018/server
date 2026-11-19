@@ -42,7 +42,9 @@ empty leg's queue wait plus that span, on every run.
 
 import re
 import statistics
+import subprocess
 import sys as _sys
+import time
 from datetime import datetime
 from pathlib import Path as _Path
 
@@ -274,15 +276,31 @@ def render_pooled(costs: list[dict]) -> str:
     )
 
 
-def read_jobs(run_id: int, gh_json=gh_json) -> list[dict]:
+def _stderr_line(error: subprocess.CalledProcessError) -> str:
+    lines = (error.stderr or "").strip().splitlines()
+    return lines[-1].strip() if lines else f"gh exited {error.returncode}"
+
+
+def read_jobs(run_id: int, gh_json=gh_json, retry_pause: float = 5.0) -> list[dict]:
     """The jobs of CI run `run_id`, from the Actions jobs API.
 
+    A failed fetch is retried once after `retry_pause` seconds.
+
     Raises:
+        RuntimeError: both fetches failed; the message names the run and gh's last stderr line.
         ValueError: the response is not an object holding a `jobs` list of objects.
     """
-    listed = gh_json(
-        "api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100"
-    )
+    path = f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100"
+    try:
+        try:
+            listed = gh_json("api", path)
+        except subprocess.CalledProcessError:
+            time.sleep(retry_pause)
+            listed = gh_json("api", path)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"gh could not read the jobs of run {run_id}: {_stderr_line(error)}"
+        ) from error
     return as_object_list(as_object(listed, "the jobs response").get("jobs"), "jobs")
 
 
@@ -350,11 +368,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("name RUN_IDs or pass --recent N, not both or neither")
     if args.pull_requests and not args.recent:
         parser.error("--pull-requests reads runs for --recent N")
-    runs = (
-        recent_runs(args.recent, args.pull_requests)
-        if args.recent
-        else {run_id: read_jobs(run_id) for run_id in args.run_ids}
-    )
+    try:
+        runs = (
+            recent_runs(args.recent, args.pull_requests)
+            if args.recent
+            else {run_id: read_jobs(run_id) for run_id in args.run_ids}
+        )
+    except RuntimeError as error:
+        print(f"ci_slot_cost: {error}", file=_sys.stderr)
+        return 1
     costs = {run_id: run_cost(jobs) for run_id, jobs in runs.items()}
     if len(costs) == 1 or args.all:
         print("\n\n".join(render(run_id, cost) for run_id, cost in costs.items()))
