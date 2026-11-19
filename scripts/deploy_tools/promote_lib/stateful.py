@@ -65,7 +65,8 @@ Run: uv run python scripts/deploy_tools/promote.py hold <sha> --hold '<sha> stat
 import argparse
 import json
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 import sys as _sys
@@ -82,6 +83,7 @@ from lib.repo_paths import REPO
 import forge
 from changed_set import own_digests
 from deploy_tools.promote_lib.prune import ReadError
+from deploy_tools.promote_lib.verify_promotion import VerifyVerdict
 from renderer.renderer_lib.ordering import split_kind
 
 STATEFUL_FILE = "stateful.json"
@@ -235,25 +237,85 @@ def write(directory: Path, found: dict) -> None:
     )
 
 
-def read(directory: Path) -> dict:
+@dataclass(frozen=True)
+class StatefulRecord:
+    """The record `decide` wrote beside R's bundles, as `read` parsed it for the post.
+
+    Attributes:
+        digest: `sha-<R>`'s manifest digest, `sha256:` and 64 hex.
+        changed: every changed name, as `decide` sorted them.
+        snapshot_roles: every snapshot role R's bundle renders.
+        stateful: each changed snapshot role, mapped to its `digest8` and claims in
+            `snapshot_roles`'s shape. Never empty.
+        soak_job: the soak Job R's bundle renders, or "" for none.
+        widened: why every name counts as changed, or "" when the digests decided it.
+    """
+
+    digest: str
+    changed: tuple[str, ...]
+    snapshot_roles: frozenset[str]
+    stateful: Mapping[str, dict]
+    soak_job: str
+    widened: str
+
+
+def _names(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(n, str) for n in value)
+
+
+def _role(value: object) -> bool:
+    """Whether `value` has the shape `snapshot_roles` gives one role."""
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("digest8"), str)
+        and isinstance(value.get("claims"), list)
+        and all(
+            isinstance(c, dict)
+            and isinstance(c.get("name"), str)
+            and isinstance(c.get("namespace"), str)
+            for c in value["claims"]
+        )
+    )
+
+
+def read(directory: Path) -> StatefulRecord:
     """The record `decide` wrote under `directory`.
 
     Raises:
-        ValueError: the file is missing, not JSON, or lacks a field the post prints. The post
-            then fails red rather than posting blocks it cannot fill.
+        ValueError: the file is missing, not JSON, or lacks a field the post prints, or a
+            field has the wrong shape. The post then fails red rather than posting blocks it
+            cannot fill.
     """
+    path = directory / STATEFUL_FILE
     try:
-        found = json.loads((directory / STATEFUL_FILE).read_text(encoding="utf-8"))
+        found = json.loads(path.read_text(encoding="utf-8"))
     except OSError as err:
-        raise ValueError(f"{directory / STATEFUL_FILE}: {err}") from err
+        raise ValueError(f"{path}: {err}") from err
     fields = ("digest", "changed", "snapshot_roles", "stateful", "soak_job")
     if not isinstance(found, dict) or any(f not in found for f in fields):
-        raise ValueError(f"{directory / STATEFUL_FILE} lacks one of {fields}")
+        raise ValueError(f"{path} lacks one of {fields}")
     if not _DIGEST.fullmatch(str(found["digest"])):
         raise ValueError(f"{STATEFUL_FILE}: digest {found['digest']!r} is not sha256")
-    if not found["stateful"]:
+    stateful, widened = found["stateful"], found.get("widened", "")
+    if (
+        not _names(found["changed"])
+        or not _names(found["snapshot_roles"])
+        or not isinstance(stateful, dict)
+        or not all(_role(role) for role in stateful.values())
+        or not isinstance(found["soak_job"], str)
+        or not isinstance(widened, str)
+    ):
+        raise ValueError(f"{path}: a field does not have the shape `record` writes")
+    if not stateful:
         raise ValueError(f"{STATEFUL_FILE} names no changed snapshot role")
-    return found
+    return StatefulRecord(
+        digest=found["digest"],
+        changed=tuple(found["changed"]),
+        snapshot_roles=frozenset(found["snapshot_roles"]),
+        stateful=stateful,
+        soak_job=found["soak_job"],
+        widened=widened,
+    )
 
 
 # -- the post --------------------------------------------------------------------------------
@@ -351,9 +413,9 @@ def _pack(marker: str, lines: list[str]) -> list[str]:
 def messages(
     target: str,
     hold: str,
-    verdict: str,
+    verdict: VerifyVerdict | None,
     failed: list[str],
-    found: dict,
+    found: StatefulRecord,
     script_present: bool = True,
 ) -> list[str]:
     """The post: the header, then one message per changed snapshot role.
@@ -365,18 +427,18 @@ def messages(
     Args:
         target: R, the held commit.
         hold: the DEPLOY_HOLD value `settle` wrote.
-        verdict: `verify`'s verdict, `failed` or anything else for no verdict.
+        verdict: `verify`'s verdict, or None when verify ended with none.
         failed: the names `verify` printed as failed or timed out.
         found: the record `decide` wrote (`read`).
         script_present: whether REVERT_SCRIPT is in the checkout; the header says when not.
     """
-    snapshot = set(found["snapshot_roles"])
-    stateful = found["stateful"]
+    snapshot = found.snapshot_roles
+    stateful = found.stateful
     marker = f"promote hold {target[:8]}:"
-    changed = [_mark(n, snapshot) for n in found["changed"]] or ["none"]
-    if found.get("widened"):
-        changed.append(f"(every name counts as changed: {found['widened']})")
-    if verdict == "failed" and failed:
+    changed = [_mark(n, snapshot) for n in found.changed] or ["none"]
+    if found.widened:
+        changed.append(f"(every name counts as changed: {found.widened})")
+    if verdict == VerifyVerdict.FAILED and failed:
         failing = [_mark(n, snapshot) for n in failed]
     else:
         failing = ["none named, because verify ended with no verdict"]
@@ -392,7 +454,7 @@ def messages(
             "until it lands. Suspend, then wait for it before any reset."
         )
     if SOAK in failed:
-        job = found.get("soak_job") or ""
+        job = found.soak_job
         if job:
             header += [
                 f"soak failed. Its Job is {job}; this prints the services it named:",
@@ -414,7 +476,7 @@ def messages(
         state = "FAILED" if any(split_kind(n)[0] == tag for n in failed) else "changed"
         info = [
             f"{marker} snapshot role {tag} ({state}), digest8 {role['digest8']}",
-            f"Compare its classify output with: {comparison(found['digest'])}",
+            f"Compare its classify output with: {comparison(found.digest)}",
             "Snapshot prefix per claim:",
             *(
                 f"- {c['name']} ({c['namespace']}): "
@@ -422,7 +484,7 @@ def messages(
                 for c in role["claims"]
             ),
         ]
-        whole = "\n".join(info) + "\n" + block(tag, role, found["digest"])
+        whole = "\n".join(info) + "\n" + block(tag, role, found.digest)
         if len(whole) <= forge.DISCORD_MAX:
             posts.append(whole)
         else:
@@ -430,7 +492,7 @@ def messages(
             # the block. A block still over the limit fails its send, so the run reads red.
             posts += [
                 "\n".join(info),
-                f"{marker} {tag}'s commands:\n" + block(tag, role, found["digest"]),
+                f"{marker} {tag}'s commands:\n" + block(tag, role, found.digest),
             ]
     return posts
 
@@ -447,6 +509,15 @@ def suspended_message(target: str, hold: str, tags: list[str]) -> str:
     )
 
 
+def verify_verdict(value: str) -> VerifyVerdict | None:
+    """`--verdict`'s value: None for "", which promote.yml passes when verify wrote no output.
+
+    Raises:
+        ValueError: any other value outside VerifyVerdict, which argparse refuses.
+    """
+    return VerifyVerdict(value) if value else None
+
+
 def add_parser(commands) -> None:
     """Add the `hold` subcommand to `promote.py`'s subparsers."""
     cmd = commands.add_parser(
@@ -461,7 +532,12 @@ def add_parser(commands) -> None:
         type=Path,
         help="where decide wrote its record; required for a stateful hold",
     )
-    cmd.add_argument("--verdict", default="", help="verify's verdict")
+    cmd.add_argument(
+        "--verdict",
+        type=verify_verdict,
+        default=None,
+        help=f"verify's verdict: {', '.join(VerifyVerdict)}, or empty for none",
+    )
     cmd.add_argument("--failed", default="", help="verify's failed names, comma-joined")
 
 

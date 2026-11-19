@@ -15,7 +15,7 @@ from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import land_flux, land_tags, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 from deploy_tools.land_lib.host_wait import HostTarget
-from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib import proc_testing
 
 HEAD = "c" * 40
@@ -27,7 +27,7 @@ def _names(calls):
 
 
 # What land-wait answers when the changed set names bento-pdf.
-SETTLED_BENTO = WaitResult("settled", detail="1 applied", tags=("bento-pdf",))
+SETTLED_BENTO = WaitResult(WaitVerdict.SETTLED, detail="1 applied", tags=("bento-pdf",))
 
 
 def _fakes(**kwargs: object) -> Fakes:
@@ -100,7 +100,9 @@ def test_a_pr_of_documents_and_tests_alone_waits_on_no_promotion(land_run, path)
 
 
 def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
-    held = WaitResult("deploy-failed", "promote-held", "DEPLOY_HOLD holds abc")
+    held = WaitResult(
+        WaitVerdict.DEPLOY_FAILED, "promote-held", "DEPLOY_HOLD holds abc"
+    )
     rc, out, _, calls, logline = land_run([], _fakes(land_wait=[held]))
     assert rc == 1 and "VERDICT: deploy-failed" in out
     assert "DEPLOY_HOLD holds abc" in out
@@ -110,7 +112,10 @@ def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
 
 def test_a_held_promotion_records_the_changed_sets_tags_on_the_ledger(land_run):
     held = WaitResult(
-        "deploy-failed", "promote-held", "DEPLOY_HOLD holds abc", tags=("bento-pdf",)
+        WaitVerdict.DEPLOY_FAILED,
+        "promote-held",
+        "DEPLOY_HOLD holds abc",
+        tags=("bento-pdf",),
     )
     rc, _, _, _, logline = land_run([], _fakes(land_wait=[held]))
     assert rc == 1
@@ -120,7 +125,7 @@ def test_a_held_promotion_records_the_changed_sets_tags_on_the_ledger(land_run):
 def test_a_held_promotion_puts_the_waits_hold_owner_on_the_result_line(land_run):
     """Only the wait reads the hold against the PR's own services, so its answer is copied."""
     held = WaitResult(
-        "deploy-failed",
+        WaitVerdict.DEPLOY_FAILED,
         "promote-held",
         "DEPLOY_HOLD holds abc",
         tags=("bento-pdf",),
@@ -134,7 +139,9 @@ def test_a_held_promotion_puts_the_waits_hold_owner_on_the_result_line(land_run)
 
 def test_a_held_promotion_still_names_the_plane_and_the_host_it_carries(land_run):
     """The wait ends the landing before the health step and the host wait print these."""
-    held = WaitResult("deploy-failed", "promote-held", "DEPLOY_HOLD holds abc")
+    held = WaitResult(
+        WaitVerdict.DEPLOY_FAILED, "promote-held", "DEPLOY_HOLD holds abc"
+    )
     fakes = _fakes(
         land_wait=[held],
         gh_views={
@@ -156,7 +163,10 @@ def test_a_failed_soak_is_deploy_failed_with_soak_failed(land_run):
     """The red half is the mapping before D5.3b3, which labelled every `deploy-failed`
     `promote-held`."""
     failed = WaitResult(
-        "deploy-failed", "soak-failed", "flux/soak reads failure", revision="d" * 40
+        WaitVerdict.DEPLOY_FAILED,
+        "soak-failed",
+        "flux/soak reads failure",
+        revision="d" * 40,
     )
     rc, out, _, calls, logline = land_run([], _fakes(land_wait=[failed]))
     assert rc == 1 and "VERDICT: deploy-failed" in out
@@ -166,7 +176,9 @@ def test_a_failed_soak_is_deploy_failed_with_soak_failed(land_run):
 
 
 def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
-    timed_out = WaitResult("gave-up", "promote-timeout", "no promotion covered it")
+    timed_out = WaitResult(
+        WaitVerdict.GAVE_UP, "promote-timeout", "no promotion covered it"
+    )
     rc, out, _, _, logline = land_run([], _fakes(land_wait=[timed_out]))
     assert rc == 75 and "VERDICT: deferred" in out
     assert "cause=promote-timeout" in logline
@@ -177,7 +189,7 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
 def test_an_unreadable_cluster_is_deferred_with_gate_unreadable(land_run):
     """`land_probe` reads the cause as a resume point; the timeout note would mislead."""
     unreadable = WaitResult(
-        "gave-up", "gate-unreadable", "this host cannot read the cluster"
+        WaitVerdict.GAVE_UP, "gate-unreadable", "this host cannot read the cluster"
     )
     rc, out, _, _, logline = land_run([], _fakes(land_wait=[unreadable]))
     assert rc == 75 and "VERDICT: deferred" in out
@@ -187,7 +199,9 @@ def test_an_unreadable_cluster_is_deferred_with_gate_unreadable(land_run):
 
 
 def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
-    suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
+    suspended = WaitResult(
+        WaitVerdict.SUSPENDED, "promote-suspended", "bento-pdf is suspended"
+    )
     rc, out, _, calls, _ = land_run([], _fakes(land_wait=[suspended]))
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert "bento-pdf is suspended" in out
@@ -204,7 +218,9 @@ def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
     ],
 )
 def test_a_suspended_tag_with_a_plane_owed_is_needs_manual_apply(land_run, owed, line):
-    suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
+    suspended = WaitResult(
+        WaitVerdict.SUSPENDED, "promote-suspended", "bento-pdf is suspended"
+    )
     fakes = _fakes(
         land_wait=[suspended],
         gh_views={
@@ -225,7 +241,7 @@ def test_a_suspended_tag_with_a_plane_owed_is_needs_manual_apply(land_run, owed,
 
 def test_a_suspended_tag_with_a_host_package_still_waits_for_the_host(land_run):
     suspended = WaitResult(
-        "suspended",
+        WaitVerdict.SUSPENDED,
         "promote-suspended",
         "bento-pdf is suspended",
         suspended=("bento-pdf",),
@@ -251,7 +267,7 @@ def test_a_suspended_tag_with_a_host_package_still_waits_for_the_host(land_run):
 
 def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
     settled = WaitResult(
-        "settled",
+        WaitVerdict.SETTLED,
         detail="3 applied",
         suspended=("bento-pdf",),
         tags=("bento-pdf", "texbrain"),

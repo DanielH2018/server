@@ -78,7 +78,9 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
+from typing import assert_never
 
 import yaml
 
@@ -319,20 +321,32 @@ class StatusReads:
     prod: Callable[[], str | None] | None = None
 
 
+class VerifyVerdict(StrEnum):
+    """How `verify` ended, as its `verdict=` step output, which `settle` and `hold` read."""
+
+    GOOD = "good"
+    FAILED = "failed"
+    SUPERSEDED = "superseded"
+
+
 @dataclass(frozen=True)
 class Verdict:
     """How `verify` ended.
 
     Attributes:
-        verdict: `good`, `failed` or `superseded`.
+        verdict: the outcome.
         failed: the names `settle` writes into `<T> failed=<names>`, sorted.
         excused: the dependents left out because their recorded status on `prod`'s commit
             read `failure`.
     """
 
-    verdict: str
+    verdict: VerifyVerdict
     failed: tuple[str, ...] = ()
     excused: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Raises ValueError on a value outside VerifyVerdict, where the verdict is built.
+        object.__setattr__(self, "verdict", VerifyVerdict(self.verdict))
 
 
 def already_failing(
@@ -394,7 +408,7 @@ def verify(
     def moved_past() -> Verdict | None:
         if superseded.moved_past(reads.prod, digest) is None:
             return None
-        return Verdict("superseded", excused=tuple(sorted(excused)))
+        return Verdict(VerifyVerdict.SUPERSEDED, excused=tuple(sorted(excused)))
 
     while True:
         if moved := moved_past():
@@ -411,19 +425,19 @@ def verify(
         final = [n for n in failed if n not in rolling]
         if final and not window.provisional(final, states, reads.clock()):
             return moved_past() or Verdict(
-                "failed", tuple(failed), tuple(sorted(excused))
+                VerifyVerdict.FAILED, tuple(failed), tuple(sorted(excused))
             )
         if failed:
             line += window.note() if final else controller.note()
         if all(states.get(STATUS_PREFIX + n) == "success" for n in names):
-            return Verdict("good", excused=tuple(sorted(excused)))
+            return Verdict(VerifyVerdict.GOOD, excused=tuple(sorted(excused)))
         if line != last:
             print(f"  verify: {line}", flush=True)
             last = line
         if reads.clock() - started >= expected.timeout_s:
             missing = [n for n in names if states.get(STATUS_PREFIX + n) != "success"]
             return moved_past() or Verdict(
-                "failed", tuple(missing), tuple(sorted(excused))
+                VerifyVerdict.FAILED, tuple(missing), tuple(sorted(excused))
             )
         reads.sleep(poll_s)
 
@@ -439,7 +453,13 @@ def report(target: str, verdict: Verdict, github_output: str | None) -> int:
     if github_output:
         with open(github_output, "a", encoding="utf-8") as out:
             out.write(f"verdict={verdict.verdict}\nfailed={failed}\n")
-    return OK if verdict.verdict in ("good", "superseded") else FAILED
+    match verdict.verdict:
+        case VerifyVerdict.GOOD | VerifyVerdict.SUPERSEDED:
+            return OK
+        case VerifyVerdict.FAILED:
+            return FAILED
+        case unknown:
+            assert_never(unknown)
 
 
 def add_parser(commands) -> None:

@@ -61,7 +61,9 @@ def test_verify_reads_an_expected_status_that_sits_on_the_second_page():
     clock = Clock()
     reads = vp.StatusReads(forge.GitHub(transport, None).statuses, clock.sleep, clock)
     since = datetime(2026, 10, 22, 21, 15, tzinfo=UTC)
-    assert vp.verify(reads, T, "b" * 40, expected, since) == vp.Verdict("good")
+    assert vp.verify(reads, T, "b" * 40, expected, since) == vp.Verdict(
+        vp.VerifyVerdict.GOOD
+    )
     assert any("page=2" in url for url in requests), "the reader never asked for page 2"
 
 
