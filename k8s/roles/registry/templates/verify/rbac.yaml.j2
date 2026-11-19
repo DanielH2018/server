@@ -4,10 +4,5 @@
   It is a ServiceAccount with no Role. Both Jobs dial the registry over the pod network and
   exec into no pod, so they need no Kubernetes grant, and their pods mount no token.
 #}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: registry-verify
-  namespace: {{ k8s_namespace }}
-automountServiceAccountToken: false
+{% from 'digest-job.yml.j2' import verify_sa with context %}
+{{ verify_sa('registry-verify') }}

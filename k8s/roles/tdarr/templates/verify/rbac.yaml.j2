@@ -6,10 +6,5 @@
   one check that would need `pods/exec`; the Deployment's `vaapi-encode` initContainer runs it
   instead (#5451).
 #}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: tdarr-verify
-  namespace: {{ k8s_namespace }}
-automountServiceAccountToken: false
+{% from 'digest-job.yml.j2' import verify_sa with context %}
+{{ verify_sa('tdarr-verify') }}
