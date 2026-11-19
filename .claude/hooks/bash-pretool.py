@@ -30,8 +30,14 @@ the session typed. `uv-python` (#3286) routes bare python/pytest through `uv run
 is what the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20.
 Its own docstring owns the rewrite rules and what the harness does with an `updatedInput` that
 arrives beside a `deny` or an `ask`. `strip-cd-cwd` (#3957) runs before it and drops a leading
-`cd <dir> &&` when `<dir>` is the session's cwd, so the auto-mode classifier reads one command
-rather than a compound. Each rewrite arm reads the text the one before it produced.
+`cd <dir> &&` when `<dir>` is the session's cwd. Each rewrite arm reads the text the one before
+it produced.
+
+AUTO MODE TAKES NO REWRITE. The auto-mode classifier reviews a call before this hook runs, and
+it refuses any call whose input a hook then changed. So in auto mode `strip-cd-cwd` does not
+run, and whatever `uv-python` produced is emitted as a `deny` whose reason names the rewritten
+command. The session's one retry sends that command, which the classifier reviews as it runs
+and which every rewrite arm leaves as it is.
 
 THE MERGE is the one Claude Code performs across separate hooks, read from the 2.1.267
 bundle: `deny` is sticky, `defer` outranks `ask`, `ask` outranks `allow`, and `allow` only
@@ -83,6 +89,15 @@ _CONTEXT_ARM = ("inject-nested-docs", "inject_nested_docs")
 # decision above read the command as typed. `strip-cd-cwd` goes first so that `cd <cwd> &&
 # pytest` reaches `uv-python` as `pytest` and leaves as `uv run pytest`.
 _REWRITE_ARMS = (("strip-cd-cwd", "strip_cd_cwd"), ("uv-python", "uv_python"))
+
+# Rewrite arms not asked in auto mode: the classifier has already reviewed the typed command, so
+# stripping a `cd` there buys nothing and draws the input-changed refusal.
+_SKIPPED_IN_AUTO_MODE = frozenset({"strip-cd-cwd"})
+
+_AUTO_MODE_DENY = (
+    "Auto mode refuses a call whose input a hook changed after its review, so this hook names "
+    "the rewrite instead of applying it. Send this command, alone: {command}"
+)
 
 # Highest first. `defer` is in the table because the harness ranks it between deny and ask; no
 # arm returns one today, and leaving it out would silently demote an arm that grew one.
@@ -144,11 +159,14 @@ def collect(
             fresh here and so cannot be monkeypatched from outside.
         rewrite_arms: the pairs asked for a rewritten command, in order. Each reads the text
             the previous one produced, and an arm that raises or returns None leaves that text
-            as it was. Asked after the decision arms so they judge the command as typed.
+            as it was. Asked after the decision arms so they judge the command as typed. In
+            auto mode an arm in `_SKIPPED_IN_AUTO_MODE` is not asked, and the text the others
+            produced becomes a `deny` verdict naming it, attributed to the last arm that
+            changed it.
 
     Returns:
         `(verdicts, context, command)`, where `command` is None when no rewrite arm changed
-        the text.
+        the text, and always None in auto mode.
     """
     verdicts = []
     for filename, module_name in arms:
@@ -165,8 +183,12 @@ def collect(
         context = load(*context_arm).context(payload)
     except Exception as exc:
         _report(context_arm[0], exc)
+    auto_mode = payload.get("permission_mode") == "auto"
     command = None
+    rewriter = None
     for filename, module_name in rewrite_arms:
+        if auto_mode and filename in _SKIPPED_IN_AUTO_MODE:
+            continue
         current = payload
         if command is not None:
             current = {
@@ -179,7 +201,11 @@ def collect(
             _report(filename, exc)
             continue
         if rewritten is not None:
-            command = rewritten
+            command, rewriter = rewritten, filename
+    if auto_mode and command is not None:
+        reason = _AUTO_MODE_DENY.format(command=command)
+        verdicts.append(("deny", _attributed(rewriter, reason)))
+        command = None
     return verdicts, context, command
 
 
