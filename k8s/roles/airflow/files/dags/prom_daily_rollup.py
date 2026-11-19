@@ -8,13 +8,12 @@ catchup reaches back only as far as the source still holds.
 
 from datetime import datetime, timedelta, timezone
 
-from airflow.exceptions import AirflowSkipException
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.sdk import Asset, dag, task
+from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import prom_rollup as pr
-from homelab_warehouse.warehouse import ensure_schema, replace_partition
-from psycopg2.extras import RealDictCursor
+from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
 
 WAREHOUSE_CONN = "warehouse"
 PROM_DAILY = Asset("warehouse://prom/daily")
@@ -72,11 +71,8 @@ def prom_daily_rollup():
         day = _day(data_interval_start)
         conn = PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn()
         try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(f"SELECT * FROM {pr.UPS_TABLE} WHERE day = %s", (day,))
-                ups = cursor.fetchall()
-                cursor.execute(f"SELECT * FROM {pr.TEMP_TABLE} WHERE day = %s", (day,))
-                temps = cursor.fetchall()
+            ups = read_partition(conn, pr.UPS_TABLE, "day", day)
+            temps = read_partition(conn, pr.TEMP_TABLE, "day", day)
         finally:
             conn.close()
         problems = pr.quality_problems(day, ups, temps)
