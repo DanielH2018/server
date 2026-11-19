@@ -9,7 +9,7 @@ ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:{{ k8s_built_imag
 k8s_autodeploy: true
 k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route. NOTHING CAN TRIGGER AN AUTOMERGE: ical_proxy_k8s_image is a registry-built <pull-host>/ical-proxy ref, listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer. Only templates/Dockerfile.j2's FROM line moves, and every automerge rule in renovate.json is custom.regex-only, so that dockerfile-manager bump never automerges. The stance is correct and harmless, not active"
 
-# Blast-radius caps (M1 values, k8s-native units).
+# Blast-radius caps.
 ical_proxy_k8s_cpu_limit: 500m
 ical_proxy_k8s_mem_limit: 128Mi
 ical_proxy_k8s_cpu_request: 50m

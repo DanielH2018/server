@@ -2,25 +2,20 @@
 # generic-device-plugin advertises arbitrary /dev nodes as schedulable extended resources.
 # Chosen over the vendor AMD plugin (which targets ROCm compute, not the render node VAAPI uses)
 # and over smarter-device-manager (same idea, larger config surface).
-# Pinned by digest, Renovate-trackable. The digest is the exact image validated against the
-# whole VAAPI path — encode at 10.9x realtime — so the version that was proven is the version
-# that ships.
+# Pinned by digest, Renovate-trackable.
 # `:latest` plus a digest, not a version tag, because upstream publishes no version tags at all
 # — every tag is `latest` or a commit SHA, none semver. The digest is what actually pins. The
-# `:latest` is there so Renovate's
-# k8s-defaults manager matches the line and can offer digest bumps — a digest-only pin slips
-# its regex and would age forever with no update signal, which the repo's own guard test
-# (test_every_k8s_role_image_is_renovate_tracked) refuses.
+# `:latest` is there so Renovate's k8s-defaults manager matches the line and can offer digest
+# bumps — a digest-only pin slips its regex and would age forever with no update signal, which
+# the repo's own guard test (test_every_k8s_role_image_is_renovate_tracked) refuses.
 dri_device_plugin_k8s_image: ghcr.io/squat/generic-device-plugin:latest@sha256:8dc84958301f054bf72d9753a7a2c9af3d6642a9844b34d1171b3f2cdb4a15f6
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Under Flux the gate is the K8sExtendedResourceMissing verify alert the soak reads, not a
-# rollout wait. Even a probe would not close this: a readiness probe on /health would
-# prove only the HTTP listener, not that the plugin registered its gRPC socket with the kubelet
-# — rollout status would go green on an unregistered plugin. This is also the workload that
-# advertises the /dev/dri render node as a schedulable resource — jellyfin's GPU transcoding
-# depends on it, so a wedge here has a downstream victim with no rollout gate of its own
-# watching for it either.
+# rollout wait. A readiness probe on /health would prove only the HTTP listener, not that the
+# plugin registered its gRPC socket with the kubelet — rollout status would go green on an
+# unregistered plugin. This workload advertises the /dev/dri render node as a schedulable
+# resource, which jellyfin's GPU transcoding depends on.
 k8s_autodeploy: false
 k8s_autodeploy_reason: "no rollout gate proves the plugin works — the soak reads the K8sExtendedResourceMissing alert instead; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable"
 
@@ -28,12 +23,11 @@ k8s_autodeploy_reason: "no rollout gate proves the plugin works — the soak rea
 # allowance, not a hardware fact — jellyfin and tdarr both want it, and the GPU multiplexes fine.
 dri_device_plugin_count: 4
 
-# ── the admission reaper (templates/admission-reaper-cronjob.yaml.j2) ──────────────────────
 # After a reboot the kubelet can re-admit a GPU pod before this plugin re-registers, and the
-# rejected pod stays Failed beside its replacement (#6367). The CronJob deletes those pods;
+# rejected pod stays Failed beside its replacement. The CronJob deletes those pods;
 # files/dri_admission_reaper.py has the rule. Every 15 minutes, so a tombstone from the weekly
 # reboot is gone well inside the hour after boot.
-# The add-on namespaces where the job also deletes every Failed pod a Job owns (#6460). They run
+# The add-on namespaces where the job also deletes every Failed pod a Job owns. They run
 # Jobs this repo does not render: k3s's helm-install Jobs and Longhorn's backup Jobs, which no
 # `ttlSecondsAfterFinished` reaches. system-upgrade is not listed: the SUC controller's
 # SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH (900) ages its Plan Jobs out on their own.

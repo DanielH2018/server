@@ -7,7 +7,7 @@ window ends `Failed` with reason `UnexpectedAdmissionError` ("Allocate failed du
 devices present") or `OutOf<resource>`. Its ReplicaSet creates a replacement, which schedules
 once the plugin is back, but nothing deletes the rejected pod: the kube-controller-manager's
 `terminated-pod-gc-threshold` is 12500 pods, so the tombstone stays Failed and dashboards list
-it as Down (#6367, tdarr after the 2026-10-25 reboot).
+it as Down.
 
 The `dri-admission-reaper` CronJob runs this in the workload namespace, and the
 `addon-job-reaper` CronJob runs it in kube-system against each add-on namespace. In the
@@ -22,7 +22,7 @@ workload namespace a pod is deleted only when all three hold:
 
 The add-on namespaces, `kube-system` and `longhorn-system`, run Jobs this repo does not render:
 k3s's helm-install Jobs and Longhorn's backup Jobs. No `ttlSecondsAfterFinished` reaches them,
-so a run the weekly reboot interrupts stays Failed (#6460). There a pod is deleted when it is a
+so a run the weekly reboot interrupts stays Failed. There a pod is deleted when it is a
 workload-namespace tombstone, or when both of these hold:
 
 - its phase is `Failed`;

@@ -365,7 +365,6 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
 
 
-# --- the Discord report is capped on the wire path --------------------------------------------
 # The cap lives in monitor-bridge's bridge/common.py. This drives the real `post_discord` through
 # a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook in its
 # environment, so no first-party name is patched.

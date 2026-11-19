@@ -1,14 +1,14 @@
 ---
-# Cluster DNS, handed to Flux (H1.4). The templates are derived from k3s's own
+# Cluster DNS, handed to Flux. The templates are derived from k3s's own
 # manifests/coredns.yaml at k3s_version, with each `%{...}%` placeholder written as the value k3s
 # substitutes on this cluster. Nothing here is vendored, because that file is not YAML until k3s
 # substitutes it. A k3s bump refreshes the templates by hand, and
 # hosts/tests/test_coredns_image_follows_bundled_manifest.py ties them to the version.
 
 # The CoreDNS image k3s v1.37.2+k3s1 bundles, with `%{SYSTEM_DEFAULT_REGISTRY}%` replaced by the
-# empty string as k3s stages it. The k3s addon stopped reconciling it when the `.skip` marker
-# went in, so this pin is the only thing that moves the image: a k3s bump changes k3s_version,
-# the test's excerpt, this pin and any template change in one PR (H6).
+# empty string as k3s stages it. The k3s addon does not reconcile it (the `.skip` marker), so
+# this pin is the only thing that moves the image: a k3s bump changes k3s_version, the test's
+# excerpt, this pin and any template change in one PR.
 #
 # Renovate must not bump it alone: the k8s image manager matches every `_image:` key in a k8s
 # role's defaults, and renovate.json disables this one. The image is whatever k3s bundles.

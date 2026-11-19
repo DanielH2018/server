@@ -4,7 +4,7 @@
 
   Flat keys, because a ConfigMap key cannot hold a `/`. The CronJob's volume maps each
   configarr_lib key back under configarr_lib/ with `items:`, so `from configarr_lib import ...`
-  resolves beside the reader as it did on the host.
+  resolves beside the reader.
 
   No secret goes in here, and the pod takes none from a Secret.
   tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every

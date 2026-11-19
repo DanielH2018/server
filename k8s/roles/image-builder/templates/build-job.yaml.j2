@@ -72,18 +72,14 @@ spec:
             - type=image,"name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_content_tag }},{{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }}",push=true,registry.insecure=true
             # Layer cache, kept in the registry beside the image it belongs to. buildkitd's
             # own state is an emptyDir that dies with the Job, so without this EVERY build is
-            # cold: re-pull the base, re-run every apt/pip/npm step, re-fetch everything the
-            # Dockerfile downloads — even when the Dockerfile is byte-identical to last time.
+            # cold, even when the Dockerfile is byte-identical to last time.
             #
-            # mode=min, not max, and that is sufficient here rather than a compromise: max
-            # only adds the layers of intermediate BUILD STAGES, and all seven Dockerfiles
-            # this role builds are single-stage, so every RUN already produces a layer of the
-            # resulting image that min exports. max would cost registry space for nothing.
+            # mode=min, not max: max only adds the layers of intermediate BUILD STAGES, and
+            # every Dockerfile this role builds is single-stage, so min already exports every
+            # RUN layer. max would cost registry space for nothing.
             #
-            # image-manifest+oci-mediatypes are what make the cache storable in a standard
-            # distribution registry (ours is the `registry` image, pinned in
-            # k8s/roles/registry/defaults/main.yml) rather than needing a
-            # buildkit-aware one.
+            # image-manifest+oci-mediatypes make the cache storable in a standard distribution
+            # registry (the `registry` image, pinned in k8s/roles/registry/defaults/main.yml).
             #
             # The `:buildcache` tag is a real tag, so registry GC — which only sweeps
             # UNTAGGED blobs — will not reclaim it. The cache is therefore bounded by the
@@ -93,22 +89,20 @@ spec:
             - --export-cache
             - type=registry,ref={{ k8s_registry_push_host }}/{{ image_builder_name }}:buildcache,mode=min,image-manifest=true,oci-mediatypes=true,registry.insecure=true
           # Rootless BuildKit needs these two, and this is the least-confined workload in the
-          # fleet — everything else runs cap_drop: ALL and nothing else relaxes seccomp. Stated
-          # plainly rather than buried: building an image means unpacking arbitrary base-image
-          # layers and running arbitrary RUN steps, so the builder is a code-execution surface
-          # by construction. What is bought by rootless is that it is NOT privileged and does
-          # NOT run as uid 0 — the usual in-cluster build setup is both.
+          # fleet — everything else runs cap_drop: ALL and nothing else relaxes seccomp. Building
+          # an image means unpacking arbitrary base-image layers and running arbitrary RUN steps,
+          # so the builder is a code-execution surface by construction. Rootless buys that it is
+          # NOT privileged and does NOT run as uid 0.
           #
           # It runs only during a deploy, has no Service and no ingress, and the thing it builds
           # is a Dockerfile from this repo. The exposure is the deploy path itself, which is
           # already trusted with far more.
           #
-          # allowPrivilegeEscalation is NOT set false here, and it is the one place in this
-          # fleet that is true. Setting it false was tried first and fails before buildkitd
-          # starts, with `newuidmap: Could not set caps`: rootlesskit puts the DAEMON in a user
-          # namespace, and mapping subuids into one goes through the setuid newuidmap helper,
-          # whose whole job is to raise capabilities. Blocking that does not make the builder
-          # safer — it makes rootless impossible, leaving only a root or privileged builder,
+          # allowPrivilegeEscalation is NOT set false here, the one place in this fleet that is
+          # true. False fails before buildkitd starts, with `newuidmap: Could not set caps`:
+          # rootlesskit puts the DAEMON in a user namespace, and mapping subuids into one goes
+          # through the setuid newuidmap helper, whose whole job is to raise capabilities.
+          # Blocking that makes rootless impossible, leaving only a root or privileged builder,
           # which is strictly worse. Upstream's k8s example omits the field for this reason.
           #
           # What it does not grant: root on the node. The container is uid 1000, adds no
@@ -124,10 +118,10 @@ spec:
             - name: image-builder-context
               mountPath: /workspace
               readOnly: true
-            # buildkitd's state. Still an emptyDir, and still not a PVC — but for a different
-            # reason than before: cross-build caching now lives in the registry (see
-            # --export-cache above), so this only has to survive one build. A Longhorn volume
-            # would duplicate that at higher cost, and would pin builds to one node.
+            # buildkitd's state. An emptyDir, not a PVC: cross-build caching lives in the
+            # registry (see --export-cache above), so this only has to survive one build. A
+            # Longhorn volume would duplicate that at higher cost, and would pin builds to one
+            # node.
             - name: image-builder-buildkitd
               mountPath: /home/user/.local/share/buildkit
 {{ container_resources(cpu_limit="2", mem_limit="2048Mi", cpu_request="200m", mem_request="256Mi") }}

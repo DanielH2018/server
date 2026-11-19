@@ -108,9 +108,6 @@ def allowed_names(body: dict) -> set[str]:
     return {i["quality"]["name"] for i in body["items"] if i["allowed"]}
 
 
-# ── the match key ───────────────────────────────────────────────────────────────────────────
-
-
 def test_a_profile_is_found_by_its_name() -> None:
     shipped = _profile("Standard", 3)
     assert seed.find_profile([_profile("Any", 1), shipped], "Standard") is shipped
@@ -119,9 +116,6 @@ def test_a_profile_is_found_by_its_name() -> None:
 def test_a_name_that_matches_nothing_is_not_adopted() -> None:
     # The reject half: Standard must not be mistaken for a similarly named profile.
     assert seed.find_profile([_profile("Standard (old)", 3)], "Standard") is None
-
-
-# ── what the declaration says ───────────────────────────────────────────────────────────────
 
 
 def test_the_lossy_profile_allows_exactly_the_decided_qualities() -> None:
@@ -170,9 +164,6 @@ def test_a_cutoff_outside_the_allowed_set_fails_the_run() -> None:
         declare(_profile("Standard", 3), {**STANDARD, "cutoff": "MP3-256"})
 
 
-# ── the rewrite decision ────────────────────────────────────────────────────────────────────
-
-
 def test_a_profile_already_declared_is_not_rewritten() -> None:
     declared = declare(_profile("Standard", 3), STANDARD)
     assert not seed.needs_update(declared, declare(declared, STANDARD))
@@ -198,9 +189,6 @@ def test_drift_from_the_declaration_is_rewritten(mutate) -> None:
     drifted = declare(_profile("Standard", 3), STANDARD)
     mutate(drifted)
     assert seed.needs_update(drifted, declare(drifted, STANDARD))
-
-
-# ── the Job, as Flux receives it ────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(scope="module")
@@ -246,9 +234,6 @@ def test_the_job_reads_the_key_lidarr_applies_and_the_declared_profiles(
     }
     assert json.loads(env["LIDARR_QUALITY_PROFILES"]["value"]) == PROFILES
     assert env["LIDARR_URL"]["value"] == "http://lidarr.homelab.svc.cluster.local:8686"
-
-
-# ── the run ─────────────────────────────────────────────────────────────────────────────────
 
 
 class _Lidarr:

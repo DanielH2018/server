@@ -22,7 +22,7 @@ spec:
     spec:
       # uid 1000, read-only root, all caps dropped, /tmp the only writable path.
       # The pod's own read-only cluster identity (rbac.yaml) — get/list on workload
-      # shapes + pods/log, the exact surface of the Phase G cluster-API tools.
+      # shapes + pods/log, the exact surface of the cluster-API tools.
 {{ pod_shell('homelab-best-effort', service_account='homelab-mcp', run_as_user=1000, run_as_group=1000, non_root=true) }}
       # Pinned, not preferred: the source mounts below read the node's checkout, and only the
       # primary node's checkout has a timer (checkout-sync) keeping it at origin/master.
@@ -47,16 +47,15 @@ spec:
                 secretKeyRef:
                   name: homelab-mcp-secrets
                   key: HOMELAB_HA_TOKEN
-            # In-cluster service URLs — every backend this server reads is cluster-hosted
-            # now. DOCKER_PROXY_URL stays unset on purpose: the cluster is barred from the
-            # Docker socket (Security M1), so the container tools raise a clear
-            # tools-are-dark error (safe_reads.docker_base_or_raise) until the Phase G
-            # cluster-API successor.
+            # In-cluster service URLs — every backend this server reads is cluster-hosted.
+            # DOCKER_PROXY_URL stays unset on purpose: the cluster is barred from the Docker
+            # socket, so the container tools raise a clear tools-are-dark error
+            # (safe_reads.docker_base_or_raise).
             - name: PROMETHEUS_URL
               value: http://prometheus.observability.svc.cluster.local:9090
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
-            # The observability Loki — verbatim prompt/response content (KL1). Only
+            # The observability Loki — verbatim prompt/response content. Only
             # claude_code_events reads it, and only through the metadata whitelist
             # (k8s_reads.claude_event_rows); the raw store stays without a LAN route.
             - name: CLAUDE_LOKI_URL
@@ -71,7 +70,7 @@ spec:
             - name: MCP_PUBLIC_HOST
               value: mcp.local.{{ domain }}
             # The only destinations cert_expiry may dial: hostnames under the routed zone, on
-            # Traefik's HTTPS port. Unset, the tool refuses every target (#1931).
+            # Traefik's HTTPS port. Unset, the tool refuses every target.
             - name: CERT_EXPIRY_DOMAINS
               value: "{{ domain }}"
             - name: CERT_EXPIRY_PORTS

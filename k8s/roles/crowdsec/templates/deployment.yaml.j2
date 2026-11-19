@@ -20,9 +20,8 @@ spec:
         app: crowdsec
         netpol-baseline: enforced
     spec:
-      # Pinned with the rest of the home-critical chain to the node announcing its VIPs
-      # (#3452); the DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2
-      # has why.
+      # Pinned with the rest of the home-critical chain to the node announcing its VIPs; the
+      # DECIDED marker in k8s/roles/home-assistant/templates/deployment.yaml.j2 has why.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       # The ServiceAccount is the crowdsec-jobs sidecar's (jobs-rbac.yaml.j2). Its token is not
@@ -34,8 +33,7 @@ spec:
       initContainers:
         # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
         # start; this seeds our config first so the entrypoint treats it as existing
-        # config rather than overwriting it. Mirrors the Docker flow, where the image
-        # populated ./crowdsec-config once and Ansible dropped these same files in.
+        # config rather than overwriting it.
         - name: config-install
           image: {{ crowdsec_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -189,10 +187,10 @@ spec:
             timeoutSeconds: 10
 {{ container_resources(cpu_limit=crowdsec_k8s_cpu_limit, mem_limit=crowdsec_k8s_mem_limit, cpu_request=crowdsec_k8s_cpu_request, mem_request=crowdsec_k8s_mem_request) }}
         # The remote allowlist, the AppSec verify, the bouncer prune and the home allowlist, each
-        # on its old host cron's schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
-        # database, and a container in this pod reaches it with no `pods/exec` grant: the
-        # operator's ruling of 2026-10-18 on #5655. It shares the engine's config and database
-        # volumes, and cscli reads them here as it does in the engine container.
+        # on its own schedule (files/crowdsec_jobs.py). They need cscli against the LAPI's own
+        # database, and a container in this pod reaches it with no `pods/exec` grant. It shares
+        # the engine's config and database volumes, and cscli reads them here as it does in the
+        # engine container.
         #
         # Root, like the engine container: the SQLite file and its directory belong to root, and
         # cscli writes allowlist rows and prunes bouncer rows there. Every capability is dropped,

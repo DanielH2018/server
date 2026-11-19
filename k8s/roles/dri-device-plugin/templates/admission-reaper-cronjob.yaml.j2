@@ -6,13 +6,13 @@
 
   `dri-admission-reaper`, in the workload namespace, deletes the Failed pods the kubelet
   rejected at admission because this role's plugin had not re-registered `devic.es/dri` yet,
-  once their ReplicaSet has replaced them (#6367). It runs there rather than beside the
+  once their ReplicaSet has replaced them. It runs there rather than beside the
   DaemonSet in kube-system, because those pods are there and a Role grants only in its own
   namespace. The namespace baseline fences ingress only, and the job takes no connection, so
   it needs no `netpol_from` grant.
 
   `addon-job-reaper`, in kube-system, deletes the Failed Job pods in the add-on namespaces
-  that `dri_device_plugin_reaper_job_namespaces` lists (#6460).
+  that `dri_device_plugin_reaper_job_namespaces` lists.
   # DECIDED: the add-on sweep runs as its own ServiceAccount in kube-system, not as the
   # workload namespace's reaper. Its grant reaches every pod in kube-system and
   # longhorn-system, and RBAC cannot narrow a delete by phase or owner. Only a principal that

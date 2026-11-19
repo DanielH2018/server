@@ -2,17 +2,16 @@
 # not a pin. Same base, same digest: Renovate groups the two into one PR, so they stay in step.
 FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 WORKDIR /app
-# mcp stays on 1.x: 2.0.0 (picked up by the 2026-08-09 Sunday rebuild, Docker era) removed
-# mcp.server.fastmcp and crash-looped the container. Lift it only with an app.py port to the
-# 2.x API. The `mcp<2` range this used to carry re-resolved to the newest 1.x on every rebuild,
-# and httpx/uvicorn had no bound at all (#2150) — all three are exact now. Renovate tracks each
-# on PyPI (regex manager in renovate.json); the packageRule there caps mcp at `<2` so the 1.x
-# line is what it offers.
+# mcp stays on 1.x: 2.0.0 removed mcp.server.fastmcp and crash-loops the container. Lift it
+# only with an app.py port to the 2.x API. All three packages are pinned exact, because a range
+# re-resolves to the newest release on every rebuild. Renovate tracks each on PyPI (regex
+# manager in renovate.json); the packageRule there caps mcp at `<2` so the 1.x line is what it
+# offers.
 RUN pip install --no-cache-dir mcp==1.30.0 httpx==0.28.1 uvicorn==0.54.0
 # COPY . (not `COPY app.py safe_reads.py`): the context is a ConfigMap mount, whose
 # files are symlinks into ..data/, and buildkit's followPaths optimization for a
 # multi-file COPY drops all but the first symlinked file from the transfer ("not
-# found", verified 2026-08-13 — a single-file COPY like n8n-runners' works). COPY .
+# found" — a single-file COPY like n8n-runners' works). COPY .
 # ships the whole snapshot, so the ..data dir arrives and every symlink resolves.
 # The image gains the Dockerfile + ConfigMap dotdirs under /app — harmless.
 COPY . ./

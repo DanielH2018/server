@@ -2,7 +2,7 @@
 
 The script's behaviour is in test_longhorn_reconcile.py. These cases read the render: the
 ConfigMap's tier lists against the keys `setup/k3s` still derives, and the CronJob and its grants
-against the CSI sidecars, which the `longhorn` role's Setting owns (#5958).
+against the CSI sidecars, which the `longhorn` role's Setting owns.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_render.py
 """
@@ -105,7 +105,7 @@ def test_the_role_grants_nothing_on_deployments():
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#Traps
     # fact: k8s/roles/longhorn-reconcile/CLAUDE.md#longhorn-reconcile — the hourly job that holds each volume in its backup tier
     # A grant the script no longer needs is a write path to the CSI Deployments that
-    # longhorn-manager undoes on its next tick, the flip-flop #5958 removed.
+    # longhorn-manager undoes on its next tick.
     rules = [
         r for d in _docs("rbac.yaml.j2") if d["kind"] == "Role" for r in d["rules"]
     ]

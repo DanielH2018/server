@@ -15,27 +15,25 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:0
 # health-check `timeout`, by the drain's `rollout status --timeout` and by `progressDeadlineSeconds` in every deployment template. The
 # deadline has to move with the timeout: at the 600s Kubernetes default, `rollout status` fails
 # on ProgressDeadlineExceeded whatever `--timeout` says.
-# Sized from the chrome image, the one karakeep pull that outlasts the shared 600s: daniel-server
-# pulled the 449,334,662-byte karakeep-chrome digest in 14m13.354s on 2026-10-12 (#4564). 1200s
-# is that pull with prowlarr's ~1.4x margin. Its cost is a genuinely stuck karakeep rollout
+# Sized from the chrome image (449 MB), the one karakeep pull that outlasts the shared 600s: a
+# cold pull on daniel-server takes about 14 minutes. 1200s is that pull with prowlarr's ~1.4x
+# margin. Its cost is a genuinely stuck karakeep rollout
 # failing at 20 minutes rather than 10. A cached image rolls in seconds, so the budget costs time
 # only on a real hang or a cold pull.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
-# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 1200s
 karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # The budget of the karakeep-prepull Kustomization, whose Job pulls all four Deployments'
 # images onto their node before the karakeep Kustomization applies
 # (scripts/renderer/renderer_lib/prepull.py). `karakeep` and `karakeep-meilisearch` are
-# `Recreate`, so without it the old pod stops before the new pod's pull starts. On 2026-10-19
-# (#5778) a digest bump left karakeep down for 20 minutes: the pull ran 16.5 minutes and then
-# failed on a corrupt layer, with the old pod already gone.
-# MEASURED 2026-10-22 from GHCR's amd64 manifests: the app image is 511,337,699 bytes and the
-# chrome image 449,327,469, about 960 MB when one release moves both. The pulls measured at
-# 0.25 MB/s (#5778, one 40 MB layer in 2m40s) and 0.53 MB/s (#4564, the chrome digest in
-# 14m13s), and GHCR has served this homelab as slowly as 0.145 MB/s (n8n's defaults). The
-# kubelet pulls one image after the other, so both at 0.25 MB/s take about 3840s. 4500s
+# `Recreate`, so without it the old pod stops before the new pod's pull starts, and a failed
+# pull leaves karakeep down.
+# The app image is 511 MB and the chrome image 449 MB, about 960 MB when one release moves
+# both. GHCR has served this homelab as slowly as 0.145 MB/s (n8n's defaults) and pulls have
+# run at 0.25 MB/s. The kubelet pulls one image after the other, so both at 0.25 MB/s take
+# about 3840s. 4500s
 # covers that down to 0.213 MB/s, and the app image alone down to 0.114 MB/s. The Job has no
 # deadline, so a slower pull costs that revision its verdict, the Job keeps pulling, and Flux
 # applies karakeep on a later retry. Only Flux reads it: the renderer adds the Kustomization
@@ -65,13 +63,12 @@ k8s_autodeploy: false
 k8s_autodeploy_reason: "three reasons: (1) stateful — meilisearch migrates its index in place on a bump, non-atomically; (2) probe-less time-tagger sub-deployment; (3) migrating state — Recreate + RWO PVC. COUPLING NOTE for a future promotion: karakeep-meili is deliberately excluded from the snapshot, so reverting karakeep-data alone desyncs the search index until a manual reindex"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the karakeep-snapshot Kustomization, whose Job snapshots it before karakeep applies
-# (D5.2a). Declared regardless of k8s_autodeploy, because an app bump runs karakeep's own one-way DB
+# Declared regardless of k8s_autodeploy, because an app bump runs karakeep's own one-way DB
 # migration on db.db at boot. karakeep-meili stays out on purpose:
 # it is rebuilt by reindexing, and the COUPLING NOTE above records the desync a revert causes.
 k8s_autodeploy_snapshot_pvcs: [karakeep-data]
 
-# Each memory request below is its container's 7-day p95 working set on 2026-11-14 rounded
-# up to 64Mi: 946Mi for the app, 591Mi for chrome and 770Mi for meilisearch.
+# Each memory request below is its container's 7-day p95 working set rounded up to 64Mi: 946Mi for the app, 591Mi for chrome and 770Mi for meilisearch.
 karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi
 karakeep_k8s_cpu_request: "100m"
@@ -86,7 +83,7 @@ karakeep_k8s_meili_mem_limit: 1024Mi
 karakeep_k8s_meili_cpu_request: "100m"
 karakeep_k8s_meili_mem_request: 832Mi
 # Mirrors resources('1.0', '512M', '0.05', '64M'). cpu 1.0 is deliberate: the boot-time
-# `uv pip install` plus the per-cycle tag burst CFS-throttled ~67% of periods at 0.5.
+# `uv pip install` plus the per-cycle tag burst CFS-throttle at 0.5.
 karakeep_k8s_tagger_cpu_limit: "1"
 karakeep_k8s_tagger_mem_limit: 512Mi
 karakeep_k8s_tagger_cpu_request: "50m"
@@ -99,8 +96,7 @@ karakeep_k8s_tagger_mem_request: 64Mi
 karakeep_k8s_pruner_schedule: "15 5 * * *"
 karakeep_k8s_pruner_screenshot_days: 30
 karakeep_k8s_pruner_delete_days: 90
-# The operator read the dry runs' logs and turned this on on 2026-10-12. With it false the
-# job logs what it would do and changes nothing, which is the way to pause it.
+# With it false the job logs what it would do and changes nothing, which is the way to pause it.
 karakeep_k8s_pruner_apply: true
 # A ceiling on deletions per run, so a bad clock or a misread response cannot empty the
 # library in one night.
@@ -155,8 +151,7 @@ k8s_claims:
     size: "{{ karakeep_k8s_meili_size }}"
 
 # Under Flux the renderer copies the pruner CronJob into one Job per role revision, in
-# `karakeep-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the
-# k8s/cronjob-gate include at the flip. With
+# `karakeep-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). With
 # karakeep_k8s_pruner_apply true the run deletes, so it is a mutation, and the named test shows
 # a second run changes nothing.
 flux_cronjob_gates:
@@ -182,10 +177,10 @@ image_builder_builds:
 # this line a rotated KARAKEEP_PYTHON_API_KEY lands in the Secret while the tagger keeps
 # calling the API with the old key.
 #
-# chrome is listed so the batch drain WAITS on it, never so it restarts (#4564). Its one
+# chrome is listed so the batch drain WAITS on it, never so it restarts. Its one
 # input that moves is `karakeep_k8s_chrome_image`, which Renovate bumps every few weeks: a
-# bump changes chrome's pod template, so the apply rolls it, and before this entry nothing
-# waited on that roll and the landing read `VERDICT: settled` mid-pull. `restart_on: []`
+# bump changes chrome's pod template, so the apply rolls it, and without this entry nothing
+# waits on that roll and the landing reads `VERDICT: settled` mid-pull. `restart_on: []`
 # keeps the shared extra restart off it. chrome mounts no role-rendered config, reads no
 # Secret and runs no built image, so all three signals would only restart it on an
 # unrelated karakeep edit and drop any crawl in flight.

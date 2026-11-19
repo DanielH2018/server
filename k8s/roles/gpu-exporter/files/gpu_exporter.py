@@ -1,6 +1,6 @@
 """GPU utilization as Prometheus series, read from the kernel's DRM sysfs.
 
-Transcode load on the render node was unmeasured until this existed (#1446): the
+Transcode load on the render node needs this exporter to be measured: the
 dri-device-plugin advertises `/dev/dri/renderD128` as `devic.es/dri`, jellyfin and tdarr both
 request it, and nothing turned the resulting load into a series. A slow transcode and a
 contended one looked identical.

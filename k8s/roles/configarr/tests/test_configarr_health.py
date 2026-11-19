@@ -113,7 +113,7 @@ def test_the_verdict_patch_names_a_field_manager_flux_does_not_strip():
         for a in patch
         if a.startswith("--field-manager=")
     ]
-    # Without the flag kubectl records `kubectl-patch`, which Flux's apply strips (#6746).
+    # Without the flag kubectl records `kubectl-patch`, which Flux's apply strips.
     assert managers == ["configarr-health"]
 
 

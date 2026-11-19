@@ -3,8 +3,7 @@
 
 The `crowdsec-home-ips` CronJob runs this on daniel-box every few minutes with `hostNetwork:
 true`, because the pod network is IPv4-only and only the host's own network namespace holds
-the home IPv6 /64 (the operator's ruling of 2026-10-18 on #5701, recorded in the H2 plan's
-*Open questions* 2). It runs no `cscli` and execs into nothing. The `crowdsec-jobs` sidecar of
+the home IPv6 /64. It runs no `cscli` and execs into nothing. The `crowdsec-jobs` sidecar of
 the LAPI pod reads the ConfigMap and syncs the `home-ips` allowlist from it
 (`home_allowlist.py`).
 
@@ -22,7 +21,7 @@ patch then carries only the family's error field, never its value, so the sideca
 an empty value where a good one was. An empty IPv6 lookup, a host with no global address, is
 not an error, and also leaves the stored /64 alone. When ipify fails, the job probes the
 `WAN_PROBE_URLS` endpoints, and when none answers it marks the error `WAN unreachable`, so the
-sidecar can report a skip rather than a fault (#2793).
+sidecar can report a skip rather than a fault.
 
 The ConfigMap's `data` has one writer, this job. The role renders the object with no `data`
 keys (`templates/home-ips-configmap.yaml.j2`), so neither Ansible's apply nor a later Flux

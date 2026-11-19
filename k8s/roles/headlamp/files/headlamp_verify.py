@@ -39,7 +39,7 @@ from collections.abc import Mapping
 
 from flux_job_connect import open_url, refused
 
-# The socket timeout of each connect, in seconds; the probe it replaces uses `nc -w 5`.
+# The socket timeout of each connect, in seconds.
 TIMEOUT = 5
 # How long the control retries a refused connect, in seconds: the helper's own default.
 CONTROL_RETRY_SECONDS = 60

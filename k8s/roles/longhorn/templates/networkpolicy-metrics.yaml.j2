@@ -1,13 +1,13 @@
 # Let Prometheus scrape longhorn-manager's metrics port.
 #
-# Longhorn v1.12's own deploy/longhorn.yaml ships six NetworkPolicies into longhorn-system, and
+# Longhorn's own deploy/longhorn.yaml ships six NetworkPolicies into longhorn-system, and
 # the `longhorn-manager` one admits ingress only from Longhorn's own components: the manager, the
 # UI, the CSI plugin, recurring-job pods, job-task pods and the driver deployer. Prometheus is not
-# on that list, so from the moment those policies landed the `longhorn` scrape target read
-# `up == 0` with `dial tcp ...:9500: connect: connection refused`, and
-# `count(longhorn_volume_robustness)` returned nothing at all. Volume robustness and replica loss
-# — degraded volumes, a replica rebuild that never finishes — were unwatched, on the storage layer
-# every PVC in the cluster sits on.
+# on that list, so without this policy the `longhorn` scrape target reads `up == 0` with
+# `dial tcp ...:9500: connect: connection refused`, and `count(longhorn_volume_robustness)`
+# returns nothing at all. Volume robustness and replica loss — degraded volumes, a replica
+# rebuild that never finishes — go unwatched, on the storage layer every PVC in the cluster sits
+# on.
 #
 # This is additive, not a patch of the upstream object. Editing theirs in place would be undone
 # by the next refresh of files/upstream/longhorn.yaml, and NetworkPolicies are additive by design

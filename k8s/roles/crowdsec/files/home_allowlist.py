@@ -10,14 +10,14 @@ few hours. A burst test egressing over IPv6 banned the homelab's own address on 
 The addresses come from the `crowdsec-home-ips` ConfigMap, which the `crowdsec-home-ips`
 CronJob writes from daniel-box's host network (`home_ips_discover.py`). This job runs in the
 `crowdsec-jobs` sidecar of the LAPI pod, started by `crowdsec_jobs.py`, which owns the
-verdict gauge and the log line. The split is the operator's ruling of 2026-10-18 on #5701: the sidecar
-shares the pod's IPv4-only network and cannot see the /64 itself.
+verdict gauge and the log line. The split exists because the sidecar shares the pod's
+IPv4-only network and cannot see the /64 itself.
 
 **The allowlist is its own state.** Each run reads the stored entries with `cscli allowlists
 inspect home-ips` and compares them with the ConfigMap. This job owns every entry in
 `home-ips`, so for each family it adds the wanted value and removes any other entry of that
 family. **An empty wanted value removes nothing**, so a failed or empty IPv6 lookup never
-removes a stored /64, and the IPv4 entry syncs whatever happened to IPv6 (#1248).
+removes a stored /64, and the IPv4 entry syncs whatever happened to IPv6.
 
 The verdict, first match wins:
 
@@ -27,7 +27,7 @@ The verdict, first match wins:
   unreachable WAN. A stale /64 can rotate out from under a green tile, so an IPv6 fault is
   reported even when the IPv4 half synced cleanly;
 - up, naming the skip, when the IPv4 lookup failed because no WAN probe answered. The WAN
-  Reachable tile owns that fault (#2793);
+  Reachable tile owns that fault;
 - up otherwise, naming any change.
 
 Usage:

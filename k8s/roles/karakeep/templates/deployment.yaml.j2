@@ -56,9 +56,8 @@ spec:
           # modules whose bytecode is already in the image and writes nothing, so it needs no
           # writable path at all — no emptyDir goes with this.
           #
-          # uid 1000 since #2672 put the tagger's image behind k8s/image-builder. This container
-          # installs nothing and only imports stdlib, so it never needed root; it ran as root
-          # because the stock uv image could not be run any other way.
+          # uid 1000: this container installs nothing and only imports stdlib, so it needs no
+          # root. The tagger's image is built by k8s/image-builder so it can run non-root.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
 {{ node_affinity_preference('daniel-server') }}
@@ -73,9 +72,9 @@ spec:
           # here needs CHOWN or DAC_OVERRIDE.
           #
           # /run is an emptyDir (`karakeep-run` below) because of that missing CHOWN. Since
-          # 0.34.0 the image ships `/run` owned by `node` (karakeep-app/karakeep#3114).
+          # 0.34.0 the image ships `/run` owned by `node`.
           # s6-overlay's preinit chowns /run to the container uid whenever the two differ, and
-          # without CHOWN that exits 111 before the app starts (#6387). kubelet creates an
+          # without CHOWN that exits 111 before the app starts. kubelet creates an
           # emptyDir owned by root, so preinit finds uid 0 on uid 0 and changes nothing. The
           # image puts nothing else in /run, so the mount hides nothing.
           #
@@ -110,8 +109,7 @@ spec:
             - name: BROWSER_WEB_URL
               value: http://karakeep-chrome:9222
             # NextAuth builds sign-in redirects and callback URLs from this, so it has to be the
-            # hostname a browser actually arrives on. Before cutover that is the -k8s LAN name;
-            # after it, the bridged public one. Getting it wrong does not fail at startup — the
+            # hostname a browser actually arrives on. Getting it wrong does not fail at startup — the
             # pod goes ready and login breaks, bouncing users to a host that will not resolve
             # for them. Same treatment as speedtest's APP_URL.
             - name: NEXTAUTH_URL
@@ -127,9 +125,8 @@ spec:
             # These two are what make the public /api/trpc/ bypass safe, because that prefix also
             # reaches the app's public procedures: users.create (signup) and apiKeys.exchange
             # (email and password in, API key out). Both names are the ones the app reads
-            # (packages/shared/config.ts upstream). The first line here was
-            # DISABLE_NEW_USERS_REGISTRATION until 2026-09-28, which the app ignores, so signup
-            # stayed open on the internet. RATE_LIMITING_ENABLED defaults to false upstream, and
+            # (packages/shared/config.ts upstream); DISABLE_NEW_USERS_REGISTRATION is ignored by
+            # the app and leaves signup open on the internet. RATE_LIMITING_ENABLED defaults to false upstream, and
             # without it apiKeys.exchange's own 10-per-15-minutes limit never runs.
             - name: DISABLE_SIGNUPS
               value: "true"

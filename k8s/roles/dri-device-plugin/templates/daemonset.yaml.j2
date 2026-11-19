@@ -1,7 +1,7 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
 ---
-# Advertises the AMD render node as the schedulable resource `devic.es/dri` (slice 4, B1).
+# Advertises the AMD render node as the schedulable resource `devic.es/dri`.
 #
 # kube-system rather than the workload namespace: extended resources are a NODE property, not a
 # namespace one, and every namespace's pods can request this once it is advertised.

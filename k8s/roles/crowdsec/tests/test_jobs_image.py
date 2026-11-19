@@ -7,12 +7,12 @@ runs the sidecar. The AppSec verify and the home allowlist run end to end agains
 and `kubectl` binaries, and the home-ips discovery answers `--help` under the same confinement
 its CronJob gives it. The real `cscli`,
 copied out of `crowdsec_k8s_image` as the `jobs-cscli` initContainer copies it, must run in the
-python image too, which is the linkage the operator's ruling on #5655 asked to check.
+python image too, which is the linkage this test checks.
 
 The `lapi-register` initContainer's script, taken from the rendered Deployment, runs in
 `crowdsec_k8s_image` twice with no network, so no LAPI can answer it. Its database directory
-holds the entrypoint's links into the image's read-only `/staging` and no database yet. That is D5's check that `cscli machines add` and `cscli allowlists create` work with
-no LAPI running (#5741).
+holds the entrypoint's links into the image's read-only `/staging` and no database yet. The
+legs check that `cscli machines add` and `cscli allowlists create` work with no LAPI running.
 
 No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
 `/etc/crowdsec` and database is checked by the post-landing `--run` in the role's CLAUDE.md.
@@ -339,7 +339,7 @@ def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     )
     # Closed by hand: a connection's `with` block commits but never closes, and the open
     # connection's ResourceWarning then fires at garbage collection inside whichever test is
-    # running, failing that one instead (#5789).
+    # running, failing that one instead.
     db = sqlite3.connect(data / "crowdsec.db")
     try:
         allowlists = {name for (name,) in db.execute("select name from allow_lists")}

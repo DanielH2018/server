@@ -330,7 +330,6 @@ def test_tls_context_states_the_protocol_floor():
     assert tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
 
 
-# --- cert_target_allowed ---------------------------------------------------------
 # cert_expiry hands its host/port to socket.create_connection; this predicate is what keeps a
 # bearer holder from using the pod as a TCP-connect oracle. Each shape has a clean and a
 # flagged half so the guard cannot stop matching unnoticed.
@@ -387,7 +386,7 @@ _TORZNAB = (
 
 
 def test_parse_loki_redacts_the_torznab_apikey():
-    """A `query_logs` row over a *arr line shipped before the Alloy stage (#6276)."""
+    """A `query_logs` row over a *arr line shipped before the Alloy stage."""
     resp = {
         "data": {
             "result": [{"stream": {"container": "sonarr"}, "values": [["1", _TORZNAB]]}]

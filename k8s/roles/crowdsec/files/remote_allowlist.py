@@ -4,8 +4,8 @@
 The home-allowlist cron covers the home address, which daniel-box can look up for itself.
 A remote session — a VPN exit, a phone — arrives from an address nothing on the server side
 can predict, and the only evidence of who is behind it is that the session is authenticated.
-Until 2026-09-21 that case was a hand-pinned /32 in `crowdsec-trusted-remote-whitelist.yaml`,
-and the operator self-banned every time the exit rotated (#2123).
+A hand-pinned /32 in `crowdsec-trusted-remote-whitelist.yaml` would self-ban the operator
+every time the exit rotated.
 
 The signal is Traefik's access log, not Authelia's. A login is logged once per session and a
 session outlives it by days, so 48 hours of Authelia logs held zero logins while the operator
@@ -27,8 +27,9 @@ capped, and reaching the cap is a DOWN that names the entries rather than a sile
 private, loopback and CGNAT addresses never enter, so an Authelia LAN bypass rule cannot feed
 it. An address inside a `home-ips` entry never enters either, and a live entry inside one is
 pruned on the next run: home devices rotate IPv6 privacy addresses, and each one held a slot for
-TTL until the cap refused the remote exits this list exists for (#6709). The way out is `cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the
-way to see it is `cscli allowlists inspect remote-ips`.
+TTL until the cap refused the remote exits this list exists for. The way out is
+`cscli allowlists remove remote-ips <ip>`, or letting the entry lapse; the way to see it is
+`cscli allowlists inspect remote-ips`.
 
 Runs every 5 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
 `crowdsec_jobs.py`, which owns the verdict gauge and the log line. This module owns the decision.
@@ -63,15 +64,12 @@ NAMESPACE = "homelab"
 # Sighting window. The cron runs every 5 min; 6 min overlaps the previous run so a request on
 # the boundary is seen once by each rather than by neither.
 LOG_WINDOW = "6m"
-# An exit is exempt for a week after its last authenticated request. Sized from the incidents:
-# the same exit banned the operator on 2026-09-19 and again 2026-09-21, two days apart, and the
-# 2026-08-09 entry it replaced held for six weeks. The refresh threshold is half the TTL so a
-# daily-used exit costs one rewrite every 3.5 days, not one per run.
+# An exit is exempt for a week after its last authenticated request. The refresh threshold is
+# half the TTL so a daily-used exit costs one rewrite every 3.5 days, not one per run.
 TTL = timedelta(hours=168)
 REFRESH_BELOW = TTL / 2
-# The cap is the bound on the trade-off named in the module docstring. The operator ruled 16 on
-# 2026-11-05, after authenticated addresses filled a cap of 8 and it refused a new one. Hitting
-# it means the list needs reading, and the DOWN message lists the entries so that can be done.
+# The cap is the bound on the trade-off named in the module docstring. Hitting it means the
+# list needs reading, and the DOWN message lists the entries so that can be done.
 CAP = 16
 # The sidecar's initContainers copy both binaries into the shared `tools` emptyDir
 # (`templates/deployment.yaml.j2`).
@@ -128,7 +126,7 @@ def authenticated_clients(lines, routers):
         # Cloudflare appends the address it saw, so only the RIGHTMOST entry is not client-chosen.
         # From any other source forwardedHeaders has already dropped the header, leaving the
         # connection address. The crowdsecurity/traefik-logs parser takes the same entry, so
-        # this list holds the address CrowdSec bans (#2446).
+        # this list holds the address CrowdSec bans.
         host = (entry.get("ClientHost") or "").rsplit(",", 1)[-1].strip()
         if is_remote_client(host):
             seen.add(host)

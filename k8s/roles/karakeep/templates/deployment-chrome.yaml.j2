@@ -40,12 +40,12 @@ spec:
           # --no-sandbox, --use-gl=angle, --use-angle=swiftshader and
           # --remote-debugging-address=0.0.0.0, then socat-forwards 9222 -> 9223.
           #
-          # So the three flags this list used to carry are now absent deliberately, and one of
-          # them was load-bearing to remove: a trailing --remote-debugging-port=9222 wins over
-          # the entrypoint's 9223, which would put headless-shell and socat on the same port.
-          # --no-sandbox and --remote-debugging-address would merely have been duplicates.
+          # So three flags are absent deliberately, and one of them is load-bearing to omit: a
+          # trailing --remote-debugging-port=9222 wins over the entrypoint's 9223, which would
+          # put headless-shell and socat on the same port. --no-sandbox and
+          # --remote-debugging-address would merely be duplicates.
           #
-          # What remains is upstream's compose list minus two. karakeep also passes
+          # karakeep's upstream compose list also passes
           # --disable-blink-features=AutomationControlled and --window-size=1440,900; both are
           # adoptable, but the window size changes the dimensions of every newly captured
           # screenshot, so taking them is a rendering change and belongs in its own commit.
@@ -55,9 +55,8 @@ spec:
             - --hide-scrollbars
           ports:
             - containerPort: 9222
-          # 65534, not 1000: karakeep-chrome's Dockerfile ends `USER 65534:65534`, where
-          # zenika/alpine-chrome started chromium as uid 1000. The uid here must MATCH the
-          # image's own — asserting it is what makes it an API-server guarantee rather than an
+          # 65534, not 1000: karakeep-chrome's Dockerfile ends `USER 65534:65534`. The uid here
+          # must MATCH the image's own — asserting it is what makes it an API-server guarantee rather than an
           # image default a future tag bump could drop silently, and runAsNonRoot alone would
           # not do it, because the kubelet only rejects a numeric root uid.
           # Safe for THIS container specifically because it mounts only the kubelet-created
@@ -69,7 +68,7 @@ spec:
           # Do not copy it to the sibling
           # karakeep deployments without checking each one: karakeep's own /data seed tree and
           # time-tagger's /root/.cache/uv are root-owned, so the same three lines would break
-          # them (2026-08-31 review). The entrypoint runs chromium with --no-sandbox, so it
+          # them. The entrypoint runs chromium with --no-sandbox, so it
           # needs no SYS_ADMIN or sandbox caps.
           #
           # read_only follows from the same fact. The image is chromedp/headless-shell plus
@@ -92,8 +91,8 @@ spec:
             # DECIDED: an emptyDir alone, no env var.
             # fontconfig's cache. This is the FIRST entry in the cachedir list the image's
             # fonts.conf ships, so with a read-only root and no mount here fontconfig finds
-            # nothing writable — it logged `Fontconfig error: No writable cache directories`
-            # once per chrome process and rescanned the whole font tree on each start.
+            # nothing writable — it logs `Fontconfig error: No writable cache directories`
+            # once per chrome process and rescans the whole font tree on each start.
             # An emptyDir is the whole fix: fontconfig needs the directory to be writable,
             # not preserved, and one rescan per pod is what it costs. No env var goes with
             # it — the two fallbacks in that log (`$HOME/.cache/fontconfig`,

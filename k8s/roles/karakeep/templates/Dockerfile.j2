@@ -10,16 +10,15 @@
 #             `--system` is what targets the image's own interpreter rather than a venv, so the
 #             install writes here on every start. Owned by root:root 0755 upstream.
 #   the uv cache
-#             was mounted at `/root/.cache/uv`, and Debian's `/root` is 0700 root:root, so a
-#             non-root uid cannot even traverse to it. Relocated to `/uv-cache` by the
-#             `UV_CACHE_DIR` below rather than fixed with a second chown: the hardcoded `/root`
-#             was the defect, and an image that no longer names it cannot regrow the coupling.
-#             Nothing chowns `/uv-cache` — kubelet creates an emptyDir 0777, and the mount
-#             replaces whatever this image put there.
+#             Debian's `/root` is 0700 root:root, so a non-root uid cannot traverse to
+#             `/root/.cache/uv`. `UV_CACHE_DIR` below relocates the cache to `/uv-cache`, so an
+#             image that never names `/root` cannot regrow the coupling. Nothing chowns
+#             `/uv-cache` — kubelet creates an emptyDir 0777, and the mount replaces whatever
+#             this image put there.
 #
-# Chowning site-packages lets the app rewrite its own installed packages, which is worth stating
-# plainly. It is still strictly LESS privilege than the status quo: today PID 1 is root and can
-# rewrite every path in the container, this one included.
+# Chowning site-packages lets the app rewrite its own installed packages. That is still
+# strictly LESS privilege than running PID 1 as root, which can rewrite every path in the
+# container.
 #
 # DIGEST-PINNED on a mutable tag, so the digest is the entire pin, and Renovate's built-in
 # dockerfile manager raises the bump PR. karakeep is `k8s_autodeploy: false`, so renovate.json's

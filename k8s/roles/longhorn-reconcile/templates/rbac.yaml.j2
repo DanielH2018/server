@@ -12,7 +12,7 @@
   because kubectl's `label` and `patch` read the object first. `resourceNames` cannot narrow
   `list`, so the volume and PVC grants are by resource alone. The PVC grant is a ClusterRole
   because the claims sit in every namespace. No grant reaches the CSI Deployments: their memory
-  request is the `longhorn` role's Setting (#5958).
+  request is the `longhorn` role's Setting.
 #}
 ---
 apiVersion: v1

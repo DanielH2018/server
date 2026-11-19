@@ -59,7 +59,7 @@ def closed_url():
     The socket stays bound, without listening, until the test ends. Linux refuses a connect to
     a bound port that is not listening, and no other socket can bind it meanwhile. A released
     port can be handed to a stand-in server, in this test or in another xdist worker, and the
-    leg then reads an answer instead of a refusal (#6480).
+    leg then reads an answer instead of a refusal.
     """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

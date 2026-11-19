@@ -8,10 +8,8 @@
 # remembering to label it — and the labels Longhorn reads live on its Volume CRs, not on the
 # PVC, so a PVC-level label would have been silently inert.
 #
-# The trade is that an opt-out is now the explicit act: slice 4's media volumes are large and
-# already covered by Kopia on host paths, so they get their own group to keep them out of this
-# one. Design doc §6 gate: a service's data must be visible in its NEW backup path before the
-# Docker copy is decommissioned.
+# The trade is that an opt-out is the explicit act: the media volumes are large, so they get
+# their own group to keep them out of this one.
 apiVersion: longhorn.io/v1beta2
 kind: RecurringJob
 metadata:
@@ -29,12 +27,12 @@ spec:
   retain: {{ k3s_longhorn_backup_retain }}
   concurrency: 1
 ---
-# The weekly tier, sharded across weekdays (sixth cap event, 2026-08-16): one Sunday batch of
-# 11 volumes — stacked with the daily tier, double retention pruning, and the 07:30 reboot
-# resync — blew both B2 2,500/day caps. Each B2-destined volume backs up once a week, on the
-# weekday its entry's weekly_backup_claims declares (k3s_longhorn_weekly_volumes); the label
-# reconcile job (the `longhorn-reconcile` role) assigns the matching weekly-backup-d<N> group. An hour after the daily
-# run so the two never overlap.
+# The weekly tier, sharded across weekdays: one Sunday batch — stacked with the daily tier,
+# double retention pruning, and the 07:30 reboot resync — blows both B2 2,500/day caps. Each
+# B2-destined volume backs up once a week, on the weekday its entry's weekly_backup_claims
+# declares (k3s_longhorn_weekly_volumes); the label reconcile job (the `longhorn-reconcile`
+# role) assigns the matching weekly-backup-d<N> group. An hour after the daily run so the two
+# never overlap.
 {% for shard in range(7) %}
 {% if not loop.first %}
 ---
@@ -54,14 +52,12 @@ spec:
   concurrency: 1
 {% endfor %}
 ---
-# Longhorn's own filesystem trim (H2.2a). It hands blocks that ext4 has already freed back to the
-# replicas. The host trim cron in `setup/k3s` keeps running beside it until H2.2c, and a second
-# trim of the same day is harmless.
+# Longhorn's own filesystem trim. It hands blocks that ext4 has already freed back to the
+# replicas.
 #
 # A volume joins this job through the per-job label `recurring-job.longhorn.io/trim: enabled`,
 # which `longhorn-reconcile` sets on a volume that is attached and has a Running ReplicaSet or
-# StatefulSet workload. Until H2.2b the reconcile job bounds that to one canary claim
-# (`longhorn_reconcile_trim_claims`).
+# StatefulSet workload.
 {# DECIDED: groups: [] and never a `trim` group. Four readers treat every
    `recurring-job-group.longhorn.io/` key on a Volume as a backup tier, so a `trim` group would put
    a `no-backup` volume back into the restore drill's IN_BACKUP_GROUP set and would replace

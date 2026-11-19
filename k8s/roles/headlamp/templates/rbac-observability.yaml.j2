@@ -1,8 +1,7 @@
 # Rendered apart from rbac.yaml.j2 because it lives in the observability namespace. The
-# armed shared apply passes `-n homelab`, and kubectl refuses a document placed anywhere else
-# (#3575), so the renderer puts this file in the deferred `headlamp-observability/`
-# directory and Flux applies it there. The header of rbac.yaml.j2 explains the
-# second subject on the binding below.
+# armed shared apply passes `-n homelab`, and kubectl refuses a document placed anywhere else,
+# so the renderer puts this file in the deferred `headlamp-observability/` directory and Flux
+# applies it there. The header of rbac.yaml.j2 explains the second subject on the binding below.
 #
 # The Prometheus plugin (headlamp_k8s_plugins, defaults/main.yml) does not talk to Prometheus
 # itself: it asks the API server to proxy each query —
@@ -11,8 +10,8 @@
 # pod is the API server's, admitted by netpol_baseline_obs_node_cidrs (k8s/roles/netpol-baseline)
 # rather than by anything selecting the headlamp pod.
 #
-# The authoriser checks the resource name WITH the port: measured 2026-09-06, an unpinned call
-# was refused as `services "prometheus:9090" is forbidden`. Pinned to that exact name, so the
+# The authoriser checks the resource name WITH the port: an unpinned call is refused as
+# `services "prometheus:9090" is forbidden`. Pinned to that exact name, so the
 # SA cannot proxy to any other Service in observability (Loki, Tempo, the collector). `get` on
 # a proxy is a read of whatever Prometheus serves on 9090 — the same port-wide caveat the
 # prometheus-callers NetworkPolicy documents, and safe for the same reason: Prometheus runs

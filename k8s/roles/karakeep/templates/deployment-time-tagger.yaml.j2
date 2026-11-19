@@ -86,13 +86,13 @@ spec:
               sleep 900;
               done
           workingDir: /work
-          # uid 1000, and the IMAGE is what makes that possible (#2672). This container ran as
-          # root until then, for two reasons a securityContext cannot reach: the uv cache was
-          # mounted at `/root/.cache/uv` behind Debian's 0700 `/root`, and `uv pip install
-          # --system` writes into the image's own site-packages. `templates/Dockerfile.j2` chowns
-          # site-packages to 1000 and relocates the cache to `/uv-cache` via `UV_CACHE_DIR`; read
-          # it before changing either path here. No DAC_OVERRIDE and no added capability: the
-          # container now owns what it writes instead of overriding the permission check.
+          # uid 1000, and the IMAGE is what makes that possible: a securityContext cannot reach
+          # the two reasons the stock uv image needs root, the uv cache under Debian's 0700
+          # `/root` and `uv pip install --system` writing into the image's own site-packages.
+          # `templates/Dockerfile.j2` chowns site-packages to 1000 and relocates the cache to
+          # `/uv-cache` via `UV_CACHE_DIR`; read it before changing either path here. No
+          # DAC_OVERRIDE and no added capability: the container owns what it writes instead of
+          # overriding the permission check.
           #
           # DECIDED: no readOnlyRootFilesystem here, unlike the wait-for-karakeep init container
           # above. The `uv pip install ... --system` in the command block installs five packages
@@ -104,7 +104,7 @@ spec:
           # Redirecting the install into a mounted emptyDir instead (a venv on /work, or
           # PYTHONUSERBASE) would make read-only reachable, but it re-resolves the same install
           # against a cache that no longer persists and changes how the container boots — a
-          # bigger change than the hardening it buys, and out of scope for #1129.
+          # bigger change than the hardening it buys.
 {{ hardened_security_context(non_root=true, run_as_user=1000, run_as_group=1000) }}
           env:
 {# Never set LOGURU_AUTOINIT=false here. setup_logging() drops loguru's default handler itself,
