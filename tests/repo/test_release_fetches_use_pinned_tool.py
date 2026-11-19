@@ -234,7 +234,7 @@ def test_no_unlisted_installer_action_runs():
     assert installer_uses(_sources()) - set(INSTALLERS) == set()
 
 
-NFPM_URL = "https://github.com/goreleaser/nfpm/releases/download/v1/nfpm.tar.gz"
+NFPM_URL = "https://github.com/goreleaser/nfpm/releases/download/fixture/nfpm.tar.gz"
 
 
 NFPM = "goreleaser/nfpm"
@@ -253,11 +253,11 @@ NFPM = "goreleaser/nfpm"
             NFPM,
         ),
         (
-            'repo=goreleaser/nfpm; curl -fsSLo f "https://github.com/$repo/releases/download/v1/n"',
+            'repo=goreleaser/nfpm; curl -fsSLo f "https://github.com/$repo/releases/download/fixture/n"',
             UNRESOLVED,
         ),
         (
-            'curl -fsSLo f "https://github.com/${OWNER}/nfpm/releases/download/v1/n"',
+            'curl -fsSLo f "https://github.com/${OWNER}/nfpm/releases/download/fixture/n"',
             UNRESOLVED,
         ),
     ],
