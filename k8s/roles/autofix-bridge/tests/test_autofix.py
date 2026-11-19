@@ -274,9 +274,12 @@ def test_dry_run_enabled_false_for_explicit_disable_values():
 
 
 def _configure_sonarr_only(monkeypatch):
-    monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
+    """Points the cycle at Sonarr alone; returns the list its Discord posts land in."""
+    posts = []
+    monkeypatch.setattr(autofix, "post_discord", posts.append)
     monkeypatch.setattr(autofix, "SONARR_API_KEY", "sonarr-key")
     monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
+    return posts
 
 
 def _fake_request(records, calls):
@@ -304,7 +307,7 @@ def test_run_once_dry_run_makes_zero_mutating_calls(monkeypatch):
 
     key = autofix.item_key("Sonarr", item)
     streaks = {key: autofix.GRACE_CYCLES - 1}
-    ok, _msg = autofix.run_once(streaks)
+    ok, _msg = autofix.run_once(autofix.CycleState(streaks))
 
     assert calls == []
     assert ok is True
@@ -319,7 +322,7 @@ def test_run_once_live_deletes_then_searches_in_order(monkeypatch):
 
     key = autofix.item_key("Sonarr", item)
     streaks = {key: autofix.GRACE_CYCLES - 1}
-    ok, _msg = autofix.run_once(streaks)
+    ok, _msg = autofix.run_once(autofix.CycleState(streaks))
 
     assert ok is True
     assert len(calls) == 2
@@ -341,15 +344,49 @@ def test_run_once_held_branch_makes_zero_mutating_calls(monkeypatch):
     ]
     calls = []
     monkeypatch.setattr(autofix, "_request", _fake_request(items, calls))
-    _configure_sonarr_only(monkeypatch)
+    posts = _configure_sonarr_only(monkeypatch)
     monkeypatch.setattr(autofix, "DRY_RUN", False)
 
     streaks = {autofix.item_key("Sonarr", it): autofix.GRACE_CYCLES - 1 for it in items}
-    ok, msg = autofix.run_once(streaks)
+    state = autofix.CycleState(streaks)
+    ok, msg = autofix.run_once(state)
+    autofix.run_once(state)
 
     assert calls == []
     assert ok is False
-    assert "holding" in msg
+    assert msg.startswith("Holding")
+    assert posts == [msg]
+
+
+def test_an_unchanged_held_set_is_not_a_change():
+    state = autofix.CycleState()
+    assert state.hold_changed(["a", "b"]) is True
+    assert state.hold_changed(["b", "a"]) is False
+
+
+def test_a_changed_held_set_is_a_change():
+    state = autofix.CycleState()
+    state.hold_changed(["a", "b"])
+    assert state.hold_changed(["a"]) is True
+
+
+def test_a_hold_that_clears_and_recurs_is_a_change():
+    state = autofix.CycleState()
+    state.hold_changed(["a"])
+    state.hold_changed([])
+    assert state.hold_changed(["a"]) is True
+
+
+def test_the_hold_alert_names_the_apps_and_the_first_titles():
+    held = [("Radarr", "Film.2024")] + [
+        ("Sonarr", "Show.S01E%02d" % i) for i in range(4)
+    ]
+    msg = autofix.format_hold(held, 5)
+    assert "Radarr 1, Sonarr 4" in msg
+    assert (
+        "[Radarr] Film.2024; [Sonarr] Show.S01E00; [Sonarr] Show.S01E01; and 2 more"
+        in msg
+    )
 
 
 def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
@@ -360,7 +397,7 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     monkeypatch.setattr(autofix, "SONARR_API_KEY", "")
     monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
 
-    ok, msg = autofix.run_once({})
+    ok, msg = autofix.run_once(autofix.CycleState())
 
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
 
