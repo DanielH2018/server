@@ -264,6 +264,7 @@ FLOOR = [
     # The Renovate agent's grant points.
     "hosts/components/renovate-agent/files/t2-approval-floor",
     "hosts/components/renovate-agent/files/renovate_floor.py",
+    "hosts/lib/renovate_identity.py",
     "hosts/components/renovate-agent/files/land_renovate_pr.py",
     "hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2",
     "hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2",

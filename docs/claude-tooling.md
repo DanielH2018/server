@@ -808,6 +808,21 @@ the hook keys its once-only state on the `agent_id` as well. It also tags that s
 rows `agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
 longer fits the budget left by earlier docs in the same command waits for the next command.
 
+A context can hold docs its state key never received. Three cases reach the hook with no state
+file:
+
+- A fork subagent inherits its parent's context under a fresh `agent_id`.
+- A resumed session gets a new session id, and its transcript copies the earlier id's records.
+- A session runs on after a reboot, which empties `/tmp`.
+
+For such a context, `inherited_state` reads the context's own transcript once: the payload's
+`transcript_path`, or `<session>/subagents/agent-<id>.jsonl` for a subagent. Every
+`[inject-nested-docs]` block found there counts as sent.
+`.claude/hooks/_transcript_docs.py` follows a fork's `fork-context-ref` record into the parent
+transcript, up to the last record the fork inherited. It also drops what a `compact_boundary`
+discarded. The 2026-11-11 to 2026-11-18 transcripts held three repeats, two from forks and one
+from a resume (#9015).
+
 A path inside a git object resolves too. `git show origin/master:k8s/roles/foo/
 tasks/main.yml` names a path only after its `<ref>:` prefix is stripped, (#2651), a common read form in review sessions and subagents. `path_tokens` emits both
 the whole token and the part after its last `:`, and the existence check keeps whichever is

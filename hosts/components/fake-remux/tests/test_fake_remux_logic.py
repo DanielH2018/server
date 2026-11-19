@@ -111,6 +111,13 @@ def test_remux_candidates_selects_only_remux_qualities_with_a_path():
     assert out[0]["path"].startswith("/data/media/tv/")
 
 
+def test_quality_reads_the_nested_sonarr_quality_and_tolerates_missing_levels():
+    nested = {"quality": {"quality": {"id": 7, "name": "Bluray-1080p Remux"}}}
+    assert frl.Quality.of(nested) == frl.Quality(7, "Bluray-1080p Remux")
+    for partial in ({}, {"quality": None}, {"quality": {"quality": None}}):
+        assert frl.Quality.of(partial) == frl.Quality(None, None)
+
+
 def _probed(
     quality="Bluray-1080p Remux", encoder=None, keyframes=None, fid=1, series_id=9
 ):
