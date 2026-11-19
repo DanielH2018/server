@@ -406,6 +406,29 @@ def test_the_setup_gives_each_path_its_mode_and_a_second_run_changes_nothing(
     assert (home / ".profile").read_text() == "profile\n"
 
 
+def test_a_second_run_leaves_a_file_that_already_matches_in_place(rendered, agent_home):
+    profile = agent_home["home"] / ".profile"
+    assert run_setup(rendered).returncode == 0
+    before = profile.stat().st_ctime_ns
+    assert run_setup(rendered).returncode == 0
+    assert profile.stat().st_ctime_ns == before
+
+
+@pytest.mark.parametrize("drift", ["content", "mode"])
+def test_a_file_whose_content_or_mode_drifted_is_rewritten(rendered, agent_home, drift):
+    profile = agent_home["home"] / ".profile"
+    assert run_setup(rendered).returncode == 0
+    if drift == "content":
+        (agent_home["templates"] / "profile").write_text("profile v2\n")
+    else:
+        profile.chmod(0o600)
+    assert run_setup(rendered).returncode == 0
+    assert mode(profile) == 0o644
+    assert profile.read_text() == (
+        "profile v2\n" if drift == "content" else "profile\n"
+    )
+
+
 def plant_link(home, relative, decoy):
     (home / relative).parent.mkdir(parents=True, exist_ok=True)
     os.symlink(decoy, home / relative)
