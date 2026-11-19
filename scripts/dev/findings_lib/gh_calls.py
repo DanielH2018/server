@@ -12,6 +12,7 @@ dry run must be stopped BEFORE it — `cmd_open` does that, branching on `args.d
 calling `run` instead.
 """
 
+import json
 import sys
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -50,6 +51,127 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
         if warning:
             sys.stderr.write(warning + "\n")
     return issues
+
+
+# An aliased `issue(number:)` lookup of the field values alone: one request and one point for
+# the 113 open issues, 0.79s, measured 2026-11-19. `gh issue list --json` cannot return them.
+_FIELDS_PER_CALL = 100
+_FIELD_VALUES = """issueFieldValues(first: 25) { nodes {
+      ... on IssueFieldSingleSelectValue { name field { ... on IssueFieldSingleSelect { name } } }
+      ... on IssueFieldDateValue { value field { ... on IssueFieldDate { name } } } } }"""
+
+
+def _graphql(tools: FindingsTools, query: str) -> JsonObject:
+    owner, name = (tools.repo or PR_REPO).split("/", 1)
+    data = as_object(
+        tools.gh_json(
+            "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}",
+            "-F", f"name={name}", timeout=REST_TIMEOUT,
+        ),
+        "gh api graphql",
+    )  # fmt: skip
+    return as_object(data.get("data"), "gh api graphql data")
+
+
+def _nodes(parent: JsonObject, key: str) -> list[JsonObject]:
+    return as_object_list(
+        as_object(parent.get(key) or {}, key).get("nodes"), f"{key}.nodes"
+    )
+
+
+def _field_map(issue: JsonObject) -> dict[str, str]:
+    out = {}
+    for value in _nodes(issue, "issueFieldValues"):
+        name = as_object(value.get("field") or {}, "field").get("name")
+        if isinstance(name, str):
+            out[name] = str(value.get("name") or value.get("value"))
+    return out
+
+
+def attach_fields(issues: list[dict], tools: FindingsTools) -> list[dict]:
+    """``issues``, each given a `fields` dict of its issue-field values by field name.
+
+    Every loader calls this, because `issue_model.not_before` and `severity` read `fields`,
+    and an issue missing them reads as undeferred. So a failed read raises rather than
+    returning issues with no fields: a command that cannot see the dates must not offer
+    deferred issues.
+    """
+    numbers = [i["number"] for i in issues]
+    by_number: dict[int, dict[str, str]] = {}
+    for start in range(0, len(numbers), _FIELDS_PER_CALL):
+        chunk = numbers[start : start + _FIELDS_PER_CALL]
+        lookups = "\n".join(
+            f"  i{n}: issue(number: {n}) {{ {_FIELD_VALUES} }}" for n in chunk
+        )
+        query = (
+            "query($owner: String!, $name: String!) {\n"
+            f" repository(owner: $owner, name: $name) {{\n{lookups}\n }}\n}}"
+        )
+        repository = as_object(_graphql(tools, query).get("repository"), "repository")
+        for n in chunk:
+            by_number[n] = _field_map(as_object(repository.get(f"i{n}") or {}, f"#{n}"))
+    for issue in issues:
+        issue["fields"] = by_number.get(issue["number"], {})
+    return issues
+
+
+def set_fields(
+    number: int | str,
+    values: dict[str, str | None],
+    tools: FindingsTools,
+    dry_run: bool,
+) -> None:
+    """Sets each issue field in ``values`` on issue ``number``; None clears that field.
+
+    ``number`` is a string only under ``dry_run``, where `open` names an issue not yet made.
+
+    A single-select value is the option's name. Raises LookupError naming a field or an
+    option the account lacks, so the caller fails rather than silently dropping the value.
+    """
+    if dry_run:
+        for name, value in values.items():
+            print(
+                f"gh api graphql setIssueFieldValue #{number} {name}={value or '<clear>'}"
+            )
+        return
+    query = (
+        "query($owner: String!, $name: String!) {\n"
+        " repository(owner: $owner, name: $name) {\n"
+        f"  issue(number: {number}) {{ id }}\n"
+        "  issueFields(first: 30) { nodes {\n"
+        "   ... on IssueFieldSingleSelect { id name options { id name } }\n"
+        "   ... on IssueFieldDate { id name } } }\n }\n}"
+    )
+    repository = as_object(_graphql(tools, query).get("repository"), "repository")
+    issue_id = as_object(repository.get("issue"), f"issue #{number}")["id"]
+    defs = {f.get("name"): f for f in _nodes(repository, "issueFields")}
+    entries = []
+    for name, value in values.items():
+        field = defs.get(name)
+        if field is None:
+            raise LookupError(
+                f'no "{name}" issue field; add it under Settings > Planning > Issue fields'
+            )
+        if value is None:
+            entries.append(f"{{fieldId: {json.dumps(field['id'])}, delete: true}}")
+        elif "options" in field:
+            options = as_object_list(field["options"], f"{name} options")
+            option = next((o for o in options if o.get("name") == value), None)
+            if option is None:
+                raise LookupError(f'issue field "{name}" has no option "{value}"')
+            entries.append(
+                f"{{fieldId: {json.dumps(field['id'])}, "
+                f"singleSelectOptionId: {json.dumps(option['id'])}}}"
+            )
+        else:
+            entries.append(
+                f"{{fieldId: {json.dumps(field['id'])}, dateValue: {json.dumps(value)}}}"
+            )
+    mutation = (
+        f"mutation {{ setIssueFieldValue(input: {{issueId: {json.dumps(issue_id)}, "
+        f"issueFields: [{', '.join(entries)}]}}) {{ issue {{ id }} }} }}"
+    )
+    tools.gh_json("api", "graphql", "-f", f"query={mutation}", timeout=REST_TIMEOUT)
 
 
 def _operator_issues(issues: list[dict]) -> list[dict]:
@@ -140,7 +262,9 @@ def load_issues(
             "cap -- the register past it is missing, not empty; `findings.py history` "
             "searches past findings without the cap\n"
         )
-    return _warn_at_the_comment_cap(_operator_issues(issues))
+    return attach_fields(
+        _warn_at_the_comment_cap(_operator_issues(issues)), tools or FindingsTools()
+    )
 
 
 # The labels `findings.py close` writes on its two not-planned outcomes, and the whole of
@@ -223,6 +347,8 @@ def fingerprint_match(fp: str, tools: FindingsTools) -> dict | None:
         "gh issue list --search",
     )
     found = find_by_fingerprint(_warn_at_the_comment_cap(hits), fp)
+    if found is not None:
+        attach_fields([found], tools)
     if found is None and len(hits) >= FINGERPRINT_SEARCH_LIMIT:
         # The one way this returns a wrong None: the owning issue was pushed out of the page
         # by issues that merely mention the fingerprint. Says so rather than filing a silent
@@ -248,7 +374,7 @@ def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dic
     cost is the search index's lag — an issue filed seconds ago may not match yet, which
     `fingerprint_match`'s DECIDED marker weighs for `open`.
     """
-    return as_object_list(
+    hits = as_object_list(
         tools.gh_json(
             "issue",
             "list",
@@ -265,6 +391,7 @@ def search_register(query: str, tools: FindingsTools, *, limit: int) -> list[dic
         ),
         "gh issue list --search",
     )
+    return attach_fields(hits, tools)
 
 
 def open_pr_refs(tools: FindingsTools) -> set[int]:
@@ -345,6 +472,13 @@ def threaded_issues(raw: list[dict], tools: FindingsTools) -> list[dict]:
                 "url": i.get("html_url") or "",
                 "author": {"login": (i.get("user") or {}).get("login") or ""},
                 "comments": [_gh_comment(c) for c in comments],
+                "fields": {
+                    v["issue_field_name"]: (v.get("single_select_option") or {}).get(
+                        "name"
+                    )
+                    or v.get("value")
+                    for v in i.get("issue_field_values") or []
+                },
                 "blockedBy": {
                     "nodes": [
                         {
@@ -447,6 +581,8 @@ def _load_issue(number: int, tools: FindingsTools) -> JsonObject:
             f"{REGISTER_AUTHOR}, so findings.py does not read it"
         )
     _warn_at_the_comment_cap([issue] if issue else [])
+    if issue:
+        attach_fields([issue], tools)
     return issue
 
 

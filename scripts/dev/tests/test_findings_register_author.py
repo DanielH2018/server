@@ -12,7 +12,12 @@ from dev.findings_lib.gh_calls import _load_issue, load_issues
 
 
 def _answering(answer):
-    return FindingsTools(gh_json=lambda *argv, **kwargs: answer)
+    def gh_json(*argv, **kwargs):
+        if argv[:2] == ("api", "graphql"):
+            return {"data": {"repository": {}}}
+        return answer
+
+    return FindingsTools(gh_json=gh_json)
 
 
 def test_the_list_keeps_the_operators_issues_and_names_the_skipped_ones(capsys):
