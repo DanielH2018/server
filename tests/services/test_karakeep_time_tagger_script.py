@@ -26,7 +26,7 @@ PINNED_URL = (
     "37fa33fdd62b2ee5275ce8cdc1c86d29d0ec4237/community_scripts/karakeep-time-tagger/"
     "karakeep-time-tagger.py"
 )
-FORK_SHA256 = "b0e4e7de8606251d1d3082efa0b2d1370942f477fa56db5f6a2bf36814856009"
+FORK_SHA256 = "f6baff066cb6af85b655593389bf7ba84e3cfd8a9c22d62fd2739a8d6ee240ec"
 
 
 def test_the_vendored_script_matches_the_pinned_checksum():
