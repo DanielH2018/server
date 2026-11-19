@@ -55,6 +55,7 @@ lint = [
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
   # new diagnostics get read.
+  "vulture>=2.16",                  # dead-name gate (prek hook); [tool.vulture] holds its ignore list
 ]
 
 [tool.pytest.ini_options]
@@ -324,10 +325,10 @@ select = [
 "**/test_*.py" = ["D205", "D209"]
 "**/conftest.py" = ["D205", "D209"]
 
-# A one-off dead-code sweep reads this, not a hook or CI job: `uvx vulture` from the
-# repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
-# role files/ trees still counts. The extensionless hosts/lib/homelab-* scripts are not read, so
-# `refresh_pending` is the one line it reports. Every name below was triaged as live.
+# The `vulture` prek hook reads this and fails on any name nothing uses: delete the name, or
+# list it below under a comment that says what calls it. It scans every tracked Python root,
+# so a caller outside scripts/, hosts/lib and the role files/ trees still counts. Every name
+# below was triaged as live.
 # A test counts as a caller here, because many library functions exist for a guard under
 # tests/. To list production code that only tests call, run a second pass with
 # `--exclude '*/tests/*,*conftest.py,*/test_*.py,*/_*_harness.py'`.
@@ -371,7 +372,14 @@ ignore_names = [
   # Module-level `pytestmark`, which pytest reads.
   "pytestmark",
   # Keyword a fake's signature accepts because the real call passes it.
-  "server_hostname",
+  "server_hostname", "ua",
+  # Fixtures a test requests for their effect and never reads.
+  "restore_sigint", "ssh_here",
+  # Called from the extensionless hosts/lib/homelab-reconcile, which vulture does not read.
+  "refresh_pending",
+  # Nothing reads it. It records the session unit's EnvironmentFile path in
+  # renovate_session.py, a file on the landers' approval lists.
+  "SESSION_ENV_FILE",
   # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.
