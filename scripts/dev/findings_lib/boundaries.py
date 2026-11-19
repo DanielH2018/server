@@ -47,6 +47,7 @@ from dev.findings_lib import milestone
 from dev.findings_lib.issue_model import PR_REPO
 from dev.fanout_lib.manifest import branches_launched_by
 from dev.findings_lib.peer_trees import peer_worktree_list
+from dev.findings_lib.tracked_paths import tracked_files
 from lib.repo_paths import REPO
 from lib.worktrees import Worktree, primary_checkout
 from lib.worktrees import worktree_facts as read_worktree_facts
@@ -125,6 +126,9 @@ class FindingsTools:
     # run, so a test drives either without restating the milestone REST reads.
     attach_milestone: Callable[..., str | None] = milestone.attach_target
     close_idle_milestones: Callable[..., list[str]] = milestone.close_idle
+    # `() -> the register's tracked files`, which `issue_model.cited_paths` resolves an
+    # issue's citations against. A field so a test's `paths` never depend on this tree.
+    tracked: Callable[[], Collection[str]] = tracked_files
 
     @property
     def owner_name(self) -> str:
@@ -170,4 +174,7 @@ def aimed(tools: FindingsTools, repo: str | None) -> FindingsTools:
         repo=repo,
         gh_json=aimed_read,
         worktree_facts=facts if checkout is None else lambda: facts(checkout),
+        # DECIDED: another repo's citations resolve against nothing, as `place launch` has
+        # it: this repo's files would resolve them to paths that repo does not have.
+        tracked=tools.tracked if repo.lower() == PR_REPO.lower() else frozenset,
     )

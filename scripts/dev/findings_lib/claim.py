@@ -413,7 +413,13 @@ def free_issues(
             "warning: worktree read failed; withholding every currently claimed issue\n"
         )
         live = {i["number"] for i in issues if current_claim(i)}
-    rows = pickable(issues, live_claims=live, pr_refs=pr_refs, today=today)
+    rows = pickable(
+        issues,
+        live_claims=live,
+        pr_refs=pr_refs,
+        today=today,
+        tracked=tools.tracked(),
+    )
     text_of = {i["number"]: (i["title"], i.get("body") or "") for i in issues}
     for r in rows:
         r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))

@@ -1,15 +1,10 @@
-"""Resolve a path an issue cites relative to some directory to the tracked file it names.
+"""The tracked files an issue's cited paths resolve against.
 
-WHY. An issue body often cites a path from a subdirectory: `fanout_lib/clean.py`, meaning
-`scripts/dev/fanout_lib/clean.py`. `issue_model.cited_paths` returns what the body spells, so
-a consumer that compares against repo-root paths would miss: the fan-out collision check would
-let a fragment and its full path land in two batches.
-
-A fragment resolves only when exactly one tracked file ends with `/<fragment>`. An ambiguous or
-unmatched one stays as written, so nothing is resolved by guesswork.
+WHY. An issue body cites a file from the repo root, from a subdirectory or by its name alone.
+`issue_model.cited_paths` turns the last two into the tracked file they name, and it is a pure
+function, so the `git ls-files` read it resolves against lives here.
 """
 
-from collections.abc import Collection, Iterable
 from functools import cache
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -31,15 +26,3 @@ def tracked_files(repo: Path = REPO) -> frozenset[str]:
     if proc.returncode:
         return frozenset()
     return frozenset(p for p in proc.stdout.split("\0") if p)
-
-
-def resolve_fragments(paths: Iterable[str], tracked: Collection[str]) -> list[str]:
-    """Each of `paths`, replaced by the one tracked file it is a suffix of when there is one."""
-    return [_resolve(path, tracked) for path in paths]
-
-
-def _resolve(path: str, tracked: Collection[str]) -> str:
-    if path in tracked:
-        return path
-    hits = [t for t in tracked if t.endswith(f"/{path}")]
-    return hits[0] if len(hits) == 1 else path
