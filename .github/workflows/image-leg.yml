@@ -14,6 +14,9 @@ name: image-leg
 
 on:
   pull_request:
+    # `ready_for_review` joins the defaults: the job skips a draft, and a pull request opened as a
+    # draft and never pushed again would otherwise leave draft without a run.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - ".github/workflows/image-leg.yml"
       - "k8s/roles/longhorn-restore-drill/**"
