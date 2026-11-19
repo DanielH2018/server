@@ -20,6 +20,7 @@ V3 = "0.102+gcccccccccccc"
 CLAUDE = {
     "name": "claude",
     "uid": 1001,
+    "gid": 1001,
     "home": "/home/claude",
     "shell": "/bin/bash",
     "comment": "Claude agent",
@@ -80,7 +81,7 @@ def test_installing_a_version_that_declares_the_live_uid_and_clearing_the_hold_r
 ):
     host, node = pair
     held_by_a_uid_mismatch(host, node)
-    node.manifest["users"] = {"users": [{**CLAUDE, "uid": 1000}]}
+    node.manifest["users"] = {"users": [{**CLAUDE, "uid": 1000, "gid": 1000}]}
     at_version(host, node, V3)
 
     result = host.run("--clear-hold", "--install-newest")

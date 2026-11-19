@@ -78,7 +78,7 @@ ACCEPTED = {
         (SHADOW,),
         {"rewrite": _with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED))},
     ),
-    "a declared user's group moved, with its passwd gid": (
+    "a declared user's group moved to its declared gid, with its passwd gid": (
         (PASSWD, GROUP),
         {
             "snapshot": {
@@ -151,7 +151,7 @@ REJECTED = {
     "a declared user's gid pointing at another group": (
         PASSWD,
         {"rewrite": _with(PASSWD, ("claude:x:900:985:", "claude:x:900:990:"))},
-        "declared user claude's gid is not its own group's",
+        "declared user claude's gid is not its declared gid",
     ),
     "an undeclared group gaining a declared member": (
         GROUP,
@@ -165,17 +165,32 @@ REJECTED = {
     "a declared group with gid 0": (
         GROUP,
         {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:0:"))},
-        "the gid of declared group claude is 0 or another group's",
+        "the gid of declared group claude is not its declared gid",
     ),
     "a declared group whose gid collides with another group": (
         GROUP,
         {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:990:"))},
-        "the gid of declared group claude is 0 or another group's",
+        "the gid of declared group claude is not its declared gid",
     ),
-    "a declared group whose gid leaves its user's": (
+    "a declared user and its group moved together to an undeclared, unshared gid": (
+        PASSWD,
+        {
+            "rewrite": {
+                **_with(PASSWD, ("claude:x:900:985:", "claude:x:900:987:")),
+                **_with(GROUP, ("claude:x:985:", "claude:x:987:")),
+            }
+        },
+        "declared user claude's gid is not its declared gid",
+    ),
+    "a declared group at its declared gid while another group holds it too": (
         GROUP,
-        {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:986:"))},
-        "declared user claude's gid is not its own group's",
+        {
+            "rewrite": _with(
+                GROUP, ("claude:x:985:", "claude:x:985:svc"), ("990", "985")
+            ),
+            "snapshot": _with(GROUP, ("990", "985")),
+        },
+        "the declared gid of group claude is another group's too",
     ),
     "a declared group with an undeclared member": (
         GROUP,

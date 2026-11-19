@@ -56,17 +56,17 @@ defaults:
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
-  - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  - {name: claude, uid: 900, gid: 985, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
   # Triage's controller: owns triage's records and reports, and alone will
   # start its units. Declared here, not in the claude-code component, because triage ships only
   # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.
-  - {name: claude-triage-ctl, uid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
+  - {name: claude-triage-ctl, uid: 906, gid: 906, home: /var/lib/claude-triage-ctl, shell: /usr/sbin/nologin, comment: Triage controller}
   # Triage's session user: runs the headless session the controller starts, with no GitHub token
   # and no start right.
-  - {name: claude-triage, uid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
+  - {name: claude-triage, uid: 907, gid: 907, home: /var/lib/claude-triage, shell: /usr/sbin/nologin, comment: Triage session}
   # Renders the triage and Renovate sessions' Claude Code config from the verified dotfiles tag
   # It is no session's user, so no session reaches its stage.
-  - {name: claude-triage-render, uid: 908, home: /run/homelab-claude-config-render, shell: /usr/sbin/nologin, comment: T2 config render}
+  - {name: claude-triage-render, uid: 908, gid: 908, home: /run/homelab-claude-config-render, shell: /usr/sbin/nologin, comment: T2 config render}
 components:
   - reconcile
   - secrets-unit

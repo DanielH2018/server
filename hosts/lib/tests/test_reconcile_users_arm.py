@@ -17,11 +17,12 @@ ARM = "reconcile_lib/users.py"
 CLAUDE = {
     "name": "claude",
     "uid": 1001,
+    "gid": 1001,
     "home": "/home/claude",
     "shell": "/bin/bash",
     "comment": "Claude agent",
 }
-BOT = {**CLAUDE, "name": "bot", "uid": 1002, "home": "/home/bot"}
+BOT = {**CLAUDE, "name": "bot", "uid": 1002, "gid": 1002, "home": "/home/bot"}
 DRIFT = 'homelab_host_reconcile_drift{host="daniel-pi",arm="users"}'
 
 
@@ -83,7 +84,7 @@ def test_a_user_that_exists_with_the_declared_uid_needs_no_sysusers(node):
     assert commands(node) == []
 
 
-# A uid mismatch is a fault.
+# A uid or gid mismatch is a fault.
 
 
 def mismatch_fails_the_run(node: Node) -> None:
@@ -100,10 +101,6 @@ def mismatch_fails_the_run(node: Node) -> None:
         "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev -uid 1000"
         " -exec chown -h 1001 {} +;" in result.stderr
     )
-    assert (
-        "if claude's primary group is claude with gid 1000, also groupmod -g 1001 claude"
-        " and the same find with -gid 1000 -exec chown -h :1001 {} +;" in result.stderr
-    )
     assert "then sudo /usr/lib/homelab/homelab-updater --clear-hold" in result.stderr
     assert node.applied()["result"]["ok"] is False
     assert commands(node) == [], "a faulted run creates nothing"
@@ -119,6 +116,37 @@ def test_red_an_arm_that_never_compares_the_uid_would_leave_the_host_unheld(tmp_
         mismatch_fails_the_run,
         ARM,
         'if int(fields[2]) != user["uid"]:',
+        "if False:",
+    )
+
+
+def gid_mismatch_fails_the_run(node: Node) -> None:
+    declare(node, CLAUDE)
+    node.state["users"] = {"claude": 1001}
+    node.state["gids"] = {"claude": 985}
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "claude has gid 985; the package declares 1001" in result.stderr
+    assert "groupmod -g 1001 claude;" in result.stderr
+    assert (
+        "find /home/claude /tmp /var/tmp /var/spool/cron/crontabs -xdev -gid 985"
+        " -exec chown -h :1001 {} +;" in result.stderr
+    )
+    assert node.applied()["result"]["ok"] is False
+
+
+def test_a_declared_gid_that_differs_from_the_live_gid_fails_the_run(node):
+    gid_mismatch_fails_the_run(node)
+
+
+def test_red_an_arm_that_never_compares_the_gid_would_leave_the_host_unheld(tmp_path):
+    red(
+        tmp_path,
+        gid_mismatch_fails_the_run,
+        ARM,
+        'if int(fields[3]) != user["gid"]:',
         "if False:",
     )
 

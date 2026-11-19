@@ -219,8 +219,9 @@ def test_the_agents_profile_hands_landings_to_the_unit_the_box_ships(box):
 def test_daniel_box_declares_the_agent_with_its_own_uid(box):
     users = json.loads(box.files["/usr/lib/homelab/manifest.json"][0])["users"]["users"]
     assert {u["name"]: u["uid"] for u in users}["claude"] == 900
-    assert 'u claude 900 "Claude agent" /var/lib/claude /bin/bash\n' in (
-        box.files["/usr/lib/sysusers.d/homelab.conf"][0].decode()
+    assert (
+        'g claude 985\nu claude 900:985 "Claude agent" /var/lib/claude /bin/bash\n'
+        in (box.files["/usr/lib/sysusers.d/homelab.conf"][0].decode())
     )
 
 

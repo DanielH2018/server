@@ -81,17 +81,18 @@ case "$*" in
 esac
 """
 # Given a sysusers.d file, adds each `u` user missing from the fake passwd file at its declared
-# uid, or, as sysusers does when that uid is held, at the first free uid down from 999.
+# uid and gid, or, as sysusers does when that uid is held, at the first free uid down from 999.
 SYSUSERS_STUB = """echo "sysusers $*" >> {log}
 [ -n "$1" ] || exit 0
-while read -r kind name uid _; do
+while read -r kind name ids _; do
     [ "$kind" = u ] || continue
     grep -q "^$name:" {passwd} && continue
+    uid=${{ids%%:*}} gid=${{ids#*:}}
     if cut -d: -f3 {passwd} | grep -qx "$uid"; then
         uid=999
         while cut -d: -f3 {passwd} | grep -qx "$uid"; do uid=$((uid - 1)); done
     fi
-    echo "$name:x:$uid:$uid::/:/usr/sbin/nologin" >> {passwd}
+    echo "$name:x:$uid:$gid::/:/usr/sbin/nologin" >> {passwd}
 done < "$1"
 """
 NFPM_STUB = """#!/bin/sh

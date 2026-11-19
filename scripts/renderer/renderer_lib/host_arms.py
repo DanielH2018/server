@@ -35,11 +35,14 @@ Each `src` renders to the object's XML, which must carry the declared `<name>` a
 pinned UUID is what lets `net-define` replace the live object instead of colliding with it. The
 XML installs under `/usr/lib/homelab/libvirt/<kind>/<name>.xml`.
 
-A `users:` key declares system users with a fixed uid (`hosts/lib/reconcile_lib/users.py`)::
+A `users:` key declares system users with a fixed uid and the fixed gid of each user's own group
+(`hosts/lib/reconcile_lib/users.py`)::
 
-    users: [{name: claude, uid: 1001, home: /home/claude, shell: /bin/bash, comment: Claude agent}]
+    users: [{name: claude, uid: 1001, gid: 1001, home: /home/claude, shell: /bin/bash,
+             comment: Claude agent}]
 
-The renderer writes every user of the host package to `/usr/lib/sysusers.d/homelab.conf`.
+The renderer writes every user of the host package to `/usr/lib/sysusers.d/homelab.conf`, each
+as a `g` line for its group and a `u` line naming that gid.
 
 A `lines:` key declares edits in files dpkg does not overwrite (`hosts/lib/reconcile_lib/lines.py`)::
 
@@ -84,7 +87,7 @@ LIBVIRT_ROOTS = {"networks": "network", "nwfilters": "filter"}
 LIBVIRT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
-USER_KEYS = frozenset({"name", "uid", "home", "shell", "comment"})
+USER_KEYS = frozenset({"name", "uid", "gid", "home", "shell", "comment"})
 USER_NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 LINE_KEYS = ({"path", "line", "regexp"}, {"path", "block", "marker"})
 OCTAL = re.compile(r"[0-7]{3,4}")
@@ -302,7 +305,7 @@ def add_users(package: Package, directory: Path, users: object) -> None:
     """Record each declared user for the users arm and for the sysusers.d file.
 
     Raises:
-        RenderRefused: An entry is malformed, or a name or a uid is declared twice.
+        RenderRefused: An entry is malformed, or a name, a uid or a gid is declared twice.
     """
     if not isinstance(users, list):
         raise RenderRefused(f"{directory}: users {users!r} is not a list")
@@ -312,8 +315,10 @@ def add_users(package: Package, directory: Path, users: object) -> None:
             and set(user) == USER_KEYS
             and isinstance(user["name"], str)
             and USER_NAME.fullmatch(user["name"])
-            and type(user["uid"]) is int
-            and 0 < user["uid"] < 65534
+            and all(
+                type(user[key]) is int and 0 < user[key] < 65534
+                for key in ("uid", "gid")
+            )
             and all(
                 isinstance(user[key], str)
                 and user[key].startswith("/")
@@ -326,10 +331,12 @@ def add_users(package: Package, directory: Path, users: object) -> None:
         ):
             raise RenderRefused(f"{directory}: user {user!r} is malformed")
         if any(
-            user[key] == seen[key] for seen in package.users for key in ("name", "uid")
+            user[key] == seen[key]
+            for seen in package.users
+            for key in ("name", "uid", "gid")
         ):
             raise RenderRefused(
-                f"{package.name}: user {user['name']} or its uid is declared twice"
+                f"{package.name}: user {user['name']}, its uid or its gid is declared twice"
             )
         package.users.append(user)
 
@@ -345,7 +352,8 @@ def add_sysusers(package: Package) -> None:
     if SYSUSERS in package.files:
         raise RenderRefused(f"{package.name}: {SYSUSERS} is the rendered users list")
     text = "".join(
-        f'u {u["name"]} {u["uid"]} "{u["comment"] or "-"}" {u["home"]} {u["shell"]}\n'
+        f"g {u['name']} {u['gid']}\n"
+        f'u {u["name"]} {u["uid"]}:{u["gid"]} "{u["comment"] or "-"}" {u["home"]} {u["shell"]}\n'
         for u in sorted(package.users, key=lambda u: u["uid"])
     )
     package.files[SYSUSERS] = (text.encode(), 0o644)

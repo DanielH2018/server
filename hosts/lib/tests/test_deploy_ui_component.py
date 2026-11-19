@@ -129,6 +129,7 @@ def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
+    node.state["gids"] = {u["name"]: u["gid"] for u in manifest["users"]["users"]}
     # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     # t2-egress restarts squid, a dependency the Pi fixture never installed.

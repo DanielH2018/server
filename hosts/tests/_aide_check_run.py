@@ -142,6 +142,7 @@ DECLARED_USERS = [
     {
         "name": "claude",
         "uid": 900,
+        "gid": 985,
         "home": "/var/lib/claude",
         "shell": "/bin/bash",
         "comment": "Claude agent",
@@ -149,6 +150,7 @@ DECLARED_USERS = [
     {
         "name": "svc",
         "uid": 906,
+        "gid": 906,
         "home": "/var/lib/svc",
         "shell": "/usr/sbin/nologin",
         "comment": "Svc",

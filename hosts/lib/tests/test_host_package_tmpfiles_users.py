@@ -43,7 +43,9 @@ def undeclared_users(files: Files) -> set[str]:
     """The users and groups tmpfiles lines name that neither the image nor sysusers.d creates."""
     sysusers = files.get(SYSUSERS, (b"", 0))[0].decode()
     declared = {
-        line.split()[1] for line in sysusers.splitlines() if line.startswith("u ")
+        line.split()[1]
+        for line in sysusers.splitlines()
+        if line.startswith(("u ", "g "))
     }
     named = {
         owner.lstrip(":")
@@ -93,7 +95,7 @@ def test_every_tmpfiles_d_file_a_package_ships_is_applied_by_reconcile_on_instal
 def declared_uids(files: Files) -> dict[str, int]:
     sysusers = files.get(SYSUSERS, (b"", 0))[0].decode()
     return {
-        fields[1]: int(fields[2])
+        fields[1]: int(fields[2].split(":")[0])
         for fields in (line.split() for line in sysusers.splitlines())
         if fields[0] == "u"
     }

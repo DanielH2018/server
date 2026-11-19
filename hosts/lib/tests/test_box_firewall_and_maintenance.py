@@ -126,6 +126,7 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
+    node.state["gids"] = {u["name"]: u["gid"] for u in manifest["users"]["users"]}
     # The package's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     # t2-egress restarts squid, a dependency the Pi fixture never installed.
