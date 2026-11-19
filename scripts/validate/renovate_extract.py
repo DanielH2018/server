@@ -78,6 +78,8 @@ TABLE_HEADER = (
 # Dockerfile FROM instead, so the `_image:` key itself has nothing to track.
 REGISTRY_BUILT_IMAGES = frozenset(
     {
+        "airflow_k8s_image",
+        "airflow_k8s_task_image",
         "n8n_k8s_image",
         "n8n_k8s_runners_image",
         "ical_proxy_k8s_image",

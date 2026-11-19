@@ -378,7 +378,7 @@ observability_stabilise_workloads:
   - kind: deploy
     name: grafana
     restart_on: []
-    restart_secrets: [secret-grafana-admin.yaml]
+    restart_secrets: [secret-grafana-admin.yaml, grafana-warehouse-datasource-secret.yaml]
   - kind: deploy
     name: alertmanager
     restart_on: []

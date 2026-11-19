@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The promote workflow's `images` job: push each rendered image context to GHCR once (D5.4a2).
 
-`homelab-render cluster` writes each of the ten contexts `k8s/image-builder` builds to
+`homelab-render cluster` writes each of the contexts `k8s/image-builder` builds to
 `DIR/images/<name>/`, and each content tag to `DIR/images/tags.json` (D5.4a1,
 `scripts/renderer/renderer_lib/images.py`). The `images` job downloads that render and runs:
 
@@ -212,7 +212,7 @@ def ref(name: str, tag: str) -> str:
 def docker_build(name: str, tag: str, context: Path) -> str:
     """Build `context` and push it as `name:tag`, returning the pushed digest, or "" on failure.
 
-    The local image and build cache are pruned afterwards, so ten builds fit on one runner.
+    The local image and build cache are pruned afterwards, so every build fits on one runner.
     """
     with tempfile.TemporaryDirectory() as tmp:
         metadata = Path(tmp) / "metadata.json"
@@ -280,7 +280,7 @@ def push(
         # build metadata's digest. The job builds on the runner's default `docker` driver,
         # whose `containerimage.digest` can be the config digest rather than the manifest
         # digest GHCR serves. docker/setup-buildx-action would move the build cache out of
-        # reach of the `docker system prune` that lets ten builds fit on one runner.
+        # reach of the `docker system prune` that lets every build fit on one runner.
         if after.status != 200 or not DIGEST_RE.fullmatch(after.digest):
             problems.append(
                 f"{ref(name, tag)}: pushed {digest}, but the registry answers HTTP "

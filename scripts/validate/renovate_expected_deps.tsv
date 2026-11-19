@@ -2,6 +2,7 @@
 # scripts/validate/renovate_extract.py checks CI's extract against it; after adding or
 # moving a pin, regenerate it with `renovate_extract.py write <report>`.
 # manager	file	depName	datasource	digest	packageName
+dockerfile	k8s/roles/airflow/templates/Dockerfile.j2	apache/airflow	docker	digest	-
 dockerfile	k8s/roles/code-server/templates/Dockerfile.j2	lscr.io/linuxserver/code-server	docker	digest	-
 dockerfile	k8s/roles/homelab-mcp/templates/Dockerfile.j2	python	docker	digest	-
 dockerfile	k8s/roles/ical-proxy/templates/Dockerfile.j2	python	docker	digest	-
@@ -71,6 +72,7 @@ regex	hosts/packages/homelab-tools/package.yml	twpayne/chezmoi	github-release-at
 regex	hosts/packages/homelab-tools/package.yml	vale-cli/vale	github-release-attachments	digest	-
 regex	hosts/packages/homelab-tools/package.yml	vale-cli/vale	github-release-attachments	digest	-
 regex	inventory/group_vars/all.yml	crowdsecurity/crowdsec	docker	digest	-
+regex	k8s/roles/airflow/defaults/main.yml	postgres	docker	digest	-
 regex	k8s/roles/artifacts/defaults/main.yml	python	docker	digest	-
 regex	k8s/roles/authelia/defaults/main.yml	authelia/authelia	docker	digest	-
 regex	k8s/roles/authelia/defaults/main.yml	redis	docker	digest	-

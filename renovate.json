@@ -640,6 +640,7 @@
       ],
       "matchFileNames": [
         "inventory/group_vars/all.yml",
+        "k8s/roles/airflow/defaults/main.yml",
         "k8s/roles/arr-notification/defaults/main.yml",
         "k8s/roles/authelia/defaults/main.yml",
         "k8s/roles/autofix-bridge/defaults/main.yml",
@@ -700,6 +701,7 @@
         "dockerfile"
       ],
       "matchFileNames": [
+        "k8s/roles/airflow/templates/Dockerfile*.j2",
         "k8s/roles/code-server/templates/Dockerfile*.j2",
         "k8s/roles/karakeep/templates/Dockerfile*.j2",
         "k8s/roles/n8n/templates/Dockerfile*.j2",
