@@ -568,7 +568,7 @@ jobs:
     # `full` when the legs ran the whole census, `selected` when they ran a pull request's
     # selection. Every leg computes it from the same diff and the same table, so whichever
     # leg writes last writes the same word. The `prek` gate records a tree for either word,
-    # and a landing batch's members for `full` alone.
+    # on the head and on a landing batch's members.
     outputs:
       scope: ${{ steps.select.outputs.scope }}
     strategy:
@@ -2015,7 +2015,7 @@ jobs:
           echo "Recorded tree $tree on $HEAD_SHA."
 
       # A landing batch is a pull request from a `queue/` branch of this repository that holds
-      # up to four PRs stacked on master, and this run is the one full run they share
+      # up to four PRs stacked on master, and this run is the one run they share
       # (`docs/ci-throughput.md`, slice B3). `tested_tree.py record-batch` reads the members'
       # numbers from the PR's body, stacks their heads on this run's base itself, and records a
       # tree on each head only when the last stacked tree is the tree this run tested. The
@@ -2028,7 +2028,7 @@ jobs:
       # here would fail a batch that passed. Each has its own timeout for the same reason: a
       # fetch that hangs would otherwise run into the job's timeout and cancel the gate.
       - name: Check out the batch's history
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && needs.pytest.outputs.scope == 'full'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && (needs.pytest.outputs.scope == 'full' || needs.pytest.outputs.scope == 'selected')
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/checkout@v7.0.1
@@ -2037,7 +2037,7 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - name: Record the tested tree on each batch member's head
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && needs.pytest.outputs.scope == 'full'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'queue/') && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && (needs.pytest.outputs.scope == 'full' || needs.pytest.outputs.scope == 'selected')
         continue-on-error: true
         timeout-minutes: 2
         env:

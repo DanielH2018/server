@@ -65,6 +65,10 @@ against a red parent would leave out what the parent broke.
 - `scripts/dev/pytest_shard.py` no longer widens a selection that needs more than half the
   legs. That rule existed to keep the tested-tree record, which a selection no longer loses.
 - A landing batch still records its members only from a run that swept in full.
+  **Extended on 2026-11-19:** a batch records from a selected run too. The run's diff is
+  every member stacked on master, so its selection holds each module any member can
+  affect. The trees between the first member's merge and the last are tested by no run,
+  as they were when the batch's run swept in full.
 - A push run's selection rests on its base's gate, so a gate that passed wrongly at one
   commit is trusted by every push after it until the nightly sweep runs.
 - Reversing this means restoring a second status context and the `pytest-proven` output

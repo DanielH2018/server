@@ -23,6 +23,7 @@ from jinja2 import pass_context
 from jinja2.runtime import Context
 from jinja2.utils import missing
 
+from lib import yaml_fast
 from lib.render_guard import make_env
 
 __all__ = [
@@ -64,7 +65,7 @@ def yaml_error(rendered: str) -> str | None:
     return None
 
 
-class StrictKeyLoader(yaml.SafeLoader):
+class StrictKeyLoader(yaml_fast.Loader):
     """SafeLoader that rejects a duplicate mapping key instead of letting the last one win.
 
     Plain YAML treats a repeated key as an overwrite: the document stays valid, kubectl
