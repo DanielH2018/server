@@ -58,8 +58,9 @@ shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
 A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT. `--changed-since REF` asks
 `affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
 few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
-empty list and CI skips their remaining steps. A push to master and a dispatch pass no REF and
-run the whole census. `affected_lib/table.py` has the rule and what it can miss.
+empty list and CI skips their remaining steps. A push to master passes the newest ancestor
+whose CI passed as REF. A dispatch passes no REF and runs the whole census, as does a push
+with no such ancestor in reach. `affected_lib/table.py` has the rule and what it can miss.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 

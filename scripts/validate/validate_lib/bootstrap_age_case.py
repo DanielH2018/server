@@ -96,6 +96,6 @@ def run(cases) -> None:
         cases.failed.append(NAME)
         print(f"[FAIL] {NAME}: {exc}", file=sys.stderr)
     else:
-        print(f"[PASS] {NAME}", file=sys.stderr)
+        cases.passed.append(NAME)
     finally:
         c.remove()

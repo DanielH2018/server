@@ -8,8 +8,10 @@
 # have. The flags select one of three postures:
 #
 #   run-hook.sh session-health
-#       uv run --no-project, stderr quieted, always exit 0. The posture for an observability
-#       hook that must never block: SessionStart, InstructionsLoaded, Stop.
+#       uv run --no-project, always exit 0. The posture for an observability hook that must
+#       never block: SessionStart, InstructionsLoaded, Stop. stdout passes through. stderr is
+#       dropped on success; on a non-zero exit its last line replaces stdout as one
+#       `{"systemMessage":"[<name>] failed: <line>"}`, so a crash is never silent.
 #
 #   run-hook.sh auto-mode-bridge --project
 #       cd into the repo, then `exec` so the hook's stdin JSON survives. No output means the
@@ -66,12 +68,12 @@ while (($# > 0)); do
             ask_guards=${1#--ask-on-cd=}
             ;;
         -*)
-            echo "run-hook.sh: unknown flag '$1' — the hook did not run" >&2
+            echo "[run-hook.sh] unknown flag '$1' — the hook did not run" >&2
             exit 0
             ;;
         *)
             if [[ -n "$name" ]]; then
-                echo "run-hook.sh: more than one hook name ('$name', '$1') — neither ran" >&2
+                echo "[run-hook.sh] more than one hook name ('$name', '$1') — neither ran" >&2
                 exit 0
             fi
             name=$1
@@ -81,7 +83,7 @@ while (($# > 0)); do
 done
 
 if [[ -z "$name" ]]; then
-    echo "run-hook.sh: no hook name given — nothing ran" >&2
+    echo "[run-hook.sh] no hook name given — nothing ran" >&2
     exit 0
 fi
 
@@ -89,7 +91,7 @@ fi
 # escaped: unparsable output from a DENY guard reads to the harness as a silent allow.
 # The name bails rather than falling back, since a quote or slash names no `.py` here.
 if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
-    echo "run-hook.sh: '$name' is not a hook name — nothing ran" >&2
+    echo "[run-hook.sh] '$name' is not a hook name — nothing ran" >&2
     exit 0
 fi
 
@@ -104,9 +106,9 @@ script="$HOOKS_DIR/$name.py"
 # Both arguments are prose for the one stderr line and the one `ask` reason.
 did_not_run() {
     local what=$1 why=$2
-    echo "run-hook.sh $name: $what ($why)${ask_guards:+ — asking instead of allowing}" >&2
+    echo "[$name] $what ($why)${ask_guards:+ — asking instead of allowing}" >&2
     [[ -n "$ask_guards" ]] || return 0
-    printf '%s\n' "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"run-hook.sh $name: $what ($why), so this call was checked by none of: $ask_guards. Review it yourself.\"}}"
+    printf '%s\n' "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"[$name] $what ($why), so this call was checked by none of: $ask_guards. Review it yourself.\"}}"
 }
 
 # The checkout whose `.venv` `uv run --no-sync` uses, and the uv that runs it, default to the
@@ -160,13 +162,29 @@ if [[ -n "$project" ]]; then
     fi
     own_venv=${HOOKS_DIR%/.claude/hooks}/.venv
     if [[ -x "$own_venv/bin/python" && "$own_venv" =~ ^/[A-Za-z0-9_./-]+$ ]]; then
-        echo "run-hook.sh $name: $project_dir/.venv/bin/python cannot run, so $own_venv runs this hook" >&2
+        echo "[$name] $project_dir/.venv/bin/python cannot run, so $own_venv runs this hook" >&2
         UV_PROJECT_ENVIRONMENT=$own_venv exec "$uv" run --no-sync --quiet python "$script"
     fi
     did_not_run "guards did not run" "neither $project_dir/.venv nor $own_venv has a Python that runs"
     exit 0
 fi
 
-"$uv" run --no-project --no-python-downloads --python 3.15.2 \
-    "$script" 2>/dev/null
+# stdout goes straight through on fd 3; only stderr is captured, for the failure line.
+# `--quiet` drops uv's own warnings, such as a `UV_*` setting that `--no-project` ignores,
+# which would otherwise be the last line; uv's errors still print.
+exec 3>&1
+err=$("$uv" run --quiet --no-project --no-python-downloads --python 3.15.2 \
+    "$script" 2>&1 >&3 3>&-)
+rc=$?
+exec 3>&-
+if ((rc != 0)); then
+    # The last non-empty stderr line is a Python traceback's `<Exc>: <msg>`. It can carry any
+    # bytes, so control characters are stripped and the JSON specials escaped.
+    cause=$(printf '%s\n' "$err" | awk 'NF { last = $0 } END { print last }' | tr -d '\000-\037')
+    cause=${cause:0:300}
+    cause=${cause:-exit $rc with no stderr}
+    cause=${cause//\\/\\\\}
+    cause=${cause//\"/\\\"}
+    printf '%s\n' "{\"systemMessage\":\"[$name] failed: $cause\"}"
+fi
 exit 0

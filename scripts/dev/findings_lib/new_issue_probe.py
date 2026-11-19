@@ -108,7 +108,7 @@ def read(tools: FindingsTools, after: int | None, baseline: Path, today: date) -
         tools: the boundaries every gh call goes through, aimed at the register.
         after: the `--after` baseline, or None to use the one recorded at ``baseline``.
         baseline: the file a wait with no `--after` records its baseline in.
-        today: the date a `not-before:` label is compared to.
+        today: the date a Not Before date is compared to.
 
     Raises:
         subprocess.SubprocessError, OSError: a gh read failed; there is no verdict.

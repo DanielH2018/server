@@ -41,7 +41,7 @@ import json
 import re
 import sys
 
-from _hook_common import read_payload
+from _hook_common import read_payload, tagged
 
 _GIT_PUSH = re.compile(r"(?:^|[\s;&|(])git\s+(?:-C\s+\S+\s+)?push(?:\s|$)")
 # GitHub's ruleset lines name the ref; the `[remote rejected]` line names only the branch.
@@ -124,7 +124,7 @@ def main() -> None:
                     {
                         "hookSpecificOutput": {
                             "hookEventName": event,
-                            "additionalContext": note,
+                            "additionalContext": tagged("auto-mode-bridge", note),
                         }
                     }
                 )

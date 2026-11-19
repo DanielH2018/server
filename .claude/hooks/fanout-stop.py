@@ -80,7 +80,7 @@ import re
 import sys
 from pathlib import Path
 
-from _hook_common import read_payload
+from _hook_common import read_payload, tagged
 
 MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
@@ -231,7 +231,10 @@ def main(stdin=sys.stdin, stdout=sys.stdout) -> int:
         return 0
     reason = decide(payload)
     if reason:
-        stdout.write(json.dumps({"decision": "block", "reason": reason}) + "\n")
+        stdout.write(
+            json.dumps({"decision": "block", "reason": tagged("fanout-stop", reason)})
+            + "\n"
+        )
     return 0
 
 

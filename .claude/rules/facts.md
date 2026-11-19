@@ -169,19 +169,14 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   section at 0 reads. The freshness reviewer
   (`.claude/agents/homelab-docs-freshness-reviewer.md`) reads this ranking. Next, the report
   ranks the docs delivered as a head by their `form=head` rows, which is the order a trim
-  should follow. Then it prints the instruction bytes each session loaded. Next, it replays
-  the notice once per first-parent commit in the window, with the parent as the base, and
-  counts the rows by kind (`scripts/lib/facts/replay.py:notice_replay`). Last, it replays the
-  comment class of the removed-name rule over the same commits
+  should follow. Then it prints the instruction bytes each session loaded. Last, it replays
+  the comment class of the removed-name rule once per first-parent commit in the window
   (`scripts/lib/facts/replay.py:comment_replay`), which calls the function the advice calls,
   `scripts/lib/facts/removed.py:stale_comment_uses`. `--json` prints the
-  same as one object. Its `notice_replay.content_notices` list holds each row whose atom is
-  not a path atom, with its commit, section, atom and kind, and whether the commit edited the
-  section's prose: that list is what a grading of the notice's yield reads. Its
-  `comment_replay.rows` list holds each comment row as its commit, the removed name and
-  `path:line` at that commit, which is what G7 step 5's grading reads. The two replays walk
-  every commit in the window and take minutes, where the rest takes about a second, so
-  `--no-replay` leaves both out for a caller that reads only the log's lists, such as the
+  same as one object. Its `comment_replay.rows` list holds each comment row as its commit, the
+  removed name and `path:line` at that commit, which is what G7 step 5's grading reads. The
+  replay walks every commit in the window and takes minutes, where the rest takes about a
+  second, so `--no-replay` leaves it out for a caller that reads only the log's lists, such as the
   freshness reviewer.
   `scripts/lib/facts/report.py` says where each count comes from.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an

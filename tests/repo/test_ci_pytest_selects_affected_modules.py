@@ -45,9 +45,18 @@ def _unguarded_after_select(steps: list[dict]) -> list[str]:
     ]
 
 
-def _arguments(tmp_path, event: str) -> str:
-    """What the select step hands `uv` on `event`, with `uv` replaced by an echo."""
+def _arguments(tmp_path, event: str, green_base: str = "") -> str:
+    """What the select step hands `uv` on `event`, with `uv` replaced by an echo.
+
+    The step's own `env:` names each variable, so a variable the workflow stops passing is
+    unset here too.
+    """
     step = next(s for s in _job()["steps"] if s.get("name") == SELECT)
+    passed = {
+        "${{ matrix.shard }}": "2",
+        "${{ strategy.job-total }}": "6",
+        "${{ needs.prove.outputs.base }}": green_base,
+    }
     stubs = fake_bin(tmp_path / "bin", uv='echo "$@"\n')
     done = run(
         ["bash", "-c", step["run"]],
@@ -56,9 +65,8 @@ def _arguments(tmp_path, event: str) -> str:
         env={
             "PATH": "/usr/bin:/bin",
             "GITHUB_EVENT_NAME": event,
-            "SHARD": "2",
-            "SHARDS": "6",
             "RUNNER_TEMP": str(tmp_path),
+            **{name: passed[value] for name, value in step["env"].items()},
         },
     )
     assert done.returncode == 0, done.stderr
@@ -72,9 +80,21 @@ def test_a_pull_request_diffs_against_the_commit_it_was_merged_onto(tmp_path):
     assert "--of 6 --shard 2" in arguments
 
 
-@pytest.mark.parametrize("event", ["push", "workflow_dispatch"])
-def test_a_push_and_a_dispatch_hand_the_split_no_base(tmp_path, event):
-    arguments = _arguments(tmp_path, event)
+def test_a_push_diffs_against_the_green_base_the_prove_job_named(tmp_path):
+    arguments = _arguments(tmp_path, "push", green_base="f" * 40)
+
+    assert f"--changed-since {'f' * 40}" in arguments
+
+
+@pytest.mark.parametrize(
+    ("event", "green_base"),
+    [("push", ""), ("workflow_dispatch", "")],
+    ids=["push-with-no-green-ancestor", "dispatch"],
+)
+def test_a_push_with_no_base_and_a_dispatch_hand_the_split_no_base(
+    tmp_path, event, green_base
+):
+    arguments = _arguments(tmp_path, event, green_base)
 
     assert "pytest_shard.py" in arguments and "--changed-since" not in arguments
 

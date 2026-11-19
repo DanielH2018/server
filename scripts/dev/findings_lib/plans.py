@@ -13,14 +13,13 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.red_green import RED_GREEN_LABEL, RED_GREEN_STYLE
+from dev.findings_lib.red_green import RED_GREEN_STYLE
 from dev.findings_lib.milestone import branch_of
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
     NOT_PLANNED_PREFIX,
     NOT_BEFORE_PREFIX,
-    NOT_BEFORE_STYLE,
     PR_REPO,
     _REOBSERVED,
     claim_comment,
@@ -28,7 +27,6 @@ from dev.findings_lib.issue_model import (
     fold_marker,
     label_names,
     not_before,
-    not_before_label,
     open_blockers,
     release_comment,
     reobservations,
@@ -48,52 +46,42 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
 
 
 def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
-    """The `label create` a label outside `LABELS` needs before anything can apply it.
+    """The `label create` the `red-green` label needs before anything can apply it.
 
-    `gh issue create --label` and `gh issue edit --add-label` both fail on a label the repo
-    lacks, and `plan_sync_labels` only knows the static `LABELS` set. Returns `[]` when the
-    label already exists, so a second deferral to the same date plans nothing extra.
+    `gh issue create --label` fails on a label the repo lacks, and `plan_sync_labels` only
+    knows the static `LABELS` set. Returns `[]` when the label already exists.
     """
     if name in existing:
         return []
-    colour, desc = RED_GREEN_STYLE if name == RED_GREEN_LABEL else NOT_BEFORE_STYLE
+    colour, desc = RED_GREEN_STYLE
     return [["label", "create", name, "--color", colour, "--description", desc]]
 
 
-def plan_defer(
-    issue: dict, *, until: date | None, existing_labels: set[str]
-) -> list[list[str]]:
-    """Plans the gh argv that sets, moves or clears ``issue``'s not-before date.
+def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:
+    """Plans the gh argv that records setting, moving or clearing ``issue``'s not-before date.
+
+    The date itself is the Not Before issue field, which the caller sets with
+    `gh_calls.set_fields`. This plans the comment the thread reads later, and removes every
+    `not-before:` label still on the issue: `not_before` takes the latest of the field and
+    the labels, so a label left behind would outlive a move to an earlier date or a clear.
 
     Args:
         until: the first day the issue may be offered again, or None to clear the deferral.
-        existing_labels: the repo's label names, so the dated label is created only once.
-
-    Every `not-before:` label already on the issue is removed, whatever its date, so the
-    issue carries at most one and `not_before` never has to pick. The comment is what the
-    thread reads later, so nobody re-derives the date from the body.
 
     Raises:
         ClaimRefused: the issue is closed, or clearing an issue that carries no deferral.
     """
     if issue.get("state", "OPEN") != "OPEN":
         raise ClaimRefused("closed — nothing to defer")
+    if until is None and not_before(issue) is None:
+        raise ClaimRefused("not deferred — no Not Before date to clear")
     n = str(issue["number"])
     stale = sorted(x for x in label_names(issue) if x.startswith(NOT_BEFORE_PREFIX))
-    if until is None:
-        if not stale:
-            raise ClaimRefused("not deferred — no `not-before:` label to clear")
-        plans = [["issue", "edit", n, *_flat("--remove-label", stale)]]
-        plans.append(["issue", "comment", n, "--body", "Deferral cleared."])
-        return plans
-    new = not_before_label(until)
-    plans = plan_ensure_label(new, existing_labels)
-    edit = ["issue", "edit", n, "--add-label", new]
-    edit += _flat("--remove-label", [x for x in stale if x != new])
-    plans.append(edit)
-    plans.append(
-        ["issue", "comment", n, "--body", f"Deferred until {until.isoformat()}."]
+    plans = [["issue", "edit", n, *_flat("--remove-label", stale)]] if stale else []
+    note = (
+        "Deferral cleared." if until is None else f"Deferred until {until.isoformat()}."
     )
+    plans.append(["issue", "comment", n, "--body", note])
     return plans
 
 
@@ -282,7 +270,7 @@ def plan_claim(
 
     Raises:
         ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
-            carries a `not-before:` date after ``today``, has an open blocker, or another
+            carries a Not Before date after ``today``, has an open blocker, or another
             worktree already holds it.
     """
     if issue.get("state", "OPEN") != "OPEN":
@@ -372,7 +360,6 @@ def plan_open(
     fp: str,
     source: str,
     verify_by: str | None = None,
-    defer_until: date | None = None,
 ) -> tuple[str, int, list[list[str]]]:
     """Plans the gh argv to file, touch or reopen a finding, given its matching issue.
 
@@ -387,8 +374,9 @@ def plan_open(
         source: the review or session that produced this finding.
         verify_by: prose describing how to check whether the finding is fixed, which
             `verify` prints back; stored only when creating a new issue.
-        defer_until: the first day `next` may offer the finding, as a `not-before:` label;
-            applied only when creating a new issue. The caller plans the label's creation.
+
+    The severity and not-before date are issue fields, which `gh issue create` cannot set,
+    so the caller writes them once the issue exists.
 
     Returns:
         A ``(outcome, exit_code, plans)`` tuple: outcome is one of ``created``, ``touched``,
@@ -410,8 +398,6 @@ def plan_open(
         ]
         for lab in labels:
             argv += ["--label", lab]
-        if defer_until is not None:
-            argv += ["--label", not_before_label(defer_until)]
         return "created", 0, [argv]
     n = str(existing["number"])
     names = label_names(existing)

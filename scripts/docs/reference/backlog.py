@@ -6,8 +6,8 @@ beside the other generated references at docs.local, so "what is known-broken an
 is answered where "what runs here" is, without opening GitHub.
 
 FOUR TABLES, ONE REGISTER. The first is the open backlog. The second lists the open findings
-that carry a `not-before:` date, sorted by it, because GitHub's issue list can neither match
-a label prefix nor sort by a label. The third is the settled register:
+that carry a Not Before date, sorted by it, because GitHub's issue list cannot sort by an
+issue field. The third is the settled register:
 every finding closed `--accepted` (true, and the operator lives with it) or `--refuted` (a
 skeptic disproved it), grouped by reviewer domain with the close reason beside it. The
 reviewer agents under .claude/agents/ point at that table instead of carrying a hand-copied
@@ -139,9 +139,9 @@ def _deferred_section(rows: list[dict], today: date) -> list[str]:
     """Every open finding carrying a not-before date, soonest first."""
     parts = [
         "## Deferred, by date\n",
-        "Open findings carrying a `not-before:` label, soonest first. `findings.py next` "
+        "Open findings carrying a Not Before date, soonest first. `findings.py next` "
         "withholds a *withheld* row until its date and offers it on that day; a *date "
-        "passed* row is workable again and keeps its label until someone defers or clears "
+        "passed* row is workable again and keeps its date until someone defers or clears "
         "it. Set or move a date with `findings.py defer <n> --until <date>`.\n",
     ]
     dated = [r for r in rows if r.get("not_before")]

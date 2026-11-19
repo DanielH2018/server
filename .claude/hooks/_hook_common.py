@@ -204,11 +204,23 @@ def repo_root(start: Path) -> Path | None:
     return None
 
 
-def emit_pretooluse_decision(decision: str, reason: str) -> None:
+def tagged(hook: str, text: str) -> str:
+    """`text` as hook `hook` emits it: `[<hook>] <text>`.
+
+    Every message a hook here hands the harness opens with this prefix, so a reader can tell
+    which hook wrote a deny, a context note or a failure line, and grep for it.
+    `run-hook.sh` writes the same shape for the lines it emits itself.
+    """
+    return f"[{hook}] {text}"
+
+
+def emit_pretooluse_decision(hook: str, decision: str, reason: str) -> None:
     """Print the Claude Code PreToolUse permission-decision JSON.
 
-    ``decision`` is ``"allow"`` or ``"deny"``; ``reason`` is the human-readable
-    justification the harness surfaces.
+    Args:
+        hook: the hook or arm that decided; `tagged` prefixes the reason with it.
+        decision: ``"allow"``, ``"ask"`` or ``"deny"``.
+        reason: the human-readable justification the harness surfaces.
     """
     print(
         json.dumps(
@@ -216,7 +228,7 @@ def emit_pretooluse_decision(decision: str, reason: str) -> None:
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": decision,
-                    "permissionDecisionReason": reason,
+                    "permissionDecisionReason": tagged(hook, reason),
                 }
             }
         )
