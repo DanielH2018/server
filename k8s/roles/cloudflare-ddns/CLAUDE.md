@@ -54,5 +54,5 @@ conventions.
 
 ## Editing
 - Manifests: `k8s/roles/cloudflare-ddns/templates/deployment-direct.yaml.j2`,
-  `k8s/roles/cloudflare-ddns/templates/deployment-proxied.yaml.j2`,
-  `k8s/roles/cloudflare-ddns/templates/secret.yaml.j2`.
+  `k8s/roles/cloudflare-ddns/templates/deployment-proxied.yaml.j2`, and the Secret in
+  `k8s/roles/cloudflare-ddns/defaults/main.yml:render_secrets`.

@@ -76,3 +76,12 @@ k8s_claims:
   - name: "{{ lidarr_k8s_claim }}"
     storage_class: "{{ lidarr_k8s_storage_class }}"
     size: "{{ lidarr_k8s_size }}"
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # lidarr's API key. lidarr adopts it through LIDARR__AUTH__APIKEY, and the exportarr
+  # sidecar authenticates with it.
+  - name: lidarr-exportarr
+    string_data:
+      api_key: lidarr_api_key
