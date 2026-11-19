@@ -6,8 +6,9 @@
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 Usage: Claude Code runs this hook on the SessionStart event. It takes no stdin payload. It
-prints one SessionStart JSON object to stdout, or nothing when everything is green, and it always
-exits 0. `-h` or `--help` prints this text and exits 0. `--sessions` prints every other live
+prints one SessionStart JSON object to stdout, or nothing when everything is green, and it
+exits 0. A bug that escapes the per-probe guards raises and exits 1, which `run-hook.sh` turns
+into one `[session-health] failed: <cause>` line while still exiting 0. `-h` or `--help` prints this text and exits 0. `--sessions` prints every other live
 session in this repo with the paths it changed, which the banner lists only where they overlap
 this branch.
 
@@ -27,7 +28,7 @@ Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
   - READ-ONLY and NEVER BLOCKS: every external call is timeout-bounded and wrapped;
-    any failure degrades to a quiet skip. Always exits 0.
+    a probe's failure degrades to a quiet skip. `run-hook.sh` exits 0 whatever this does.
   - The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
@@ -589,7 +590,4 @@ if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
         print(__doc__.strip())
         sys.exit(0)
-    try:
-        sys.exit(print_all_sessions() if "--sessions" in sys.argv[1:] else main())
-    except Exception:
-        sys.exit(0)
+    sys.exit(print_all_sessions() if "--sessions" in sys.argv[1:] else main())

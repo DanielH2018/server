@@ -2,7 +2,8 @@
 """Tests for the SessionStart health-banner hook.
 
 The hook must: stay silent when all-green, surface down scrape targets when they exist, and
-never raise. We exercise the pure helpers directly and stub `_run` so the suite needs no live
+degrade a failed probe to a skip. A bug outside the probes exits non-zero, which
+`run-hook.sh` reports. We exercise the pure helpers directly and stub `_run` so the suite needs no live
 Prometheus.
 
 Run: uv run pytest .claude/hooks
@@ -29,6 +30,32 @@ _spec = importlib.util.spec_from_file_location("session_health", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
+
+
+def test_a_crash_in_main_exits_non_zero_so_run_hook_can_report_it(tmp_path):
+    """`run-hook.sh` reports a crash only on a non-zero exit, so main's raise must escape.
+
+    The copy sits beside a stub `_hook_common` whose `read_payload` raises, the first call
+    `main` makes, so nothing on the host is read.
+    """
+    copy = tmp_path / "session-health.py"
+    shutil.copy(_HOOK, copy)
+    (tmp_path / "_hook_common.py").write_text(
+        "def primary_checkout():\n    return None\n\n"
+        "def tagged(hook, text):\n    return text\n\n"
+        "def read_payload():\n    raise RuntimeError('payload read broke')\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(copy)],
+        input="{}",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert proc.stderr.strip().splitlines()[-1] == "RuntimeError: payload read broke"
 
 
 def _result(stdout, returncode=0):

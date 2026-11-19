@@ -6,8 +6,9 @@
 """Record which CLAUDE.md / .claude/rules file loaded into context, and why.
 
 Usage: Claude Code runs this hook on the InstructionsLoaded event. It reads the hook JSON
-payload on stdin, appends one row to `.claude/logs/instructions.log`, prints nothing, and always
-exits 0. `-h` or `--help` prints this text and exits 0 without reading stdin.
+payload on stdin, appends one row to `.claude/logs/instructions.log`, prints nothing, and
+exits 0. An error it hits raises and exits 1, which `run-hook.sh` turns into one
+`[log-instructions] failed: <cause>` line while still exiting 0. `-h` or `--help` prints this text and exits 0 without reading stdin.
 
 One line per file as it loads, carrying the file and its `load_reason`: session_start,
 path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` appends a sixth,
@@ -24,8 +25,8 @@ The point: verify that path-scoped rules actually fire. Claude Code has known bu
 this log you can edit, say, a compose template and check that `docker.md` shows up with
 `load_reason=path_glob_match` and the right trigger.
 
-Observability only — InstructionsLoaded cannot block, and this swallows all errors and always exits
-0 so it can never disrupt session startup. Pure stdlib (no third-party deps), like every hook here.
+Observability only: InstructionsLoaded cannot block, and `run-hook.sh` exits 0 whatever this
+does, so a failure here never disrupts session startup. Pure stdlib (no third-party deps), like every hook here.
 
 Log: the PRIMARY checkout's .claude/logs/instructions.log (gitignored), even when the hook runs
 from a worktree, bounded by single-backup rotation. `_hook_common.instructions_log_path` owns
@@ -66,8 +67,7 @@ def size_field(path, cwd):
 def main():
     """Append one line to the instructions log for an InstructionsLoaded event on stdin.
 
-    Ignores any other hook event. The caller wraps this in a broad except so a failure here
-    never blocks session startup.
+    Ignores any other hook event. A failure raises; `run-hook.sh` keeps it from blocking.
     """
     d = read_payload()
     if d is None or d.get("hook_event_name") != "InstructionsLoaded":
@@ -97,7 +97,4 @@ if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
         print(__doc__.strip())
         sys.exit(0)
-    try:
-        main()
-    except Exception:  # noqa: S110 -- a logging hook must never block the tool call
-        pass
+    main()
