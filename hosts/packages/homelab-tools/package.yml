@@ -118,7 +118,7 @@ tools:
   # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
   # daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
-  # https://github.com/goreleaser/nfpm/releases/download/v2.48.0/checksums.txt
+  # https://github.com/goreleaser/nfpm/releases/download/v2.49.0/checksums.txt
   nfpm:
     amd64:
       # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
