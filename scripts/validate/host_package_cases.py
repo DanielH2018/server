@@ -80,9 +80,12 @@ Usage:
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
     uv run python scripts/validate/host_package_cases.py ... --bootstrap
 
-Exit codes: 0 no case failed, with a last `[NO VERDICT]` line counting the cases a mirror outage
-left untested; 1 a case failed, each `[FAIL]` line on stderr naming it and why, or a container
-never booted; 64 a usage error.
+A passing case prints nothing. A failed case prints a `[FAIL]` line naming why, then its
+container's journal. The last line counts each verdict, and each failed case gets an `::error`
+annotation; `case_groups.report` writes both.
+
+Exit codes: 0 no case failed, with a last `[NO VERDICT]` line naming the cases a mirror outage
+left untested; 1 a case failed or a container never booted; 64 a usage error.
 """
 
 import sys as _sys
@@ -102,7 +105,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
-from validate.validate_lib.case_groups import groups, run_groups, verdict
+from validate.validate_lib.case_groups import groups, report, run_groups
 from validate.validate_lib.host_container import (
     LAST_SUCCESS,
     PORT,
@@ -156,6 +159,7 @@ class Cases:
         self.k3s_download = args.k3s_download
         self.shard = args.bootstrap_shard
         self.box = box_address(args.render / "head")
+        self.passed: list[str] = []
         self.failed: list[str] = []
         self.no_verdict: list[str] = []
         self.debs: dict[str, Path] = {}
@@ -255,7 +259,7 @@ class Cases:
                 f"::group::journal after {name}\n{journal}::endgroup::", file=sys.stderr
             )
             return
-        print(f"[PASS] {container.name}: {name}", file=sys.stderr)
+        self.passed.append(name)
 
     def boot(self, label: str) -> Container | None:
         container = Container(self.image, f"homelab-host-test-{label}", self.work)
@@ -593,9 +597,7 @@ def main(argv: list[str] | None = None) -> int:
         run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
     else:
         run_groups(cases, groups(Cases), args.jobs)
-    line, status = verdict(cases)
-    print(line, file=sys.stderr)
-    return status
+    return report(cases)
 
 
 if __name__ == "__main__":

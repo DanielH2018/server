@@ -5,7 +5,7 @@ and each case module's `run`. Every group boots its own containers, and their na
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
 `work` is `<work>/groups/<name>`, with its own `repo/`, `build/` and a copy of each prepared
-`.deb`, and its own `debs`, `versions`, `failed` and `no_verdict`. `secrets_case.seal_pi` rewrites `debs`
+`.deb`, and its own `debs`, `versions`, `passed`, `failed` and `no_verdict`. `secrets_case.seal_pi` rewrites `debs`
 labels such as `pi-head`, so a group never sees another group's sealed build.
 
 Groups run on threads, not processes, so a group looked up at call time is the one that runs.
@@ -20,6 +20,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import copy
+import os
 import shutil
 import sys
 import threading
@@ -28,6 +29,8 @@ import traceback
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
+
+from lib.progress import count_line
 
 from validate.validate_lib import bootstrap_age_case
 from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
@@ -112,6 +115,7 @@ def isolate(cases, name: str):
             shutil.copy(deb, target)
         group.debs[label] = target
     group.versions = dict(cases.versions)
+    group.passed = []
     group.failed = []
     group.no_verdict = []
     return group
@@ -119,7 +123,7 @@ def isolate(cases, name: str):
 
 def _run_one(
     cases, name: str, run: Callable, stderr: StderrByThread
-) -> tuple[list[str], list[str], float]:
+) -> tuple[list[str], list[str], list[str], float]:
     stderr.hold()
     start = time.monotonic()
     try:
@@ -130,14 +134,14 @@ def _run_one(
             group.failed.append(f"{name}: raised {type(exc).__name__}")
             print(f"[FAIL] {name}: raised outside a case: {exc}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr, end="")
-        failed, no_verdict = group.failed, group.no_verdict
+        passed, failed, no_verdict = group.passed, group.failed, group.no_verdict
     except Exception as exc:
-        failed, no_verdict = [f"{name}: could not isolate"], []
+        passed, failed, no_verdict = [], [f"{name}: could not isolate"], []
         print(f"[FAIL] {name}: its scratch directory: {exc}", file=sys.stderr)
     seconds = time.monotonic() - start
     print(f"[DONE] {name} in {seconds:.0f}s", file=sys.stderr)
     stderr.release()
-    return failed, no_verdict, seconds
+    return passed, failed, no_verdict, seconds
 
 
 def run_groups(
@@ -148,13 +152,13 @@ def run_groups(
     Args:
         cases: The prepared `Cases`. Each group gets an `isolate` copy of it.
         groups: `(name, run)` pairs, as `groups` lists them; `run` takes the group's copy and
-            records each failed case on its `failed`.
+            records each case on its `passed`, `failed` or `no_verdict`.
         jobs: How many groups run at once.
 
     Returns:
         Each group's wall time in seconds, by name. `cases.failed` gains every group's
-        failures in `groups` order, and a group that raised is one of them. `cases.no_verdict`
-        gains every case that could not reach a verdict, the same way.
+        failures in `groups` order, and a group that raised is one of them. `cases.passed` and
+        `cases.no_verdict` gain the passes and the cases that reached no verdict, the same way.
     """
     stderr = StderrByThread(sys.stderr)
     sys.stderr = stderr
@@ -168,22 +172,72 @@ def run_groups(
     finally:
         sys.stderr = stderr.real
     for name, _ in groups:
-        cases.failed.extend(results[name][0])
-        cases.no_verdict.extend(results[name][1])
-    slowest = sorted(results.items(), key=lambda item: -item[1][2])
-    times = ", ".join(f"{name} {seconds:.0f}s" for name, (_, _, seconds) in slowest)
+        passed, failed, no_verdict, _ = results[name]
+        cases.passed.extend(passed)
+        cases.failed.extend(failed)
+        cases.no_verdict.extend(no_verdict)
+    slowest = sorted(results.items(), key=lambda item: -item[1][3])
+    times = ", ".join(f"{name} {result[3]:.0f}s" for name, result in slowest)
     print(f"group wall times: {times}", file=sys.stderr)
-    return {name: seconds for name, (_, _, seconds) in results.items()}
+    return {name: result[3] for name, result in results.items()}
 
 
-def verdict(cases) -> tuple[str, int]:
-    """The run's last line and exit status: 1 when a case failed, else 0, even with no verdicts."""
-    if cases.failed:
-        return f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", 1
-    if cases.no_verdict:
-        return (
-            f"[NO VERDICT] {len(cases.no_verdict)} cases gave no verdict, and every other"
-            f" case passed: {cases.no_verdict}",
-            0,
+# GitHub shows at most 10 error annotations per step.
+ANNOTATION_CAP = 10
+
+
+def report(cases) -> int:
+    """Annotate each failed case, print the run's last line, and return the exit status.
+
+    Each failed case gets one `::error` annotation, up to `ANNOTATION_CAP`; past the cap the
+    last annotation counts the rest. The last line opens with the count of each verdict and
+    lists the failed cases, or the cases with no verdict when none failed. When
+    `GITHUB_STEP_SUMMARY` names a file, the count and every failed or no-verdict case are
+    appended to it.
+
+    Returns:
+        1 when a case failed, else 0, even when some cases gave no verdict.
+    """
+    states = (
+        ["failed"] * len(cases.failed)
+        + ["no verdict"] * len(cases.no_verdict)
+        + ["passed"] * len(cases.passed)
+    )
+    counts = count_line(states)
+    shown = cases.failed
+    if len(shown) > ANNOTATION_CAP:
+        shown = shown[: ANNOTATION_CAP - 1]
+    for name in shown:
+        print(
+            f"::error title=host package case failed::{_escape(name)}", file=sys.stderr
         )
-    return "every case passed", 0
+    if len(shown) < len(cases.failed):
+        rest = len(cases.failed) - len(shown)
+        print(
+            f"::error title=host package case failed::{rest} more; the job summary lists them",
+            file=sys.stderr,
+        )
+    _summarise(cases, counts)
+    if cases.failed:
+        print(f"[FAIL] {counts}: {cases.failed}", file=sys.stderr)
+        return 1
+    if cases.no_verdict:
+        print(f"[NO VERDICT] {counts}: {cases.no_verdict}", file=sys.stderr)
+        return 0
+    print(f"[PASS] {counts}", file=sys.stderr)
+    return 0
+
+
+def _escape(text: str) -> str:
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _summarise(cases, counts: str) -> None:
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    lines = ["### Host package cases", "", counts, ""]
+    lines += [f"- failed: {name}" for name in cases.failed]
+    lines += [f"- no verdict: {name}" for name in cases.no_verdict]
+    with open(path, "a", encoding="utf-8") as summary:
+        summary.write("\n".join(lines) + "\n")

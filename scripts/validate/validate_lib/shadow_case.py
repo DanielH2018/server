@@ -82,6 +82,6 @@ def run(cases) -> None:
         ).stdout
         print(f"::group::journal after {NAME}\n{journal}::endgroup::", file=sys.stderr)
     else:
-        print(f"[PASS] {c.name}: {NAME}", file=sys.stderr)
+        cases.passed.append(NAME)
     finally:
         c.remove()

@@ -11,6 +11,7 @@ Run: uv run pytest scripts/validate/tests/test_host_package_cases_concurrent.py
 
 import threading
 import time
+import types
 from collections.abc import Callable
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from validate.validate_lib import (
     bootstrap_age_case,
     bootstrap_case,
     bootstrap_repo_case,
+    case_groups,
     conffile_case,
     disarm_case,
     engine_case,
@@ -84,8 +86,10 @@ def _stub(
         if name == fail:
             target.failed.append(name)
             print(f"[FAIL] stub: {name}: it was told to fail", file=cases.sys.stderr)
-        if name == no_verdict:
+        elif name == no_verdict:
             target.no_verdict.append(name)
+        else:
+            target.passed.append(name)
 
     return body
 
@@ -137,7 +141,61 @@ def test_a_case_with_no_verdict_passes_the_leg_and_is_counted_last(
     last = capfd.readouterr().err.splitlines()[-1]
     assert (status, last) == (
         0,
-        "[NO VERDICT] 1 cases gave no verdict, and every other case passed: ['bootstrap_age_case']",
+        "[NO VERDICT] 1 no verdict, 10 passed: ['bootstrap_age_case']",
+    )
+
+
+def test_a_failed_case_is_annotated_and_summarised_and_no_pass_is_listed(
+    tmp_path, monkeypatch, capfd
+):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    _, status = _run_main(tmp_path, monkeypatch, fail="cold_install")
+
+    err = capfd.readouterr().err.splitlines()
+    assert {
+        "status": status,
+        "errors": [line for line in err if line.startswith("::error")],
+        "passes": [line for line in err if line.startswith("[PASS]")],
+        "last": err[-1],
+        "summary": summary.read_text().splitlines()[2:],
+    } == {
+        "status": 1,
+        "errors": ["::error title=host package case failed::cold_install"],
+        "passes": [],
+        "last": "[FAIL] 1 failed, 10 passed: ['cold_install']",
+        "summary": ["1 failed, 10 passed", "", "- failed: cold_install"],
+    }
+
+
+def test_a_clean_run_ends_with_one_count_line(tmp_path, monkeypatch, capfd):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    _, status = _run_main(tmp_path, monkeypatch)
+
+    err = capfd.readouterr().err.splitlines()
+    assert (status, err[-1], [line for line in err if "::error" in line]) == (
+        0,
+        "[PASS] 11 passed",
+        [],
+    )
+
+
+def test_failures_past_the_annotation_cap_are_counted_in_the_last_annotation(capfd):
+    run = types.SimpleNamespace(
+        passed=[], no_verdict=[], failed=[f"case {i}" for i in range(12)]
+    )
+
+    status = case_groups.report(run)
+
+    errors = [
+        line
+        for line in capfd.readouterr().err.splitlines()
+        if line.startswith("::error")
+    ]
+    assert (status, len(errors), errors[-1]) == (
+        1,
+        case_groups.ANNOTATION_CAP,
+        "::error title=host package case failed::3 more; the job summary lists them",
     )
 
 
