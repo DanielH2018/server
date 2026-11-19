@@ -392,38 +392,36 @@ def _pr_note(pr: PR) -> str:
 def render_digest(items: list[tuple[PR, str]], limit: int = DISCORD_MAX) -> str:
     """Render the actionable (pr, bucket) list into a Discord digest message.
 
-    Groups by bucket in `_BUCKET_ORDER`, then truncates the tail (adding a "…and N more"
-    line) to stay under `limit` characters — Discord's message cap.
+    Groups by bucket in `_BUCKET_ORDER`, then adds PRs one at a time while they fit under
+    `limit` characters, Discord's message cap, and ends with a "…and N more" line for the rest.
 
     Args:
         items: (pr, bucket) pairs, typically `actionable()`'s output.
         limit: character budget for the rendered message.
     """
     total = len(items)
-    head = "Renovate — %d PR(s) need attention" % total
-    # Build per-PR entries in bucket order; add as many as fit, count the remainder.
-    entries: list[tuple[str, list[str]]] = []  # (bucket_header, [lines]) groups
-    for bucket in _BUCKET_ORDER:
-        group = [(pr) for pr, b in items if b == bucket]
-        if not group:
-            continue
-        lines = []
-        for pr in group:
-            lines.append(" • #%d %s — %s" % (pr.number, pr.title, _pr_note(pr)))
-            lines.append("   %s" % pr.url)
-        entries.append((_BUCKET_HEADER[bucket], lines))
-
-    out = [head, ""]
+    out = ["Renovate — %d PR(s) need attention" % total, ""]
     shown = 0
     truncated = False
-    for header, lines in entries:
-        block = [header] + lines + [""]
-        # +len for a possible "…and N more" tail keeps us safely under the limit.
-        if len("\n".join(out + block)) > limit - 20:
-            truncated = True
-            break
-        out += block
-        shown += len(lines) // 2
+    for bucket in _BUCKET_ORDER:
+        group = [pr for pr, b in items if b == bucket]
+        if not group or truncated:
+            continue
+        header = [_BUCKET_HEADER[bucket]]
+        for pr in group:
+            entry = [
+                " • #%d %s — %s" % (pr.number, pr.title, _pr_note(pr)),
+                "   %s" % pr.url,
+            ]
+            # The 20 spare characters hold a possible "…and N more" tail.
+            if len("\n".join(out + header + entry)) > limit - 20:
+                truncated = True
+                break
+            out += header + entry
+            header = []
+            shown += 1
+        if not header:
+            out.append("")
     msg = "\n".join(out).rstrip()
     if truncated and shown < total:
         msg += "\n…and %d more" % (total - shown)

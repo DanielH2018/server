@@ -6,11 +6,17 @@ import renovate_notify as rn
 
 
 def _pr(
-    number=1, url="u", automerge=True, ci="success", conflicting=False, dead_paths=None
+    number=1,
+    url="u",
+    automerge=True,
+    ci="success",
+    conflicting=False,
+    dead_paths=None,
+    title="t",
 ):
     return nl.PR(
         number=number,
-        title="t",
+        title=title,
         url=url,
         automerge=automerge,
         ci=ci,
@@ -44,6 +50,22 @@ def test_a_long_prefix_still_ends_with_the_digest():
     msg = nl.compose_message([_long_autoclosed(30)], items)
     assert len(msg) <= nl.DISCORD_MAX
     assert msg.endswith("http://x/900")
+
+
+def test_a_digest_over_the_floor_behind_a_long_prefix_still_lists_prs():
+    url = "https://github.com/owner/repo/pull/%d"
+    items = [
+        (
+            _pr(number=n, url=url % n, title="chore(deps): update %s" % ("z" * 48)),
+            "stuck",
+        )
+        for n in range(1, 6)
+    ]
+    assert len(nl.render_digest(items)) > nl.DIGEST_FLOOR
+    msg = nl.compose_message([_long_autoclosed(20)], items)
+    assert len(msg) <= nl.DISCORD_MAX
+    assert url % 1 in msg
+    assert msg.endswith("more")
 
 
 def test_a_prefix_that_fits_is_not_cut():
