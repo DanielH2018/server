@@ -40,19 +40,16 @@ spec:
       initContainers:
 {% endif %}
 {% if traefik_k8s_manage_acme %}
-        # Traefik creates acme.json 0600 itself, but kubelet's fsGroup handling ORs group bits
-        # into every file on the volume at mount time, so it comes back 0660 on every start.
-        # Traefik then refuses to load the ACME account and drops the entire resolver:
+        # Traefik creates acme.json 0600, but kubelet's fsGroup handling ORs group bits into every
+        # file on the volume at mount time, so it comes back 0660 on every start. Traefik then
+        # refuses the ACME account and drops the entire resolver:
         #   unable to get ACME account: permissions 660 for /data/acme.json are too open,
         #   please use 600
-        #   -> The ACME resolve is skipped from the resolvers list
-        # after which every router asking for that resolver fails with "Router uses a
-        # nonexistent certificate resolver" and nothing serves TLS at all. The deploy stays
-        # green throughout: the pod is healthy, it is just not serving HTTPS.
+        # Every router asking for that resolver then fails with "Router uses a nonexistent
+        # certificate resolver" and nothing serves TLS, while the deploy stays green.
         #
-        # This has to run on every start rather than being fixed once, because it is the mount
-        # that widens the file. Reuses the Traefik image (it carries /bin/sh) so there is no
-        # second image to pin and no version skew.
+        # This runs on every start because the mount is what widens the file. It reuses the
+        # Traefik image (it carries /bin/sh), so there is no second image to pin.
         - name: fix-acme-permissions
           image: {{ traefik_k8s_image }}
           imagePullPolicy: IfNotPresent
@@ -103,9 +100,8 @@ spec:
               mountPath: /etc/traefik-file
               readOnly: true
 {% endif %}
-            # NOT /run/secrets, which is the Docker convention this was ported from.
-            # /var/run/secrets symlinks to /run/secrets, and that is where Kubernetes projects
-            # the ServiceAccount token — mounting a read-only Secret over it leaves runc unable
+            # NOT /run/secrets: /var/run/secrets symlinks to it, and Kubernetes projects the
+            # ServiceAccount token there. Mounting a read-only Secret over it leaves runc unable
             # to create /run/secrets/kubernetes.io and the container never starts:
             #   mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
 {% if traefik_k8s_manage_acme %}
@@ -129,50 +125,45 @@ spec:
             - name: traefik-acme
               mountPath: /data
 {% endif %}
-            # Shared with the crowdsec-agent sidecar, which tails access.log (slice-6 D2).
+            # Shared with the crowdsec-agent sidecar, which tails access.log.
             - name: traefik-logs
               mountPath: /var/log/traefik
-            # Traefik downloads experimental plugins (the crowdsec bouncer) here at start.
-            # With the read-only rootfs it cannot mkdir this itself — and when that fails
-            # it does not fail the pod: it DISABLES plugins, the crowdsec Middleware never
-            # materializes, and every router referencing it 404s. The whole edge went dark
-            # this way on the first B1 rollout.
+            # Traefik downloads experimental plugins (the crowdsec bouncer) here at start. With the
+            # read-only rootfs it cannot mkdir this itself, and when that fails it does not fail
+            # the pod: it DISABLES plugins, the crowdsec Middleware never materializes, and every
+            # router referencing it 404s.
             - name: traefik-plugins-storage
               mountPath: /plugins-storage
             - name: traefik-tmp
               mountPath: /tmp
 {% if traefik_k8s_manage_crowdsec %}
-          # #1322: /ping answers 200 from the moment the process is up, and says nothing about
-          # whether Traefik built a routing table. On 2026-09-06 the boot-time download of the
-          # bouncer plugin timed out, the `crowdsec` Middleware the https entrypoint names
-          # resolved to "invalid middleware type", every router on that entrypoint was
-          # rejected, and this pod sat 3/3 Ready serving 404 to the whole fleet for 3.5 hours.
-          # Traefik does not retry that download, and nothing restarted it.
+          # /ping answers 200 from the moment the process is up, and says nothing about whether
+          # Traefik built a routing table. If the boot-time download of the bouncer plugin times
+          # out, the `crowdsec` Middleware the https entrypoint names resolves to "invalid
+          # middleware type", every router on that entrypoint is rejected, and the pod sits Ready
+          # serving 404. Traefik does not retry that download.
           #
           # This probe makes the pod's start conditional on the routing table existing. Its
-          # target is edge-selfcheck-ingressroute.yaml.j2 — a router on the https entrypoint
-          # backed by ping@internal, so it carries the crowdsec middleware chain but depends
-          # on no other workload. Plugin loaded: 200. Plugin missing: the router is rejected
-          # with all the others and the probe reads 404, kubelet restarts the container, and
-          # the restart re-downloads. Minutes instead of hours, and a download that keeps
-          # failing shows as CrashLoopBackOff rather than a green pod.
+          # target is edge-selfcheck-ingressroute.yaml.j2: a router on the https entrypoint
+          # backed by ping@internal, so it carries the crowdsec middleware chain but depends on
+          # no other workload. Plugin missing: the router is rejected with all the others, the
+          # probe reads 404, kubelet restarts the container, and the restart re-downloads. A
+          # download that keeps failing shows as CrashLoopBackOff rather than a green pod.
           #
-          # A startupProbe rather than a liveness one, on purpose. It is scoped to boot, which
-          # is when the download happens, so a steady-state wobble in CrowdSec can never
-          # restart-loop the edge. It also suppresses the readiness probe below until it
-          # passes, which is what keeps a routerless Traefik out of the Service.
+          # A startupProbe rather than a liveness one: it is scoped to boot, when the download
+          # happens, so a steady-state wobble in CrowdSec can never restart-loop the edge. It
+          # also suppresses the readiness probe below until it passes, which keeps a routerless
+          # Traefik out of the Service.
           #
           # DECIDED: the shared emptyDir does not need clearing between container starts (#1345).
           # A failing startupProbe restarts the CONTAINER, so /plugins-storage is the same
-          # emptyDir on every retry, where the #1322 repair was a rollout restart onto a fresh
-          # one. Measured 2026-09-10 on this exact image: each restart re-downloads. Traefik
-          # clears the sources tree at every process start and re-requests the archive on every
-          # install, so a stale or partial archive cannot short-circuit recovery. Full evidence
-          # in this role's CLAUDE.md; do not re-run that outage.
+          # emptyDir on every retry. Traefik clears the sources tree at every process start and
+          # re-requests the archive on every install, so a stale or partial archive cannot
+          # short-circuit recovery. This role's CLAUDE.md has the evidence.
           #
           # 3 minutes of tolerance (36 x 5s). The download takes ~1s when plugins.traefik.io
           # answers, and the bouncer's own updateMaxFailure: 5 gives roughly 6 minutes before
-          # a dead LAPI turns into a blanket 403 — so this window closes well inside the one
+          # a dead LAPI turns into a blanket 403, so this window closes well inside the one
           # case where a healthy edge could still fail the probe.
           startupProbe:
             httpGet:
@@ -181,10 +172,9 @@ spec:
               scheme: HTTPS
             periodSeconds: 5
             failureThreshold: 36
-            # 3s, not kubelet's 1s default. Each attempt is a full TLS handshake plus the
-            # crowdsec, default-headers and compress chain — at cold boot on a loaded node,
-            # which is the exact scenario this probe exists for, 1s can expire on a Traefik
-            # that is fine. That would burn all 36 attempts and restart a healthy edge.
+            # 3s, not kubelet's 1s default. Each attempt is a full TLS handshake plus the crowdsec,
+            # default-headers and compress chain, and at cold boot on a loaded node 1s can expire
+            # on a healthy Traefik, burning all 36 attempts and restarting it.
             timeoutSeconds: 3
 {% endif %}
           readinessProbe:
@@ -211,29 +201,19 @@ spec:
         # is ever reached).
         #
         # copytruncate, NOT a SIGUSR1 reopen signal: signalling traefik's PID 1 from a sibling
-        # container needs shareProcessNamespace: true on the pod (NOT set, deliberately — every
-        # sidecar here would then see and be able to signal every other container's process,
-        # a real security regression on this security-critical edge pod for a marginal gain).
-        # copytruncate needs no cross-container signal at all: it copies the log aside then
-        # truncates the SAME inode in place, so traefik's already-open fd keeps writing without
-        # being reopened. That works because traefik opens the access log O_APPEND, and an
-        # O_APPEND write always targets the current end-of-file rather than a cached offset — so
-        # the first write after a truncate lands at the new offset 0. The rotate() function below
-        # checks this held rather than trusting it silently (see "did rotation actually take"
-        # below). CrowdSec's acquis.yaml (crowdsec-secret.yaml.j2) names the exact file
-        # /var/log/traefik/access.log, not a glob, so the rotated .1/.2 generations are never
-        # re-ingested and old requests never get re-banned. This isn't a new mechanism for this
-        # file: the retired Docker-era edge (deleted by #2385; `git show
-        # 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/traefik/`) ran
-        # copytruncate against this exact access.log, with crowdsec tailing it the same way, for
-        # months with no reported loss (see git history: b93d9a4c added
-        # roles/containers/traefik/files/traefik-logrotate with `copytruncate`, `rotate 7`).
+        # container needs shareProcessNamespace: true on the pod, which stays unset so no
+        # sidecar can see or signal another container's process on this security-critical pod.
+        # copytruncate copies the log aside, then truncates the SAME inode, so traefik's
+        # already-open fd keeps writing. That works because traefik opens the access log
+        # O_APPEND, so the first write after a truncate lands at the new offset 0. The rotate()
+        # function below checks this held. CrowdSec's acquis.yaml (crowdsec-secret.yaml.j2)
+        # names the exact file /var/log/traefik/access.log, not a glob, so the rotated .1/.2
+        # generations are never re-ingested and old requests never get re-banned.
         #
-        # Deliberately NO readinessProbe — same trap as crowdsec-agent above: a sidecar's
-        # readiness gates the whole pod's Service endpoints, so a tail or rotation hiccup here
-        # must never pull the EDGE out of rotation. No livenessProbe either: the loop below is
-        # its own watchdog for the child `tail` (restarts it, logging when it does), and a
-        # container restart here would gain nothing a shell loop can't already do.
+        # Deliberately NO readinessProbe, as with crowdsec-agent above: a sidecar's readiness
+        # gates the whole pod's Service endpoints, so a tail or rotation hiccup here must never
+        # pull the EDGE out of rotation. No livenessProbe either: the loop below watchdogs the
+        # child `tail`, and a container restart would gain nothing.
         - name: access-log-rotate
           image: {{ traefik_k8s_logrotate_image }}
           imagePullPolicy: IfNotPresent
@@ -249,12 +229,10 @@ spec:
 
               log() { echo "access-log-rotate: $*"; }
 
-              # BusyBox's tail is not asserted to reseek to 0 on a detected truncation the way
-              # GNU coreutils does — this image was never exec'd against to check. Rather than
-              # rely on that, the child is killed and restarted across every rotation, which is
-              # correct regardless of which tail implementation the image carries. `-n +1`
-              # follows from byte 0: right after a truncate/restart the file is ~empty, so
-              # nothing is lost by not seeking to the (now stale) end.
+              # BusyBox's tail is not known to reseek to 0 on a detected truncation the way GNU
+              # coreutils does, so the child is killed and restarted across every rotation.
+              # `-n +1` follows from byte 0: right after a truncate/restart the file is ~empty,
+              # so nothing is lost by not seeking to the (now stale) end.
               start_tail() {
                 tail -f -n +1 "$LOG" &
                 TAIL_PID=$!
@@ -281,11 +259,9 @@ spec:
                 wait "$TAIL_PID" 2>/dev/null || true
                 start_tail
 
-                # Did the truncate actually take? If traefik does not open the log O_APPEND
-                # after all, its cached write offset stays at the pre-rotate size, the file
-                # re-grows to it on the very next write, and copying that in full every cycle
-                # would spend the disk I/O this sidecar exists to bound. Fail loud and stop
-                # trying rather than fail silent and thrash.
+                # Did the truncate take? If traefik does not open the log O_APPEND, its write offset
+                # stays at the pre-rotate size and the file re-grows to it on the next write, so
+                # copying it in full every cycle would thrash the disk. Fail loud and stop rotating.
                 size_after=$(file_size)
                 if [ "$size_after" -ge "$MAX_BYTES" ]; then
                   log "truncate did not shrink $LOG (still ${size_after}B) — disabling further rotation"
@@ -330,9 +306,8 @@ spec:
         - name: traefik-cloudflare
           secret:
             secretName: traefik-cloudflare
-            # 0440, not 0400: the kubelet owns secret files as root:fsGroup, so the container
-            # user reaches them through the GROUP bit. 0400 grants the group nothing and the
-            # token is unreadable to the process that needs it.
+            # 0440, not 0400: the kubelet owns secret files as root:fsGroup, so the container user
+            # reaches them through the GROUP bit, which 0400 does not grant.
             defaultMode: 0440
         - name: traefik-acme
           persistentVolumeClaim:
@@ -364,10 +339,9 @@ spec:
 {% endif %}
         - name: traefik-plugins-storage
           emptyDir: {}
-        # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism — the
-        # access-log-rotate sidecar copytruncates the log well before this is reached (see
-        # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml). Hitting this cap would
-        # mean rotation itself has stopped working, not that rotation was never implemented.
+        # sizeLimit is a BACKSTOP against pod eviction, not the rotation mechanism: the
+        # access-log-rotate sidecar copytruncates the log well before it is reached (see
+        # traefik_k8s_access_log_rotate_mb / _keep in defaults/main.yml).
         - name: traefik-logs
           emptyDir:
             sizeLimit: {{ traefik_k8s_access_log_size }}

@@ -2,8 +2,7 @@
 
 The script tests drive `check` with a stub opener. The render tests render a copy of the role
 with `traefik_k8s_bouncer_key_precheck` set, as pihole's precheck tests do, and check the Job
-meets every Job census row and sits in front of `traefik`. The default is on since #6157, once
-the fence peer #6095 landed first was live; the Job and its peer deadlock in one revision.
+meets every Job census row and sits in front of `traefik`.
 
 Run: uv run pytest k8s/roles/traefik/tests/test_traefik_bouncer_key_precheck.py
 """

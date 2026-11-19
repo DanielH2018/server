@@ -24,13 +24,12 @@ k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy ca
 
 wg_easy_k8s_claim: wg-easy-config
 # `longhorn`, NOT nobackup: /etc/wireguard holds the server keypair and every client
-# config — losing it means re-importing every device. Tiny volume, real state. The volume was
-# seeded from the Docker copy's config dir, and the server KEYPAIR must survive any move or
-# every client has to re-import.
+# config — losing it means re-importing every device. Tiny volume, real state. The server
+# KEYPAIR must survive any move or every client has to re-import.
 wg_easy_k8s_storage_class: longhorn
 wg_easy_k8s_size: 1Gi
 
-# The claim the renderer emits for this role, which the wg-easy Kustomization applies (#3387).
+# The claim the renderer emits for this role, which the wg-easy Kustomization applies.
 k8s_claims:
   - name: "{{ wg_easy_k8s_claim }}"
     storage_class: "{{ wg_easy_k8s_storage_class }}"

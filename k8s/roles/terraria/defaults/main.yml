@@ -6,7 +6,7 @@
 #
 # The upstream DIGEST PIN lives in that Dockerfile's FROM line, which is where Renovate's
 # built-in dockerfile manager reads it. Built images carry automerge: false, so a person merges
-# the digest PR. Since D5.15 Flux applies this role: the merge moves the content tag, the
+# the digest PR. Flux applies this role: the merge moves the content tag, the
 # promote workflow's `images` job pushes it to GHCR, and the renderer points this ref there.
 terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_tags.get('terraria', 'latest') }}"
 
@@ -32,7 +32,7 @@ terraria_k8s_mem_limit: 2048Mi
 terraria_k8s_cpu_request: "250m"
 terraria_k8s_mem_request: 512Mi
 
-# The claim the renderer emits for this role, which the terraria Kustomization applies (#3387).
+# The claim the renderer emits for this role, which the terraria Kustomization applies.
 k8s_claims:
   - name: "{{ terraria_k8s_claim }}"
     storage_class: "{{ terraria_k8s_storage_class }}"

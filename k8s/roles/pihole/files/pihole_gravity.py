@@ -53,7 +53,7 @@ GRAVITY_READ_TIMEOUT = 300
 # How long the first connect to each instance retries a refusal, in seconds. It waits out
 # kube-router learning this new pod's address.
 REACH_RETRY_SECONDS = 60
-# The comment on every row the reconcile adds. It matches the rows the Ansible task wrote.
+# The comment on every row the reconcile adds.
 COMMENT = "ansible-declared"
 # The line gravity.sh prints once the new database has replaced the old one
 # (`gravity_swap_databases`: `echo -e "${OVER}  ${TICK} ${str}"`). A run that fails earlier
@@ -229,8 +229,8 @@ def reconcile(api: Api, declared: Mapping) -> list[str]:
     regex = api.regex_denies()
     for pattern in declared["regex_deny"]:
         if pattern not in regex:
-            # FTL compiles the pattern before it stores it, which the SQL insert never did, so
-            # an invalid one now fails here rather than sitting unused in gravity.db.
+            # FTL compiles the pattern before it stores it, so an invalid one fails here
+            # rather than sitting unused in gravity.db.
             api.write(
                 "POST",
                 "/api/domains/deny/regex",

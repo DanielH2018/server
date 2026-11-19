@@ -2,7 +2,7 @@
    so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
    Do not reach for `from_apps: []`: it renders `from:` as null, which admits every source by
    accident rather than by statement.
 #}
@@ -17,7 +17,7 @@
 # for, and it would also admit every other device on the LAN, which is most of what an attacker
 # on the LAN would already have.
 #
-# 7777 is the containerPort AND the Service port — verified 2026-08-20, they match.
+# 7777 is the containerPort AND the Service port.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

@@ -15,7 +15,7 @@ k8s_autodeploy: true
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the prowlarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. NOT about gatedness: both rendered Deployments (prowlarr + flaresolverr) gate correctly. WEIGHED: prowlarr pushes indexer config to the *arr apps, which store Prowlarr-assigned indexer IDs back; a revert desyncs those IDs until the next reconciliation or a manual re-sync. UNATTENDED RECOVERY DOES NOT APPLY HERE: sonarr, radarr, bazarr and jellyfin all self-heal a revert (rescan / re-download / existence check), so an operator reading the rollback alert for prowlarr should expect to re-sync indexers by hand"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the prowlarr-snapshot Kustomization, whose Job snapshots it before prowlarr applies
-# (D5.2a). Only the seeded config claim: flaresolverr runs on an emptyDir and has no claim.
+# Only the seeded config claim: flaresolverr runs on an emptyDir and has no claim.
 # The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [prowlarr-config]
 
@@ -39,7 +39,7 @@ prowlarr_k8s_size: 2Gi
 # so the budget costs time only on a real hang.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
-# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 780s
 prowlarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
@@ -65,24 +65,21 @@ prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
 
-# flaresolverr's memory pair is sized from measurement. It launches a fresh headless Chromium per solve, so its footprint tracks
-# how many solves overlap, and a full deploy restarts most of the *arr stack at once: prowlarr
-# then re-syncs its indexers and a cold flaresolverr pod takes that whole burst.
+# flaresolverr's memory pair is sized from measurement. It launches a fresh headless Chromium per
+# solve, so its footprint tracks how many solves overlap, and a full deploy restarts most of the
+# *arr stack at once: prowlarr then re-syncs its indexers and a cold flaresolverr pod takes that
+# whole burst.
 #
 # A burst at a 1024Mi limit OOM-kills it (exit 137) minutes after a rollout restarts it, which
-# fails the whole deploy.yml run at the post-deploy stabilisation gate.
-# `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[30d])` puts the
-# highest SURVIVING pod at 934Mi, against 74-676Mi for the nine others — so 1024Mi is not a
-# comfortable cap that one burst overshoots, it is a cap the steady fleet already brushes. 934Mi
-# is a sampled figure and therefore a lower bound on real demand: the scrapes never caught the
-# burst that died. 2048Mi is one doubling over the highest observation, and daniel-server
-# carries it — 31Gi allocatable against 2.6Gi of requests and 16.8Gi of limits at measurement.
+# fails the whole deploy at the post-deploy stabilisation gate. The highest SURVIVING pod's
+# 30-day peak working set was 934Mi, against 74-676Mi for the nine others, so 1024Mi is a cap the
+# steady fleet already brushes. 934Mi is a sampled figure and therefore a lower bound on real
+# demand. 2048Mi is one doubling over the highest observation, and daniel-server carries it.
 #
-# Upstream exposes NO concurrency cap to fix this at the source: FlareSolverr's README documents
-# no env var for concurrent sessions or browser-pool size, and tells the operator to size RAM
-# instead ("With each request a new browser is launched"). Sizing is therefore the only lever on
-# how MANY browsers run at once; prowlarr_k8s_fs_disable_media below is the second lever, on how
-# expensive each one is.
+# Upstream exposes NO concurrency cap: FlareSolverr documents no env var for concurrent sessions
+# or browser-pool size and tells the operator to size RAM instead. Sizing is therefore the only
+# lever on how MANY browsers run at once; prowlarr_k8s_fs_disable_media below is the second
+# lever, on how expensive each one is.
 #
 # The REQUEST deliberately stops well short of the peak. It reserves node memory permanently,
 # and 2048Mi held out of a scheduler that only sees 128Mi used steady-state would hoard a
@@ -94,16 +91,13 @@ prowlarr_k8s_mem_request: 128Mi
 #
 # HONESTLY SCOPED — upstream documents DISABLE_MEDIA as a BANDWIDTH saving, not a memory one
 # ("To disable loading images, CSS, and other media in the web browser to save network
-# bandwidth"). A memory reduction was only an inference, and the measurement refutes it (#2962).
-# Over 2026-09-29..10-05, the six pods that ran with this flag peaked at 714-1112Mi on
-# `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[7d])`. The highest
-# was 1112Mi (kubelet job; 1084Mi on the cadvisor job), above both the 934Mi baseline above and
-# the old 1024Mi cap. The high peaks fell on 2026-10-04, a day of repeated redeploys, which
-# matches the cold-pod burst described above. So this flag buys no memory headroom. The limit
-# stays at 2048Mi, about 1.8x the highest observation. Do not lower it on this flag's account.
+# bandwidth"), and it buys no memory headroom here: pods that ran with the flag peaked at
+# 714-1112Mi over a week, above the 934Mi baseline and the 1024Mi limit above, with the high
+# peaks on a day of repeated redeploys, which matches the cold-pod burst described above.
+# The limit stays at 2048Mi, about 1.8x the highest observation. Do not lower it on this flag's
+# account.
 #
-# The flag stays on because it cost nothing measurable. Over the same 7 days Prowlarr logged one
-# flaresolverr solve timeout (1337x, 2026-10-02), which succeeded on retry, and no indexer failed.
+# The flag stays on because it cost nothing measurable: no indexer failed over the same week.
 #
 # THE REGRESSION IT RISKS points at the indexers, not at this pod. A Cloudflare interstitial is
 # a rendered widget, and the flag strips STYLESHEETS as well as images — upstream gives no

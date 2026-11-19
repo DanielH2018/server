@@ -50,7 +50,7 @@ def test_extra_keys_in_current_are_ignored() -> None:
 @pytest.mark.parametrize(
     ("filename", "excluded"),
     [
-        # The three fake-episode shapes indexers served (#6274).
+        # The three fake-episode shapes indexers served.
         ("isooy2.exe", True),
         ("VisionQuest S01E05 Firewall 1080p WEB H264-EZTV.7z", True),
         ("[SubsPlease] Kimetsu no Yaiba - 05 (1080p) [57D14100].iso", True),

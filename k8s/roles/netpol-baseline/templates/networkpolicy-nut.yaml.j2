@@ -2,7 +2,7 @@
    ipBlocks, so this fence stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 ---
 apiVersion: networking.k8s.io/v1
@@ -17,37 +17,26 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool` for the reason networkpolicy.yaml.j2 spells out in full: a string
-   `-e netpol_baseline_enforced=false` is truthy to bare Jinja and False to Ansible's `when:`. #}
+{# `| bool` for the string trap networkpolicy.yaml.j2 spells out in full: a string
+   `'false'` is truthy to bare Jinja and False to `netpol_baseline_probe_active`. #}
 {% if netpol_baseline_enforced | bool %}
     # Four in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
     #
-    # peanut is the web UI in-cluster.
+    # peanut is the web UI. nut-exporter renders UPS variables as network_ups_tools_* series for
+    # Prometheus (k8s/roles/nut-exporter). home-assistant runs HA's NUT integration; HA sits on
+    # daniel-box, nut is pinned to daniel-server, and nut's hostPort binds `hostIP: 127.0.0.1`,
+    # so HA's only path is the ClusterIP. blackbox-exporter dials
+    # nut.{{ k8s_namespace }}.svc.cluster.local:3493 for the `blackbox-extra` probe.
     #
-    # nut-exporter reads UPS variables anonymously and renders them as network_ups_tools_*
-    # series for Prometheus (k8s/roles/nut-exporter). It is a pod like peanut and
-    # home-assistant, so it needs a podSelector for the reason spelled out below: pod ->
-    # ClusterIP -> pod traffic keeps the caller's pod IP and never arrives as a node address.
-    #
-    # home-assistant runs HA's NUT integration. `sensor.ups_power` is live and updating
-    # (360.0 at 2026-08-20 01:03). HA sits on daniel-box, nut is pinned to daniel-server, and
-    # nut's hostPort binds `hostIP: 127.0.0.1`, so HA's only path is the ClusterIP.
-    #
-    # blackbox-exporter dials nut.{{ k8s_namespace }}.svc.cluster.local:3493 for the
-    # `blackbox-extra` probe.
-    #
-    # Each of them needs a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP -> pod
-    # traffic PRESERVES the caller's pod IP, same-node and cross-node alike. It is NOT
-    # masqueraded to the cni0 bridge address. Proven from slice 2's own probe log
-    # (netpol-baseline-probe-slice2-79xf7 ran on daniel-box and logged `isolated:` for
-    # sonarr/radarr/qbittorrent, all daniel-box pods -- same-node calls that a masquerade to
-    # 10.42.0.1 would instead have ADMITTED through the baseline's node ipBlocks). So the node
-    # ipBlocks below cover host processes only; they never cover these pod callers.
+    # Each of them needs a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP ->
+    # pod traffic PRESERVES the caller's pod IP, same-node and cross-node alike. It is NOT
+    # masqueraded to the cni0 bridge address. So the node ipBlocks below cover host processes
+    # only; they never cover these pod callers.
     #
     # The node entries are daniel-server's shutdown chain: upsmon runs as a host process there,
     # so it arrives as a node address, not a pod. nut is permanently pinned to daniel-server
-    # (nodeSelector in nut/templates/deployment.yaml.j2 -- the UPS is USB-attached there and
-    # this never unwinds), so this is not about the pod moving.
+    # (nodeSelector in nut/templates/deployment.yaml.j2 -- the UPS is USB-attached there), so
+    # this is not about the pod moving.
     # The two cni0 entries (`k3s_cni0_gateways`) duplicate netpol_baseline_node_cidrs
     # ONLY ONCE nut carries `netpol-baseline: enforced` and the baseline selects it. During the
     # deploy step that applies this policy the label is not on the pod yet, so in that window

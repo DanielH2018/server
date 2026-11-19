@@ -2,12 +2,12 @@
    namespace, so it stays off the callers model.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+   peers, and its header rules out growing it to absorb another shape.
 #}
 {# One additive policy per pod in `crowdsec_k8s_sidecar_agents` (group_vars/all.yml), the map
    the sidecar's AGENT_USERNAME, the LAPI registration loop and observability's
    `crowdsec-<app>-agent` scrape jobs also read. Adding an app to that map renders its grant
-   here, so no app's own policy carries a hand-written :6060 rule (#4088).
+   here, so no app's own policy carries a hand-written :6060 rule.
 
    The grant and the scrape job only work as a pair: without the grant the job reads
    `up == 0` forever. Nothing but prometheus may reach :6060, because agent metrics enumerate

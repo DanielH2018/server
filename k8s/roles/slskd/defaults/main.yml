@@ -51,7 +51,7 @@ slskd_k8s_secret_mount: /mullvad
 slskd_k8s_uid: 1000
 
 # Soularr's poll interval, in seconds, and what it grabs. allowed_filetypes is in preference
-# order: the lossy default profile decided on #8190 first, lossless after.
+# order: the lossy default profile first, lossless after.
 slskd_k8s_soularr_interval: "300"
 slskd_k8s_soularr_filetypes: "mp3 320,mp3 v0,flac 16/44.1,flac"
 

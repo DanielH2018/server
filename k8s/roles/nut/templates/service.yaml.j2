@@ -1,8 +1,6 @@
 ---
-# In-cluster upsd endpoint — successor to the Docker-era {{ '{{ server_ip }}' }}:3493 LAN
-# publish and the DOCKER-USER nut-lan-firewall that scoped it, both retired with the
-# port. Consumers: the peanut web UI and Home Assistant's NUT integration, both pods, and
-# daniel-box's host secondary upsmon (hosts/components/nut-secondary, H7.33).
+# In-cluster upsd endpoint. Consumers: the peanut web UI and Home Assistant's NUT integration,
+# both pods, and daniel-box's host secondary upsmon (hosts/components/nut-secondary).
 # upsd's own auth (upsd.users) still applies on top of network reachability.
 apiVersion: v1
 kind: Service

@@ -43,8 +43,8 @@ template:
     restartPolicy: Never
     enableServiceLinks: false
     # tdarr's PUID and PGID, the uid tdarr's own process writes the library as, and the
-    # render-node group tdarr's Deployment adds. The Ansible task this replaces probed as root
-    # with DAC_OVERRIDE, which would pass a library tdarr itself cannot write.
+    # render-node group tdarr's Deployment adds. Probing as root with DAC_OVERRIDE would pass a
+    # library tdarr itself cannot write.
     securityContext:
       runAsNonRoot: true
       runAsUser: {{ puid }}

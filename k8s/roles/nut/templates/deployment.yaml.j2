@@ -28,33 +28,28 @@ spec:
       containers:
         - name: nut
           image: {{ nut_k8s_image }}
-{# Ansible owns nut, so its ref is the in-cluster registry's, whose tags are mutable: `:latest`
+{# nut's ref is the in-cluster registry's, whose tags are mutable: `:latest`
    moves on every build, and a forced rebuild re-pushes an unchanged content tag with new
    bytes. A node's cached copy under that name can be stale, so it pulls `Always`, for the
    reason terraria's deployment records. A flux-owned tag's ref is a GHCR content tag instead,
    which `ci_images` never re-pushes, and the renderer sets `IfNotPresent` beside it
    (scripts/renderer/renderer_lib/images.py:ghcr_refs), so a node that holds the tag restarts
-   the pod with no WAN. nut moves in its Wave C PR, after the in-cluster registry mirrors GHCR
-   (D5 Open question 2). A Jinja comment, so an edit here never changes nut's render. #}
+   the pod with no WAN. A Jinja comment, so an edit here never changes nut's render. #}
           imagePullPolicy: Always
           ports:
             - containerPort: 3493
               # Loopback publish for the HOST's own upsmon (secondary, nut_host role):
               # it monitors apc-ups@127.0.0.1 and is what actually runs
               # `systemctl poweroff` when FSD is raised — the pod cannot power off the
-              # node. Byte-identical to the Docker-era `127.0.0.1:3493:3493` publish,
-              # so the host config did not change at cutover.
+              # node.
               hostIP: 127.0.0.1
               hostPort: 3493
           securityContext:
-            # privileged, and the Docker posture was cap-list + udev MODE=0666 with NO
-            # privileged — k8s cannot express that: it has no `devices:` whitelist, so a
-            # hostPath'd /dev/bus/usb node is refused by the
-            # non-privileged pod's device cgroup regardless of file permissions. The
+            # privileged: k8s has no `devices:` whitelist, so a hostPath'd /dev/bus/usb node is
+            # refused by a non-privileged pod's device cgroup regardless of file permissions. The
             # containment that remains: our own built image, pinned to one node, with
             # only a loopback hostPort exposed. A generic USB device plugin could
-            # restore the unprivileged posture — noted as follow-up, not blocking the
-            # Docker removal this port exists for.
+            # restore the unprivileged posture.
             privileged: true
           env:
             - name: TZ

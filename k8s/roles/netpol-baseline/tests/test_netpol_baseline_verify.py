@@ -80,7 +80,7 @@ def _closed_port():
     The socket stays bound, without listening, until the block exits. Linux refuses a connect
     to a bound port that is not listening, and no other socket can bind it meanwhile. A
     released port can be handed to a stand-in server, in this test or in another xdist worker,
-    and a refused row then reads an answer (#6480).
+    and a refused row then reads an answer.
     """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -330,7 +330,7 @@ def flipped(stubs) -> list[dict]:
 
 
 def test_the_tree_renders_netpol_baseline_verify(stubs):
-    """The flip moved the Job to `templates/verify/`, so the tree's own render emits it."""
+    """The tree's own render emits the Job from `templates/verify/`."""
     assert any(doc["kind"] == "Job" for doc in _docs(_verify_render(stubs)))
 
 

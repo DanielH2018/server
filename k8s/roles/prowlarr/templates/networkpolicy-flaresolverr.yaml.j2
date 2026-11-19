@@ -2,18 +2,15 @@
 ---
 # The subject of this policy is FLARESOLVERR, not prowlarr — it lives in the prowlarr role
 # because flaresolverr has no role of its own, and prowlarr is its only caller. prowlarr's own
-# policy is the sibling `networkpolicy-prowlarr.yaml.j2`. The file was called
-# `networkpolicy.yaml.j2` until 2026-08-24, where the generic name next to a `-prowlarr` sibling
-# read as "prowlarr's policy" and a review took it for one.
+# policy is the sibling `networkpolicy-prowlarr.yaml.j2`.
 #
-# Reproduces the `prowlarr-flaresolverr` Docker network, which existed so that a headless browser
-# rendering attacker-supplied Cloudflare pages was reachable by prowlarr and nothing else.
-# Collapsing the fleet into one namespace would have widened that to every workload in
-# {{ k8s_namespace }} — including qbittorrent's untrusted payloads and jellyfin. This makes the
-# move a NARROWING instead, which is the same argument n8n-broker's policy makes.
+# It keeps a headless browser that renders attacker-supplied Cloudflare pages reachable by
+# prowlarr and nothing else. Without it every workload in
+# {{ k8s_namespace }} could reach it — including qbittorrent's untrusted payloads and jellyfin —
+# the same argument n8n-broker's policy makes.
 #
-# INGRESS, and that word is doing work. Measured on this cluster 2026-08-07 (slice 4, B3): an
-# Egress policy selects pods correctly and blocks nothing. Ingress policies ARE enforced —
+# INGRESS: an Egress policy selects pods correctly on this cluster and blocks nothing.
+# Ingress policies ARE enforced —
 # n8n-broker relies on one and probes it. So this is written in the direction that holds, and
 # the prowlarr-verify Job (templates/verify/job.yaml.j2) checks it on every revision that edits
 # this policy or flaresolverr's Deployment, rather than trusting the asymmetry.
