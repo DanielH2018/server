@@ -1,24 +1,26 @@
-# The T2 session users' egress table and proxy on daniel-box. daniel-box's package.yml lists it,
+# The T2 session users' egress fence and proxy on daniel-box. daniel-box's package.yml lists it,
 # because the triage and Renovate sessions run only there.
 #
-# B3-0 is the shadow trace: `table inet t2_egress` records each new connection the session users
-# open, in two dynamic sets, and drops nothing. Read it with `rootq nft`, or as root
-# `nft list set inet t2_egress seen4` and `seen6`. A reboot empties the sets.
+# `table inet t2_egress` lets uids 901 and 907 reach squid on t2_egress_proxy and refuses every
+# other connection they open. It also records each new connection in two dynamic sets, refused
+# ones included. Read them with `rootq nft`, or as root `nft list set inet t2_egress seen4` and
+# `seen6`. A reboot empties the sets.
 #
-# B3-1 adds squid in shadow on t2_egress_proxy, which daniel-box's host_vars set and each session
-# unit reads for its HTTPS_PROXY. squid admits every loopback client and logs each request to
-# /var/log/squid/t2-access.log. Once a session runs through it, the only fresh entries in the nft
-# sets are the proxy's port and the DNS server; any other one bypassed the proxy. B3-2 turns the
-# squid admit into the allowlist and the table into the fence.
+# squid admits only the hosts its config lists, and logs each request to
+# /var/log/squid/t2-access.log, a refusal as a 403. Each session unit points HTTPS_PROXY at
+# t2_egress_proxy and runs t2-egress-check as root before it starts, which refuses the session
+# unless the table holds that uid's fence rules.
 #
-# A ruleset change reloads the unit and a unit-file change restarts it. Neither empties the sets,
-# because the unit has no ExecStop and the ruleset applies in one nft transaction. The unit and
-# its enable link ship whatever the flag says. The way out is `t2_egress_enabled: false`: the
-# ruleset then deletes the table, and the reload applies it. In an emergency,
-# `sudo nft delete table inet t2_egress` removes it at once, and the next start or reload of
-# homelab-t2-egress.service loads it again. The squid drop-in and config ship whenever the component is listed, because the
-# component installs squid: with the flag off, squid stays bound to loopback with no client.
-# Removing t2_egress_proxy from host_vars takes the proxy out of both session units.
+# A ruleset change reloads the unit and a unit-file change restarts it. Neither empties the sets
+# or opens a gap in the fence, because the unit has no ExecStop and the ruleset applies in one nft
+# transaction. The unit and its enable link ship whatever the flag says. The way out is
+# `t2_egress_enabled: false`: the ruleset then deletes the table, the reload applies it, and the
+# session units drop the check. In an emergency, `sudo nft delete table inet t2_egress` removes
+# the fence at once, and every session then refuses to start until the next start or reload of
+# homelab-t2-egress.service loads it again. The squid drop-in and config ship whenever the
+# component is listed, because the component installs squid: with the flag off, squid stays bound
+# to loopback. Removing t2_egress_proxy from host_vars takes the proxy out of both session units,
+# so with the fence still loaded their every connection is refused.
 #
 # needrestart may restart squid.service on a library upgrade, which drops a session's open
 # connections. Claude Code retries a failed API call; a git or gh call in flight fails once.
@@ -26,6 +28,7 @@ depends:
   - squid
 files:
   - {src: templates/t2-egress.nft.j2, dst: /usr/lib/homelab/t2-egress/t2-egress.nft, activate: "reload:homelab-t2-egress.service"}
+  - {src: files/t2-egress-check, dst: /usr/lib/homelab/t2-egress/t2-egress-check, mode: "0755"}
   - {src: units/homelab-t2-egress.service, dst: /usr/lib/systemd/system/homelab-t2-egress.service}
   - {src: templates/t2-squid.conf.j2, dst: /usr/lib/homelab/t2-egress/t2-squid.conf, activate: "try-restart:squid.service"}
   - {src: units/squid-50-homelab-t2.conf, dst: /usr/lib/systemd/system/squid.service.d/50-homelab-t2.conf, activate: "try-restart:squid.service"}

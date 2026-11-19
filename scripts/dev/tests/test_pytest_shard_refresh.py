@@ -63,66 +63,6 @@ def test_successive_cron_runs_visit_every_slice():
     assert sorted(visited) == list(range(8))
 
 
-PINNED = FILES[0]
-PINS = {PINNED: 16.0}
-
-
-def _free(files=None):
-    """A local measurement, where the pinned module's legs skip and every file costs 0s."""
-    return {}
-
-
-@pytest.fixture
-def pinned_table(tmp_path):
-    table = tmp_path / "weights.json"
-    table.write_text(json.dumps({f: 16.0 if f == PINNED else 0.0 for f in FILES}))
-    return table
-
-
-@pytest.mark.parametrize(
-    "record",
-    [
-        pytest.param(pytest_shard.record_weights, id="record"),
-        pytest.param(
-            lambda table, **kw: pytest_shard.record_named_weights(
-                [PINNED], table, **kw
-            ),
-            id="record-files",
-        ),
-    ],
-)
-def test_a_record_keeps_a_ci_only_pin_its_local_run_measures_as_free(
-    pinned_table, record
-):
-    record(pinned_table, files=FILES, measure=_free, pins=PINS)
-    assert json.loads(pinned_table.read_text())[PINNED] == 16.0
-
-
-def test_a_refresh_neither_measures_nor_moves_a_ci_only_pin(pinned_table):
-    asked = []
-    for index in range(2):
-        moved = pytest_shard.refresh_drifted_weights(
-            index,
-            2,
-            pinned_table,
-            files=FILES,
-            measure=lambda f: asked.extend(f) or {},
-            pins=PINS,
-        )
-        assert PINNED not in moved
-    assert PINNED not in asked
-    assert json.loads(pinned_table.read_text())[PINNED] == 16.0
-
-
-def test_every_ci_only_pin_names_a_module_the_shards_run():
-    pins = pytest_shard.CI_ONLY_WEIGHTS
-    assert "k8s/roles/crowdsec/tests/test_jobs_image.py" in pins
-    assert sorted(set(pins) - set(pytest_shard.census())) == []
-    # CI reads only the table, so a pin the table does not carry has no effect there.
-    table = pytest_shard.load_weights()
-    assert {p: table.get(p) for p in pins} == pins
-
-
 def _runs(*results):
     """A `measure` whose successive calls return `results` in order, the last one repeating.
 
@@ -159,7 +99,7 @@ def test_a_refresh_keeps_a_row_one_outlying_measurement_would_rewrite(
     measure, _ = _runs(first, {module: settled})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
+        0, 1, table, files=[module], measure=measure
     )
 
     assert moved == []
@@ -173,9 +113,7 @@ def test_a_refresh_re_measures_only_the_files_that_drifted(tmp_path):
     table.write_text(json.dumps({f: 2.0 for f in FILES}))
     measure, calls = _runs({f: 2.0 for f in steady} | {noisy: 9.0})
 
-    pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=FILES, measure=measure, pins={}
-    )
+    pytest_shard.refresh_drifted_weights(0, 1, table, files=FILES, measure=measure)
 
     assert sorted(calls[0]) == sorted(FILES)
     re_measured = [f for call in calls[1:] for f in call]
@@ -190,7 +128,7 @@ def test_a_refresh_keeps_a_row_whose_two_runs_drift_but_disagree(tmp_path):
     measure, _ = _runs({module: 0.0}, {module: 40.0})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
+        0, 1, table, files=[module], measure=measure
     )
 
     assert moved == []
@@ -212,7 +150,7 @@ def test_a_refresh_reads_a_file_a_run_omitted_as_0_0(tmp_path, first, second):
     measure, _ = _runs(first, second)
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
+        0, 1, table, files=[module], measure=measure
     )
 
     assert moved == [module]
@@ -227,7 +165,7 @@ def test_a_refresh_writes_the_lower_of_two_agreeing_runs(tmp_path):
     measure, _ = _runs({module: 20.0}, {module: 23.39})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
+        0, 1, table, files=[module], measure=measure
     )
 
     assert moved == [module]
@@ -295,7 +233,7 @@ def test_a_refresh_keeps_a_row_the_runner_table_says_ci_would_reject(tmp_path):
     measure, _ = _runs({module: 85.0})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
+        0, 1, table, files=[module], measure=measure
     )
 
     assert moved == []
@@ -311,7 +249,7 @@ def test_a_refresh_still_writes_a_row_the_runner_table_lacks(tmp_path):
     measure, _ = _runs({held: 85.0, unmeasured: 85.0})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[held, unmeasured], measure=measure, pins={}
+        0, 1, table, files=[held, unmeasured], measure=measure
     )
 
     assert moved == [unmeasured]
@@ -326,7 +264,7 @@ def test_the_refusal_starts_at_the_gates_floor(tmp_path):
     measure, _ = _runs({at_floor: floor, under_floor: floor - 0.5})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[at_floor, under_floor], measure=measure, pins={}
+        0, 1, table, files=[at_floor, under_floor], measure=measure
     )
 
     assert moved == [under_floor]
@@ -342,7 +280,7 @@ def test_the_refusal_starts_at_the_local_reading_ratio(tmp_path):
     measure, _ = _runs({over: over_runner * ratio * 1.1, under: under_reading})
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[over, under], measure=measure, pins={}
+        0, 1, table, files=[over, under], measure=measure
     )
 
     assert moved == [under]
@@ -359,7 +297,7 @@ def test_the_refusal_judges_the_lower_reading_the_row_would_hold(tmp_path):
     )
 
     moved = pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[refused, written], measure=measure, pins={}
+        0, 1, table, files=[refused, written], measure=measure
     )
 
     assert moved == [written]
@@ -375,9 +313,7 @@ def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
     table = _table(tmp_path, {module: 2.0})
     measure, _ = _runs({module: 85.0})
 
-    pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
-    )
+    pytest_shard.refresh_drifted_weights(0, 1, table, files=[module], measure=measure)
 
     captured = capsys.readouterr()
     assert module in captured.out + captured.err

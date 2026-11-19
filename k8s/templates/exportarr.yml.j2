@@ -68,6 +68,9 @@
                   key: api_key
             - name: TZ
               value: "{{ tz }}"
+            # At info it logs one line per API request of every scrape.
+            - name: LOG_LEVEL
+              value: warn
           livenessProbe:
             httpGet:
               path: /healthz

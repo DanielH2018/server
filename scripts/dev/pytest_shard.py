@@ -105,7 +105,6 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
-import dataclasses
 import hashlib
 import json
 import math
@@ -171,18 +170,6 @@ _PER_FILE_SECONDS = 0.028
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
 _SLICE_PERIOD_SECONDS = 12 * 60 * 60
-
-# Weights only CI can measure, which every write to the table keeps. A module whose expensive
-# legs skip on every host here and run on CI records about 0s from any local re-measure, so
-# `--record-files`, the check's own repair, would write back the number the check flagged, and
-# `--refresh-drifted` would undo a hand fix within days. Set a pin to the sum of the
-# module's lines in CI's `--durations` report, then run `--record-files` on it so the table,
-# which is all CI reads, carries the pin too.
-CI_ONLY_WEIGHTS = {
-    # Four legs run the jobs image under docker, which no host here has. CI hands them the real
-    # PATH through `tests/leakguard.py:_LIVE_API_TESTS`. 22.8s on master run 39813591673.
-    "k8s/roles/crowdsec/tests/test_jobs_image.py": 22.8,
-}
 
 
 def testpaths() -> list[str]:
@@ -292,19 +279,10 @@ def affected(
 ) -> affected_table.Selection:
     """The modules the diff from `base` to HEAD can affect, as `rows` reads it.
 
-    `rows` is the committed table when None. A module in `CI_ONLY_WEIGHTS` joins every
-    selection: its expensive legs run only on a CI runner, so no row recorded on a host holds
-    what they read.
+    `rows` is the committed table when None.
     """
-    files = census(repo)
-    selection = affected_table.select_since(
-        affected_table.load() if rows is None else rows, base, files, repo
-    )
-    if selection.full:
-        return selection
-    pinned = set(CI_ONLY_WEIGHTS).intersection(files)
-    return dataclasses.replace(
-        selection, modules=sorted(pinned.union(selection.modules))
+    return affected_table.select_since(
+        affected_table.load() if rows is None else rows, base, census(repo), repo
     )
 
 
@@ -370,11 +348,8 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
     return totals
 
 
-def _write_weights(
-    weights: dict[str, float], path: Path, pins: dict[str, float] = CI_ONLY_WEIGHTS
-) -> dict[str, float]:
-    pinned = {f: w for f, w in pins.items() if f in weights}
-    ordered = dict(sorted((weights | pinned).items()))
+def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
+    ordered = dict(sorted(weights.items()))
     path.write_text(json.dumps(ordered, indent=1, sort_keys=True) + "\n")
     return ordered
 
@@ -384,12 +359,11 @@ def record_weights(
     *,
     files: list[str] | None = None,
     measure=measure_weights,
-    pins: dict[str, float] = CI_ONLY_WEIGHTS,
 ) -> dict[str, float]:
     """Re-measure every file's seconds from a serial run of the whole suite and write them out."""
     measured = measure()
     files = census() if files is None else files
-    return _write_weights({f: measured.get(f, 0.0) for f in files}, path, pins)
+    return _write_weights({f: measured.get(f, 0.0) for f in files}, path)
 
 
 def record_missing_weights(
@@ -442,7 +416,6 @@ def record_named_weights(
     *,
     files: list[str] | None = None,
     measure=measure_weights,
-    pins: dict[str, float] = CI_ONLY_WEIGHTS,
 ) -> dict[str, float]:
     """Re-measure exactly `paths` and write the merged table, refreshing entries that exist.
 
@@ -464,7 +437,7 @@ def record_named_weights(
     kept = {f: known[f] for f in files if f in known}
     measured = measure(paths)
     kept |= {f: measured.get(f, 0.0) for f in paths}
-    return _write_weights(kept, path, pins)
+    return _write_weights(kept, path)
 
 
 def refresh_slice(path: str, slices: int) -> int:
@@ -489,7 +462,6 @@ def refresh_drifted_weights(
     *,
     files: list[str] | None = None,
     measure=measure_weights,
-    pins: dict[str, float] = CI_ONLY_WEIGHTS,
 ) -> list[str]:
     """Re-measure slice `index` of `slices` of the recorded entries, and rewrite the drifted ones.
 
@@ -508,7 +480,6 @@ def refresh_drifted_weights(
         path: The weights table to read and rewrite.
         files: The census to keep entries for; `census()` when None.
         measure: Measures a list of files, as `measure_weights` does.
-        pins: The CI-only weights, which are neither measured nor rewritten.
 
     Returns:
         The paths whose weights were rewritten, sorted.
@@ -516,7 +487,7 @@ def refresh_drifted_weights(
     files = census() if files is None else files
     known = load_weights(path)
     kept = {f: known[f] for f in files if f in known}
-    chosen = [f for f in kept if refresh_slice(f, slices) == index and f not in pins]
+    chosen = [f for f in kept if refresh_slice(f, slices) == index]
     measured = measure(chosen) if chosen else {}
     candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
     # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
@@ -531,7 +502,7 @@ def refresh_drifted_weights(
         and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
     }
     moved = runner_backed_readings(agreed)
-    _write_weights(kept | moved, path, pins)
+    _write_weights(kept | moved, path)
     return sorted(moved)
 
 

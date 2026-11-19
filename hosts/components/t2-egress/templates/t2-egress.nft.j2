@@ -1,6 +1,9 @@
 #!/usr/sbin/nft -f
-# Shipped by daniel-box's package (the t2-egress component). The B3-0 shadow trace: it records
-# each new connection a T2 session user opens, and drops nothing.
+{% set uids = [901, 907] -%}
+{% set proxy_host, proxy_port = t2_egress_proxy.split(':') -%}
+# Shipped by daniel-box's package (the t2-egress component). The T2 session users' egress fence:
+# each may reach squid on {{ t2_egress_proxy }} and nothing else. Every other connection gets a TCP
+# reset or ICMP admin-prohibited, so a client fails at once instead of waiting out a timeout.
 #
 # It touches only `table inet t2_egress`, so loading it changes no ufw, kube-proxy, flannel or
 # portmap rule (I4). nft applies the file as one transaction, and its statements are idempotent,
@@ -8,12 +11,16 @@
 # rules: a chain must exist before `flush chain`. `add set` refuses a set whose type changed, so
 # a change to a set's key must `delete set` it first.
 #
-# No statement logs. A kernel log line reaches syslog and loki-homelab, the path I6 closes.
-# The sets hold addresses and ports, not names: they show which tuples a session uses, and squid's
-# log names the hosts.
+# The output hook at filter priority sees addresses after kube-proxy's DNAT, so a rule naming a
+# Service VIP would never match: the fence names squid's own address alone.
 #
-# The uids are the T2 session users the users arm declares: renovate-agent (901) and
-# claude-triage (907). hosts/lib/tests/test_t2_egress_component.py holds the two equal.
+# The trace rules come first, so a refused attempt still lands in the sets. No statement logs: a
+# kernel log line reaches syslog and loki-homelab, the path I6 closes. The counters and the sets
+# show what the fence refused.
+#
+# The session units refuse to start unless each uid's two `t2-fence <uid>` rules are loaded
+# (t2-egress-check). The uids are the T2 session users the users arm declares: renovate-agent
+# (901) and claude-triage (907). hosts/lib/tests/test_t2_egress_component.py holds the two equal.
 {% if t2_egress_enabled %}
 
 add table inet t2_egress
@@ -21,8 +28,13 @@ add chain inet t2_egress output { type filter hook output priority filter; polic
 flush chain inet t2_egress output
 add set inet t2_egress seen4 { type uid . ipv4_addr . inet_proto . inet_service; flags dynamic, timeout; timeout 30d; size 4096; }
 add set inet t2_egress seen6 { type uid . ipv6_addr . inet_proto . inet_service; flags dynamic, timeout; timeout 30d; size 4096; }
-add rule inet t2_egress output meta skuid { 901, 907 } ct state new meta l4proto { tcp, udp } meta nfproto ipv4 update @seen4 { meta skuid . ip daddr . meta l4proto . th dport } counter
-add rule inet t2_egress output meta skuid { 901, 907 } ct state new meta l4proto { tcp, udp } meta nfproto ipv6 update @seen6 { meta skuid . ip6 daddr . meta l4proto . th dport } counter
+add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ct state new meta l4proto { tcp, udp } meta nfproto ipv4 update @seen4 { meta skuid . ip daddr . meta l4proto . th dport } counter
+add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ct state new meta l4proto { tcp, udp } meta nfproto ipv6 update @seen6 { meta skuid . ip6 daddr . meta l4proto . th dport } counter
+add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ip daddr {{ proxy_host }} tcp dport {{ proxy_port }} counter accept
+{% for uid in uids %}
+add rule inet t2_egress output meta skuid {{ uid }} meta l4proto tcp counter reject with tcp reset comment "t2-fence {{ uid }} tcp"
+add rule inet t2_egress output meta skuid {{ uid }} counter reject with icmpx admin-prohibited comment "t2-fence {{ uid }} other"
+{% endfor %}
 {% else %}
 #
 # t2_egress_enabled is false: the table goes. The `add` makes the `delete` succeed whether or not

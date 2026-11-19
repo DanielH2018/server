@@ -56,7 +56,8 @@ here must satisfy this summary.
 - **Authoritative sources:** the *arr `/api/v3/queue` (`k8s/roles/autofix-bridge/files/autofix.py:run_once`)
   and ffprobe truth, never a cached guess.
 - **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
-  match reads as a systemic cause, so it acts on **none** and alerts
+  match reads as a systemic cause, so it acts on **none** and alerts. The sidecar alerts once
+  per change of the held set, not every cycle
   (`k8s/roles/autofix-bridge/tests/test_autofix.py::test_run_once_held_branch_makes_zero_mutating_calls`,
   `hosts/components/fake-remux/tests/test_fake_remux_logic.py::test_seed_ledger_adds_new_and_blasts_over_cap`).
 - **Required evidence:** every cycle records a verdict a monitor reads. The sidecar exports

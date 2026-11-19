@@ -731,8 +731,9 @@ other eight jobs stay hosted, because they are short or need what a pod does not
 1. **C2, paused.** A launcher on daniel-box starts one runner pod for each heavy job of a run
    it dispatches, and the `workflow-runners-are-pinned` row accepts the one `runs-on` expression
    that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
-   a probe sets each beside the hosted run of the same commit. The suite's Docker tests move to
-   a job of their own, which stays hosted. The slice ends after a week with no shadow job green
+   a probe sets each beside the hosted run of the same commit. The suite's Docker tests already
+   run in a hosted job of their own, `image-leg.yml`, so the `pytest` job needs no Docker
+   daemon. The slice ends after a week with no shadow job green
    where its twin was red.
 1. **C3, paused.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no
