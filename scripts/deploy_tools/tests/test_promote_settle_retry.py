@@ -33,7 +33,7 @@ def test_a_prod_digest_write_recovers_on_its_third_try(tmp_path, jobs, job):
     )
     assert result.returncode == 0, result.stderr
     assert len(calls) == 3
-    assert "failed on try 2 of 3" in result.stderr
+    assert "::warning::gh failed on try 2 of 3" in result.stderr
 
 
 def test_settles_prod_digest_write_recovers_on_its_third_try(tmp_path, jobs):
