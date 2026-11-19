@@ -14,9 +14,9 @@
 # the same page on purpose, so two criticals for one dead kubelet target is the accepted outcome.
 #
 # THE LITERALS. Each threshold mirrors a value the deleted bridge rows carried. A ported
-# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against. A literal another role
-# declares (valheim's transient, jellyfin's snapshot cap, the Longhorn disk floor) is held to
-# that role by tests/services/test_storage_rule_literals.py.
+# threshold's `DECIDED:` marker on its rule is what a retune is reviewed against. A literal
+# another role declares (valheim's transient, jellyfin's snapshot cap, the Longhorn disk floor)
+# is held to that role by tests/services/test_storage_rule_literals.py.
 #
 # THE `for:` HOLDS. A bridge streak of N cycles is N x 300s, as in A2. The rows with no streak
 # (fullness, the free-space floor, the read-only mount and the etcd size) hold for one bridge
@@ -37,6 +37,7 @@ groups:
       # monitor-bridge's `longhorn_volumes`: a volume that lost redundancy. `k3s_longhorn_replica_count`
       # is 2, so `degraded` is a single copy, and `faulted` has no healthy replica left. `for: 15m`
       # is the bridge's 3-cycle streak x 300s, which rides out a node drain or the Sunday reboot.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle streak kept as is, to ride out a drain or reboot.
       - alert: LonghornVolumeDegraded
         expr: max by (volume, pvc, state) (longhorn_volume_robustness{state!~"healthy|unknown"} == 1)
         for: 15m
@@ -56,6 +57,7 @@ groups:
       # went away, which is not the same as healthy. The second arm requires up == 1, so a failed
       # scrape stays ScrapeTargetDown's page (M1 convention 5). `for: 15m` is the bridge's
       # "scrape gap grace", its 3-cycle streak.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle streak kept as is.
       - alert: LonghornVolumesMissing
         expr: >-
           absent(up{job="longhorn"})
@@ -119,6 +121,7 @@ groups:
       # evaluates to nothing exactly when its input vanishes. A valheim Deployment parked at zero
       # replicas mounts no volume, so the kubelet reports nothing by design: the `unless` mutes
       # the rule while kube-state-metrics reads zero replicas, and stays loud when it reads none.
+      # DECIDED: `for: 5m`, one bridge cycle, so a single missed scrape does not page.
       - alert: PVCFreeFloorUnmonitored
         expr: >-
           absent(kubelet_volume_stats_available_bytes{persistentvolumeclaim="valheim-server"})
@@ -186,6 +189,7 @@ groups:
       # A capped claim with a capacity series and no snapshot series is a breach, not green. A
       # capped volume is snapshotted on every deploy, so an empty reading means the exporter or
       # the join went away. Zero capacity series is LonghornVolumesMissing's case.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle snapshot-cap streak kept as is.
       - alert: LonghornSnapshotCapUnmonitored
         expr: >-
           group by (pvc) (longhorn_volume_capacity_bytes{pvc="jellyfin-config"})
@@ -214,6 +218,7 @@ groups:
       # daniel-box's disk-health line, which test_storage_rule_literals.py holds the two to. An
       # absent series is LonghornVolumesMissing's case. `for: 15m` is the 3-cycle streak, as for
       # the other Longhorn rows: the disk grows by GB a day, so the hold costs no warning.
+      # DECIDED: `for: 15m`, the 3-cycle streak of the other Longhorn rows.
       - alert: LonghornDiskOverSchedulingFloor
         expr: max by (node, disk) (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) > 0.75
         for: 15m
@@ -236,6 +241,8 @@ groups:
       # while the node hosting Prometheus boots is never scraped; loki-homelab's
       # HostFilesystemRemountedReadOnly reads that one from the kernel log. A remount of
       # prometheus-data stops the Watchdog, which pages from Healthchecks.io.
+      # DECIDED: `for: 1m`, two scrapes, shorter than the bridge's cycle: a remount lasts 2 to 6
+      # minutes, so a 5m hold would miss the shorter ones.
       - alert: KubeletCSIMountReadOnly
         expr: node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/.*"} == 1
         for: 1m

@@ -14,6 +14,7 @@ import re
 
 from _helpers import K8S_ROLES, REPO
 from _ratchet_census import tracked_files
+from test_alertmanager_routing import ROUTED
 
 RULES_DIR = K8S_ROLES / "observability" / "files" / "rules"
 DECIDED = re.compile(r"#\s*DECIDED:")
@@ -142,3 +143,58 @@ def test_the_nine_routing_batch_modules_are_gone():
 def test_the_routing_table_names_every_rules_file_the_batches_walked():
     text = (REPO / "tests/services/test_alertmanager_routing.py").read_text()
     assert [name for name in BATCH_RULE_FILES if f'"{name}"' not in text] == []
+
+
+# The `for:` holds the deleted literal tests pinned, by rules file.
+PINNED_HOLDS = {
+    "hosts.yaml": [
+        "HostTemperatureHot",
+        "HostTemperatureNotReporting",
+        "CPUThermalThrottled",
+        "UPSOnBattery",
+        "UPSBatteryLow",
+        "UPSRuntimeLow",
+        "UPSReplaceBattery",
+    ],
+    "storage.yaml": [
+        "LonghornVolumeDegraded",
+        "LonghornVolumesMissing",
+        "LonghornDiskOverSchedulingFloor",
+        "PVCCoverageShortfall",
+        "LonghornSnapshotNearCap",
+        "LonghornSnapshotCapUnmonitored",
+        "PVCFull",
+        "PVCBelowFreeFloor",
+        "PVCFreeFloorUnmonitored",
+        "KubeletCSIMountReadOnly",
+        "EtcdDBNearQuota",
+    ],
+    "edge.yaml": ["TraefikRouter421"],
+}
+
+
+def unmarked_holds(texts: dict[str, str]) -> dict[str, list[str]]:
+    missing = {}
+    for name, alerts in PINNED_HOLDS.items():
+        marked = marked_alerts(texts[name])
+        if lacking := [alert for alert in alerts if alert not in marked]:
+            missing[name] = lacking
+    return missing
+
+
+def test_every_pinned_hold_carries_a_decided_marker_on_its_rule():
+    texts = {name: (RULES_DIR / name).read_text() for name in PINNED_HOLDS}
+    assert unmarked_holds(texts) == {}
+
+
+def test_a_hold_whose_marker_is_dropped_is_flagged():
+    texts = {name: (RULES_DIR / name).read_text() for name in PINNED_HOLDS}
+    texts["storage.yaml"] = texts["storage.yaml"].replace(
+        "# DECIDED: `for: 1m`", "# `for: 1m`"
+    )
+    assert unmarked_holds(texts) == {"storage.yaml": ["KubeletCSIMountReadOnly"]}
+
+
+def test_the_routing_table_rows_cover_every_rules_file_the_batches_walked():
+    routed = [row[0] for row in ROUTED]
+    assert [name for name in BATCH_RULE_FILES if name not in routed] == []

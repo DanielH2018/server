@@ -348,6 +348,7 @@ groups:
       # The bridge's empty-vector and per-host coverage arm of check_host_temp
       # (3 hosts, over the series that survive the nvme_ exclusion). `for: 25m` is the bridge's
       # 5-cycle streak x 300s.
+      # DECIDED: `for: 25m`, the bridge's 5-cycle streak kept as is.
       - alert: HostTemperatureNotReporting
         expr: |
           up{job="node", origin="daniel-box"} == 1
@@ -395,6 +396,7 @@ groups:
             temperature. Read the hwmon collector on the host.
       # The bridge's thermal-throttle arm of check_host_temp. `for: 15m` is
       # the bridge's 3-cycle streak x 300s. daniel-pi publishes no Processor cooling device.
+      # DECIDED: `for: 15m`, the bridge's 3-cycle streak kept as is.
       - alert: CPUThermalThrottled
         expr: |
           max by (origin, job, instance) (
@@ -845,6 +847,7 @@ groups:
             10 minutes. The battery has aged. Read the UPS on the NUT host.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
       # The UPS's own replace-battery verdict (the NUT RB flag).
+      # DECIDED: `for: 10m`, the bridge's 2-cycle UPS streak kept as is.
       - alert: UPSReplaceBattery
         expr: |
           max by (job, instance) (network_ups_tools_ups_status{flag="RB"}) > 0.5

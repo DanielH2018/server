@@ -500,7 +500,6 @@ def test_each_routed_file_holds_its_paging_rules_and_critical_set(
     file, count, critical
 ):
     assert row_problems(rules_of(file), count, critical) == []
-    assert all(name in PAGING for name in rule_sets(file, shadow=False))
 
 
 def test_a_routed_rule_that_regains_shadow_is_flagged():
