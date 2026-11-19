@@ -28,6 +28,7 @@ from lib.facts.citations import repo_citations
 from lib.facts.lint import changed_units, lint_sections
 from lib.facts.notice import FORMATS, branch_notice
 from lib.facts.renames import move
+from lib.progress import count_line
 from lib.facts.report import build, default_log, render
 from lib.repo_paths import REPO
 
@@ -47,8 +48,16 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(unresolvable, file=_sys.stderr)
         return _USAGE
     findings = lint_sections(repo, keys, since=args.changed_since)
+    if findings:
+        print(count_line("warning" if f.warn else "error" for f in findings))
+    grouped: dict[tuple[bool, str, str], list[str]] = {}
     for f in findings:
-        print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
+        grouped.setdefault((f.warn, f.rule, f.unit), []).append(f.detail)
+    for (warn, rule, unit), details in grouped.items():
+        times = f" x{len(details)}" if len(details) > 1 else ""
+        print(
+            f"{'warn ' if warn else 'ERROR'} {rule:<20} {unit}{times}: {'; '.join(details)}"
+        )
     errors = any(not f.warn for f in findings)
     if errors:
         print(FIX_LINT)

@@ -1,7 +1,7 @@
 """What the longhorn-reconcile role renders, held to what the script and the old tasks did.
 
 The script's behaviour is in test_longhorn_reconcile.py. These cases read the render: the
-ConfigMap's tier lists against the keys `setup/k3s` still derives, and the CronJob and its grants
+ConfigMap's tier lists against the keys the k3s-server host component still derives, and the CronJob and its grants
 against the CSI sidecars, which the `longhorn` role's Setting owns.
 
 Run: uv run pytest k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile_render.py
@@ -44,7 +44,7 @@ def test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults():
 
 
 def test_setup_k3s_no_longer_defines_the_tier_lists():
-    """One home per key: a copy left in `setup/k3s` would drift from the ConfigMap's."""
+    """One home per key: a copy left in k3s-server's defaults would drift from the ConfigMap's."""
     host_plane = load_defaults(K3S_SERVER)
     for key in (
         "k3s_longhorn_r2_volumes",

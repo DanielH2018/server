@@ -45,6 +45,9 @@ Environment=CLAUDE_GUARD_HOME={{ pins.tools_dir }}/.local/share/claude-guard
 Environment=CLAUDE_WORKTREE_HOME={{ pins.tools_dir }}/.local/share/claude-worktree
 # The controller owns the binary; the session cannot update it.
 Environment=DISABLE_AUTOUPDATER=1
+# No error reports or telemetry to Claude Code's third-party intakes, which the egress allowlist
+# leaves out.
+Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 # A memory written here would die with the tmpfs home, and none may reach a later run.
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
@@ -76,5 +79,9 @@ ReadWritePaths={{ pins.exchange_dir }}/requests {{ pins.exchange_dir }}/out
 MemoryMax={{ pins.memory_max }}
 MemorySwapMax=0
 TasksMax={{ pins.tasks_max }}
+{% if t2_egress_enabled | default(false) %}
+# No session starts unfenced: the check refuses unless the egress table holds this uid's rules.
+ExecStartPre=+/usr/lib/homelab/t2-egress/t2-egress-check {{ pins.session_uid }}
+{% endif %}
 ExecStart={{ pins.tools_dir }}/.local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/renovate_session.py

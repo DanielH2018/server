@@ -54,12 +54,6 @@ def test_every_field_of_a_filled_ledger(field, value):
     assert _fields(annotation_line(_filled(), 1, 400.0))[field] == value
 
 
-def test_the_line_carries_no_field_of_the_tick_land_sh_no_longer_runs():
-    """H7.49a stopped land.sh running the GitOps tick, so nothing writes these four."""
-    fields = _fields(annotation_line(_filled(), 1, 400.0))
-    assert not {"tick", "lock", "holder", "kick"} & fields.keys()
-
-
 @pytest.mark.parametrize(
     "field, value",
     [

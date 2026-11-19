@@ -1,9 +1,8 @@
 name: image-leg
 
 # Runs the pytest tests marked `image`: they execute a script and its fixtures inside a pinned
-# container image with `docker run`. The `pytest` shards in ci.yml have no Docker daemon, and
-# leakguard blocks a socket in them, so `addopts` in pyproject.toml deselects the marker there
-# and this job is the only place those tests run.
+# container image with `docker run`. `addopts` in pyproject.toml deselects the marker from the
+# `pytest` shards in ci.yml, so this job is the only place those tests run.
 #
 # A separate workflow, not a ci.yml job: every ci.yml job must be read by the `prek` gate
 # (tests/repo/test_every_ci_job_is_gated.py), which would make this one a merge blocker through
@@ -15,10 +14,18 @@ name: image-leg
 
 on:
   pull_request:
+    # `ready_for_review` joins the defaults: the job skips a draft, and a pull request opened as a
+    # draft and never pushed again would otherwise leave draft without a run.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - ".github/workflows/image-leg.yml"
       - "k8s/roles/longhorn-restore-drill/**"
       - "tests/longhorn/**"
+      # crowdsec's two images: the role pins the jobs image, all.yml pins the engine image.
+      - "k8s/roles/crowdsec/**"
+      - "inventory/group_vars/all.yml"
+      - "k8s/roles/conftest.py"
+      - "tests/_k8s_render.py"
       - "hosts/lib/tests/test_pi_compose_network_measurement.py"
       - "tests/_shell_render.py"
       - "scripts/lib/proc_testing.py"
@@ -56,3 +63,4 @@ jobs:
         run: >-
           uv run python -m pytest --color yes -n 0 -s -m image tests/longhorn/
           hosts/lib/tests/test_pi_compose_network_measurement.py
+          k8s/roles/crowdsec/tests/test_jobs_image.py

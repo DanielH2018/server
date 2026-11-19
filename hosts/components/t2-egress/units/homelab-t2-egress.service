@@ -1,7 +1,6 @@
 # Shipped by daniel-box's package (the t2-egress component), enabled at boot. Applies
 # t2-egress.nft, which loads `table inet t2_egress`, the T2 session users' egress table, or
-# deletes it while t2_egress_enabled is false. In B3-0 the table only records, so a session's
-# traffic is unchanged.
+# deletes it while t2_egress_enabled is false. The table fences the session uids to squid.
 [Unit]
 Description=Load the T2 session users' egress table (table inet t2_egress)
 After=network-pre.target

@@ -238,7 +238,7 @@ def pending_fingerprint(items: list[tuple[str, str, int]]) -> str:
 
 
 PENDING_HEADER_MSG = (
-    "\U0001f6d1 Renovate — update(s) stuck in Pending Status Checks (soaked, no PR):"
+    "Renovate — update(s) stuck in Pending Status Checks (soaked, no PR):"
 )
 
 
@@ -283,7 +283,7 @@ def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
 #
 # A check that cannot fire is reporting nothing, not reporting healthy — so the run says so.
 PENDING_RESET_MSG = (
-    "⚠️ Renovate — the pending-item dwell state was lost, so every stuck-pending "
+    "Renovate — the pending-item dwell state was lost, so every stuck-pending "
     "clock restarted at zero. The stuck-pending check can find nothing until %s for a "
     "version bump (%s for a digest bump), and the churn arm nothing until %s, whatever an "
     "item's real dwell was. Anything already overdue will not page in that window — check it "
@@ -399,7 +399,7 @@ def churn_fingerprint(items: list[tuple[str, str, int, int]]) -> str:
 
 
 CHURN_HEADER_MSG = (
-    "\U0001f501 Renovate — pending update(s) whose branch keeps churning (every re-push "
+    "Renovate — pending update(s) whose branch keeps churning (every re-push "
     "restarts the soak, so no single digest ever ages out):"
 )
 

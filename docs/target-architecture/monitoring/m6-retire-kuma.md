@@ -1340,7 +1340,7 @@ Cutover-1a PR that adds this paragraph). The window has four stacked PRs:
 
 **Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the twelve rules in `initial-setup-checks.yaml` and
 removes the six `CheckWithoutPager` terms of B2 (Docs Refresh, Secret Rotation, Setup Plane Drift, Homelab Evals and the two Loki Read Route tiles). Every rule file is `files/rules/initial-setup-checks.yaml`.
-All twelve are `warning`, which posts to Discord alone, the channel mix the six tiles had. The routing test is `tests/services/test_alertmanager_routing_b2_b4_b6b.py`.
+All twelve are `warning`, which posts to Discord alone, the channel mix the six tiles had. The routing test is the `initial-setup-checks.yaml` row of `ROUTED` in `tests/services/test_alertmanager_routing.py`.
 
 **Inhibits.** None is added. The generic `HostCheckOverdue` deadman is already muted beside every `<Check>NotReporting` pair by the inhibit on `equal: [check, origin]`, and that inhibit's source is the rule whichever of `shadow` it carries. `HostCheckOverdue{check="eval-run",origin="daniel-server"}` is a different series ([#6735](https://github.com/DanielH2018/server/issues/6735)) and stays a live page until the leaked file goes. No B2 rule overlaps a scrape-target page: the checks read textfile verdicts, and a dead `node` exporter is `ScrapeTargetDown`'s alone.
 

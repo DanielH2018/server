@@ -106,7 +106,7 @@ def test_gate_stays_out_of_crd_objects():
     assert not (
         K8S_ROLES / "livesync" / "templates" / "ingressroute.yaml.j2"
     ).exists(), "livesync must render no IngressRoute — the token gate owns its names"
-    files, _secret = resolved_manifest_files("livesync")
+    files = resolved_manifest_files("livesync")
     assert "ingressroute.yaml" not in files, (
         "livesync's containers_list entry carries a hostname, which earns the shared route "
         "unless its include excludes it"

@@ -44,6 +44,7 @@ status=0
 # with its streak named in the report.
 verdict=up
 report=""
+{% set _ssh = 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes${RUNTIME_DIRECTORY:+ -o ControlMaster=auto -o ControlPath=$RUNTIME_DIRECTORY/%C -o ControlPersist=60}' %}
 {% for peer in claude_code_artifacts_peer_sources %}
 # --delete, so an artifact pruned on {{ peer.name }} stops being served here too; the index
 # would otherwise keep offering links to documents that no longer exist anywhere.
@@ -63,11 +64,15 @@ report=""
 # toward the same streak: until it lands, {{ peer.name }}'s prune can delete an artifact starred
 # here. No list yet means nothing was ever starred, and there is nothing to push.
 {% endif %}
+# The pull and the push share one ssh connection through a control socket in the unit's
+# RuntimeDirectory, so each run is one sshd login on the peer, not two. ControlPersist keeps the
+# master alive between the two rsyncs; systemd stops it with the oneshot's cgroup. With no
+# RUNTIME_DIRECTORY, as in the tests, each rsync opens its own connection.
 if rsync -a --delete --chmod=D0750 --timeout=60 \
-    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
+    -e "{{ _ssh }}" \
     "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ claude_code_artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
   && { [ ! -f "{{ claude_code_artifacts_stars_file }}" ] || rsync -a --timeout=60 \
-    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
+    -e "{{ _ssh }}" \
     "{{ claude_code_artifacts_stars_file }}" "{{ peer.ssh_target }}:{{ peer.stars_path }}"; }{% endif %}; then
   # A run that recovers says so in the journal and forgets the streak, so the next outage
   # starts counting from zero rather than inheriting the last one's total.

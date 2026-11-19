@@ -68,7 +68,7 @@ highest-signal findings.
 
 ## Output format
 Findings grouped **High / Medium / Low**. Each: 1-line title, `file:line`, the problem, a concrete
-fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas briefly. End with a
+fix, tagged **[GAP] / [IMPROVEMENT] / [FEATURE]**. Note verified-clean areas briefly. End with a
 **3-bullet top-priorities** summary. Few real findings beat many speculative.
 
 ## Rules

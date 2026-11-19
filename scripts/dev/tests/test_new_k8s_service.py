@@ -19,7 +19,6 @@ from lib import yaml_fast
 from lib.guard_jinja_env import template_env
 from lib.k8s_roles import (
     SHARED_MANIFEST_DEFAULTS,
-    declared_manifest_files,
     resolved_manifest_files,
 )
 from lib.inventory_lists import K8S_HOST
@@ -165,9 +164,8 @@ def test_the_doc_opens_its_block_with_the_generators_banner(args):
 def test_the_entry_earns_the_shared_defaults_without_a_template(args, tmp_path):
     """The derivation adds a shared default for the entry's `port` and `hostname`."""
     scaffold.write_role(args, tmp_path)
-    files, secret = resolved_manifest_files("widget", tmp_path, _entry(args))
+    files = resolved_manifest_files("widget", tmp_path, _entry(args))
     assert files == {"deployment.yaml", "service.yaml", "ingressroute.yaml"}
-    assert secret == set()
     assert {"service.yaml", "ingressroute.yaml"} <= SHARED_MANIFEST_DEFAULTS.keys()
 
 
@@ -177,7 +175,7 @@ def test_an_unrouted_service_gets_no_ingressroute_and_no_hostname(tmp_path):
     )
     entry = _entry(args)
     scaffold.write_role(args, tmp_path)
-    files, _secret = resolved_manifest_files("widget", tmp_path, entry)
+    files = resolved_manifest_files("widget", tmp_path, entry)
     assert files == {"deployment.yaml", "service.yaml"}
     assert "hostname" not in entry
     assert "use_authelia" not in entry
@@ -285,7 +283,7 @@ def test_the_generated_role_ships_no_service_or_route_template(args, tmp_path):
 def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp_path):
     """Non-vacuity: the fallback resolver, run over the generated role, finds the Service."""
     scaffold.write_role(args, tmp_path)
-    declared = declared_manifest_files("widget", tmp_path, _entry(args))
+    declared = resolved_manifest_files("widget", tmp_path, _entry(args))
     assert "service.yaml" in declared
     assert "ingressroute.yaml" in declared
 

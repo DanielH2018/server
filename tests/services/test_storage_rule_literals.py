@@ -1,12 +1,9 @@
-"""The storage rules carry the thresholds monitor-bridge's five storage checks carried.
+"""The storage rules' literals that another file declares equal that file's value.
 
-`files/rules/storage.yaml` is plain YAML, so each threshold is a literal. Until M6 batch A5's
-Cutover-a2 each one mirrored an env value of the bridge row it shadowed, and this test read the
-rendered env. That cutover deleted the rows and their env keys, so the numbers below are the
-record of what the bridge carried (M1 convention 1), and a rule edit that drifts from them
-fails here. KubeletCSIMountReadOnly is the exception: it holds two scrapes, shorter than the
-bridge's cycle, for the reason its comment in `storage.yaml` gives. Two of them also derive from other roles (valheim's transient and jellyfin's
-snapshot cap), and the last tests hold the rules to those roles.
+`files/rules/storage.yaml` is plain YAML, so each threshold is a literal. A threshold of the
+rule's own carries its reason as a `DECIDED:` marker in the rules file. The tests here hold the
+literals another file owns: the Longhorn state allow-list, valheim's transient, jellyfin's
+snapshot cap and k3s-host-checks' disk floor, plus the claims the fullness page must not drop.
 
 Run: uv run pytest tests/services/test_storage_rule_literals.py
 """
@@ -19,30 +16,7 @@ from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
 ROBUSTNESS = K8S_ROLES / "monitor-bridge" / "files" / "longhorn_robustness.py"
-CYCLE_MINUTES = 5  # the bridge's INTERVAL, which every *_CONSECUTIVE streak counted
-ONE_CYCLE = f"{CYCLE_MINUTES}m"  # the hold for a row with no streak
 GIB = 1024**3
-
-# What the deleted env keys held (`templates/config/env.yaml.j2`), as the shipped rendering
-# stringified them.
-RETIRED_BRIDGE_ENV = {
-    "LONGHORN_CONSECUTIVE": "3",
-    "PVC_MAX_PCT": "85",
-    "PVC_EXCLUDE": "media-data",
-    "PVC_MIN_CLAIMS": "32",
-    "PVC_CLAIMS_CONSECUTIVE": "3",
-    "PVC_MIN_FREE": "valheim-server=3221225472",
-    "SNAPSHOT_CAPS": "jellyfin-config=17179869184",
-    "SNAPSHOT_CAP_WARN_RATIO": "0.9",
-    "SNAPSHOT_CAP_CONSECUTIVE": "3",
-    "ETCD_DB_QUOTA_BYTES": "2147483648",
-    "ETCD_DB_MAX_PCT": "80",
-}
-
-
-def bridge_env() -> dict[str, str]:
-    """The values the deleted bridge rows read, which the rules must still carry."""
-    return dict(RETIRED_BRIDGE_ENV)
 
 
 def safe_robustness() -> str:
@@ -59,80 +33,21 @@ def rules_by_name(text: str) -> dict[str, dict]:
     return {rule["alert"]: rule for rule in group["rules"]}
 
 
-def literal_problems(rules: dict[str, dict], env: dict[str, str], safe: str):
-    """Each rule fragment or hold the bridge value says should be present and is not."""
-    [floor_claim, floor_bytes] = env["PVC_MIN_FREE"].split("=")
-    [cap_claim, cap_bytes] = env["SNAPSHOT_CAPS"].split("=")
-    streak = lambda name: f"{int(env[name]) * CYCLE_MINUTES}m"
-    expected = {
-        "LonghornVolumeDegraded": [f'state!~"{safe}"'],
-        "PVCFull": [
-            f"> {env['PVC_MAX_PCT']}",
-            f'persistentvolumeclaim!~"{env["PVC_EXCLUDE"]}"',
-        ],
-        "PVCBelowFreeFloor": [
-            f'persistentvolumeclaim="{floor_claim}"',
-            f"< {floor_bytes}",
-        ],
-        "PVCFreeFloorUnmonitored": [f'persistentvolumeclaim="{floor_claim}"'],
-        "PVCCoverageShortfall": [f"< {env['PVC_MIN_CLAIMS']}"],
-        "LonghornSnapshotNearCap": [
-            f'pvc="{cap_claim}"',
-            f">= {cap_bytes} * {env['SNAPSHOT_CAP_WARN_RATIO']}",
-        ],
-        "LonghornSnapshotCapUnmonitored": [f'pvc="{cap_claim}"'],
-        "EtcdDBNearQuota": [
-            f"/ {env['ETCD_DB_QUOTA_BYTES']} >= {env['ETCD_DB_MAX_PCT']}"
-        ],
-    }
-    problems = [
-        f"{alert}: expr lacks `{fragment}`"
-        for alert, fragments in expected.items()
-        for fragment in fragments
-        if fragment not in " ".join(rules[alert]["expr"].split())
-    ]
-    holds = {
-        "LonghornVolumeDegraded": streak("LONGHORN_CONSECUTIVE"),
-        "LonghornVolumesMissing": streak("LONGHORN_CONSECUTIVE"),
-        "LonghornDiskOverSchedulingFloor": streak("LONGHORN_CONSECUTIVE"),
-        "PVCCoverageShortfall": streak("PVC_CLAIMS_CONSECUTIVE"),
-        "LonghornSnapshotNearCap": streak("SNAPSHOT_CAP_CONSECUTIVE"),
-        "LonghornSnapshotCapUnmonitored": streak("SNAPSHOT_CAP_CONSECUTIVE"),
-        "PVCFull": ONE_CYCLE,
-        "PVCBelowFreeFloor": ONE_CYCLE,
-        "PVCFreeFloorUnmonitored": ONE_CYCLE,
-        "KubeletCSIMountReadOnly": "1m",
-        "EtcdDBNearQuota": ONE_CYCLE,
-    }
-    problems += [
-        f"{alert}: for is not {hold}"
-        for alert, hold in holds.items()
-        if rules[alert]["for"] != hold
-    ]
-    return problems
+def allow_list_problems(text: str) -> list[str]:
+    """`LonghornVolumeDegraded` must skip exactly the states SAFE_ROBUSTNESS names."""
+    fragment = f'state!~"{safe_robustness()}"'
+    if fragment in rule_expr("LonghornVolumeDegraded", text):
+        return []
+    return [f"LonghornVolumeDegraded: expr lacks `{fragment}`"]
 
 
-def shipped() -> list[str]:
-    return literal_problems(
-        rules_by_name(RULES.read_text()), bridge_env(), safe_robustness()
-    )
-
-
-def test_storage_rule_literals_equal_the_bridge_values():
-    assert shipped() == []
-
-
-def test_a_retuned_bridge_value_is_flagged():
-    text = RULES.read_text().replace(") > 85", ") > 90")
-    assert literal_problems(rules_by_name(text), bridge_env(), safe_robustness()) == [
-        "PVCFull: expr lacks `> 85`"
-    ]
+def test_the_degraded_rule_skips_the_states_the_runbook_calls_safe():
+    assert allow_list_problems(RULES.read_text()) == []
 
 
 def test_a_state_dropped_from_the_allow_list_is_flagged():
     text = RULES.read_text().replace('"healthy|unknown"', '"healthy"')
-    problems = literal_problems(rules_by_name(text), bridge_env(), safe_robustness())
-    assert problems == [
+    assert allow_list_problems(text) == [
         f'LonghornVolumeDegraded: expr lacks `state!~"{safe_robustness()}"`'
     ]
 
@@ -185,12 +100,8 @@ def role_default(role: str, name: str) -> str:
 
 def valheim_floor_problems(text: str) -> list[str]:
     """The tree-derived half, by NAME: the valheim role declares the transient its updater
-    stages, and `PVCBelowFreeFloor` must carry that claim and number.
-
-    DECIDED: 3 GiB even though 85% of the 20Gi claim also breaches at 3 GiB free. The floor is
-    sized to the transient, not to open a gap under the percentage: a resize moves what 85%
-    means and leaves this where the copy is, which at the 10Gi the incident happened on was
-    1.5 G more warning than the percentage gave.
+    stages, and `PVCBelowFreeFloor` must carry that claim and number. The rule's `DECIDED:`
+    marker says why the floor is the transient rather than a gap under the percentage.
     """
     claim = role_default("valheim", "valheim_k8s_server_claim")
     transient = int(

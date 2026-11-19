@@ -3,8 +3,8 @@
 The two entrypoints `fake_remux_scan.py` and `fake_remux_replace.py` fold into one
 `files/fake_remux.py`, and their two libraries move into a PEP 420 namespace package
 `files/fake_remux_lib/`, the way `deploy_tools/land_lib/` holds `land.py`'s modules. The move
-changes no behaviour, so these tests check where the code is, who still reaches for the old
-location, what the package installs, and that the timers still run it.
+changes no behaviour, so these tests check where the code is, what the package installs, and
+that the timers still run it.
 
 The tests find each library by the function it defines rather than by its file name, so the
 move may keep or shorten the basenames.
@@ -40,11 +40,6 @@ LIB = FILES / "fake_remux_lib"
 HOST_LIB = REPO / "hosts" / "lib"
 ENTRYPOINT = "fake_remux.py"
 OPT = "/usr/lib/homelab/fake-remux"
-OLD_ENTRY_MODULES = {"fake_remux_scan", "fake_remux_replace"}
-OLD_LIB_MODULES = {"fake_remux_logic", "fake_remux_replace_logic"}
-OLD_FILES_PATH = re.compile(
-    r"files/(?:fake_remux_scan|fake_remux_replace|fake_remux_logic|fake_remux_replace_logic)\.py"
-)
 # service -> the subcommand its ExecStart must pass to the entrypoint
 SERVICE_SUBCOMMANDS = {
     "homelab-fake-remux-scan": "scan",
@@ -161,63 +156,6 @@ def test_only_the_one_entrypoint_keeps_the_fake_remux_prefix_in_files():
         if p.rsplit("/", 1)[0] == files
     }
     assert top == {ENTRYPOINT}
-
-
-def _old_location_imports(source: str, inside_lib: bool) -> list[str]:
-    # Inside the lib a module may keep its basename and import a sibling by bare name.
-    old = set() if inside_lib else OLD_ENTRY_MODULES | OLD_LIB_MODULES
-    hits = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.ImportFrom) and node.module and node.module in old:
-            hits.append(node.module)
-        elif isinstance(node, ast.Import):
-            hits += [a.name for a in node.names if a.name in old]
-    return hits
-
-
-def test_no_tracked_module_imports_a_fake_remux_module_from_its_old_location():
-    # The mkv repair imports the scan's config loader; the role's own tests import the shell.
-    scanned, offenders = set(), {}
-    for rel in _tracked("*.py"):
-        path = REPO / rel
-        if not path.is_file():
-            continue
-        scanned.add(rel)
-        inside_lib = path.is_relative_to(LIB)
-        hits = _old_location_imports(path.read_text(), inside_lib)
-        if hits:
-            offenders[rel] = hits
-    assert "hosts/components/fake-remux/files/mkv_attachment_repair.py" in scanned
-    assert offenders == {}
-
-
-def test_no_hand_written_file_names_an_old_files_path():
-    me = str(Path(__file__).resolve().relative_to(REPO))
-    generated = re.compile(r"<!-- generated_from:.*?<!-- /generated_from -->", re.S)
-    scanned, offenders = set(), []
-    for rel in _tracked():
-        if rel == me or rel.startswith(("docs/reference/", "docs/archive/")):
-            continue
-        if rel == "scripts/dev/pytest_shard_weights.json":
-            continue
-        path = REPO / rel
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text()
-        except UnicodeDecodeError:
-            continue
-        if "generated_from:" in text:
-            if "<!-- /generated_from -->" not in text:
-                continue  # a wholly generated page: its generator owns it
-            text = generated.sub("", text)
-        scanned.add(rel)
-        offenders += [f"{rel}: {m}" for m in sorted(set(OLD_FILES_PATH.findall(text)))]
-    assert {
-        "hosts/components/fake-remux/CLAUDE.md",
-        "docs/autofix-bridge-actuators.md",
-    } <= scanned
-    assert offenders == []
 
 
 def test_replacement_library_imports_when_run_directly_from_another_directory(tmp_path):

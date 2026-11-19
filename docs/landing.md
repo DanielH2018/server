@@ -97,7 +97,7 @@ the slots.
 **Three rules refuse a merge inside the landing turn.** A landing checks them when a draft
 takes the turn, before its CI run, and again just before the merge. A refused landing exits
 75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
-`slots.refuse_before_merge` owns the rules, and each read that fails bars nothing.
+`slots._bar` owns the rules, and each read that fails bars nothing.
 
 - A PR that changes a k8s role is refused while `DEPLOY_HOLD` reads anything but `none`.
 - A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
@@ -105,6 +105,16 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   until its process ends, so every other PR is refused meanwhile. A serial PR changes the
   `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
   cluster-vars file.
+- A serial PR that holds the turn waits for those landings instead of refusing. At the
+  draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
+  `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints
+  `waiting in the landing turn for the landings past their merge to reach their verdicts`.
+  No other landing merges while it holds the turn, so those landings only finish. The wait
+  ends when the bar clears, when a rule that waiting cannot clear starts to apply, or at the
+  cap, and the last two refuse. On 2026-11-18, #9047, #9057 and #9059 were refused three or
+  four times each under the rule without the wait, each time after up to 82 minutes in line.
+  Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
+  the turn, a serial PR is still refused at once.
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 
@@ -391,6 +401,12 @@ every PR into master at `BLOCKED` with every check green, so the word says nothi
 checks. The wait never reads it: `await_ci.py` owns the verdict. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
+
+**To read why a CI run went red, start with `ghread run failures`.** It takes a run ID, a SHA
+or `--pr <n>`, and prints each failed job's test IDs, error lines and annotations. For one
+master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 KB to 380 KB.
+Read the full log only for a job whose failure the summary does not explain. To survey red
+attempts across a date range, run `scripts/dev/ci_failures.py`.
 
 **A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct

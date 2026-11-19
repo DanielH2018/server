@@ -218,13 +218,13 @@ file list would fall back to the derived one unseen.
 
 The renderer writes a tag's files by these rules:
 
-- **The file lists.** `scripts/lib/k8s_roles.py:resolved_manifest_files` derives them from
-  the role's templates and its `containers_list` entry. A top-level template whose basename
-  says `secret` is a secret file. The rest are files, with a shared `service.yaml` for an entry
-  with a `port` and a shared `ingressroute.yaml` for one with a `hostname`, less any `-job.yaml`,
-  the role's `manifests_deferred_files` and its `manifests_exclude_files`. A role whose defaults
-  set `manifests_files` or `manifests_secret_files` gets that list instead, resolved against the
-  render context. navidrome's list, for one, names `ingressroute.yaml` only while it has
+- **The file list.** `scripts/lib/k8s_roles.py:resolved_manifest_files` derives it from
+  the role's templates and its `containers_list` entry: every top-level manifest template, with
+  a shared `service.yaml` for an entry with a `port` and a shared `ingressroute.yaml` for one
+  with a `hostname`, less any `-job.yaml`, the role's `manifests_deferred_files` and its
+  `manifests_exclude_files`. A Secret template is a file like any other, because
+  `restart.py` finds the Secrets a pod reads by kind. A role whose defaults set
+  `manifests_files` gets that list instead, resolved against the render context. navidrome's list, for one, names `ingressroute.yaml` only while it has
   replicas.
 - **The shared defaults.** A listed `service.yaml` or `ingressroute.yaml` that the role ships
   no template for renders from `service-default.yaml.j2` or `ingressroute-default.yaml.j2`

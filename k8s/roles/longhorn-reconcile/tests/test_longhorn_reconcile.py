@@ -2,8 +2,7 @@
 
 `World` answers the script's reads from dicts, applies its merge patches the way the API server
 does, and records every call. The label cases are a transition table with the
-label strings typed out here, as `setup/k3s`'s `test_every_label_task_renders_the_live_labels`
-did for the tasks this script replaces: an expectation built from the script's own constants
+label strings typed out here: an expectation built from the script's own constants
 would follow a rename and pass, and a one-byte change in a live label drops the volume out of
 its RecurringJob with nothing failing.
 

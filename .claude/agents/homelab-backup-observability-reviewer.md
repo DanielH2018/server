@@ -76,7 +76,7 @@ operator's time).
 
 ## Output format
 Findings grouped **High / Medium / Low**. Each: 1-line title, `file:line` (repo source), the
-problem, a concrete fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
+problem, a concrete fix, tagged **[GAP] / [IMPROVEMENT] / [FEATURE]**. Note verified-clean areas in
 one line each. End with a **3-bullet top-priorities** summary. Few real findings beat many speculative.
 
 ## Rules

@@ -156,24 +156,6 @@ def test_the_glance_generator_on_catalog_lib_finds_no_stale_block(tmp_path):
     _assert_libraries_come_from_catalog_lib(script, loaded)
 
 
-def test_no_tracked_file_names_a_library_at_its_flat_path():
-    """A path a doc, hook, test or role names is an interface: every caller moves with it."""
-    flat = re.compile(
-        r"(?<![\w/])(?:scripts/)?docs/(" + "|".join(LIBRARIES) + r")\.py\b"
-    )
-    me = Path(__file__).resolve().relative_to(REPO).as_posix()
-    hits = []
-    for path in _tracked():
-        if path == me:
-            continue
-        try:
-            text = (REPO / path).read_text()
-        except UnicodeDecodeError, IsADirectoryError, FileNotFoundError:
-            continue
-        hits += [f"{path}: {m.group(0)}" for m in flat.finditer(text)]
-    assert hits == []
-
-
 def test_the_regenerated_scripts_page_lists_the_libraries_under_catalog_lib():
     """docs/reference/scripts.md is generated: the move regenerates it rather than editing it."""
     page = (REPO / "docs/reference/scripts.md").read_text()

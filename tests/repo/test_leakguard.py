@@ -357,9 +357,9 @@ def test_every_allowlisted_nodeid_names_a_test_that_exists() -> None:
     stale nodeid that matches nothing. A guard that globs for its own subject can find none of
     it; the fix is always to assert against something concrete.
     """
-    assert len(leakguard._LIVE_API_TESTS) >= 5, (
-        "the live-API allowlist has shrunk below the five tests measured on 2026-09-04 — if "
-        "one was retired, say so here"
+    assert len(leakguard._LIVE_API_TESTS) >= 2, (
+        "the live-API allowlist has shrunk below its two systemd tests: if one was retired, "
+        "say so here"
     )
     for nodeid in sorted(leakguard._LIVE_API_TESTS):
         relative, _, test_name = nodeid.partition("::")

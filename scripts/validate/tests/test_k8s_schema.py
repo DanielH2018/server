@@ -353,6 +353,36 @@ def test_an_unknown_crd_kind_reports_no_schema():
     assert crd_schema_error(unknown) is NO_SCHEMA
 
 
+def test_a_schema_rewritten_on_disk_is_read_afresh(tmp_path):
+    schema = tmp_path / "example.com" / "widget_v1.json"
+    schema.parent.mkdir()
+    widget = {"apiVersion": "example.com/v1", "kind": "Widget", "spec": {"size": 1}}
+
+    schema.write_text('{"type": "object"}')
+    assert crd_schema_error(widget, tmp_path) is None
+    schema.write_text('{"type": "object", "required": ["status"]}')
+    assert (
+        crd_schema_error(widget, tmp_path) == "<root>: 'status' is a required property"
+    )
+
+
+def test_a_vendored_schema_that_is_no_schema_is_flagged(tmp_path):
+    schema = tmp_path / "example.com" / "widget_v1.json"
+    schema.parent.mkdir()
+    widget = {"apiVersion": "example.com/v1", "kind": "Widget"}
+
+    schema.write_text('{"type": 7}')
+    err = crd_schema_error(widget, tmp_path)
+    assert isinstance(err, str) and err.startswith(
+        "vendored schema widget_v1.json is invalid"
+    )
+    schema.write_text("not json")
+    err = crd_schema_error(widget, tmp_path)
+    assert isinstance(err, str) and err.startswith(
+        "vendored schema widget_v1.json is unreadable"
+    )
+
+
 def test_the_schema_does_not_catch_a_missing_tls_block():
     """The limit of structural validation, asserted so nobody claims coverage it lacks.
 

@@ -13,7 +13,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.estate import Inventory
-from lib.proc_testing import run
+from lib.proc_testing import run, write_exec
 from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -165,6 +165,14 @@ def test_both_sessions_send_their_traffic_through_the_proxy(box):
         assert "Wants=squid.service" in text, unit
 
 
+def test_no_session_sends_claude_codes_nonessential_traffic(box):
+    """Error reports go to an intake the egress allowlist leaves out, so the session never tries."""
+    for unit in SESSION_UNITS:
+        assert "Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1\n" in rendered(
+            box, unit
+        ), unit
+
+
 def test_without_a_proxy_address_no_session_names_one(box_off):
     for unit in SESSION_UNITS:
         text = rendered(box_off, unit)
@@ -185,3 +193,124 @@ def test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address(box, tmp_p
     )
     run([*shlex.split(command), str(kubeconfig)], check=True)
     assert f"    server: https://{server_ip}:6443\n" in kubeconfig.read_text()
+
+
+CHECK = REPO / "hosts/components/t2-egress/files/t2-egress-check"
+SESSION_UIDS = {SESSION_UNITS[0]: 907, SESSION_UNITS[1]: 901}
+ALLOWED_HOSTS = frozenset(
+    {
+        "api.anthropic.com",
+        "api.github.com",
+        "prometheus.local.daniel-hunter.com",
+        "alertmanager.local.daniel-hunter.com",
+        "results-receiver.actions.githubusercontent.com",
+        "cafe.github.com",
+    }
+)
+
+
+def declared_uids() -> set[int]:
+    return {
+        user["uid"]
+        for name, spec in SESSION_USERS.items()
+        for user in yaml_fast.safe_load(spec.read_text())["users"]
+        if user["name"] == name
+    }
+
+
+def first(lines: list[str], needle: str) -> int:
+    return next(i for i, line in enumerate(lines) if needle in line)
+
+
+def test_each_session_uid_is_refused_everything_after_its_trace_and_the_proxy(box):
+    """The trace sees refused attempts too, and only squid's address and port get past."""
+    proxy_host, proxy_port = yaml_fast.safe_load(
+        (HOST_VARS / "daniel-box.yml").read_text()
+    )["t2_egress_proxy"].split(":")
+    rules = [s for s in statements(rendered(box, RULESET)) if s.startswith("add rule")]
+    accept = first(rules, " accept")
+    assert (
+        f"ip daddr {proxy_host} tcp dport {proxy_port} counter accept" in rules[accept]
+    )
+    assert (
+        first(rules, "update @seen4") < accept
+        and first(rules, "update @seen6") < accept
+    )
+    for uid in declared_uids():
+        tcp = first(rules, f'comment "t2-fence {uid} tcp"')
+        other = first(rules, f'comment "t2-fence {uid} other"')
+        assert accept < tcp < other
+        assert "reject with tcp reset" in rules[tcp]
+        assert "reject with icmpx admin-prohibited" in rules[other]
+    assert not [r for r in rules if re.search(r"\blog\b", r)], "a rule logs (I6)"
+
+
+def test_squid_admits_exactly_the_ruled_hosts_and_refuses_the_rest(box):
+    server_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+        "server_ip"
+    ]
+    conf = statements(rendered(box, SQUID_CONF))
+    hosts = {line.split()[-1] for line in conf if line.startswith("acl t2_https ")}
+    assert hosts == ALLOWED_HOSTS
+    assert f"acl t2_k3s dst {server_ip}" in conf
+    access = [line for line in conf if line.startswith("http_access ")]
+    assert access == [
+        "http_access deny to_localhost",
+        "http_access deny to_linklocal",
+        "http_access allow loopback CONNECT https_port t2_https",
+        "http_access allow loopback CONNECT k3s_port t2_k3s",
+        "http_access deny all",
+    ]
+
+
+def test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts(box, box_off):
+    """I4: the check runs as root before the session, and goes with the flag."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    for unit, uid in SESSION_UIDS.items():
+        line = f"ExecStartPre=+/usr/lib/homelab/t2-egress/t2-egress-check {uid}\n"
+        assert line in rendered(box, unit), unit
+        assert "t2-egress-check" not in rendered(box_off, unit), unit
+    assert set(SESSION_UIDS.values()) == declared_uids()
+
+
+def checked(tmp_path, nft_body: str, uid: str = "907") -> int:
+    """t2-egress-check's exit status against a stub nft whose script is `nft_body`."""
+    nft = write_exec(tmp_path / "nft", f"#!/bin/sh\n{nft_body}\n")
+    script = write_exec(
+        tmp_path / "t2-egress-check",
+        CHECK.read_text().replace("nft=/usr/sbin/nft", f"nft={nft}"),
+    )
+    assert f"nft={nft}" in script.read_text()
+    return run([str(script), uid]).returncode
+
+
+def fence_listing(box) -> str:
+    """What `nft list chain` prints for the rendered fence, close enough for the check."""
+    return "\n".join(
+        "\t\t" + s.split("output ", 1)[1]
+        for s in statements(rendered(box, RULESET))
+        if s.startswith("add rule")
+    )
+
+
+def test_the_check_passes_a_loaded_fence_for_the_uid_is_clean(box, tmp_path):
+    listing = tmp_path / "listing"
+    listing.write_text(fence_listing(box))
+    assert checked(tmp_path, f"cat {listing}") == 0
+
+
+def test_the_check_refuses_when_the_table_is_missing_is_flagged(tmp_path):
+    assert checked(tmp_path, "echo 'No such file or directory' >&2; exit 1") == 1
+
+
+def test_the_check_refuses_a_table_without_the_uids_rules_is_flagged(box, tmp_path):
+    listing = tmp_path / "listing"
+    listing.write_text(
+        "\n".join(
+            line
+            for line in fence_listing(box).splitlines()
+            if "t2-fence 907" not in line
+        )
+    )
+    assert checked(tmp_path, f"cat {listing}") == 1
+    assert checked(tmp_path, f"cat {listing}", uid="901") == 0

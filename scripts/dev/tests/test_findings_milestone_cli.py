@@ -11,7 +11,7 @@ MILESTONES = "repos/DanielH2018/server/milestones"
 
 
 def test_start_files_the_branch_claims_and_open_pr_under_the_new_milestone():
-    mine = make_issue(1132, labels=["claimed"], comments=[claim_comment(WT, None, "t")])
+    mine = make_issue(1132, comments=[claim_comment(WT, None, "t")])
     other = make_issue(1140)
     tools, calls = build_tools(
         Fakes(issues=[mine, other], prs=[{"number": 77}], api={MILESTONES: []})

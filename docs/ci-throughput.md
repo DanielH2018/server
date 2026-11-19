@@ -71,7 +71,9 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   the same tree would diff it against the same base with the same table, so its selection
   would be the one the pull-request run already ran, and it skips every job
   (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
-  A landing batch whose run was selected still records nothing on its members.
+  A landing batch's run records its members the same way. Its selection comes from the
+  diff of every member stacked on master, so it holds each module any one member can
+  affect.
 - **An unproven push selects against the newest green ancestor.** Master moved under the
   pull request, so no run tested the pushed tree. The `prove` job names a base,
   `scripts/dev/tested_tree.py:green_base`: the newest first-parent ancestor whose `prek`
@@ -84,10 +86,13 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
 
 ## A nightly sweep runs every module
 
-`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head at 09:30 UTC, on
+`.github/workflows/pytest-sweep.yml` runs the whole suite on master's head once a day, on
 one runner and with no selection. It finds a module whose row in the table is older than a
 dependency the module gained, which no selected run is told to run.
 
+- **It starts hours after its schedule.** The cron line says 09:30 UTC. GitHub started
+  the Renovate canary, scheduled for 09:00 UTC, between 17:38 and 18:58 UTC on each of
+  2026-11-16 to 2026-11-18. A stale-row miss can therefore go unseen for more than a day.
 - **It grades no commit.** No job in it carries the name of the `prek` gate, so
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
   (`tests/repo/test_pytest_sweep_workflow.py::test_a_job_under_the_gates_name_is_flagged`).
@@ -726,8 +731,9 @@ other eight jobs stay hosted, because they are short or need what a pod does not
 1. **C2, paused.** A launcher on daniel-box starts one runner pod for each heavy job of a run
    it dispatches, and the `workflow-runners-are-pinned` row accepts the one `runs-on` expression
    that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
-   a probe sets each beside the hosted run of the same commit. The suite's Docker tests move to
-   a job of their own, which stays hosted. The slice ends after a week with no shadow job green
+   a probe sets each beside the hosted run of the same commit. The suite's Docker tests already
+   run in a hosted job of their own, `image-leg.yml`, so the `pytest` job needs no Docker
+   daemon. The slice ends after a week with no shadow job green
    where its twin was red.
 1. **C3, paused.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no

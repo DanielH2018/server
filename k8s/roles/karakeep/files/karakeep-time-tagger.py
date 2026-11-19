@@ -22,7 +22,9 @@ class AddTimeToRead:
     """Class to add time-to-read tags to bookmarks based on content length."""
 
     # Define the time-to-read tags
-    TIME_TAGS = ["0-1m", "1-5m", "5-10m", "10-15m", "15-30m", "30m+"]
+    # Every slot estimate_reading_time returns, plus 0-1m and 1-5m, which an older version
+    # attached; a bookmark still carrying one has it replaced on its next run.
+    TIME_TAGS = ["0-1m", "1-5m", "0-5m", "5-10m", "10-15m", "15-30m", "30m+"]
 
     def __init__(self):
         """Initialize the AddTimeToRead class."""

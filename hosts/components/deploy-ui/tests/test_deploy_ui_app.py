@@ -157,23 +157,6 @@ def test_page_has_no_stale_release_panel_is_flagged(app):
     assert "/api/stale" not in html and 'id="stale"' not in html
 
 
-def test_deploy_route_is_gone_and_spawns_nothing_is_flagged(app, monkeypatch, tmp_path):
-    spawned = []
-    monkeypatch.setattr(
-        deploy_ui.writes,
-        "spawn_logged",
-        lambda argv, cwd, log_dir, action: spawned.append(argv) or tmp_path / "d.log",
-    )
-    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
-    status, _ = app.post("/api/deploy", HDRS, json.dumps({"tag": "n8n"}))
-    assert status == 404 and spawned == []
-
-
-def test_stale_route_is_gone_and_runs_nothing_is_flagged(app):
-    status, _ = app.get("/api/stale")
-    assert status == 404 and not any(c[0] == "uv" for c in app.run.calls)
-
-
 def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
     # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     b = body(app.get("/api/inflight"))

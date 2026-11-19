@@ -1,0 +1,35 @@
+#!/bin/sh
+# Shipped by daniel-box's package (the t2-egress component) as
+# /usr/lib/homelab/t2-egress/t2-egress-check.
+#
+# Usage: t2-egress-check UID
+#
+# Each T2 session unit runs it as root through `ExecStartPre=+` with its own session uid. It exits
+# 0 when `table inet t2_egress` holds both of that uid's fence rules, `t2-fence <uid> tcp` and
+# `t2-fence <uid> other`, and 1 otherwise, so the session never starts unfenced (I4). nft is
+# named by path: the unit's PATH holds a directory the controller writes.
+set -eu
+nft=/usr/sbin/nft
+
+case "${1:-}" in
+  -h | --help)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  '' | *[!0-9]*)
+    echo "t2-egress-check: usage: t2-egress-check UID" >&2
+    exit 64
+    ;;
+esac
+uid=$1
+
+if ! rules=$("$nft" list chain inet t2_egress output 2>/dev/null); then
+  echo "t2-egress-check: table inet t2_egress is not loaded; refusing the session of uid $uid" >&2
+  exit 1
+fi
+for kind in tcp other; do
+  if ! printf '%s\n' "$rules" | grep -qF "comment \"t2-fence $uid $kind\""; then
+    echo "t2-egress-check: no t2-fence $uid $kind rule in table inet t2_egress; refusing the session" >&2
+    exit 1
+  fi
+done

@@ -7,7 +7,8 @@
 #   override it. The Pi's vm.swappiness and vm.page-cluster are pi-tuning's.
 # - /etc/ufw/sysctl.conf is ufw's conffile. Ubuntu ships `log_martians=0` uncommented there, and
 #   ufw re-applies the file on every enable and reload, so both log_martians lines must read 1 in
-#   both files. Reconcile runs the line arm before the ufw arm for the same reason.
+#   both files. Reconcile runs the line arm before the ufw arm for the same reason. The
+#   `rsyslog-filter` component drops the pod-to-pod martians this produces.
 # - /etc/login.defs is the `login` package's conffile. The six edits keep the regexps of the
 #   lineinfile tasks they replace.
 # - journald's cap lands in a drop-in. The Pi's pi-tuning adds 60-homelab-pi.conf beside it, and

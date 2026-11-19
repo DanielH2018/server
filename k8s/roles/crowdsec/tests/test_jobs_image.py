@@ -20,11 +20,13 @@ No leg reaches a LAPI. What the sidecar's `cscli` reads from the live engine's
 The `lapi-register` leg records what each cscli run printed as its `job_log` property, which
 `k8s/roles/conftest.py` prints to CI's job log when the leg passes.
 
-The legs skip when `docker` is missing and `CI` is unset, and fail when `CI` is set, so CI
-always runs them. Each is in `_LIVE_API_TESTS` in tests/leakguard.py, which hands
-them the real PATH. Every other test gets leakguard's `docker` shim, which exits 127.
+The four Docker legs carry the `image` marker, so the pytest shards deselect them and
+`.github/workflows/image-leg.yml` runs them. That workflow is no required check: a red run shows
+on the pull request and blocks no merge. The legs skip when `docker` is missing and `CI` is
+unset, and fail when `CI` is set. tests/leakguard.py hands an `image`-marked test the real
+PATH. Every other test gets leakguard's `docker` shim, which exits 127.
 
-Run: uv run pytest k8s/roles/crowdsec/tests/test_jobs_image.py
+Run: uv run pytest -m image k8s/roles/crowdsec/tests/test_jobs_image.py
 """
 
 import importlib.util
@@ -135,6 +137,7 @@ def jobs(tmp_path):
     return root
 
 
+@pytest.mark.image
 def test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli(
     docker, jobs, tmp_path
 ):
@@ -159,6 +162,7 @@ def test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli(
         assert proc.returncode == 0, (script, proc.stderr)
 
 
+@pytest.mark.image
 def test_the_home_allowlist_runs_in_the_jobs_image_against_stub_tools(
     docker, jobs, tmp_path
 ):
@@ -180,6 +184,7 @@ def test_the_home_allowlist_runs_in_the_jobs_image_against_stub_tools(
     assert (proc.returncode, proc.stdout) == (0, "home IPs unchanged\n"), proc.stderr
 
 
+@pytest.mark.image
 def test_the_engines_cscli_runs_in_the_jobs_image(docker, jobs, tmp_path):
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -296,6 +301,7 @@ def _run_in_engine_image(docker, data, etc, *command) -> subprocess.CompletedPro
     )
 
 
+@pytest.mark.image
 def test_the_lapi_register_init_runs_against_a_fresh_database_with_no_lapi(
     docker, tmp_path, record_property
 ):
