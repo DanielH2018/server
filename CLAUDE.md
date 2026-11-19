@@ -30,7 +30,7 @@ A task a skill covers routes through the skill listing; this table holds the res
 | Changing what a k8s role renders | `docs/homelab-render.md`, the render contract every role meets |
 | Picking up an open issue | `findings.py next` names what is free. Claim first: `findings.py claim <n> --worktree <branch>`. |
 | Recording a finding you will not fix this session | `findings.py open`; `findings.py list` is the register. |
-| Starting focused work that spans several PRs or issues, or that the user asks to track | `findings.py milestone start "<title>" --worktree <branch>`, titled for the work (`scripts/dev/findings_lib/milestone_cli.py:cmd_milestone`). No other session gets a milestone. |
+| Starting focused work that spans several PRs or issues, or that the user asks to track | `findings.py milestone start "<title>" --worktree <branch>`, titled for the work (`scripts/dev/findings_lib/milestone_cli.py:cmd_milestone`). No other session gets a milestone. A sub-coordinator adds `--project`, for a milestone that holds a backlog (`docs/issue-claiming-and-fanout.md`). |
 | Answering "what runs here / where / behind what" | `docs/reference/`. A page with a `generated_from:` banner is generated: change its generator (`scripts/docs/build_docs.py` lists them). |
 | Choosing where a new Python module or test goes | `.claude/rules/python-layout.md` |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` and `k8s/roles/monitor-bridge/files/registry.py` **first** — most gaps are handled. |
