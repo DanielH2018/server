@@ -55,7 +55,7 @@ def test_a_missing_hooklib_still_leaves_a_banner_naming_it(tmp_path):
     assert "hooklib is broken" in result.stdout, result.stdout
 
 
-def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
+def test_remote_fanout_lines_count_each_runs_batches_on_another_host(tmp_path):
     (tmp_path / "20260909T203000Z.json").write_text(
         json.dumps(
             {
@@ -90,7 +90,7 @@ def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
     assert lines == [
         "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
-        "  • daniel-server worktree-fanout-1345 — #1345 (run 20260909T203000Z)",
+        "  • daniel-server: 1 batch in run 20260909T203000Z",
     ]
 
 
@@ -113,17 +113,15 @@ def _aged_manifest(tmp_path):
     )
 
 
-def test_a_batch_under_a_day_old_is_named(tmp_path):
+def test_batches_under_a_day_old_are_counted_on_one_line_per_run(tmp_path):
+    # One line per batch put 48 lines of a single run into the operator's banner.
     _aged_manifest(tmp_path)
     lines = _mod.remote_fanout_lines(
         manifest_dir=tmp_path,
         local_host="daniel-box",
         now=_LAUNCH + timedelta(hours=23),
     )
-    assert lines[1:] == [
-        "  • daniel-server worktree-fanout-1 — #1 (run r6)",
-        "  • daniel-server worktree-fanout-2 — #2 (run r6)",
-    ]
+    assert lines[1:] == ["  • daniel-server: 2 batches in run r6"]
 
 
 def test_batches_over_a_day_old_fold_into_one_count_per_host(tmp_path):
@@ -161,7 +159,7 @@ def test_the_default_manifest_dir_is_resolved_at_call_time_not_at_import(
         )
     )
     lines = _mod.remote_fanout_lines(local_host="daniel-box")
-    assert lines[-1] == "  • daniel-server b — #7 (run r5)"
+    assert lines[-1] == "  • daniel-server: 1 batch in run r5"
 
 
 def test_remote_fanout_lines_are_silent_with_no_manifest(tmp_path):
@@ -205,7 +203,7 @@ def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_p
     assert lines == [
         "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
-        "  • daniel-server b — #2 (run r2)",
+        "  • daniel-server: 1 batch in run r2",
     ]
 
 
@@ -227,12 +225,12 @@ def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_p
     assert lines == [
         "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
-        "  • daniel-server b — #2 (run r3)",
+        "  • daniel-server: 1 batch in run r3",
     ]
 
 
 def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
-    # `clean` records the removal in the manifest; the banner must stop naming that
+    # `clean` records the removal in the manifest; the banner must stop counting that
     # worktree, or it advertises a directory the other host no longer has until every
     # batch of the run is cleaned.
     (tmp_path / "r.json").write_text(
@@ -260,5 +258,5 @@ def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
     assert lines == [
         "fan-out worktrees on other hosts "
         "(uv run python scripts/dev/fanout.py place status <run-id>):",
-        "  • daniel-server worktree-fanout-2 — #2 (run r4)",
+        "  • daniel-server: 1 batch in run r4",
     ]

@@ -62,8 +62,22 @@ def test_lint_warning_only_exits_zero_without_the_fix_pointer(tmp_path, capsys):
     (repo / "CLAUDE.md").write_text("## Gate\n`t/test_m.py::test_a` pins it.\n")
     assert main(["lint", "--repo", str(repo)]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("warn ") and "one-way-test" in out
+    assert out.splitlines()[0] == "1 warning" and "one-way-test" in out
     assert "fix:" not in out
+
+
+def test_lint_leads_with_a_count_and_groups_rows_of_one_section_and_rule(
+    tmp_path, capsys
+):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nsee `t/m.py:3` and `t/m.py:4`\n"
+    )
+    assert main(["lint", "--repo", str(repo)]) == 1
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "2 error"
+    assert len(lines) == 3 and "CLAUDE.md#Style x2" in lines[1]
+    assert lines[2].startswith("fix: .claude/rules/facts.md")
 
 
 def test_lint_flags_a_value_only_a_built_in_renovate_manager_bumps(tmp_path, capsys):

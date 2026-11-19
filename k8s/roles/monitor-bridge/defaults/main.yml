@@ -80,8 +80,8 @@ k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken d
 # check's `timeout` and every `grace` are seconds, as the API returns them; a Cron check carries
 # its expression and timezone.
 #
-# A literal rather than a reference to the cron variables, because those live in the setup/k3s,
-# setup/initial_setup, k8s/pi-peer-backup, k8s/registry and k8s/observability defaults, and role
+# A literal rather than a reference to the cron variables, because those live in host components'
+# defaults and in the pi-peer-backup, registry and observability roles' defaults, and role
 # defaults do not cross the deploy play's include_role loop. tests/services/test_monitor_bridge_healthchecks_expected.py holds
 # this list to those variables (through the deadman-cadences fragment's reader), so a cron
 # cannot move in one place alone. The period-and-grace table in

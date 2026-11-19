@@ -30,15 +30,17 @@ reaches master (H3.11). A digest that differs from its pin fails the command.
 binary, and `placeholders` fails on a `${key}` the root's SOPS file does not carry (H4.1c). The job
 runs them on every PR, ahead of its steps that stand down on an unchanged tree.
 
-`job-changed` says whether any `--job` it names parses differently at a commit than in the
-working tree. CI's host package jobs build what the container cases read and invoke them, so
-a PR that edits any of them runs the cases. The comparison is of the parsed YAML, so an
-edit to a comment alone does not count.
+`cases-changed` says whether a PR changes what the container cases depend on, beyond the
+render `diff` sees. It checks three arms in order and stops at the first that fires:
 
-`fixture-changed` says whether the container cases' fixture `homelab-daniel-pi` renders
-differently in two trees, each with the renderer and the fixture that tree holds. The fixture
-exercises renderer paths no real host package does yet, such as a drop-in and a dropped unit,
-so a renderer change can alter the fixture and no real render. Such a PR runs the cases too.
+  * a changed path matches one of `--inputs`, the cases' own inputs that no render reads.
+  * a CI job in `CASE_JOBS` parses differently at BASE than in the working tree. Those jobs
+    build what the cases read and invoke them. The comparison is of the parsed YAML, so an
+    edit to a comment alone does not count.
+  * the cases' fixture `homelab-daniel-pi` renders differently in BASE_TREE than in the
+    working tree, each with the renderer and the fixture that tree holds. The fixture
+    exercises renderer paths no real host package does yet, such as a drop-in and a dropped
+    unit, so a renderer change can alter the fixture and no real render.
 
 Usage:
     uv run python scripts/validate/host_packages.py render --tree . --out /tmp/head
@@ -48,17 +50,15 @@ Usage:
     uv run python scripts/validate/host_packages.py prove-scan --gitleaks BIN --config FILE
     uv run python scripts/validate/host_packages.py scan-roots /tmp/head --gitleaks BIN --config FILE
     uv run python scripts/validate/host_packages.py placeholders /tmp/head
-    uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
-        --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages \
-        --job k3s_download
-    uv run python scripts/validate/host_packages.py fixture-changed /tmp/base-tree .
+    uv run python scripts/validate/host_packages.py cases-changed BASE_SHA /tmp/base-tree \
+        --inputs "$CASE_INPUTS"
 
 Exit codes: 0 the render, diff or lint succeeded and the lint found nothing; 1 the lint found a
 problem (each `[FAIL]` line on stderr names it), or nothing to lint, or a render failed; 64 a
 usage error. `diff` exits 0 whether or not the renders differ, and prints `changed=true` or
-`changed=false` on stdout for `$GITHUB_OUTPUT`. `job-changed` and `fixture-changed` exit 0 either way
-and print `true` or `false` on stdout. Either exits non-zero when it cannot decide, and CI's
-render step fails on that rather than reading it as `false`.
+`changed=false` on stdout for `$GITHUB_OUTPUT`. `cases-changed` exits 0 either way and prints
+`true` or `false` on stdout, with the arm that fired on stderr. It exits non-zero when it cannot
+decide, and CI's render step fails on that rather than reading it as `false`.
 """
 
 import sys as _sys
@@ -71,6 +71,8 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from lib import yaml_fast
@@ -293,6 +295,16 @@ def jobs_differ(before: str | None, after: str, jobs: list[str]) -> bool:
     return any(job_differs(before, after, job) for job in jobs)
 
 
+CI_WORKFLOW = Path(".github/workflows/ci.yml")
+# The jobs that build what the container cases read, and the jobs that invoke them.
+CASE_JOBS = (
+    "host_packages_build",
+    "host_packages",
+    "host_packages_bootstrap",
+    "k3s_download",
+)
+
+
 def job_changed(base: str, workflow: Path, jobs: list[str]) -> bool:
     """Whether any of `jobs` in `workflow` differs between commit `base` and the working tree."""
     shown = git("show", f"{base}:{workflow.as_posix()}", check=False)
@@ -356,6 +368,72 @@ def fixture_changed(base: Path, head: Path) -> bool:
     return bool(lines)
 
 
+def touches_inputs(paths: list[str], inputs: list[str]) -> bool:
+    """Whether any of `paths` is one of `inputs` or sits under one, as a git pathspec matches.
+
+    Args:
+        paths: repo-relative paths, such as `git diff --name-only` prints.
+        inputs: repo-relative files or directories; a trailing `/` is optional.
+    """
+    specs = [spec.rstrip("/") for spec in inputs]
+    return any(
+        path == spec or path.startswith(spec + "/") for path in paths for spec in specs
+    )
+
+
+def _changed_paths(base: str) -> list[str]:
+    # --no-renames lists both sides of a rename, so a file moved out of an input still counts.
+    return git("diff", "--no-renames", "--name-only", base, "HEAD").stdout.splitlines()
+
+
+@dataclass(frozen=True)
+class CaseArms:
+    """The boundaries `cases_changed` reads, each run against the working tree.
+
+    Attributes:
+        changed_paths: the paths that differ between a commit and HEAD.
+        jobs_changed: whether a job in `CASE_JOBS` differs from its form at a commit.
+        fixture_changed: whether the cases' fixture renders differently in a tree.
+    """
+
+    changed_paths: Callable[[str], list[str]] = _changed_paths
+    jobs_changed: Callable[[str], bool] = lambda base: job_changed(
+        base, CI_WORKFLOW, list(CASE_JOBS)
+    )
+    fixture_changed: Callable[[Path], bool] = lambda tree: fixture_changed(
+        tree, Path.cwd()
+    )
+
+
+def cases_changed(
+    base: str, base_tree: Path, inputs: list[str], arms: CaseArms = CaseArms()
+) -> str | None:
+    """Which arm says the cases must run on the working tree against `base`, or None.
+
+    The arms run in order and the first that fires decides, so the fixture renders only
+    when neither the paths nor the jobs did.
+
+    Args:
+        base: the merge-base commit.
+        base_tree: a checkout of `base`, for the fixture render.
+        inputs: the cases' own inputs (see `touches_inputs`).
+        arms: the boundaries read; the default reads git and renders the fixture.
+
+    Returns:
+        The `::notice::` text naming the arm that fired, or None when none did.
+
+    Raises:
+        subprocess.CalledProcessError: git or the fixture render failed.
+    """
+    if touches_inputs(arms.changed_paths(base), inputs):
+        return "This PR changes an input of the container cases, so they run."
+    if arms.jobs_changed(base):
+        return "This PR changes the host package jobs' steps, so the cases run."
+    if arms.fixture_changed(base_tree):
+        return "This PR changes how the cases' fixture renders, so the cases run."
+    return None
+
+
 def lint(paths: list[Path]) -> list[str]:
     """Every problem in each `nfpm.yaml` and `.deb` under `paths`, as `[FAIL]` lines."""
     problems, checked = [], 0
@@ -398,16 +476,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     fetch_cmd.add_argument("render", type=Path, metavar="RENDER")
     fetch_cmd.add_argument("--cache", type=Path, required=True, metavar="DIR")
-    job_cmd = commands.add_parser(
-        "job-changed", help="whether a workflow job differs from its form at BASE"
+    cases_cmd = commands.add_parser(
+        "cases-changed",
+        help="whether the working tree changes an input of the container cases",
     )
-    job_cmd.add_argument("base", metavar="BASE")
-    job_cmd.add_argument("--workflow", type=Path, required=True)
-    job_cmd.add_argument(
-        "--job",
+    cases_cmd.add_argument("base", metavar="BASE")
+    cases_cmd.add_argument("base_tree", type=Path, metavar="BASE_TREE")
+    cases_cmd.add_argument(
+        "--inputs",
         required=True,
-        action="append",
-        help="a job id under `jobs:`; repeat it to name several, and any one differing counts",
+        help="the cases' input files and directories, separated by whitespace",
     )
     for command, text in (
         ("scan-roots", "gitleaks over each named package root of RENDER"),
@@ -422,12 +500,6 @@ def main(argv: list[str] | None = None) -> int:
         "placeholders", help="placeholders of each named package root against its keys"
     )
     placeholder_cmd.add_argument("render", type=Path, metavar="RENDER")
-    fixture_cmd = commands.add_parser(
-        "fixture-changed",
-        help="whether the cases' fixture renders differently in BASE_TREE and HEAD_TREE",
-    )
-    fixture_cmd.add_argument("base_tree", type=Path, metavar="BASE_TREE")
-    fixture_cmd.add_argument("head_tree", type=Path, metavar="HEAD_TREE")
     args = parser.parse_args(argv)
 
     if args.command == "render":
@@ -459,13 +531,11 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(problem, file=sys.stderr)
         return 1 if problems else 0
-    if args.command == "job-changed":
-        changed = job_changed(args.base, args.workflow, args.job)
-        print("true" if changed else "false")
-        return 0
-    if args.command == "fixture-changed":
-        changed = fixture_changed(args.base_tree.resolve(), args.head_tree.resolve())
-        print("true" if changed else "false")
+    if args.command == "cases-changed":
+        reason = cases_changed(args.base, args.base_tree.resolve(), args.inputs.split())
+        if reason:
+            print(f"::notice::{reason}", file=sys.stderr)
+        print("true" if reason else "false")
         return 0
     problems = lint(args.paths)
     for problem in problems:

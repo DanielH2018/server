@@ -269,16 +269,6 @@ def test_auto_mode_a_cd_into_the_cwd_is_not_rewritten_in_place(
     assert out is None or "updatedInput" not in out
 
 
-def test_auto_mode_a_deny_names_the_fully_rewritten_command(
-    sandbox, monkeypatch, capsys
-):
-    """A deny names what both rewrites together would run, so one retry lands."""
-    out = dispatch_auto(f"cd {_REPO} && pytest --version", sandbox, monkeypatch, capsys)
-    assert out is None or "updatedInput" not in out
-    if out is not None and out.get("permissionDecision") == "deny":
-        assert "uv run pytest --version" in out["permissionDecisionReason"]
-
-
 def test_auto_mode_a_bare_pytest_is_denied_naming_uv_run(sandbox, monkeypatch, capsys):
     out = dispatch_auto("pytest --version", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "deny"
@@ -290,6 +280,8 @@ def test_auto_mode_keeps_the_cd_into_the_cwd_in_the_named_command(
     sandbox, monkeypatch, capsys
 ):
     out = dispatch_auto(f"cd {_REPO} && pytest --version", sandbox, monkeypatch, capsys)
+    assert "updatedInput" not in out
+    assert out["permissionDecision"] == "deny"
     assert out["permissionDecisionReason"].endswith(
         f": cd {_REPO} && uv run pytest --version"
     )

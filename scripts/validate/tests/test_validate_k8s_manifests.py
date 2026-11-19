@@ -28,7 +28,7 @@ from validate import k8s_manifests as vkm
 def real_tree():
     """Run the validator over the real tree ONCE per worker: (exit code, stdout, stderr).
 
-    A full run renders every k8s role through the renderer and costs ~20s.
+    A full run renders every k8s role through the renderer, which takes several seconds.
     Six guards below assert on different parts of the same run's output. The run is a pure
     function of the repo tree, so one capture of both streams serves all of them.
 

@@ -50,7 +50,7 @@ spec:
       # load-bearing for client IPs, announcement and placement stay on one node as a
       # unit; this pin only ever moves together with the L2Advertisement nodeSelector.
       # BOTH instances pin here, deliberately. Every VIP is announced from a single node
-      # (setup/k3s metallb-pool.yaml.j2, marked PERMANENT), and externalTrafficPolicy: Local
+      # (k8s/roles/metallb/templates/metallb-pool.yaml.j2, marked PERMANENT), and externalTrafficPolicy: Local
       # means a pod on the other node would receive nothing. Redundancy here is against a
       # rollout, not against node loss.
       nodeSelector:
