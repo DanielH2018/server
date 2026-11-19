@@ -1,6 +1,6 @@
 """The soak Job: after revision R rolls out, fail on any restart or alert in the services R changed.
 
-The plan is `docs/archive/deploy/d5-bulk-move.md`, *The soak as a Job (D5.3)*.
+The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *The soak as a Job (D5.3)*.
 The Job runs in `flux-system`, once per promoted revision R, and its exit is the verdict that
 notification-controller posts as `flux/soak`. In order, it:
 

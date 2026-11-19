@@ -1,6 +1,6 @@
 """The changed set: which Kustomizations a commit's bundle changes, from two `digests.json` files.
 
-Contract C2 in docs/archive/contracts.md defines it, and contract C1 defines the
+Contract C2 in docs/target-architecture/contracts.md defines it, and contract C1 defines the
 file. Each bundle carries `digests.json` at its root. It maps each deploy tag and each shared
 kind to two SHA-256 digests, `own` and `footprint`, plus the reserved key `_unclassified` for a
 bundle path that counts for no name. The changed set between an older bundle and a newer one
@@ -26,7 +26,7 @@ never on fewer.
 
 THREE CALLERS, ONE FUNCTION. `promote.py land-wait` reads it for C6's wait (D2.3). D2.5's
 `promote.py verify` and D4.3's timeout derivation call the same `changed_set`, and none of
-them derives the set a second time (docs/archive/deploy/d2-first-leaf.md, *Steps,
+them derives the set a second time (docs/target-architecture/deploy/d2-first-leaf.md, *Steps,
 as PRs*, D2.5). It is pure: the callers read the files and the Kustomizations themselves.
 
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_changed_set.py`
