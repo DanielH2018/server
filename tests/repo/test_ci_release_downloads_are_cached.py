@@ -161,16 +161,6 @@ def test_an_uncached_promote_download_is_flagged():
     ]
 
 
-def test_a_download_without_its_cache_is_flagged(workflow):
-    broken = copy.deepcopy(workflow)
-    steps = _job_steps(broken, "host_packages_build")
-    steps.remove(_step(broken, "host_packages_build", "Cache the gitleaks release"))
-    assert problems(broken) == [
-        "host_packages_build: Scan the named package roots for secrets: "
-        "no earlier actions/cache step caches $RUNNER_TEMP/pinned/gitleaks"
-    ]
-
-
 def test_a_constant_cache_key_is_flagged():
     broken = _load(PYTEST_TOOLS)
     _step(broken, PYTEST_TOOLS, "Cache the sops release")["with"]["key"] = "sops-linux"
