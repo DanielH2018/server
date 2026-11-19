@@ -133,8 +133,8 @@ as closing, and `Todo` otherwise.
 The board shows Severity and Not Before as columns read from the issue fields, so nothing
 keeps a copy of them in step. The account owns their definitions: the operator created both
 under Settings > Planning > Issue fields, with Public visibility. The gh token cannot read or
-create the account's definitions, but `repository.issueFields` lists them, which is what
-`gh_calls.set_fields` reads; a missing field or option fails the write with a line naming
+create the account's definitions, but a repository's GraphQL `issueFields` connection lists
+them, which is what `gh_calls.set_fields` reads; a missing field or option fails the write with a line naming
 where to add it.
 
 The board's Status is the one claim state a person reads. GitHub shows it in each issue's
