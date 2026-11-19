@@ -8,6 +8,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_host_manifest.py
 import importlib.machinery
 import json
 import types
+from pathlib import Path
 
 import pytest
 
@@ -60,41 +61,41 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
     package = host_mode.render_host("daniel-pi", root)
 
     text = package.files[MANIFEST][0].decode()
-    parsed = _reconcile().parse_manifest(text)
-    assert parsed == {
-        "units": {
-            "homelab-beat.service": {"policy": "manual"},
-            "homelab-beat.timer": {},
-            "homelab-updater.service": {},
-            "homelab-updater.timer": {},
+    reconcile = _reconcile()
+    parsed = reconcile.parse_manifest(text)
+    legacy = (
+        reconcile.LegacyPath(Path("/usr/local/bin/beat.sh")),
+        reconcile.LegacyCron("Beat heartbeat", "ubuntu"),
+        reconcile.LegacyCronFile("beat"),
+        reconcile.LegacyUnit("beat.service"),
+    )
+    assert parsed == reconcile.Manifest(
+        units={
+            "homelab-beat.service": "manual",
+            "homelab-beat.timer": None,
+            "homelab-updater.service": None,
+            "homelab-updater.timer": None,
         },
-        "enable_links": ["homelab-beat.timer"],
-        "legacy": [
-            {"path": "/usr/local/bin/beat.sh"},
-            {"cron": "Beat heartbeat", "user": "ubuntu"},
-            {"cron_file": "beat"},
-            {"unit": "beat.service"},
-        ],
-        "handoffs": [
-            {
-                "units": [
+        enable_links=frozenset({"homelab-beat.timer"}),
+        legacy=legacy,
+        handoffs=(
+            reconcile.Handoff(
+                (
                     "homelab-beat.service",
                     "homelab-beat.timer",
                     "homelab-updater.timer",
-                ],
-                "legacy": [
-                    {"path": "/usr/local/bin/beat.sh"},
-                    {"cron": "Beat heartbeat", "user": "ubuntu"},
-                    {"cron_file": "beat"},
-                    {"unit": "beat.service"},
-                ],
-            }
-        ],
-        "reconcilers": [],
-        "activations": {},
-        "arms": dict.fromkeys(("libvirt", "lines", "ufw", "users")),
-    }
-    assert parsed["legacy"] == package.legacy
+                ),
+                legacy,
+            ),
+        ),
+        unknown_arms=(),
+        activations={},
+        arms=dict.fromkeys(("libvirt", "lines", "ufw", "users")),
+        secrets_digest=None,
+    )
+    assert [
+        json.loads(reconcile.legacy_key(e)) for e in parsed.legacy
+    ] == package.legacy
 
 
 @pytest.mark.parametrize("on", [True, False])
@@ -234,10 +235,9 @@ def test_a_legacy_entry_ships_without_its_when_only_while_it_holds(hosts, on):
 
     expected = [] if on else [{"path": "/x.prom"}]
     assert package.legacy == expected
-    assert (
-        _reconcile().parse_manifest(json.dumps(_manifest(package)))["legacy"]
-        == expected
-    )
+    reconcile = _reconcile()
+    parsed = reconcile.parse_manifest(json.dumps(_manifest(package)))
+    assert [json.loads(reconcile.legacy_key(e)) for e in parsed.legacy] == expected
 
 
 def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):

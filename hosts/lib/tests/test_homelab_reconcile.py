@@ -8,6 +8,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile.py
 """
 
 import fcntl
+import json
 import os
 import time
 from pathlib import Path
@@ -535,3 +536,14 @@ def test_a_failed_restart_keeps_its_old_hash_and_the_next_run_retries_only_it(no
     assert retried.returncode == 0, retried.stderr
     assert node.actions() == [["restart", "homelab-pi-sd.service"]]
     assert node.applied()["result"]["ok"] is True
+
+
+def test_a_record_entry_of_the_wrong_type_reads_as_absent(node):
+    node.manifest["legacy"].append({"path": "/usr/local/bin/old"})
+    node.applied_path.parent.mkdir(parents=True)
+    node.applied_path.write_text(json.dumps({"retired": [{"path": "/old"}]}))
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["retired"] == ['{"path": "/usr/local/bin/old"}']
