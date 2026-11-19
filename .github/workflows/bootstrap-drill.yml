@@ -24,6 +24,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/bootstrap-drill.yml
+      - .github/actions/pinned-tool/action.yml
       - scripts/deploy_tools/bootstrap_drill.py
       - scripts/renderer/**
       - k8s/roles/flux/**

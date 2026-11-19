@@ -75,7 +75,8 @@ jobs:
 
       # A dispatch always runs the drill. A pull request runs it when the diff touches the
       # renderer, the fixture tree, the flux role's defaults or sync objects, the registry role,
-      # the PriorityClasses, the break-glass page or this file, and prints `skipped` otherwise.
+      # the PriorityClasses, the break-glass page, the pinned-tool action or this file, and
+      # prints `skipped` otherwise.
       - name: Check whether this PR touches the drill's inputs
         id: scope
         if: github.event_name == 'pull_request'
@@ -96,9 +97,10 @@ jobs:
               k8s/roles/registry/ \
               k8s/roles/cluster-base/templates/priorityclass.yaml.j2 \
               docs/break-glass.md \
+              .github/actions/pinned-tool/action.yml \
               .github/workflows/flux-deletion-drill.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "skipped: no renderer, fixture, flux or registry role, break-glass page or workflow change"
+            echo "skipped: no renderer, fixture, flux or registry role, break-glass page, pinned-tool or workflow change"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
