@@ -8,8 +8,7 @@ value comes from a role's `tasks/`.
 A build's paths come from `role_file()`, so a lookup reads the calling role's files.
 
 No value a template reads comes from live state, so the renderer pins no fact. Target slice
-R3 removed the last live reads, and R3's live-read census in `scripts/renderer/tests/` holds
-the tree to that.
+R3 removed the last live reads, and `dialect.py` refuses every lookup that could add one.
 """
 
 import sys as _sys

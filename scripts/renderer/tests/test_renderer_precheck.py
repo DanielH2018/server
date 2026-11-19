@@ -32,8 +32,8 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.ordering import (
-    ANSIBLE_OWNED_DEPS,
     TAG_KIND_SUFFIXES,
+    UNRENDERED_DEPS,
     Ordering,
     kustomization_edges,
     split_kind,
@@ -171,8 +171,8 @@ def _depends(doc: dict) -> list[str]:
     return [edge["name"] for edge in doc["spec"].get("dependsOn", [])]
 
 
-def _dropped(doc: dict) -> str | None:
-    return (doc["metadata"].get("annotations") or {}).get(ANSIBLE_OWNED_DEPS)
+def _unrendered(doc: dict) -> str | None:
+    return (doc["metadata"].get("annotations") or {}).get(UNRENDERED_DEPS)
 
 
 def _every_kind() -> dict:
@@ -217,7 +217,7 @@ def test_a_precheck_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
     precheck = docs.get(PIHOLE_PRECHECK)
     assert precheck is not None, "flux/pihole.yaml holds no pihole-precheck"
     assert _depends(precheck) == ["bento-pdf"]
-    assert _dropped(precheck) == "traefik"
+    assert _unrendered(precheck) == "traefik"
 
 
 def test_a_precheck_kind_follows_its_tag_in_suffix_order():

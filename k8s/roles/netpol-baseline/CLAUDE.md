@@ -63,9 +63,7 @@ tighter or looser allow-list than the baseline
   a dependency of `netpol-baseline` on every other flux-owned tag and on every other tag's
   `-deferred` Kustomization. `netpol-baseline-deferred` depends on `netpol-baseline`, and
   `netpol-baseline-verify` on `netpol-baseline-deferred`. Flux's `wait` and that ordering
-  hold the role until every other rollout is Ready. Every k8s role is
-  flux-owned, so the renderer drops none of these edges into the `homelab/ansible-owned-deps`
-  annotation.
+  hold the role until every other rollout is Ready.
 - **A failed workload change leaves these policies unapplied.** The role depends on every
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
