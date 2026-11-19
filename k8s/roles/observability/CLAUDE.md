@@ -77,9 +77,11 @@ names without putting their bytes in the annotation. The role's defaults list it
 `manifests_self_rollouts`, from
 `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads`. Each
 Secret reader names the rendered files its pod reads in `restart_secrets`:
-`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` for
-grafana and `alertmanager-secret.yaml` for alertmanager. The first two render from the
-role's `render_secrets` entries.
+`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` and
+`grafana-warehouse-datasource-secret.yaml` for grafana, and `alertmanager-secret.yaml` for
+alertmanager. The first two render from the role's `render_secrets` entries. Grafana mounts
+the warehouse datasource Secret as a projected volume source, beside its provisioning
+ConfigMap.
 `tests/services/test_observability_config_rolls_one_workload.py` holds that
 declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
 An Alertmanager config edit rolls Alertmanager alone.
