@@ -6,6 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_batch.py
 assert what happened to each PR, not which calls ran.
 """
 
+import os
 from dataclasses import replace
 
 import pytest
@@ -13,7 +14,7 @@ import pytest
 import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
-from deploy_tools.land_lib import batch, line
+from deploy_tools.land_lib import batch, line, turn
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -284,8 +285,22 @@ def test_a_batch_github_refuses_partway_leaves_the_landing_its_own_pr(
     assert "could not form a landing batch" in capsys.readouterr().out
 
 
-def test_landing_code_older_than_masters_forms_no_batch(batch_of):
+def test_landing_code_older_than_masters_hands_the_turn_to_a_fresh_landing(
+    batch_of, tmp_path
+):
     # Master's landing code changed while this landing waited for the turn.
+    ln, hub, the_line = batch_of(
+        drafts=("7",), fakes=Fakes(stale_code=["scripts/deploy_tools/land.py"])
+    )
+    ln.tools = replace(ln.tools, try_turn=lambda: turn.try_take(tmp_path / "turn.lock"))
+    with pytest.raises(turn.HandOver) as handed:
+        land(ln)
+    os.close(handed.value.fd)
+    assert hub.stacked == {} and hub.batch_prs == [] and hub.merged == []
+    assert the_line("waiting", str(line.FRESH_S)).split() == ["7", head_of("7")]
+
+
+def test_older_landing_code_with_a_turn_it_cannot_hand_over_forms_no_batch(batch_of):
     ln, hub, the_line = batch_of(
         drafts=("7",), fakes=Fakes(stale_code=["scripts/deploy_tools/land.py"])
     )
