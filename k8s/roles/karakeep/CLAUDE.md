@@ -85,7 +85,8 @@ loop to auto-tag bookmarks
 - `karakeep-chrome` is listed too, with `restart_on: []` (#4564). The drain waits on the roll
   a `karakeep_k8s_chrome_image` bump makes, and no karakeep edit restarts chrome mid-crawl.
   The renderer honours the empty list, so chrome gets no restart checksum.
-  `tests/services/test_karakeep_chrome_rollout.py` pins both.
+  The `extra-rollouts-restart-as-declared` row of `tests/repo/test_census_rows_roles.py` pins
+  both.
 - **The time-tagger's image is built in-cluster**, from `templates/Dockerfile.j2`, since #2672
   — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus
   `UV_CACHE_DIR=/uv-cache`. It exists only so the tagger can run as uid 1000. Two paths blocked
@@ -109,8 +110,9 @@ loop to auto-tag bookmarks
 - `files/karakeep-time-tagger.py` is a fork of upstream's script (not fetched at render time)
   because CI renders every template on a machine that has never deployed. It carries the
   logging changes of #8985 and lists `0-5m` in `TIME_TAGS`, the slot its estimate returns
-  that upstream's list left out (#9095), so `test_karakeep_time_tagger_script.py` holds it to its own sha256
-  and names the upstream commit it forked from. Edit the script and the test's hash together.
+  that upstream's list left out (#9095), so the `karakeep-time-tagger-script-matches-its-pinned-sha256` row
+  of `tests/repo/_config_rows.py` holds it to its own sha256, and `defaults/main.yml` names the
+  upstream commit it forked from. Edit the script and the row's hash together.
 - **`karakeep-archive-pruner`** (CronJob) prunes archived bookmarks by age, and only logs a
   dry run while `karakeep_k8s_pruner_apply` is false. Rules: `files/karakeep_archive_pruner.py`.
 - **The pruner's gate Job, in `karakeep-verify`.** `defaults/main.yml` names the CronJob in

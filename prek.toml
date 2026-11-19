@@ -10,7 +10,7 @@
 # default_stages does NOT reach a hook whose upstream manifest declares `stages` itself, and
 # pre-commit-hooks v6.0.0 lists `[pre-commit, pre-push, manual]` on three of ours. So every hook
 # from a remote repo repeats `stages = ["pre-commit"]`, which also covers a manifest that gains
-# `stages` on a Renovate bump. ENFORCED: tests/repo/test_prek_hooks_run_only_at_commit.py
+# `stages` on a Renovate bump. ENFORCED: the `every-remote-prek-hook-pins-the-commit-stage` row in tests/repo/_config_rows.py
 default_stages = ["pre-commit"]
 
 # `prek install` writes a shim per type listed here. Without `commit-msg` in the list, the

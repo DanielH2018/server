@@ -41,7 +41,8 @@ CONCURRENT = 5
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
-# (tests/repo/test_promote_workflow_verify.py).
+# (the `promote-verify-timeout-holds-the-capped-derived-timeout` row of
+# tests/repo/test_census_rows_workflows.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
 # (#5868: 38172s with 128 Kustomizations, soak included, against 19800s). `verify`'s own wait is the same
 # `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would

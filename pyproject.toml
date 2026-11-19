@@ -293,9 +293,9 @@ select = [
 # it would be redundant rather than load-bearing.
 
 [tool.ruff.lint.per-file-ignores]
-# Vendored upstream script, byte-for-byte: tests/services/test_karakeep_time_tagger_script.py
-# asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
-# drift that test exists to catch.
+# Vendored upstream script, byte-for-byte: the `karakeep-time-tagger-script-matches-its-pinned-sha256`
+# row in tests/repo/_config_rows.py asserts its sha256 against the commit the archived Docker role
+# pins, so a lint fix here is a drift that row exists to catch.
 #
 # The docstring-layout rules are here for the same reason, and they are the load-bearing half:
 # this file's docstrings trip D212, so without this entry `ruff check --fix`
