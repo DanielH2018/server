@@ -40,9 +40,9 @@ skipped required job as a pass.
 
 ## A pull request runs the test modules its diff can affect
 
-A pull-request run's `pytest` legs run a selection, and a push to master and a dispatch run
-every module (#8458, ruled by the operator on 2026-11-15). A push whose tree a
-pull-request run tested runs nothing
+A pull-request run's `pytest` legs run a selection (#8458, ruled by the operator on
+2026-11-15), and so does a push to master whose tree no pull-request run tested. A
+dispatch runs every module. A push whose tree a pull-request run tested runs nothing
 ([ADR-0036](adr/0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md)).
 
 - **The table.** `scripts/dev/affected_tests.json` holds, for each test module, the tracked
@@ -72,6 +72,15 @@ pull-request run tested runs nothing
   would be the one the pull-request run already ran, and it skips every job
   (`tests/repo/test_ci_skip_proven_master.py::test_a_run_records_the_tree_it_tested_unless_it_was_proven`).
   A landing batch whose run was selected still records nothing on its members.
+- **An unproven push selects against the newest green ancestor.** Master moved under the
+  pull request, so no run tested the pushed tree. The `prove` job names a base,
+  `scripts/dev/tested_tree.py:green_base`: the newest first-parent ancestor whose `prek`
+  gate passed. The legs select the modules the diff from that base can affect. The base is
+  not always the parent. A selection against a parent whose run is red would leave out
+  what the parent broke, and master would read green with that module failing
+  (`scripts/dev/tests/test_tested_tree.py::test_a_red_or_unfinished_parent_is_skipped_for_the_ancestor_behind_it`).
+  A parent whose run has not finished is skipped the same way. With no green ancestor
+  within `MAX_BASE_WALK` commits, or a lookup that fails, the push runs every module.
 
 ## A nightly sweep runs every module
 
@@ -161,7 +170,8 @@ rule in `scripts/deploy_tools/land_lib/` stays where it is, and so does every ch
 pull-request run makes, because the one run is still a pull-request run.
 
 The queue is never what makes a merge correct. When master moves between a PR's run and its
-merge, the trees differ, nothing is proven, and master's run sweeps in full as it did before.
+merge, the trees differ, nothing is proven, and master's run repeats every job but `pytest`,
+whose legs run a selection against the newest green ancestor.
 
 **D9, ruled by the operator on 2026-11-14: every landing forms a batch, and sessions and the
 fan-out open their PRs as drafts.** B3 saves runs only for a draft whose head has had no CI
