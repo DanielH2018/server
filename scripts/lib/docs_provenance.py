@@ -25,11 +25,9 @@ to write the result.
 import datetime as dt
 import functools
 import subprocess
-import sys
 from collections.abc import Callable, Sized
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.git import git
 from lib.repo_paths import REPO
 

@@ -30,11 +30,6 @@ Pure pieces (``kubectl_argv``, ``node_names``, ``cluster_of``, ``cluster_refusal
 ``kubectl_json`` are the runners.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import json
 import os
 import shutil

@@ -25,14 +25,10 @@ import os
 import pwd
 import socket
 import subprocess
-import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-# The `lib` convention for a module that imports its siblings as `lib.<name>`; `render_guard`
-# carries the same insert.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import _claude_worktree  # noqa: F401
 from lib import fanout_lock

@@ -54,10 +54,10 @@ from deploy_tools.land_lib.pin_gate import hold_problem
 from deploy_tools.land_lib.pin_reads import PinReads
 from deploy_tools.land_lib.pin_reads import Unreadable as HoldUnreadable
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
-from lib.repo_paths import HOST_LIB_FILES
 
 # The Backup CR reader the backup-health cron ships; it imports host_lib.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
+
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
 from longhorn_lib import longhorn_backups
 

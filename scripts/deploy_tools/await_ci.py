@@ -37,10 +37,9 @@ from lib import gh_rate_limit
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import CI_DISARMED, CI_RED, CI_UNPROVEN
 from lib.git import git, git_stdout
-from lib.repo_paths import HOST_LIB_FILES
 
 # The host-side verdict logic and GitHub request, which checkout-sync and the builder ship.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 
 from builder_ci_grade import read_check_pages
 from ci_verdict import (

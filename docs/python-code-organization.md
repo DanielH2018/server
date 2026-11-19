@@ -134,15 +134,18 @@ directory in another root.
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path
 initialization][syspath]). `python -m scripts.dir.name` would put the current directory
 first instead, but that requires every cron and every hook to start from the repo root, and
-the role-shipped programs have no repo root at all. So a module that imports across a
-directory boundary carries its own insert:
+the role-shipped programs have no repo root at all. `scripts/` itself is the installed import
+root ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so a dotted import such as
+`from lib.repo_paths import REPO` needs no insert. A module that imports a sibling in another
+directory by bare name still carries its own insert of that directory, until its area is
+qualified:
 
 ```python
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from lib.repo_paths import REPO
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "dev"))
+import fanout_lib
 ```
 
 The bootstrap goes on the module that needs it, never on a shared module, because a single
