@@ -124,10 +124,10 @@ class StubUndefined(ChainableUndefined):
         return iter(())
 
     def __add__(self, other):  # {{ secret | indent(n) }}
-        return self._FILL + str(other)
+        return str(self) + str(other)
 
     def __radd__(self, other):
-        return str(other) + self._FILL
+        return str(other) + str(self)
 
 
 class StrictChainableUndefined(ChainableUndefined, StrictUndefined):

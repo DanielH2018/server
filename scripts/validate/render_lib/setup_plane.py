@@ -33,7 +33,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined, meta
+from jinja2 import meta
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -49,6 +49,7 @@ from lib.render_guard import (
     dump_numbered,
     host_files,
     load_yaml,
+    StubUndefined,
     make_env,
 )
 from lib.repo_paths import REPO, SECRETS
@@ -65,22 +66,20 @@ HOST_RENDER_CONTEXT = {"inventory_hostname": "daniel-box"}
 
 
 def _tracking_undefined(seen: dict[str, set[str]], template: str):
-    """A Jinja Undefined that records the name it stood in for instead of raising.
+    """`StubUndefined`, recording into `seen[template]` each name it stood in for.
 
-    Renders as the literal ``STUB`` (the same fill the other guards use) so a single missing
-    value does not abort the render and hide every later problem in the same file. `main()`
-    judges the collected names afterwards.
+    It fills like the other families' stub, so a single missing value does not abort the
+    render and hide every later problem in the same file. `run()` judges the collected names
+    afterwards.
     """
 
-    class Tracking(ChainableUndefined):
-        _FILL = "STUB"
-
+    class Tracking(StubUndefined):
         def _record(self):
             seen[template].add(self._undefined_name or "<unnamed>")
 
         def __str__(self) -> str:
             self._record()
-            return self._FILL
+            return super().__str__()
 
         def __bool__(self) -> bool:
             # `{% if undefined %}` is an error under Ansible's Templar, so it is one here too.
@@ -91,13 +90,7 @@ def _tracking_undefined(seen: dict[str, set[str]], template: str):
 
         def __iter__(self):
             self._record()
-            return iter(())
-
-        def __add__(self, other):  # {{ secret | indent(n) }}
-            return str(self) + str(other)
-
-        def __radd__(self, other):
-            return str(other) + str(self)
+            return super().__iter__()
 
     return Tracking
 

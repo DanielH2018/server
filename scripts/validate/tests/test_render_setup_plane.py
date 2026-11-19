@@ -70,6 +70,15 @@ def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):
     assert "longhorn_b2_key_id_that_no_rename_left_behind" in problems[0]
 
 
+def test_an_undefined_variable_reached_through_indent_is_flagged(tmp_path, ctx, known):
+    """`indent` concatenates onto the undefined, which must record the name like a print."""
+    tpl = tmp_path / "role" / "templates" / "creds.yaml.j2"
+    tpl.parent.mkdir(parents=True)
+    tpl.write_text("key: |\n  {{ an_indented_name_nothing_defines | indent(2) }}\n")
+    problems = v.check_template(tpl, ctx, known)
+    assert any("an_indented_name_nothing_defines" in p for p in problems)
+
+
 def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     """The accepting half, over each source the tree supplies a name from."""
     tpl = tmp_path / "role" / "templates" / "creds.yaml.j2"
