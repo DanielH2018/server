@@ -1353,8 +1353,8 @@ with no verdict, and `settle` holds it as `<T> unverified`.
 `verify` job that its own `timeout-minutes` stops leaves no verdict, and `settle` writes
 `<T> unverified`, which names no Kustomization. At the cap `verify` prints `failed` with the
 names that never passed, and `settle` writes that hold like any other timeout. Three limits
-are sized from the cap, and `tests/repo/test_promote_workflow_verify.py` holds them
-against each other:
+are sized from the cap, and the `promote-verify-*` and `promote-job-timeout-*` rows of
+`tests/repo/test_census_rows_workflows.py` hold them against each other:
 
 | Limit | Value | Why |
 |---|---|---|
@@ -1415,7 +1415,8 @@ without `--role` renders every tag. That bundle holds the shared kinds and a roo
 and no tag, so the first decryption of the cluster file gets a revision of its own. Both
 branches pass `--all-images`, because the `images` job refuses a render without
 `images/tags.json` and `publish` needs that job (#5593).
-`tests/repo/test_promote_workflow_bundle.py` fails a no-tag branch without
+The `promote-render-no-tag-branch-renders-the-shared-kinds` row of
+`tests/repo/test_census_rows_workflows.py` fails a no-tag branch without
 `--shared-only` or `--all-images`.
 
 After the census, the step `ciphertext` runs `cluster_vars.py check --ciphertext-only` on

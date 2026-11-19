@@ -464,7 +464,6 @@ the other test files that cover at least one of those lines.
 | `.claude/hooks/tests/test_rules_globs_match_a_tracked_file.py` | 39 | 438 |
 | `scripts/lib/tests/test_renovate_annotations.py` | 39 | 584 |
 | `tests/repo/test_host_package_build_step.py` | 39 | 913 |
-| `tests/repo/test_host_package_cases_run_on_their_inputs.py` | 39 | 913 |
 | `tests/repo/test_ci_tool_pins_do_not_move_backwards.py` | 38 | 253 |
 | `tests/repo/test_module_length_ratchet.py` | 38 | 253 |
 | `scripts/deploy_tools/tests/test_promote_forward_only_real_tags.py` | 37 | 1109 |
@@ -636,8 +635,6 @@ the other test files that cover at least one of those lines.
 | `scripts/lib/tests/test_yaml_fast.py` | 7 | 1043 |
 | `tests/k8s/test_service_role_claude_md_has_at_a_glance.py` | 7 | 431 |
 | `tests/k8s/test_netpol_probe_targets.py` | 6 | 662 |
-| `tests/services/test_karakeep_chrome_rollout.py` | 6 | 163 |
-| `tests/services/test_scrutiny_rollouts.py` | 6 | 163 |
 | `tests/deploy/test_containers_list_names_unique.py` | 5 | 431 |
 | `hosts/lib/tests/test_bootstrap_host.py` | 4 | 317 |
 | `hosts/lib/tests/test_bootstrap_host_baseline.py` | 4 | 317 |
@@ -719,10 +716,8 @@ the other test files that cover at least one of those lines.
 | `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py` | 1 | 624 |
 | `tests/longhorn/test_volume_revert_include.py` | 1 | 624 |
 | `tests/repo/test_ci_apt_fallback_mirror.py` | 1 | 624 |
-| `tests/repo/test_ci_bootstrap_cases_own_job.py` | 1 | 624 |
 | `tests/repo/test_ci_dispatch_sweeps_everything.py` | 1 | 624 |
 | `tests/repo/test_ci_k3s_download_job_off_critical_path.py` | 1 | 624 |
-| `tests/repo/test_ci_k3s_download_leg_does_not_gate.py` | 1 | 624 |
 | `tests/repo/test_ci_lint_group.py` | 1 | 624 |
 | `tests/repo/test_ci_master_runs_are_not_evictable.py` | 1 | 624 |
 | `tests/repo/test_ci_pytest_job_fetch_depth.py` | 1 | 624 |
@@ -735,15 +730,7 @@ the other test files that cover at least one of those lines.
 | `tests/repo/test_kind_node_image_follows_k3s.py` | 1 | 624 |
 | `tests/repo/test_lan_facts_have_one_source.py` | 1 | 624 |
 | `tests/repo/test_promote_runtime_imports.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow_bundle.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow_schedule.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow_starters.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow_uv_groups.py` | 1 | 624 |
-| `tests/repo/test_promote_workflow_verify.py` | 1 | 624 |
-| `tests/repo/test_prune_artifacts_workflow.py` | 1 | 624 |
 | `tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py` | 1 | 624 |
-| `tests/repo/test_setup_action_uv_cache.py` | 1 | 624 |
 | `tests/repo/test_sops_creation_rules.py` | 1 | 624 |
 | `tests/repo/test_vale_matches_the_ci_pin.py` | 1 | 624 |
 | `tests/services/test_alert_runbook_urls.py` | 1 | 624 |
@@ -752,10 +739,8 @@ the other test files that cover at least one of those lines.
 | `tests/services/test_authelia_config_schema.py` | 1 | 624 |
 | `tests/services/test_blackbox_exporter_modules.py` | 1 | 624 |
 | `tests/services/test_dashboard_folders_are_mounted.py` | 1 | 624 |
-| `tests/services/test_deploy_pipeline_reboot_window_rule.py` | 1 | 624 |
 | `tests/services/test_dri_resource_name_agrees.py` | 1 | 624 |
 | `tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py` | 1 | 624 |
-| `tests/services/test_flux_not_ready_comment_pager.py` | 1 | 624 |
 | `tests/services/test_grafana_authelia_oidc.py` | 1 | 624 |
 | `tests/services/test_ha_trusted_proxies_cover_cloudflare.py` | 1 | 624 |
 | `tests/services/test_homepage_calendar_tracks_follow_services_rows.py` | 1 | 624 |
@@ -776,7 +761,7 @@ the other test files that cover at least one of those lines.
 
 Each group's files cover exactly the same measured lines.
 
-- 74 files: `hosts/lib/tests/test_host_census.py`, `hosts/tests/test_coredns_metrics_port_agrees.py`, `hosts/tests/test_docker_engine_hold_list.py`, `hosts/tests/test_etcd_quota_and_its_monitor_agree.py`, `hosts/tests/test_host_python_pin.py`, `hosts/tests/test_k3s_host_has_no_docker.py`, `hosts/tests/test_k3s_join_port_symmetry.py`, `hosts/tests/test_server_names_daniel_pi.py`, `hosts/tests/test_ssh_rate_limit_lan_exempt.py`, `hosts/tests/test_unattended_origins_pattern.py`, `hosts/tests/test_wan_probe_urls_match_the_bridge.py`, `k8s/roles/monitor-bridge/tests/test_bridge_grace_rules.py`, `k8s/roles/monitor-bridge/tests/test_bridge_prometheus_gated_rules.py`, `k8s/roles/monitor-bridge/tests/test_bridge_ungated_rules.py`, `tests/k8s/test_alloy_ships_k3s_log.py`, `tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py`, `tests/k8s/test_forwardauth_rebuilds_request_target.py`, `tests/k8s/test_rate_limit_keys_on_the_client.py`, `tests/k8s/test_workload_service_overrides.py`, `tests/longhorn/test_pvc_sizes_match_block_size.py`, `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py`, `tests/longhorn/test_volume_revert_include.py`, `tests/repo/test_ci_apt_fallback_mirror.py`, `tests/repo/test_ci_bootstrap_cases_own_job.py`, `tests/repo/test_ci_dispatch_sweeps_everything.py`, `tests/repo/test_ci_k3s_download_job_off_critical_path.py`, `tests/repo/test_ci_k3s_download_leg_does_not_gate.py`, `tests/repo/test_ci_lint_group.py`, `tests/repo/test_ci_master_runs_are_not_evictable.py`, `tests/repo/test_ci_pytest_job_fetch_depth.py`, `tests/repo/test_ci_release_downloads_are_cached.py`, `tests/repo/test_ci_skip_proven_master.py`, `tests/repo/test_every_ci_job_is_gated.py`, `tests/repo/test_host_package_scans_run_on_every_pr.py`, `tests/repo/test_host_test_image_predownloads.py`, `tests/repo/test_kind_node_image_follows_k3s.py`, `tests/repo/test_lan_facts_have_one_source.py`, `tests/repo/test_promote_runtime_imports.py`, `tests/repo/test_promote_workflow.py`, `tests/repo/test_promote_workflow_bundle.py`, `tests/repo/test_promote_workflow_schedule.py`, `tests/repo/test_promote_workflow_starters.py`, `tests/repo/test_promote_workflow_uv_groups.py`, `tests/repo/test_promote_workflow_verify.py`, `tests/repo/test_prune_artifacts_workflow.py`, `tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py`, `tests/repo/test_setup_action_uv_cache.py`, `tests/repo/test_sops_creation_rules.py`, `tests/repo/test_vale_matches_the_ci_pin.py`, `tests/services/test_alert_runbook_urls.py`, `tests/services/test_artifacts_configmap.py`, `tests/services/test_authelia_argon2_parameters_agree.py`, `tests/services/test_authelia_config_schema.py`, `tests/services/test_blackbox_exporter_modules.py`, `tests/services/test_dashboard_folders_are_mounted.py`, `tests/services/test_deploy_pipeline_reboot_window_rule.py`, `tests/services/test_dri_resource_name_agrees.py`, `tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py`, `tests/services/test_flux_not_ready_comment_pager.py`, `tests/services/test_grafana_authelia_oidc.py`, `tests/services/test_ha_trusted_proxies_cover_cloudflare.py`, `tests/services/test_homepage_calendar_tracks_follow_services_rows.py`, `tests/services/test_homepage_longhorn_widget_url.py`, `tests/services/test_host_job_series_have_a_board.py`, `tests/services/test_k8s_workloads_rule_literals.py`, `tests/services/test_lan_address_rules_agree.py`, `tests/services/test_metric_drop_regexes.py`, `tests/services/test_monitor_bridge_modules.py`, `tests/services/test_observability_cluster_ips_pinned.py`, `tests/services/test_observability_config_rolls_one_workload.py`, `tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py`, `tests/services/test_scrape_target_flap_rule.py`, `tests/services/test_smtp_wiring.py`, `tests/services/test_storage_rule_literals.py`
+- 62 files: `hosts/lib/tests/test_host_census.py`, `hosts/tests/test_coredns_metrics_port_agrees.py`, `hosts/tests/test_docker_engine_hold_list.py`, `hosts/tests/test_etcd_quota_and_its_monitor_agree.py`, `hosts/tests/test_host_python_pin.py`, `hosts/tests/test_k3s_host_has_no_docker.py`, `hosts/tests/test_k3s_join_port_symmetry.py`, `hosts/tests/test_server_names_daniel_pi.py`, `hosts/tests/test_ssh_rate_limit_lan_exempt.py`, `hosts/tests/test_unattended_origins_pattern.py`, `hosts/tests/test_wan_probe_urls_match_the_bridge.py`, `k8s/roles/monitor-bridge/tests/test_bridge_grace_rules.py`, `k8s/roles/monitor-bridge/tests/test_bridge_prometheus_gated_rules.py`, `k8s/roles/monitor-bridge/tests/test_bridge_ungated_rules.py`, `tests/k8s/test_alloy_ships_k3s_log.py`, `tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py`, `tests/k8s/test_forwardauth_rebuilds_request_target.py`, `tests/k8s/test_rate_limit_keys_on_the_client.py`, `tests/k8s/test_workload_service_overrides.py`, `tests/longhorn/test_pvc_sizes_match_block_size.py`, `tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py`, `tests/longhorn/test_volume_revert_include.py`, `tests/repo/test_ci_apt_fallback_mirror.py`, `tests/repo/test_ci_dispatch_sweeps_everything.py`, `tests/repo/test_ci_k3s_download_job_off_critical_path.py`, `tests/repo/test_ci_lint_group.py`, `tests/repo/test_ci_master_runs_are_not_evictable.py`, `tests/repo/test_ci_pytest_job_fetch_depth.py`, `tests/repo/test_ci_release_downloads_are_cached.py`, `tests/repo/test_ci_skip_proven_master.py`, `tests/repo/test_every_ci_job_is_gated.py`, `tests/repo/test_host_package_scans_run_on_every_pr.py`, `tests/repo/test_host_test_image_predownloads.py`, `tests/repo/test_kind_node_image_follows_k3s.py`, `tests/repo/test_lan_facts_have_one_source.py`, `tests/repo/test_promote_runtime_imports.py`, `tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py`, `tests/repo/test_sops_creation_rules.py`, `tests/repo/test_vale_matches_the_ci_pin.py`, `tests/services/test_alert_runbook_urls.py`, `tests/services/test_artifacts_configmap.py`, `tests/services/test_authelia_argon2_parameters_agree.py`, `tests/services/test_authelia_config_schema.py`, `tests/services/test_blackbox_exporter_modules.py`, `tests/services/test_dashboard_folders_are_mounted.py`, `tests/services/test_dri_resource_name_agrees.py`, `tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py`, `tests/services/test_grafana_authelia_oidc.py`, `tests/services/test_ha_trusted_proxies_cover_cloudflare.py`, `tests/services/test_homepage_calendar_tracks_follow_services_rows.py`, `tests/services/test_homepage_longhorn_widget_url.py`, `tests/services/test_host_job_series_have_a_board.py`, `tests/services/test_k8s_workloads_rule_literals.py`, `tests/services/test_lan_address_rules_agree.py`, `tests/services/test_metric_drop_regexes.py`, `tests/services/test_monitor_bridge_modules.py`, `tests/services/test_observability_cluster_ips_pinned.py`, `tests/services/test_observability_config_rolls_one_workload.py`, `tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py`, `tests/services/test_scrape_target_flap_rule.py`, `tests/services/test_smtp_wiring.py`, `tests/services/test_storage_rule_literals.py`
 - 34 files: `scripts/dev/tests/test_fanout_headless_imports.py`, `scripts/dev/tests/test_run_as_cron.py`, `scripts/diagnostics/tests/test_probe_bad_since_census.py`, `scripts/diagnostics/tests/test_probe_boundaries.py`, `scripts/diagnostics/tests/test_ui_smoke_helpers.py`, `scripts/docs/tests/test_catalog_lib_layout.py`, `scripts/docs/tests/test_fragments_lib_layout.py`, `scripts/lib/tests/test_ansible_bool_rationale.py`, `scripts/lib/tests/test_entry_point_census_collects_cheaply.py`, `scripts/lib/tests/test_help_check_rejects_work_output.py`, `scripts/lib/tests/test_script_classify_surface.py`, `scripts/renderer/tests/test_renderer_size_ceiling.py`, `scripts/secrets_mgmt/tests/test_secrets_lib_layout.py`, `scripts/tests/test_census_roots_cover_host_lib.py`, `scripts/tests/test_census_rows_test_modules.py`, `scripts/tests/test_census_rows_test_renders.py`, `scripts/tests/test_fqdn_links_js.py`, `scripts/tests/test_mkdocs_config.py`, `scripts/tests/test_prek_files_cover_entry_imports.py`, `scripts/tests/test_prek_files_cover_pythonpath_imports.py`, `scripts/tests/test_renovate_automerge_does_not_chase_master.py`, `scripts/tests/test_renovate_cluster_pin_rules.py`, `scripts/tests/test_renovate_cosign_release.py`, `scripts/tests/test_renovate_digest_soak_without_timestamp.py`, `scripts/tests/test_renovate_docker_engine_pins.py`, `scripts/tests/test_renovate_manager_overlap.py`, `scripts/tests/test_renovate_manual_rules_push_weekly.py`, `scripts/tests/test_renovate_nginx_digest_soak.py`, `scripts/tests/test_renovate_python_group.py`, `scripts/tests/test_renovate_renderer_closure_no_automerge.py`, `scripts/tests/test_script_bootstraps_present.py`, `scripts/tests/test_scripts_import_direction.py`, `scripts/tests/test_table_filter_js.py`, `scripts/tests/test_vale_scope.py`
 - 25 files: `hosts/components/registry-gc/tests/test_ghcr_mirror_prune.py`, `hosts/lib/tests/test_hosts_tree_is_tracked.py`, `hosts/lib/tests/test_reconcile_stub_imports.py`, `hosts/tests/test_docs_refresh_failure_path.py`, `hosts/tests/test_etcd_restore_drill_verify.py`, `hosts/tests/test_eval_run_failure_path.py`, `hosts/tests/test_health_cron_boot_grace.py`, `tests/k8s/test_uncovered_roles_justifications_resolve.py`, `tests/repo/test_census_rows_python.py`, `tests/repo/test_census_rows_suite.py`, `tests/repo/test_claude_md_paragraphs_have_one_home.py`, `tests/repo/test_docs_relative_links_resolve.py`, `tests/repo/test_installed_units_log_level.py`, `tests/repo/test_k8s_render_prebuild.py`, `tests/repo/test_row_table.py`, `tests/repo/test_scripts_suite_collects_on_its_own.py`, `tests/repo/test_tracked_python_hazards.py`, `tests/repo/test_ty_config_covers_the_repo.py`, `tests/services/test_jellyfin_plugin_allowlist.py`, `tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py`, `tests/services/test_pi_peer_backup_push_line_is_readable.py`, `tests/services/test_registry_gc_dockerhub_mirror.py`, `tests/services/test_registry_gc_ghcr_mirror.py`, `tests/services/test_registry_gc_mirror_job_report.py`, `tests/services/test_registry_gc_state_file_is_json.py`
 - 14 files: `hosts/components/claude-code/tests/test_takeover_check_flux_selection.py`, `hosts/lib/tests/test_homelab_reconcile.py`, `hosts/lib/tests/test_homelab_reconcile_batched_reads.py`, `hosts/lib/tests/test_homelab_reconcile_timing.py`, `hosts/lib/tests/test_homelab_reconcile_udev.py`, `hosts/lib/tests/test_homelab_updater.py`, `hosts/lib/tests/test_homelab_updater_fetch.py`, `hosts/lib/tests/test_reconcile_activation.py`, `hosts/lib/tests/test_reconcile_hold_way_out.py`, `hosts/lib/tests/test_reconcile_libvirt_arm.py`, `hosts/lib/tests/test_reconcile_lines_arm.py`, `hosts/lib/tests/test_reconcile_shadow_handoff.py`, `hosts/lib/tests/test_reconcile_ufw_arm.py`, `hosts/lib/tests/test_reconcile_users_arm.py`
@@ -827,9 +812,7 @@ Each group's files cover exactly the same measured lines.
 - 2 files: `tests/k8s/test_reboot_window_cronjobs_age_out.py`, `tests/services/test_homepage_widget_urls_carry_no_credentials.py`
 - 2 files: `tests/longhorn/test_longhorn_restore_drill_empty_waiver.py`, `tests/longhorn/test_longhorn_restore_drill_sqlite.py`
 - 2 files: `tests/repo/test_ci_tool_pins_do_not_move_backwards.py`, `tests/repo/test_module_length_ratchet.py`
-- 2 files: `tests/repo/test_host_package_build_step.py`, `tests/repo/test_host_package_cases_run_on_their_inputs.py`
 - 2 files: `tests/repo/test_k8s_render_role_template.py`, `tests/services/test_traefik_http_entrypoint_crowdsec.py`
-- 2 files: `tests/services/test_karakeep_chrome_rollout.py`, `tests/services/test_scrutiny_rollouts.py`
 - 2 files: `tests/staging/test_bootstrap_drill_mode.py`, `tests/staging/test_staging_egress_fence_fires.py`
 
 ### Test files that cover no measured line inside a test
@@ -915,23 +898,17 @@ helpers), or tests whose subject runs only in an unmeasured child process.
 - `tests/longhorn/test_volume_cr_has_no_volumename.py`
 - `tests/repo/test_component_contract_row.py`
 - `tests/repo/test_entry_points_outside_scripts_answer_help.py`
-- `tests/repo/test_fix_skeptic_pass_documented.py`
 - `tests/repo/test_gitleaks_allowlist_paths_are_anchored.py`
-- `tests/repo/test_gitleaks_manifest_digest_allowlist.py`
-- `tests/repo/test_gitleaks_secret_key_name_allowlist.py`
 - `tests/repo/test_guard_tests_read_renders_not_templates.py`
 - `tests/repo/test_helpers.py`
 - `tests/repo/test_leakguard.py`
 - `tests/repo/test_phase_timing.py`
-- `tests/repo/test_prek_hooks_run_only_at_commit.py`
-- `tests/repo/test_prek_uv_entries_are_frozen.py`
 - `tests/repo/test_process_waits.py`
 - `tests/repo/test_ratchet_rules.py`
 - `tests/repo/test_ratchet_tighten.py`
 - `tests/repo/test_render_gate.py`
 - `tests/repo/test_render_share.py`
 - `tests/repo/test_repair_commands_cannot_deadlock_on_their_own_guard.py`
-- `tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py`
 - `tests/repo/test_shell_entry_points_answer_help.py`
 - `tests/repo/test_static_ratchet_hook.py`
 - `tests/repo/test_unit_kubeconfig_row.py`
@@ -947,7 +924,6 @@ helpers), or tests whose subject runs only in an unmeasured child process.
 - `tests/services/test_ical_proxy_pins_match_uv_lock.py`
 - `tests/services/test_karakeep_backend_policies.py`
 - `tests/services/test_karakeep_public_bypass.py`
-- `tests/services/test_karakeep_time_tagger_script.py`
 - `tests/services/test_n8n_build_is_pinned.py`
 - `tests/services/test_n8n_web_port_is_fenced.py`
 - `tests/services/test_pi_peer_backup_ssh_key_secret.py`

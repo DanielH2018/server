@@ -283,7 +283,7 @@ and upstream facts through `gh`.
   most one pending run per concurrency group, and a newer run evicts the queued one. Actions
   are pinned by commit SHA, for example `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`.
   Every job runs on `ubuntu-26.04`, and the `workflow-runners-are-pinned` row of
-  `tests/repo/test_census_rows_text.py` refuses a floating label. The workflows at
+  `tests/repo/test_census_rows_workflows.py` refuses a floating label. The workflows at
   this commit are `ci.yml`, `image-smoke.yml` and `renovate-config-canary.yml`.
 - **The deployer reads CI through `deploy_git.py:ci_verdict`.**
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`

@@ -135,7 +135,10 @@ karakeep_k8s_meili_size: 2Gi
 # The time-tagger's script is vendored at files/karakeep-time-tagger.py rather than downloaded,
 # because a ConfigMap must render from something that exists at render time and CI renders every
 # template on a machine that has never deployed. It is 17K, far inside the 1M ConfigMap ceiling.
-# test_karakeep_time_tagger_script.py pins it to the upstream commit URL and sha256.
+# The `karakeep-time-tagger-script-matches-its-pinned-sha256` row of tests/repo/_config_rows.py
+# pins its sha256, and the `karakeep-time-tagger-fork-names-an-immutable-upstream-commit` row
+# there holds the URL below to a full commit SHA.
+# Forked from https://raw.githubusercontent.com/thiswillbeyourgithub/karakeep_python_api/37fa33fdd62b2ee5275ce8cdc1c86d29d0ec4237/community_scripts/karakeep-time-tagger/karakeep-time-tagger.py
 
 # The claims the renderer emits for this role. The karakeep Kustomization applies them after the
 # karakeep-snapshot Job.

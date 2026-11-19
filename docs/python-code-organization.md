@@ -307,6 +307,9 @@ erases it.
 
 - **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
   `tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+- **Workflows.** A property of a GitHub Actions workflow or action is a row of
+  `tests/repo/test_census_rows_workflows.py`, which parses the file rather than matching its
+  text, so a reordered key or an `if` split across lines reads the same.
 - **Template-source readers are declared.** Every directory under `tests/` is in `SCANNED`
   of `tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
   template text lists itself in that file's `TEMPLATE_SOURCE_READERS` with what a render erases:

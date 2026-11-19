@@ -744,7 +744,8 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
 
   The decision is the marker `DECIDED: a verification in flight is guarded by two checks` in
   `scripts/deploy_tools/promote_lib/verify_promotion.py`, and
-  `tests/repo/test_promote_workflow_verify.py` fails a `verify` or `settle` job that
+  the `promote-verify-and-settle-join-no-concurrency-group` row of
+  `tests/repo/test_census_rows_workflows.py` fails a `verify` or `settle` job that
   joins a group. A run that never settles stalls promotion as `current`, which D2.6d's
   `PromotionStalled` alert pages. D5's `reset_to_last_good` dispatch moves `prod` outside
   this group as well, so D5 must design it against both checks (C2 *Requests on C2*).
