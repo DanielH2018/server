@@ -45,6 +45,7 @@ import statistics
 import subprocess
 import sys as _sys
 import time
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path as _Path
 
@@ -281,31 +282,41 @@ def _stderr_line(error: subprocess.CalledProcessError) -> str:
     return lines[-1].strip() if lines else f"gh exited {error.returncode}"
 
 
+def _fetch(what: str, args: Sequence[str], gh_json, retry_pause: float):
+    """Run `gh_json(*args)`, retrying once after `retry_pause` seconds.
+
+    Raises:
+        RuntimeError: both calls failed; the message names `what` and gh's last stderr line.
+    """
+    try:
+        try:
+            return gh_json(*args)
+        except subprocess.CalledProcessError:
+            time.sleep(retry_pause)
+            return gh_json(*args)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"gh could not read {what}: {_stderr_line(error)}"
+        ) from error
+
+
 def read_jobs(run_id: int, gh_json=gh_json, retry_pause: float = 5.0) -> list[dict]:
     """The jobs of CI run `run_id`, from the Actions jobs API.
 
-    A failed fetch is retried once after `retry_pause` seconds.
-
     Raises:
-        RuntimeError: both fetches failed; the message names the run and gh's last stderr line.
+        RuntimeError: the fetch failed twice; the message names the run and gh's stderr.
         ValueError: the response is not an object holding a `jobs` list of objects.
     """
     path = f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100"
-    try:
-        try:
-            listed = gh_json("api", path)
-        except subprocess.CalledProcessError:
-            time.sleep(retry_pause)
-            listed = gh_json("api", path)
-    except subprocess.CalledProcessError as error:
-        raise RuntimeError(
-            f"gh could not read the jobs of run {run_id}: {_stderr_line(error)}"
-        ) from error
+    listed = _fetch(f"the jobs of run {run_id}", ("api", path), gh_json, retry_pause)
     return as_object_list(as_object(listed, "the jobs response").get("jobs"), "jobs")
 
 
 def recent_runs(
-    count: int, pull_requests: bool = False, gh_json=gh_json
+    count: int,
+    pull_requests: bool = False,
+    gh_json=gh_json,
+    retry_pause: float = 5.0,
 ) -> dict[int, list[dict]]:
     """The jobs of the newest `count` green runs that ran a pytest leg.
 
@@ -326,13 +337,15 @@ def recent_runs(
         f"run list --workflow {CI_WORKFLOW} {source}"
         f" --status success --limit {RUN_WINDOW} --json databaseId"
     ).split()
-    listed = as_object_list(gh_json(*args) or [], "the run list")
+    listed = as_object_list(
+        _fetch("the run list", args, gh_json, retry_pause) or [], "the run list"
+    )
     found: dict[int, list[dict]] = {}
     for run in listed:
         if len(found) == count:
             break
         run_id = int(str(run["databaseId"]))
-        jobs = read_jobs(run_id, gh_json)
+        jobs = read_jobs(run_id, gh_json, retry_pause)
         if any(s["name"].startswith(PYTEST_PREFIX) for s in job_spans(jobs)):
             found[run_id] = jobs
     if len(found) < count:
@@ -343,7 +356,9 @@ def recent_runs(
     return found
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None, gh_json=gh_json, retry_pause: float = 5.0
+) -> int:
     answer_help(__doc__, argv)
     parser = ArgumentParser(description="Print what CI runs cost the runner pool")
     parser.add_argument("run_ids", nargs="*", type=int, metavar="RUN_ID")
@@ -370,9 +385,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--pull-requests reads runs for --recent N")
     try:
         runs = (
-            recent_runs(args.recent, args.pull_requests)
+            recent_runs(args.recent, args.pull_requests, gh_json, retry_pause)
             if args.recent
-            else {run_id: read_jobs(run_id) for run_id in args.run_ids}
+            else {
+                run_id: read_jobs(run_id, gh_json, retry_pause)
+                for run_id in args.run_ids
+            }
         )
     except RuntimeError as error:
         print(f"ci_slot_cost: {error}", file=_sys.stderr)

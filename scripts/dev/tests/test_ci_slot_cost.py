@@ -7,6 +7,7 @@ import pytest
 from ci_slot_cost import (
     empty_leg_line,
     head_line,
+    main,
     p90,
     read_jobs,
     recent_runs,
@@ -218,3 +219,18 @@ def test_two_failed_jobs_fetches_name_the_run_and_the_stderr_line():
 
     with pytest.raises(RuntimeError, match="run 7: secondary rate limit"):
         read_jobs(7, gh_json, retry_pause=0)
+
+
+@pytest.mark.parametrize(
+    ("argv", "named"),
+    [
+        (["7"], "the jobs of run 7"),
+        (["--recent", "1"], "the run list"),
+    ],
+)
+def test_a_failing_gh_prints_one_stderr_line_and_exits_1(argv, named, capsys):
+    gh_json, _ = _failing_gh(2)
+
+    assert main(argv, gh_json, retry_pause=0) == 1
+    err = capsys.readouterr().err
+    assert err == f"ci_slot_cost: gh could not read {named}: secondary rate limit\n"
