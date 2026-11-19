@@ -1162,8 +1162,8 @@ jobs:
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
       # Renovate reads from the release's checksums.txt.
       # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
-      NFPM_VERSION: v2.48.0
-      NFPM_SHA256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+      NFPM_VERSION: v2.49.0
+      NFPM_SHA256: 2afaa5ffb5e3493402e31e7c67a5a1fb42133e3f66fc315ca0051934125561c7
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
