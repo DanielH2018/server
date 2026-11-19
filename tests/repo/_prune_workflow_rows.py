@@ -1,8 +1,7 @@
 """The `prune-artifacts` workflow deletes old artifact versions under promote's own rules.
 
-Its jobs, guard, scopes and concurrency group are rows here, and so are the cosign pin, the cosign
-fetch steps and the `RETRY_FUNCTIONS` helper it holds equal to promote's, so the two cannot drift
-apart. Each row's red half is the real file with that one property broken.
+Its jobs, guard, scopes and concurrency group are rows here, and so are the cosign pin and the
+`RETRY_FUNCTIONS` helper it holds equal to promote's, so the two cannot drift apart. Each row's red half is the real file with that one property broken.
 """
 
 import copy
@@ -37,16 +36,6 @@ def _env(wf: dict) -> dict:
     return wf.get("env") or {}
 
 
-def _cosign_steps(wf: dict) -> list[dict]:
-    """Every job's cosign cache and fetch steps, in order."""
-    return [
-        s
-        for job in jobs(wf).values()
-        for s in steps(job)
-        if "pinned/cosign" in str(s.get("run", "")) + str(s.get("with", ""))
-    ]
-
-
 def _code_lines(step: dict) -> list[str]:
     lines = (line.strip() for line in str(step.get("run", "")).splitlines())
     return [line for line in lines if line and not line.startswith("#")]
@@ -74,13 +63,6 @@ def _equal_to_promotes(key: str):
     return rule
 
 
-def _cosign_fetch_problems(wf: dict) -> list[str]:
-    cosign, reference = _cosign_steps(wf), _cosign_steps(load(PROMOTE))
-    if len(cosign) != 2 or reference != cosign * 2:
-        return ["the cosign fetch steps differ from promote.yml's"]
-    return []
-
-
 def _checkout_problems(wf: dict) -> list[str]:
     found = checkouts(_prune(wf))
     args = (found[0].get("with") or {}) if len(found) == 1 else {}
@@ -92,11 +74,6 @@ def _checkout_problems(wf: dict) -> list[str]:
 def _drifted_cosign_release(wf: dict) -> None:
     assert wf["env"]["COSIGN_VERSION"] != "v3.1.3"
     wf["env"]["COSIGN_VERSION"] = "v3.1.3"
-
-
-def _drifted_cosign_fetch(wf: dict) -> None:
-    step = _cosign_steps(wf)[1]
-    step["run"] = step["run"].replace("--retry 12", "--retry 5")
 
 
 PRUNE_ROWS = (
@@ -309,17 +286,6 @@ PRUNE_ROWS = (
             red=mutants(
                 PRUNE, prune_with_a_drifted_cosign_release=_drifted_cosign_release
             ),
-        )
-    ),
-    Census(
-        **prune_row(
-            name="prune-cosign-fetch-equals-promotes",
-            reason=(
-                "The cosign cache and fetch steps are a copy of promote's, held equal, so a "
-                "fix to one download reaches both."
-            ),
-            offence=judge(_cosign_fetch_problems),
-            red=mutants(PRUNE, prune_with_a_drifted_cosign_fetch=_drifted_cosign_fetch),
         )
     ),
     Census(

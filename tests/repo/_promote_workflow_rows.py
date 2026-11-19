@@ -10,9 +10,7 @@ import copy
 
 from _promote_workflow import (
     CONCURRENCY,
-    COSIGN_FETCH,
     COSIGN_RELEASE,
-    FLUX_FETCH,
     JOBS,
     NEEDS,
     PERMISSIONS,
@@ -27,6 +25,7 @@ from _promote_workflow import (
     ancestry_problems,
     checkout_problems,
     drop_steps,
+    fetches,
     flux_version,
     guard_problems,
     handoff_problems,
@@ -320,7 +319,7 @@ PROMOTE_ROWS = (
             offence=judge(
                 lambda wf: (
                     []
-                    if installed_in(wf, FLUX_FETCH)
+                    if installed_in(wf, "flux")
                     == {"publish", "tag", "settle", "reconcile", "reset-move"}
                     else [
                         "the flux CLI is not installed in exactly publish, tag, settle, "
@@ -331,7 +330,7 @@ PROMOTE_ROWS = (
             red=mutants(
                 PROMOTE,
                 tag_without_its_flux_fetch=drop_steps(
-                    "tag", lambda s: FLUX_FETCH not in str(s.get("run", ""))
+                    "tag", lambda s: not fetches(s, "flux")
                 ),
             ),
         )
@@ -369,14 +368,14 @@ PROMOTE_ROWS = (
             offence=judge(
                 lambda wf: (
                     []
-                    if installed_in(wf, COSIGN_FETCH) == {"publish", "promote"}
+                    if installed_in(wf, "cosign") == {"publish", "promote"}
                     else ["cosign is not installed in exactly publish and promote"]
                 )
             ),
             red=mutants(
                 PROMOTE,
                 promote_without_its_cosign_fetch=drop_steps(
-                    "promote", lambda s: COSIGN_FETCH not in str(s.get("run", ""))
+                    "promote", lambda s: not fetches(s, "cosign")
                 ),
             ),
         )
