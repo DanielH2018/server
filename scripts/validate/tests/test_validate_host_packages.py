@@ -8,12 +8,13 @@ builds `fixtures/host_packages/red/` with it.
 Run: uv run pytest scripts/validate/tests/test_validate_host_packages.py
 """
 
+import subprocess
 from pathlib import Path
 from typing import ClassVar
 
 import homelab_tool_fetch
 import pytest
-from lib import proc_testing
+from lib import proc_testing, yaml_fast
 from lib.repo_paths import REPO
 from validate import host_packages
 
@@ -207,6 +208,95 @@ def test_the_same_tree_renders_the_same_fixture(tmp_path):
 
 def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
     assert host_packages.fixture_changed(tmp_path, REPO)
+
+
+def test_every_case_job_is_a_job_of_the_ci_workflow():
+    """A renamed job reads as None on both sides, so the jobs arm would never fire for it."""
+    jobs = yaml_fast.safe_load((REPO / host_packages.CI_WORKFLOW).read_text())["jobs"]
+    missing = [job for job in host_packages.CASE_JOBS if job not in jobs]
+    assert not missing, (
+        f"CASE_JOBS names {missing}, which {host_packages.CI_WORKFLOW} lacks"
+    )
+
+
+_CASE_INPUTS = ["hosts/lib/tests/container/", "scripts/validate/host_package_cases.py"]
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("hosts/lib/tests/container/Dockerfile", True),
+        ("hosts/lib/tests/container/fixture/units/homelab-fixture-kept.service", True),
+        ("scripts/validate/host_package_cases.py", True),
+        ("hosts/lib/tests/container-x/Dockerfile", False),
+        ("scripts/validate/host_package_cases.py.orig", False),
+        ("scripts/validate/host_package_cases_extra.py", False),
+        ("README.md", False),
+    ],
+)
+def test_a_path_touches_the_case_inputs_as_a_pathspec_matches(path, expected):
+    assert host_packages.touches_inputs([path], _CASE_INPUTS) is expected
+
+
+def _arms(changed: str, job: bool, fixture: bool | Exception, consulted: list[str]):
+    """Fake arms for `cases_changed`; each arm it consults appends its name to `consulted`."""
+
+    def jobs_changed(_base):
+        consulted.append("jobs")
+        return job
+
+    def fixture_changed(_tree):
+        consulted.append("fixture")
+        if isinstance(fixture, Exception):
+            raise fixture
+        return fixture
+
+    return host_packages.CaseArms(
+        changed_paths=lambda _base: changed.splitlines(),
+        jobs_changed=jobs_changed,
+        fixture_changed=fixture_changed,
+    )
+
+
+def _cases_changed(arms) -> str:
+    return (
+        host_packages.cases_changed("BASE", Path("base-tree"), _CASE_INPUTS, arms) or ""
+    )
+
+
+def test_a_changed_case_input_runs_the_cases_without_rendering_the_fixture():
+    consulted = []
+    arms = _arms("hosts/lib/tests/container/Dockerfile\n", False, False, consulted)
+    assert "an input of the container cases" in _cases_changed(arms)
+    assert consulted == []
+
+
+def test_a_changed_job_runs_the_cases_without_rendering_the_fixture():
+    consulted = []
+    arms = _arms("README.md\n", True, False, consulted)
+    assert "host package jobs" in _cases_changed(arms)
+    assert consulted == ["jobs"]
+
+
+def test_a_changed_fixture_render_runs_the_cases():
+    consulted = []
+    assert "fixture renders" in _cases_changed(
+        _arms("README.md\n", False, True, consulted)
+    )
+    assert consulted == ["jobs", "fixture"]
+
+
+def test_no_arm_firing_reads_no_change():
+    consulted = []
+    assert _cases_changed(_arms("README.md\n", False, False, consulted)) == ""
+    assert consulted == ["jobs", "fixture"]
+
+
+def test_a_crashing_arm_raises_rather_than_reading_no_change():
+    """CI's render step fails on the raise, where a swallowed crash would skip the cases."""
+    crash = subprocess.CalledProcessError(1, ["python", "-c", "render"])
+    with pytest.raises(subprocess.CalledProcessError):
+        _cases_changed(_arms("README.md\n", False, crash, []))
 
 
 # ── fetch-tools: the pins of every rendered homelab-tools tree, fetched and verified ─────
