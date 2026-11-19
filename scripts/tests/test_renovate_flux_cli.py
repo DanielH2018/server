@@ -5,11 +5,14 @@ Each workflow that runs the flux CLI pins it in env as `FLUX_VERSION` and `FLUX_
 its jobs fetch that release through a cache keyed on the pin.
 The `promote-flux-cli-matches-the-controllers` row of tests/repo/test_census_rows_workflows.py
 holds the promote workflow's pin equal to `flux_version` in k8s/roles/flux, and the census below
-holds every workflow's pin equal to it and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
-`# renovate:` comment on the line above it.
+holds every workflow's pin equal to it and to the amd64 digest in homelab-tools. A custom
+manager reads each pin from the `# renovate:` comment on the line above it; Renovate's extract,
+held against `scripts/validate/renovate_expected_deps.tsv` in CI, proves it reads version and
+digest in one match.
 
-These tests hold two things. The manager finds every pin, version and digest in one match. And
-each pin and `flux_version` resolve to the one manual flux group, so a bump opens as one PR.
+These tests hold two things. Every pin is in the table with its digest and equals the role's
+`flux_version` and homelab-tools' amd64 digest. And each pin and `flux_version` resolve to the
+one manual flux group, so a bump opens as one PR.
 
 Run: uv run pytest scripts/tests/test_renovate_flux_cli.py
 """
@@ -23,9 +26,9 @@ from _renovate import (
     _CONFIG_MANAGERS,
     _PACKAGE_RULES,
     _REPO,
-    _file_pattern_to_regex,
     _resolve_setting,
-    _to_python_regex,
+    expected_deps,
+    workflow_env_pins,
 )
 
 WORKFLOW = ".github/workflows/promote.yml"
@@ -66,10 +69,9 @@ def _manager() -> dict:
         m
         for m in _CONFIG_MANAGERS
         if any(
-            _file_pattern_to_regex(fp).search(WORKFLOW)
-            for fp in m.get("managerFilePatterns", [])
+            "depName=fluxcd/flux2" in ms and "FLUX_VERSION" in ms
+            for ms in m.get("matchStrings", [])
         )
-        and any("depName=fluxcd/flux2" in ms for ms in m.get("matchStrings", []))
     ]
     return manager
 
@@ -93,14 +95,6 @@ def _dep(dep: str) -> tuple[str, str, str, str, str | None]:
     return (DEP_NAME, *DEPS[dep])
 
 
-def _matches(text: str) -> list[re.Match]:
-    return [
-        m
-        for ms in _manager()["matchStrings"]
-        for m in re.finditer(_to_python_regex(ms), text)
-    ]
-
-
 def _flux_version() -> str:
     defaults = yaml_fast.safe_load((_REPO / FLUX_DEFAULTS).read_text(encoding="utf-8"))
     return defaults["flux_version"]
@@ -112,28 +106,19 @@ def _amd64_digest() -> str:
 
 
 @pytest.mark.parametrize("workflow", sorted(FLUX_PINS))
-def test_the_manager_reads_every_flux_cli_pin(workflow: str) -> None:
-    patterns = _manager().get("managerFilePatterns", [])
-    assert any(_file_pattern_to_regex(fp).search(workflow) for fp in patterns), patterns
+def test_every_flux_cli_pin_is_extracted_with_its_digest_and_equals_the_roles(
+    workflow: str,
+) -> None:
     text = (_REPO / workflow).read_text(encoding="utf-8")
     assert len(FETCH.findall(text)) == FLUX_PINS[workflow]
-    matches = _matches(text)
-    assert [(m["currentValue"], m["currentDigest"]) for m in matches] == [
-        (_flux_version(), _amd64_digest())
-    ] * len(re.findall(r"^\s+FLUX_VERSION:", text, re.M))
-    assert matches, workflow
-
-
-@pytest.mark.parametrize("workflow", sorted(FLUX_PINS))
-def test_a_flux_pin_without_its_annotation_is_flagged(workflow: str) -> None:
-    text = (_REPO / workflow).read_text(encoding="utf-8")
-    stripped = re.sub(
-        r"\n[ \t]*# renovate: datasource=github-release-attachments depName=fluxcd/flux2",
-        "",
-        text,
-    )
-    assert _matches(text)
-    assert _matches(stripped) == []
+    pins = workflow_env_pins(workflow, "FLUX_VERSION", "FLUX_SHA256")
+    assert pins and pins == [(_flux_version(), _amd64_digest())] * len(pins)
+    extracted = [
+        d
+        for d in expected_deps(workflow, DEP_NAME)
+        if d.datasource == _manager()["datasourceTemplate"]
+    ]
+    assert [d.digest for d in extracted] == ["digest"] * len(pins)
 
 
 def test_the_workflow_pin_moves_its_digest_in_the_flux_group() -> None:
