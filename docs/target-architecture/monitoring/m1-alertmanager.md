@@ -601,7 +601,7 @@ A resolved notification would count as a ping and hide the outage. Its `payload`
 | `Watchdog` | always 1 (`vector(1)`) | — | `info` |
 | `PrometheusRuleReloadFailed` | `prometheus_config_last_reload_successful == 0` | 10m | `warning` |
 | `AlertmanagerNotificationsFailing` | `increase(alertmanager_notifications_failed_total{reason!="rateLimited"}[30m]) > 0`, by integration | — | `critical` |
-| `AlertmanagerNotificationsRateLimited` | `increase(alertmanager_notifications_failed_total{reason="rateLimited"}[7m]) > 0`, by integration | 10m | `critical` |
+| `AlertmanagerNotificationsRateLimited` | `increase(alertmanager_notifications_failed_total{reason="rateLimited"}[7m]) > 0`, by integration | 15m | `critical` |
 | `AlertmanagerMetricsMissing` | `absent(up{job="alertmanager"})` or (`absent(alertmanager_notifications_failed_total{job="alertmanager"})` and on() `up{job="alertmanager"} == 1`) | 10m | `warning` |
 
 `AlertmanagerNotificationsFailing` is Alertmanager's counterpart of Kuma's `Kuma Notification
@@ -618,8 +618,11 @@ and set `DEPLOY_HOLD` on a healthy cluster
 per failed flush: at 00:10 that night, the 30-minute increase of failed Discord requests and
 of `rateLimited` failures both read 11. A group stuck behind the limit therefore fails once per
 5-minute `group_interval`, and the 7-minute window always holds one such failure. The burst
-held the 7-minute increase above 0 for about 8 minutes, under the 10-minute `for:`, so it
-passes. A rate limit that holds for 10 minutes still pages as a critical, so it reaches email.
+held the 7-minute increase above 0 for about 8 minutes. A group that fails two flushes in a
+row holds it for about 11. Both stay under the 15-minute `for:`, so both pass, and a group
+that fails three in a row pages. A 15-minute `for:` matches the fleet's longest critical
+`for:`, so it leaves the soak's fleet timeout unchanged. A rate limit that holds for 15
+minutes still pages as a critical, so it reaches email.
 
 `AlertmanagerMetricsMissing` is the family's zero-series alert (convention 2). If
 Alertmanager's metrics stop reaching Prometheus, `AlertmanagerNotificationsFailing` evaluates
@@ -685,8 +688,8 @@ red, for up to 30 minutes after the cause clears. The gate names the alert, so t
 fault. Once `observability` is flux-owned, the same critical alert also fails D5's soak when
 it becomes active during the soak. That is intended too, because a promote is not safe while
 pages are dropped. A rate-limited send is the exception: it fails the soak only once
-`AlertmanagerNotificationsRateLimited` has held for 10 minutes. That `for:` sets
-`observability`'s soak window W to 720 seconds.
+`AlertmanagerNotificationsRateLimited` has held for 15 minutes. That `for:` sets
+`observability`'s soak window W to 1020 seconds.
 
 ### Rules other slices add (C7)
 

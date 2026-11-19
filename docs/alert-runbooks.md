@@ -22,9 +22,10 @@ Alertmanager failed at least one send through one integration (Discord or email)
 
 ### `AlertmanagerNotificationsRateLimited`
 
-An integration answered Alertmanager's sends as rate limited in every 7-minute window for 10
-minutes. Alertmanager sends a group again at its next flush after a failed one, so a short
-burst during a large rollout delivers late and never fires this alert. One that persists means
+An integration answered Alertmanager's sends as rate limited in every 7-minute window for 15
+minutes. Alertmanager sends a group again at its next flush after a failed one, so a burst
+during a large rollout that fails one group for up to two flushes delivers late and never
+fires this alert. One that persists means
 the resends are failing too.
 
 - Read the `alertmanager` pod's log in the `observability` namespace for the receiver's answer.

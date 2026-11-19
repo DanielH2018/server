@@ -186,25 +186,39 @@ tests:
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts: []
 
-  # A group stuck behind the limit fails once per 5-minute flush. It pages after 10 minutes,
-  # and not before.
+  # One group fails two flushes in a row, 5 minutes apart, then delivers. The 7m increase
+  # stays above 0 from 6m to 16m, under the 15m `for:`, so nothing pages.
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="rateLimited"}'
+        values: '0x5 1x4 2x40'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: AlertmanagerNotificationsRateLimited
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: AlertmanagerNotificationsRateLimited
+        exp_alerts: []
+
+  # A group stuck behind the limit fails once per 5-minute flush. It pages once the 7m
+  # increase has held above 0 for 15 minutes, and not before.
   - interval: 1m
     input_series:
       - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="rateLimited"}'
         values: '0x4 1x4 2x4 3x4 4x4 5x4 6x4 7x4'
     alert_rule_test:
-      - eval_time: 12m
+      - eval_time: 18m
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts: []
-      - eval_time: 18m
+      - eval_time: 22m
         alertname: AlertmanagerNotificationsRateLimited
         exp_alerts:
           - exp_labels: {integration: discord, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager's discord sends have been rate limited for 10 minutes.
+              summary: Alertmanager's discord sends have been rate limited for 15 minutes.
               description: >-
                 The discord integration refused Alertmanager's sends as rate limited in every
-                7-minute window for 10 minutes, so its resends are not getting through. Read
+                7-minute window for 15 minutes, so its resends are not getting through. Read
                 the alertmanager pod's log, and look for an alert group that floods the
                 receiver.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsratelimited
@@ -213,14 +227,14 @@ tests:
         exp_alerts:
           - exp_labels: {integration: discord, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager's discord sends have been rate limited for 10 minutes.
+              summary: Alertmanager's discord sends have been rate limited for 15 minutes.
               description: >-
                 The discord integration refused Alertmanager's sends as rate limited in every
-                7-minute window for 10 minutes, so its resends are not getting through. Read
+                7-minute window for 15 minutes, so its resends are not getting through. Read
                 the alertmanager pod's log, and look for an alert group that floods the
                 receiver.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsratelimited
-      - eval_time: 18m
+      - eval_time: 22m
         alertname: AlertmanagerNotificationsFailing
         exp_alerts: []
 

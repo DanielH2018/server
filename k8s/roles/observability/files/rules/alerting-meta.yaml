@@ -69,21 +69,23 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
       # A rate limit that outlasts a rollout's burst. The counter moves once per failed flush,
       # so a group stuck behind the limit adds one failure per 5m `group_interval`; the 7m
-      # window always holds one. A burst holds the 7m increase above 0 for about 8 minutes,
-      # under the 10m `for:`. Critical, so a sustained Discord rate limit still reaches email.
+      # window always holds one. One failed flush holds the 7m increase above 0 for about 8
+      # minutes and two for about 11, both under the 15m `for:`, so a rollout's burst passes;
+      # three in a row page. 15m matches the fleet's longest critical `for:`, so the soak's
+      # fleet timeout stays put. Critical, so a sustained Discord rate limit still reaches email.
       - alert: AlertmanagerNotificationsRateLimited
         expr: >-
           sum by (integration)
           (increase(alertmanager_notifications_failed_total{job="alertmanager", reason="rateLimited"}[7m])) > 0
-        for: 10m
+        for: 15m
         labels:
           severity: critical
           service: observability
         annotations:
-          summary: Alertmanager's {{ $labels.integration }} sends have been rate limited for 10 minutes.
+          summary: Alertmanager's {{ $labels.integration }} sends have been rate limited for 15 minutes.
           description: >-
             The {{ $labels.integration }} integration refused Alertmanager's sends as rate
-            limited in every 7-minute window for 10 minutes, so its resends are not getting
+            limited in every 7-minute window for 15 minutes, so its resends are not getting
             through. Read the alertmanager pod's log, and look for an alert group that floods
             the receiver.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsratelimited
