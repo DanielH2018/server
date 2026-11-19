@@ -52,7 +52,6 @@ KNOWN_JOBS = frozenset(
         "hooks",
         "pr_gates",
         "pytest",
-        "deck_mod",
         "sops_manifest_type_proof",
         "host_packages_build",
         "host_packages",

@@ -8,8 +8,8 @@ neither holds. Clearing the hold stays the operator's decision; this only waits 
     landing_clear.py              # the state now, one JSON line
 
 ONE DEFINITION OF A BLOCKER. The verdict is `landing_blockers.blockers` over the two facts it
-reads, and the CI state is `landing_blockers.ci_state`, so this wait, `probe.py landing` and
-the deck band cannot disagree on what blocks. The other reads `collect` makes (the cluster,
+reads, and the CI state is `landing_blockers.ci_state`, so this wait and `probe.py landing` cannot
+disagree on what blocks. The other reads `collect` makes (the cluster,
 GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
 
 THE STATE.

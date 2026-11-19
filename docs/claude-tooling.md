@@ -258,7 +258,7 @@ the deploy notifier skips.
 things: what would stop a landing now, the `land.sh` runs in flight, and the
 worktrees with the issues each has claimed. While something blocks, the text view lists the
 worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
-document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
+document with every worktree, for `jq` or an agent to read.
 
 A blocker is one of two states: a `DEPLOY_HOLD` that reads anything but `none`, or a red
 master CI run. The command computes that list itself, so every surface that shows it
@@ -621,41 +621,6 @@ misspelled metric name still fails the run. pint reports a disable comment that 
 selector as an `invalid comment` warning. `WorkloadServiceUnmapped` in `k8s-workloads.yaml`
 uses `# pint rule/set promql/series ignore/label-value service` instead, for a label value
 that a healthy cluster never holds.
-
-## The deck mod (`.claude/plugins/deck/`)
-
-The deck is a Claude Code mod: a plugin of function hooks, which needs Claude Code 2.1.287 or
-newer. It shows the `probe.py landing` snapshot live during a session, where the SessionStart
-banner shows that state only once. It reads and gates nothing. A failed read shows in the pane,
-and the band and the system-prompt section keep the last good snapshot.
-
-Its three parts:
-
-- **Pane.** `/deck` opens the pane, and `/deck` again closes it. The pane lists the blockers,
-  the hold, master CI, the runs in flight, the last landing's `VERDICT:` line, and the
-  worktrees with their claims.
-- **Band.** A row above the prompt appears only while a landing is blocked. Its Hide button
-  turns it off, and `/deck band on` turns it back on.
-- **Model context.** While a landing is blocked, a `prompt.compose` hook adds a system-prompt
-  section that lists the blockers. `/deck context off` stops it, and `/deck context on`
-  restores it.
-
-The mod keeps each toggle in `$.store`, so a toggle survives into the next session. A timer runs
-`probe.py landing --json` every 60 s. `/deck refresh` runs it at once. In a checkout without
-`scripts/diagnostics/probe.py`, the mod starts no timer.
-
-To load it for one session, start Claude Code with `claude --plugin-dir .claude/plugins/deck`.
-A project's settings cannot name a plugin folder. To load it in every session, set
-`CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`, which the dotfiles
-repo owns.
-
-To check a change to the mod, run `claude plugin validate .claude/plugins/deck` and
-`claude plugin test .claude/plugins/deck`. CI's `deck_mod` job runs both with the CLI version
-that `.github/claude-cli/package-lock.json` pins, and the `prek` gate requires it. The job
-checks the mod on a pull request that touches it and on a dispatch, and passes without checking
-on a push to master. The test file mocks the probe and runs each drawing on
-the `terminal` and `desktop` surfaces. `scripts/diagnostics/tests/test_probe_landing.py` holds
-the probe's JSON keys equal to the `DeckSnapshot` fields in `types/index.d.ts`.
 
 ## Hooks
 

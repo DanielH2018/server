@@ -1,11 +1,10 @@
-"""Tests for `probe.py landing`, the snapshot the deck mod renders.
+"""Tests for `probe.py landing`, what would stop a landing and who else works the repo.
 
 Every source is handed to `collect` as a callable, so no test reaches deploy-ui, GitHub or git.
 """
 
 import json
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -184,33 +183,6 @@ def test_a_blocked_landing_lists_the_claimed_worktrees_and_counts_the_rest():
     assert "  worktree-fanout-1  #3 #12" in text
     assert "1 other worktree(s); `probe.py landing --json` lists them." in text
     assert "worktrees/drill" not in text
-
-
-def _deck_snapshot_fields(dts: str) -> set[str]:
-    """The field names of `DeckSnapshot` in the deck mod's type contract."""
-    body = re.search(r"export type DeckSnapshot = \{(.*?)\n\}", dts, re.S)
-    assert body, "DeckSnapshot is gone from the deck mod's types/index.d.ts"
-    return set(re.findall(r"^\s+(\w+):", body.group(1), re.M))
-
-
-DECK_TYPES = REPO / ".claude/plugins/deck/types/index.d.ts"
-
-
-def _drift(snap: dict, dts: str) -> set[str]:
-    """The keys the snapshot and the mod's `DeckSnapshot` type do not share."""
-    return set(snap) ^ _deck_snapshot_fields(dts)
-
-
-def test_the_snapshot_carries_exactly_the_fields_the_deck_mod_types():
-    dts = DECK_TYPES.read_text()
-    assert {"promote", "blockers", "worktrees"} <= _deck_snapshot_fields(dts)
-    snap = landing.collect(fake_deploy_ui, fake_run(GREEN))
-    assert _drift(snap, dts) == set()
-
-
-def test_a_field_the_mod_does_not_type_is_caught():
-    snap = landing.collect(fake_deploy_ui, fake_run(GREEN))
-    assert _drift({**snap, "extra": 1}, DECK_TYPES.read_text()) == {"extra"}
 
 
 def test_a_fanout_batch_worktree_carries_the_issues_its_name_lists():

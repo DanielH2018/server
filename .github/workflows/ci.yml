@@ -73,7 +73,7 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 25 jobs (82 runs measured 2026-11-12, #8143). At most
+  # jobs at once, and a full sweep runs 24 jobs (82 runs measured 2026-11-12, #8143). At most
   # 18 of them were in progress at once across 20 of those sweeps, a peak seen under contention,
   # not a ceiling the workflow sets. The queue measurement that prompted this
   # grouping found job start lag at 1-4s with nothing waiting on a slot. That no longer holds.
@@ -85,7 +85,7 @@ concurrency:
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
   # of the pool, not the group key: #6309 measured whether paced merges let push runs take
-  # the 2-job proven skip, where a full sweep runs 25 jobs, and #6307 is the operator's call on more
+  # the 2-job proven skip, where a full sweep runs 24 jobs, and #6307 is the operator's call on more
   # runner capacity.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
@@ -593,7 +593,7 @@ jobs:
       #
       # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
       # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
+      # hosted jobs at once and a full sweep asks for 24, so every leg's fixed cost also
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
@@ -605,7 +605,7 @@ jobs:
       # `Run the test suite`, plus the k8s render prebuild and the import cost every leg repeats.
       # Its 17-22s of collection and up to 15s of fleet prebuild before the first test (the
       # `phase timing` sections of run 43594559130) mostly move with its files to another leg.
-      # Five shards would save about 40 of the 1,414 and one of the 25 queued jobs, and add
+      # Five shards would save about 40 of the 1,414 and one of the 24 queued jobs, and add
       # about 20s to the wall of every run that skips the host package legs, where pytest is
       # the last job to finish. Four would save about 80 and add about 50s. Neither moves the
       # p90.
@@ -746,66 +746,6 @@ jobs:
       - name: Check every heavy module's recorded weight
         if: steps.select.outputs.count != '0'
         run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
-
-  # The deck mod (`.claude/plugins/deck/`, #3676) is a Claude Code plugin of function hooks,
-  # an early-access API that changes between releases. `claude plugin validate` reads the
-  # module the way the engine will, and `claude plugin test` runs its tests against the engine
-  # with the probe call mocked. Neither needs credentials. `.github/claude-cli/package-lock.json`
-  # pins the CLI to the version whose API the mod was written and type-checked against, so a
-  # bump is a deliberate change that re-runs this job. The package's postinstall puts the
-  # native binary in place: run 37866869971 failed under --ignore-scripts with `claude native
-  # binary not installed`. The install skips every script and then runs that one by name, so
-  # it works whatever npm's lifecycle-script policy is and runs no other package's script.
-  #
-  # On a push to master the steps below skip and the job passes, as renovate-config skips its
-  # push run. The PR run already checked the mod, and an npm outage on a master push would turn
-  # the required context red and park every landing behind a check of a file the push did not
-  # change. A dispatch still runs it, as every job here does.
-  deck_mod:
-    needs: prove
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
-    name: deck mod (claude plugin validate + test)
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
-
-      - name: Check whether this PR touches the deck mod
-        id: scope
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
-        run: |
-          set -euo pipefail
-          # pr_changed_files.sh fetches the base with the token. Its file lists go unused, because
-          # one `git diff --quiet` over three paths answers this step's question.
-          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
-          if git diff --quiet "origin/$BASE_REF...HEAD" -- .claude/plugins/ .github/claude-cli/ .github/workflows/ci.yml; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "The deck mod is untouched by this PR, so there is nothing to check."
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/setup-node@v7.1.0
-        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        with:
-          node-version: "26.13.0"
-
-      - name: Validate and test the deck mod
-        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        run: |
-          set -euo pipefail
-          npm ci --ignore-scripts --prefix .github/claude-cli
-          node .github/claude-cli/node_modules/@anthropic-ai/claude-code/install.cjs
-          claude=.github/claude-cli/node_modules/.bin/claude
-          "$claude" --version
-          "$claude" plugin validate .claude/plugins/deck
-          "$claude" plugin test .claude/plugins/deck
 
   # Workflows name actions by version tag, and `.github/workflows/actions.lock` pins each tag to
   # a commit (#8014). `--verify` fails when the lockfile is out of step with the workflows, or
@@ -948,8 +888,8 @@ jobs:
   #   exists to catch, and it fails.
   #
   # It runs on a PR that touches the flux pin, the sops pin, the registry image pin,
-  # `cluster_vars.py`, its fixture or this file, and on a dispatch. On a push to master its steps skip and it passes, as deck_mod
-  # does: the PR run already measured it. The scope step is step-level, never a job-level `if:`,
+  # `cluster_vars.py`, its fixture or this file, and on a dispatch. On a push to master its steps skip and it passes:
+  # the PR run already measured it. The scope step is step-level, never a job-level `if:`,
   # because the `prek` gate requires `success` and a skipped job reports `skipped`.
   sops_manifest_type_proof:
     needs: prove
@@ -2021,7 +1961,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, deck_mod, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -2064,7 +2004,6 @@ jobs:
           HOOKS: ${{ needs.hooks.result }}
           PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
-          DECK_MOD: ${{ needs.deck_mod.result }}
           LOCKFILE: ${{ needs.lockfile.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
@@ -2074,7 +2013,7 @@ jobs:
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} pytest-proven=${PYTEST_PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
-            "deck-mod=$DECK_MOD lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
+            "lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
@@ -2092,7 +2031,7 @@ jobs:
           # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
           # build's own result is required below, so a build that failed passes nothing here.
           idle() { [ "$1" = skipped ] && [ "$2" = false ]; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok_pytest "$PYTEST" && ok "$DECK_MOD" && ok "$LOCKFILE" \
+          ok "$HOOKS" && ok "$PR_GATES" && ok_pytest "$PYTEST" && ok "$LOCKFILE" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
             && { ok "$HOST_PACKAGES" || idle "$HOST_PACKAGES" "${RUN_CASES:-}"; } \
             && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
