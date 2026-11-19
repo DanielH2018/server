@@ -15,6 +15,7 @@ import promote
 import pytest
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from deploy_tools.promote_lib import stateful
+from deploy_tools.promote_lib.decision import Decision
 from lib.exit_codes import USAGE_ERROR
 from lib.repo_paths import REPO
 from renderer.renderer_lib.snapshot import snapshot_files
@@ -76,6 +77,7 @@ def test_a_revision_that_changes_a_snapshot_roles_own_digest_is_stateful(
     world.publish(r, files=_bundle({"sonarr": "s2", "traefik": "t1"}, snap=SONARR_SNAP))
     code, outputs = _decide(world, monkeypatch, capsys, tmp_path / "handoff")
     assert (code, outputs["verdict"], outputs["stateful"]) == (0, "promote", "sonarr")
+    assert outputs["hold_form"] == "stateful"
     found = stateful.read(tmp_path / "handoff")
     assert found.digest == digest_of(r), "the digest the fixture registry names"
     assert found.stateful == {
@@ -100,6 +102,23 @@ def test_a_revision_that_leaves_every_snapshot_roles_own_digest_is_not_stateful(
     world.publish(r, files=_bundle(own, footprint, snap=SONARR_SNAP))
     code, outputs = _decide(world, monkeypatch, capsys, tmp_path / "handoff")
     assert (code, outputs["verdict"], outputs["stateful"]) == (0, "promote", "")
+    assert outputs["hold_form"] == "reset"
+
+
+@pytest.mark.parametrize(
+    ("roles", "tags", "form"),
+    [
+        (("sonarr",), (), "stateful"),
+        (("sonarr",), ("longhorn",), "stateful"),
+        ((), ("longhorn",), "no-reset"),
+        ((), (), "reset"),
+    ],
+    ids=["snapshot-role", "both", "forward-only", "neither"],
+)
+def test_the_hold_form_puts_a_snapshot_role_before_a_forward_only_tag(
+    roles, tags, form
+):
+    assert Decision("promote", stateful=roles, no_reset=tags).hold_form == form
 
 
 def test_an_unreadable_snapshot_job_is_an_error_and_moves_nothing(

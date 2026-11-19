@@ -83,6 +83,7 @@ wrong is worth more than the record of one that did not.
 | [0036](0036-a-selected-run-proves-its-tree-and-a-nightly-sweep-is-the-net.md) | A selected pull-request run proves its tree, and a nightly sweep is the net for a stale row | Accepted | 2026-11-19 |
 | [0037](0037-the-renderer-keeps-jinja-after-ansible.md) | The renderer keeps Jinja after Ansible, and sheds the Ansible model instead | Accepted | 2026-11-19 |
 | [0038](0038-design-is-checked-where-code-is-written.md) | Design is checked where code is written, and a design finding only takes code out | Accepted | 2026-11-19 |
+| [0039](0039-scripts-is-installed-in-place.md) | scripts/ is installed in place as the one import root, and each tree's own root goes first | Accepted | 2026-11-19 |
 
 ## The long-form behind a record
 

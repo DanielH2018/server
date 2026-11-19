@@ -140,6 +140,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         "hypervisor",
         "integrity-scans",
         "k3s-agent",
+        "kuma-check-dir",
         "loki-route-witness",
         "worktree-holders",
         "worktree-sweep",

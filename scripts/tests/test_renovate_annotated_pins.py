@@ -1,12 +1,12 @@
 """Guards on the `# renovate:` annotated pins and the one packageRule that finishes them.
 
 A pinned artifact is declared to Renovate by one annotation above its `_version:` line
-(lib/renovate_annotations.py). Four things can still let one age silently or land unfinished:
+(lib/renovate_annotations.py). CI's extract check (`scripts/validate/renovate_extract.py`)
+fails an annotation Renovate does not read and a version a pinned download renders from that
+nothing tracks. Three things it cannot see stay here:
 
-- An annotation the manager's regex does not read: keys out of order, or a blank line before
-  the pin. Renovate reports nothing; the pin is simply untracked.
-- A pin whose URL renders from a version nothing tracks. `asset_pins.py` fetches it, but no
-  PR ever bumps it.
+- An extractVersion that strips the `v` from a pin carrying one, so Renovate writes back a
+  bare version and every URL built from the pin 404s.
 - The annotated-pin packageRule sitting after a per-package rule it should yield to, which
   strips `k8s_autodeploy: false` from the crowdsec bouncer plugin's title so the unattended
   agent lands a traefik redeploy.
@@ -18,45 +18,24 @@ Run: uv run pytest scripts/tests/test_renovate_annotated_pins.py
 """
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 
 from _renovate import (
+    EXPECTED_DEPS,
     _CONFIG_MANAGERS,
-    _MANAGERS,
     _PACKAGE_RULES,
     _REPO,
-    _file_pattern_to_regex,
     _resolve_group_name,
     _resolve_setting,
-    _to_python_regex,
 )
-from lib.renovate_annotations import annotations_in, is_annotation_manager
-from validate.asset_pins import Pin, discover_pins
+from lib.renovate_annotations import (
+    annotations_in,
+    is_annotation_manager,
+    to_python_regex,
+)
 
 ANNOTATION_MANAGER = next(m for m in _CONFIG_MANAGERS if is_annotation_manager(m))
 DEP_TYPE = ANNOTATION_MANAGER["depTypeTemplate"]
-
-# depNames the expansion must find, one per datasource and plane, so a regex that stops
-# matching fails by name instead of shrinking the census to nothing.
-KNOWN_ANNOTATED = frozenset(
-    {
-        "k3s-io/k3s",
-        "docker-ce",
-        "maxlerebourg/crowdsec-bouncer-traefik-plugin",
-        "node",
-    }
-)
-
-# Version keys a pin's URL renders from that no manager tracks, on purpose.
-UNTRACKED_BY_DECISION: dict[str, str] = {
-    # The pin covers traefik's in-tree CRD copy, which Renovate cannot rewrite: a bump of this
-    # key alone would leave the file and its sha256 on the old release. The image pin is the
-    # tracked one, and tests/k8s/test_traefik_crds.py fails a minor image bump until
-    # the copy, this key and the hash are refreshed together.
-    "traefik_crds_k8s_version": "follows traefik_k8s_image's minor; refreshed by hand",
-}
-
-_ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
 TRAEFIK_DEFAULTS = "k8s/roles/traefik/defaults/main.yml"
 PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
@@ -69,111 +48,54 @@ def _read(rel: str) -> str:
     return (_REPO / rel).read_text(errors="replace")
 
 
-def unread_annotations(text: str, manager: dict = ANNOTATION_MANAGER) -> int:
-    """How many `# renovate:` comment lines in `text` the annotation manager does not read."""
-    return len(_ANNOTATION_LINE.findall(text)) - len(annotations_in(manager, text))
-
-
-def untracked_pin_versions(
-    pins: Iterable[Pin],
-    managers: list[dict],
-    read: Callable[[str], str],
-    exempt: Iterable[str] = (),
-) -> list[str]:
-    """`<file>: <key> (pin <name>)` for each `_version` key a pin renders from that no
-    manager's matchString covers in that file. Empty means every one is tracked."""
-    exempt = set(exempt)
-    problems = []
-    for pin in pins:
-        for key in sorted(pin.inputs):
-            if not key.endswith("_version") or key in exempt:
-                continue
-            text = read(pin.source)
-            owns_line = re.compile(rf"(?m)^\s*{re.escape(key)}:")
-            tracked = any(
-                owns_line.search(match.group(0))
-                for m in managers
-                if any(
-                    _file_pattern_to_regex(p).search(pin.source)
-                    for p in m["managerFilePatterns"]
-                )
-                for ms in m["matchStrings"]
-                for match in re.finditer(_to_python_regex(ms), text)
-            )
-            if not tracked:
-                problems.append(f"{pin.source}: {key} (pin {pin.name})")
-    return problems
-
-
-# ── the annotations themselves ────────────────────────────────────────────────────────────
-
-
-def test_the_expansion_finds_the_known_annotated_pins():
-    found = {m["depNameTemplate"] for m in _MANAGERS if "annotation" in m}
-    missing = KNOWN_ANNOTATED - found
-    assert not missing, f"no `# renovate:` annotation expands to {sorted(missing)}"
-
-
-def test_every_annotation_comment_in_role_defaults_is_read():
-    patterns = [
-        _file_pattern_to_regex(p) for p in ANNOTATION_MANAGER["managerFilePatterns"]
+def _annotated_pins() -> list[dict[str, str]]:
+    """Each annotation in a file Renovate extracts from, with `file` added."""
+    files = sorted({d.file for d in EXPECTED_DEPS if d.manager == "regex"})
+    return [
+        {**groups, "file": path}
+        for path in files
+        for groups in annotations_in(ANNOTATION_MANAGER, _read(path))
     ]
-    defaults = sorted(
-        str(p.relative_to(_REPO))
-        for p in (_REPO / "k8s/roles").glob("*/defaults/main.yml")
-    )
-    scanned = [rel for rel in defaults if any(p.search(rel) for p in patterns)]
-    assert TRAEFIK_DEFAULTS in scanned
-    unread = [rel for rel in scanned if unread_annotations(_read(rel))]
-    assert not unread, (
-        "a `# renovate:` comment the annotation manager does not read: its keys must be "
-        "`datasource= depName= [versioning=] [extractVersion=] [registryUrl=]` in that order, "
-        f"directly above a `<key>_version:` line. In: {unread}"
-    )
 
 
-def tag_rewriting_pins(managers: list[dict], read: Callable[[str], str]) -> list[str]:
+def tag_rewriting_pins(pins: list[dict], read: Callable[[str], str]) -> list[str]:
     """`<file>: <variable>` for each `v`-prefixed annotated pin its own extractVersion rewrites.
 
     Renovate writes the extracted version back into the pin, so an extractVersion that strips
     the `v` turns `v0.16.0` into `0.16.2`, and a URL that renders the pin as a git ref 404s.
     """
     problems = []
-    for m in managers:
-        if "annotation" not in m or "extractVersionTemplate" not in m:
+    for pin in pins:
+        if "extractVersion" not in pin:
             continue
-        path, variable = m["annotation"]["file"], m["annotation"]["variable"]
+        path, variable = pin["file"], pin["variable"]
         line = re.search(rf'(?m)^\s*{re.escape(variable)}:\s*"?([^"\s]+)"?', read(path))
         current = line.group(1) if line else ""
         if not current.startswith("v"):
             continue
-        extracted = re.search(_to_python_regex(m["extractVersionTemplate"]), current)
+        extracted = re.search(to_python_regex(pin["extractVersion"]), current)
         if extracted is None or extracted["version"] != current:
             problems.append(f"{path}: {variable}")
     return problems
 
 
 def _annotated(extract: str, value: str = "v1.2.0") -> tuple[list[dict], Callable]:
-    managers = [
+    pins = [
         {
-            "annotation": {
-                "file": "roles/x/defaults/main.yml",
-                "variable": "x_version",
-            },
-            "extractVersionTemplate": extract,
+            "file": "roles/x/defaults/main.yml",
+            "variable": "x_version",
+            "extractVersion": extract,
         }
     ]
-    return managers, lambda _: f"x_version: {value}\n"
+    return pins, lambda _: f"x_version: {value}\n"
 
 
 def test_every_v_prefixed_annotated_pin_keeps_its_v():
-    checked = {
-        m["annotation"]["variable"]
-        for m in _MANAGERS
-        if "annotation" in m and "extractVersionTemplate" in m
+    pins = _annotated_pins()
+    assert "k3s_metallb_version" in {
+        p["variable"] for p in pins if "extractVersion" in p
     }
-    assert "k3s_metallb_version" in checked
-    problems = tag_rewriting_pins(_MANAGERS, _read)
+    problems = tag_rewriting_pins(pins, _read)
     assert not problems, (
         "an extractVersion strips the `v` from a pin that carries one, so Renovate writes the "
         "bare version back and every URL built from the pin breaks. Capture the `v` inside "
@@ -193,77 +115,11 @@ def test_an_extract_version_stripping_the_v_is_flagged():
 
 def test_the_metallb_anchor_drops_the_chart_releases():
     metallb = next(
-        m
-        for m in _MANAGERS
-        if m.get("annotation", {}).get("variable") == "k3s_metallb_version"
+        p for p in _annotated_pins() if p["variable"] == "k3s_metallb_version"
     )
-    anchor = re.compile(_to_python_regex(metallb["extractVersionTemplate"]))
+    anchor = re.compile(to_python_regex(metallb["extractVersion"]))
     assert anchor.search("v0.16.2")
     assert not anchor.search("metallb-chart-0.16.1")
-
-
-def test_a_well_formed_annotation_is_read():
-    text = '# renovate: datasource=github-releases depName=a/b\nb_version: "1.0"\n'
-    assert unread_annotations(text) == 0
-
-
-def test_an_annotation_with_keys_out_of_order_is_unread():
-    text = '# renovate: depName=a/b datasource=github-releases\nb_version: "1.0"\n'
-    assert unread_annotations(text) == 1
-
-
-# ── every version a pinned download renders from is tracked ───────────────────────────────
-
-
-def test_every_version_a_pin_renders_from_is_tracked():
-    pins, _ = discover_pins()
-    with_versions = [p for p in pins if any(k.endswith("_version") for k in p.inputs)]
-    assert {
-        "k3s_install_script",
-    } <= {p.name for p in with_versions}
-    problems = untracked_pin_versions(
-        with_versions, _MANAGERS, _read, UNTRACKED_BY_DECISION
-    )
-    assert not problems, (
-        "a pinned download renders from a version no Renovate manager tracks, so it is "
-        "fetched and checked but never bumped. Add `# renovate: datasource=... depName=...` "
-        "above the version line:\n" + "\n".join(problems)
-    )
-
-
-def _fake_pin(source: str = "roles/x/defaults/main.yml") -> Pin:
-    return Pin(
-        "tool",
-        "https://host/tool",
-        "sha256",
-        "0" * 64,
-        source,
-        inputs=frozenset({"tool_version"}),
-    )
-
-
-def test_a_pin_version_a_manager_matches_is_clean():
-    managers = [
-        {
-            "managerFilePatterns": ["/^roles/x/defaults/main\\.yml$/"],
-            "matchStrings": ['tool_version:\\s*"(?<currentValue>[^"]+)"'],
-        }
-    ]
-    read = lambda _: 'tool_version: "1.0"\n'
-    assert untracked_pin_versions([_fake_pin()], managers, read) == []
-
-
-def test_a_pin_version_no_manager_matches_is_flagged():
-    managers = [
-        {
-            "managerFilePatterns": ["/^roles/x/defaults/main\\.yml$/"],
-            "matchStrings": ['other_version:\\s*"(?<currentValue>[^"]+)"'],
-        }
-    ]
-    read = lambda _: 'tool_version: "1.0"\nother_version: "2.0"\n'
-    assert untracked_pin_versions([_fake_pin()], managers, read) == [
-        "roles/x/defaults/main.yml: tool_version (pin tool)"
-    ]
 
 
 # ── the packageRule that finishes an annotated pin ────────────────────────────────────────

@@ -80,6 +80,7 @@ def test_a_revision_that_changes_longhorn_is_named_for_a_hold_without_reset(
     result = _decide(world, monkeypatch, capsys)
     assert result.outputs["verdict"] == "promote", result.stderr
     assert result.outputs["no_reset"] == "longhorn"
+    assert result.outputs["hold_form"] == "no-reset"
 
 
 def test_a_revision_whose_last_good_lacks_longhorn_is_named(world, monkeypatch, capsys):

@@ -4,6 +4,8 @@ name: renovate-config-canary
 # config the hosted Mend app has stopped accepting is caught within a day rather than only
 # when renovate.json is next touched. The reasoning for validating unpinned is on the
 # `renovate-config` job in ci.yml, which runs the same script on a PR that touches the file.
+# It also checks Renovate's extract of master against scripts/validate/renovate_expected_deps.tsv,
+# which catches a Renovate release that reads a file differently on a day nothing changed.
 #
 # This does not run on every push to master. Mend rolls its Renovate forward on its own cadence
 # and deprecates config keys a release ahead, so per-merge buys nothing over daily. Renovate
@@ -37,18 +39,21 @@ jobs:
     name: validate renovate.json against latest Renovate
     runs-on: ubuntu-26.04
     timeout-minutes: 20 # six install attempts at 60s, plus a wedged fetch
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false # nothing here pushes; the repo is public, so the fetch needs no token
 
-      # The pinned Node, from the action ci.yml's `renovate-config` job uses, so the two run the
-      # validator under one Node release.
+      # The pinned Node, from the action ci.yml's `renovate-config` job uses, so the two run
+      # Renovate under one Node release. Python and uv run the extract's checker.
       - uses: $/.github/actions/setup
         with:
-          python: "false"
-          uv: "false"
+          python: "true"
+          uv: "true"
           node: "true"
 
-      - name: Validate renovate.json
-        run: scripts/validate/renovate_config.sh renovate.json
+      - name: Validate renovate.json and check Renovate's extract
+        run: scripts/validate/renovate_config.sh validate extract

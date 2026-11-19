@@ -206,7 +206,7 @@ The exit criterion is three observations:
   `k8s/roles/*/defaults/main.yml`, `ansible/roles/setup/*/defaults/main.yml` and
   `inventory/group_vars/all.yml`. Its description also justifies that scope: only the
   k8s-images manager carries a template that can write a digest onto a pin.
-  `scripts/tests/test_renovate_auto_replace.py:test_the_k8s_image_template_round_trips_every_live_pin`
+  `scripts/validate/renovate_extract.py:broken_templates`
   holds that manager's `autoReplaceStringTemplate` to every live pin. alloy and wg-easy pin a
   tag and a digest.
 - **A Pi deploy is heavy.** The `container_healthcheck_timeout` comment in
@@ -1464,7 +1464,7 @@ upstream, revert its downstreams before it.
       `docs/wireguard-private-homelab-access.md`.
 - **H5.11:** the Renovate rule tests in `scripts/tests/test_renovate_managers.py`, and the
   Pi template's round-trip test beside
-  `scripts/tests/test_renovate_auto_replace.py:test_the_k8s_image_template_round_trips_every_live_pin`.
+  `scripts/validate/renovate_extract.py:broken_templates`.
 - **H5.12:**
     - root `CLAUDE.md`, in three places: the *roles/containers/ is now only the Pi* block, the
       Docker on daniel-pi line under *Adding a New Service*, and the table row on a config

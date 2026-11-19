@@ -243,6 +243,7 @@ def test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature(
     answers, expected = REGISTRY_CASES[case]
     env = {
         **os.environ,
+        "REGISTRY_FUNCTIONS": workflow["env"]["REGISTRY_FUNCTIONS"],
         "RUNNER_TEMP": str(tmp_path),
         "DIGEST": "sha256:" + "5b" * 32,
         "IDENTITY": forge.SIGNER_IDENTITY,
