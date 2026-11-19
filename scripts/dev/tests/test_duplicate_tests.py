@@ -36,6 +36,15 @@ def test_tests_that_differ_in_a_value_or_an_argument_are_clean() -> None:
     assert duplicate_groups(sources) == []
 
 
+def test_one_body_parametrized_over_different_values_is_clean() -> None:
+    sources = {
+        "a/test_cart.py": '@pytest.mark.parametrize("cart", [1])' + _COPY.format(n=1),
+        "b/test_checkout.py": '@pytest.mark.parametrize("cart", [2])'
+        + _COPY.format(n=2),
+    }
+    assert duplicate_groups(sources) == []
+
+
 def test_a_one_statement_body_is_not_a_copy() -> None:
     one_line = "def test_it_holds():\n    assert CHECK()\n"
     assert duplicate_groups({"a/test_a.py": one_line, "b/test_b.py": one_line}) == []

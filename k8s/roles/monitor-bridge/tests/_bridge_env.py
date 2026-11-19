@@ -1,7 +1,7 @@
 """The environment the pod gets, rendered from `templates/`, for the suite.
 
 The settings render from `templates/config/env.yaml.j2` into the Deployment's `env`, and the
-credentials from `templates/env-secret.yaml.j2` (#5574). Since #3659 every key either renders
+credentials from the role's `render_secrets` (#5574). Since #3659 every key either renders
 has no default in `bridge/config*.py`, so a test that builds a `Config` starts from this render
 rather than from an empty dict. It is the same render a deploy of daniel-box makes
 (`_k8s_render.render_pod_env`), with two changes so a test cannot reach a real service by

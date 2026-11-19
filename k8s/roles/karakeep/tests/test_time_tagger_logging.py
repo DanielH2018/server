@@ -1,22 +1,75 @@
 """What one run of the vendored time-tagger writes to the container log, which Loki stores.
 
-The script's imports (`loguru`, `tqdm`, `fire`, `karakeep_python_api`, ...) are not in this
-repo's dev group, so, like `test_time_tagger_wiring.py`, these tests read the script through
-`ast` and model what loguru and tqdm do with it:
+Most of these tests read the script through `ast`, like `test_time_tagger_wiring.py`, and
+model what loguru and tqdm do with it:
 
 - loguru starts with a default stderr handler at DEBUG, which only `logger.remove()` drops;
 - the deployment runs `--reset_all=True` with `create_lists` left at its default, and stderr
   is not a TTY.
 
+The first premise holds only under the environment the Deployment sets, so one test runs the
+script's handler setup for real, with loguru, under that environment. Its other imports
+(`tqdm`, `fire`, `bs4`, `karakeep_python_api`) are not in this repo's dev group, so the
+driver stubs them, and its `KarakeepAPI` repeats what karakeep-python-api 1.9.1's
+`_configure_logging` does to loguru's handlers.
+
 Run: uv run pytest k8s/roles/karakeep/tests/test_time_tagger_logging.py
 """
 
 import ast
+import os
+import re
+import subprocess
+import sys
 from typing import TypeGuard
 from pathlib import Path
 
 ROLE = Path(__file__).resolve().parents[1]
 SCRIPT = ROLE / "files" / "karakeep-time-tagger.py"
+DEPLOYMENT = ROLE / "templates" / "deployment-time-tagger.yaml.j2"
+
+# Loaded as `tagger`, so its records are the script's, never the library's.
+_DRIVER = """
+import runpy, sys, types
+from loguru import logger
+
+for name, attr, value in (
+    ("fire", "Fire", lambda f: None),
+    ("tqdm", "tqdm", lambda it=None, **k: it),
+    ("bs4", "BeautifulSoup", object),
+):
+    stub = types.ModuleType(name)
+    setattr(stub, attr, value)
+    sys.modules[name] = stub
+
+
+def library_record(record):
+    return (record["name"] or "").startswith("karakeep_python_api")
+
+
+class KarakeepAPI:
+    def __init__(self):
+        try:
+            logger.remove(0)
+        except ValueError:
+            pass
+        else:
+            logger.add(sys.stderr, level="DEBUG", filter=lambda r: not library_record(r))
+        logger.add(sys.stderr, level="INFO", filter=library_record)
+
+
+api = types.ModuleType("karakeep_python_api")
+api.KarakeepAPI = KarakeepAPI
+sys.modules["karakeep_python_api"] = api
+
+script = runpy.run_path(sys.argv[1], run_name="tagger")
+tagger = script["AddTimeToRead"]()
+tagger.setup_logging(False)
+KarakeepAPI()
+bookmark = types.SimpleNamespace(content=types.SimpleNamespace(type="unsupported"))
+tagger.extract_content_text(bookmark)
+print("driver finished", file=sys.stderr)
+"""
 
 RUNS_PER_DAY = 96
 DAILY_LINE_BUDGET = 1000
@@ -160,6 +213,31 @@ def test_the_default_debug_handler_is_removed_so_debug_lines_do_not_ship():
         f"stderr carries handlers at {handlers}: loguru's default DEBUG handler survives "
         "setup_logging, so every bookmark's DEBUG line reaches Loki. Call logger.remove() "
         "before adding the INFO handler."
+    )
+
+
+def _deployment_env() -> dict[str, str]:
+    pairs = re.findall(
+        r"- name: (\w+)\n\s+value: \"?([^\"\n{]*)\"?\n", DEPLOYMENT.read_text()
+    )
+    return {name: value for name, value in pairs if name.startswith("LOGURU_")}
+
+
+def test_under_the_deployed_env_no_script_debug_line_survives_the_library_setup():
+    env = {k: v for k, v in os.environ.items() if not k.startswith("LOGURU_")}
+    env |= _deployment_env()
+    run = subprocess.run(
+        [sys.executable, "-c", _DRIVER, str(SCRIPT)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert "driver finished" in run.stderr, run.stderr
+    assert "Unsupported content type" not in run.stderr, (
+        f"with {_deployment_env() or 'no LOGURU_* env'}, a script DEBUG line reaches stderr "
+        "after KarakeepAPI() sets up its logging: the library's logger.remove(0) took the "
+        "script's INFO handler and left a DEBUG catch-all"
     )
 
 

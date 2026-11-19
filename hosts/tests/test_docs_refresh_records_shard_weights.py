@@ -2,26 +2,22 @@
 
 CI's measured check (`pytest_shard.py --check-durations`) only annotates an unweighted module
 costing `RUNNER_HEAVY_SECONDS` or more, and says nothing about a lighter one. An unweighted file
-is packed at the suite median of 0.0s, so nothing but this cron repairs the table: it holds the
-git-tree lock already and already publishes through a PR.
+is packed at the suite median of 0.0s, so nothing but this cron repairs the table: it already
+publishes through a PR.
 
-Three things have to hold together, and each has a way of failing that reads green:
+Two things have to hold together, and each has a way of failing that reads green:
 
 - The record runs BEFORE `git diff --cached --quiet`. That gate exits the script when the
   generated trees did not move, which is most runs, so a record after it never publishes.
 - Both weights tables are in the `git add`: the recorded one, and the runner-seconds one that
-  `--refresh-runner` rewrites from CI's logs. Written and left unstaged, a table is a
-  modified file in the primary checkout, which `homelab-checkout-sync` reads as dirty and
-  which parks it.
-- `restore_generated_tree`'s per-tree check names them too. That check is what decides between
-  `tree restored` and `TREE STILL DIRTY` after a failed commit, and it is path-scoped: scoped
-  to the two doc trees it would report restored over a weights table left modified.
+  `--refresh-runner` rewrites from CI's logs. Written and left unstaged, a table never
+  publishes, and the cron reports the stray write as a degraded run.
 
 The runner refresh runs before the gate for the same reason the record does.
 
 The cron also records what each test module depends on (`affected_tests.py record`),
 into a third table that a pull request's CI run selects its test modules from. The same
-three things hold for it, and it needs `strace`, which the component has to install.
+two things hold for it, and it needs `strace`, which the component has to install.
 
 Every path here is derived from `pytest_shard` rather than spelled, so renaming the table or
 the script breaks this test instead of silently leaving the cron pointing at nothing.
@@ -127,20 +123,9 @@ def test_a_record_after_the_publish_gate_is_flagged():
         pytest.param(AFFECTED, id="affected"),
     ],
 )
-@pytest.mark.parametrize(
-    "marker",
-    [
-        pytest.param("git add ", id="staged-for-the-commit"),
-        pytest.param("git status --porcelain -- ", id="checked-by-the-restore"),
-    ],
-)
-def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker, table):
-    """Both places name docs/reference; a weights table missing from either parks checkout-sync.
-
-    The `git add` is the issue's own first bullet. The porcelain check is one layer under it:
-    the per-path restore already covers the table, and this is the check that says the restore
-    worked — scoped to the two doc trees it reports `tree restored` over leftover dirt.
-    """
+def test_the_weights_table_is_staged_with_the_doc_trees(table):
+    """The `git add` that names docs/reference names the table; one left out never publishes."""
+    marker = "git add "
     lines = _code_lines(SCRIPT)
     hits = [i for i, line in enumerate(lines) if marker in line]
     assert hits, f"{TEMPLATE.name} no longer contains a {marker!r} line"
@@ -150,7 +135,7 @@ def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker, table):
         assert "docs/reference" in span, f"{marker!r} at line {start} names no doc tree"
         assert table in span, (
             f"{TEMPLATE.name}: the {marker!r} covering docs/reference does not name "
-            f"{table}, so the table the cron writes is left loose in the primary checkout"
+            f"{table}, so the table the cron writes never publishes"
         )
 
 

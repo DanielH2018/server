@@ -1,7 +1,8 @@
 """`board.sync_board` against a fake `gh api graphql`: the read, the plan and the mutations.
 
-`FakeGh` answers the aliased read from `issues` and `board`, and records each mutation's
-query text, so a test asserts which writes went out without restating the GraphQL.
+`FakeGh` answers the aliased read from `issues`, `board` and `issue_fields`, and records
+each mutation's query text, so a test asserts which writes went out without restating the
+GraphQL.
 """
 
 import json
@@ -21,52 +22,49 @@ from dev.findings_lib.board import (
 )
 
 BOARD_ID = "PVT_board"
-
-
-def _board(*, fields=("Status", "Severity", "Not before")) -> dict:
-    known = {
-        "Status": {
-            "id": "F_status",
-            "name": "Status",
-            "options": [
-                {"id": "o_todo", "name": TODO},
-                {"id": "o_prog", "name": IN_PROGRESS},
-                {"id": "o_done", "name": DONE},
-            ],
-        },
-        "Severity": {
-            "id": "F_sev",
-            "name": "Severity",
-            "options": [{"id": f"o_{s}", "name": s} for s in ("high", "medium", "low")],
-        },
-        "Not before": {"id": "F_nb", "name": "Not before"},
-    }
-    return {
-        "id": BOARD_ID,
-        "title": PROJECT_TITLE,
-        "fields": {"nodes": [known[f] for f in fields]},
-    }
-
-
+SEVERITY_FIELD = {
+    "id": "IF_sev",
+    "name": "Severity",
+    "options": [{"id": f"o_{s.lower()}", "name": s} for s in ("High", "Medium", "Low")],
+}
+NOT_BEFORE_FIELD = {"id": "IF_nb", "name": "Not Before"}
 CLAIMED = (claim_comment("worktree-a", None, "2026-11-18T10:00Z"),)
 
 
-def _issue(number, *, labels=(), state="OPEN", prs=(), held=None, comments=()) -> dict:
+def _board() -> dict:
+    status = {
+        "id": "F_status",
+        "name": "Status",
+        "options": [
+            {"id": "o_todo", "name": TODO},
+            {"id": "o_prog", "name": IN_PROGRESS},
+            {"id": "o_done", "name": DONE},
+        ],
+    }
+    return {"id": BOARD_ID, "title": PROJECT_TITLE, "fields": {"nodes": [status]}}
+
+
+def _issue(
+    number, *, labels=(), state="OPEN", prs=(), status=None, fields=None, comments=()
+) -> dict:
+    """One issue as the read returns it; ``status`` puts it on the board with that Status."""
     items = []
-    if held is not None:
-        values = [
-            {"date": v, "field": {"name": k}}
-            if k == "Not before"
-            else {"name": v, "field": {"name": k}}
-            for k, v in held.items()
-        ]
+    if status is not None:
         items.append(
             {
                 "id": f"item{number}",
                 "project": {"id": BOARD_ID},
-                "fieldValues": {"nodes": values},
+                "fieldValues": {
+                    "nodes": [{"name": status, "field": {"name": "Status"}}]
+                },
             }
         )
+    values = [
+        {"value": v, "field": {"name": k}}
+        if k == "Not Before"
+        else {"name": v, "field": {"name": k}}
+        for k, v in (fields or {}).items()
+    ]
     return {
         "id": f"I_{number}",
         "number": number,
@@ -74,6 +72,7 @@ def _issue(number, *, labels=(), state="OPEN", prs=(), held=None, comments=()) -
         "labels": {"nodes": [{"name": n} for n in labels]},
         "comments": {"nodes": [operator_comment(c) for c in comments]},
         "closedByPullRequestsReferences": {"nodes": [{"state": s} for s in prs]},
+        "issueFieldValues": {"nodes": values},
         "projectItems": {"nodes": items},
     }
 
@@ -81,9 +80,17 @@ def _issue(number, *, labels=(), state="OPEN", prs=(), held=None, comments=()) -
 class FakeGh:
     """A `gh` that answers the board read and records every mutation."""
 
-    def __init__(self, issues, board=None, *, fail=None):
+    def __init__(
+        self,
+        issues,
+        board=None,
+        *,
+        issue_fields=(SEVERITY_FIELD, NOT_BEFORE_FIELD),
+        fail=None,
+    ):
         self.issues = {i["number"]: i for i in issues}
         self.board = _board() if board is None else board
+        self.issue_fields = list(issue_fields)
         self.fail = fail
         self.mutations: list[str] = []
 
@@ -99,7 +106,10 @@ class FakeGh:
                 if line.startswith("a")
             }
             return subprocess.CompletedProcess(argv, 0, json.dumps({"data": data}), "")
-        repository = {"owner": {"projectsV2": {"nodes": [self.board]}}}
+        repository = {
+            "owner": {"projectsV2": {"nodes": [self.board]}},
+            "issueFields": {"nodes": self.issue_fields},
+        }
         for n, issue in self.issues.items():
             if f"i{n}:" in query:
                 repository[f"i{n}"] = issue
@@ -120,28 +130,32 @@ def test_status_follows_the_claim_a_closing_pr_and_the_close():
 def test_severity_and_not_before_come_from_their_labels():
     labels = {"severity/high", "not-before:2026-12-01"}
     fields = wanted_fields("OPEN", labels, 0, claimed=False)
-    assert fields["Severity"] == "high"
-    assert fields["Not before"] == "2026-12-01"
+    assert fields["Severity"] == "High"
+    assert fields["Not Before"] == "2026-12-01"
     assert wanted_fields("OPEN", set(), 0, claimed=False)["Severity"] is None
 
 
-def test_a_claim_comment_moves_the_issue_to_in_progress():
-    gh = FakeGh(
-        [
-            _issue(
-                7,
-                labels=["severity/low"],
-                held={"Status": TODO, "Severity": "low"},
-                comments=CLAIMED,
-            )
-        ]
-    )
+def test_a_claim_comment_moves_the_board_status_to_in_progress():
+    gh = FakeGh([_issue(7, status=TODO, comments=CLAIMED)])
 
-    outcomes = sync_board([7], None, gh=gh)
-
-    assert outcomes == {7: ("updated", "Status Todo -> In Progress")}
+    assert sync_board([7], None, gh=gh) == {
+        7: ("updated", "Status Todo -> In Progress")
+    }
     assert len(gh.mutations) == 1
     assert '"o_prog"' in gh.mutations[0] and '"item7"' in gh.mutations[0]
+
+
+def test_the_labels_set_the_issue_fields_on_the_issue_itself():
+    labels = ["severity/low", "not-before:2026-12-01"]
+    gh = FakeGh([_issue(7, labels=labels, status=TODO)])
+
+    assert sync_board([7], None, gh=gh) == {
+        7: ("updated", "Severity empty -> Low; Not Before empty -> 2026-12-01")
+    }
+    [mutation] = gh.mutations
+    assert mutation.count("setIssueFieldValue") == 2 and '"I_7"' in mutation
+    assert '"o_low"' in mutation and 'dateValue: "2026-12-01"' in mutation
+    assert "updateProjectV2ItemFieldValue" not in mutation
 
 
 def test_an_issue_missing_from_the_board_is_added_then_written_after_a_pause():
@@ -152,47 +166,50 @@ def test_an_issue_missing_from_the_board_is_added_then_written_after_a_pause():
 
     assert outcomes[9] == (
         "updated",
-        "added; Status empty -> Todo; Severity empty -> medium",
+        "added; Status empty -> Todo; Severity empty -> Medium",
     )
     assert "addProjectV2ItemById" in gh.mutations[0]
     assert '"new_a9"' in gh.mutations[1]
     assert pauses == [MUTATION_PAUSE_S]
 
 
-def test_a_cleared_label_clears_the_field():
-    gh = FakeGh([_issue(4, held={"Status": TODO, "Not before": "2026-11-01"})])
+def test_a_cleared_label_clears_the_issue_field():
+    gh = FakeGh([_issue(4, status=TODO, fields={"Not Before": "2026-11-01"})])
 
-    assert sync_board([4], None, gh=gh)[4][1] == "Not before 2026-11-01 -> empty"
-    assert "clearProjectV2ItemFieldValue" in gh.mutations[0]
+    assert sync_board([4], None, gh=gh)[4][1] == "Not Before 2026-11-01 -> empty"
+    assert "delete: true" in gh.mutations[0]
 
 
 def test_an_agreeing_issue_writes_nothing():
-    gh = FakeGh([_issue(5, held={"Status": TODO})])
+    gh = FakeGh(
+        [_issue(5, labels=["severity/high"], status=TODO, fields={"Severity": "High"})]
+    )
 
     assert sync_board([5], None, gh=gh) == {5: ("unchanged", "")}
     assert gh.mutations == []
 
 
 def test_a_dry_run_plans_but_writes_nothing():
-    gh = FakeGh([_issue(7, held={"Status": TODO}, comments=CLAIMED)])
+    gh = FakeGh([_issue(7, status=TODO, comments=CLAIMED)])
 
     assert sync_board([7], None, dry_run=True, gh=gh)[7][0] == "updated"
     assert gh.mutations == []
 
 
-def test_a_board_without_a_field_fails_the_issue_and_names_the_field():
-    gh = FakeGh(
-        [_issue(7, held={"Status": TODO})], _board(fields=("Status", "Severity"))
-    )
+def test_an_account_without_an_issue_field_names_where_to_add_it():
+    gh = FakeGh([_issue(7, status=TODO)], issue_fields=(SEVERITY_FIELD,))
 
     assert sync_board([7], None, gh=gh) == {
-        7: ("failed", 'board has no "Not before" field')
+        7: (
+            "failed",
+            'no "Not Before" issue field; add it under Settings > Planning > Issue fields',
+        )
     }
     assert gh.mutations == []
 
 
 def test_a_number_that_is_not_an_issue_fails_alone():
-    gh = FakeGh([_issue(5, held={"Status": TODO})])
+    gh = FakeGh([_issue(5, status=TODO)])
 
     assert sync_board([5, 6], None, gh=gh) == {
         5: ("unchanged", ""),

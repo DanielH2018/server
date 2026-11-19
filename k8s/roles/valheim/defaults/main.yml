@@ -217,3 +217,11 @@ image_builder_builds:
     when: valheim_k8s_mods | length > 0
 
 manifests_rollout: valheim
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The join password, kept out of the Deployment manifest.
+  - name: valheim-env
+    string_data:
+      SERVER_PASS: valheim_server_pass
