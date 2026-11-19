@@ -8,8 +8,9 @@ A fan-out brief and a hand-run session both call this script, so the list has on
     uv run python scripts/dev/repo_guards.py --drop-candidates  # what the list could lose
 
 After the guards, the run prints advice for the branch: each instruction-file section that
-cites code the branch changed and whose prose it left unchanged, and each name the branch
-removed that a doc or a comment still uses. Advice changes no exit code.
+cites code the branch changed and whose prose it left unchanged, each name the branch
+removed that a doc or a comment still uses, and a count of what the branch adds with each
+new name that nothing outside tests calls. Advice changes no exit code.
 
 The whole suite is out of scope. It costs about five times this set, and the operator ruled it
 out for fan-out batches (`.claude/hooks/block-batch-full-suite.py`).
@@ -34,6 +35,7 @@ import ci_failures
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.branch_adds import added_advice
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 from lib.facts.lint import vanished_advice
@@ -118,11 +120,16 @@ def _removed_names(repo: Path) -> str | None:
     return vanished_advice(repo, NOTICE_REF)
 
 
-# What a branch gets told before its PR opens: the sections that cite code it changed, and
-# the names it removed that a doc or a comment still uses.
+def _branch_adds(repo: Path) -> str | None:
+    return added_advice(repo, NOTICE_REF)
+
+
+# What a branch gets told before its PR opens: the sections that cite code it changed, the
+# names it removed that a doc or a comment still uses, and what it adds to the tree.
 ADVICE: tuple[tuple[str, Source], ...] = (
     ("facts notice", _reread),
     ("removed names", _removed_names),
+    ("branch adds", _branch_adds),
 )
 
 
