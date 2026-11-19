@@ -308,8 +308,9 @@ answers for every run, other sessions' included, which `cc-wait fanout` cannot. 
 reads the hosts itself and never reuses an earlier wait's reading, so a wait started just
 after a launch counts that launch's batches (#6758). The source
 is `scripts/dev/fanout.py headroom`, which calls the same two placement functions `launch`
-does, so `room` is not a promise the issue-body gates pass. Launch within a minute of
-`room`: the probe's ssh connection to daniel-server persists for `MUX_PERSIST_S` (60s), and
+does, so `room` is not a promise the issue-body gates pass. Launch within three minutes
+of `room`: the probe's ssh connection to daniel-server persists for
+`scripts/dev/fanout_lib/transport.py:MUX_PERSIST_S`, and
 `launch` reuses it rather than spending another against `ufw limit ssh`.
 
 **Waiting for more work once the queue is empty.** When `next --json` lists nothing free,

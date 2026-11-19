@@ -7,7 +7,8 @@ import os
 
 from fanout_lib.brief import Issue
 from fanout_lib.place import main
-from fanout_lib.transport import SSH_OPTS, _argv, control_dir
+from fanout_lib import headroom_probe, wait_probe
+from fanout_lib.transport import MUX_PERSIST_S, SSH_OPTS, _argv, control_dir
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
@@ -20,6 +21,11 @@ def test_a_control_directory_adds_the_reuse_options_to_a_remote_call():
     assert "ControlMaster=auto" in argv
     assert "ControlPath=/run/user/1000/fanout-ssh/%C" in argv
     assert argv[-2:] == ["daniel-server", "echo hi"]
+
+
+def test_the_master_connection_outlives_every_host_reading_poll():
+    intervals = [p.describe()["interval_s"] for p in (wait_probe, headroom_probe)]
+    assert intervals and all(i < MUX_PERSIST_S for i in intervals), intervals
 
 
 def test_no_control_directory_leaves_the_call_as_it_was():
