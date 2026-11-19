@@ -29,13 +29,6 @@ import re
 import sys
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.cli_help import answer_help
 from lib.repo_paths import K8S, REPO
 
@@ -114,4 +107,4 @@ def main(argv: Sequence[str] = ()) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(_sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

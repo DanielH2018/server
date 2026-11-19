@@ -20,11 +20,6 @@ It does not cover the three upstream hosts, an arm64 host, or daniel-server's ha
 `github-cli.list`, which reconcile retires and no case here installs.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import hashlib
 import shlex
 import shutil

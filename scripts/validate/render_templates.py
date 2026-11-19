@@ -33,13 +33,6 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.cli_help import answer_help
 from validate.render_lib import compose, setup_plane, shell, units
 from validate.validate_lib.ok_lines import ok_printer

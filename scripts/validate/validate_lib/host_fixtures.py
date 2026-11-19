@@ -14,11 +14,6 @@ into the repository as TEST_KEYRING. The test image's source names that keyring 
 `Signed-By:`, so apt checks the signature and the `Valid-Until` an expired-index case moves.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import atexit
 import dataclasses
 import functools
