@@ -1,10 +1,10 @@
 name: render-diff
 
 # Advisory: renders the merge base and the PR head with one commit value, then prints the
-# difference and the head's tree digest. It fails nothing and no ruleset requires it
-# (R4 Open question 12, option 2). A human reads the printed diff before merging a renderer or
-# renderer-dependency change. renovate.json disables automerge for the renderer's dependency
-# closure, so a bump that moves output waits for that read.
+# difference and the head's tree digest. It fails nothing and no ruleset requires it. A human
+# reads the printed diff before merging a renderer or renderer-dependency change. renovate.json
+# disables automerge for the renderer's dependency closure, so a bump that moves output waits
+# for that read.
 
 on:
   pull_request:
