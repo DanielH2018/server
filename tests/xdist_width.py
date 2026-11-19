@@ -46,8 +46,8 @@ keeps current from CI's own logs. The runner measures a median 1.8x the seconds 
 above. A selection's total over its heaviest module does not move with that scale, so only
 `MIN_SECONDS_PER_WORKER` is stated in runner seconds.
 
-On 2026-11-19 the rule gave the `-python` hook 3 (19.9 runner seconds, heaviest 7.02s), the
-fastest width measured for it. It gave `scripts/lib/tests` 5 (105.1s, heaviest 23.99s), where
+On 2026-11-19 the rule gave the `-python` hook's modules 3 (19.9 runner seconds, heaviest
+7.02s), the fastest width measured for them. It gave `scripts/lib/tests` 5 (105.1s, heaviest 23.99s), where
 4 measured faster than 8 and 5 was not measured. It gives four light files 1, where a second
 worker saved under half a second in one round of two. A module the table does not hold is
 charged the table's mean. A run that names no path (the
