@@ -27,7 +27,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 # The `lib` convention for a module that imports its siblings as `lib.<name>`; `render_guard`
@@ -64,6 +64,7 @@ __all__ = [
     "default_ref",
     "forge_says_landed",
     "forge_says_merged",
+    "held_by_readable_process",
     "is_dirty",
     "is_merged",
     "local_landed_layer",
@@ -672,6 +673,35 @@ def in_use_reason(path: str) -> str:
     if not users:
         return ""
     return f"{IN_USE}: " + "; ".join(f"pid {pid} ({how})" for pid, how in users)
+
+
+@functools.cache
+def _readable_holds() -> tuple[tuple[int, str, str], ...]:
+    return tuple(process_holds())
+
+
+def held_by_readable_process(
+    path: str,
+    holds: Callable[[], Sequence[tuple[int, str, str]]] = _readable_holds,
+) -> bool:
+    """Whether a process this uid can read has its cwd or `CLAUDE_PROJECT_DIR` inside `path`.
+
+    The claim-liveness counterpart of `processes_using`, which fails closed because it gates
+    a deletion. A claim held on no evidence is never reaped, so an unreadable process (a
+    FOREIGN_UID hold, whose path is unknown) counts for nothing here. The /proc scan runs
+    once per process, shared by every tree asked about; `holds` is its test seam.
+
+    The main worktree, the one whose `.git` is a directory, is never held: every linked
+    session tree sits under it, sessions also run in it, and its branch is `master`, which
+    no claim may name.
+    """
+    if Path(path, ".git").is_dir():
+        return False
+    roots = tree_roots(path)
+    return any(
+        how != FOREIGN_UID and held and holds_tree(held, roots)
+        for _pid, held, how in holds()
+    )
 
 
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:

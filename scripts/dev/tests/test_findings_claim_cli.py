@@ -330,6 +330,60 @@ def test_claim_is_flagged_when_the_worktree_state_makes_the_claim_stale(capsys):
     assert calls.none()
 
 
+def test_claim_from_an_unlocked_tree_its_session_works_in_needs_no_force():
+    # A desktop-app session: its tree is unlocked and, between commits, merged and clean.
+    branch = "claude/priceless-wright-db36f0"
+    tree = Worktree(
+        path="/w/pw", head="abc", branch=branch, locked=False, lock_reason=""
+    )
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=facts([tree], merged=True),
+            held_paths={"/w/pw"},
+        )
+    )
+    assert main(["claim", "1132", "--worktree", branch], tools) == 0
+    assert any(f"Claim: `{branch}`" in a for c in calls.gh for a in c)
+
+
+def test_claim_on_master_is_refused_while_sessions_work_in_and_under_it(
+    capsys, tmp_path
+):
+    (tmp_path / ".git").mkdir()
+    session_path = f"{tmp_path}/.claude/worktrees/s"
+    primary = Worktree(path=str(tmp_path), head="abc", branch="master", locked=False)
+    session = Worktree(path=session_path, head="abc", branch=WT, locked=False)
+    issue = make_issue(1132)
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=facts([primary, session], merged=True),
+            held_paths={str(tmp_path), session_path},
+        )
+    )
+    assert main(["claim", "1132", "--worktree", "master"], tools) == 3
+    assert "merged, clean, unlocked" in capsys.readouterr().err
+    assert calls.none()
+
+
+def test_reap_keeps_a_claim_on_an_unlocked_tree_a_live_process_works_in():
+    tree = Worktree(path="/w/wt", head="abc", branch=WT, locked=False, lock_reason="")
+    issue = make_issue(1132, comments=[claim_comment(WT, None, "t")])
+    tools, calls = build_tools(
+        Fakes(
+            issues=[issue],
+            worktree_facts=facts([tree], merged=True),
+            held_paths={"/w/wt"},
+        )
+    )
+    assert main(["reap"], tools) == 0
+    assert not _released(calls, "1132")
+
+
 def test_claim_force_overrides_the_stale_at_birth_refusal():
     """The way out. A resumed orchestrator legitimately re-claims without its lock, so the
     guard is a door and not a wall — and the refusal message names this flag."""

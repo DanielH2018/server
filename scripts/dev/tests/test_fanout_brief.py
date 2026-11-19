@@ -264,7 +264,6 @@ def test_a_server_brief_names_the_guard_script_and_a_dotfiles_brief_does_not():
 
 
 def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():
-    """The red phase covers only `red-green` batches, so every brief carries the step."""
     for host, target in (
         ("daniel-box", None),
         ("daniel-server", None),

@@ -54,11 +54,11 @@ def test_every_implementer_phase_runs_at_the_rung_and_resume_keeps_its_model(tmp
         assert _flag(argv, "--max-budget-usd") == str(TOP.budget_usd)
 
 
-def test_the_red_author_and_reviewer_stay_on_opus_medium_whatever_the_rung(tmp_path):
+def test_the_reviewer_stays_on_opus_medium_whatever_the_rung(tmp_path):
     pipeline, _ = _pipeline(tmp_path, [])
     pipeline.record.implementer = TOP
-    for argv in (pipeline._red_author(), pipeline._reviewer()):
-        assert (_flag(argv, "--model"), _flag(argv, "--effort")) == ("opus", "medium")
+    argv = pipeline._reviewer()
+    assert (_flag(argv, "--model"), _flag(argv, "--effort")) == ("opus", "medium")
 
 
 def test_the_review_unit_builds_its_pipeline_at_the_rung_it_was_launched_with(

@@ -89,6 +89,15 @@ def _unregistered(branch: str, trees: list[Worktree]) -> bool:
     return not any(t.branch == branch for t in trees)
 
 
+# `(worktree path) -> bool`: whether a live process works in that tree, a
+# `FindingsTools.tree_held`. Asked only of a tree `classify` calls removable.
+TreeHeld = Callable[[str], bool]
+
+
+def _never_held(_path: str) -> bool:
+    return False
+
+
 @dataclass(frozen=True)
 class ClaimState:
     """One issue's claim, and whether the worktree behind it is still working.
@@ -115,6 +124,7 @@ def claim_is_live(
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
+    held: TreeHeld = _never_held,
 ) -> tuple[bool, str]:
     """Whether the claim held by ``worktree_name`` is still live.
 
@@ -126,6 +136,7 @@ def claim_is_live(
             takes the TREE and not the branch name because `is_merged` keys on the head SHA;
             passing a branch name as its `head` argument makes every git layer exit non-zero
             and the function return False for everything.
+        held: takes a worktree path, returns whether a live process works in it.
 
     Returns:
         (live, reason). The reason is `classify`'s own, so a `claims` row and a
@@ -141,6 +152,13 @@ def claim_is_live(
     The worktree cannot answer that, and the issue number is not known here, so the callers
     that hold an issue — `claim_states` and `stale_holder` — ask the run manifests through
     their `batch_holds` argument.
+
+    A TREE A LIVE PROCESS WORKS IN IS HELD, LOCK OR NO LOCK. The Claude desktop app creates
+    its session worktrees unlocked, on `claude/<name>` branches. Between a clean commit and
+    the next edit such a tree reads merged, clean and unlocked, so `classify` calls it
+    removable while its session is running. A process whose cwd or `CLAUDE_PROJECT_DIR` is
+    inside the tree is the sign of a live session that needs no lock, so a removable
+    verdict is overturned when ``held`` finds one.
 
     AN UNREADABLE WORKTREE IS HELD, NOT RELEASED. A PRUNABLE worktree — one whose directory
     was removed without `git worktree remove` — keeps appearing in `git worktree list
@@ -170,6 +188,8 @@ def claim_is_live(
             "run `git worktree prune`"
         )
     verdict, reason = classify(tree, merged=tree_merged, dirty=tree_dirty)
+    if verdict == REMOVABLE and held(tree.path):
+        return True, f"in use — a live process works in {tree.path}"
     return verdict != REMOVABLE, reason
 
 
@@ -202,6 +222,7 @@ def stale_holder(
     merged: Callable[[Worktree], bool],
     batch_holds: BatchHolds = _no_batch_holds,
     peer_trees: PeerTrees = _no_peer_trees,
+    held_tree: TreeHeld = _never_held,
 ) -> tuple[str, str] | None:
     """(holder, why) when this issue's claim is STALE, else None.
 
@@ -217,8 +238,8 @@ def stale_holder(
     held = current_claim(issue)
     if not held:
         return None
-    live, why = claim_is_live(held, trees, dirty, merged)
-    if live or branch_is_held(held, trees, dirty, merged, peer_trees):
+    live, why = claim_is_live(held, trees, dirty, merged, held_tree)
+    if live or branch_is_held(held, trees, dirty, merged, peer_trees, held_tree):
         return None
     if issue["number"] in batch_holds([issue["number"]]):
         return None
@@ -231,13 +252,14 @@ def branch_is_held(
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
     peer_trees: PeerTrees = _no_peer_trees,
+    held: TreeHeld = _never_held,
 ) -> bool:
     """Whether a worktree on either host still holds ``branch``, or the peer cannot say.
 
     The worktree half of `stale_holder`, without the batch holds an issue adds. `reap`
     asks it of each session milestone's branch before closing the milestone.
     """
-    if claim_is_live(branch, trees, dirty, merged)[0]:
+    if claim_is_live(branch, trees, dirty, merged, held)[0]:
         return True
     return (
         _unregistered(branch, trees) and _peer_reason(peer_trees(), branch) is not None
@@ -252,6 +274,7 @@ def claim_states(
     batch_holds: BatchHolds = _no_batch_holds,
     now: datetime | None = None,
     peer_trees: PeerTrees = _no_peer_trees,
+    held_tree: TreeHeld = _never_held,
 ) -> list[ClaimState]:
     """One `ClaimState` per issue that is currently claimed, in issue order.
 
@@ -269,7 +292,7 @@ def claim_states(
         held = current_claim(issue)
         if not held:
             continue
-        live, reason = claim_is_live(held, trees, dirty, merged)
+        live, reason = claim_is_live(held, trees, dirty, merged, held_tree)
         states.append(
             ClaimState(
                 issue["number"], held, live, reason, _claim_age_days(issue, held, now)
@@ -375,7 +398,13 @@ def free_issues(
     stale: dict[int, str] = {}
     if ok:
         states = claim_states(
-            issues, trees, dirty, merged, tools.batch_holds, peer_trees=tools.peer_trees
+            issues,
+            trees,
+            dirty,
+            merged,
+            tools.batch_holds,
+            peer_trees=tools.peer_trees,
+            held_tree=tools.tree_held,
         )
         live = {s.number for s in states if s.live}
         stale = {s.number: s.worktree for s in states if not s.live}

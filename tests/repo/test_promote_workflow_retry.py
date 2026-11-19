@@ -135,6 +135,41 @@ def test_a_call_outside_retry_is_flagged(workflow, case):
     ), retry_problems(broken)
 
 
+# GitHub prints every workflow-level env value in each step's header, so a literal command
+# there shows as a false hit to every grep for `::error` over the run's log.
+WORKFLOW_COMMAND = re.compile(r"::(?:error|warning|notice|debug)\b")
+ENV_HOLDERS = (WORKFLOW, WORKFLOW.parent / "prune-artifacts.yml")
+
+
+def env_command_problems(wf: dict) -> list[str]:
+    """Every workflow-level env value that carries a literal workflow command."""
+    return [
+        f"env: {key}: carries a literal {match[0]}"
+        for key, value in (wf.get("env") or {}).items()
+        if (match := WORKFLOW_COMMAND.search(str(value)))
+    ]
+
+
+@pytest.mark.parametrize("path", ENV_HOLDERS, ids=lambda p: p.name)
+def test_no_env_value_carries_a_literal_workflow_command_is_clean(path):
+    assert env_command_problems(_load(path)) == []
+
+
+@pytest.mark.parametrize("command", ["::error::", "::warning::"])
+def test_an_env_value_with_a_literal_workflow_command_is_flagged(workflow, command):
+    broken = copy.deepcopy(workflow)
+    broken["env"]["RETRY_FUNCTIONS"] += f'echo "{command}boom"\n'
+    assert env_command_problems(broken) == [
+        f"env: RETRY_FUNCTIONS: carries a literal {command[:-2]}"
+    ]
+
+
+def test_annotate_prints_the_workflow_command(workflow):
+    script = workflow["env"]["RETRY_FUNCTIONS"] + 'annotate error "it broke"'
+    result = proc_run(["bash", "-c", script], env=dict(os.environ))
+    assert result.stdout == "::error::it broke\n", result.stderr
+
+
 BARE = "gh variable set PROD_DIGEST --body x"
 
 
