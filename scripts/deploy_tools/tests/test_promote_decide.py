@@ -32,6 +32,7 @@ NOTHING_MOVES = {
     "clears_hold": "false",
     "no_reset": "",
     "stateful": "",
+    "hold_form": "reset",
     "suspended_hold": "",
     "supersedes": "",
     "hold_read": "none",
