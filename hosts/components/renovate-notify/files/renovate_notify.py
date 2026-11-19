@@ -86,6 +86,9 @@ DASHBOARD_STALE_MSG = (
 )
 
 
+MAX_ISSUE_PAGES = 20
+
+
 def cfg() -> dict[str, str]:
     return parse_env_file(CONFIG)
 
@@ -268,6 +271,22 @@ def write_pending_seen(path: str, seen: dict[str, float]) -> None:
     atomic_write(path, json.dumps(seen, sort_keys=True))
 
 
+def fetch_issues_through_dashboard(repo: str) -> list[dict]:
+    """Return open issues and PRs, paging until the Dependency Dashboard appears.
+
+    The `/issues` endpoint lists newest first and the dashboard is the oldest open item, so
+    one page misses it once more than 100 items are open. Stops at the dashboard, a short
+    page, or MAX_ISSUE_PAGES.
+    """
+    issues: list[dict] = []
+    for page in range(1, MAX_ISSUE_PAGES + 1):
+        batch = get("repos/%s/issues?state=open&per_page=100&page=%d" % (repo, page))
+        issues += batch
+        if len(batch) < 100 or find_dashboard(batch) is not None:
+            break
+    return issues
+
+
 def main() -> int:
     """Fetch open Renovate PRs and the dashboard, and post a digest on a fingerprint change.
 
@@ -296,7 +315,7 @@ def main() -> int:
     # stale/missing dashboard means Renovate itself stopped (broken App or renovate.json) —
     # a state with NO PRs, which the digest alone would read as a healthy "backlog cleared".
     # Fold it into the fingerprint so it notifies on transition, not every daily tick.
-    issues = get("repos/%s/issues?state=open&per_page=100" % repo)
+    issues = fetch_issues_through_dashboard(repo)
     stale = dashboard_stale(find_dashboard(issues))
     # Repository Problems (per-package lookup failures, config warnings) get no PR and
     # don't touch dashboard staleness — a package can silently stop updating forever
