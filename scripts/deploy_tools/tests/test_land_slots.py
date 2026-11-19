@@ -148,7 +148,13 @@ def _land(ln) -> None:
         (_DOCS, {"serial": [False]}, "a landing of a forward-only pin"),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
-    ids=["hold", "serial-live", "serial-beside-a-slot", "beside-serial", "window"],
+    ids=[
+        "hold",
+        "serial-live-past-the-drain",
+        "serial-beside-a-slot-past-the-drain",
+        "beside-serial",
+        "window",
+    ],
 )
 def test_a_rule_refuses_the_merge_with_exit_75(landing, paths, fakes, why):
     ln, calls = _merging(landing, paths, **fakes)
@@ -156,6 +162,43 @@ def test_a_rule_refuses_the_merge_with_exit_75(landing, paths, fakes, why):
         _land(ln)
     assert stop.value.rc == 75 and why in stop.value.error
     assert "merge" not in call_order(calls)
+
+
+@pytest.mark.parametrize(
+    ("draft", "fakes"),
+    [
+        (False, {"slot": [False, False, True]}),
+        (False, {"serial": [False, True]}),
+        (True, {"slot": [False, False, False, True]}),
+    ],
+    ids=["a-slot-frees", "the-serial-lock-frees", "a-draft-beside-a-slot"],
+)
+def test_a_serial_pr_in_the_turn_merges_once_the_landings_past_their_merge_finish(
+    landing, draft, fakes
+):
+    ln, calls = _merging(landing, _SERIAL, draft, **fakes)
+    _land(ln)
+    assert "merge" in call_order(calls)
+    assert "sleep" in _names(calls)
+
+
+@pytest.mark.parametrize(
+    ("in_turn", "fakes"),
+    [
+        (False, {"slot": [False]}),
+        (True, {"slot": [False], "in_window": True}),
+        (True, {"slot": [False], "deploy_hold": "abc123"}),
+    ],
+    ids=["out-of-the-turn", "inside-the-window", "under-a-hold"],
+)
+def test_a_serial_pr_the_drain_cannot_clear_is_refused_without_waiting(
+    landing, in_turn, fakes
+):
+    ln, calls = _merging(landing, _SERIAL, **fakes)
+    with pytest.raises(Outcome) as stop:
+        slots.refuse_before_merge(ln, in_turn)
+    assert stop.value.rc == 75
+    assert "sleep" not in _names(calls)
 
 
 @pytest.mark.parametrize(
@@ -176,7 +219,7 @@ def test_a_pr_no_rule_bars_merges(landing, paths, draft, fakes):
 def test_a_serial_landing_keeps_the_serial_lock_past_its_checks(landing):
     ln, _ = _merging(landing, _SERIAL)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln)
+    slots.refuse_before_merge(ln, in_turn=True)
     serial = Path(os.environ[turn.TURN_DIR_ENV]) / slots.SERIAL_NAME
     assert slots.try_take([serial], 1) is None
     assert ln.serial_lock
@@ -194,7 +237,7 @@ def test_a_draft_a_rule_bars_spends_no_run(landing):
 def test_the_checks_leave_the_lock_files_free(landing):
     ln, _ = _merging(landing, _K8S, in_window=True)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln)
+    slots.refuse_before_merge(ln, in_turn=True)
     moved = Path(os.environ[turn.TURN_DIR_ENV])
     names = [*slots.SLOT_NAMES, slots.SERIAL_NAME]
     release = slots.try_take([moved / n for n in names], 1)

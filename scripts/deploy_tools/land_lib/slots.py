@@ -30,6 +30,7 @@ import contextlib
 import os
 from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
+from typing import NoReturn
 
 import sys as _sys
 
@@ -50,6 +51,11 @@ _LOCK_DIR = turn.LOCK.parent
 SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # Held by a landing of a serial PR from the check before its merge until its process ends.
 SERIAL_NAME = "homelab-land-serial.lock"
+# DECIDED: 2400 s, the longest a serial PR in the turn waits for the landings past their merge
+# (`_drain`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its
+# merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
+# on a soak for longer would otherwise hold the turn for two merge budgets.
+DRAIN_S = 2400
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
@@ -102,11 +108,16 @@ def _cap(ln: Landing) -> tuple[int, str]:
     return (1, low) if low else (COUNT, f"the count of {COUNT}")
 
 
+def _budget_left(ln: Landing) -> int:
+    """The seconds the landing's two merge budgets leave, which `LAND_DEADLINE` counts."""
+    spent = ln.tools.clock() - ln.ledger.t_start
+    return max(0, int(2 * ln.opts.merge_timeout - spent))
+
+
 def _wait(ln: Landing) -> Release | None:
     """Poll for a slot while the merge budgets last; the call that frees it, or None."""
     o = ln.opts
-    spent = ln.tools.clock() - ln.ledger.t_start
-    budget = max(0, int(2 * o.merge_timeout - spent))
+    budget = _budget_left(ln)
     lock = ln.tools.try_slot or _locker(ln.tools.hostname())
     waiting = OnChange(say)
     waited = 0
@@ -169,34 +180,74 @@ def _keep_serial(ln: Landing, lock: Locker) -> bool:
     return ln.serial_lock is None
 
 
-def _bar(ln: Landing, kind: str, lock: Locker) -> str:
-    """Why `ln`'s PR, of `kind`, may not merge now; "" when nothing bars it."""
+def _bar(ln: Landing, kind: str, lock: Locker) -> tuple[str, bool]:
+    """Why `ln`'s PR, of `kind`, may not merge now, and whether `_drain` can clear it.
+
+    Returns:
+        The reason, "" when nothing bars the PR, and whether the bar clears once the landings
+        past their merge reach their verdicts. Inside the no-promotion window they cannot,
+        so no bar drains there.
+    """
     if kind:
         hold = live_limit.fail_open(
             lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
         )
         if hold:
-            return f"{hold}, and this PR changes a k8s role"
+            return f"{hold}, and this PR changes a k8s role", False
+    in_window = bool(kind) and live_limit.fail_open(ln.tools.in_reboot_window)
     if kind == live_limit.SERIAL:
         if _keep_serial(ln, lock):
-            return "another landing of a forward-only pin, flux or cluster-vars change is live"
+            return (
+                "another landing of a forward-only pin, flux or cluster-vars change is live",
+                not in_window,
+            )
         if _held_by_another(lock, SLOT_NAMES):
             return (
                 "this PR changes a forward-only pin, flux or cluster-vars, and another "
-                "landing is past its merge"
+                "landing is past its merge",
+                not in_window,
             )
     elif _held_by_another(lock, [SERIAL_NAME]):
-        return "a landing of a forward-only pin, flux or cluster-vars change is live"
-    if (
-        kind
-        and live_limit.fail_open(ln.tools.in_reboot_window)
-        and _held_by_another(lock, SLOT_NAMES)
-    ):
+        return (
+            "a landing of a forward-only pin, flux or cluster-vars change is live",
+            False,
+        )
+    if in_window and _held_by_another(lock, SLOT_NAMES):
         return (
             "inside the weekly reboot's no-promotion window, another landing is past its "
-            "merge, and this PR changes a k8s role"
+            "merge, and this PR changes a k8s role",
+            False,
         )
-    return ""
+    return "", False
+
+
+def _drain(ln: Landing, kind: str, lock: Locker, why: str) -> str:
+    """Wait in the turn while the landings past their merge reach their verdicts.
+
+    The caller holds the turn, so no other landing merges meanwhile and the bar can only
+    clear. The wait ends after `DRAIN_S`, or sooner when the merge budgets run out.
+
+    Returns:
+        Why the PR still may not merge; "" once nothing bars it.
+    """
+    o = ln.opts
+    budget = min(DRAIN_S, _budget_left(ln))
+    waiting = OnChange(say)
+    waited = 0
+    while waited + o.merge_poll <= budget:
+        waiting(
+            f"waiting in the landing turn for the landings past their merge to reach their "
+            f"verdicts: {why}"
+        )
+        ln.tools.sleep(o.merge_poll)
+        waited += o.merge_poll
+        why, drains = _bar(ln, kind, lock)
+        if not why:
+            say(f"the landings past their merge reached their verdicts after {waited}s")
+            return ""
+        if not drains:
+            return why
+    return f"{why}, after {waited}s of waiting in the landing turn"
 
 
 def _kind(ln: Landing) -> str:
@@ -216,28 +267,49 @@ def bar_member(member: Landing) -> str:
     kind = _kind(member)
     if kind and live_limit.fail_open(member.tools.in_reboot_window):
         return "it changes a k8s role inside the weekly reboot's no-promotion window"
-    return _bar(member, kind, _lock_of(member))
+    return _bar(member, kind, _lock_of(member))[0]
 
 
-def refuse_before_merge(ln: Landing) -> None:
+def _refuse(ln: Landing, why: str) -> NoReturn:
+    ln.die(
+        f"{why}; nothing is merged. Re-run the same command once that clears",
+        75,
+        Verdict.REFUSED,
+    )
+
+
+def refuse_before_run(ln: Landing) -> None:
+    """End the landing of a draft that takes the turn while a rule bars it, before its run.
+
+    A bar that the landings past their merge clear (`_bar`) lets the run start: the turn
+    keeps other merges out during the run, and `refuse_before_merge` waits out the rest.
+    """
+    why, drains = _bar(ln, _kind(ln), _lock_of(ln))
+    if why and not drains:
+        _refuse(ln, why)
+    if why:
+        say(f"{why}; starting its run, and it waits in the turn for that to clear")
+
+
+def refuse_before_merge(ln: Landing, in_turn: bool) -> None:
     """End the landing with exit 75, merging nothing, while a rule bars its PR from merging.
 
-    It runs inside the landing turn, when a draft takes it and again just before the merge,
-    so a barred draft spends no CI run. The rules, for a PR of `live_limit.kind`:
+    It runs just before the merge, and `refuse_before_run` runs the same rules when a draft
+    takes the turn. The rules, for a PR of `live_limit.kind`:
 
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
     - a serial PR waits while another landing holds a slot or the serial lock, and keeps the
       serial lock until its process ends, a fresh grading included, so every other PR waits
-      for it;
+      for it. When `in_turn`, it waits up to `DRAIN_S` for those landings to reach their
+      verdicts before it refuses, because no other landing merges meanwhile;
     - a k8s or serial PR waits inside the weekly reboot's no-promotion window while another
       landing holds a slot, so one at a time waits out the window.
 
     Every read fails open: a rule whose read fails bars nothing.
     """
-    why = _bar(ln, _kind(ln), _lock_of(ln))
+    kind, lock = _kind(ln), _lock_of(ln)
+    why, drains = _bar(ln, kind, lock)
+    if why and drains and in_turn:
+        why = _drain(ln, kind, lock, why)
     if why:
-        ln.die(
-            f"{why}; nothing is merged. Re-run the same command once that clears",
-            75,
-            Verdict.REFUSED,
-        )
+        _refuse(ln, why)
