@@ -20,10 +20,11 @@ runs:
     # apt-utils is for the repository signer's tests, which drive apt-ftparchive as the
     # signer does on daniel-box (hosts/lib/tests/test_repo_signer.py).
     #
-    # Nothing here needs root. sops and the two packages' /usr/bin binaries go to ~/.local/bin,
-    # which the runner image has on PATH and the step checks, and `apt-get download` with
-    # `dpkg-deb -x` unpacks the packages. Stale package lists are refreshed into a directory
-    # under $RUNNER_TEMP, which apt then reads in place of /var/lib/apt/lists.
+    # Nothing here needs root. pinned-tool puts sops in $RUNNER_TEMP/bin. The two packages'
+    # /usr/bin binaries go to ~/.local/bin, which the runner image has on PATH and the step
+    # checks, and `apt-get download` with `dpkg-deb -x` unpacks the packages. Stale package
+    # lists are refreshed into a directory under $RUNNER_TEMP, which apt then reads in place of
+    # /var/lib/apt/lists.
     #
     # The download runs once per runner image version: an apt-get install took a median 4.1s
     # of a leg's 28s outside `Run the test suite`. The unpacked binaries are cached
@@ -51,33 +52,18 @@ runs:
         [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
         echo "version=$sops_version" >> "$GITHUB_OUTPUT"
         echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
-    - name: Cache the sops release
-      uses: actions/cache@v6.1.0 # zizmor: ignore[unpinned-uses]
+    - name: Fetch the pinned sops and check its sha256
+      uses: $/.github/actions/pinned-tool
       with:
-        path: ${{ runner.temp }}/pinned/sops
-        key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
-    - name: Install sops, age and apt-utils for the tests
+        tool: sops
+        version: ${{ steps.sops.outputs.version }}
+        sha256: ${{ steps.sops.outputs.sha256 }}
+    - name: Install age and apt-utils for the tests
       shell: bash
-      env:
-        SOPS_VERSION: ${{ steps.sops.outputs.version }}
-        SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
       run: |
         set -euo pipefail
-        sops="$RUNNER_TEMP/pinned/sops/sops"
-        if [[ -f "$sops" ]]; then
-          echo "sops $SOPS_VERSION: cached"
-        else
-          mkdir -p "$RUNNER_TEMP/pinned/sops"
-          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
-            "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
-        fi
-        echo "$SOPS_SHA256  $sops" | sha256sum -c --strict || {
-          echo "::error::sops $SOPS_VERSION does not match its sha256 in hosts/packages/homelab-tools/package.yml"
-          exit 1
-        }
         bin="$HOME/.local/bin"
         mkdir -p "$bin"
-        install -m 0755 "$sops" "$bin/sops"
         apt_tools="$RUNNER_TEMP/pinned/apt-tools"
         cached_apt_tools_run() {
           [[ -x "$apt_tools/age-keygen" && -x "$apt_tools/apt-ftparchive" ]] \
@@ -100,9 +86,7 @@ runs:
           cp "$debs"/root/usr/bin/* "$apt_tools"/
         fi
         install -m 0755 "$apt_tools"/* "$bin"/
-        [ "$(command -v sops)" = "$bin/sops" ]
         [ "$(command -v age-keygen)" = "$bin/age-keygen" ]
-        sops --version --disable-version-check
         age-keygen --version
         command -v apt-ftparchive
     # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the

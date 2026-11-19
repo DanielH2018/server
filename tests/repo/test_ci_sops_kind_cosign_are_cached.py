@@ -1,14 +1,16 @@
-"""Every CI job that fetches sops, kind or cosign restores it from a cache keyed on its pin.
+"""Every inline cosign fetch in CI restores the release from a cache keyed on its pin.
 
 A GitHub release-host 504 fails any job that fetches a binary uncached with a short retry
 window, so each fetch is cached.
 Each fetch takes the shape `test_ci_flux_cli_is_cached.py` holds the flux CLI to: an
 `actions/cache` step keyed on the pin, a curl only on a miss with nfpm's `--retry-all-errors`
 window, and a `sha256sum -c` against the pin on every run.
-tests/repo/test_release_fetches_use_pinned_tool.py refuses an installer action.
+sops and kind, and cosign in the drills, come through `.github/actions/pinned-tool`, which
+tests/repo/test_release_fetches_use_pinned_tool.py holds to the same shape and which also
+refuses an installer action. This module names the jobs whose cosign fetch stays inline.
 
 The jobs are named rather than derived, because the fix removes the strings a derivation would
-match. A job whose fetch already holds a property is left out of that property's set.
+match.
 
 Run: uv run pytest tests/repo/test_ci_sops_kind_cosign_are_cached.py
 """
@@ -25,27 +27,14 @@ CACHE = "actions/cache@"
 PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|inputs\.|hashFiles\()")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 SHA256 = re.compile(r"\b[0-9a-f]{64}\b")
-RELEASES = {
-    "sops": "getsops/sops/releases/download",
-    "kind": "kubernetes-sigs/kind/releases/download",
-    "cosign": "sigstore/cosign/releases/download",
-}
-# Every job that fetches each tool.
+RELEASE = "sigstore/cosign/releases/download"
+PINNED = re.compile(r"\$RUNNER_TEMP/pinned/cosign[\w-]*")
+# Every job that fetches cosign inline.
 FETCHES = (
-    ("sops", "ci.yml", "pytest"),
-    ("sops", "pytest-sweep.yml", "sweep"),
-    ("sops", "bootstrap-drill.yml", "drill"),
-    ("kind", "bootstrap-drill.yml", "drill"),
-    ("kind", "flux-deletion-drill.yml", "drill"),
-    ("cosign", "flux-deletion-drill.yml", "drill"),
-    ("cosign", "promote.yml", "publish"),
-    ("cosign", "promote.yml", "promote"),
-    ("cosign", "prune-artifacts.yml", "prune"),
+    ("promote.yml", "publish"),
+    ("promote.yml", "promote"),
+    ("prune-artifacts.yml", "prune"),
 )
-# ci.yml's two jobs already cache sops and kind.
-UNCACHED = tuple(f for f in FETCHES if f[1] != "ci.yml")
-# The drills already check sops and kind against their pins.
-UNCHECKED = tuple(f for f in FETCHES if f[0] == "cosign")
 
 
 def _load(path: str) -> dict:
@@ -58,43 +47,21 @@ def _normalise(text: str) -> str:
     )
 
 
-def _steps(job: dict) -> list[dict]:
-    """The job's steps, with each local composite action replaced by its own steps."""
-    found = []
-    for step in job.get("steps") or []:
-        uses = str(step.get("uses", ""))
-        local = uses.startswith(("./", "$/"))
-        action = REPO / uses[2:] / "action.yml"
-        if local and action.is_file():
-            inner = (_load(str(action.relative_to(REPO))).get("runs") or {}).get(
-                "steps"
-            )
-            for sub in inner or []:
-                found.append({**sub, "with_caller": step.get("with") or {}})
-        else:
-            found.append(step)
-    return found
-
-
 def _job(workflow: str, job: str) -> tuple[dict, list[dict]]:
     loaded = _load(f".github/workflows/{workflow}")
-    return loaded, _steps((loaded.get("jobs") or {}).get(job) or {})
+    return loaded, ((loaded.get("jobs") or {}).get(job) or {}).get("steps") or []
 
 
 def _step_text(step: dict) -> str:
     return _normalise(str(step.get("run", "")) + json.dumps(step.get("env") or {}))
 
 
-def _pinned(tool: str) -> re.Pattern[str]:
-    return re.compile(rf"\$RUNNER_TEMP/pinned/{tool}[\w-]*")
-
-
-def _installs(tool: str, steps: list[dict]) -> list[tuple[int, dict]]:
-    """The steps that fetch or install the tool's release, with their positions."""
+def _installs(steps: list[dict]) -> list[tuple[int, dict]]:
+    """The steps that fetch or install the cosign release, with their positions."""
     return [
         (i, s)
         for i, s in enumerate(steps)
-        if RELEASES[tool] in _step_text(s) or _pinned(tool).search(_step_text(s))
+        if RELEASE in _step_text(s) or PINNED.search(_step_text(s))
     ]
 
 
@@ -149,7 +116,7 @@ def _pinned_tool_retry_window() -> int:
 def _cosign_pins(workflow: str, job: str) -> set[str]:
     """The sha256 digests in the job's cosign install steps and its `COSIGN*` env keys."""
     loaded, steps = _job(workflow, job)
-    installs = [s for _, s in _installs("cosign", steps)]
+    installs = [s for _, s in _installs(steps)]
     envs = [loaded.get("env"), ((loaded.get("jobs") or {}).get(job) or {}).get("env")]
     envs += [s.get("env") for s in installs]
     values = [str(v) for e in envs for k, v in (e or {}).items() if "COSIGN" in k]
@@ -157,15 +124,15 @@ def _cosign_pins(workflow: str, job: str) -> set[str]:
     return set(SHA256.findall(text))
 
 
-@pytest.mark.parametrize(("tool", "workflow", "job"), UNCACHED)
-def test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(tool, workflow, job):
+@pytest.mark.parametrize(("workflow", "job"), FETCHES)
+def test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(workflow, job):
     _, steps = _job(workflow, job)
-    installs = _installs(tool, steps)
-    assert installs, f"{workflow} {job}: no step fetches the {tool} release"
+    installs = _installs(steps)
+    assert installs, f"{workflow} {job}: no step fetches the cosign release"
     first, step = installs[0]
-    targets = set(_pinned(tool).findall(_step_text(step)))
+    targets = set(PINNED.findall(_step_text(step)))
     assert targets, (
-        f"{workflow} {job}: the {tool} fetch writes outside $RUNNER_TEMP/pinned/"
+        f"{workflow} {job}: the cosign fetch writes outside $RUNNER_TEMP/pinned/"
     )
     caches = {
         path: str((s.get("with") or {}).get("key", ""))
@@ -179,27 +146,25 @@ def test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(tool, workflow
     )
 
 
-@pytest.mark.parametrize(("tool", "workflow", "job"), UNCACHED)
-def test_each_job_fetches_the_tool_only_on_a_cache_miss(tool, workflow, job):
+@pytest.mark.parametrize(("workflow", "job"), FETCHES)
+def test_each_job_fetches_the_tool_only_on_a_cache_miss(workflow, job):
     _, steps = _job(workflow, job)
-    runs = [str(s.get("run", "")) for _, s in _installs(tool, steps)]
+    runs = [str(s.get("run", "")) for _, s in _installs(steps)]
     curls = [line for text in runs for line in _curls(text)]
-    assert curls, f"{workflow} {job}: no step curls the {tool} release"
+    assert curls, f"{workflow} {job}: no step curls the cosign release"
     assert [line for text in runs for line in _unguarded_curls(text)] == [], (
-        f"{workflow} {job}: a {tool} curl runs outside the cache-miss branch"
+        f"{workflow} {job}: a cosign curl runs outside the cache-miss branch"
     )
 
 
-@pytest.mark.parametrize(("tool", "workflow", "job"), FETCHES)
-def test_each_fetch_outlasts_a_release_outage(tool, workflow, job):
+@pytest.mark.parametrize(("workflow", "job"), FETCHES)
+def test_each_fetch_outlasts_a_release_outage(workflow, job):
     floor = _pinned_tool_retry_window()
     _, steps = _job(workflow, job)
     curls = [
-        line
-        for _, s in _installs(tool, steps)
-        for line in _curls(str(s.get("run", "")))
+        line for _, s in _installs(steps) for line in _curls(str(s.get("run", "")))
     ]
-    assert curls, f"{workflow} {job}: no step curls the {tool} release"
+    assert curls, f"{workflow} {job}: no step curls the cosign release"
     short = [
         line
         for line in curls
@@ -208,18 +173,18 @@ def test_each_fetch_outlasts_a_release_outage(tool, workflow, job):
         or int(m[1]) * int(m[2]) < floor
     ]
     assert short == [], (
-        f"{workflow} {job}: each {tool} curl must retry all errors for at least {floor}s"
+        f"{workflow} {job}: each cosign curl must retry all errors for at least {floor}s"
     )
 
 
-@pytest.mark.parametrize(("tool", "workflow", "job"), UNCHECKED)
-def test_each_job_checks_the_pinned_sha256(tool, workflow, job):
+@pytest.mark.parametrize(("workflow", "job"), FETCHES)
+def test_each_job_checks_the_pinned_sha256(workflow, job):
     _, steps = _job(workflow, job)
-    installs = [s for _, s in _installs(tool, steps)]
-    assert installs, f"{workflow} {job}: no step fetches the {tool} release"
-    assert _cosign_pins(workflow, job), f"{workflow} {job}: no {tool} sha256 pin"
+    installs = [s for _, s in _installs(steps)]
+    assert installs, f"{workflow} {job}: no step fetches the cosign release"
+    assert _cosign_pins(workflow, job), f"{workflow} {job}: no cosign sha256 pin"
     checks = [s for s in installs if "sha256sum -c" in str(s.get("run", ""))]
-    assert checks, f"{workflow} {job}: no {tool} step runs sha256sum -c against the pin"
+    assert checks, f"{workflow} {job}: no cosign step runs sha256sum -c against the pin"
 
 
 def _broken(monkeypatch, workflow: str, job: str, mutate) -> None:
@@ -234,8 +199,8 @@ def _broken(monkeypatch, workflow: str, job: str, mutate) -> None:
     )
 
 
-def _edit_fetch(tool: str, steps: list[dict], old: str, new: str) -> None:
-    _, step = _installs(tool, steps)[0]
+def _edit_fetch(steps: list[dict], old: str, new: str) -> None:
+    _, step = _installs(steps)[0]
     assert old in step["run"], old
     step["run"] = step["run"].replace(old, new)
 
@@ -243,16 +208,16 @@ def _edit_fetch(tool: str, steps: list[dict], old: str, new: str) -> None:
 def test_a_job_without_its_cache_step_is_flagged(monkeypatch):
     _broken(
         monkeypatch,
-        "bootstrap-drill.yml",
-        "drill",
+        "promote.yml",
+        "promote",
         lambda steps: steps.__setitem__(
             slice(None),
-            [s for s in steps if "pinned/sops" not in str(s.get("with", ""))],
+            [s for s in steps if "pinned/cosign" not in str(s.get("with", ""))],
         ),
     )
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
         test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(
-            "sops", "bootstrap-drill.yml", "drill"
+            "promote.yml", "promote"
         )
 
 
@@ -265,37 +230,34 @@ def test_a_cache_with_a_constant_key_is_flagged(monkeypatch):
     _broken(monkeypatch, "promote.yml", "publish", constant_key)
     with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
         test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(
-            "cosign", "promote.yml", "publish"
+            "promote.yml", "publish"
         )
 
 
 def test_a_curl_outside_the_cache_check_is_flagged(monkeypatch):
     _broken(
         monkeypatch,
-        "flux-deletion-drill.yml",
-        "drill",
+        "prune-artifacts.yml",
+        "prune",
         lambda steps: _edit_fetch(
-            "kind",
-            steps,
-            'if [[ -f "$kind" ]]; then',
-            'if [[ -n "$KIND_VERSION" ]]; then',
+            steps, 'if [[ -f "$cosign" ]]; then', 'if [[ -n "$COSIGN_VERSION" ]]; then'
         ),
     )
     with pytest.raises(AssertionError, match="outside the cache-miss branch"):
         test_each_job_fetches_the_tool_only_on_a_cache_miss(
-            "kind", "flux-deletion-drill.yml", "drill"
+            "prune-artifacts.yml", "prune"
         )
 
 
 def test_a_curl_with_a_short_retry_window_is_flagged(monkeypatch):
     _broken(
         monkeypatch,
-        "ci.yml",
-        "pytest",
-        lambda steps: _edit_fetch("sops", steps, "--retry 12", "--retry 5"),
+        "promote.yml",
+        "promote",
+        lambda steps: _edit_fetch(steps, "--retry 12", "--retry 5"),
     )
     with pytest.raises(AssertionError, match="must retry all errors"):
-        test_each_fetch_outlasts_a_release_outage("sops", "ci.yml", "pytest")
+        test_each_fetch_outlasts_a_release_outage("promote.yml", "promote")
 
 
 def test_a_cosign_fetch_without_its_digest_check_is_flagged(monkeypatch):
@@ -303,9 +265,7 @@ def test_a_cosign_fetch_without_its_digest_check_is_flagged(monkeypatch):
         monkeypatch,
         "prune-artifacts.yml",
         "prune",
-        lambda steps: _edit_fetch(
-            "cosign", steps, "| sha256sum -c --strict", "> /dev/null"
-        ),
+        lambda steps: _edit_fetch(steps, "| sha256sum -c --strict", "> /dev/null"),
     )
     with pytest.raises(AssertionError, match="no cosign step runs sha256sum -c"):
-        test_each_job_checks_the_pinned_sha256("cosign", "prune-artifacts.yml", "prune")
+        test_each_job_checks_the_pinned_sha256("prune-artifacts.yml", "prune")

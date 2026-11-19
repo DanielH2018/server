@@ -22,7 +22,8 @@ notification-controller posts as `flux/soak`. In order, it:
    4xx still fails;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
-   alert activated after T0. A restart counts for a container or a native sidecar (an
+   alert activated after T0. A pod with no series of its own whose workload maps to a service
+   outside the scope is printed as advisory instead. A restart counts for a container or a native sidecar (an
    initContainer with `restartPolicy: Always`), never for a plain init container's retries.
 
 A pass prints the services it judged, then one `event=deploy` logfmt line, the cluster's deploy
@@ -47,6 +48,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from changed_set import ROOT, changed_set
+from soak_pods import (
+    UNMAPPED,
+    WORKLOADS,
+    WorkloadPod,
+    controller_of,
+    judged_pods,
+    long_running_statuses,
+    restart_counts,
+    samples_by_pod,
+    sidecar_names,
+)
 from soak_reads import Reads, SoakError, TransientError, live_reads, parse_time
 
 TERMINATION_LOG = "/dev/termination-log"
@@ -67,8 +79,6 @@ DIGESTS_FILE = "digests.json"
 SOAK = "soak"
 # C3's reserved suffixes. A changed-set name with one strips to its tag.
 RESERVED_SUFFIXES = ("-deferred", "-snapshot", "-prepull", "-precheck", "-verify")
-WORKLOADS = frozenset({"Deployment", "DaemonSet", "StatefulSet"})
-UNMAPPED = "unmapped"
 # The kube-state-metrics scrape and the rule evaluation that W adds to the longest `for:`.
 SCRAPE_AND_EVAL_SECONDS = 120
 POLL_SECONDS = 15
@@ -289,16 +299,9 @@ def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -
         reads.sleep(POLL_SECONDS)
 
 
-def _controller(obj: Mapping) -> Mapping:
-    for owner in obj.get("metadata", {}).get("ownerReferences") or []:
-        if owner.get("controller"):
-            return owner
-    return {}
-
-
 def workload_pods(
     reads: Reads, inputs: Inputs, namespaces: Iterable[str], t0: float
-) -> dict:
+) -> dict[tuple, WorkloadPod]:
     """Each pod created after T0 whose owner chain ends in a Deployment, DaemonSet or StatefulSet.
 
     A transient read is retried for up to `inputs.wait_seconds`, because a k3s upgrade's API
@@ -309,7 +312,7 @@ def workload_pods(
     def api(path: str) -> dict:
         return retry_transient(reads, deadline, lambda: reads.api(path))
 
-    owners: dict[str, str] = {}
+    owners: dict[str, Mapping] = {}
     pods = {}
     for namespace in sorted(namespaces):
         for pod in api(f"/api/v1/namespaces/{namespace}/pods")["items"]:
@@ -319,32 +322,21 @@ def workload_pods(
                 or parse_time(meta["creationTimestamp"]) < t0
             ):
                 continue
-            owner = _controller(pod)
-            kind = owner.get("kind")
-            if kind == "ReplicaSet":
+            owner = controller_of(pod)
+            if owner.get("kind") == "ReplicaSet":
                 path = (
                     f"/apis/apps/v1/namespaces/{namespace}/replicasets/{owner['name']}"
                 )
                 if path not in owners:
                     # A refused read exits through SoakError rather than dropping every
                     # Deployment pod from the restart leg.
-                    owners[path] = _controller(api(path)).get("kind", "")
-                kind = owners[path]
-            if kind in WORKLOADS:
-                pods[(namespace, meta["name"])] = pod
+                    owners[path] = controller_of(api(path))
+                owner = owners[path]
+            if owner.get("kind") in WORKLOADS:
+                pods[(namespace, meta["name"])] = WorkloadPod(
+                    pod, owner["kind"], owner.get("name", "")
+                )
     return pods
-
-
-def _series(result: list) -> dict[tuple, list]:
-    """Each series' `(namespace, pod[, container])`, mapped to its raw `[time, value]` samples."""
-    out: dict[tuple, list] = {}
-    for series in result:
-        metric = series["metric"]
-        key = (metric.get("namespace"), metric.get("pod"))
-        if "container" in metric:
-            key += (metric["container"],)
-        out.setdefault(key, []).extend(series.get("values") or [series.get("value")])
-    return out
 
 
 def wait_seconds(inputs: Inputs, services: Iterable[str]) -> int:
@@ -359,27 +351,6 @@ def _ready_since(pod: Mapping) -> float | None:
     return None
 
 
-def _sidecars(pod: Mapping) -> set[str]:
-    return {
-        c["name"]
-        for c in (pod.get("spec") or {}).get("initContainers") or []
-        if c.get("restartPolicy") == "Always"
-    }
-
-
-def _long_running_statuses(pod: Mapping) -> list[Mapping]:
-    """A pod's container statuses plus its native sidecars'; plain init containers retry."""
-    status = pod.get("status") or {}
-    sidecars = _sidecars(pod)
-    return (status.get("containerStatuses") or []) + [
-        c for c in status.get("initContainerStatuses") or [] if c["name"] in sidecars
-    ]
-
-
-def _restarts(pod: Mapping) -> dict[str, int]:
-    return {c["name"]: c.get("restartCount", 0) for c in _long_running_statuses(pod)}
-
-
 def judge_pods(
     reads: Reads,
     inputs: Inputs,
@@ -391,34 +362,38 @@ def judge_pods(
     """The restart legs over every in-scope pod R created, read after the wait."""
     namespaces = _namespaces(inputs, scope)
     pods = workload_pods(reads, inputs, namespaces, t0)
-    mapping = _mapping(reads)
+    judged, advisory = judged_pods(reads, pods, scope.services)
+    for label, service in advisory:
+        print(
+            f"soak: advisory: pod {label} has no homelab:pod_service:info mapping; "
+            f"its workload is {service}'s, outside the scope",
+            file=sys.stderr,
+        )
     selector = f'namespace=~"{"|".join(sorted(namespaces))}"'
     window = f"[{int(reads.clock() - t0) + 1}s]"
-    ready = _series(
+    ready = samples_by_pod(
         reads.query(f"kube_pod_status_ready_time{{{selector}}}{window}", None)
     )
-    scraped = _series(
+    scraped = samples_by_pod(
         reads.query(
             f"kube_pod_container_status_restarts_total{{{selector}}}{window}", None
         )
     )
-    if any(_sidecars(pod) for pod in pods.values()):
-        scraped |= _series(
+    if any(sidecar_names(owned.pod) for owned in pods.values()):
+        scraped |= samples_by_pod(
             reads.query(
                 f"kube_pod_init_container_status_restarts_total{{{selector}}}{window}",
                 None,
             )
         )
     gap = 2 * inputs.scrape_seconds
-    for key, pod in sorted(pods.items()):
+    for key, service in sorted(judged.items()):
+        pod = pods[key].pod
         label = "/".join(key)
-        service = mapping.get(key, UNMAPPED)
         if service == UNMAPPED:
             verdict.fail(
                 UNMAPPED, f"pod {label} has no homelab:pod_service:info mapping"
             )
-            continue
-        if service not in scope.services:
             continue
         samples = [float(v) for _, v in ready.get(key, []) if float(v) >= t0]
         first_ready = min(samples, default=None)
@@ -427,7 +402,7 @@ def judge_pods(
                 service, f"pod {label} is Ready but has no Ready sample since T0"
             )
         counts = before.get(pod["metadata"].get("uid"), {})
-        for status in _long_running_statuses(pod):
+        for status in long_running_statuses(pod):
             name = status["name"]
             if status.get("restartCount", 0) > counts.get(
                 name, status.get("restartCount", 0)
@@ -458,15 +433,6 @@ def judge_pods(
 def _namespaces(inputs: Inputs, scope: Scope) -> set[str]:
     return {
         ns for s in scope.services for ns in inputs.services[s].get("namespaces", [])
-    }
-
-
-def _mapping(reads: Reads) -> dict[tuple, str]:
-    return {
-        (s["metric"].get("namespace"), s["metric"].get("pod")): s["metric"].get(
-            "service", UNMAPPED
-        )
-        for s in reads.query("homelab:pod_service:info", None)
     }
 
 
@@ -538,13 +504,14 @@ def soak(reads: Reads, inputs: Inputs) -> Verdict:
         return verdict
     namespaces = _namespaces(inputs, scope)
     first = workload_pods(reads, inputs, namespaces, t0)
-    before = {pod["metadata"].get("uid"): _restarts(pod) for pod in first.values()}
-    mapping = _mapping(reads)
+    before = {
+        owned.pod["metadata"].get("uid"): restart_counts(owned.pod)
+        for owned in first.values()
+    }
     readies = [
         since
-        for key, pod in first.items()
-        if mapping.get(key, UNMAPPED) in scope.services | {UNMAPPED}
-        and (since := _ready_since(pod)) is not None
+        for key in judged_pods(reads, first, scope.services)[0]
+        if (since := _ready_since(first[key].pod)) is not None
     ]
     until = max(readies, default=t0) + wait_seconds(inputs, scope.services)
     if until > reads.clock():

@@ -18,7 +18,7 @@ import pytest
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _HERE)
 
-from _hook_common import INSTRUCTIONS_LOG_ENV  # noqa: E402
+from _hook_common import INSTRUCTIONS_LOG_ENV, parse_payload  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "inject_nested_docs", os.path.join(_HERE, "inject-nested-docs.py")
@@ -107,7 +107,7 @@ def test_a_fork_payload_reaches_the_transcript_through_context(repo, tmp_path):
         "agent_id": "f1",
         "transcript_path": main,
     }
-    assert _mod.context(payload) is None
+    assert _mod.context(parse_payload(payload).bash()) is None
 
 
 def test_a_block_after_the_forks_cut_is_flagged(repo, tmp_path):

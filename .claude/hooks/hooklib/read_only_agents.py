@@ -472,22 +472,19 @@ def read_only_reason(command, repo_root, written_paths, depth=0):
     return None
 
 
-def read_only_decision(
-    payload, command, repo_root, written_paths, agents=read_only_agents
-):
+def read_only_decision(call, repo_root, written_paths, agents=read_only_agents):
     """The `("deny", reason)` for a read-only agent's write, or None.
 
     Args:
-        payload: the hook JSON; its `agent_type` names the subagent, absent for the main session.
-        command: the Bash command text.
+        call: the `BashCall`; its `agent_type` names the subagent, None for the main session.
         repo_root: the directory a relative path resolves against.
         written_paths: block-protected-bash's redirect detector.
         agents: the read-only set's source, a test seam.
     """
-    agent = payload.get("agent_type")
+    agent = call.agent_type
     if not agent or agent not in agents():
         return None
-    problem = read_only_reason(command, repo_root, written_paths)
+    problem = read_only_reason(call.command, repo_root, written_paths)
     if not problem:
         return None
     return (

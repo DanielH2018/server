@@ -11,21 +11,19 @@ import pytest
 
 from fanout_lib import brief as brief_mod
 from fanout_lib import launch as launch_mod
-from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.target import Target
 from fanout_lib.place import main
-from _fanout_fakes import HOST_KEY, fake_tools, ok
+from _fanout_fakes import HOST_KEY, fake_tools, labelled_issue, ok
 
 # Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.
 # The plane side is as roomy as the fleet side on purpose: these tests measure call counts,
 # placement order and the ssh budget, so the plane must not become the binding cap. The key is
 # one the fake registered set holds, so a test that says nothing about signing passes the gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
-CLAIMED = [
-    Issue(1, "one", "body one", ("claude",)),
-    Issue(2, "two", "body two", ("claude",)),
-]
+
+
+CLAIMED = [labelled_issue(1, "one"), labelled_issue(2, "two")]
 
 
 def _launch(tools, tmp_path, *args):
@@ -130,7 +128,7 @@ def test_an_unpinned_launch_reads_both_hosts_and_places_on_the_emptier_one(tmp_p
 
 
 def test_three_batches_pinned_to_one_host_cost_exactly_five_calls_there(tmp_path):
-    issues = CLAIMED + [Issue(3, "three", "body three", ("claude",))]
+    issues = CLAIMED + [labelled_issue(3, "three")]
     tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=issues)
     code = _launch(
         tools,
@@ -150,8 +148,8 @@ def test_three_batches_pinned_to_one_host_cost_exactly_five_calls_there(tmp_path
 
 def test_four_batches_pinned_to_one_host_is_refused_before_any_launch(tmp_path, capsys):
     issues = CLAIMED + [
-        Issue(3, "three", "body three", ("claude",)),
-        Issue(4, "four", "body four", ("claude",)),
+        labelled_issue(3, "three"),
+        labelled_issue(4, "four"),
     ]
     tools, run = fake_tools(answers={"daniel-server": ok(HEADROOM)}, issues=issues)
     code = _launch(
@@ -260,7 +258,7 @@ def test_a_failed_issue_fetch_launches_nothing_and_writes_no_manifest(tmp_path, 
 
 def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, capsys):
     tools, run = fake_tools(
-        answers={"daniel-box": ok(HEADROOM)}, issues=[Issue(3, "t", "b", ("bug",))]
+        answers={"daniel-box": ok(HEADROOM)}, issues=[labelled_issue(3, "t", "bug")]
     )
     assert _launch(tools, tmp_path, "--batch", "3") == 1
     assert not run.host_calls  # refused before the first ssh, so nothing was created
@@ -268,7 +266,7 @@ def test_an_unlabelled_issue_is_refused_and_a_labelled_one_launches(tmp_path, ca
 
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
-        issues=[Issue(3, "t", "b", ("claude", "bug"))],
+        issues=[labelled_issue(3, "t", "claude", "bug")],
     )
     assert _launch(tools, tmp_path, "--batch", "3", "--host", "daniel-box") == 0
     # headroom read, health read, one launch call for the one batch.

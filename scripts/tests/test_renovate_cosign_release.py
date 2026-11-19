@@ -28,13 +28,15 @@ from _renovate import (
 
 WORKFLOW = ".github/workflows/promote.yml"
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
-# census and passing. Each value counts the jobs whose fetch reads the file's one pin.
+# census and passing. Each value counts the jobs whose fetch reads the file's one pin, inline
+# or through .github/actions/pinned-tool.
 COSIGN_PINS = {
     WORKFLOW: 2,
     ".github/workflows/prune-artifacts.yml": 1,
     ".github/workflows/flux-deletion-drill.yml": 1,
 }
 FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
+ACTION_FETCH = "version: ${{ env.COSIGN_VERSION }}"
 
 UPDATE_TYPES = ("major", "minor", "patch", "digest", "pinDigest")
 
@@ -54,7 +56,7 @@ def test_every_cosign_pin_is_extracted_with_its_digest_and_equals_promotes(
 ) -> None:
     assert [d.digest for d in expected_deps(workflow, "sigstore/cosign")] == ["digest"]
     text = (_REPO / workflow).read_text(encoding="utf-8")
-    assert text.count(FETCH) == COSIGN_PINS[workflow]
+    assert text.count(FETCH) + text.count(ACTION_FETCH) == COSIGN_PINS[workflow]
     pins = workflow_env_pins(workflow, "COSIGN_VERSION", "COSIGN_SHA256")
     assert pins == workflow_env_pins(WORKFLOW, "COSIGN_VERSION", "COSIGN_SHA256")
     assert len(pins) == 1

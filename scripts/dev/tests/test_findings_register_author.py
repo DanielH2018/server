@@ -23,7 +23,7 @@ def _answering(answer):
 def test_the_list_keeps_the_operators_issues_and_names_the_skipped_ones(capsys):
     issues = [make_issue(1), make_issue(2, author=FOREIGNER)]
     kept = load_issues("open", _answering(issues))
-    assert [i["number"] for i in kept] == [1]
+    assert [i.number for i in kept] == [1]
     assert f"skipped 1 issue(s) not opened by DanielH2018: #2 by {FOREIGNER}" in (
         capsys.readouterr().err
     )
