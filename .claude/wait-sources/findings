@@ -6,4 +6,4 @@
 # this only finds it. It runs under uv's 3.15 with no project environment, as the
 # `fanout-headroom` source does.
 root=$(cd "$(dirname "$0")/../.." && pwd)
-exec uv run --no-project --quiet --python 3.15 python "$root/scripts/dev/findings.py" new-issues "$@"
+exec env PYTHONPATH="$root/scripts" uv run --no-project --quiet --python 3.15 python "$root/scripts/dev/findings.py" new-issues "$@"
