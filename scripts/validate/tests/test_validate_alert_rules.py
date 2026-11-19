@@ -387,6 +387,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "Watchdog",
         "PrometheusRuleReloadFailed",
         "AlertmanagerNotificationsFailing",
+        "AlertmanagerNotificationsRateLimited",
         "AlertmanagerMetricsMissing",
         "PrometheusRuleEvaluationFailures",
         "WarningUnresolved",
