@@ -13,10 +13,8 @@ import tempfile
 from collections.abc import Mapping
 from types import MappingProxyType
 
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib.git import extract, git
 from secrets_mgmt.cluster_vars_check import ciphertexts, digest, parse_source
