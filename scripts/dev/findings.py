@@ -115,7 +115,8 @@ SEVERITY AND DATES ARE ISSUE FIELDS. `open --severity` sets the issue's Severity
 and `open --not-before` its Not Before field, once the issue exists, because `gh issue
 create` cannot set one; re-running the same `open` repairs a failed write. Every loader in
 `findings_lib/gh_calls.py` reads them with `attach_fields`, and a failed read fails the
-command rather than reading as "nothing is deferred". A `severity/` or `not-before:` label
+command rather than reading as "nothing is deferred". `open --kind` sets the issue type in
+the same write: Gap, Improvement or Feature. A `severity/`, `not-before:` or `kind/` label
 still counts as a fallback, for sessions on a pre-field checkout.
 
 DEFERRING AN ISSUE. `defer <n> --until <date>` (or `open --not-before <date>`) sets the issue's Not Before
@@ -187,6 +188,7 @@ from dev.findings_lib.gh_calls import (
     blocker_hints,
     open_pr_refs,
     run,
+    fill_missing,
     set_fields,
 )
 from dev.findings_lib.issue_model import (
@@ -195,8 +197,8 @@ from dev.findings_lib.issue_model import (
     PR_REPO,
     SEVERITY_FIELD,
     SEVERITY_OPTIONS,
+    KIND_TYPES,
     cited_paths,
-    field_value,
     recorded_blockers,
     is_deferred_row,
     now_iso,
@@ -253,7 +255,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     body = args.body_file.read_text()
     blockers = _split_refs(args.blocked_by)
     fp = fingerprint(args.title, args.file)
-    labels = ["claude", f"kind/{args.kind}"]
+    labels, issue_type = ["claude"], KIND_TYPES[args.kind]
     fields = {SEVERITY_FIELD: SEVERITY_OPTIONS[args.severity]}
     if args.not_before:
         fields[NOT_BEFORE_FIELD] = args.not_before.isoformat()
@@ -286,7 +288,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if outcome == "created":
         if args.dry_run:
             run(plans, True, tools)
-            set_fields("<new>", fields, tools, dry_run=True)
+            set_fields("<new>", fields, tools, dry_run=True, issue_type=issue_type)
             if blockers:
                 print(f"gh issue edit <new> --add-blocked-by {','.join(blockers)}")
             print(f"(dry-run) would create; fingerprint {fp}")
@@ -294,9 +296,9 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             return 0
         url = _create(plans[0], tools)
         number = url.rsplit("/", 1)[-1]
-        # `gh issue create` cannot set an issue field, so the severity and date are a second
-        # write; re-running the same `open` repairs a failed one.
-        set_fields(int(number), fields, tools, dry_run=False)
+        # `gh issue create` cannot set an issue field, so the fields and the type are a
+        # second write; re-running the same `open` repairs a failed one.
+        set_fields(int(number), fields, tools, dry_run=False, issue_type=issue_type)
         if blockers:
             # `gh issue create` has no blocked-by flag, so the relationship is a second write.
             run(plan_block({"number": number}, on=blockers, clear=False), False, tools)
@@ -332,10 +334,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         if outcome != "reopened":
             plans += _release_for_manual(existing)
     run(plans, args.dry_run, tools)
-    if field_value(existing, SEVERITY_FIELD) is None:
-        # The repair for an `open` whose field write failed after `gh issue create`.
-        repair = {SEVERITY_FIELD: fields[SEVERITY_FIELD]}
-        set_fields(existing["number"], repair, tools, args.dry_run)
+    severity_only = {SEVERITY_FIELD: fields[SEVERITY_FIELD]}
+    fill_missing(existing, severity_only, issue_type, tools, args.dry_run)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0
 

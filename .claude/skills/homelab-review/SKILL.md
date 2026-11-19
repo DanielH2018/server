@@ -176,7 +176,7 @@ depends on running `git log`, `kubectl`, or `probe.py`; its live/history checks 
 
 ## 4. Output format each agent must return
 Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (ansible source), what's
-wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
+wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [FEATURE]**. Note verified-clean areas in
 one line. End with a **3-bullet top-priorities** summary. Be specific and skeptical: 5 real findings beat
 20 speculative ones.
 
@@ -352,7 +352,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
 - **STOP.** Recommend next steps; do not implement, deploy, or commit.
 - **File every CONFIRMED finding the operator does not fix in this session** with
   `uv run python scripts/dev/findings.py open --title "<one-line title>" --body-file <f> --severity
-  <high|medium|low> --kind <gap|improvement|addition> --domain <step-1 name> --file <file:line>
+  <high|medium|low> --kind <gap|improvement|feature> --domain <step-1 name> --file <file:line>
   --source review-<date>`, adding `--no-vetted-remediation` when both remediations failed step 7.
   The body file carries where, mechanism, fix, and the two verdicts. `open` dedupes by title and
   file, so a re-filed finding touches the existing issue instead of duplicating it; an exit of 3
