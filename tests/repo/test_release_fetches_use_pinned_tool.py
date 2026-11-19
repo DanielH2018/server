@@ -3,7 +3,9 @@
 The action restores the asset from an actions/cache keyed on the tool, version and sha256,
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
-problem unless `EXEMPT` names its job with the reason, and so is a third-party installer action.
+problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
+a third-party installer action. A script a step runs is out of scope: its downloads are held to a
+cache by tests/repo/test_ci_release_downloads_are_cached.py.
 
 Run: uv run pytest tests/repo/test_release_fetches_use_pinned_tool.py
 """
@@ -18,33 +20,44 @@ from lib import yaml_fast
 
 ACTION = ".github/actions/pinned-tool/action.yml"
 USES = "$/.github/actions/pinned-tool"
-RELEASE = re.compile(r"github\.com/[\w.-]+/[\w.-]+/releases/download\b")
-CURL = re.compile(r"^\s*curl\s", re.M)
+RELEASE = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/releases/download\b")
+FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re.M)
+GH_RELEASE = re.compile(
+    r"\bgh release download\b[^\n]*?(?:-R|--repo)[ =]([\w.-]+/[\w.-]+)"
+)
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 INSTALLER = re.compile(r"setup-|install|/action@|-action@")
 
 NO_CHECKOUT = (
     "checks out nothing (promote.yml's job table), so no local action reaches it"
 )
-# (file, job) -> why its inline release curl stays. `test_every_exemption_still_curls` fails
-# on a row whose job no longer curls.
+GITLEAKS = (
+    "gitleaks checks against the release's checksums.txt, so its version has one home in "
+    "prek.toml"
+)
+FLUX, SOPS, KIND = "fluxcd/flux2", "getsops/sops", "kubernetes-sigs/kind"
+COSIGN = "sigstore/cosign"
+# (file, job, release repo) -> why that inline fetch stays. `test_every_exemption_still_fetches`
+# fails on a row whose job no longer fetches that repo.
 EXEMPT = {
-    ("promote.yml", "publish"): NO_CHECKOUT,
-    ("promote.yml", "tag"): NO_CHECKOUT,
-    ("promote.yml", "settle"): NO_CHECKOUT,
-    ("promote.yml", "reconcile"): NO_CHECKOUT,
-    ("promote.yml", "reset-move"): NO_CHECKOUT,
-    ("ci.yml", "hooks"): "Vale has no sha256 pin for the action to check (#9225)",
-    ("ci.yml", "host_packages_build"): (
-        "gitleaks checks against the release's checksums.txt, so its version has one home in "
-        "prek.toml"
-    ),
-    ("promote.yml", "render"): "gitleaks, as in ci.yml's host_packages_build",
-    ("promote.yml", "promote"): "moves to the action in #9222",
-    ("bootstrap-drill.yml", "drill"): "moves to the action in #9219",
-    ("flux-deletion-drill.yml", "drill"): "moves to the action in #9220",
-    ("prune-artifacts.yml", "prune"): "moves to the action in #9221",
-    ("pytest-tools", "pytest-tools"): "moves to the action in #9223",
+    ("promote.yml", "publish", FLUX): NO_CHECKOUT,
+    ("promote.yml", "publish", COSIGN): NO_CHECKOUT,
+    ("promote.yml", "tag", FLUX): NO_CHECKOUT,
+    ("promote.yml", "settle", FLUX): NO_CHECKOUT,
+    ("promote.yml", "reconcile", FLUX): NO_CHECKOUT,
+    ("promote.yml", "reset-move", FLUX): NO_CHECKOUT,
+    ("ci.yml", "hooks", "vale-cli/vale"): "Vale has no sha256 pin to check (#9225)",
+    ("ci.yml", "host_packages_build", "gitleaks/gitleaks"): GITLEAKS,
+    ("promote.yml", "render", "gitleaks/gitleaks"): GITLEAKS,
+    ("promote.yml", "promote", COSIGN): "moves to the action in #9222",
+    ("bootstrap-drill.yml", "drill", FLUX): "moves to the action in #9219",
+    ("bootstrap-drill.yml", "drill", SOPS): "moves to the action in #9219",
+    ("bootstrap-drill.yml", "drill", KIND): "moves to the action in #9219",
+    ("flux-deletion-drill.yml", "drill", FLUX): "moves to the action in #9220",
+    ("flux-deletion-drill.yml", "drill", KIND): "moves to the action in #9220",
+    ("flux-deletion-drill.yml", "drill", COSIGN): "moves to the action in #9220",
+    ("prune-artifacts.yml", "prune", COSIGN): "moves to the action in #9221",
+    ("pytest-tools", "pytest-tools", SOPS): "moves to the action in #9223",
 }
 # installer action -> why it stays.
 INSTALLERS = {
@@ -82,19 +95,29 @@ def _action_steps() -> list[dict]:
     ]
 
 
-def release_curls(sources: dict[str, dict]) -> set[tuple[str, str]]:
-    """Every (file, job) with a step outside pinned-tool that curls a release download."""
-    found = set()
-    for name, workflow in sources.items():
-        for job_name, job in (workflow.get("jobs") or {}).items():
-            context = str(workflow.get("env") or "") + str(job.get("env") or "")
-            for step in job.get("steps") or []:
-                run = str(step.get("run", ""))
-                if CURL.search(run) and RELEASE.search(
-                    context + run + str(step.get("env") or "")
-                ):
-                    found.add((name, job_name))
-    return found
+def _fetched_repos(step: dict, context: str) -> set[str]:
+    """The release repos a step's curl, wget or `gh release download` fetches from.
+
+    A step naming no release URL itself reads the URL its job or workflow env holds.
+    """
+    run = str(step.get("run", ""))
+    if not FETCH.search(run):
+        return set()
+    own = set(RELEASE.findall(run + str(step.get("env") or "")))
+    return own | set(GH_RELEASE.findall(run)) or set(RELEASE.findall(context))
+
+
+def release_fetches(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
+    """Every (file, job, release repo) a step outside pinned-tool fetches inline."""
+    return {
+        (name, job_name, repo)
+        for name, workflow in sources.items()
+        for job_name, job in (workflow.get("jobs") or {}).items()
+        for step in job.get("steps") or []
+        for repo in _fetched_repos(
+            step, str(workflow.get("env") or "") + str(job.get("env") or "")
+        )
+    }
 
 
 def installer_uses(sources: dict[str, dict]) -> set[str]:
@@ -130,7 +153,7 @@ def action_problems(steps: list[dict]) -> list[str]:
     for pin in ("inputs.tool", "inputs.version", "inputs.sha256"):
         if pin not in key:
             found.append(f"the cache key does not read {pin}")
-    fetch = next((s for s in steps if CURL.search(str(s.get("run", "")))), {})
+    fetch = next((s for s in steps if FETCH.search(str(s.get("run", "")))), {})
     run = str(fetch.get("run", ""))
     if not (cache and fetch) or steps.index(cache) > steps.index(fetch):
         found.append("no actions/cache step runs before the fetch")
@@ -169,32 +192,64 @@ def test_the_census_finds_the_known_callers():
     assert KNOWN_CALLERS <= callers(_sources())
 
 
+def unknown_tools(
+    sources: dict[str, dict], tools: set[str]
+) -> set[tuple[str, str, str]]:
+    """The callers naming a tool outside `tools`, which the action's `case` would exit 1 on."""
+    return {c for c in callers(sources) if c[2] not in tools}
+
+
 def test_every_caller_names_a_tool_the_action_fetches():
-    unknown = {c for c in callers(_sources()) if c[2] not in _action_tools()}
+    tools = _action_tools()
+    assert {c[2] for c in KNOWN_CALLERS} <= tools, f"the action's case reads as {tools}"
+    unknown = unknown_tools(_sources(), tools)
     assert unknown == set(), f"pinned-tool has no release URL for {sorted(unknown)}"
 
 
-def test_no_release_curl_runs_outside_the_action():
-    found = release_curls(_sources()) - set(EXEMPT)
+def test_a_caller_naming_an_unknown_tool_is_flagged():
+    sources = copy.deepcopy(_sources())
+    sources["ci.yml"]["jobs"]["flux_roundtrip"]["steps"].append(
+        {"uses": USES, "with": {"tool": "helm"}}
+    )
+    assert unknown_tools(sources, _action_tools()) == {
+        ("ci.yml", "flux_roundtrip", "helm")
+    }
+
+
+def test_no_release_fetch_runs_outside_the_action():
+    found = release_fetches(_sources()) - set(EXEMPT)
     assert found == set(), f"fetch these through {USES}: {sorted(found)}"
 
 
-def test_every_exemption_still_curls():
-    assert set(EXEMPT) - release_curls(_sources()) == set()
+def test_every_exemption_still_fetches():
+    assert set(EXEMPT) - release_fetches(_sources()) == set()
 
 
 def test_no_unlisted_installer_action_runs():
     assert installer_uses(_sources()) - set(INSTALLERS) == set()
 
 
-def test_a_release_curl_in_a_migrated_job_is_flagged():
+NFPM_URL = "https://github.com/goreleaser/nfpm/releases/download/v1/nfpm.tar.gz"
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        f"curl -fsSLo f {NFPM_URL}",
+        f"out=$(curl -fsSL {NFPM_URL})",
+        f"mkdir -p d && curl -fsSLo d/f {NFPM_URL}",
+        f"wget -q {NFPM_URL}",
+        "gh release download v1 -R goreleaser/nfpm -p 'nfpm_*'",
+    ],
+)
+def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run):
     sources = copy.deepcopy(_sources())
-    sources["ci.yml"]["jobs"]["flux_roundtrip"]["steps"].append(
-        {
-            "run": "curl -fsSLo f https://github.com/fluxcd/flux2/releases/download/v1/f\n"
-        }
+    sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
+        {"run": run + "\n"}
     )
-    assert ("ci.yml", "flux_roundtrip") in release_curls(sources) - set(EXEMPT)
+    assert release_fetches(sources) - set(EXEMPT) == {
+        ("ci.yml", "host_packages_build", "goreleaser/nfpm")
+    }
 
 
 def test_an_installer_action_is_flagged():
