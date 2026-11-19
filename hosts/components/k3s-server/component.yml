@@ -192,6 +192,7 @@ files:
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s.service"}
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
   - {src: templates/cpu-weight.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf}
+  - {src: templates/system-slice-cpu-weight.conf.j2, dst: /usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf}
   - {src: templates/logrotate-k3s.j2, dst: /etc/logrotate.d/k3s}
   - {src: templates/tmpfiles-k3s.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-server.conf}
   # An empty marker: the deploy controller skips an addon file whose name ends `.skip`, which
