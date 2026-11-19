@@ -67,6 +67,9 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
   A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
   `test_census_rows_test_renders.py`.
+- An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
+  row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
+  the strings it requires, the pattern it forbids or the step that must come first.
 - `tests/_row_table.py` is the harness the tables share. A property needing a second
   render context, a cross-document join or a long exemption list keeps its own file.
 

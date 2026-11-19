@@ -5,13 +5,15 @@ nothing. Written as its own file, each guard restated the walk, the floor, the o
 and the red-proof pair. As a row, the selector and the predicate are the row's own code and
 everything else is here once.
 
-Two tables use it:
+Three tables use it:
 
 - `tests/k8s/_property_table.py` selects from the rendered k8s manifests. Its `check`
   ends in `verdict` below.
 - `Census` below selects from the tracked tree: `git ls-files` or `role_dirs()`. Its rows live
   in `tests/repo/test_census_rows_*.py`, one file per domain, because
   `TEST_CAP` in `_ratchet.py` caps any one module.
+- `tests/_runbook_rule.py` selects the units of one Markdown section of an operator-only
+  runbook. Its rows live in `tests/repo/test_runbook_rules.py`.
 
 What a row buys over a file:
 

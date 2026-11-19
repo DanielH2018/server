@@ -646,8 +646,8 @@ to fetch the commit that fixes it. In this order:
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 
-`tests/repo/test_flux_recovery_runbook.py` fails this section on a suspend or a resume
-without `--field-manager=homelab-operator`, on a server-side apply without
+The `recovery-*` rows of `tests/repo/test_runbook_rules.py` fail this section on a suspend
+or a resume without `--field-manager=homelab-operator`, on a server-side apply without
 `--force-conflicts`, and on a hand-apply branch whose apply precedes its `DEPLOY_HOLD` step.
 
 ## Bootstrapping Flux on a rebuilt cluster
@@ -810,12 +810,12 @@ Every hand apply in steps 3, 5, 6 and 9 is
 file. That is the root's own field manager, so the root and the `flux` tag adopt each object
 without a conflict.
 
-`tests/repo/test_flux_bootstrap_section.py` fails this section when the root's apply
-comes before the restore step, when a hand apply lacks `--field-manager=kustomize-controller`,
-and when step 2 names `reset_to_last_good` without its condition and the recorded exception.
-It also runs R4's PR 7b `awk` program over this file and fails unless the program exits 0 with
-empty output. The program refuses an Ansible deploy, a hand suspend of the root and the
-`flux_sync_suspend` key set to `true`.
+The `bootstrap-*` rows of `tests/repo/test_runbook_rules.py` fail this section when the
+root's apply comes before the restore step, when a hand apply lacks
+`--field-manager=kustomize-controller`, and when a step names `reset_to_last_good` without its
+condition and the recorded exception. They also refuse, on any line of the section, fenced
+lines included, the forms R4's PR 7b refused: a local or Ansible deploy, a hand suspend of the
+root and the `flux_sync_suspend` key set to `true`.
 
 ### Why the root is withheld, not suspended
 
