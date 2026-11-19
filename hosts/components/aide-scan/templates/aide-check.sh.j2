@@ -168,6 +168,9 @@ DPKG_LOG=/var/log/dpkg.log
 # How many unexplained paths the verdict's message names; the journal lists them all.
 MSG_PATHS=3
 UNEXPLAINED_MAX_LINES=500
+# How many unexplained entries have their AIDE detail logged, each about ten lines, so that a
+# long DOWN stays inside journald's default burst of 10000 lines.
+DETAIL_MAX_ENTRIES=50
 
 # Logs the verdict, then writes the textfile the host-checks rules read. The log line is
 # unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
@@ -504,6 +507,35 @@ summary_count() {
     !found && $0 ~ "^[[:space:]]*" label " entries:[[:space:]]*[0-9]+" { print $NF; found = 1 }'
 }
 
+# Prints, for each path on stdin, "path: <summary column>" from its report entry, then
+# "path: Name: old | new" for each attribute in its block of the report's detail section. A
+# value AIDE wraps over several lines is joined. An added or removed entry has no block.
+entry_details() {
+  local paths
+  paths=$(cat)
+  printf '%s\n' "$REPORT" | PATHS="$paths" awk '
+    function flush() { if (attr != "") print cur ": " attr ": " old " | " new; attr = "" }
+    function squeeze(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+    BEGIN { n = split(ENVIRON["PATHS"], p, "\n"); for (i = 1; i <= n; i++) if (p[i] != "") want[p[i]] = 1 }
+    !detail && substr($0, 19, 3) == ": /" && $0 !~ /^[ \t]/ {
+      path = substr($0, 21); if (path in want) print path ": " substr($0, 1, 18); next
+    }
+    /^Detailed information about changes:/ { detail = 1; next }
+    !detail { next }
+    # A block opens on its type and path, such as "File: /etc/passwd", and ends at a blank line.
+    /^[A-Z][A-Za-z ]*: \// { flush(); path = $0; sub(/^[^:]*: /, "", path); cur = (path in want) ? path : ""; next }
+    cur == "" { next }
+    /^[ \t]*$/ { flush(); cur = ""; next }
+    {
+      bar = index($0, " | "); left = bar ? substr($0, 1, bar - 1) : $0; right = bar ? substr($0, bar + 3) : ""
+      if (match(left, /^ [A-Za-z0-9]+ *: /)) {
+        flush(); attr = substr(left, 2, RLENGTH - 1); sub(/ *: $/, "", attr)
+        old = squeeze(substr(left, RLENGTH + 1)); new = squeeze(right)
+      } else { old = old squeeze(left); new = new squeeze(right) }
+    }
+    END { flush() }'
+}
+
 # DECIDED: page on a difference no package explains, and advance the baseline after every run
 # that has none. Package upgrades land every week, so the classifier rather than the exit code
 # decides. Advancing makes each report cover one week instead of
@@ -533,6 +565,9 @@ elif ((RC >= 1 && RC <= 7)); then
     printf '%s\n' "$UNEXPLAINED" \
       | awk -v max="$UNEXPLAINED_MAX_LINES" 'NR <= max { print "unexplained: " $0 }' \
       | logger -p daemon.notice -t aide-check
+    # Logged apart from the capped report, which can stop before an unexplained entry or its block.
+    printf '%s\n' "$UNEXPLAINED" | awk -v max="$DETAIL_MAX_ENTRIES" 'NR <= max { sub(/ \([^()]*\)$/, ""); print }' \
+      | entry_details | awk '{ print "detail: " $0 }' | logger -p daemon.notice -t aide-check
     NAMED=$(printf '%s\n' "$UNEXPLAINED" | awk -v max="$MSG_PATHS" 'NR <= max' | paste -sd ';' -)
     MSG="${UNEXPLAINED_COUNT} changes no package explains: ${NAMED} (${COUNTS}, exit ${RC}, run ${RUN_TIME}); journalctl -t aide-check lists them; once reviewed, run aide-check --accept"
   else
