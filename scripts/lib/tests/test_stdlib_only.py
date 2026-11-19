@@ -322,15 +322,18 @@ def test_a_launcher_line_with_the_root_is_clean():
     assert _unrooted(line) == []
 
 
-def test_each_wait_source_with_an_entry_is_a_launcher_the_root_check_reads():
-    from lib.stdlib_only import WAIT_SOURCES
-
-    with_entry = {
-        f"wait-sources/{source.name}"
-        for source in WAIT_SOURCES.iterdir()
-        if "--no-project" in source.read_text(encoding="utf-8")
-    }
-    assert with_entry and with_entry <= set(_launchers())
+def test_every_launcher_holds_a_line_the_root_check_reads():
+    # Without a match, a reshaped command line would pass the root check vacuously.
+    missing = [
+        name
+        for name, text in _launchers().items()
+        if not any(
+            _NO_PROJECT_RUN.search(line)
+            for line in text.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+    ]
+    assert missing == []
 
 
 def test_the_fanout_launchers_name_the_scripts_of_the_copy_they_run():
