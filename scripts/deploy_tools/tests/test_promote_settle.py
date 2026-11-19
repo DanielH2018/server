@@ -90,7 +90,8 @@ def jobs() -> dict:
 def _functions() -> dict[str, str]:
     """The workflow env's shell functions, which each step loads with `eval`."""
     env = yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8")).get("env", {})
-    return {key: env.get(key, "") for key in ("RETRY_FUNCTIONS", "DISPATCH_FUNCTIONS")}
+    keys = ("RETRY_FUNCTIONS", "REGISTRY_FUNCTIONS", "DISPATCH_FUNCTIONS")
+    return {key: env.get(key, "") for key in keys}
 
 
 def _step(job: dict, name: str) -> dict:
@@ -134,8 +135,7 @@ def _settle(tmp_path, jobs, **env: str):
         "FAKE_PROD_DIGEST": DIGEST,
         "RESET_DIGEST": RESET,
         "CLEARS_HOLD": "false",
-        "NO_RESET": "",
-        "STATEFUL": "",
+        "HOLD_FORM": "reset",
         "VERDICT": "failed",
         "FAILED_NAMES": "bento-pdf",
     }
@@ -246,7 +246,7 @@ def test_a_forward_only_failure_holds_as_t_alone_and_leaves_prod(
     tmp_path, jobs, verdict, names
 ):
     result, calls = _settle(
-        tmp_path, jobs, NO_RESET="longhorn", VERDICT=verdict, FAILED_NAMES=names
+        tmp_path, jobs, HOLD_FORM="no-reset", VERDICT=verdict, FAILED_NAMES=names
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [
@@ -257,7 +257,7 @@ def test_a_forward_only_failure_holds_as_t_alone_and_leaves_prod(
 
 def test_a_failed_hold_write_tags_nothing_and_exits_non_zero(tmp_path, jobs):
     result, calls = _settle(
-        tmp_path, jobs, NO_RESET="longhorn", FAKE_GH_FAIL="DEPLOY_HOLD"
+        tmp_path, jobs, HOLD_FORM="no-reset", FAKE_GH_FAIL="DEPLOY_HOLD"
     )
     assert result.returncode != 0
     assert (
@@ -266,7 +266,7 @@ def test_a_failed_hold_write_tags_nothing_and_exits_non_zero(tmp_path, jobs):
 
 
 def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs):
-    result, calls = _settle(tmp_path, jobs, NO_RESET="longhorn", FAKE_FLUX_FAIL="held")
+    result, calls = _settle(tmp_path, jobs, HOLD_FORM="no-reset", FAKE_FLUX_FAIL="held")
     assert result.returncode != 0
     assert calls[0] == f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"
     assert "tagging sha-" in result.stdout
@@ -292,9 +292,9 @@ def test_a_failure_that_changes_a_snapshot_role_holds_stateful_and_does_not_rese
     """The no-reset rule and the hold's form.
 
     The red half is C2's `failed=` form followed by a reset, which the same fixture without
-    STATEFUL produces (`test_a_failure_writes_the_hold_before_the_reset_then_records_prod_digest`).
+    HOLD_FORM=stateful produces (`test_a_failure_writes_the_hold_before_the_reset_then_records_prod_digest`).
     """
-    result, calls = _settle(tmp_path, jobs, STATEFUL="sonarr", FAILED_NAMES="sonarr")
+    result, calls = _settle(tmp_path, jobs, HOLD_FORM="stateful", FAILED_NAMES="sonarr")
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [_stateful_hold("stateful=sonarr"), HELD]
     assert f"stateful_hold={T} stateful=sonarr\n" in _outputs(tmp_path)
@@ -308,7 +308,9 @@ def test_a_snapshot_role_change_with_a_failing_non_snapshot_role_holds_without_r
     The trigger is a changed snapshot role, not a failed one, so traefik's failure leaves
     `prod` on T, and the hold names traefik.
     """
-    result, calls = _settle(tmp_path, jobs, STATEFUL="sonarr", FAILED_NAMES="traefik")
+    result, calls = _settle(
+        tmp_path, jobs, HOLD_FORM="stateful", FAILED_NAMES="traefik"
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [_stateful_hold("stateful=traefik"), HELD]
 
@@ -322,25 +324,25 @@ def test_a_stateful_failure_with_no_usable_names_holds_as_stateful_unverified(
     tmp_path, jobs, verdict, names
 ):
     result, calls = _settle(
-        tmp_path, jobs, STATEFUL="sonarr", VERDICT=verdict, FAILED_NAMES=names
+        tmp_path, jobs, HOLD_FORM="stateful", VERDICT=verdict, FAILED_NAMES=names
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [_stateful_hold("stateful=unverified"), HELD]
 
 
-def test_a_revision_that_is_stateful_and_forward_only_writes_the_stateful_form(
-    tmp_path, jobs
+@pytest.mark.parametrize("form", ["", "stateful-ish"], ids=["empty", "unknown"])
+def test_a_hold_form_decide_never_writes_holds_nothing_and_resets_nothing(
+    tmp_path, jobs, form
 ):
-    result, calls = _settle(
-        tmp_path, jobs, STATEFUL="sonarr", NO_RESET="longhorn", FAILED_NAMES="longhorn"
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert calls == [_stateful_hold("stateful=longhorn"), HELD]
+    result, calls = _settle(tmp_path, jobs, HOLD_FORM=form)
+    assert result.returncode != 0
+    assert calls == []
+    assert "is not stateful, no-reset or reset" in result.stdout
 
 
 def test_a_failed_stateful_hold_write_tags_nothing_and_leaves_no_post(tmp_path, jobs):
     result, calls = _settle(
-        tmp_path, jobs, STATEFUL="sonarr", FAKE_GH_FAIL="DEPLOY_HOLD"
+        tmp_path, jobs, HOLD_FORM="stateful", FAKE_GH_FAIL="DEPLOY_HOLD"
     )
     assert result.returncode != 0
     assert calls == [_stateful_hold("stateful=bento-pdf")] * 3
@@ -421,7 +423,8 @@ def test_a_prod_read_that_fails_moves_nothing(tmp_path, jobs):
     result, calls, output = _move(tmp_path, jobs, FAKE_PROD_STATUS="503")
     assert result.returncode != 0
     assert (calls, output) == ([], "")
-    assert "HEAD prod answered HTTP 503" in result.stdout
+    assert "prod's digest could not be read" in result.stdout
+    assert "HEAD prod answered HTTP 503" in result.stderr
 
 
 def test_the_promotion_records_prod_digest_after_the_move_and_fails_on_a_failed_write(

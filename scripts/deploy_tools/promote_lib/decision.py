@@ -82,6 +82,19 @@ class Decision:
     lost_settle: str = ""
     lost_settle_digest: str = ""
 
+    @property
+    def hold_form(self) -> str:
+        """The hold `settle` and `reconcile` write for anything but a good verdict.
+
+        `stateful` when `stateful` names a snapshot role, whatever `no_reset` says, then
+        `no-reset` when `no_reset` names a forward-only tag, else `reset`.
+        """
+        if self.stateful:
+            return "stateful"
+        if self.no_reset:
+            return "no-reset"
+        return "reset"
+
 
 def _promotion(
     reads: Reads,
