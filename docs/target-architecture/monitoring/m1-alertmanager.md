@@ -600,7 +600,8 @@ A resolved notification would count as a ping and hide the outage. Its `payload`
 |---|---|---|---|
 | `Watchdog` | always 1 (`vector(1)`) | — | `info` |
 | `PrometheusRuleReloadFailed` | `prometheus_config_last_reload_successful == 0` | 10m | `warning` |
-| `AlertmanagerNotificationsFailing` | `increase(alertmanager_notifications_failed_total[30m]) > 0`, by integration | — | `critical` |
+| `AlertmanagerNotificationsFailing` | `increase(alertmanager_notifications_failed_total{reason!="rateLimited"}[30m]) > 0`, by integration | — | `critical` |
+| `AlertmanagerNotificationsRateLimited` | `increase(alertmanager_notifications_failed_total{reason="rateLimited"}[5m]) > 0`, by integration | 10m | `critical` |
 | `AlertmanagerMetricsMissing` | `absent(up{job="alertmanager"})` or (`absent(alertmanager_notifications_failed_total{job="alertmanager"})` and on() `up{job="alertmanager"} == 1`) | 10m | `warning` |
 
 `AlertmanagerNotificationsFailing` is Alertmanager's counterpart of Kuma's `Kuma Notification
@@ -608,6 +609,15 @@ Delivery` tile (`kuma_notify_failures` in `check_table.py`). It is critical, so 
 Discord and email, and a dropped Discord send still reaches the operator by email. M1 ships it
 before any family cuts over. Once M2 cuts over, Alertmanager pages for real, and a dropped page
 must not be silent.
+
+`AlertmanagerNotificationsRateLimited` holds the `rateLimited` reason apart. Alertmanager
+retries a rate-limited send, and a large rollout's alert churn makes Discord return 429 for a
+few minutes. On 2026-11-19 that burst fired `AlertmanagerNotificationsFailing`, failed the soak
+and set `DEPLOY_HOLD` on a healthy cluster
+([#9088](https://github.com/DanielH2018/server/issues/9088)). The 5-minute window with a
+10-minute `for:`, two of the default route's `group_interval`, lets a burst that the retries
+deliver pass. A rate limit that holds for 10 minutes still pages as a critical, so it reaches
+email.
 
 `AlertmanagerMetricsMissing` is the family's zero-series alert (convention 2). If
 Alertmanager's metrics stop reaching Prometheus, `AlertmanagerNotificationsFailing` evaluates
@@ -672,7 +682,9 @@ that one transient failed send keeps `AlertmanagerNotificationsFailing` firing, 
 red, for up to 30 minutes after the cause clears. The gate names the alert, so the operator can tell such a send from a deploy
 fault. Once `observability` is flux-owned, the same critical alert also fails D5's soak when
 it becomes active during the soak. That is intended too, because a promote is not safe while
-pages are dropped.
+pages are dropped. A rate-limited send is the exception: it fails the soak only once
+`AlertmanagerNotificationsRateLimited` has held for 10 minutes. That `for:` sets
+`observability`'s soak window W to 720 seconds.
 
 ### Rules other slices add (C7)
 

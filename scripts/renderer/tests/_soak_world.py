@@ -14,6 +14,7 @@ import threading
 from datetime import UTC, datetime
 
 import flux_soak
+import soak_pods
 
 R, OTHER = "a" * 40, "b" * 40
 T0 = 1_800_000_000.0
@@ -119,6 +120,8 @@ class World:
         # Each path's queued errors, raised one per read before the path answers.
         self.api_errors = {}
         self.unmapped = set()
+        # Each workload rule's series, as (kind, namespace, workload) mapped to its service.
+        self.workload_services = {}
         self.ready_samples = None
         self.scrape_gaps = []
         self.alerts = []
@@ -175,6 +178,13 @@ class World:
         return out
 
     def query(self, promql, at):
+        for kind, (rule, label) in soak_pods.WORKLOAD_RULES.items():
+            if promql == rule:
+                return [
+                    {"metric": {"namespace": ns, label: name, "service": service}}
+                    for (k, ns, name), service in self.workload_services.items()
+                    if k == kind
+                ]
         if promql.startswith("homelab:pod_service:info"):
             return [
                 {
