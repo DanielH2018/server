@@ -240,7 +240,21 @@ def test_hosts_carries_a_literal_compose_services_and_omits_a_templated_one(tree
         plane="k8s",
     )
     hosts = rc.render_context(template, inventory=inv)["hosts"]
-    assert hosts == {"pi": {"server_ip": "10.0.0.2", "compose_services": pi_list}}
+    assert hosts == {
+        "pi": {"server_ip": "10.0.0.2", "compose_services": tuple(pi_list)}
+    }
+    assert type(hosts["pi"]["compose_services"][0]) is ContainerEntry
+
+
+def test_a_malformed_pi_service_entry_fails_the_context_read(tree):
+    # Templates pass the Pi's list to the same filters as `services`, which re-check nothing.
+    template, inv = tree(
+        {},
+        hosts={"pi": {"compose_services": [{"name": "alloy"}, "not-an-entry"]}},
+        plane="k8s",
+    )
+    with pytest.raises(ContainerEntryError, match="compose_services item 1"):
+        rc.render_context(template, inventory=inv)
 
 
 def test_hosts_has_an_entry_per_host_vars_file_and_none_for_the_template(tree):
@@ -257,7 +271,7 @@ def test_hosts_has_an_entry_per_host_vars_file_and_none_for_the_template(tree):
     hosts = rc.render_context(template, inventory=inv)["hosts"]
     assert hosts == {
         "box": {"server_ip": "10.0.0.1"},
-        "pi": {"server_ip": "10.0.0.2", "compose_services": pi_list},
+        "pi": {"server_ip": "10.0.0.2", "compose_services": tuple(pi_list)},
     }
 
 
