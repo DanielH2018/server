@@ -50,7 +50,8 @@ def _probe(f: Fakes, healthy_everywhere: frozenset[str] = frozenset()):
     """
 
     def run(argv, cwd: Path, **_kwargs):
-        tag, extra = argv[5], argv[6:]
+        at = argv.index("health") + 1
+        tag, extra = argv[at], argv[at + 1 :]
         flipped = _carries_the_flip(cwd, f) or tag in healthy_everywhere
         rc, out, err = 0, f"{tag}: all 1 workload healthy", ""
         if tag == "traefik" and not flipped:
