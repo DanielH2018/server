@@ -473,7 +473,7 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
         in_turn, waited = take_turn(draft)
         if in_turn and draft:
             # Before the draft's run, so a PR its merge would be refused spends no run.
-            slots.refuse_before_merge(ln)
+            slots.refuse_before_run(ln)
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)
