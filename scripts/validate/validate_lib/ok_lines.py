@@ -1,6 +1,6 @@
 """The per-template `[ok]` line every template validator prints, kept behind `-v` (#4448).
 
-A clean run of `k8s_manifests.py` printed one `[ok]` line per template, about 150 of them, and
+A clean run of `render_lib/k8s.py` printed one `[ok]` line per template, about 150 of them, and
 the `[FAIL]` lines a reader needed sat somewhere in that list. A validator now prints its
 failures and its one-line summary by default, and lists the clean templates only when asked.
 """

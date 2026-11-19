@@ -27,7 +27,8 @@ from renderer.renderer_lib.cluster import (
 )
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
 from renderer.shadow_diff import stub_vars
-from validate.k8s_manifests import K8S_ROLES, SKIP_ROLES, k8s_entries
+from lib.k8s_roles import SKIP_ROLES, k8s_entries
+from lib.repo_paths import K8S_ROLES
 
 
 def _stubs(overrides: dict | None) -> dict:

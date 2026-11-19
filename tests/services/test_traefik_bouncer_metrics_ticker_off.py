@@ -17,14 +17,10 @@ import pytest
 from lib import yaml_fast
 from lib.render_context import render_context
 
-from validate.k8s_manifests import (
-    K8S_ROLES,
-    SHARED_TPL,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-)
+from lib.guard_jinja_env import register_ansible_filters
+from lib.k8s_yaml import make_lookup
+from lib.render_guard import make_env, render_or_error
+from lib.repo_paths import K8S_ROLES, SHARED_TPL
 
 _ROLE = "traefik"
 _HOST = "daniel-box"
