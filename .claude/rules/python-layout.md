@@ -75,8 +75,9 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 - An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
   row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
   the strings it requires, the pattern it forbids or the step that must come first.
-- `tests/_row_table.py` is the harness the tables share. A property needing a second
-  render context, a cross-document join or a long exemption list keeps its own file.
+- `tests/_row_table.py` is the harness the tables share. A property over a second render is
+  still a row: it passes that render as the row's `source` (`_prepull_property_rows.py`).
+  One needing a long exemption list keeps its own file.
 - The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
   refuses a new module under `tests/repo/` or `tests/services/` with three test functions or
   fewer that reads tracked text, by a walk or by one file's path, and runs no code: no

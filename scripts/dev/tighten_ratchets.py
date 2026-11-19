@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Lower every ratchet allowlist entry to what its file is today.
 
-The two lists are `tests/repo/module_length_allowlist.txt` and
-`tests/repo/monkeypatch_allowlist.txt`, and an entry has to MATCH its file (the
+The three lists are `tests/repo/module_length_allowlist.txt`,
+`tests/repo/monkeypatch_allowlist.txt` and `tests/repo/copied_tests_allowlist.txt`, and an
+entry has to MATCH its file (the
 `DECIDED:` marker in `tests/_ratchet.py`). So every PR that shrinks a listed file
 also edits that file's line: 70 commits did in the 30 days to 2026-09-28, 49 of them only
 lowering or deleting. This writes that edit instead.
@@ -37,7 +38,14 @@ _sys.path.insert(0, str(TESTS))
 from _helpers import REPO
 from lib.cli_help import ArgumentParser
 from _ratchet import Ratchet, parse_allowlist, tighten
-from _ratchet_census import LENGTHS, PATCHES, code_line_counts, monkeypatch_counts
+from _ratchet_census import (
+    COPIES,
+    LENGTHS,
+    PATCHES,
+    code_line_counts,
+    copied_test_counts,
+    monkeypatch_counts,
+)
 
 
 def changes(before: str, after: str) -> list[str]:
@@ -76,6 +84,7 @@ def main() -> int:
     for ratchet, counts in (
         (LENGTHS, code_line_counts()),
         (PATCHES, monkeypatch_counts()),
+        (COPIES, copied_test_counts()),
     ):
         found = tighten_list(ratchet, counts, write=args.tighten)
         if found:
