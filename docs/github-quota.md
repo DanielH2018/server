@@ -185,6 +185,17 @@ on 2026-11-14 one uid's ledger held two live windows per bucket, which one token
 counted in whichever window ended later. A caller whose `gh` has no token gets the uid as
 its identity. Two tokens of one GitHub user spend one quota and get two ledger files.
 
+**A counted call writes the ledger in one transaction.** `record` claims a due sample in one
+short write, runs `gh api rate_limit` while holding no lock, and then writes the sample's
+rows, the prune and the call's own row under one `BEGIN IMMEDIATE`. A writer waits up to
+`LOCK_WAIT_S` (5 seconds) for another writer, and then the call goes ahead unrecorded with
+a `database is locked` line in `failures.<uid>`. On 2026-11-18 a 1-second wait dropped 25
+calls between 20:36 and 21:27 UTC, while about 15 sessions wrote during a burst and the host
+was short of memory ([#9055](https://github.com/DanielH2018/server/issues/9055)). The wait delays a
+counted `gh` call only while another writer holds the lock. The ledger stays in SQLite's
+rollback journal, not WAL: WAL's `-wal` and `-shm` files take the writer's `umask`, and a
+reader running as another uid could then not open the ledger.
+
 **Each sample names its caller.** The ledger's `sampler` table, keyed by window and bucket
 like `truth`, stores three facts about the last caller that sampled that window: its session
 key, the resolved path of its `gh`, and the names of its `GH_*` and `GITHUB_*` variables.
@@ -427,7 +438,9 @@ every session at once.
 +                           -> /usr/bin/gh-quota, the same file as a command
 +    templates/gh-quota.conf.j2
 +    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
-+    tests/test_gh_quota.py
++    tests/test_gh_quota.py           classifying, sampling and windows
++    tests/test_gh_quota_failures.py  a failed sample, a locked or corrupt file, two writers
++    tests/_gh_quota_fakes.py, tests/conftest.py   the fake gh, clock and ledger both share
  hosts/daniel-box/package.yml, hosts/daniel-server/package.yml   + gh-quota
  scripts/lib/gh.py          gh(): record each call
  scripts/dev/fanout_lib/launch.py   the fan-out snapshot carries the module
