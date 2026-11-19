@@ -41,10 +41,10 @@ consumer's own tasks, and a test proves each ship list matches the tree.
 Each of these was made once and is easy to re-open by accident. The reason and the primary
 source are recorded so the next reader can check whether the reason still holds.
 
-### A virtual uv project, not a package
+### One uv project, with `scripts/` installed in place
 
 [uv](https://docs.astral.sh/uv/) manages the dev and test tooling from `pyproject.toml` and
-`uv.lock`. A virtual project pins its dependencies and the pytest config. `[project]
+`uv.lock`. The project pins its dependencies and the pytest config. `[project]
 dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jinja2`. The
 `lint` group holds the tools that only prek hooks and hand-run commands call: ruff, ty,
 `actionlint-py`, `zizmor` and `mkdocs-material`. The `dev` group holds everything else, which is
@@ -62,13 +62,16 @@ and `ci.yml`, and fails on a third-party import outside that list's closure.
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
 `validate-render-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
 
-`[tool.uv] package = false` in `pyproject.toml`. uv's own guidance is that a project does not
-need a package when it is "writing scripts, building a simple application, using a flat
-layout," and needs one to "add commands to the project, distribute the project to others, use
-a `src` and `test` layout" ([uv projects config][uv-config]). This repo is the first list.
-The consequence is that `[project.scripts]` console entry points are unavailable, and so is
-`pip install -e .`. Those are the two things a `src/` layout would buy, so the two decisions
-are one decision.
+`[tool.uv] package = true`, and `[tool.uv.build-backend]` installs `scripts/` where it stands:
+`module-root = "scripts"`, `namespace = true`, one `module-name` per area. The editable
+install writes a `.pth` that names `scripts/`, so every interpreter in the venv imports
+`lib.x` or `dev.x` with no insert. A no-venv run (`uv run --no-project`) gets no `.pth`, and
+its launcher sets `PYTHONPATH` to its own checkout's `scripts/` instead.
+[ADR-0039](adr/0039-scripts-is-installed-in-place.md) has the decision and why nothing moved to
+`src/`. It also covers the one cost: code run under another checkout's venv falls through to
+that checkout's `scripts/` for a module its own tree lacks. `required-version` holds uv to the
+range `uv_build` names, so every sync uses the backend bundled with uv
+([uv projects config][uv-config]).
 
 ### Flat layout, because the scripts run uninstalled
 
@@ -82,6 +85,11 @@ unique-basename rule for tests is the price.
 Re-examined on 2026-09-28 (#2809) and kept. Packaging `scripts/` as the uv project would retire
 the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts,
 which have no checkout and no install step.
+
+**HISTORY —** On 2026-11-19 `scripts/` was installed in place
+([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so in a venv it no longer runs
+uninstalled. The role-shipped programs still run with no install, and the bootstraps stand
+until the scripts packaging milestone's slice 3 removes them.
 
 ### PEP 420 namespace packages, no `__init__.py` anywhere
 

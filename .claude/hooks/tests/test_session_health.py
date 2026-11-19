@@ -470,8 +470,10 @@ def test_a_hooklib_that_will_not_compile_is_named_rather_than_killing_the_banner
     and exits 0. An uncaught SyntaxError at import would take the whole banner out with nothing
     a session could see, and nothing at module scope may do that.
     """
+    # `-S`: without it the venv's `.pth` supplies this checkout's `scripts/`, which the copy
+    # lacks, so the other-session section would read the real worktrees.
     proc = subprocess.run(
-        [sys.executable, str(_hook_copy_with_a_broken_hooklib(tmp_path))],
+        [sys.executable, "-S", str(_hook_copy_with_a_broken_hooklib(tmp_path))],
         input='{"source": "startup"}',
         capture_output=True,
         text=True,
