@@ -56,7 +56,10 @@ SERIAL_NAME = "homelab-land-serial.lock"
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
-_SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
+_SERIAL_LIVE = (
+    f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live "
+    "(`cc-wait landing-clear` waits for it)"
+)
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
@@ -168,6 +171,11 @@ def _held_by_another(lock: Locker, names: Sequence[str]) -> bool:
     if release:
         release()
     return release is None
+
+
+def serial_landing_live(hostname: str) -> bool:
+    """Whether a landing of a serial PR holds the serial lock, read from `hostname`."""
+    return _held_by_another(_locker(hostname), [SERIAL_NAME])
 
 
 def _keep_serial(ln: Landing, lock: Locker) -> bool:
