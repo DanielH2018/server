@@ -65,7 +65,7 @@ import os
 import sys
 import traceback
 
-from _hook_common import read_payload
+from _hook_common import read_payload, tagged
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -104,22 +104,20 @@ def load_arm(filename, module_name):
 
 
 def _report(arm_name, exc):
-    """Name the arm that stopped judging, on stderr, with its traceback."""
-    print(
-        f"bash-pretool.py: arm {arm_name} raised, so it returned no verdict:",
-        file=sys.stderr,
-    )
-    traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
+    """Name the arm that stopped judging: its traceback on stderr, one line for the model.
 
+    The harness drops a hook's stderr when it exits 0, so the traceback reaches only a person
+    running this by hand. The returned line rides in `additionalContext`, which is how the agent
+    learns a guard skipped this call.
 
-def _attributed(arm_name, reason):
-    """`reason` prefixed with the arm that returned it, as `[<arm>] <reason>`.
-
-    The OTEL `tool_decision` stream names the hook that decided, and since the merge that
-    hook is `run-hook.sh bash-pretool` for every Bash verdict. The prefix puts back what the stream
-    lost: which arm decided, greppable in the reason itself.
+    Returns:
+        `[bash-pretool] arm <arm> raised <ExceptionType>: <first line of its message>`.
     """
-    return f"[{arm_name}] {reason}"
+    line = tagged("bash-pretool", f"arm {arm_name} raised {type(exc).__name__}")
+    print(f"{line}, so it returned no verdict:", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
+    message = str(exc).strip().splitlines()
+    return f"{line}: {message[0]}" if message else line
 
 
 def collect(
@@ -132,8 +130,10 @@ def collect(
     """Every arm's output for `payload`: the verdicts, the context text and the rewrite.
 
     Each reason carries its arm's name as a `[<arm>] ` prefix, so the merged verdict still
-    says which arm decided. An arm that raises — including one that cannot be imported — contributes nothing and is
-    reported on stderr. An arm with no opinion contributes nothing and is silent.
+    says which arm decided: the OTEL `tool_decision` stream names `run-hook.sh bash-pretool`
+    for every Bash verdict. An arm that raises, including one that cannot be imported,
+    contributes no verdict; `_report` names it on stderr and in one line that opens `context`.
+    An arm with no opinion contributes nothing and is silent.
 
     Args:
         payload: the hook JSON, already parsed.
@@ -147,24 +147,25 @@ def collect(
             as it was. Asked after the decision arms so they judge the command as typed.
 
     Returns:
-        `(verdicts, context, command)`, where `command` is None when no rewrite arm changed
-        the text.
+        `(verdicts, context, command)`, where `context` is None when no arm raised and the
+        context arm had nothing, and `command` is None when no rewrite arm changed the text.
     """
     verdicts = []
+    failures = []
     for filename, module_name in arms:
         try:
             verdict = load(filename, module_name).decision(payload)
         except Exception as exc:  # Blind on purpose: one arm must not silence the rest.
-            _report(filename, exc)
+            failures.append(_report(filename, exc))
             continue
         if verdict:
             decision, reason = verdict
-            verdicts.append((decision, _attributed(filename, reason)))
+            verdicts.append((decision, tagged(filename, reason)))
     context = None
     try:
         context = load(*context_arm).context(payload)
     except Exception as exc:
-        _report(context_arm[0], exc)
+        failures.append(_report(context_arm[0], exc))
     command = None
     for filename, module_name in rewrite_arms:
         current = payload
@@ -176,10 +177,12 @@ def collect(
         try:
             rewritten = load(filename, module_name).rewrite(current)
         except Exception as exc:
-            _report(filename, exc)
+            failures.append(_report(filename, exc))
             continue
         if rewritten is not None:
             command = rewritten
+    if failures:
+        context = "\n\n".join([*failures, *([context] if context else [])])
     return verdicts, context, command
 
 

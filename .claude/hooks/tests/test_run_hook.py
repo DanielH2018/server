@@ -60,7 +60,7 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
         f"RUN_HOOK_UV:-{_UV}}}",
         'cd "$project_dir" ||',
         'exec "$uv" run',
-        '\n"$uv" run',
+        'err=$("$uv" run',
     ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
@@ -210,6 +210,28 @@ def test_accept_the_quiet_variant_runs_its_hook_and_stays_silent(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "ran"
     assert "did not run" not in proc.stderr
+
+
+def test_reject_a_quiet_hook_that_crashes_reports_its_last_stderr_line(tmp_path):
+    """A crash stays fail-open, exit 0, but its cause reaches the reader as one systemMessage."""
+    (tmp_path / "probe.py").write_text(
+        "import sys\nprint('noise', file=sys.stderr)\n"
+        "raise ValueError('bad \"quote\" and \\\\ slash')\n",
+        encoding="utf-8",
+    )
+    proc = _run(_variant_runner(tmp_path, str(tmp_path)), "probe")
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {
+        "systemMessage": '[probe] failed: ValueError: bad "quote" and \\ slash'
+    }
+
+
+def test_reject_a_quiet_hook_that_exits_non_zero_silently_names_the_exit(tmp_path):
+    (tmp_path / "probe.py").write_text("raise SystemExit(3)\n", encoding="utf-8")
+    proc = _run(_variant_runner(tmp_path, str(tmp_path)), "probe")
+    assert json.loads(proc.stdout) == {
+        "systemMessage": "[probe] failed: exit 3 with no stderr"
+    }
 
 
 def _fanout_stop_runner(tmp_path: Path) -> Path:

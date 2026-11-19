@@ -93,7 +93,8 @@ def test_main_emits_a_block_decision_on_stdout(tmp_path):
     payload = {"cwd": str(root), "last_assistant_message": PROGRESS}
     assert _mod.main(io.StringIO(json.dumps(payload)), out) == 0
     decision = json.loads(out.getvalue())
-    assert decision["decision"] == "block" and decision["reason"]
+    assert decision["decision"] == "block"
+    assert decision["reason"].startswith("[fanout-stop] This is a headless")
 
     quiet = io.StringIO()
     payload["last_assistant_message"] = FINISHED

@@ -81,6 +81,7 @@ from _hook_common import (
     instructions_log_path,
     read_payload,
     session_state_path,
+    tagged,
 )
 from _inline_budget import header as _header
 from _inline_budget import inline_margins, print_report, rule_globs
@@ -95,13 +96,15 @@ INLINE_MAX_LINES = 190
 MIN_HEAD_CHARS = 1500
 
 # The wrapper text, charged to both payload budgets before any doc is rendered.
-_PREAMBLE = (
-    "[inject-nested-docs] Project instructions for paths this command names. Claude Code "
+_PREAMBLE = tagged(
+    "inject-nested-docs",
+    "Project instructions for paths this command names. Claude Code "
     "loads them for Read/Edit/Write but not for Bash, so this hook supplies each once per "
-    "session or subagent (an editing rule on the first write).\n\n"
+    "session or subagent (an editing rule on the first write).\n\n",
 )
-_SHORT_PREAMBLE = (
-    "[inject-nested-docs] More project instructions for paths this command names.\n\n"
+_SHORT_PREAMBLE = tagged(
+    "inject-nested-docs",
+    "More project instructions for paths this command names.\n\n",
 )
 
 # Everything a session is injected before its role docs and editing rules arrive as outlines.

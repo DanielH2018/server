@@ -61,8 +61,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # the banner.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hook_common import primary_checkout, read_payload
+    from _hook_common import primary_checkout, read_payload, tagged
 except ImportError, SyntaxError:
+
+    def tagged(hook, text):
+        return f"[{hook}] {text}"
+
     # Without the payload the banner cannot tell a compaction from an open, so it prints on
     # both. One repeat banner is the cost; a hook that printed none would hide this failure.
     def read_payload():
@@ -402,7 +406,7 @@ def unlabelled_worktree_lines(cwd, *, run=None):
     if not top or not has_generated_name(top) or read_label(top):
         return []
     return [
-        f"WARN: this worktree's name ({os.path.basename(top)}) was generated. Once you "
+        f"This worktree's name ({os.path.basename(top)}) was generated. Once you "
         "know the task, label it: `uv run python scripts/dev/label_worktree.py <issue>...` "
         'or `--text "<what you are doing>"`.'
     ]
@@ -448,7 +452,7 @@ def format_banner(targets=(), parked=(), master_moved=()):
         commands.append(f"{PROBE} landing")
     if targets:
         commands += [f"{PROBE} targets", f"{PROBE} health <svc>"]
-    out = ["WARN: homelab health check found issues:", *problems]
+    out = ["Homelab health check found issues:", *problems]
     if commands:
         out.append("  → triage: " + " or ".join(f"`{c}`" for c in commands))
     return out
@@ -457,6 +461,11 @@ def format_banner(targets=(), parked=(), master_moved=()):
 # Claude Code persists a longer SessionStart output to a file and shows the session only a
 # 2 KB preview of it, so a line past this budget is a line the session never reads.
 BANNER_BUDGET_BYTES = 2000
+
+
+def _tag_first(lines):
+    """`lines` with the `[session-health] ` tag on the first, so each message names its hook."""
+    return [tagged("session-health", lines[0]), *lines[1:]] if lines else []
 
 
 def fit_to_budget(lines, budget=BANNER_BUDGET_BYTES):
@@ -550,7 +559,9 @@ def main(
         context += ["Other Claude sessions in this repo:", *sessions]
 
     # Operator housekeeping goes to `systemMessage`, which the model never reads.
-    print_hook_output(fit_to_budget(context), worktrees + fanout)
+    print_hook_output(
+        fit_to_budget(_tag_first(context)), _tag_first(worktrees + fanout)
+    )
     return 0
 
 

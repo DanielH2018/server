@@ -41,7 +41,7 @@ def test_banner_empty_when_no_problems():
 
 def test_banner_lists_problems_and_triage():
     out = _mod.format_banner(targets=["  ✗ target jellyfin [x] down"])
-    assert out[0] == "WARN: homelab health check found issues:"
+    assert out[0] == "Homelab health check found issues:"
     assert "jellyfin" in out[1]
     assert "triage" in out[-1]
 
@@ -49,7 +49,7 @@ def test_banner_lists_problems_and_triage():
 def test_a_branch_only_banner_prints_no_triage_line():
     out = _mod.format_banner(master_moved=["  ⚠ this branch is 3 commits behind"])
     assert out == [
-        "WARN: homelab health check found issues:",
+        "Homelab health check found issues:",
         "  ⚠ this branch is 3 commits behind",
     ]
 
@@ -314,6 +314,8 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
     assert "loki" in context
     assert context.splitlines()[-1].endswith("cut at the banner's 2000-byte budget")
     assert "merged worktree" in operator
+    assert context.startswith("[session-health] ")
+    assert operator.startswith("[session-health] ")
 
 
 # `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point

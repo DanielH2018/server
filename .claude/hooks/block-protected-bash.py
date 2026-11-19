@@ -148,7 +148,7 @@ def main():
         return 0
     verdict = decision(data)
     if verdict:
-        emit_pretooluse_decision(*verdict)
+        emit_pretooluse_decision("block-protected-bash", *verdict)
     return 0
 
 
