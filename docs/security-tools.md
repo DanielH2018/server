@@ -105,6 +105,12 @@ Advancing the baseline after every UP run makes each report cover one week. A DO
 sudo journalctl -t aide-check --since -7d | grep unexplained
 ```
 
+The capped report can stop before an unexplained entry, so for the first 50 of them the script also logs a `detail:` line with the entry's summary column, and a `detail:` line for each attribute that changed, old and new, from the report's detail section. Those lines tell a content change from a change of times or mode:
+
+```bash
+sudo journalctl -t aide-check --since -7d | grep 'detail: /etc/passwd'
+```
+
 Once every path is accounted for, accept the run's database as the baseline. This takes the scan lock and moves `aide.db.new` over `aide.db`. It scans nothing and writes no verdict, and the alert clears on the next weekly run:
 
 ```bash
