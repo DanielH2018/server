@@ -2,7 +2,7 @@
 
 `promote_lib/verify_promotion.py:expected_set` calls `promote_timeout` with T's bundle and its changed set,
 the same set `verify` expects, so the timeout and the expected statuses cannot disagree. The
-plan is docs/target-architecture/deploy/d4-ordering.md, *What `promote` reads*, and the
+plan is docs/archive/deploy/d4-ordering.md, *What `promote` reads*, and the
 operator's view is docs/flux-deploy-plane.md, *The timeout follows the chain*. Like
 `changed_set`, it is pure and reaches no forge: the caller reads the bundle.
 

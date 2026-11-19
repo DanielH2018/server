@@ -10,7 +10,7 @@ when it leaves the render.
 inserts `checksum/restart`, so no other byte of the file moves. A re-serialised document would
 drop the quotes around a `"${key}"` and change the type Flux substitutes into it.
 
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Prune exemptions, digests and
+The plan is docs/archive/deploy/d5-bulk-move.md, *Prune exemptions, digests and
 the collision census (D5.1a1, D5.1a2)*.
 """
 

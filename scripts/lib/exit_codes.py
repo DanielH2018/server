@@ -175,7 +175,7 @@ RENOVATE_SWEEP_GH_FAILED = 2
 RENOVATE_SWEEP_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/renderer/homelab_render.py -------------------------------------------------
-# C1 in docs/target-architecture/contracts.md fixes 2 for a render refused before it writes.
+# C1 in docs/archive/contracts.md fixes 2 for a render refused before it writes.
 # The parser exits 64 on a usage error, so 2 always means that refusal.
 RENDER_OK = OK
 RENDER_FAILED = FAILED

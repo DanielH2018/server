@@ -113,9 +113,9 @@ exclude_docs: |
 # links it. Declaring it here is what separates "decided to leave unlinked" from "nobody
 # noticed", which is the distinction the nav coverage test now enforces.
 #
-# `target-architecture/` holds the migration plans, archived in place: hundreds of files link
-# into those paths, so they stay built. what-the-migration-built.md links the design, the
-# contracts and the docs-guard handoff, and each plan links its siblings.
+# `target-architecture/` holds the docs-guard slices, which are still in progress, and one
+# stub per archived plan that a rendered comment still cites. A stub goes once no rendered
+# comment cites its path. what-the-migration-built.md links the docs-guard handoff.
 #
 # DECIDED: docs/archive stays; size was never the concern, and a PR number is not greppable
 # offline the way the linked record is.
@@ -232,8 +232,6 @@ nav:
       - CI and the repo:
           # What the 20-job runner cap costs a landing, and the phased plan to get under it.
           - CI throughput: ci-throughput.md
-          # One coverage run with per-test contexts: deletion candidates, not a gate.
-          - Test coverage snapshot: test-coverage-snapshot.md
           # What exhausts the shared GitHub API quota, and the per-session budget ADR-0034 chose.
           - GitHub API quota: github-quota.md
           - Python code organization: python-code-organization.md

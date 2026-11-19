@@ -19,7 +19,7 @@ later unrelated commit still fails. A failed pull fails the publish. A `prod` th
 not hold is the first run, as for `decide`, and the reference is then empty.
 `render_diff_gates.py`'s arm 6 is the early warning on a pull request, with the base render as
 its reference. The plan is the deletion policy section of
-docs/target-architecture/deploy/d6-delete-old-path.md.
+docs/archive/deploy/d6-delete-old-path.md.
 """
 
 import sys

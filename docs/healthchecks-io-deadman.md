@@ -130,7 +130,7 @@ a down Alertmanager pages up to 30 minutes in. A shorter check would page on mos
 reboots: the gap between the last ping before the reboot and the first after it is about 15
 minutes. The operator accepted the 30 minutes on 2026-10-12
 ([#4693](https://github.com/DanielH2018/server/issues/4693)). The
-[M1 slice plan](target-architecture/monitoring/m1-alertmanager.md) has the sizing.
+[M1 slice plan](archive/monitoring/m1-alertmanager.md) has the sizing.
 
 ## What leaves the house
 

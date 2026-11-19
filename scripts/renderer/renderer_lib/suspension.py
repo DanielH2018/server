@@ -5,7 +5,7 @@ take the field back from an operator's hand suspend. The renderer therefore writ
 only when it is true, and `bundle.bundle_files` fails a render whose bundle holds a `false` in
 any document, a role template's included. The flux role's `sync.yaml.j2` follows the same rule.
 `suspends_tag` reads the rendered flag back for `digests.json`'s `suspended` field (D5.1a2).
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *The stop lever (D5.1b)*.
+The plan is docs/archive/deploy/d5-bulk-move.md, *The stop lever (D5.1b)*.
 
 The flux role's `flux_sync_suspend` is refused outright from D5 step 29 on
 (`sync_suspend_refusal`). Flux applies its own sync objects from then, so a suspend rendered

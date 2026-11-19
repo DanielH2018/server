@@ -7,7 +7,7 @@ to `sha-<T>`, and a failed one writes `<T> failed=<names>` to DEPLOY_HOLD, then 
 to `last-good`. When `decide` named forward-only tags T changes (its `no_reset` output), a
 failed one writes T's SHA alone in place of that value, tags T's digest `held` and leaves
 `prod` on T (H1.1b, `forward_only.py`). The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*, and the
+docs/archive/deploy/d2-first-leaf.md, *Publication and verification*, and the
 operator's view is docs/flux-deploy-plane.md.
 
 WHAT `verify` EXPECTS. `flux/homelab` plus `flux/<name>` for every name in T's changed set,

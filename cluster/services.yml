@@ -951,13 +951,13 @@ containers_list:
   # and the role fences that itself.
   - name: flux
     tier: platform
-  # system-upgrade-controller, its CRD and the two k3s Plans (docs/target-architecture/host/
+  # system-upgrade-controller, its CRD and the two k3s Plans (docs/archive/host/
   # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
   # The Plans select the nodes in `system_upgrade_nodes`, both since H6.3d. No port and no
   # hostname: nothing dials the controller, and the namespace denies all ingress.
   - name: system-upgrade
     tier: platform
-  # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
+  # The ingress probes' exporter (docs/archive/monitoring/m4-blackbox-ingress.md).
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
     # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
