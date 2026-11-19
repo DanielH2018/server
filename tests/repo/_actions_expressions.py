@@ -146,22 +146,3 @@ def interpolate(value: object, context: dict) -> str:
         return "" if result is None else str(result)
 
     return re.sub(r"\$\{\{(.*?)\}\}", one, str(value))
-
-
-def read_outputs(text: str) -> dict[str, str]:
-    """`$GITHUB_OUTPUT` as the runner parses it: `k=v` lines and `k<<DELIM` blocks."""
-    outputs: dict[str, str] = {}
-    lines = iter(text.splitlines())
-    for line in lines:
-        if "<<" in line and ("=" not in line or line.index("<<") < line.index("=")):
-            key, delimiter = line.split("<<", 1)
-            body = []
-            for inner in lines:
-                if inner == delimiter:
-                    break
-                body.append(inner)
-            outputs[key] = "\n".join(body)
-        elif "=" in line:
-            key, value = line.split("=", 1)
-            outputs[key] = value
-    return outputs
