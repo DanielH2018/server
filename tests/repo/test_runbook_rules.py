@@ -100,8 +100,14 @@ _HOLD_FIRST_REASON = (
 )
 _COLD_START_REASON = (
     "No local script installs Flux or deploys a workload on the cluster, so a cold-start "
-    "runbook sends the operator to the bootstrap section, which owns the bring-up order."
+    "runbook sends the operator to the bootstrap section, which owns the bring-up order. "
+    "`./scripts/deploy.sh` is gone, so a step that names it is wrong wherever the link is."
 )
+
+
+def _deploy_step_added(text: str) -> str:
+    """The section with a step naming the retired script appended, its link left in place."""
+    return text + "\n9. Deploy: `./scripts/deploy.sh`.\n"
 
 
 def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
@@ -112,7 +118,11 @@ def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
         heading=(heading,),
         unit=SECTION,
         require=(BOOTSTRAP_LINK,),
-        red=red or (edit(BOOTSTRAP_LINK, "flux-deploy-plane.md", every=True),),
+        forbid=re.compile(r"\./scripts/deploy\.sh"),
+        red=(
+            *(red or (edit(BOOTSTRAP_LINK, "flux-deploy-plane.md", every=True),)),
+            _deploy_step_added,
+        ),
     )
 
 
