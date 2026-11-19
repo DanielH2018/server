@@ -9,6 +9,7 @@ Run: uv run pytest tests/repo/test_census_rows_workflows.py
 """
 
 import pytest
+from _ci_handoff_workflow_rows import HANDOFF_ROWS
 from _ci_workflow_rows import CI_ROWS
 from _k3s_download_leg_row import K3S_DOWNLOAD_LEG_DOES_NOT_GATE
 from _promote_render_workflow_rows import PROMOTE_RENDER_ROWS
@@ -26,6 +27,7 @@ ROWS = (
     *PROMOTE_VERIFY_ROWS,
     *PRUNE_ROWS,
     *CI_ROWS,
+    *HANDOFF_ROWS,
     K3S_DOWNLOAD_LEG_DOES_NOT_GATE,
     *SETUP_ACTION_ROWS,
 )

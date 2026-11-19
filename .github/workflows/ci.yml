@@ -1464,34 +1464,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
-      # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
-      # that a rerun cleared; every red one followed a build that never uploaded.
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      # The tarball unpacks to the paths the build job wrote: `$RUNNER_TEMP/render` and
-      # `$RUNNER_TEMP/debs`.
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/bin/nfpm" --version
-
-      # The bootstrap cases seed from the pins the build job fetched and saved under this key, so
-      # a pin is downloaded once per run. Restore-only: a leg never saves what its cases fetched
-      # under the build's key. A miss, such as a lost save race, makes the cases download instead.
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
       # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
@@ -1526,7 +1503,7 @@ jobs:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
@@ -1594,26 +1571,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/bin/nfpm" --version
-
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       - name: Build the test image for this release
         env:
@@ -1635,7 +1597,7 @@ jobs:
           PYTHON: ${{ matrix.python }}
           SHARD: ${{ matrix.shard }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no image was built; the bootstrap cases do not run."
@@ -1689,25 +1651,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       - name: Build the test image
         continue-on-error: true
@@ -1727,7 +1675,7 @@ jobs:
         continue-on-error: true
         env:
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no image was built; the k3s download case does not run."

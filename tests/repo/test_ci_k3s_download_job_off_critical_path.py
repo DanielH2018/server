@@ -18,7 +18,6 @@ DOWNLOAD_FLAG = "--k3s-download"
 GATING_JOB = "host_packages"
 BUILD_JOB = "host_packages_build"
 GATE_JOB = "prek"
-HANDOFF_ARTIFACT = "host-packages-build"
 IMAGE_SCRIPT = "hosts/lib/tests/container/build-image.sh"
 
 
@@ -117,17 +116,6 @@ def test_the_k3s_download_job_is_outside_the_gate():
         f"{job_id} is in {GATE_JOB}'s needs, and ci_verdict reads every check-run there,"
         " so a k3s release outage would fail the PR"
     )
-
-
-def test_the_k3s_download_job_downloads_the_build_hand_off():
-    job_id, job = _download_job()
-    downloads = [
-        s
-        for s in job.get("steps") or ()
-        if str(s.get("uses", "")).startswith("actions/download-artifact@")
-        and (s.get("with") or {}).get("name") == HANDOFF_ARTIFACT
-    ]
-    assert downloads, f"{job_id} does not download the {HANDOFF_ARTIFACT} artifact"
 
 
 def test_the_k3s_download_job_gets_its_image_like_the_legs():
