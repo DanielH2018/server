@@ -3,9 +3,10 @@
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:main`), so the notification is repo
-state rather than UI state. The declaration runs as a seed Job in sonarr's, radarr's and lidarr's
-`templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
-`lookup()`. Those lookups are the role's only callers, and no app includes the role
+state rather than UI state. The declaration runs as a seed Job that sonarr's, radarr's and
+lidarr's `templates/verify/notification.yaml.j2` render (*The Job form*, below). Each of those
+templates reads this role's script and defaults by `lookup()`. Those lookups are the role's
+only callers, and no app includes the role
 (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_seed_job_reads_no_role_but_its_app_and_arr_notification`).
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
