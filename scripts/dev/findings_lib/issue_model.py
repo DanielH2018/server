@@ -16,7 +16,7 @@ import re
 from datetime import UTC, date, datetime
 
 SEVERITIES = ("high", "medium", "low")
-KINDS = ("gap", "improvement", "addition")
+KINDS = ("gap", "improvement", "feature")
 DOMAINS = (
     "backup-observability",
     "cicd",
@@ -38,9 +38,6 @@ NO_REOPEN = frozenset(("refuted", "accepted"))
 # system with the artifacts; severity is red / yellow / green, state markers are greys.
 LABELS: dict[str, tuple[str, str]] = {
     "claude": ("cba6f7", "Filed by Claude via scripts/dev/findings.py"),
-    "kind/gap": ("fab387", "Something missing that should exist"),
-    "kind/improvement": ("89b4fa", "Something present that could be better"),
-    "kind/addition": ("94e2d5", "A new capability"),
     "refuted": (
         "6c7086",
         "Closed because a skeptic disproved the finding; do not reopen",
@@ -62,11 +59,15 @@ LABELS: dict[str, tuple[str, str]] = {
 # options are matched exactly. `gh_calls.attach_fields` puts their values in `issue["fields"]`.
 SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
 SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
+# The repository's issue type for each kind; the operator created Gap and Improvement beside
+# GitHub's own Feature. gh's `--json issueType` and REST's `type` both carry it.
+KIND_TYPES = {"gap": "Gap", "improvement": "Improvement", "feature": "Feature"}
 # The labels that held the same two values. Sessions still on a pre-field checkout write only
 # these, so the readers below take them as a fallback.
 # TODO: https://github.com/DanielH2018/server/issues/9120 - delete with the labels.
 NOT_BEFORE_PREFIX = "not-before:"
 SEVERITY_PREFIX = "severity/"
+KIND_PREFIX = "kind/"
 for _d in DOMAINS:
     LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
 
@@ -75,7 +76,7 @@ for _d in DOMAINS:
 # renaming them would have turned that move into a rewrite. The underscore still carries what
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
-_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author,milestone"
+_LIST_FIELDS = "number,title,state,stateReason,labels,body,createdAt,closedAt,url,comments,blockedBy,author,milestone,issueType"
 # The one account whose issues a session takes as work. Any collaborator
 # can open a `claude`-labelled issue, and its body would reach a session as instructions.
 REGISTER_AUTHOR = "DanielH2018"
@@ -215,6 +216,20 @@ def severity(issue: dict) -> str | None:
     if held:
         return held.lower()
     return _prefixed(label_names(issue), SEVERITY_PREFIX)
+
+
+def kind(issue: dict) -> str | None:
+    """``issue``'s kind as one of `KINDS`, or None.
+
+    Read from the issue type, falling back to a `kind/<kind>` label, where `addition` was
+    the name for `feature`.
+    """
+    held = (issue.get("issueType") or {}).get("name")
+    by_type = {name: k for k, name in KIND_TYPES.items()}
+    if held in by_type:
+        return by_type[held]
+    label = _prefixed(label_names(issue), KIND_PREFIX)
+    return "feature" if label == "addition" else label
 
 
 def not_before(issue: dict) -> date | None:
@@ -673,7 +688,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "title": issue["title"],
                 "state": issue.get("state", "OPEN"),
                 "severity": severity(issue),
-                "kind": _prefixed(names, "kind/"),
+                "kind": kind(issue),
                 "domain": _prefixed(names, "domain/"),
                 "escalated": "escalated" in names,
                 "refuted": "refuted" in names,

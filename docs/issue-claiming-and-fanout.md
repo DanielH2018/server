@@ -56,15 +56,20 @@ it. That is the property `manual` lacks. #1288 could be re-derived only once sev
 metric existed, said so in its body, and was claimed, read and released unchanged six times in
 four days because the only withholding label was permanent and meant the wrong thing (#1739).
 Severity is the Severity issue field, `High`, `Medium` or `Low`, which `open --severity` sets.
+A kind is the issue's type: `open --kind gap` sets Gap, `improvement` sets Improvement and
+`feature` sets GitHub's own Feature. The operator created Gap and Improvement under
+Settings > Planning > Issue types.
 
-Both replaced labels: one `not-before:<YYYY-MM-DD>` label per date, and three `severity/*`.
+All three replaced labels: one `not-before:<YYYY-MM-DD>` label per date, three `severity/*`
+and three `kind/*`, where `kind/addition` was the name for `feature`. `gh issue list --json`
+returns the type as `issueType`.
 `gh issue list --json` cannot return an issue field, so every loader in
 `findings_lib/gh_calls.py` adds them with `attach_fields`, one aliased GraphQL read per 100
 issues (0.79s and one point for 113 issues, measured 2026-11-19). A failed read fails the
 command, because an issue missing its date reads as not deferred, and `next` would offer it.
 Until [#9120](https://github.com/DanielH2018/server/issues/9120) closes, the readers still
-take a `not-before:` or `severity/` label as a fallback, the later date winning, because a
-session on a pre-field checkout writes only labels.
+take a `not-before:`, `severity/` or `kind/` label as a fallback, the later date winning,
+because a session on a pre-field checkout writes only labels.
 
 Issue search filters a field directly, as `field."not before":>2026-12-01`, which a dated
 label never allowed. The "Deferred, by date" table on the generated backlog page still lists

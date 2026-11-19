@@ -257,6 +257,10 @@ ISSUE_FIELD_DEFS = [
     },
     {"id": "IF_nb", "name": "Not Before"},
 ]
+ISSUE_TYPE_DEFS = [
+    {"id": f"IT_{name}", "name": name}
+    for name in ("Task", "Bug", "Feature", "Gap", "Improvement")
+]
 
 
 def _graphql_answer(f: Fakes, query_arg: str) -> dict:
@@ -264,7 +268,8 @@ def _graphql_answer(f: Fakes, query_arg: str) -> dict:
 
     The aliased field read answers each issue's `fields` key, so a fixture sets its issue
     fields as `{"Severity": "High", "Not Before": "2026-12-01"}`. `set_fields`' read answers
-    `ISSUE_FIELD_DEFS`, and its mutation answers nothing; `calls.gh_json` holds it.
+    `ISSUE_FIELD_DEFS` and `ISSUE_TYPE_DEFS`, and its mutation answers nothing;
+    `calls.gh_json` holds it.
     """
     query = query_arg.removeprefix("query=")
     if query.startswith("mutation"):
@@ -276,6 +281,7 @@ def _graphql_answer(f: Fakes, query_arg: str) -> dict:
                 "repository": {
                     "issue": {"id": f"I_{number}"},
                     "issueFields": {"nodes": ISSUE_FIELD_DEFS},
+                    "issueTypes": {"nodes": ISSUE_TYPE_DEFS},
                 }
             }
         }

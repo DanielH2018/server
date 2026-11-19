@@ -3,11 +3,13 @@
 
 `gh run list` reports only a run's latest attempt, so a run that went red and passed on re-run
 reads as green. This tool lists the runs in windows under the search cap, asks each re-run run
-for its earlier attempts, and reads the log of each failed step. It prints three sections: a
-tally by failing job, step and test module, with distinct branches and last-seen date; the same
-tally over the flaky attempts alone, the red ones whose run went green on a later attempt of the
-same commit; and one line per red attempt, followed by its failed job, step and module rows,
-so a tally row leads to the run whose log to read. A red attempt is a `failure`, `timed_out` or
+for its earlier attempts, and reads the log of each failed step. After a count line it prints a
+tally by failing job, step and test module, with distinct branches and last-seen date, and the
+same tally over the flaky attempts alone: the red ones whose run went green on a later attempt
+of the same commit. An empty flaky tally prints as one `0 flaky` line. `--all` adds one line per
+red attempt, followed by its failed job, step and module rows, so a tally row leads to the run
+whose log to read. The last line is `CI-FAILURES: red=<n> flaky=<n>` for a caller to read. A
+red attempt is a `failure`, `timed_out` or
 `startup_failure`; a `cancelled` attempt gave no verdict, so it does not count.
 
 `gh run view --log-failed` usually labels every line `UNKNOWN STEP` and returns the whole failed
@@ -26,7 +28,8 @@ Usage:
 `gh`.
 
 Exit codes: 0 the report printed, even when a log had expired, and the report counts those; 1 a
-`gh` call that lists runs, attempts or jobs failed (its stderr is printed); 64 a bad flag.
+`gh` call that lists runs, attempts or jobs failed, and stderr carries the last line of `gh`'s
+stderr; 64 a bad flag.
 """
 
 import json
@@ -47,6 +50,7 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, warn
 from lib.exit_codes import FAILED, OK
 from lib.gh import gh
+from lib.gh_rate_limit import is_rate_limited
 from lib.repo_paths import REPO
 
 ACTIONS = "repos/{owner}/{repo}/actions"
@@ -237,25 +241,45 @@ def render(
     attempts: list[dict[str, Any]],
     read: list[tuple[list[tuple[str, str, str]], bool]],
     latest: dict[int, dict[str, Any]],
+    show_all: bool = False,
 ) -> list[str]:
-    """Render the report: a header, the tally, the flake tally, then each red attempt's rows."""
+    """Render the report: a count line, the tally, the flake tally, then a `CI-FAILURES:` line.
+
+    `show_all` adds each red attempt and its own rows before the `CI-FAILURES:` line.
+    """
     runs = {attempt["id"] for attempt in attempts}
     unread = sum(not readable for _, readable in read)
+    hint = "; --all to list each" if attempts and not show_all else ""
     out = [
-        f"{len(attempts)} red attempts in {len(runs)} of {scanned} runs, {since} to {until}",
+        f"{len(attempts)} red attempts in {len(runs)} of {scanned} runs,"
+        f" {since} to {until}{hint}",
     ]
     if unread:
         out.append(f"{unread} red attempts had no readable log, so they show no module")
     header = "count  branches  last seen   job / step / module"
-    out += ["", header, *_tally(attempts, read)]
+    if attempts:
+        out += ["", header, *_tally(attempts, read)]
     flaky = [
         (attempt, entry)
         for attempt, entry in zip(attempts, read, strict=True)
         if _passed_on_rerun(attempt, latest[attempt["id"]])
     ]
-    out += ["", "flaky: red, then green on a re-run of the same commit", header]
-    out += _tally([a for a, _ in flaky], [entry for _, entry in flaky])
-    out += ["", "red attempts"]
+    out += ["", f"{len(flaky)} flaky: red, then green on a re-run of the same commit"]
+    if flaky:
+        out += [header, *_tally([a for a, _ in flaky], [entry for _, entry in flaky])]
+    if show_all and attempts:
+        out += ["", "red attempts", *_attempt_lines(attempts, read, latest)]
+    out += ["", f"CI-FAILURES: red={len(attempts)} flaky={len(flaky)}"]
+    return out
+
+
+def _attempt_lines(
+    attempts: list[dict[str, Any]],
+    read: list[tuple[list[tuple[str, str, str]], bool]],
+    latest: dict[int, dict[str, Any]],
+) -> list[str]:
+    """Return one line per red attempt, oldest first, each followed by its own rows."""
+    out: list[str] = []
     ordered = sorted(
         zip(attempts, read, strict=True),
         key=lambda entry: (entry[0]["run_started_at"], entry[0]["id"]),
@@ -274,6 +298,21 @@ def render(
         )
         out += [f"    {' / '.join(row)}" for row in rows]
     return out
+
+
+def gh_failure(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
+    """Return one line naming why a `gh` call failed: the last line of its stderr.
+
+    A rate-limit refusal also names `gh-quota status`, which shows the session spending it.
+    """
+    stderr = exc.stderr or ""
+    if isinstance(stderr, bytes):
+        stderr = stderr.decode(errors="replace")
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    why = lines[-1] if lines else str(exc).splitlines()[0]
+    if is_rate_limited(stderr) or re.search(r"\bHTTP (?:403|429)\b", stderr):
+        why += "; run `gh-quota status` to see which session spends the quota"
+    return f"gh failed: {why}"
 
 
 def survey(
@@ -317,14 +356,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--until", type=date.fromisoformat, default=datetime.now(UTC).date()
     )
+    parser.add_argument(
+        "--all", action="store_true", help="also list each red attempt and its rows"
+    )
     args = parser.parse_args(argv)
     try:
         runs, attempts, read = survey(args.since, args.until)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        print(f"gh failed: {exc.stderr or exc}", file=sys.stderr)
+        print(gh_failure(exc), file=sys.stderr)
         return FAILED
     latest = {run["id"]: run for run in runs}
-    print("\n".join(render(args.since, args.until, len(runs), attempts, read, latest)))
+    report = render(args.since, args.until, len(runs), attempts, read, latest, args.all)
+    print("\n".join(report))
     return OK
 
 

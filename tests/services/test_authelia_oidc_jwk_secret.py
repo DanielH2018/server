@@ -3,8 +3,8 @@
 The key is a multi-line PEM block, so no Flux placeholder can carry it, and target slice R2's
 PR 7 moved it out of authelia-config. Three things have to agree for the portal to start:
 
-- authelia passes explicit file lists, and a passed list wins whole, so a template the
-  `manifests_secret_files` expression does not name is never rendered. The Deployment would
+- authelia passes an explicit file list, and a passed list wins whole, so a template the
+  `manifests_files` expression does not name is never rendered. The Deployment would
   then mount a Secret no deploy wrote. The lists are evaluated through the renderer's
   environment, because `lib.k8s_roles.resolved_manifest_files` counts every basename in a
   conditional branch and would pass with the lever's arm broken.
@@ -26,8 +26,8 @@ LEVER = "authelia_k8s_manage_oidc"
 JWK_SECRET = "oidc-jwk-secret.yaml"
 
 
-def _lists(lever: bool) -> tuple[list[str], list[str]]:
-    """`(manifests_files, manifests_secret_files)` as the include passes them, at `lever`."""
+def _files(lever: bool) -> list[str]:
+    """`manifests_files` as the renderer evaluates it, at `lever`."""
     defaults = load_defaults(ROLE_DIR)
     variables = {
         name: defaults[name]
@@ -37,24 +37,19 @@ def _lists(lever: bool) -> tuple[list[str], list[str]]:
         )
     } | {LEVER: lever}
     env = renderer_env(ROLE_DIR / "templates")
-    files, secret = (
-        list(cast(list[str], evaluate(env, defaults[key], variables)))
-        for key in ("manifests_files", "manifests_secret_files")
-    )
-    return files, secret
+    return list(cast(list[str], evaluate(env, defaults["manifests_files"], variables)))
 
 
-def test_the_lever_on_lists_the_jwk_secret_as_a_secret_file():
-    files, secret = _lists(True)
-    assert JWK_SECRET in secret
+def test_the_lever_on_lists_the_jwk_secret():
+    files = _files(True)
+    assert JWK_SECRET in files
+    assert "config-secret.yaml" in files
+
+
+def test_the_lever_off_leaves_the_jwk_secret_out():
+    files = _files(False)
     assert JWK_SECRET not in files
-    assert "config-secret.yaml" in secret
-
-
-def test_the_lever_off_lists_the_jwk_secret_nowhere():
-    files, secret = _lists(False)
-    assert JWK_SECRET not in secret + files
-    assert "config-secret.yaml" in secret
+    assert "config-secret.yaml" in files
 
 
 # `-e authelia_k8s_manage_oidc=false` arrives as a string, which the list reads through `| bool`.

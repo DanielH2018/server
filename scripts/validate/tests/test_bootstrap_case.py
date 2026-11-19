@@ -28,6 +28,10 @@ from validate.validate_lib import host_fixtures
 from validate.validate_lib.host_container import CaseFailed, Container, uid_problems
 
 SCRIPT = case.SCRIPT.read_text()
+TOOLS = yaml_fast.safe_load(
+    (REPO / "hosts/packages/homelab-tools/package.yml").read_text()
+)
+NFPM_ARCHIVE = f"nfpm_{TOOLS['tools']['nfpm']['amd64']['version'].removeprefix('v')}_Linux_x86_64.tar.gz"
 DEBS = (
     "/tmp/w/debs/homelab-tools_0.1+gabc_amd64.deb"
     " /tmp/w/debs/homelab-updater_0.1+gabc_all.deb"
@@ -44,7 +48,7 @@ def test_the_kit_pins_name_the_three_files_the_offline_branch_checks():
     pins = case.kit_pins(SCRIPT)
     assert set(pins) == {
         "install.sh",
-        "nfpm_2.48.0_Linux_x86_64.tar.gz",
+        NFPM_ARCHIVE,
         "uv-x86_64-unknown-linux-gnu.tar.gz",
     }
     assert pins["install.sh"][1] == case.script_value(SCRIPT, "K3S_INSTALL_SHA256")
@@ -75,14 +79,14 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     assert [(kit.name, p.refusal is None) for p, kit in offline] == [
         ("green", True),
         ("red-k3s", False),
-        ("red-nfpm_2.48.0_Linux_x86_64.tar.gz", False),
+        (f"red-{NFPM_ARCHIVE}", False),
         ("green", False),
         ("green", True),
     ]
     assert not (offline[1][1] / "k3s").exists()
     assert [p.name for p, _ in offline[1:4]] == [
         "refuse a kit whose k3s is missing",
-        "refuse a kit whose nfpm_2.48.0_Linux_x86_64.tar.gz does not match its pin",
+        f"refuse a kit whose {NFPM_ARCHIVE} does not match its pin",
         "refuse a local build whose homelab-daniel-box Depends on homelab-daniel-server",
     ]
     depends = offline[3][0]
