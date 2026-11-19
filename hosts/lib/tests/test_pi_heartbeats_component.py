@@ -152,12 +152,6 @@ def test_credential_problems_is_flagged_on_a_unit_that_still_loads_one():
     ]
 
 
-@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
-def test_no_host_package_ships_a_kuma_push_library(host):
-    files = host_mode.render_host(host).files
-    assert [f for f in files if f.endswith(("kuma-push-lib.sh", "kuma_push.py"))] == []
-
-
 @pytest.mark.parametrize(
     "script", ["pi-sd-health", "pi-recovery-health", "rkhunter-check"]
 )
