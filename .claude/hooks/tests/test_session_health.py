@@ -104,8 +104,7 @@ def _run_main(
 
     Every probe is a fake, because each real one reads live state that would make a main()
     assertion depend on the host: this checkout's distance from origin/master, the PRIMARY
-    checkout's `git status` (genuinely dirty while docs-refresh runs the suite over the pages
-    it just staged), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
+    checkout's `git status` (dirty while anyone edits it by hand), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
     main()'s keyword seams rather than as patches, because the monkeypatch ratchet
     (tests/_ratchet.py) caps a test module at zero patches on a first-party module.
     """

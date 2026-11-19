@@ -49,7 +49,7 @@ name: promote
 #            command block per changed snapshot role, to the deploy Discord channel through
 #            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
 #   reconcile  packages: write, statuses: read, actions: write. Checks out nothing. Runs only
-#            when `decide` names a run that ended without its `settle` (`lost_settle`, #7863).
+#            when `decide` names a run that ended without its `settle` (`lost_settle`).
 #            While `prod` still names that run's digest, a good `homelab/promote-verdict` for it
 #            moves `last-good`, then dispatches this workflow for master's newest green commit
 #            when that commit is newer. Anything else writes the hold `settle` would have
@@ -74,7 +74,7 @@ name: promote
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
   # `branches` keeps a pull request's CI run from starting a run that every job's guard then
-  # skips (#6152). The job guards stay the security check.
+  # skips. The job guards stay the security check.
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -113,7 +113,7 @@ permissions: {}
 # prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
-  # groups, so an unreachable tool download (actionlint-py's build, #7625) cannot block a
+  # groups, so an unreachable tool download (actionlint-py's build) cannot block a
   # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow_uv_groups.py fails a workflow
   # without them.
   UV_NO_DEV: "1"
@@ -125,7 +125,7 @@ env:
   FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
   # The cosign release the publish and promote jobs sign and verify with, the sha256 of
   # `cosign-linux-amd64`. Each job restores it from an actions/cache keyed on both, and fetches
-  # the release only on a miss (#7781). prune-artifacts.yml and flux-deletion-drill.yml carry
+  # the release only on a miss. prune-artifacts.yml and flux-deletion-drill.yml carry
   # copies, and scripts/tests/test_renovate_cosign_release.py holds the three equal.
   # renovate: datasource=github-release-attachments depName=sigstore/cosign
   COSIGN_VERSION: v3.1.4
@@ -148,7 +148,7 @@ env:
     ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
     ghcr_login() { retry ghcr_login_once; }
   # `dispatch_newer_green <commit>`, which `settle` and `reconcile` run after they settle
-  # <commit>, so a green commit newer than it does not wait for the next merge (#5022, #7877).
+  # <commit>, so a green commit newer than it does not wait for the next merge.
   # It dispatches one more run when CI's newest green push run on master is for a commit newer
   # than <commit>. The list is newest first, so "newer" means <commit>'s own run sits further
   # down it. With <commit> outside the list it cannot tell, and dispatches nothing. The bound: a
@@ -274,7 +274,7 @@ jobs:
       # the first decryption of the cluster file gets a revision of its own (D3.3a).
       # A --role render writes only the named tags' image contexts, and --shared-only writes
       # none, so both branches pass --all-images: the `images` job builds and pushes all ten
-      # from out/images/ and refuses a render without tags.json (#5374, #5593).
+      # from out/images/ and refuses a render without tags.json.
       # tests/repo/test_promote_workflow_bundle.py fails either branch without it.
       - name: Build the bundle
         id: build
@@ -319,7 +319,7 @@ jobs:
       # The same gitleaks release as the `rev` in prek.toml, checked against the release's own
       # checksums file. A renovate.json custom manager moves the version in both URLs, and its
       # `gitleaks (prek.toml and the promote workflow)` group moves this copy and prek.toml's in
-      # one PR. The download is cached under that URL, so a release outage (#7625) blocks only
+      # one PR. The download is cached under that URL, so a release outage blocks only
       # the promotion that first needs a new version; the checksum check still runs every time.
       - name: Cache the gitleaks release
         uses: actions/cache@v6.1.0
@@ -366,7 +366,6 @@ jobs:
   # is success and is never rebuilt, because the push-once rule is what makes a content tag
   # immutable. The concurrency group keeps two runs from both reading a tag as absent and both
   # pushing it; a newer pending run evicts an older one, and pushes whatever that one would have.
-  # Nothing pulls these refs until D5.4b.
   images:
     needs: render
     if: >-
@@ -378,9 +377,7 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # About 3x the slowest measured run, at a 20-minute floor (#5482). A rebuild of all ten
-    # took 394s on 2026-10-17, code-server's toolchains the longest at 213s. Over the 35
-    # `images` jobs to that date the slowest success took 54s.
+    # About 3x the slowest measured run (a rebuild of all ten, 394s), at a 20-minute floor.
     timeout-minutes: 20
     concurrency:
       group: images
@@ -395,7 +392,7 @@ jobs:
           persist-credentials: false
 
       # DECIDED: the download-artifact steps run once, unlike the curl and gh calls. Over
-      # 2026-10-13..11-12 no promote download failed at all (#8005); ci.yml's host_packages
+      # 2026-10-13..11-12 no promote download failed at all; ci.yml's host_packages
       # job carries the full measurement.
       - uses: actions/download-artifact@v8.0.2
         with:
@@ -432,7 +429,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # GitHub can deliver one CI completion as two workflow_run events, and two publishes of one
-    # commit then race to write its signature (run 42710237024 was refused `write_package`).
+    # commit then race to write its signature, and GHCR refuses the second with `write_package`.
     concurrency:
       group: publish-${{ needs.render.outputs.sha }}
       cancel-in-progress: false
@@ -450,7 +447,7 @@ jobs:
       # job in ci.yml fetches the same pin, so the CLI that proves target slice R2's round trip
       # is the CLI that publishes, and scripts/tests/test_renovate_flux_cli.py fails a drift.
       # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
-      # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
+      # miss, with nfpm's 12x30s retry window. The sha256 check runs on a hit too.
       - name: Cache the flux CLI release
         uses: actions/cache@v6.1.0
         with:
@@ -497,8 +494,8 @@ jobs:
       # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
       # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
       # A digest that already verifies is not signed again: GHCR refuses a second signature write
-      # with `write_package`. cosign can read a registry error as unsigned (#4829), which only
-      # costs a redundant sign.
+      # with `write_package`. cosign can read a registry error as unsigned, which only costs a
+      # redundant sign.
       - name: Push and sign the bundle
         id: push
         if: ${{ !inputs.verify_drill }}
@@ -542,7 +539,7 @@ jobs:
       # unsigned sha-<X> makes `decide` report an error for that commit. The annotation gives
       # the drill bundle a digest that no signed push carries. Without it, --reproducible makes
       # the drill's digest equal sha-<X>'s, and cosign v3 stores a signature as a referrer of
-      # the digest, so `verify-drill` verified against promote's signature (#4820).
+      # the digest, so `verify-drill` verified against promote's signature.
       - name: Push the drill bundle unsigned
         id: drill-push
         if: ${{ inputs.verify_drill }}
@@ -578,15 +575,13 @@ jobs:
       # would read Ready and prove nothing. The identity is scripts/deploy_tools/forge.py's
       # SIGNER_IDENTITY and SIGNER_ISSUER, and the workflow test fails a drift.
       #
-      # `cosign verify` must refuse the digest, but its refusal alone proves nothing (#4829).
-      # cosign v3.1.3 swallows a registry error on its bundle probe and falls back to the
-      # legacy `.sig` tag, which a referrer signature never writes, so a 429 on a signed digest
-      # still reads `no signatures found`. The step therefore reads the registry itself and
-      # fails on any answer other than 200 or 404. GHCR answers the OCI referrers API with
-      # 404, so cosign stores its bundle in the referrers-tag fallback `sha256-<hex>`: an
-      # image index that lists each referrer. On 2026-10-13 prod's digest held its Sigstore
-      # bundle there, and the drill digest's fallback tag answered 404. The step reads the
-      # API first anyway, in case GHCR starts serving it.
+      # `cosign verify` must refuse the digest, but its refusal alone proves nothing: cosign
+      # v3.1.3 swallows a registry error on its bundle probe and falls back to the legacy `.sig`
+      # tag, which a referrer signature never writes, so a 429 on a signed digest still reads
+      # `no signatures found`. The step therefore reads the registry itself and fails on any
+      # answer other than 200 or 404. GHCR answers the OCI referrers API with 404, so cosign
+      # stores its bundle in the referrers-tag fallback `sha256-<hex>`, an image index that
+      # lists each referrer. The step reads the API first anyway, in case GHCR starts serving it.
       - name: Refuse a drill bundle that verifies
         id: drill-refuses
         if: ${{ inputs.verify_drill }}
@@ -698,7 +693,7 @@ jobs:
       pull-requests: read
       statuses: read
       # The in-flight wait lists the in-progress promote runs, so a run that ended without
-      # its `settle` is named rather than waited on (#7863).
+      # its `settle` is named rather than waited on.
       actions: read
     outputs:
       verdict: ${{ steps.decide.outputs.verdict }}
@@ -1029,7 +1024,7 @@ jobs:
   verdict-status:
     needs: [promote, tag, verify]
     # always() so a verify that failed, timed out or was cancelled still leaves a status. It
-    # does not gate `settle`, so a run GitHub creates without its `settle` (#7863) still
+    # does not gate `settle`, so a run GitHub creates without its `settle` still
     # records the verdict that `reconcile` acts on in a later run.
     if: >-
       (github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor)) &&
@@ -1046,7 +1041,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     # DECIDED: statuses: write sits in a job that checks out nothing, never in `verify`, which
-    # runs repository code. The operator ruled the grant on 2026-11-09 (#7865, contract C2).
+    # runs repository code (contract C2).
     permissions:
       statuses: write
     steps:
@@ -1288,7 +1283,7 @@ jobs:
           fi
           # A superseding T's `tag` checked `last-good` before its move, but the superseded
           # run's `settle` can have read `prod` before that move and moved `last-good` after
-          # it (#6268). The reset then goes to the live `last-good`: RESET_DIGEST would roll
+          # it. The reset then goes to the live `last-good`: RESET_DIGEST would roll
           # back a verified revision and leave `prod` behind `last-good`, which `decide`
           # reads as a verification in flight. Only that settle moves `last-good` while T is
           # in flight, so a run that supersedes nothing keeps RESET_DIGEST.
@@ -1319,8 +1314,8 @@ jobs:
           [ "${#problems[@]}" -eq 0 ]
 
       # A run whose `tag` found `prod` already moved verifies nothing, so its commit would wait
-      # for the next merge (#5022). After a hold the step still dispatches, as the operator
-      # ruled: the run decides `held` unless the revert rule lets it promote a descendant.
+      # for the next merge. After a hold the step still dispatches: the run decides `held`
+      # unless the revert rule lets it promote a descendant.
       - name: Dispatch a run for a newer green commit
         # A run that a later run superseded dispatches nothing; the later run owns the dispatch.
         if: steps.apply.outputs.owned == 'true'
@@ -1384,7 +1379,7 @@ jobs:
           --hold "$HOLD" --bundle-dir "$RUNNER_TEMP/verify-input"
           --verdict "$VERDICT" --failed "$FAILED_NAMES"
 
-  # A run that ended without its `settle` (#7863): `decide` names `prod`'s commit and digest
+  # A run that ended without its `settle`: `decide` names `prod`'s commit and digest
   # in `lost_settle` once no other run past its decide has been in progress for LOST_SETTLE_S.
   # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
   # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
@@ -1412,9 +1407,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     # DECIDED: a job that checks out nothing holds packages: write to move `last-good` for a
-    # run that lost its `settle`. The operator ruled the grant on 2026-11-09 (#7865, contract
-    # C2). statuses: read is the verdict-status read. actions: write is the dispatch step's,
-    # ruled on 2026-11-15 (#7877).
+    # run that lost its `settle` (contract C2). statuses: read is the verdict-status read.
+    # actions: write is the dispatch step's.
     permissions:
       packages: write
       statuses: read
@@ -1569,8 +1563,7 @@ jobs:
   # A dispatch or a re-run is started by whoever `triggering_actor` names, and every job above
   # runs it only for an account on the list: the operator, and this workflow's own GITHUB_TOKEN
   # dispatch from `settle` or `reconcile`. Anyone else's start skips every job, and this one
-  # fails the run so the refusal shows as red rather than as a run that did nothing
-  # (dotfiles#967 slice 1).
+  # fails the run so the refusal shows as red rather than as a run that did nothing.
   refuse-starter:
     if: >-
       !(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || contains(fromJSON('["DanielH2018", "github-actions[bot]"]'), github.triggering_actor))

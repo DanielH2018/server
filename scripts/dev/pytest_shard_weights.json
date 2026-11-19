@@ -1098,6 +1098,7 @@
  "tests/k8s/test_alloy_redacts_webhook_and_session_secrets.py": 0.0,
  "tests/k8s/test_alloy_ships_audit_log.py": 0.0,
  "tests/k8s/test_alloy_ships_k3s_log.py": 0.0,
+ "tests/k8s/test_alloy_tags_pod_log_level.py": 0.01,
  "tests/k8s/test_arr_deployments_share_one_macro.py": 0.0,
  "tests/k8s/test_arr_monitoring_routes_admit_postflight.py": 0.36,
  "tests/k8s/test_base_images_digest_pinned.py": 0.0,

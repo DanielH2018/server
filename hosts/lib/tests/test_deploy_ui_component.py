@@ -55,6 +55,7 @@ def test_the_daemon_runs_from_the_package_as_the_operator_on_the_hosts_address(
     assert f"Environment=DEPLOY_UI_BIND={context['server_ip']}\n" in unit
     assert f"Environment=DEPLOY_UI_PORT={DEFAULTS['deploy_ui_port']}\n" in unit
     assert f"{DEFAULTS['deploy_ui_dir']}/deploy_ui.py\n" in unit
+    assert "SyslogIdentifier=deploy-ui\n" in unit, "syslog would tag the daemon `uv`"
     assert f"{DEFAULTS['deploy_ui_dir']}/deploy_ui.py" in package.files
     assert "deploy-ui.service" in manifest["enable_links"]
 

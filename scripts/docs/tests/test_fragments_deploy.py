@@ -118,8 +118,4 @@ def test_tree_lock_holders_rejects_a_template_that_imports_the_macro_and_never_c
 
 def test_tree_lock_holders_in_the_real_tree_include_every_known_job():
     jobs = {h["job"] for h in fd.tree_lock_holders()}
-    assert {
-        "homelab-checkout-sync.service",
-        "docs-refresh",
-        "eval-run",
-    } <= jobs
+    assert {"homelab-checkout-sync.service", "eval-run"} <= jobs

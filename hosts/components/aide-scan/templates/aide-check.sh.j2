@@ -6,8 +6,8 @@
 # With no arguments: cron job "Weekly AIDE file integrity check", or homelab-aide-check.timer on
 # a packaged host, runs it as root, Monday 03:00. It runs `aide --update` against
 # /var/lib/aide/aide.db at idle CPU and IO priority, writes the report to the journal under the
-# `aide` tag, classifies every difference (below), writes the verdict to the node_exporter
-# textfile as check `aide-check`, where AideCheckFailed and AideCheckNotReporting read it. Running
+# `aide` tag and a count of its entries per tree under `aide-check`, classifies every difference
+# (below), writes the verdict to the node_exporter textfile as check `aide-check`, where AideCheckFailed and AideCheckNotReporting read it. Running
 # it by hand is safe, but it takes as long as the scheduled run and it rewrites the textfile.
 #
 # --accept: after a human has reviewed a DOWN run's unexplained changes, moves that run's
@@ -84,6 +84,8 @@ DEADLINE_S=626400
 # the rest is dropped with a line saying so, rather than left for journald's rate limit to drop
 # without a trace.
 REPORT_MAX_LINES=2000
+# How many trees the per-tree count of the report names; its count line covers every tree.
+SUMMARY_TREES=15
 
 # database_in and database_out in Debian's /etc/aide/aide.conf.
 AIDE_DIR=/var/lib/aide
@@ -166,6 +168,9 @@ DPKG_LOG=/var/log/dpkg.log
 # How many unexplained paths the verdict's message names; the journal lists them all.
 MSG_PATHS=3
 UNEXPLAINED_MAX_LINES=500
+# How many unexplained entries have their AIDE detail logged, each about ten lines, so that a
+# long DOWN stays inside journald's default burst of 10000 lines.
+DETAIL_MAX_ENTRIES=50
 
 # Logs the verdict, then writes the textfile the host-checks rules read. The log line is
 # unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
@@ -454,6 +459,39 @@ REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide
 RC=$?
 RUN_TIME="$(((SECONDS - START) / 60))m"
 
+# Logs one count line and then the SUMMARY_TREES trees with the most entries, each a path of up to
+# three directory levels with its added, removed and changed counts, so the trees to exclude are
+# readable even when the cap drops their entries. Logs nothing for a report with no entries.
+tree_summary() {
+  printf '%s\n' "$REPORT" | awk -F '\t' -v top="$SUMMARY_TREES" '
+    substr($0, 19, 3) == ": /" && $0 !~ /^[ \t]/ {
+      s = substr($0, 1, 18); path = substr($0, 21); rest = substr(s, 2)
+      kind = (rest ~ /^\++$/) ? "added" : (rest ~ /^-+$/) ? "removed" : "changed"
+      n = split(path, part, "/"); tree = ""
+      for (i = 2; i < n && i <= 4; i++) tree = tree "/" part[i]
+      if (tree == "") tree = "/"
+      count[tree, kind]++; total[tree]++; sum[kind]++
+    }
+    END {
+      ntrees = 0; for (t in total) ntrees++
+      if (!ntrees) exit
+      printf "SUMMARY\t%d added, %d removed, %d changed in %d trees of up to three levels; the %d with the most entries:\n", \
+        sum["added"], sum["removed"], sum["changed"], ntrees, (ntrees < top ? ntrees : top)
+      for (t in total)
+        printf "%d\t%s: %d (%d added, %d removed, %d changed)\n", total[t], t, total[t], \
+          count[t, "added"], count[t, "removed"], count[t, "changed"]
+    }' | sort -t $'\t' -k1,1nr -k2,2 | awk -F '\t' -v top="$SUMMARY_TREES" '
+      $1 == "SUMMARY" { head = $2; next }
+      { rows[++n] = $2 }
+      END {
+        if (head == "") exit
+        print "report by tree: " head
+        for (i = 1; i <= n && i <= top; i++) print "  " rows[i]
+      }'
+}
+TREES=$(tree_summary)
+[[ -z "$TREES" ]] || printf '%s\n' "$TREES" | logger -p daemon.notice -t aide-check
+
 # awk reads all of its input, where head would close the pipe early and printf would log a
 # broken-pipe error.
 REPORT_LINES=$(printf '%s\n' "$REPORT" | wc -l)
@@ -467,6 +505,35 @@ fi
 summary_count() {
   printf '%s\n' "$REPORT" | awk -v label="$1" '
     !found && $0 ~ "^[[:space:]]*" label " entries:[[:space:]]*[0-9]+" { print $NF; found = 1 }'
+}
+
+# Prints, for each path on stdin, "path: <summary column>" from its report entry, then
+# "path: Name: old | new" for each attribute in its block of the report's detail section. A
+# value AIDE wraps over several lines is joined. An added or removed entry has no block.
+entry_details() {
+  local paths
+  paths=$(cat)
+  printf '%s\n' "$REPORT" | PATHS="$paths" awk '
+    function flush() { if (attr != "") print cur ": " attr ": " old " | " new; attr = "" }
+    function squeeze(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+    BEGIN { n = split(ENVIRON["PATHS"], p, "\n"); for (i = 1; i <= n; i++) if (p[i] != "") want[p[i]] = 1 }
+    !detail && substr($0, 19, 3) == ": /" && $0 !~ /^[ \t]/ {
+      path = substr($0, 21); if (path in want) print path ": " substr($0, 1, 18); next
+    }
+    /^Detailed information about changes:/ { detail = 1; next }
+    !detail { next }
+    # A block opens on its type and path, such as "File: /etc/passwd", and ends at a blank line.
+    /^[A-Z][A-Za-z ]*: \// { flush(); path = $0; sub(/^[^:]*: /, "", path); cur = (path in want) ? path : ""; next }
+    cur == "" { next }
+    /^[ \t]*$/ { flush(); cur = ""; next }
+    {
+      bar = index($0, " | "); left = bar ? substr($0, 1, bar - 1) : $0; right = bar ? substr($0, bar + 3) : ""
+      if (match(left, /^ [A-Za-z0-9]+ *: /)) {
+        flush(); attr = substr(left, 2, RLENGTH - 1); sub(/ *: $/, "", attr)
+        old = squeeze(substr(left, RLENGTH + 1)); new = squeeze(right)
+      } else { old = old squeeze(left); new = new squeeze(right) }
+    }
+    END { flush() }'
 }
 
 # DECIDED: page on a difference no package explains, and advance the baseline after every run
@@ -498,6 +565,9 @@ elif ((RC >= 1 && RC <= 7)); then
     printf '%s\n' "$UNEXPLAINED" \
       | awk -v max="$UNEXPLAINED_MAX_LINES" 'NR <= max { print "unexplained: " $0 }' \
       | logger -p daemon.notice -t aide-check
+    # Logged apart from the capped report, which can stop before an unexplained entry or its block.
+    printf '%s\n' "$UNEXPLAINED" | awk -v max="$DETAIL_MAX_ENTRIES" 'NR <= max { sub(/ \([^()]*\)$/, ""); print }' \
+      | entry_details | awk '{ print "detail: " $0 }' | logger -p daemon.notice -t aide-check
     NAMED=$(printf '%s\n' "$UNEXPLAINED" | awk -v max="$MSG_PATHS" 'NR <= max' | paste -sd ';' -)
     MSG="${UNEXPLAINED_COUNT} changes no package explains: ${NAMED} (${COUNTS}, exit ${RC}, run ${RUN_TIME}); journalctl -t aide-check lists them; once reviewed, run aide-check --accept"
   else

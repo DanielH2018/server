@@ -77,10 +77,15 @@ dir() {
 }
 
 # place OWNER GROUP MODE SRC DEST writes DEST inside its pinned parent. install -T replaces a link
-# at DEST and refuses a directory there, so it never writes through either.
+# at DEST and refuses a directory there, so it never writes through either. A DEST that already
+# matches is left alone, so its times stay what the AIDE baseline recorded.
 place() {
   pin "${5%/*}"
-  install -T -o "$1" -g "$2" -m "$3" "$4" "$pinned/${5##*/}"
+  if [ -L "$pinned/${5##*/}" ] || [ ! -f "$pinned/${5##*/}" ] \
+    || [ "$(stat -c '%U:%G %a' "$pinned/${5##*/}")" != "$1:$2 ${3#0}" ] \
+    || ! cmp -s "$4" "$pinned/${5##*/}"; then
+    install -T -o "$1" -g "$2" -m "$3" "$4" "$pinned/${5##*/}"
+  fi
   unpin
 }
 

@@ -4,20 +4,29 @@
 # Usage: docs-refresh.sh [-h|--help]
 # Takes no arguments. homelab-docs-refresh.timer starts the service that runs it as the deploy
 # user on daniel-box at 06:17 and 18:17, with the cron-era PATH and KUBECONFIG. Output goes to
-# the journal under the tag docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
-# It reads the checkout under the deploy user's home and writes the site to docs_host_site_dir.
-# It writes its verdict to docs-refresh.prom, which DocsRefreshFailed and DocsRefreshNotReporting
-# read. Exit 1 means the test suite was red.
+# the journal under the tag docs-refresh. Running it by hand publishes a PR for real.
+# It works in its own worktree of the checkout under the deploy user's home and writes the site
+# to docs_host_site_dir. It writes its verdict to docs-refresh.prom, which DocsRefreshFailed and
+# DocsRefreshNotReporting read. Exit 1 means the test suite was red.
 #
-# THE LOCK IS THE POINT. This mutates the primary git tree, which gitops-deploy.service
-# rewrites with `git pull` on a 30-minute timer and which every deploy renders its
-# templates from. {{ server_git_tree_lock }} is what makes those mutually exclusive.
-# Without it a `git pull` mid-run would leave this committing a tree it never read.
+# IT NEVER TOUCHES THE PRIMARY CHECKOUT. Every step runs in $TREE, a locked, detached worktree
+# that prepare_tree checks out at the primary checkout's HEAD and cleans of every untracked and
+# ignored file, so the generators and the suite read exactly the tracked tree CI reads. The
+# primary checkout keeps ignored debris that CI never sees: a deleted role's __pycache__ keeps
+# its directory alive, and a renamed tree's leftovers stay at the root. Every walker that lists
+# a directory then reads a role or a root entry that is not in git, and the suite failed on this
+# host alone. Working apart also means no git-tree lock, no dirty-tree gate and no restore after
+# a failed commit: nothing this script leaves behind parks homelab-checkout-sync, and the next
+# run's prepare_tree discards it.
 #
-# IT DOES NOT PULL. homelab-checkout-sync already fast-forwards this checkout, and it CI-gates
-# the tip first: a commit whose master CI is red or pending is refused. A bare pull here would
-# take the lock correctly and still skip that, fast-forwarding onto a commit checkout-sync
-# would have refused -- and the next promotion renders templates from that tree.
+# THE TREE PERSISTS BETWEEN RUNS. The detached landing publish_pr.py starts runs land.py from
+# this tree, with this tree as its working directory, and it outlives the run by its CI wait. A
+# tree removed at exit would pull the landing's code out from under it. The `-e /.venv` in
+# prepare_tree keeps the tree's virtualenv, so uv does not rebuild it on every run.
+#
+# IT DOES NOT PULL. homelab-checkout-sync already fast-forwards the primary checkout, and it
+# CI-gates the tip first: a commit whose master CI is red or pending is refused. The tree takes
+# the primary checkout's HEAD, never origin/master, which would skip that gate.
 # checkout-sync runs every 10 minutes to this script's twice a day, so reading whatever it has
 # already admitted costs at most one interval.
 #
@@ -36,8 +45,8 @@
 # the PR, which is acceptable because every byte it commits was produced by a generator whose
 # output is itself tested.
 #
-# ONE UNLANDED BRANCH AT A TIME. After publishing one this script resets master back to
-# origin, so the next run regenerates the same diff and would publish a duplicate. It asks
+# ONE UNLANDED BRANCH AT A TIME. After publishing one this script resets the tree back to
+# the commit it started from, so the next run regenerates the same diff and would publish a duplicate. It asks
 # `publish_pr.py unlanded` first and exits instead. That gate reads origin rather than the
 # open-PR list: `gh pr create` runs after the push, so a create failure leaves the branch on
 # origin with no PR and no local trace at all, and an open-PR check reads exactly that state as
@@ -62,17 +71,18 @@ done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
+# Outside $REPO, so the primary checkout never lists it, and outside .claude/worktrees/, which
+# prune_worktrees.py sweeps. The directory is tmpfiles.d/homelab-docs-site.conf.j2's.
+TREE="/var/lib/homelab/docs-refresh.d/tree"
 # A copy of k8s/roles/docs' docs_host_site_dir, which the renderer does not load.
 # hosts/lib/tests/test_docs_refresh_component.py holds it equal to that role's default.
 SITE_DIR="/home/{{ sys_user }}/docs-site"
 PR_BRANCH_PREFIX="docs-refresh/"
 
-# State this script keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately: an untracked file
-# inside the checkout parks gitops-deploy exactly as a modified one does, so a stamp whose job is
-# to record dirt must never be dirt itself. /var/lib/homelab is the setup plane's state directory
-# (root-owned, 0755); tmpfiles.d/homelab-docs-site.conf.j2 creates this subdirectory owned by the service user.
+# The failure logs, kept OUTSIDE $TREE because the next run's prepare_tree cleans it.
+# /var/lib/homelab is the setup plane's state directory (root-owned, 0755);
+# tmpfiles.d/homelab-docs-site.conf.j2 creates this subdirectory owned by the service user.
 STAMP_DIR="/var/lib/homelab/docs-refresh.d"
-COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
 # ONE LOG PER FAILING RUN, named by the run's start time, so a later failure cannot overwrite an
 # earlier traceback. keep_failure_log prunes to the newest FAILURE_LOGS_KEPT. The `failure-`
 # prefix is what the prune globs on, so it never matches the stamp beside it.
@@ -214,69 +224,18 @@ keep_failure_log() {
     | head -n "-$FAILURE_LOGS_KEPT" | xargs -r -d '\n' rm -f --
 }
 
-# Puts the checkout back the way it was before `git add`. $1 is the output of
-# `git diff --cached --name-status --no-renames`, captured BEFORE the commit.
-#
-# `git reset` alone unstages and nothing else, leaving every regenerated page MODIFIED in the
-# primary checkout. homelab-checkout-sync reads any porcelain output as dirty and refuses, so ONE
-# failed commit here parks the checkout behind origin/master.
-#
-# A newly generated page needs `rm`, not `git checkout HEAD --`: it has no HEAD version, the
-# checkout fails on it, and the file is left UNTRACKED -- which parks `homelab-checkout-sync` just as surely.
-#
-# Scoped to the staged paths, never a blanket `git checkout -- docs/reference`: topology.md is
-# hand-written prose in that tree, and a blanket checkout would destroy an uncommitted human edit.
-restore_generated_tree() {
-  local status path rc=0
-  while IFS=$'\t' read -r status path; do
-    [ -n "${path:-}" ] || continue
-    case "$status" in
-      A) rm -f -- "$path" ;;
-      *) git checkout HEAD -- "$path" >/dev/null 2>&1 || rc=1 ;;
-    esac
-  done <<EOF
-$1
-EOF
-  git reset >/dev/null 2>&1
-  # THE ACTION IS PER-PATH; THE CHECK IS PER-TREE, AND THE ASYMMETRY IS DELIBERATE.
-  #
-  # A prek hook can modify a file AFTER `git add` ran -- gen-doc-fragments regenerates the whole
-  # fragment set, so it rewrites fragments this run's generators never touched. Those files are
-  # dirty, they park checkout-sync, and they are absent from $1 by construction. A check scoped to
-  # $1 would report "tree restored" over exactly that leftover.
-  #
-  # The cost is a false TREE-STILL-DIRTY if a human edits topology.md (the one hand-written page
-  # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
-  # on any dirty tree -- and fail-closed is the direction this script's own header demands.
-  # SCOPE (see lib.git.git_dirty): path-scoped to the five paths this script writes, untracked
-  # counted within them.
-  #
-  # THE WEIGHTS TABLES ARE IN THIS LIST FOR THE SAME REASON THEY ARE IN THE `git add`. The per-path
-  # restore above covers them, because they arrive in $1 like any other staged path. This check
-  # says the restore WORKED, and a check scoped to the two doc trees would report "tree restored"
-  # over a weights table left modified under scripts/dev/, which parks `homelab-checkout-sync`
-  # exactly as a leftover page does.
-  [ -z "$(git status --porcelain -- docs/reference docs/assets/generated \
-    scripts/dev/pytest_shard_weights.json scripts/dev/pytest_shard_runner_weights.json \
-    scripts/dev/affected_tests.json)" ] || rc=1
-  return "$rc"
-}
-
 # The kept log names the failure but not the file it happened to. `prek` diffs the tree around
 # every hook, so it knows which path a hook rewrote; this script keeps only the hook's stdout.
 #
 # These two reads name it. `git diff --stat` carries the answer: the pages are staged before the
 # hooks run, so a file a hook rewrites afterwards shows up as worktree-against-index.
 #
-# IT MUST RUN BEFORE restore_generated_tree. The restore puts every staged path back and clears
-# the index, so afterwards there is nothing left to read.
-#
 # Appended to the kept log, never written to $LOG: say_failure greps $LOG and keeps the last 400
 # characters, so writing there would push the failing hook's name out of the status line.
 keep_tree_evidence() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
   {
-    printf '\n--- tree at commit failure, before the restore ---\n'
+    printf '\n--- tree at the failure ---\n'
     printf '# git status --porcelain -uall\n'
     # -uall, because a hook that CREATES a file rather than rewriting one is the case this has to
     # name: plain porcelain collapses a wholly untracked directory to `?? docs/assets/`.
@@ -286,48 +245,30 @@ keep_tree_evidence() {
   } >>"$FAILURE_LOG" 2>/dev/null || return 0
 }
 
-mark_commit_failed() {
-  mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
-  printf '%s\n' "$1" >"$COMMIT_FAILED_STAMP" 2>/dev/null || return 0
+# prepare_tree SHA -- leave $TREE checked out at SHA, holding no untracked or ignored file.
+#
+# `clean -ffdx` is the point: -x removes ignored files too, and a role directory that only
+# ignored files keep alive is what a filesystem walker reads as a role git does not have. The
+# double -f also removes a nested repository. The worktree is locked so that no
+# `git worktree prune` drops its registration, and `add -f -f` re-adds one whose directory went
+# missing while its registration stayed locked.
+#
+# A tree git no longer recognises is removed and added again; that is the only path that
+# deletes it.
+prepare_tree() {
+  if ! git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
+    rm -rf -- "$TREE"
+    git -C "$REPO" worktree add -f -f --detach "$TREE" "$1" >/dev/null 2>&1 || return 1
+    git -C "$REPO" worktree lock --reason "docs-refresh's own tree" "$TREE" >/dev/null 2>&1
+  fi
+  git -C "$TREE" checkout --quiet --force --detach "$1" || return 1
+  git -C "$TREE" clean -ffdxq -e /.venv
 }
 
-clear_commit_failed() { rm -f "$COMMIT_FAILED_STAMP"; }
-
-# The status to report for a dirty tree. Foreign dirt is `up`: somebody else is mid-edit and this
-# run legitimately did nothing. This script's OWN leftover dirt is `down`: otherwise run N fails
-# its commit and reports down, run N+1 meets that dirt, takes the dirty branch and reports `up`,
-# clearing the alarm run N raised while nothing had been published and the checkout was still
-# parked. The stamp tells the two apart; paths cannot, because a human running build_docs.py by
-# hand in this checkout dirties exactly the same files.
-dirty_tree_status() { if [ -e "$COMMIT_FAILED_STAMP" ]; then printf down; else printf up; fi; }
-
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
-
-# The shared git-tree lock, held for the script's life; git-tree-lock.j2 owns the wait and why.
-{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}
-{{ take_git_tree_lock('docs-refresh') }}
-
-# A dirty tree is usually a human or another job mid-edit. Committing on top of that would mix
-# their work into a docs commit. Build the site anyway -- serving current docs costs nothing and
-# is the useful half -- but change no files.
-#
-# THE DIRT IS NOT ALWAYS SOMEBODY ELSE'S. It may be this script's own, left by a commit failure a
-# run ago, and reporting up on that is how a failed run clears the alarm it just raised.
-# dirty_tree_status reads the stamp to tell the two apart.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  # up BEFORE the build, down inside the `||`. The other order reports up on a failed build,
-  # because the failure branch runs first and the blanket assignment then overwrites it.
-  PUSH_STATUS="$(dirty_tree_status)"
-  if [ "$PUSH_STATUS" = down ]; then
-    alert "docs-refresh: tree still dirty from this cron's own failed commit ($(tr '\n' ' ' \
-      < "$COMMIT_FAILED_STAMP" 2>/dev/null | tail -c 200)); rebuilt site only, nothing published"
-  else
-    alert "docs-refresh: working tree dirty; rebuilt site only, no regeneration"
-  fi
-  "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
-    || { alert "docs-refresh: site build failed on dirty tree"; PUSH_STATUS=down; }
-  exit 0
-fi
+BASE="$(git rev-parse HEAD)" || { alert "docs-refresh: $REPO has no HEAD"; exit 1; }
+prepare_tree "$BASE" || { alert "docs-refresh: could not prepare $TREE at $BASE"; exit 1; }
+cd "$TREE" || { alert "docs-refresh: $TREE missing"; exit 1; }
 
 # Unlanded work from a previous run means its diff is still pending. Regenerating now would
 # produce the same diff again and publish a duplicate, so build the site (the useful half,
@@ -391,8 +332,7 @@ fi
 #
 # IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
 # change reach a PR: most runs regenerate no page at all, and a table written after the gate
-# would be left unstaged in the primary checkout, which homelab-checkout-sync reads as dirty, so
-# it stops fast-forwarding the checkout.
+# would be left unstaged and never published.
 #
 # A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT (GENERATORS_OK, not an early
 # exit). `measure_weights` exits non-zero when its sub-run does not pass, but a genuinely red
@@ -401,9 +341,8 @@ fi
 # `timeout` firing, or a durations report that parses to nothing. There the pages are still worth
 # publishing, and the run still reports DOWN with the reason named.
 #
-# `timeout` bounds it because this script holds {{ server_git_tree_lock }} for its whole life,
-# so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
-#
+# `timeout` bounds it so a wedged sub-run fails this run rather than hanging it, which would
+# leave DocsRefreshNotReporting as the only sign.
 WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --record-missing 2>&1)"
 WEIGHTS_RC=$?
@@ -479,9 +418,7 @@ fi
 # strace, which the component's `depends` installs. `--budget 540` starts no module after nine
 # minutes and leaves the rest their rows, so a backlog of new modules spreads over several runs.
 # The `timeout` is that budget plus the longest one module may run
-# (scripts/dev/affected_lib/record.py:MODULE_TIMEOUT_SECONDS). It is no longer because this
-# script holds the git-tree lock, and hosts/tests/test_tree_lock_wait_covers_holders.py sums
-# every `timeout` here against the wait the other holders give the lock.
+# (scripts/dev/affected_lib/record.py:MODULE_TIMEOUT_SECONDS).
 #
 # The table holds nothing that moves with the clock, so a run that records unchanged rows
 # writes the same bytes and publishes nothing. Same degrade-not-abort handling as the steps
@@ -504,10 +441,19 @@ fi
 #
 # THE TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
 # the pages are — the `pytest_shard.py` and `affected_tests.py` steps above reproduce them — and
-# staging them is what keeps them out of the primary checkout as dirt. restore_generated_tree's
-# per-tree check names the same paths for that reason.
+# staging them is what publishes them.
 git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json \
   scripts/dev/pytest_shard_runner_weights.json scripts/dev/affected_tests.json
+
+# A STEP THAT WROTE OUTSIDE THOSE PATHS DEGRADES THE RUN. The commit leaves that write out and
+# the next prepare_tree discards it, so without this its output would never publish and nothing
+# would say so.
+STRAY="$(git status --porcelain | grep -v '^[AMDR]  ' | head -c 300 | tr '\n' ' ')"
+if [ -n "$STRAY" ]; then
+  DEGRADED_MSG="a step wrote outside the staged paths: $STRAY"
+  alert "docs-refresh: $DEGRADED_MSG"
+  GENERATORS_OK=0
+fi
 
 if git diff --cached --quiet; then
   # The common outcome: the inputs are repo files and they only move when a PR merges, so most
@@ -523,8 +469,6 @@ if git diff --cached --quiet; then
   if [ "$GENERATORS_OK" -eq 1 ]; then
     PUSH_STATUS=up
     PUSH_MSG="no change"
-    # A clean tree with nothing left to publish means a previous run's failed commit is behind us.
-    clear_commit_failed
   else
     PUSH_STATUS=down
   fi
@@ -545,33 +489,17 @@ fi
 # the same signal would REPLACE that one.
 LOG="$(mktemp)"
 
-# Captured BEFORE the commit. The index survives a failed commit, but the restore has to know
-# which paths were newly ADDED and which merely modified, and `git reset` erases that distinction.
-# --no-renames so a rename never arrives as the three-field line the restore would misread.
-STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
-
 # The suite, run explicitly and BEFORE the commit, because no prek hook runs it, and this cron
-# must not publish generated pages the suite rejects. Run here rather than left to the push
-# because a rejected commit is a state this script can undo -- restore_generated_tree -- where a
-# rejected push would leave a commit on the local master for homelab-checkout-sync to trip over.
+# must not publish generated pages the suite rejects.
 #
 # AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
-# the regenerated pages off disk. AFTER STAGED_STATUS for the same reason the commit is: the
-# restore needs to know which paths were newly added. `timeout` for the reason the weights
-# measurement has one -- this script holds {{ server_git_tree_lock }} for its whole life,
-# so a wedged run would hold gitops-deploy off the tree until flock's own wait expires.
+# the regenerated pages off disk. `timeout` for the reason the weights measurement has one.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
   keep_tree_evidence
-  if restore_generated_tree "$STAGED_STATUS"; then
-    RESTORE_NOTE="tree restored"
-  else
-    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
-  fi
-  mark_commit_failed "suite failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}; full log: ${FAILURE_LOG}"
-  say_suite_failure "docs-refresh: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  say_suite_failure "docs-refresh: the test suite failed (pytest exit ${SUITE_RC}); nothing published, full log ${FAILURE_LOG}" "$LOG"
   exit 1
 fi
 
@@ -584,22 +512,15 @@ COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
   keep_tree_evidence
-  if restore_generated_tree "$STAGED_STATUS"; then
-    RESTORE_NOTE="tree restored"
-  else
-    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
-  fi
-  # Stamped whichever way the restore went, and cleared only by a run that publishes or finds
-  # nothing to publish: it is what lets the NEXT run recognise leftover dirt as its own.
-  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (git exit ${COMMIT_RC}); ${RESTORE_NOTE}; full log: ${FAILURE_LOG}"
-  say_failure "docs-refresh: commit failed (git exit ${COMMIT_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  say_failure "docs-refresh: commit failed (git exit ${COMMIT_RC}); nothing published, full log ${FAILURE_LOG}" "$LOG"
   exit 1
 fi
 
-# Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
-# eval-run. Its header carries the ordering and the HEAD~1 reasoning. It
-# prints one line to alert with, and its exit code says where the commit is: 1 while it is
-# still local on master, 2 once the branch is on origin without a PR.
+# Branch, push, reset, PR, landing: scripts/deploy_tools/publish_pr.py, shared with eval-run.
+# Its header carries the ordering and the HEAD~1 reasoning. It runs from $TREE, so the commit,
+# the reset and the landing's working directory are all the tree's. It prints one line to alert
+# with, and its exit code says where the commit is: 1 while it is still local in the tree, 2
+# once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
   --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, the two pytest shard-weights tables and the test-dependency table. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py and scripts/dev/affected_tests.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
@@ -611,9 +532,9 @@ PUB_RC=$?
 # `${PUB_MSG: -400}` is NOT the shorter way to write it: a negative offset larger than the
 # string returns the EMPTY string, so it would silently drop every message under 400 characters.
 PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
-# Exit 1 and exit 2 are both reported the same way here, deliberately. At 2 the publisher has
-# already reset the local master, so the tree is clean either way and there is nothing for this
-# script to undo; the unlanded arm above is what catches the orphaned branch on the next run.
+# Exit 1 and exit 2 are both reported the same way here, deliberately. Either way the next
+# prepare_tree discards whatever the tree holds, and the unlanded arm above is what catches an
+# orphaned branch on the next run.
 if [ "$PUB_RC" -ne 0 ]; then
   # The publisher pushes a branch and opens a PR, both over the network, so this is the second
   # arm a WAN outage reaches. PUSH_STATUS is already `down` from its default; reachout_down
@@ -623,9 +544,6 @@ if [ "$PUB_RC" -ne 0 ]; then
 fi
 
 logger -t docs-refresh "regenerated, committed, $PUB_MSG"
-# Published: whatever an earlier run failed to commit is on origin now, so the stamp has done its
-# job and the next dirty tree this script meets belongs to somebody else.
-clear_commit_failed
 # The publish succeeded either way; GENERATORS_OK decides whether it published a COMPLETE set.
 # Reporting up here regardless would let a failing generator ride out on a successful PR, which
 # is the same "the run worked, the content did not" split the FAILURE REPORT exists for.
