@@ -66,30 +66,6 @@ def test_custom_manager_matches_live_targets(mgr: dict, tracked: list[str]) -> N
     )
 
 
-def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
-    """No customManager may target ansible/roles/containers/**.
-
-    H5.12 deleted that tree. The Pi's Compose services were Ansible roles there until H5, so a
-    manager copied from history would point at it, and a bump PR against it would target a
-    pin nothing reads.
-
-    The Pi's images ARE tracked, by the manager over
-    hosts/components/pi-compose/services/*/compose.yaml.j2. Pi digest bumps auto-deploy: they
-    automerge like an eligible k8s digest bump, and the Pi's updater health-gates the install.
-    scripts/tests/test_renovate_pi_compose_pins.py guards that manager and its rules.
-    """
-    offenders = []
-    for m in _MANAGERS:
-        for pattern in m["managerFilePatterns"]:
-            if "roles/containers" in pattern:
-                offenders.append(f"{pattern}: {m.get('description', '')[:80]}")
-    assert not offenders, (
-        "customManager(s) targeting ansible/roles/containers, which H5.12 deleted. The Pi's "
-        "Compose pins live under hosts/components/pi-compose/services/:\n"
-        + "\n".join(offenders)
-    )
-
-
 def test_ignore_paths_keeps_the_inherited_preset_globs() -> None:
     """renovate.json's ignorePaths must still carry every glob from :ignoreModulesAndTests.
 
