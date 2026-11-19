@@ -72,6 +72,10 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   the strings it requires, the pattern it forbids or the step that must come first.
 - `tests/_row_table.py` is the harness the tables share. A property needing a second
   render context, a cross-document join or a long exemption list keeps its own file.
+- The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
+  refuses a new module under `tests/repo/` or `tests/services/` that walks the tree, builds no
+  row and holds three test functions or fewer. A file that must stay one goes in that row's
+  `allow` with the reason.
 
 ## A new check ships with a proof it can go red
 

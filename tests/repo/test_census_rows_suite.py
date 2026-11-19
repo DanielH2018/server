@@ -87,6 +87,25 @@ ROLE_DIRS_CALLERS = frozenset(
 )
 
 
+# A module that reads the tree by pattern, which a Census row's selector stands in for.
+TREE_WALK = re.compile(
+    r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
+)
+TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
+BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
+# A module with this many test functions or fewer is a selector, a predicate and its red
+# proof: a row's shape.
+ROW_SIZED = 3
+
+
+def _standalone_census_offence(subject: Subject) -> list[str]:
+    text = subject.text
+    tests = len(TEST_FUNCTION.findall(text))
+    if not TREE_WALK.search(text) or BUILDS_A_ROW.search(text) or tests > ROW_SIZED:
+        return []
+    return [f"a standalone census of {tests} test function(s); make it a row"]
+
+
 ROWS = (
     Census(
         name="glob-census-carries-a-non-vacuity-assertion",
@@ -163,6 +182,63 @@ ROWS = (
         green=(Subject("a.py", "for p in role_dirs(K8S):\n"),),
         min_matches=len(ROLE_DIRS_CALLERS),
         must_find=ROLE_DIRS_CALLERS,
+    ),
+    Census(
+        name="a-single-predicate-check-is-a-row",
+        reason=(
+            "A one-selector, one-predicate check is a row, not a file "
+            "(.claude/rules/python-layout.md). A row fails `subject gone: delete this row` "
+            "once its selector matches nothing, so it retires with its subject; a file "
+            "passes over an empty census until someone notices. Write the check as a "
+            "`Census` row, a rendered-property row or a `RunbookRule` row. A check that needs "
+            "a second render context, a cross-document join or a long exemption list keeps "
+            "its file and goes in `allow` with that reason."
+        ),
+        files=lambda: tracked("tests/repo/test_*.py", "tests/services/test_*.py"),
+        offence=_standalone_census_offence,
+        red=(
+            Subject(
+                "tests/repo/test_x.py",
+                "def test_every_doc_is_short():\n"
+                "    for p in DOCS.glob('*.md'):\n"
+                "        assert len(p.read_text()) < 9000\n",
+            ),
+        ),
+        green=(
+            Subject(
+                "tests/repo/test_x.py",
+                "ROWS = (Census(files=lambda: tracked('docs/*.md')),)\n"
+                "def test_row_holds(): ...\n",
+            ),
+            Subject(
+                "tests/repo/test_x.py", "def test_parse(): assert parse('a') == 1\n"
+            ),
+        ),
+        min_matches=100,
+        must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
+        allow={
+            "tests/repo/test_ci_k3s_download_leg_does_not_gate.py": (
+                "an existential claim over every workflow: some step runs the cases outside "
+                "the gate, which no per-file offence can hold"
+            ),
+            "tests/repo/test_host_test_image_predownloads.py": (
+                "a cross-document join: the package specs' Depends against the test image's "
+                "Dockerfile"
+            ),
+            "tests/repo/test_root_entries_are_tracked_or_expected.py": (
+                "a join of the on-disk root against git's list, which a tracked-tree "
+                "selector cannot see"
+            ),
+            "tests/services/test_homelab_mcp_source_mounts.py": (
+                "reads a render, joined with the host packages that list checkout-sync"
+            ),
+            "tests/services/test_host_check_rule_literals.py": (
+                "a join of the rule file against the inventory, which #9019 rewrites"
+            ),
+            "tests/services/test_karakeep_prepulls_its_images.py": (
+                "globs its own render through the real CLI, not the tracked tree"
+            ),
+        },
     ),
 )
 

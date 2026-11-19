@@ -13,6 +13,7 @@ import re
 import pytest
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
+from _role_files_rows import DASHBOARDS_IN_EXPORTER_FORM, ROLE_PYTHON_HAS_TESTS
 from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
 
@@ -365,6 +366,8 @@ ROWS = (
     HOST_SCRIPT_WRITES,
     K8S_ROLES_ARE_REACHABLE,
     RETIRED_CRON_ARMS,
+    ROLE_PYTHON_HAS_TESTS,
+    DASHBOARDS_IN_EXPORTER_FORM,
 )
 
 _IDS = [row.name for row in ROWS]
