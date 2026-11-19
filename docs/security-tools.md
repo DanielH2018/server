@@ -105,6 +105,12 @@ Advancing the baseline after every UP run makes each report cover one week. A DO
 sudo journalctl -t aide-check --since -7d | grep unexplained
 ```
 
+The capped report can stop before an unexplained entry, so for the first 50 of them the script also logs a `detail:` line with the entry's summary column, and a `detail:` line for each attribute that changed, old and new, from the report's detail section. Those lines tell a content change from a change of times or mode:
+
+```bash
+sudo journalctl -t aide-check --since -7d | grep 'detail: /etc/passwd'
+```
+
 Once every path is accounted for, accept the run's database as the baseline. This takes the scan lock and moves `aide.db.new` over `aide.db`. It scans nothing and writes no verdict, and the alert clears on the next weekly run:
 
 ```bash
@@ -114,6 +120,12 @@ sudo /usr/lib/homelab/aide-check --accept
 It refuses when `aide.db` is missing, because a deleted baseline must stay an error rather than become a fresh, trusted one. `hosts/bootstrap-host.sh` creates the first baseline.
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
+
+Before the report, the script logs a `report by tree:` count line under `aide-check`, then the 15 trees with the most entries. A tree is the entry's directory, cut to its first three levels. Each tree line carries its added, removed and changed counts, which show where a new exclude in `98_aide_local.conf` would cut the most:
+
+```bash
+sudo journalctl -t aide-check --since -7d | grep -A15 'report by tree'
+```
 
 To prove the alert pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/lib/homelab/aide-check`, then put the database back. AIDE exits 18 at once, and the verdict goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
 

@@ -16,18 +16,19 @@
 # - Scope: five derived paths and nothing else — `docs/reference/`, `docs/assets/generated/`,
 #   the two shard-weights tables `scripts/dev/pytest_shard_weights.json` and
 #   `scripts/dev/pytest_shard_runner_weights.json`, and `scripts/dev/affected_tests.json`; a
-#   write outside them parks every deploy on the box.
+#   write outside them degrades the run. Every step runs in the cron's own worktree,
+#   `/var/lib/homelab/docs-refresh.d/tree`, so the primary checkout is never written.
 # - Mode: degrade, never abort. A failing generator sets `GENERATORS_OK=0`, publishes what
 #   succeeded and reports DOWN. A red test suite still exits 1. The timer's enable link arms it,
 #   and dropping the link from a package version, or reverting this component, stops the timer
 #   on the install that drops it.
-# - Abort valves: the shared git-tree lock, the dirty-tree gate, the unlanded-branch guard, and
-#   the commit-failure stamp under `/var/lib/homelab/docs-refresh.d`.
-# - Authoritative sources: the primary checkout as the git-tree lock holds it, and origin's
-#   branch list for the unlanded-branch guard.
+# - Abort valves: the unlanded-branch guard, the only one.
+# - Authoritative sources: the primary checkout's HEAD, which the tree is checked out at and
+#   cleaned of every untracked and ignored file, and origin's branch list for the
+#   unlanded-branch guard.
 # - Required evidence: `status=<up|down> <msg>` in the log, and `docs-refresh.prom` in the
 #   node_exporter textfile directory, which DocsRefreshFailed and DocsRefreshNotReporting read.
-# - Next-run review: before adding a fourth staged path, check no prek hook matching it can fail
+# - Next-run review: before adding a sixth staged path, check no prek hook matching it can fail
 #   on generator output. `docs/host-baseline-record.md`'s *The generated-docs refresh cron, in
 #   detail* has why, the `PUSH_STATUS` default and the `vale` exception.
 #

@@ -17,7 +17,8 @@ from lib.proc_testing import run
 from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
-RULESET = REPO / "hosts/components/t2-egress/files/t2-egress.nft"
+RULESET = "/usr/lib/homelab/t2-egress/t2-egress.nft"
+EGRESS_UNIT = "/usr/lib/systemd/system/homelab-t2-egress.service"
 SQUID_CONF = "/usr/lib/homelab/t2-egress/t2-squid.conf"
 SQUID_DROPIN = "/usr/lib/systemd/system/squid.service.d/50-homelab-t2.conf"
 SESSION_UNITS = (
@@ -52,18 +53,76 @@ def foreign_tables(text: str) -> list[str]:
     return found
 
 
-def test_the_ruleset_names_only_its_own_table_is_clean():
-    """I4: loading it changes no ufw, kube-proxy, flannel or portmap rule."""
-    assert statements(RULESET.read_text())
-    assert foreign_tables(RULESET.read_text()) == []
+@pytest.fixture(scope="module")
+def box() -> host_mode.Package:
+    return host_mode.render_host("daniel-box")
 
 
-def test_a_statement_on_another_table_is_flagged():
-    planted = RULESET.read_text() + "\nadd rule ip filter OUTPUT counter\n"
+@pytest.fixture(scope="module")
+def box_off(tmp_path_factory) -> host_mode.Package:
+    """daniel-box with the egress table and the session proxy both switched off."""
+    host_vars = tmp_path_factory.mktemp("off") / "host_vars"
+    shutil.copytree(HOST_VARS, host_vars)
+    path = host_vars / "daniel-box.yml"
+    values = yaml.safe_load(path.read_text())
+    del values["t2_egress_proxy"]
+    values["t2_egress_enabled"] = False
+    path.write_text(yaml.safe_dump(values))
+    return host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
+
+
+def rendered(package: host_mode.Package, path: str) -> str:
+    return package.files[path][0].decode()
+
+
+def table_stops(unit: str) -> list[str]:
+    """Each ExecStop or ExecStopPost line of `unit` that runs nft."""
+    return [
+        line
+        for line in unit.splitlines()
+        if re.match(r"ExecStop(?:Post)?=.*\bnft\b", line)
+    ]
+
+
+def test_the_ruleset_names_only_its_own_table_is_clean(box, box_off):
+    """I4: loading it, in either flag state, changes no ufw, kube-proxy, flannel or portmap rule."""
+    for package in (box, box_off):
+        assert statements(rendered(package, RULESET))
+        assert foreign_tables(rendered(package, RULESET)) == []
+
+
+def test_a_statement_on_another_table_is_flagged(box):
+    planted = rendered(box, RULESET) + "\nadd rule ip filter OUTPUT counter\n"
     assert foreign_tables(planted) == ["add rule ip filter OUTPUT counter"]
 
 
-def test_the_rules_cover_exactly_the_session_users_the_users_arm_declares():
+def test_the_switched_off_ruleset_deletes_the_table_and_the_unit_still_ships(
+    box, box_off
+):
+    """The way out is the flag: the package keeps the unit, and its reload deletes the table."""
+    on, off = statements(rendered(box, RULESET)), statements(rendered(box_off, RULESET))
+    assert "delete table inet t2_egress" not in on
+    assert [s for s in on if s.startswith("add rule")]
+    assert off == ["add table inet t2_egress", "delete table inet t2_egress"]
+    assert EGRESS_UNIT in box_off.files
+
+
+def test_no_stop_of_the_egress_unit_touches_the_table_is_clean(box):
+    """A restart for a changed unit file keeps the sets, and once B3-2 enforces, the fence."""
+    assert table_stops(rendered(box, EGRESS_UNIT)) == []
+
+
+def test_a_stop_that_deletes_the_table_is_flagged(box):
+    planted = (
+        rendered(box, EGRESS_UNIT)
+        + "ExecStop=/usr/sbin/nft delete table inet t2_egress\n"
+    )
+    assert table_stops(planted) == [
+        "ExecStop=/usr/sbin/nft delete table inet t2_egress"
+    ]
+
+
+def test_the_rules_cover_exactly_the_session_users_the_users_arm_declares(box):
     declared = {
         user["uid"]
         for name, spec in SESSION_USERS.items()
@@ -73,18 +132,9 @@ def test_the_rules_cover_exactly_the_session_users_the_users_arm_declares():
     assert len(declared) == len(SESSION_USERS), "a session user is no longer declared"
     rule_uids = {
         frozenset(int(uid) for uid in group.split(","))
-        for group in re.findall(r"meta skuid \{([^}]*)\}", RULESET.read_text())
+        for group in re.findall(r"meta skuid \{([^}]*)\}", rendered(box, RULESET))
     }
     assert rule_uids == {frozenset(declared)}
-
-
-@pytest.fixture(scope="module")
-def box() -> host_mode.Package:
-    return host_mode.render_host("daniel-box")
-
-
-def rendered(package: host_mode.Package, path: str) -> str:
-    return package.files[path][0].decode()
 
 
 def test_squid_binds_the_proxy_address_logs_to_a_file_and_never_to_syslog(box):
@@ -115,19 +165,9 @@ def test_both_sessions_send_their_traffic_through_the_proxy(box):
         assert "Wants=squid.service" in text, unit
 
 
-def test_without_a_proxy_address_no_session_names_one(tmp_path):
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
-    values = yaml.safe_load(path.read_text())
-    del values["t2_egress_proxy"]
-    values["t2_egress_enabled"] = False
-    path.write_text(yaml.safe_dump(values))
-    package = host_mode.render_host(
-        "daniel-box", inventory=Inventory(host_vars=host_vars)
-    )
+def test_without_a_proxy_address_no_session_names_one(box_off):
     for unit in SESSION_UNITS:
-        text = rendered(package, unit)
+        text = rendered(box_off, unit)
         assert "PROXY" not in text and "squid" not in text, unit
 
 

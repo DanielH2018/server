@@ -23,11 +23,14 @@ Run: uv run pytest hosts/tests/test_aide_check.py
 import re
 
 from _aide_check_run import (
+    ADDED,
     CHANGED_CONTENT,
     CLEAN_REPORT,
     DIFF_REPORT,
     ERROR_REPORT,
+    REMOVED,
     SCRIPT,
+    _report,
     _run_check,
 )
 from _host_packages import HOSTS, package, shipped_text
@@ -277,6 +280,38 @@ def test_a_long_report_is_capped_with_a_line_saying_so(tmp_path):
         report_lines
     )
     assert len(report_lines) == 4, report_lines
+
+
+def test_the_report_is_counted_by_tree_before_the_cap_drops_entries(tmp_path):
+    """The 2026-11-18 daniel-box run added 905,557 entries, and the capped report named none."""
+    report = (
+        _report(
+            *[f"{ADDED}: /home/ubuntu/.claude/projects/s{n}.jsonl" for n in range(5)],
+            f"{REMOVED}: /home/ubuntu/.claude/old",
+            f"{CHANGED_CONTENT}: /var/lib/aide/aide.db",
+            f"{CHANGED_CONTENT}: /etc/tool.conf",
+        )
+        + "".join(f"{ADDED}: /srv/t{n}/x/y/z\n" for n in range(20))
+        + "\nFile: /etc/tool.conf\n Size      : 1 | 2\n"
+    )
+    _, verdict, logged, _ = _run_check(tmp_path, report, rc=7, cap=3)
+    summary = [line for line in logged if line.startswith("aide-check: ")]
+    assert summary[0] == (
+        "aide-check: report by tree: 25 added, 1 removed, 2 changed in 23 trees of up to "
+        "three levels; the 15 with the most entries:"
+    ), summary
+    assert summary[1:3] == [
+        "aide-check:   /home/ubuntu/.claude: 6 (5 added, 1 removed, 0 changed)",
+        "aide-check:   /etc: 1 (0 added, 0 removed, 1 changed)",
+    ], summary
+    trees = [line for line in summary if line.startswith("aide-check:   ")]
+    assert len(trees) == 15, trees
+    assert verdict[0] == "up", verdict
+
+
+def test_a_report_with_no_entries_logs_no_tree_count(tmp_path):
+    _, _, logged, _ = _run_check(tmp_path, CLEAN_REPORT, rc=0)
+    assert not [line for line in logged if "report by tree" in line], logged
 
 
 def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):

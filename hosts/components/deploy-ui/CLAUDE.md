@@ -181,23 +181,29 @@ them where the panel sets them.
 
 ## Usage count
 
-The daemon writes one logfmt line per request to its unit journal (#2864):
-`request method=GET path=/ status=200 user=<Remote-User>`. `user` is the Authelia login
+The daemon writes one logfmt line per request to its unit journal (#2864), under the syslog
+tag `deploy-ui` (`SyslogIdentifier=` in
+`hosts/components/deploy-ui/templates/deploy-ui.service.j2`):
+`request method=GET path=/ status=200 user=<Remote-User>`. The exception is a successful `GET`
+on an `/api/` route, which writes no line, because the panels poll those
+(`hosts/components/deploy-ui/files/deploy_ui.py:is_poll`,
+`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_a_panel_poll_writes_no_request_line_is_clean`).
+An `/api/` read answered with anything but 200 still writes its line. A panel that cannot read
+answers 200 with `unavailable`, so its poll writes none. `user` is the Authelia login
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged`).
 
-A client that closes the connection mid-response adds a second line,
+A client that closes the connection mid-response adds a line,
 `client-disconnected method=GET path=/ status=200 user=<Remote-User>`, in place of a
 `BrokenPipeError` traceback that HostLogErrors would count (#7921). It opens with a word
 other than `request`, so the count below does not see the request twice
 (`hosts/components/deploy-ui/tests/test_deploy_ui_app.py::test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged`).
 
-The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
-and 18 while the finished list is hidden, because the page skips its fetch. An open game
-console adds 6 more (`hosts/components/deploy-ui/files/deploy_ui.html`).
-An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
-loads and writes instead:
+The page polls four panels every 10 seconds, an open game console polls too, and an open
+landing viewer polls `/api/log` every 2 seconds (`hosts/components/deploy-ui/files/deploy_ui.html`).
+Those polls show a tab was open, not that anyone used it, so they write no line. Count page
+loads and writes:
 
 ```bash
 journalctl -u deploy-ui --since -30d | grep -cE 'request method=GET path=/ |request method=POST'

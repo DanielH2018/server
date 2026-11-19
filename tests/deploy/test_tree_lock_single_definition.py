@@ -12,13 +12,10 @@ from lib.repo_paths import REPO
 # The host crons that take the git-tree lock, and the one macro they all take it through.
 # Named rather than discovered, so a caller that stops importing the macro fails here by name.
 # The macro lives in the shared template directory, which the host renderer's loader also
-# searches. The two callers ship in their host components since H7.10.
+# searches.
 _LOCK_MACRO = REPO / "k8s/templates/git-tree-lock.j2"
 _COMPONENTS = REPO / "hosts/components"
-_LOCK_CALLERS = (
-    _COMPONENTS / "docs-refresh/templates/docs-refresh.sh.j2",
-    _COMPONENTS / "eval-sweep/templates/eval-run.sh.j2",
-)
+_LOCK_CALLERS = (_COMPONENTS / "eval-sweep/templates/eval-run.sh.j2",)
 _IMPORT = "{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}"
 
 

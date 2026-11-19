@@ -234,6 +234,76 @@ def test_reject_a_cd_out_of_the_cwd_is_not_stripped(sandbox, monkeypatch, capsys
     assert out is None or "updatedInput" not in out
 
 
+# ── the rewrite in auto mode ─────────────────────────────────────────────────────────
+#
+# The auto-mode classifier refuses a call whose input a hook changed after it reviewed it, so
+# in auto mode no arm may answer with `updatedInput`. A deny that names the rewrite and a
+# rewrite skipped in auto mode both satisfy these.
+
+
+def dispatch_auto(command, load, monkeypatch, capsys):
+    payload = {
+        "tool_name": "Bash",
+        "cwd": _REPO,
+        "permission_mode": "auto",
+        "session_id": f"test-{uuid.uuid4()}",
+        "tool_input": {"command": command},
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _mod.main(load=load) == 0
+    out = capsys.readouterr().out
+    return json.loads(out)["hookSpecificOutput"] if out.strip() else None
+
+
+def test_auto_mode_a_bare_pytest_is_not_rewritten_in_place(
+    sandbox, monkeypatch, capsys
+):
+    out = dispatch_auto("pytest --version", sandbox, monkeypatch, capsys)
+    assert out is None or "updatedInput" not in out
+
+
+def test_auto_mode_a_cd_into_the_cwd_is_not_rewritten_in_place(
+    sandbox, monkeypatch, capsys
+):
+    out = dispatch_auto(f"cd {_REPO} && git status", sandbox, monkeypatch, capsys)
+    assert out is None or "updatedInput" not in out
+
+
+def test_auto_mode_a_deny_names_the_fully_rewritten_command(
+    sandbox, monkeypatch, capsys
+):
+    """A deny names what both rewrites together would run, so one retry lands."""
+    out = dispatch_auto(f"cd {_REPO} && pytest --version", sandbox, monkeypatch, capsys)
+    assert out is None or "updatedInput" not in out
+    if out is not None and out.get("permissionDecision") == "deny":
+        assert "uv run pytest --version" in out["permissionDecisionReason"]
+
+
+def test_auto_mode_a_bare_pytest_is_denied_naming_uv_run(sandbox, monkeypatch, capsys):
+    out = dispatch_auto("pytest --version", sandbox, monkeypatch, capsys)
+    assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"].startswith("[uv-python] ")
+    assert out["permissionDecisionReason"].endswith(": uv run pytest --version")
+
+
+def test_auto_mode_keeps_the_cd_into_the_cwd_in_the_named_command(
+    sandbox, monkeypatch, capsys
+):
+    out = dispatch_auto(f"cd {_REPO} && pytest --version", sandbox, monkeypatch, capsys)
+    assert out["permissionDecisionReason"].endswith(
+        f": cd {_REPO} && uv run pytest --version"
+    )
+
+
+def test_auto_mode_the_named_command_passes_on_its_retry(sandbox, monkeypatch, capsys):
+    """The retry the deny asks for meets no deny and no rewrite, so it converges."""
+    retry = f"cd {_REPO} && uv run pytest --version"
+    out = dispatch_auto(retry, sandbox, monkeypatch, capsys)
+    assert out is None or (
+        "updatedInput" not in out and out.get("permissionDecision") != "deny"
+    )
+
+
 # ── one arm failing ──────────────────────────────────────────────────────────────────
 
 
