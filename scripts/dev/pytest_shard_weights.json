@@ -1098,6 +1098,7 @@
  "tests/deploy/test_tree_lock_single_definition.py": 0.0,
  "tests/k8s/test_aggregated_clusterroles.py": 0.0,
  "tests/k8s/test_alertmanager_read_route.py": 0.03,
+ "tests/k8s/test_alloy_drops_routine_success_lines.py": 0.0,
  "tests/k8s/test_alloy_labels_host_program.py": 0.0,
  "tests/k8s/test_alloy_redacts_access_log_query_credentials.py": 0.0,
  "tests/k8s/test_alloy_redacts_arr_apikey.py": 0.0,
