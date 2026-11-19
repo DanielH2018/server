@@ -133,3 +133,12 @@ flux_cronjob_gates:
 # The Service's pinned address (templates/service.yaml.j2). daniel-box's fake-remux config names
 # it, so a change here changes hosts/components/fake-remux/defaults/main.yml too.
 sonarr_k8s_cluster_ip: 10.43.114.186
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # The exportarr sidecar's credential: sonarr's own API key, since sonarr offers no
+  # scoped read-only key.
+  - name: sonarr-exportarr
+    string_data:
+      api_key: sonarr_api_key

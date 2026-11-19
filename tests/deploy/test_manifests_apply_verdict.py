@@ -1,6 +1,6 @@
 """Every rendered Secret document comes from a file the renderer treats as secret."""
 
-from lib.k8s_roles import resolved_manifest_files
+from lib.k8s_roles import SECRET_TEMPLATE, resolved_manifest_files
 from _k8s_render import rendered_docs
 
 
@@ -23,7 +23,8 @@ def test_every_secret_document_renders_as_a_secret_file() -> None:
     stray = sorted(
         f"{role}/{name}"
         for role, name in secrets
-        if name.removesuffix(".j2") not in resolved_manifest_files(role)[1]
+        if name != SECRET_TEMPLATE.name
+        and name.removesuffix(".j2") not in resolved_manifest_files(role)[1]
     )
     assert not stray, (
         "These templates declare a Secret outside the role's manifests_secret_files, so a change "

@@ -133,3 +133,14 @@ manifests_deferred_files:
   - rbac-observability.yaml
 
 manifests_deferred_dir_name: headlamp-observability
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
+# its `string_data` maps a Secret field to the SOPS key its value comes from.
+render_secrets:
+  # Read by the Deployment as HEADLAMP_CONFIG_OIDC_CLIENT_SECRET while
+  # headlamp_k8s_oidc_enabled is on, and rendered while it is off, so arming the login is one
+  # variable. It is the plaintext half of the Authelia client credential: Authelia holds only
+  # the pbkdf2 digest `headlamp_oidc_client_secret_hash`, so rotate the two keys together.
+  - name: headlamp-oidc
+    string_data:
+      client_secret: headlamp_oidc_client_secret

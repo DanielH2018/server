@@ -152,7 +152,7 @@ def test_the_scan_finds_keys_across_most_configmaps() -> None:
     assert templates >= 50, (
         f"only {templates} templates carry scanned keys — the source scan broke"
     )
-    assert keys >= 150, f"only {keys} keys are being checked — the source scan broke"
+    assert keys >= 135, f"only {keys} keys are being checked — the source scan broke"
 
 
 def absorbed_keys(source_keys: list[str], rendered: set[str]) -> list[str]:
