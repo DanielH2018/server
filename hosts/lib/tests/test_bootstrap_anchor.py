@@ -9,10 +9,11 @@ import json
 
 import bootstrap_anchor as anchor
 import pytest
+from ci_verdict import CheckRun
 
 CONTEXTS = frozenset({"prek"})
-GREEN = [{"name": "prek", "status": "completed", "conclusion": "success"}]
-RED = [{"name": "prek", "status": "completed", "conclusion": "failure"}]
+GREEN = [CheckRun("prek", "completed", "success")]
+RED = [CheckRun("prek", "completed", "failure")]
 
 
 def refusal(sha, chain, runs, contexts) -> str:
