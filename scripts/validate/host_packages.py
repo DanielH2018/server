@@ -67,6 +67,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import importlib
+import os
 import re
 import subprocess
 import sys
@@ -212,6 +213,8 @@ def render(tree: Path, out: Path) -> int:
         result = subprocess.run(
             [sys.executable, str(renderer), mode, flag, name, "--out", str(out)],
             cwd=tree,
+            # `tree`'s scripts/ goes ahead of this venv's .pth, which names this checkout's.
+            env={**os.environ, "PYTHONPATH": str(tree / "scripts")},
             check=False,
         )
         if result.returncode != 0:
