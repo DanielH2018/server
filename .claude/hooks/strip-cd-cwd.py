@@ -10,6 +10,11 @@ turns ended on a "contains multiple operations" or "requested permissions" refus
 A `cd` into the directory the shell is already in changes nothing the command does, so
 dropping it leaves the command identical in effect and single in shape.
 
+NOT IN AUTO MODE. The auto-mode classifier reviews the call before the hook runs and refuses one
+whose input a hook then changed, so `bash-pretool.py` does not ask this arm in auto mode
+(`_SKIPPED_IN_AUTO_MODE`). A deny would be worse: worktree sessions open compound commands with
+`cd <worktree> &&` on purpose.
+
 THE CWD IS THE PAYLOAD'S, never this process's. `run-hook.sh` changes into the primary
 checkout to find its `.venv`, so `os.getcwd()` here is `/home/ubuntu/server` for every
 worktree session. Comparing against it would strip `cd /home/ubuntu/server && x` inside a
