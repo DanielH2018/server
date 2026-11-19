@@ -763,7 +763,8 @@ what has changed it:
   binaries, so a pod's run cannot pass the gated tests as skips.
   `tests/repo/test_ci_baseline_binaries.py` holds the step's list against every skip gate in
   the suite. `strace` is the one gated binary the hosted image lacks, so its test skips on both
-  runner types. `HOME` must be writable, because `~/.local/bin`, the dotfiles packages and
+  runner types. One gate reads a fixed path the census cannot see: a `scripts/lib` kubectl
+  test skips unless `/usr/local/bin/kubectl` exists, so the base image installs kubectl there. `HOME` must be writable, because `~/.local/bin`, the dotfiles packages and
   the real `uv`'s cache live under it; setting `UV_CACHE_DIR` moves the cache. Child
   processes write `__pycache__` beside first-party modules in the checkout. A measurement on
   2026-11-19 left open whether the suite needs a writable checkout.
@@ -772,7 +773,8 @@ what has changed it:
   anywhere but `ci-runners`, the runner namespace ADR-0032 bounds with one.
 - **The heaviest module rendered the tree twice.** `test_validate_k8s_manifests.py` hands the
   validator each role's render from the run's shared k8s render, which other modules on the
-  leg build anyway. Its tests took 12.8 s on daniel-box before and take 1.8 s.
+  leg build anyway. Its tests took 12.8 s on daniel-box and take 1.8 s. A leg where it is
+  the only reader of that render still pays the render once, 6.6 s on daniel-box.
 - **The launcher's token takes operator steps.** It would reach daniel-box as the read-only
   token does: copied from the cluster into SOPS by hand, then synced to the host.
 
