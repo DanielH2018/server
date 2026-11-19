@@ -14,6 +14,7 @@ from typing import NamedTuple
 _ROLE_PATH = re.compile(r"^k8s/roles/([^/]+)/(?:([^/]+)/)?")
 
 SECRETS_FILE = "secrets/secrets.yml"
+CLUSTER_VARS_PREFIX = "secrets/cluster-vars."
 
 
 class RolePath(NamedTuple):

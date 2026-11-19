@@ -45,7 +45,7 @@ and Alertmanager's inhibit rules hold its page behind the gate's. A row names it
   are the per-check hysteresis: a held cycle exports 1 with a `down streak n/N` note, so a
   streak delays a page, never suppresses one. The `startup_grace` rows' rules carry `for: 10m`
   instead, which rides out the weekly reboot
-  (`k8s/roles/monitor-bridge/tests/test_bridge_grace_rules.py::test_a_rule_has_for_10m_exactly_when_its_row_is_startup_grace`).
+  (`k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
 
 ## Checks
 
@@ -68,7 +68,9 @@ Three conventions hold across all of them:
 **A new arm folds into an existing check by default**; prove its selector against a live source
 first. **A new check is one `check_table.py` row and one `check_*` body, plus a rule in
 observability's `bridge-exporter.yaml`** for it to page
-(`k8s/roles/monitor-bridge/files/check_table.py:CHECKS`).
+(`k8s/roles/monitor-bridge/files/check_table.py:CHECKS`). The rule's labels, `for:` and
+`runbook_url` follow the row's columns
+(`k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
 
 ## The two exporters
 

@@ -119,7 +119,9 @@ class PushCheck:
       is_gate: This row is one of the two reachability gates, which `check.run_once`
         evaluates first.
       critical: The row's rule carries `severity: critical` and mails as well as posts.
-      runbook: The docs page slug the rule's `runbook_url` links to.
+      runbook: The docs page slug the rule's `runbook_url` links to. On `alert-runbooks` the
+        URL adds the alert name, lowercased, as its anchor. None means the rule has no
+        `runbook_url`.
     """
 
     name: str

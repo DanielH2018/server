@@ -1,8 +1,10 @@
-"""renovate.json as the Renovate guards read it, plus the regex translations they share.
+"""renovate.json as the Renovate guards read it, plus the packageRules walk they share.
 
-Renovate's `managerFilePatterns` and `matchStrings` are RE2 and minimatch; the helpers here
-turn each into a Python `re` so a guard can run it over `git ls-files` and assert it still
-matches something. The `tracked` fixture in conftest.py is the file list they run over.
+Which dependency Renovate extracts from which file is not worked out here: CI runs Renovate's
+own extract and holds it against `scripts/validate/renovate_expected_deps.tsv`
+(`scripts/validate/renovate_extract.py`). A guard that needs the extracted deps reads that
+table as `EXPECTED_DEPS`. What this module emulates is the packageRules half, which the extract
+does not cover: the grouping, automerge and soak settings a dep resolves to.
 """
 
 import json
@@ -10,8 +12,9 @@ import re
 from typing import NamedTuple
 
 from _ratchet_census import tracked_files
-from lib.renovate_annotations import effective_managers
+from lib import yaml_fast
 from lib.repo_paths import REPO
+from validate.renovate_extract import TABLE, Row, read_table
 
 # Re-export for modules that import _REPO from this module
 _REPO = REPO
@@ -21,38 +24,35 @@ _RENOVATE_CONFIG = json.loads((REPO / "renovate.json").read_text())
 # The custom managers as written in renovate.json.
 _CONFIG_MANAGERS = _RENOVATE_CONFIG["customManagers"]
 
-# The same list with the `# renovate:` annotation manager expanded into one per-pin manager per
-# annotation, so a guard that looks a pin up by depName or file finds an annotated pin the way
-# it finds a hand-written manager. lib/renovate_annotations.py has why.
-_MANAGERS = effective_managers(
-    _CONFIG_MANAGERS,
-    tracked_files(),
-    lambda rel: (REPO / rel).read_text(errors="replace"),
-)
-
 _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
+
+
+EXPECTED_DEPS = read_table(TABLE.read_text())
+
+
+def expected_deps(file: str, dep_name: str) -> list[Row]:
+    """The table's rows for one dep in one file, one per occurrence Renovate extracts."""
+    return [d for d in EXPECTED_DEPS if d.file == file and d.dep_name == dep_name]
+
+
+def workflow_env_pins(
+    workflow: str, version_key: str, digest_key: str
+) -> list[tuple[str, str]]:
+    """Each (version, digest) a workflow's `env:` blocks set, at workflow, job and step level."""
+    doc = yaml_fast.safe_load((REPO / workflow).read_text(encoding="utf-8"))
+    blocks = [doc.get("env") or {}]
+    for job in doc["jobs"].values():
+        blocks.append(job.get("env") or {})
+        blocks.extend(step.get("env") or {} for step in job.get("steps", []))
+    return [(b[version_key], b[digest_key]) for b in blocks if version_key in b]
 
 
 def _tracked_files() -> list[str]:
     return tracked_files()
 
 
-def _to_python_regex(pattern: str) -> str:
-    # Renovate/RE2 named groups are (?<name>...); Python's re wants (?P<name>...).
-    return re.sub(r"\(\?<(\w+)>", r"(?P<\1>", pattern)
-
-
-def _file_pattern_to_regex(fp: str) -> re.Pattern:
-    # A Renovate managerFilePattern wrapped in /.../ is a regex matched against the repo-relative
-    # path (all of them use this /regex/ form). Strip the one leading + trailing slash.
-    assert fp.startswith("/") and fp.endswith("/"), (
-        f"expected a /regex/ file pattern: {fp}"
-    )
-    return re.compile(fp[1:-1])
-
-
 def _slash_regex(pattern: str) -> re.Pattern:
-    """A Renovate `matchCurrentValue` value, wrapped /like/this/ same as a managerFilePattern."""
+    """A Renovate `matchCurrentValue` value, wrapped /like/this/."""
     assert pattern.startswith("/") and pattern.endswith("/"), (
         f"expected a /regex/ matchCurrentValue: {pattern}"
     )
@@ -81,7 +81,7 @@ def _disabling_currentvalue_rules(package_rules: list[dict]) -> list[dict]:
     """packageRules that disable a dependency by matching its `currentValue` (e.g.
 
     the /^latest$/ rule that started this whole guard — see
-    test_every_k8s_role_image_is_renovate_tracked).
+    test_no_k8s_role_image_is_disabled_by_a_package_rule).
 
     Deliberately excludes package-NAME disables (e.g. influxdb's `matchPackageNames` rule) — those
     are a targeted, reviewed exemption for one dependency, not a value-shaped trap that can silently
@@ -113,62 +113,6 @@ def _is_disabled_by_packagerule(
         ):
             return rule
     return None
-
-
-def _manager_covering(path_fragment: str) -> dict:
-    """Selected by the paths a manager watches, not by its datasource.
-
-    More than one `docker`-datasource manager exists — the compose templates and the k8s role
-    defaults — so picking the first match on datasource alone would silently hand back the
-    wrong one and make a coverage test assert against files it never looks at.
-    """
-    for m in _MANAGERS:
-        if m.get("datasourceTemplate") != "docker":
-            continue
-        if any(path_fragment in p for p in m["managerFilePatterns"]):
-            return m
-    raise AssertionError(f"no docker customManager covering {path_fragment!r}")
-
-
-def _k8s_image_manager() -> dict:
-    return _manager_covering("k8s/roles")
-
-
-_IF_BLOCK = re.compile(r"\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}", re.S)
-_TRIPLE_STACHE = re.compile(r"\{\{\{(\w+)\}\}\}")
-
-
-def render_auto_replace(template: str, **values: str | None) -> str:
-    """Render a Renovate `autoReplaceStringTemplate` the way Renovate's Handlebars would.
-
-    Renovate compiles the template against the upgrade object and writes the result over the
-    WHOLE span its matchString matched, so a template that drops a literal prefix corrupts the
-    line rather than failing. This covers the two constructs the k8s-images template uses —
-    `{{{name}}}` unescaped interpolation and an `{{#if name}}…{{/if}}` block gated on a truthy
-    value — and raises on anything else, so a template that grows a third construct fails here
-    instead of round-tripping by accident.
-
-    An unset value renders empty, matching Handlebars. Renovate itself never leaves `newValue`
-    unset on the updates this manager produces: both the `digest` and `pinDigest` updates carry
-    `newValue: config.currentValue` (lib/workers/repository/process/lookup/index.ts).
-    """
-
-    def _block(m: re.Match[str]) -> str:
-        assert m.group(1) in values, f"template gates on unknown var {m.group(1)!r}"
-        return m.group(2) if values[m.group(1)] else ""
-
-    def _var(m: re.Match[str]) -> str:
-        assert m.group(1) in values, f"template reads unknown var {m.group(1)!r}"
-        return values[m.group(1)] or ""
-
-    out = _TRIPLE_STACHE.sub(_var, _IF_BLOCK.sub(_block, template))
-    assert "{{" not in out, (
-        "unrendered Handlebars left in "
-        + repr(out)
-        + " — render_auto_replace covers only "
-        "triple-stache interpolation and a plain #if block"
-    )
-    return out
 
 
 # Both n8n FROMs pin a channel tag with a digest beside it, so a digest bump shows no version

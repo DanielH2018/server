@@ -66,17 +66,19 @@ def test_runs_filters_by_orchestrator_and_prints_json(tmp_path, capsys):
 
 def test_a_batch_key_this_build_does_not_know_survives_a_rewrite(tmp_path):
     run_id = "20260101T000010Z"
-    _write(tmp_path, run_id, _entry(cited_paths=["scripts/a.py"]))
+    _write(tmp_path, run_id, _entry(held_since="t0"))
     assert [r.run_id for r in all_runs(tmp_path)] == [run_id]
     run = load(run_id, tmp_path)
     run.batches[0] = dataclasses.replace(run.batches[0], removed_at="later")
     save(run, root=tmp_path)
     assert json.loads(path(run_id, tmp_path).read_text())["batches"] == [
         _entry(
-            cited_paths=["scripts/a.py"],
+            held_since="t0",
             removed_at="later",
             repo="DanielH2018/server",
             rung="opus-medium",
+            cited_paths=None,
+            excused_paths=[],
         )
     ]
 
@@ -98,12 +100,25 @@ CONSTRUCTOR_READER_FIELDS = frozenset(
 )
 
 
-def test_a_saved_batch_has_only_keys_a_constructor_reader_accepts(tmp_path):
-    b = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "u1", [1], "t")
+def test_a_saved_batch_adds_only_the_path_keys_to_what_a_constructor_reader_accepts(
+    tmp_path,
+):
+    """The two keys a build from before `Batch.from_json` cannot read, and no third."""
+    b = Batch(
+        "1",
+        "daniel-box",
+        "/w1",
+        "worktree-fanout-1",
+        "u1",
+        [1],
+        "t",
+        cited_paths=("scripts/a.py",),
+        excused_paths=("docs/b.md",),
+    )
     save(Manifest("20260101T000010Z", "worktree-a", [b]), root=tmp_path)
     (entry,) = json.loads(path("20260101T000010Z", tmp_path).read_text())["batches"]
-    assert set(entry) == CONSTRUCTOR_READER_FIELDS
-    assert Batch(**entry) == b
+    assert set(entry) - CONSTRUCTOR_READER_FIELDS == {"cited_paths", "excused_paths"}
+    assert load("20260101T000010Z", tmp_path).batches == [b]
 
 
 def test_runs_shows_a_parked_batch_with_its_reason_in_place_of_standing(
