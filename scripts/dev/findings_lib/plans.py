@@ -13,6 +13,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from collections.abc import Mapping
+
 from dev.findings_lib.milestone import branch_of, is_project
 from dev.findings_lib.issue_model import (
     LABELS,
@@ -248,12 +250,16 @@ def plan_claim(
     when: str,
     today: date,
     milestone: str | None = None,
+    reserved_by: Mapping[str, object] | None = None,
 ) -> list[list[str]]:
     """Plans the gh argv to claim ``issue`` for ``worktree``.
 
     ``milestone`` is the title of the worktree's session milestone, which an issue edit
     files the issue under. None, for a branch that never ran `milestone start`, files it
     under nothing. An issue in another branch's project milestone stays there.
+
+    ``reserved_by`` is the open project that `milestone.reservations` says reserves the
+    issue against ``worktree``, or None. A claim ``worktree`` already holds stands.
 
     The comment is the whole claim. `findings.main` then syncs the issue's board Status to
     In Progress.
@@ -264,8 +270,8 @@ def plan_claim(
 
     Raises:
         ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
-            carries a Not Before date after ``today``, has an open blocker, or another
-            worktree already holds it.
+            carries a Not Before date after ``today``, has an open blocker, sits in
+            another branch's open project, or another worktree already holds it.
     """
     if not issue.is_open:
         raise ClaimRefused("closed — nothing to work")
@@ -309,6 +315,13 @@ def plan_claim(
     held = issue.holder
     if held == worktree:
         return file_under
+    if reserved_by:
+        owner = branch_of(reserved_by)
+        raise ClaimRefused(
+            f"reserved by project `{reserved_by['title']}` of `{owner}` — only that "
+            f"branch claims from its backlog; `milestone remove {n} --worktree {owner}` "
+            "takes it out"
+        )
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
     return [

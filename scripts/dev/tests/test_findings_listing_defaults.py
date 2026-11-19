@@ -13,6 +13,7 @@ from _findings_fakes import Fakes, build_tools, live_worktree, make_issue
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
+from dev.findings_lib.milestone import description_for
 
 LIVE = "worktree-live"
 GONE = "worktree-gone"
@@ -50,6 +51,22 @@ def test_list_milestone_counts_only_the_issues_that_milestone_holds(capsys):
     tools, _ = build_tools(Fakes(issues=issues, api=milestones))
     assert main(["list", "--milestone", "Backups"], tools) == 0
     assert capsys.readouterr().out.startswith("1 open: 1 low")
+
+
+def test_list_marks_an_issue_an_open_project_reserves(capsys):
+    project = {
+        "title": "Backups",
+        "number": 9,
+        "state": "open",
+        "description": description_for(LIVE, project=True),
+    }
+    issues = _register()
+    issues[2]["milestone"] = project
+    milestones = {"repos/DanielH2018/server/milestones": [[project]]}
+    tools, _ = build_tools(Fakes(issues=issues, api=milestones))
+    assert main(["list"], tools) == 0
+    rows = capsys.readouterr().out.splitlines()[1:]
+    assert ["[project:Backups]" in row for row in rows] == [False, False, True]
 
 
 def test_list_limit_prints_how_many_it_left_out(capsys):

@@ -153,7 +153,13 @@ def read(
     )
     newer = threaded_issues([raw[i.number] for i in kept], tools)
     rows = (
-        free_issues(newer, tools, pr_refs=rest_open_pr_refs(tools), today=today)[0]
+        free_issues(
+            newer,
+            tools,
+            pr_refs=rest_open_pr_refs(tools),
+            today=today,
+            milestone=milestone,
+        )[0]
         if newer
         else []
     )
