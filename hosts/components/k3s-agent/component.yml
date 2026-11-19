@@ -39,7 +39,20 @@
 # borrowed whole. Sessions and landings run on this node too, and without it every cluster read
 # here fails. The token cannot read Secrets, and this node already holds the join token.
 #
-# ENFORCED: hosts/tests/test_k3s_agent_component.py.
+# homelab-kubelet-shutdown-lock runs files/kubelet-shutdown-lock-check.sh every 5 minutes. It
+# writes the `kubelet-shutdown-lock` textfile the KubeletShutdownLockMissing and
+# KubeletShutdownLockNotReporting rules read, so a fixed node clears its alert by itself.
+#
+# Autonomous-role contract (the lock check runs with no human in the loop).
+#
+# - Scope / exclusions: it reads logind's lock list and writes one textfile. It changes nothing.
+# - Mode (explicit and reversible): the timer's enable link arms it; dropping the component stops
+#   the timer on the install that drops it.
+# - Authoritative source: `systemd-inhibit --list`.
+# - Abort valves: none needed, since a run only reads.
+# - Required evidence, every run: the `kubelet-shutdown-lock` textfile.
+#
+# ENFORCED: hosts/tests/test_k3s_agent_component.py, hosts/tests/test_kubelet_shutdown_lock_check.py.
 component: k3s-server
 depends:
   - open-iscsi
@@ -127,6 +140,9 @@ files:
   # DECIDED: a name that sorts last, not a same-name /etc file that masks unattended-upgrades' own.
   # A mask stops working silently if the package renames its file.
   - {src: templates/logind-kubelet-shutdown.conf.j2, dst: /usr/lib/systemd/logind.conf.d/zz-homelab-kubelet-shutdown.conf, activate: "reload:systemd-logind.service"}
+  - {src: files/kubelet-shutdown-lock-check.sh, dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
+  - {src: units/homelab-kubelet-shutdown-lock.service, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
+  - {src: units/homelab-kubelet-shutdown-lock.timer, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote
@@ -164,6 +180,7 @@ outputs:
     when: "k3s_node_wifi_link | length > 0"
 enable:
   homelab-k3s-kubeconfig.service: multi-user.target
+  homelab-kubelet-shutdown-lock.timer: timers.target
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until

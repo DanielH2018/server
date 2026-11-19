@@ -10,11 +10,16 @@ removes it afterwards.
 After the merge, `classify.refuse_stale_code` raises `GradeFresh` instead, and land.py runs the
 merged PR's grading from the same kind of checkout without asking.
 
+A landing that holds the landing turn with landing code older than master's hands the turn to
+the same kind of checkout (`turn.HandOver`), so the turn's holder forms its batch with
+master's code. The child inherits the turn's locked descriptor, named in `TURN_FD_ENV`.
+
 The checkout's `land.sh` is a child process, not an exec, so this process outlives it and the
 `finally` removes the checkout whatever the child's exit code. Under `--detach`, land.py forks
 first and runs this inside the fork, so the checkout lives until the landing ends.
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +34,8 @@ from lib.git import git as _git
 FRESH_FLAG = "--fresh"
 BASE = "origin/master"
 LAND_SH = "scripts/deploy_tools/land.sh"
+# The landing turn's locked descriptor, which a child landing inherits (`turn._adopt`).
+TURN_FD_ENV = "LAND_TURN_FD"
 # Each git step is a fetch or a local worktree change; ten minutes bounds a hung remote.
 GIT_TIMEOUT_S = 600
 
@@ -79,6 +86,7 @@ def grading_argv(opts: Options, since: str) -> list[str]:
 def land_fresh(
     primary: Path,
     argv: list[str],
+    turn_fd: int | None = None,
     git: Callable[..., subprocess.CompletedProcess[str]] = _git,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> int:
@@ -87,6 +95,8 @@ def land_fresh(
     Args:
       primary: the checkout whose refs the worktree shares, and that fetches origin/master.
       argv: the arguments for the checkout's `land.sh`, already without `--fresh`.
+      turn_fd: the landing turn's locked descriptor, which the child landing inherits; the
+        caller closes its own copy once this returns.
 
     Returns:
       The child landing's exit code.
@@ -108,8 +118,14 @@ def land_fresh(
         print(
             f"land: landing from a fresh checkout of {BASE} at {path}", file=sys.stderr
         )
+        inherit = {}
+        if turn_fd is not None:
+            inherit = {
+                "pass_fds": (turn_fd,),
+                "env": {**os.environ, TURN_FD_ENV: str(turn_fd)},
+            }
         try:
-            return run([str(path / LAND_SH), *argv], check=False).returncode
+            return run([str(path / LAND_SH), *argv], check=False, **inherit).returncode
         except OSError as exc:
             raise CheckoutFailed(
                 f"--fresh could not start {LAND_SH} in its checkout ({exc})"
