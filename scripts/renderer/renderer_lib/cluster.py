@@ -59,8 +59,7 @@ from lib.k8s_roles import (
     resolved_manifest_files,
     role_fields,
 )
-from lib.k8s_context import resolve_vars
-from lib.render_guard import SHARED_TPL, StrictChainableUndefined, k8s_services
+from lib.render_guard import SHARED_TPL, k8s_services
 from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
@@ -326,19 +325,13 @@ def role_context(
         ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)
     except (ValueError, jinja2.TemplateError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc
-    try:
-        raw = include_vars(role_dir)
-        # Only the keys the render reads. The rest (rollout timeouts, extra rollouts) may name
-        # facts a role task sets, which Ansible resolves only where a task reads them.
-        read = {k: v for k, v in raw.items() if k in INCLUDE_KEYS}
-        include = resolve_vars(
-            read, {**ctx, **read}, undefined_cls=StrictChainableUndefined
-        )
-    except (ValueError, jinja2.TemplateError) as exc:
-        raise RenderError(f"{tag}: its render keys: {exc}") from exc
-    # The include's vars outrank the role defaults and the inventory; the stub file's extra
-    # vars outrank them in turn.
-    return {**ctx, **include, **stubs, "manifests_service": tag}, include
+    # The strict context leaves a value that will not resolve undefined, which a render key
+    # must not be: an undefined file list would fall back to the derived one unseen.
+    unresolved = sorted((INCLUDE_KEYS & include_vars(role_dir).keys()) - ctx.keys())
+    if unresolved:
+        raise RenderError(f"{tag}: its render keys {unresolved} do not resolve")
+    include = {k: ctx[k] for k in INCLUDE_KEYS if k in ctx}
+    return {**ctx, "manifests_service": tag}, include
 
 
 def render_tag(

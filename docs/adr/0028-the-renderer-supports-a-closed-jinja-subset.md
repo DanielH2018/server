@@ -118,10 +118,12 @@ The layers, weakest first:
 1. Role defaults.
 1. `group_vars/all.yml`.
 1. The host's `host_vars` file.
-1. The role's render metadata in its `defaults/main.yml`, for the five keys
-   `cluster.py:INCLUDE_KEYS` names. Ansible gives these keys this rank as `k8s/manifests` include
-   vars.
 1. The stub file's or placeholder mode's values, as `-e @FILE` extra vars do.
+
+**Amended 2026-11-19 (#8981):** the five render keys `cluster.py:INCLUDE_KEYS` names lost their
+own rank between `host_vars` and the stub file. Ansible gave them that rank as include vars,
+and no inventory file sets one, so they now resolve as the role defaults they are. A render
+key that does not resolve still fails the render.
 
 A value resolves after the layers merge, so a default that names a variable reads the winning
 layer's value.
