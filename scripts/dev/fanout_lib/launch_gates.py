@@ -34,7 +34,6 @@ from fanout_lib.target import SERVER
 from fanout_lib.transport import Tools, error_text, read_host
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import solo_only_reasons
-from findings_lib.tracked_paths import resolve_fragments
 from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
 from lib.role_paths import CLUSTER_VARS_PREFIX, SECRETS_FILE
@@ -274,13 +273,7 @@ def batch_paths(
     `launch` records it on the batch.
     """
     return tuple(
-        sorted(
-            {
-                path
-                for issue in issues
-                for path in resolve_fragments(cited_paths(issue.body), tracked)
-            }
-        )
+        sorted({path for issue in issues for path in cited_paths(issue.body, tracked)})
     )
 
 
