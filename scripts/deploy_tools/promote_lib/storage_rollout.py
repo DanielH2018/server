@@ -43,7 +43,10 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from chained_timeout import largest_retry_s, seconds
 
-STATUS_PREFIX = "flux/"
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.promote_lib.flux_status import STATUS_PREFIX, StatusState
+
+
 # The tag whose longhorn-manager pods serve the admission webhook a claim's dry run calls
 # (THE STORAGE ROLLOUT).
 STORAGE_TAG = "longhorn"
@@ -117,7 +120,7 @@ class Window:
         self.failed_at: float | None = None
 
     def provisional(
-        self, failed: Iterable[str], states: Mapping[str, str], now: float
+        self, failed: Iterable[str], states: Mapping[str, StatusState], now: float
     ) -> bool:
         """Whether the `failed` names read in `states` at `now` leave the wait going.
 
@@ -125,10 +128,7 @@ class Window:
         """
         if not self.grace_s or STORAGE_TAG in set(failed):
             return False
-        if (
-            self.settled_at is None
-            and states.get(STATUS_PREFIX + STORAGE_TAG) == "success"
-        ):
+        if self.settled_at is None and states.get(STORAGE_TAG) == StatusState.SUCCESS:
             self.settled_at = now
         if self.failed_at is None:
             self.failed_at = now

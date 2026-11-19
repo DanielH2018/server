@@ -55,7 +55,7 @@ def test_the_61c16826_timeline_reads_good():
     expected = vp.expected_set(HOP, PROD)
     clock = Clock()
     reads = timeline(clock, [(0, CLAIMS_FAILED), (23, LONGHORN_UP), (120, RECOVERED)])
-    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads, T, PRIOR, expected) == vp.Verdict(vp.VerifyVerdict.GOOD)
 
 
 def test_a_claim_that_never_recovers_holds_once_the_grace_runs_out():
@@ -63,7 +63,9 @@ def test_a_claim_that_never_recovers_holds_once_the_grace_runs_out():
     clock = Clock()
     reads = timeline(clock, [(0, CLAIMS_FAILED), (23, LONGHORN_UP)])
     verdict = vp.verify(reads, T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("mosquitto", "pi-peer-backup"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("mosquitto", "pi-peer-backup")
+    )
     # `longhorn` is first read as `success` at the poll at 30s.
     assert 30 + expected.storage_grace_s <= clock.now < expected.timeout_s
 
@@ -74,7 +76,9 @@ def test_a_claim_failure_holds_when_longhorn_never_reads_success():
     clock = Clock()
     pending = {**CLAIMS_FAILED, "flux/longhorn": "pending"}
     verdict = vp.verify(timeline(clock, [(0, pending)]), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("mosquitto", "pi-peer-backup"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("mosquitto", "pi-peer-backup")
+    )
     assert expected.storage_rollout_s <= clock.now < expected.timeout_s
 
 
@@ -84,7 +88,9 @@ def test_regression_guard_a_longhorn_failure_stays_final_at_the_first_read():
     clock = Clock()
     states = {**CLAIMS_FAILED, "flux/longhorn": "failure"}
     verdict = vp.verify(timeline(clock, [(0, states)]), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("longhorn", "mosquitto", "pi-peer-backup"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("longhorn", "mosquitto", "pi-peer-backup")
+    )
     assert clock.sleeps == 0
 
 
@@ -93,5 +99,7 @@ def test_regression_guard_without_a_hop_a_claims_failure_holds_at_the_first_read
     expected = vp.expected_set(NO_HOP, PROD)
     clock = Clock()
     verdict = vp.verify(timeline(clock, [(0, CLAIMS_FAILED)]), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("mosquitto", "pi-peer-backup"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("mosquitto", "pi-peer-backup")
+    )
     assert clock.sleeps == 0
