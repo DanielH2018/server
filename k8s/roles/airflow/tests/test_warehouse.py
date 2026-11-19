@@ -1,11 +1,11 @@
-"""`replace_partition` against sqlite, which shares the DB-API transaction semantics it relies on."""
+"""`replace_partition` and `read_partition` against sqlite, which shares the DB-API semantics they rely on."""
 
 import sqlite3
 from datetime import date
 
 import pytest
 
-from dags.homelab_warehouse.warehouse import replace_partition
+from dags.homelab_warehouse.warehouse import read_partition, replace_partition
 
 COLUMNS = ("day", "host", "max_c")
 NOV_17 = date(2026, 11, 17)
@@ -68,3 +68,12 @@ def test_a_row_for_another_day_is_refused_before_anything_is_written(conn):
         replace(conn, NOV_17, [(NOV_18, "daniel-box", 72.0)])
 
     assert rows(conn) == [(NOV_17, "daniel-box", 70.0)]
+
+
+def test_a_day_reads_back_as_one_dict_per_row_keyed_by_column(conn):
+    replace(conn, NOV_17, [(NOV_17, "daniel-box", 70.0)])
+    replace(conn, NOV_18, [(NOV_18, "daniel-box", 72.0)])
+
+    assert read_partition(conn, "temps", "day", NOV_17, placeholder="?") == [
+        {"day": NOV_17, "host": "daniel-box", "max_c": 70.0}
+    ]
