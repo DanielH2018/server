@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from _land_fakes import Fakes, build_tools
+from _land_fakes import PRIMARY, Fakes, build_tools
 from deploy_tools.land_lib import fresh, handoff
 from deploy_tools.land_lib.options import Options
 from lib import git_testing
@@ -45,6 +45,19 @@ def test_a_fresh_landing_runs_land_sh_from_a_checkout_of_the_fetched_tip(primary
     assert not checkout.exists()
     listed = git_testing.git(primary, "worktree", "list").stdout
     assert str(checkout) not in listed
+
+
+def test_a_fresh_landing_handed_the_turn_inherits_its_descriptor(primary):
+    seen: list = []
+
+    def run(argv, check, **inherit):
+        seen.append(inherit)
+        return subprocess.CompletedProcess(argv, 0)
+
+    fresh.land_fresh(primary, ["--pr", "7"], turn_fd=9, run=run)
+    [inherit] = seen
+    assert inherit["pass_fds"] == (9,)
+    assert inherit["env"][fresh.TURN_FD_ENV] == "9"
 
 
 def test_a_checkout_git_could_not_make_lands_nothing(tmp_path):
@@ -92,6 +105,29 @@ def test_land_hands_a_fresh_landing_to_the_checkout_and_annotates_nothing():
     assert rc == 75
     assert handed == [["--pr", "999", "--arm-merge", "--await-merge"]]
     assert not [c for c in calls if c[0] in ("logger", "gh")]
+
+
+def test_land_runs_a_handed_over_turn_from_a_fresh_checkout_and_annotates_nothing(
+    tmp_path,
+):
+    import land
+    from deploy_tools.land_lib import turn
+
+    held = turn.try_take(tmp_path / "turn.lock")
+    assert held is not None
+
+    def hand_over(*args, **kwargs):
+        raise turn.HandOver(held.fd, "its code lags master")
+
+    tools, calls = build_tools(Fakes(fresh_rc=0))
+    tools = dataclasses.replace(tools, gh_json=hand_over)
+    opts = Options(pr="999", primary=PRIMARY, arm_merge=True, await_merge=True)
+    child = ["--pr", "999", "--arm-merge", "--await-merge", "--subject", "Kept"]
+    assert land._land(opts, tools, None, child) == 0
+    [handed] = [c for c in calls if c[0] == "fresh_landing"]
+    assert handed[1][1] == child and handed[2] == {"turn_fd": held.fd}
+    assert not [c for c in calls if c[0] == "logger"]
+    assert turn.try_take(tmp_path / "turn.lock") is not None
 
 
 def test_the_lander_unit_refuses_fresh():

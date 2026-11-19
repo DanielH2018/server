@@ -203,6 +203,7 @@ tests:
                 minutes, so every firing log rule reaches no one. Read the loki-homelab pod's log
                 for "Error sending alerts", and the alertmanager-callers NetworkPolicy in the
                 observability namespace.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#lokirulernotificationsfailing
 
   # One refused send carrying four alerts, as a new Loki pod's first send can be while
   # kube-router admits it. The counter steps by 4 at once, which is one change, so the alert

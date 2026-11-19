@@ -491,18 +491,12 @@ def test_a_removed_newest_snapshot_does_not_consume_the_floor_slot():
     assert result.kept == []  # live-newest claims FLOOR 1, not even reported
 
 
-def test_an_unpopulated_markremoved_is_treated_as_not_removed():
-    # R14, ported: status.markRemoved absent (a snapshot read moments after creation) must be
-    # treated the same as an explicit False, not silently excluded.
-    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
-    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
+@pytest.mark.parametrize("removed", [None, False], ids=["absent", "false"])
+def test_an_unpopulated_markremoved_is_treated_as_not_removed(removed):
+    # status.markRemoved is absent on a snapshot read moments after creation.
     owner: dict[str, str] = {}
-    snaps = [
-        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
-        _snapshot(
-            "stale", "vol-a", "2026-08-10T00:00:00Z", job="daily-backup"
-        ),  # no `removed` key
-    ]
+    stale = _snapshot("stale", "vol-a", "2026-08-10T00:00:00Z", "daily-backup", removed)
+    snaps = [_snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"), stale]
     result = logic.classify_snapshots(
         snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
     )

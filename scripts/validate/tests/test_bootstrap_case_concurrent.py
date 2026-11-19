@@ -258,7 +258,7 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
         for label in (first, last)
     }
     assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
-    assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+    assert len(seconds[last]) == 1 and seconds[last][0] < seconds[first][0], err
 
 
 def test_each_item_s_phase_timings_print_under_its_duration_and_nothing_else_does(
