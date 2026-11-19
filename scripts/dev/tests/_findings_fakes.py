@@ -163,6 +163,9 @@ class Fakes:
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
+    # The register's tracked files. Empty by default, so no test's `paths` depend on
+    # what this tree tracks.
+    tracked: frozenset[str] = frozenset()
     # What the board sync answers per issue, `(outcome, detail)`; an issue absent here reads
     # `unchanged`, so no test reaches the real board.
     board: dict[int, tuple[str, str]] = field(default_factory=dict)
@@ -420,6 +423,7 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             sync_board=sync_board,
             attach_milestone=attach_milestone,
             close_idle_milestones=close_idle_milestones,
+            tracked=lambda: f.tracked,
             tree_held=lambda path: held_by_readable_process(
                 path, holds=lambda: [(1, p, "cwd") for p in f.held_paths]
             ),

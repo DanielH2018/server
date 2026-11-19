@@ -446,11 +446,24 @@ coordinator can read it with `place runs --json`.
 every `secrets/cluster-vars.` file: each is one encrypted document, and two branches that
 edit it cannot be rebased over each other.
 
-The rule has two known limits:
+`scripts/dev/findings_lib/issue_model.py:cited_paths` is the one reading of an issue body
+that both gates, the brief and the `paths` field of `next --json` share. It resolves each
+citation against the files `git ls-files` lists. A path from the repo root counts as
+written. A path from a subdirectory, such as `fanout_lib/clean.py`, counts as the one
+tracked file that ends with it. A filename with no directory counts only when it stands
+alone in an inline code span and exactly one tracked file has that name: `` `ci.yml` ``
+holds `.github/workflows/ci.yml`.
+
+The rule has three known limits:
 
 - **A batch's diff can exceed its cited paths.** The gate compares what each batch was
   briefed on, not what its agent edits. Two batches that cite different files can still
   edit one.
+- **A filename that several tracked files share holds nothing.** `` `main.yml` `` and
+  `` `CLAUDE.md` `` name dozens of files, so `cited_paths` drops them, and so it drops a
+  filename written outside a code span. An issue that means one of those files must spell
+  its path. In the other direction, a file an issue names only in passing is held like one
+  it edits, as a full path always was; `--allow-shared-file` excuses it.
 - **A batch that ended with no PR holds nothing, and a resumed one still holds nothing.**
   Someone who resumes such a batch by hand edits files a later launch was free to take,
   until the resumed work opens a PR.

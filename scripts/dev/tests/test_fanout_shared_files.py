@@ -3,7 +3,7 @@
 import socket
 
 from fanout_lib.brief import Issue
-from fanout_lib.launch_gates import shared_files
+from fanout_lib.launch_gates import refuse_shared_files, shared_files
 from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
@@ -67,6 +67,18 @@ def test_launch_refuses_two_batches_that_cite_one_file_before_any_ssh(tmp_path, 
     assert f"batches 1780-1784, 1782 all cite {ALERTS}" in err
     assert f"regroup them into one batch, or pass --allow-shared-file {ALERTS}" in err
     assert not list(tmp_path.glob("*.json"))
+
+
+def test_the_launch_gate_refuses_a_full_path_and_the_bare_filename_that_names_it(
+    capsys,
+):
+    issues = {
+        1: Issue(1, "a", f"`{ALERTS}` drops the row", ("claude",)),
+        2: Issue(2, "b", "`alerts.py` drops it too", ("claude",)),
+    }
+    batches = {"1": [1], "2": [2]}
+    assert refuse_shared_files(batches, issues, (), tracked={ALERTS})
+    assert f"batches 1, 2 all cite {ALERTS}" in capsys.readouterr().err
 
 
 def test_launch_proceeds_when_the_shared_script_is_grouped_into_one_batch(tmp_path):

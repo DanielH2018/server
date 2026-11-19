@@ -616,7 +616,7 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
             ``milestone`` and ``limit``.
         tools: the process boundaries the issue read goes through.
     """
-    rows = sorted(issue_rows(open_issues(args, tools)), key=sort_key)
+    rows = sorted(issue_rows(open_issues(args, tools), tools.tracked()), key=sort_key)
     rows = [
         r
         for r in rows
@@ -684,7 +684,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
     # claims (`issue-fanout`), and a waiting row inside it would be claimed.
-    held_rows = waiting(issues, today=today)
+    held_rows = waiting(issues, today=today, tracked=tools.tracked())
     held_back = (
         [waiting_line(r, today) for r in held_rows]
         if args.waiting
