@@ -36,11 +36,12 @@ tests:
             exp_annotations:
               summary: The triage poller on daniel-box has stopped reporting.
               description: >-
-                No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's
-                textfile collector, so the monitor triage poll has not completed a clean run: the timer
-                stopped firing, or every run since failed and OnFailure has posted to Discord. Read
-                `systemctl status homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll` on
-                daniel-box. If `claude_code_triage_enabled` was set false on purpose, delete this rule.
+                No claude-triage-poll verdict newer than 660s from daniel-box, so the monitor
+                triage poll has not completed a clean run. Read `systemctl status
+                homelab-claude-triage-poll.timer` and `journalctl -u
+                homelab-claude-triage-poll`. If you disabled the timer on purpose, delete this
+                rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
       - eval_time: 26m
         alertname: DiskHealthNotReporting
         exp_alerts:
@@ -512,12 +513,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
               description: >-
-                homelab_docker_engine_pending on daniel-pi has read 1 for 26 hours, so the
-                nightly 00:30 UTC homelab-docker-engine.timer run has not applied the engine
-                pins. Read `systemctl status homelab-docker-engine.timer homelab-updater.timer`
-                and `journalctl -u homelab-docker-engine` on daniel-pi, and
-                docs/host-packages.md, "Host-plane pages". A failed run leaves
-                homelab-updater.timer masked, so unmask and start it once the cause is fixed.
+                The Docker engine on daniel-pi has sat off its pins for 26 hours, so the 00:30
+                UTC homelab-docker-engine.timer did not apply them. Read `systemctl status
+                homelab-docker-engine.timer homelab-updater.timer` and `journalctl -u
+                homelab-docker-engine`, and docs/host-packages.md, "Host-plane pages".
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The issue's two cases on a series that starts at 1, as a fresh textfile does: 1 for 6h is
@@ -543,12 +542,10 @@ tests:
             exp_annotations:
               summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
               description: >-
-                homelab_docker_engine_pending on daniel-pi has read 1 for 26 hours, so the
-                nightly 00:30 UTC homelab-docker-engine.timer run has not applied the engine
-                pins. Read `systemctl status homelab-docker-engine.timer homelab-updater.timer`
-                and `journalctl -u homelab-docker-engine` on daniel-pi, and
-                docs/host-packages.md, "Host-plane pages". A failed run leaves
-                homelab-updater.timer masked, so unmask and start it once the cause is fixed.
+                The Docker engine on daniel-pi has sat off its pins for 26 hours, so the 00:30
+                UTC homelab-docker-engine.timer did not apply them. Read `systemctl status
+                homelab-docker-engine.timer homelab-updater.timer` and `journalctl -u
+                homelab-docker-engine`, and docs/host-packages.md, "Host-plane pages".
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # The run applied the pins: the series falls back to 0 after 25h of 1, and the rule stays
@@ -789,10 +786,10 @@ tests:
             exp_annotations:
               summary: daniel-box's wired link eno1 is down, so the node runs on WiFi.
               description: >-
-                eno1 on daniel-box has had no carrier, or has been down, for 5 minutes. The
-                node routes over its WiFi fallback, which carries Longhorn replication and
-                media at a fraction of the wired rate. Check the cable and the switch port,
-                then run `ip link show eno1` and `ip route get 1.1.1.1` on daniel-box.
+                eno1 on daniel-box has had no carrier, or has been down, for 5 minutes, so the
+                node routes over its slower WiFi fallback, which carries Longhorn replication.
+                Check the cable and the switch port, then run `ip link show eno1` and `ip route
+                get 1.1.1.1` on daniel-box.
 
   # daniel-server's enp88s0 is set administratively down from minute 3, so node_exporter
   # serves no carrier series for it and only node_network_up reads 0. The `up` arm fires
@@ -820,10 +817,10 @@ tests:
             exp_annotations:
               summary: daniel-server's wired link enp88s0 is down, so the node runs on WiFi.
               description: >-
-                enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes.
-                The node routes over its WiFi fallback, which carries Longhorn replication and
-                media at a fraction of the wired rate. Check the cable and the switch port,
-                then run `ip link show enp88s0` and `ip route get 1.1.1.1` on daniel-server.
+                enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes, so
+                the node routes over its slower WiFi fallback, which carries Longhorn
+                replication. Check the cable and the switch port, then run `ip link show
+                enp88s0` and `ip route get 1.1.1.1` on daniel-server.
 
   # A three-minute flap, as a switch reboot leaves, reads carrier 0 at minutes 3 to 5 and
   # ends inside the 5-minute hold. The 5m evaluation sits inside the flap, so it fails if
@@ -880,11 +877,10 @@ tests:
               summary: >-
                 daniel-server's iSCSI session session2 to iqn.2019-10.io.longhorn:pvc-1 reads FREE.
               description: >-
-                session2 on daniel-server has read FREE for 15 minutes, for target
-                iqn.2019-10.io.longhorn:pvc-1. The next attach of that volume on daniel-server
-                fails its frontend init on `iscsiadm --logout` (error 32), and Longhorn deletes
-                the pod every ~30s. Clean it up with docs/longhorn-disaster-recovery.md, "A
-                stale iSCSI session blocks an attach".
+                session2 on daniel-server has read FREE for 15 minutes (target
+                iqn.2019-10.io.longhorn:pvc-1). The next attach of that volume fails, and
+                Longhorn deletes the pod every ~30s. Clean it up with
+                docs/longhorn-disaster-recovery.md, "A stale iSCSI session blocks an attach".
               runbook_url: https://docs.local.daniel-hunter.com/longhorn-disaster-recovery/
       - eval_time: 16m
         alertname: IscsiSessionsNotReporting
@@ -1021,9 +1017,9 @@ tests:
             exp_annotations: &sync_not_reporting
               summary: The peer artifact sync on daniel-box has stopped reporting.
               description: >-
-                No sync-artifacts verdict newer than 15 minutes reached Prometheus from daniel-box's
-                textfile collector, so the cron stopped, or its flock is held by a hung run. Read the
-                `Sync peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
+                No sync-artifacts verdict newer than 15 minutes reached Prometheus from
+                daniel-box, so the cron stopped, or a hung run holds its flock. Read the `Sync
+                peer Claude artifacts` cron and `journalctl -t sync-artifacts`, then
                 /var/lib/node-exporter-textfile/sync-artifacts.prom on the host.
       - eval_time: 20m
         alertname: OtlpDoorNotReporting
@@ -1041,8 +1037,8 @@ tests:
             exp_annotations: &otlp_not_reporting
               summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
               description: >-
-                No claude-otel-health verdict newer than 25 minutes reached Prometheus from daniel-box's
-                textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
+                No claude-otel-health verdict newer than 25 minutes reached Prometheus from
+                daniel-box, so nothing is watching the OTLP door. Read the `Claude Code
                 telemetry health` cron and `journalctl -t claude-otel-health`, then
                 /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
   # Zero-series case: no sample has ever arrived, so both rules fire through absent_over_time,
@@ -1107,12 +1103,11 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly AIDE check failed or found an unexplained change.
               description: >-
-                aide-check on daniel-box ended with status=down: a file changed that no package
-                explains, AIDE exited with an error and checked nothing, or the previous week's
-                run still held the lock. Run `journalctl -t aide-check` on daniel-box; once every
-                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`, then
-                `sudo systemctl start homelab-aide-check.service`, which re-runs the check and
-                clears this alert and the unit's failed state together.
+                aide-check on daniel-box ended with status=down: an unexplained file change, an
+                AIDE error, or a held lock. Run `journalctl -t aide-check` on daniel-box. Once
+                every path is reviewed, run `sudo /usr/lib/homelab/aide-check --accept`, then
+                `sudo systemctl start homelab-aide-check.service`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aidecheckfailed
   # No AIDE file on any host, and every exporter is up. The absent_over_time arm fires for the
   # two k3s nodes and not for daniel-pi, which carries no AIDE rule.
   - interval: 1m
@@ -1135,9 +1130,9 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly AIDE check has stopped reporting.
               description: >-
-                No aide-check verdict newer than 626400s reached Prometheus from daniel-box's
-                textfile collector, so nothing confirms the file-integrity scan still runs. Read
-                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-box, so
+                nothing confirms the file-integrity scan still runs. Read the `Weekly AIDE file
+                integrity check` cron and `journalctl -t aide-check`, then
                 /var/lib/node-exporter-textfile/aide-check.prom on the host.
           - exp_labels:
               check: aide-check
@@ -1147,9 +1142,9 @@ tests:
             exp_annotations:
               summary: daniel-server's weekly AIDE check has stopped reporting.
               description: >-
-                No aide-check verdict newer than 626400s reached Prometheus from daniel-server's
-                textfile collector, so nothing confirms the file-integrity scan still runs. Read
-                the `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
+                No aide-check verdict newer than 626400s reached Prometheus from daniel-server,
+                so nothing confirms the file-integrity scan still runs. Read the `Weekly AIDE
+                file integrity check` cron and `journalctl -t aide-check`, then
                 /var/lib/node-exporter-textfile/aide-check.prom on the host.
 
   # daniel-server's rkhunter file holds a verdict taken 611000s before time 0, so the test runs
@@ -1190,10 +1185,9 @@ tests:
               summary: daniel-server's weekly rkhunter scan has stopped reporting.
               description: >-
                 No rkhunter-check verdict newer than 612000s reached Prometheus from
-                daniel-server's textfile collector, so nothing confirms the malware scan still
-                runs. Read the `Weekly rkhunter malware scan` cron and `journalctl -t
-                rkhunter-check`, then /var/lib/node-exporter-textfile/rkhunter-check.prom on the
-                host.
+                daniel-server, so nothing confirms the malware scan still runs. Read the `Weekly
+                rkhunter malware scan` cron and `journalctl -t rkhunter-check`, then
+                /var/lib/node-exporter-textfile/rkhunter-check.prom on the host.
 
   # A check no per-check rule names stops writing at time 0 with a 600s deadline. HostCheckOverdue
   # crosses its own deadline series at 11m, holds pending through 12m and fires at 13m. A pod exporter's check with
@@ -1331,11 +1325,10 @@ tests:
               summary: The Pi's Compose project has not run since daniel-pi booted.
               description: >-
                 daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
-                still predates that boot or is missing, so the boot's compose-run never wrote its
-                result. The unit is masked or disabled, systemd killed the run at its
-                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
-                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                still predates that boot or is missing, so the boot's compose-run wrote no
+                result. Read `systemctl status homelab-compose` and `journalctl -b -u
                 homelab-compose` on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composeupstale
 
   # The same boot, but the boot run writes 120s after it. A week-old result is quiet as long
   # as it follows the last boot.
@@ -1370,11 +1363,10 @@ tests:
               summary: The Pi's Compose project has not run since daniel-pi booted.
               description: >-
                 daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
-                still predates that boot or is missing, so the boot's compose-run never wrote its
-                result. The unit is masked or disabled, systemd killed the run at its
-                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
-                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                still predates that boot or is missing, so the boot's compose-run wrote no
+                result. Read `systemctl status homelab-compose` and `journalctl -b -u
                 homelab-compose` on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composeupstale
 
   # A stale result fires while the exporter answers, and the rule goes quiet once the scrape
   # fails and every series goes stale, leaving the page to ScrapeTargetDown.
@@ -1399,11 +1391,10 @@ tests:
               summary: The Pi's Compose project has not run since daniel-pi booted.
               description: >-
                 daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
-                still predates that boot or is missing, so the boot's compose-run never wrote its
-                result. The unit is masked or disabled, systemd killed the run at its
-                TimeoutStartSec, or the write to /var/lib/node-exporter-textfile/homelab_compose.prom
-                failed. Read `systemctl status homelab-compose` and `journalctl -b -u
+                still predates that boot or is missing, so the boot's compose-run wrote no
+                result. Read `systemctl status homelab-compose` and `journalctl -b -u
                 homelab-compose` on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composeupstale
       - eval_time: 30m
         alertname: ComposeUpStale
         exp_alerts: []
@@ -1439,9 +1430,9 @@ tests:
               description: >-
                 homelab-reconcile started homelab-compose.service on daniel-pi, and
                 homelab_compose_up_timestamp_seconds still predates that call, so compose-run
-                wrote no result for it. systemd killed the run at its TimeoutStartSec, or the
-                write to /var/lib/node-exporter-textfile/homelab_compose.prom failed. Read
-                `journalctl -u homelab-compose -u homelab-reconcile` on daniel-pi.
+                wrote no result for it. Read `journalctl -u homelab-compose -u
+                homelab-reconcile` on daniel-pi.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#composerestartunreported
 
   # The same restart, and compose-run wrote its result at 1040, after the call. Quiet.
   - interval: 1m
@@ -1490,10 +1481,9 @@ tests:
               summary: daniel-box has owed a reboot for more than 8 days.
               description: >-
                 Reconcile recorded a reboot-class package change on daniel-box more than 8 days
-                ago, and the host has not booted since, so the weekly reboot did not run or was
-                refused. Read `journalctl -t weekly-restart` on daniel-box and
-                docs/host-packages.md, "Reboot-pending and activation-pending", then reboot the
-                host.
+                ago, and the host has not booted since. Read `journalctl -t weekly-restart` on
+                daniel-box and docs/host-packages.md, "Reboot-pending and activation-pending",
+                then reboot the host.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 
   # daniel-box's rkhunter scan writes a fresh red verdict, and RkhunterScanFailed fires for it.
@@ -1517,11 +1507,10 @@ tests:
               summary: daniel-box's weekly rkhunter scan warned or did not complete.
               description: >-
                 rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a
-                warning, a suspect file or a possible rootkit, or the scan wrote no summary. An
-                account change clears on the next run: `sudo systemctl start
-                homelab-rkhunter-check.service` runs it now and clears the unit's failed state
-                with it, which running the script by hand does not. Read /var/log/rkhunter.log
-                and `journalctl -t rkhunter-check` on daniel-box.
+                warning, a suspect file or a possible rootkit, or the scan wrote no summary.
+                Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box,
+                then run `sudo systemctl start homelab-rkhunter-check.service`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#rkhunterscanfailed
 
   # The claude_code timers. Every check file stopped being refreshed at 0 while both
   # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
@@ -1568,13 +1557,12 @@ tests:
             exp_annotations:
               summary: The pipeline timeline snapshot on daniel-box has stopped reporting.
               description: >-
-                No claude-pipeline-timeline verdict newer than 174900s reached Prometheus from
-                daniel-box's textfile collector, so the daily snapshot of the PR timeline has not
-                completed a clean run: the timer stopped firing, or every run since failed and
-                OnFailure has posted to Discord. The journal inputs it saves rotate after about ten
-                days. Read `systemctl status homelab-claude-pipeline-timeline.timer` and `journalctl -u
-                homelab-claude-pipeline-timeline` on daniel-box. If `claude_code_pipeline_timeline_enabled`
-                was set false on purpose, delete this rule.
+                No claude-pipeline-timeline verdict newer than 174900s from daniel-box, so the
+                PR timeline snapshot is not running, and the journal inputs it saves rotate
+                after about ten days. Read `systemctl status
+                homelab-claude-pipeline-timeline.timer` and `journalctl -u
+                homelab-claude-pipeline-timeline`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudepipelinetimelinenotreporting
       - eval_time: 11m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []
@@ -1591,11 +1579,12 @@ tests:
             exp_annotations:
               summary: The triage poller on daniel-box has stopped reporting.
               description: >-
-                No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's
-                textfile collector, so the monitor triage poll has not completed a clean run: the timer
-                stopped firing, or every run since failed and OnFailure has posted to Discord. Read
-                `systemctl status homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll` on
-                daniel-box. If `claude_code_triage_enabled` was set false on purpose, delete this rule.
+                No claude-triage-poll verdict newer than 660s from daniel-box, so the monitor
+                triage poll has not completed a clean run. Read `systemctl status
+                homelab-claude-triage-poll.timer` and `journalctl -u
+                homelab-claude-triage-poll`. If you disabled the timer on purpose, delete this
+                rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudetriagepollnotreporting
       - eval_time: 35m
         alertname: ClaudeCloneSyncNotReporting
         exp_alerts: []
@@ -1612,12 +1601,11 @@ tests:
             exp_annotations:
               summary: The agent clone sync on daniel-box has stopped reporting.
               description: >-
-                No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-box's
-                textfile collector, so the agent's clone fast-forward has not completed a clean run: the
-                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
-                Read `systemctl status claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on
-                daniel-box. If `claude_code_agent_user_enabled` was set false on purpose, delete this
-                rule.
+                No claude-clone-sync verdict newer than 2100s from daniel-box, so the agent's
+                clone fast-forward has not completed a clean run. Read `systemctl status
+                claude-clone-sync.timer` and `journalctl -u claude-clone-sync`. If you disabled
+                the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
           - exp_labels:
               check: claude-clone-sync
               instance: daniel-server
@@ -1628,12 +1616,11 @@ tests:
             exp_annotations:
               summary: The agent clone sync on daniel-server has stopped reporting.
               description: >-
-                No claude-clone-sync verdict newer than 2100s reached Prometheus from daniel-server's
-                textfile collector, so the agent's clone fast-forward has not completed a clean run: the
-                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
-                Read `systemctl status claude-clone-sync.timer` and `journalctl -u claude-clone-sync` on
-                daniel-server. If `claude_code_agent_user_enabled` was set false on purpose, delete this
-                rule.
+                No claude-clone-sync verdict newer than 2100s from daniel-server, so the agent's
+                clone fast-forward has not completed a clean run. Read `systemctl status
+                claude-clone-sync.timer` and `journalctl -u claude-clone-sync`. If you disabled
+                the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeclonesyncnotreporting
       - eval_time: 35m
         alertname: ClaudeDotfilesSyncNotReporting
         exp_alerts: []
@@ -1650,12 +1637,11 @@ tests:
             exp_annotations:
               summary: The agent dotfiles sync on daniel-box has stopped reporting.
               description: >-
-                No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-box's
-                textfile collector, so the agent's dotfiles apply has not completed a clean run: the
-                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
-                Read `systemctl status claude-dotfiles-sync.timer` and `journalctl -u
-                claude-dotfiles-sync` on daniel-box. If `claude_code_agent_dotfiles` was set false on
-                purpose, delete this rule.
+                No claude-dotfiles-sync verdict newer than 2100s from daniel-box, so the agent's
+                dotfiles apply has not completed a clean run. Read `systemctl status
+                claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync`. If you
+                disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
           - exp_labels:
               check: claude-dotfiles-sync
               instance: daniel-server
@@ -1666,12 +1652,11 @@ tests:
             exp_annotations:
               summary: The agent dotfiles sync on daniel-server has stopped reporting.
               description: >-
-                No claude-dotfiles-sync verdict newer than 2100s reached Prometheus from daniel-server's
-                textfile collector, so the agent's dotfiles apply has not completed a clean run: the
-                timer stopped firing, or every run since failed and OnFailure has posted to Discord.
-                Read `systemctl status claude-dotfiles-sync.timer` and `journalctl -u
-                claude-dotfiles-sync` on daniel-server. If `claude_code_agent_dotfiles` was set false on
-                purpose, delete this rule.
+                No claude-dotfiles-sync verdict newer than 2100s from daniel-server, so the
+                agent's dotfiles apply has not completed a clean run. Read `systemctl status
+                claude-dotfiles-sync.timer` and `journalctl -u claude-dotfiles-sync`. If you
+                disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilessyncnotreporting
       - eval_time: 35m
         alertname: ClaudeMemorySyncNotReporting
         exp_alerts: []
@@ -1688,13 +1673,11 @@ tests:
             exp_annotations:
               summary: The Claude memory sync from daniel-box has stopped reporting.
               description: >-
-                No claude-memory-sync verdict newer than 2100s reached Prometheus from daniel-box's
-                textfile collector, so the memory store copy to daniel-server has not completed a clean
-                run: the timer stopped firing, or every run since failed and OnFailure has posted to
-                Discord. Read `systemctl status homelab-claude-memory-sync.timer` and `journalctl -u
-                homelab-claude-memory-sync` on daniel-box. If `claude_code_memory_sync_enabled` was set false on
-                purpose, delete this rule. A run the ExecCondition skips, because daniel-box's MEMORY.md
-                is empty, writes nothing either, and an empty store is not a healthy state.
+                No claude-memory-sync verdict newer than 2100s from daniel-box, so the memory
+                store copy to daniel-server has not completed a clean run. Read `systemctl
+                status homelab-claude-memory-sync.timer` and `journalctl -u
+                homelab-claude-memory-sync`. An empty MEMORY.md also skips the run.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudememorysyncnotreporting
       - eval_time: 55m
         alertname: ClaudeFanoutLanderNotReporting
         exp_alerts: []
@@ -1711,12 +1694,12 @@ tests:
             exp_annotations:
               summary: The fan-out server lander on daniel-box has stopped reporting.
               description: >-
-                No claude-fanout-server-lander verdict newer than 3300s reached Prometheus from
-                daniel-box's textfile collector, so the fan-out server lander has not completed a clean
-                run: the timer stopped firing, or every run since failed and OnFailure has posted to
-                Discord. Read `systemctl status homelab-claude-fanout-server-lander.timer` and `journalctl -u
-                homelab-claude-fanout-server-lander` on daniel-box. If
-                `claude_code_fanout_server_lander_enabled` was set false on purpose, delete this rule.
+                No claude-fanout-server-lander verdict newer than 3300s from daniel-box, so the
+                lander has not completed a clean run. Read `systemctl status
+                homelab-claude-fanout-server-lander.timer` and `journalctl -u
+                homelab-claude-fanout-server-lander`. If you disabled the timer on purpose,
+                delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudefanoutlandernotreporting
 
   # The weekly host-maintenance crons on daniel-box. Every check file holds a green verdict
   # taken 611000s before time 0, so each NotReporting rule's first arm stays quiet at 10m
@@ -1770,11 +1753,11 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly apt autoremove has stopped reporting.
               description: >-
-                No apt-autoremove verdict newer than 612000s reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the weekly apt
-                autoremove still runs. Read the `Weekly apt autoremove` cron in
-                root's crontab and `journalctl -t apt-autoremove`, then
+                No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box,
+                so nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
+                autoremove` cron and `journalctl -t apt-autoremove`, then
                 /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#aptautoremovenotreporting
       - eval_time: 20m
         alertname: DpkgPurgeNotReporting
         exp_alerts:
@@ -1788,12 +1771,10 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
               description: >-
-                No dpkg-purge verdict newer than 612000s reached Prometheus from
-                daniel-box's textfile collector, so nothing confirms the weekly dpkg
-                purge of orphaned configs still runs. Read the `Weekly dpkg purge
-                orphaned configs` cron in root's crontab and `journalctl -t
-                dpkg-purge`, then /var/lib/node-exporter-textfile/dpkg-purge.prom on
-                the host.
+                No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-box, so
+                nothing confirms the weekly dpkg purge still runs. Read the `Weekly dpkg purge
+                orphaned configs` cron in root's crontab and `journalctl -t dpkg-purge`, then
+                /var/lib/node-exporter-textfile/dpkg-purge.prom on the host.
       - eval_time: 20m
         alertname: FirmwareUpdateNotReporting
         exp_alerts:
@@ -1807,11 +1788,10 @@ tests:
             exp_annotations:
               summary: daniel-box's weekly firmware update has stopped reporting.
               description: >-
-                No firmware-update verdict newer than 612000s reached Prometheus
-                from daniel-box's textfile collector, so nothing confirms the weekly
-                firmware update still runs. Read the `Weekly firmware update` cron
-                in root's crontab and `journalctl -t fwupd-auto`, then
-                /var/lib/node-exporter-textfile/firmware-update.prom on the host.
+                No firmware-update verdict newer than 612000s reached Prometheus from
+                daniel-box, so nothing confirms the weekly firmware update still runs. Read the
+                `Weekly firmware update` cron in root's crontab and `journalctl -t fwupd-auto`,
+                then /var/lib/node-exporter-textfile/firmware-update.prom on the host.
 
   # Every host-maintenance job on daniel-box writes a fresh red verdict, and each Failed rule
   # fires.
@@ -1911,11 +1891,11 @@ tests:
             exp_annotations:
               summary: The audit watches on daniel-box's Claude Code guardrail paths are not in place.
               description: >-
-                claude-guardrail-audit on daniel-box ended with status=down: auditd is not running,
-                kernel auditing is off, or a guardrail path that exists has no watch. Until it
-                clears, a write to a hook, a settings file or a memory store leaves no audit record.
-                Run `journalctl -t claude-guardrail-audit` on daniel-box, then `systemctl status
-                auditd`.
+                claude-guardrail-audit on daniel-box ended with status=down: auditd is not
+                running, kernel auditing is off, or a guardrail path has no watch, so guardrail
+                writes leave no audit record. Run `journalctl -t claude-guardrail-audit` on
+                daniel-box, then `systemctl status auditd`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
           - exp_labels:
               check: claude-guardrail-audit
               instance: daniel-server
@@ -1926,11 +1906,11 @@ tests:
             exp_annotations:
               summary: The audit watches on daniel-server's Claude Code guardrail paths are not in place.
               description: >-
-                claude-guardrail-audit on daniel-server ended with status=down: auditd is not running,
-                kernel auditing is off, or a guardrail path that exists has no watch. Until it
-                clears, a write to a hook, a settings file or a memory store leaves no audit record.
-                Run `journalctl -t claude-guardrail-audit` on daniel-server, then `systemctl status
-                auditd`.
+                claude-guardrail-audit on daniel-server ended with status=down: auditd is not
+                running, kernel auditing is off, or a guardrail path has no watch, so guardrail
+                writes leave no audit record. Run `journalctl -t claude-guardrail-audit` on
+                daniel-server, then `systemctl status auditd`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditfailed
       - eval_time: 10m
         alertname: ClaudeGuardrailAuditNotReporting
         exp_alerts: []
@@ -1948,10 +1928,10 @@ tests:
               summary: The guardrail audit check on daniel-box has stopped reporting.
               description: >-
                 No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing reloads a watch an auditd restart dropped.
-                Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
-                claude-guardrail-audit`, then
-                /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
+                daniel-box, so nothing reloads a watch an auditd restart dropped. Read
+                `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
+                claude-guardrail-audit`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
           - exp_labels:
               check: claude-guardrail-audit
               instance: daniel-server
@@ -1963,10 +1943,10 @@ tests:
               summary: The guardrail audit check on daniel-server has stopped reporting.
               description: >-
                 No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
-                daniel-server's textfile collector, so nothing reloads a watch an auditd restart dropped.
-                Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
-                claude-guardrail-audit`, then
-                /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
+                daniel-server, so nothing reloads a watch an auditd restart dropped. Read
+                `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
+                claude-guardrail-audit`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeguardrailauditnotreporting
 
   # The guardrail acknowledgement pairs, on the audit pairs' timeline: Failed fires on the 0
   # verdict, NotReporting holds at 600s and fires at 1200s past the 900s deadline.
@@ -2033,10 +2013,9 @@ tests:
               summary: The guardrail change poster on daniel-box has stopped reporting.
               description: >-
                 No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
-                daniel-box's textfile collector, so no guardrail change is being posted. Read
-                `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
-                claude-guardrail-ack`, then
-                /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+                daniel-box, so no guardrail change is being posted. Read `systemctl status
+                homelab-claude-guardrail-ack.timer` and `journalctl -t claude-guardrail-ack`,
+                then /var/lib/node-exporter-textfile/claude-guardrail-ack.prom.
           - exp_labels:
               check: claude-guardrail-ack
               instance: daniel-server
@@ -2048,10 +2027,9 @@ tests:
               summary: The guardrail change poster on daniel-server has stopped reporting.
               description: >-
                 No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
-                daniel-server's textfile collector, so no guardrail change is being posted. Read
-                `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
-                claude-guardrail-ack`, then
-                /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+                daniel-server, so no guardrail change is being posted. Read `systemctl status
+                homelab-claude-guardrail-ack.timer` and `journalctl -t claude-guardrail-ack`,
+                then /var/lib/node-exporter-textfile/claude-guardrail-ack.prom.
   # SystemdUnitsFailed: every host counts a failed unit from minute 0. The 10m `for`
   # holds the page through the 9th minute, and each failed unit fires its own alert at the 10th:
   # daniel-box's two units, daniel-server's escaped unit, and one unnamed alert for daniel-pi,
@@ -2189,10 +2167,10 @@ tests:
             exp_annotations:
               summary: daniel-box's failed-unit check has stopped reporting.
               description: >-
-                No systemd-units verdict newer than 900s reached Prometheus from daniel-box's textfile
-                collector, so nothing is counting its failed units. Read `systemctl status
-                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
-                /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-box, so
+                nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box,
+                then /var/lib/node-exporter-textfile/systemd-units.prom.
   # SystemdUnitsNotReporting's absent arm: daniel-box's file reports for 5 minutes and is gone,
   # so the arm fires once 900s pass with no sample. daniel-server never wrote one, as before its
   # package installs the timer, and its history guard keeps it quiet.
@@ -2221,10 +2199,10 @@ tests:
             exp_annotations:
               summary: daniel-box's failed-unit check has stopped reporting.
               description: >-
-                No systemd-units verdict newer than 900s reached Prometheus from daniel-box's textfile
-                collector, so nothing is counting its failed units. Read `systemctl status
-                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
-                /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+                No systemd-units verdict newer than 900s reached Prometheus from daniel-box, so
+                nothing is counting its failed units. Read `systemctl status
+                homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box,
+                then /var/lib/node-exporter-textfile/systemd-units.prom.
 
   # The dotfiles root mirror pairs: Failed fires on the 0 verdict, NotReporting holds at 1800s
   # and fires at 2400s past the 2100s deadline.
@@ -2256,11 +2234,11 @@ tests:
             exp_annotations:
               summary: The dotfiles root mirror on daniel-box refused a tag or could not fetch.
               description: >-
-                claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch the
-                dotfiles repo, or the newest tag is unsigned, signed by a key other than the
-                operator's, or does not descend from the last verified tag. T2's config stays at
-                the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
-                on daniel-box.
+                claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch
+                the repo, or the newest tag is unsigned, signed by another key, or does not
+                descend from the last verified tag. T2's config stays at the last verified tag.
+                Run `journalctl -t claude-dotfiles-mirror` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
           - exp_labels:
               check: claude-dotfiles-mirror
               instance: daniel-server
@@ -2271,11 +2249,11 @@ tests:
             exp_annotations:
               summary: The dotfiles root mirror on daniel-server refused a tag or could not fetch.
               description: >-
-                claude-dotfiles-mirror on daniel-server ended with status=down: it could not fetch the
-                dotfiles repo, or the newest tag is unsigned, signed by a key other than the
-                operator's, or does not descend from the last verified tag. T2's config stays at
-                the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
-                on daniel-server.
+                claude-dotfiles-mirror on daniel-server ended with status=down: it could not
+                fetch the repo, or the newest tag is unsigned, signed by another key, or does
+                not descend from the last verified tag. T2's config stays at the last verified
+                tag. Run `journalctl -t claude-dotfiles-mirror` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrorfailed
       - eval_time: 30m
         alertname: ClaudeDotfilesMirrorNotReporting
         exp_alerts: []
@@ -2293,10 +2271,10 @@ tests:
               summary: The dotfiles root mirror on daniel-box has stopped reporting.
               description: >-
                 No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
-                daniel-box's textfile collector, so no new dotfiles tag is being verified. Read
-                `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
-                claude-dotfiles-mirror`, then
-                /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+                daniel-box, so no new dotfiles tag is being verified. Read `systemctl status
+                homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+                claude-dotfiles-mirror`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
           - exp_labels:
               check: claude-dotfiles-mirror
               instance: daniel-server
@@ -2308,10 +2286,10 @@ tests:
               summary: The dotfiles root mirror on daniel-server has stopped reporting.
               description: >-
                 No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
-                daniel-server's textfile collector, so no new dotfiles tag is being verified. Read
-                `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
-                claude-dotfiles-mirror`, then
-                /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+                daniel-server, so no new dotfiles tag is being verified. Read `systemctl status
+                homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+                claude-dotfiles-mirror`.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudedotfilesmirrornotreporting
 
   # The weekly summary pair: Failed fires on the 0 verdict, NotReporting holds at 169h, the
   # 608400s deadline, and fires an hour later. The 1h interval keeps every eval on a sample.
@@ -2356,12 +2334,11 @@ tests:
             exp_annotations:
               summary: The weekly Claude runs summary on daniel-box has stopped reporting.
               description: >-
-                No claude-weekly-summary verdict newer than 169 hours reached Prometheus from
-                daniel-box's textfile collector, so last week's unattended runs were not
-                summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and
-                `journalctl -t claude-weekly-summary`, then
-                /var/lib/node-exporter-textfile/claude-weekly-summary.prom on the host. If
-                `claude_code_weekly_summary_enabled` was set false on purpose, delete this rule.
+                No claude-weekly-summary verdict newer than 169 hours from daniel-box, so last
+                week's unattended runs were not summarised. Read `systemctl status
+                homelab-claude-weekly-summary.timer` and `journalctl -t claude-weekly-summary`.
+                If you disabled the timer on purpose, delete this rule.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
   # KubeletShutdownLockMissing: the lock is missing from minute 0 and kubelet takes it at minute
   # 20. The 15m `for` holds the page through the 14th minute, and the next verdict of 1 resolves
   # it with no silence. The check keeps writing, so NotReporting stays quiet.
@@ -2390,10 +2367,10 @@ tests:
             exp_annotations:
               summary: daniel-server's kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
               description: >-
-                Without the lock, a shutdown stops pods without draining them and can abort
-                Longhorn's ext4 journals. Read {job="k3s"} in loki-homelab for "Failed to start node
-                shutdown manager" and the logind value it names, check `systemd-analyze cat-config
-                systemd/logind.conf`, then restart k3s-agent. The next check resolves this alert.
+                Without the lock, a shutdown stops pods undrained and can abort Longhorn's ext4
+                journals. Read {job="k3s"} in loki-homelab for "Failed to start node shutdown
+                manager" and the logind value it names, then restart k3s-agent.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlockmissing
       - eval_time: 21m
         alertname: KubeletShutdownLockMissing
         exp_alerts: []
@@ -2426,7 +2403,7 @@ tests:
               summary: daniel-server's kubelet shutdown-lock check has stopped reporting.
               description: >-
                 No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from
-                daniel-server's textfile collector, so nothing reads kubelet's shutdown lock. Read
-                `systemctl status homelab-kubelet-shutdown-lock.timer` and `journalctl -t
-                kubelet-shutdown-lock` on daniel-server, then
-                /var/lib/node-exporter-textfile/kubelet-shutdown-lock.prom on the host.
+                daniel-server, so nothing reads kubelet's shutdown lock. Read `systemctl status
+                homelab-kubelet-shutdown-lock.timer` and `journalctl -t kubelet-shutdown-lock`
+                on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting

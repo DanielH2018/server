@@ -134,11 +134,11 @@ groups:
         annotations:
           summary: The nightly daniel-pi peer-key backup failed.
           description: >-
-            The pi-peer-backup script reported down: rsync from daniel-pi failed, daniel-pi's
-            host key no longer matches the committed pin, or fewer than two files came back. The
-            WireGuard peer keys are un-rebuildable, so the last good copy is the only one. Read
-            the annotation `homelab/check-message` on the pi-peer-backup-verdict ConfigMap, then
-            `kubectl -n homelab logs` on the newest pi-peer-backup Job.
+            The pi-peer-backup script reported down: rsync from daniel-pi failed, its host key no
+            longer matches the committed pin, or fewer than two files came back. The WireGuard peer
+            keys are un-rebuildable. Read the annotation `homelab/check-message` on the
+            pi-peer-backup-verdict ConfigMap.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#pipeerbackupfailed
       # A script that stopped running or stopped exiting 0 (it exits 1 on any down verdict and
       # when its export fails). 259200s is three periods of the daily schedule, so two missed
       # nights are slow and the third is the first that is not noise. The second arm is a CronJob
