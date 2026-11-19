@@ -25,12 +25,12 @@ SEGMENT = r"(?:\$\{\{[^}]*\}\}|[^\s\"'/])+"
 RELEASE = re.compile(
     rf"github\.com/({SEGMENT}(?:/{SEGMENT})?)/releases/(?:latest/)?download\b"
 )
-# The repo a release URL built from a variable reads as; no EXEMPT row can name it.
-UNRESOLVED = "<repo built from a variable>"
+# The repo a fetch whose text names no literal repo reads as; no EXEMPT row can name it.
+UNRESOLVED = "<no literal repo>"
 FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re.M)
-GH_RELEASE = re.compile(
-    r"\bgh release download\b[^\n]*?(?:-R|--repo)[ =]([\w.-]+/[\w.-]+)"
-)
+GH_RELEASE = re.compile(r"\bgh release download\b[^\n]*")
+# A literal repo after -R or --repo; an invocation without one reads as UNRESOLVED.
+GH_REPO = re.compile(r"(?:-R|--repo)[ =][\"']?([\w.-]+/[\w.-]+)[\"']?(?=[\s;&|)]|$)")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 INSTALLER = re.compile(r"setup-|install|/action@|-action@")
 
@@ -110,7 +110,11 @@ def _fetched_repos(step: dict, context: str) -> set[str]:
     if not FETCH.search(run):
         return set()
     own = set(RELEASE.findall(run + str(step.get("env") or "")))
-    repos = own | set(GH_RELEASE.findall(run)) or set(RELEASE.findall(context))
+    gh = {
+        m[1] if (m := GH_REPO.search(c)) else UNRESOLVED
+        for c in GH_RELEASE.findall(run)
+    }
+    repos = own | gh or set(RELEASE.findall(context))
     return {UNRESOLVED if "$" in r or "{" in r else r for r in repos}
 
 
@@ -266,6 +270,9 @@ NFPM = "goreleaser/nfpm"
             'curl -fsSLo f "https://github.com/${{ env.REPO }}/releases/download/fixture/n"',
             UNRESOLVED,
         ),
+        ('gh release download v1 --repo "${{ env.REPO }}" -p x', UNRESOLVED),
+        ('gh release download v1 -R "$REPO" -p x', UNRESOLVED),
+        ("gh release download v1 -p x", UNRESOLVED),
     ],
 )
 def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
