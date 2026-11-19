@@ -10,8 +10,8 @@
   `templates/verify/` and `templates/precheck/` file (`render_tag`); import this file
   `with context` so the macros read them and `k8s_namespace`.
 
-  The caller does every `lookup()`, as `arr-notification-seed.yml.j2` says why: the static
-  scans that follow a role's lookups read only the role's own templates.
+  The caller does every `lookup()`, as in `arr-notification-seed.yml.j2`: the static scans
+  that follow a role's lookups read only the role's own templates.
 
   Every `#` line in the arguments renders into the manifest, so each text argument is the YAML
   it renders, written at column 0; the macro trims and indents it.
@@ -25,8 +25,8 @@
     head         the spec's keys above `template:`: `backoffLimit`, `activeDeadlineSeconds`
                  and their comments.
     env          the container's env entries. The macro appends `PYTHONDONTWRITEBYTECODE`.
-    sa           the ServiceAccount, which is also the pod's `app` label, since that label
-                 is the peer a fence admits. Default: `name`.
+    sa           the ServiceAccount, which is also the pod's `app` label: the name fences
+                 admit or refuse the Job's pod by. Default: `name`.
     configmap    the ConfigMap's name before its digest. Default: `name`.
     container    the container's name; the script mounts at `/<container>`.
     label_note   comment lines above the `app` label.
