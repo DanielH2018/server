@@ -3,7 +3,7 @@
 The `promote` workflow's repository variable `DEPLOY_HOLD` holds the Flux-owned tags.
 `hold_lines` prints its line on every run, even when it reads `none`, so it cannot be forgotten.
 
-The first three reads are the ones docs/target-architecture/deploy/d2-first-leaf.md (*What
+The first three reads are the ones docs/archive/deploy/d2-first-leaf.md (*What
 `probe.py landing` reads, and what it costs*) prices: one `api.github.com` call, two `ghcr.io`
 requests and one cluster read. daniel-box has no flux CLI, and an anonymous `api.github.com`
 poll would spend the host's shared anonymous quota.
@@ -11,7 +11,7 @@ poll would spend the host's shared anonymous quota.
 The fourth is a second cluster read, D5.1b's: every Kustomization and OCIRepository in
 `flux-system` whose `spec.suspend` is true, the root `homelab` included, with the field
 manager of that field. A suspend from git reads as kustomize-controller's, and an operator's
-hand suspend as `homelab-operator`'s (docs/target-architecture/deploy/d5-bulk-move.md, *The
+hand suspend as `homelab-operator`'s (docs/archive/deploy/d5-bulk-move.md, *The
 stop lever*).
 
 The fifth is H1's: the break-glass procedures annotate named plumbing objects with

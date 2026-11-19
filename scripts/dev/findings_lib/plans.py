@@ -13,8 +13,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.red_green import RED_GREEN_STYLE
-from dev.findings_lib.milestone import branch_of
+from dev.findings_lib.milestone import branch_of, is_project
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
@@ -43,18 +42,6 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
                 ["label", "create", name, "--color", colour, "--description", desc]
             )
     return plans
-
-
-def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
-    """The `label create` the `red-green` label needs before anything can apply it.
-
-    `gh issue create --label` fails on a label the repo lacks, and `plan_sync_labels` only
-    knows the static `LABELS` set. Returns `[]` when the label already exists.
-    """
-    if name in existing:
-        return []
-    colour, desc = RED_GREEN_STYLE
-    return [["label", "create", name, "--color", colour, "--description", desc]]
 
 
 def plan_defer(issue: dict, *, until: date | None) -> list[list[str]]:
@@ -259,7 +246,7 @@ def plan_claim(
 
     ``milestone`` is the title of the worktree's session milestone, which an issue edit
     files the issue under. None, for a branch that never ran `milestone start`, files it
-    under nothing.
+    under nothing. An issue in another branch's project milestone stays there.
 
     The comment is the whole claim. `findings.main` then syncs the issue's board Status to
     In Progress.
@@ -303,11 +290,18 @@ def plan_claim(
             f"`block {issue['number']} --clear` lifts it"
         )
     n = str(issue["number"])
-    file_under = [["issue", "edit", n, "--milestone", milestone]] if milestone else []
+    filed_in = issue.get("milestone")
+    # A hand-steered worker claims from a project's backlog under its own branch.
+    in_their_project = is_project(filed_in) and branch_of(filed_in) != worktree
+    filed = (filed_in or {}).get("title") == milestone
+    file_under = (
+        [["issue", "edit", n, "--milestone", milestone]]
+        if milestone and not filed and not in_their_project
+        else []
+    )
     held = current_claim(issue)
     if held == worktree:
-        filed = (issue.get("milestone") or {}).get("title") == milestone
-        return [] if filed else file_under
+        return file_under
     if held:
         raise ClaimRefused(f"already claimed by `{held}`")
     return [
@@ -327,7 +321,8 @@ def plan_release(
     """Plans the gh argv to release ``worktree``'s claim on ``issue``.
 
     Takes the issue out of ``worktree``'s session milestone unless ``detach`` is False. A
-    milestone the operator set, or another session's, is left alone.
+    milestone the operator set, or another session's, is left alone. So is a project
+    milestone, whose backlog the released issue goes back to.
 
     Raises:
         ClaimRefused: nobody holds the issue, or somebody else holds it. One session
@@ -340,15 +335,58 @@ def plan_release(
         raise ClaimRefused("not claimed")
     if held != worktree:
         raise ClaimRefused(f"claimed by `{held}`, not by `{worktree}`")
+    filed_in = issue.get("milestone")
     detach_plan = (
         [["issue", "edit", n, "--remove-milestone"]]
-        if detach and branch_of(issue.get("milestone")) == worktree
+        if detach and branch_of(filed_in) == worktree and not is_project(filed_in)
         else []
     )
     return [
         ["issue", "comment", n, "--body", release_comment(worktree, when, reason)],
         *detach_plan,
     ]
+
+
+def plan_milestone_add(issue: dict, project: dict) -> list[list[str]]:
+    """Plans the gh argv that files ``issue`` in the backlog of the milestone ``project``.
+
+    Returns an empty list when the issue is already there.
+
+    Raises:
+        ClaimRefused: the issue is closed, outside the register, claimed, or held by
+            another milestone, whoever made that one.
+    """
+    if issue.get("state", "OPEN") != "OPEN":
+        raise ClaimRefused("closed — nothing to work")
+    if "claude" not in label_names(issue):
+        raise ClaimRefused(
+            "not in the register — no `claude` label, so `next` is blind to it"
+        )
+    title = (issue.get("milestone") or {}).get("title")
+    if title == project["title"]:
+        return []
+    if title is not None:
+        raise ClaimRefused(
+            f"in milestone `{title}` — `milestone remove` on its branch frees it"
+        )
+    held = current_claim(issue)
+    if held:
+        raise ClaimRefused(f"claimed by `{held}` — a backlog holds unclaimed issues")
+    return [["issue", "edit", str(issue["number"]), "--milestone", project["title"]]]
+
+
+def plan_milestone_remove(issue: dict, project: dict) -> list[list[str]]:
+    """Plans the gh argv that takes ``issue`` out of the milestone ``project``.
+
+    Raises:
+        ClaimRefused: the issue is not in that milestone, or a worktree holds its claim.
+    """
+    if (issue.get("milestone") or {}).get("title") != project["title"]:
+        raise ClaimRefused(f"not in `{project['title']}`")
+    held = current_claim(issue)
+    if held:
+        raise ClaimRefused(f"claimed by `{held}` — `release` it first")
+    return [["issue", "edit", str(issue["number"]), "--remove-milestone"]]
 
 
 def plan_open(

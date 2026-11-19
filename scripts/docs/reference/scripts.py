@@ -164,8 +164,8 @@ def build_rows(
         # the package, as land_lib, probe_lib and fragments_lib do. That test may carry the
         # family's prefix, which is the package name less `_lib`: land_lib/ci.py is tested by
         # test_land_ci.py. The nearest `*_lib` ancestor decides both, so a module in a
-        # subpackage counts too: fanout_lib/review/red_gate.py is tested by
-        # test_fanout_red_gate.py. The bare name is tried first, so fragments_lib's
+        # subpackage counts too: fanout_lib/review/base_check.py is tested by
+        # test_fanout_base_check.py. The bare name is tried first, so fragments_lib's
         # fragments_hosts.py keeps test_fragments_hosts.py.
         places = [path.parent / "tests", path.parent]
         names = [f"test_{path.stem}.py"]

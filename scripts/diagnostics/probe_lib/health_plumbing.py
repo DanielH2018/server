@@ -1,7 +1,7 @@
 """The cluster-plumbing checks `probe.py health` adds for the `coredns` and `longhorn` tags.
 
 H1 hands CoreDNS and Longhorn to Flux and deletes the `setup/k3s` host tasks that checked them
-after each apply (`docs/target-architecture/host/h1-cluster-config-to-flux.md`). A rollout
+after each apply (`docs/archive/host/h1-cluster-config-to-flux.md`). A rollout
 verdict cannot see what those tasks saw, so each check moves here, keyed by deploy tag:
 
   - `coredns`: the `NodeHosts` key of ConfigMap `kube-system/coredns` is not empty,

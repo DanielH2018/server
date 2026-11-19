@@ -70,7 +70,7 @@ def test_the_gate_matches_a_source_the_generator_reads(path):
     [
         "docs/reference/services.md",
         "docs/assets/generated/fragments/x.md",
-        "scripts/dev/pytest_shard_weights.json",
+        "scripts/dev/pytest_shard_runner_weights.json",
         "CLAUDE.md",
     ],
 )

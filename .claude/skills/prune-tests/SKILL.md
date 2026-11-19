@@ -28,6 +28,7 @@ uv run python scripts/dev/duplicate_tests.py <path>
 git grep -nE "def test_\w*(retired|removed|is_gone|stays_gone|stays_deleted|no_longer|legacy)" -- <path>
 git grep -nE "^[A-Z_]+(: [^=]+)? = (frozenset\(\)|set\(\)|\[\]|\(\)|\{\})$" -- <path>
 git grep -n "importorskip" -- <path>
+git grep -nE "def test_(no|neither|nothing)_\w+" -- <path>
 ```
 
 - The first lists tests whose bodies are identical
@@ -35,6 +36,11 @@ git grep -n "importorskip" -- <path>
 - The second lists tests named for something that went away.
 - The third lists empty allow-lists. A test that loops over one checks nothing.
 - The fourth lists skips on a missing import. One that names a declared dependency never skips.
+- The fifth lists tests named for an absence. Most are standing invariants over things that
+  exist, and those are keeps. About one in twenty names something that was removed.
+
+A hit whose `def` sits inside a string is not a test. The string is source that a test feeds
+to a child pytest.
 
 Then read every test module under the path once for what no command finds: an expected value
 computed by the code under test, an assertion on a private attribute, and an assertion on
@@ -48,7 +54,8 @@ under `tmp_path`, and the suite uses no mock library, so the usual mock signals 
 Give each candidate exactly one of these, or drop it from the list.
 
 - **The past.** It asserts that removed code stays removed. Bringing the code back would be a
-  decision, not a regression.
+  decision, not a regression. A test that nothing imports or names a module at the path it
+  had before a move is this class too.
 - **Nothing.** No change to the code under test can make it fail.
 - **The implementation.** It fails when the code is restructured and the behaviour is the same.
 - **A copy.** Another test already fails for the same regression.

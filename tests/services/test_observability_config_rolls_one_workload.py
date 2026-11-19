@@ -107,13 +107,14 @@ def _mounted_configmaps(workload):
 
 
 def _secret_inputs(workload):
-    """Secret names the pod reads, as a volume or through `env.valueFrom.secretKeyRef`."""
+    """Secret names the pod reads: a secret volume, a projected volume's secret source, or
+    `env.valueFrom.secretKeyRef`."""
     spec = pod_spec(workload)
-    names = {
-        (volume.get("secret") or {}).get("secretName")
-        for volume in spec.get("volumes") or []
-        if volume.get("secret")
-    }
+    names = set()
+    for volume in spec.get("volumes") or []:
+        names.add((volume.get("secret") or {}).get("secretName"))
+        for source in (volume.get("projected") or {}).get("sources") or []:
+            names.add((source.get("secret") or {}).get("name"))
     for container in spec.get("containers") or []:
         for entry in container.get("env") or []:
             ref = (entry.get("valueFrom") or {}).get("secretKeyRef") or {}

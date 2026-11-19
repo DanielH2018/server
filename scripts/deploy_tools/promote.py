@@ -161,7 +161,7 @@ sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import ci_verdict
 
 # The revert rule's switch (contract C2). Open question 11 of
-# docs/target-architecture/deploy/d2-first-leaf.md asks whether it turns on, and only the
+# docs/archive/deploy/d2-first-leaf.md asks whether it turns on, and only the
 # operator rules on that, in a one-line PR of its own. Every D2 step assumes it is off.
 REVERT_RULE = False
 

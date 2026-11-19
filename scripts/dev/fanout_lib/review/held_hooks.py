@@ -13,22 +13,16 @@ review-delta, land, file) runs with `--setting-sources user`. Another repo's bat
 project settings: the pipeline holds no copy of that repo's hooks, so dropping the source would
 drop its guards. The flag also drops the project `CLAUDE.md`
 and the project skills from a fresh session. A resumed session already holds `CLAUDE.md` in its
-transcript, except a red batch's, which gets the start-time copy again (below). The land text
+transcript. The land text
 carries the whole `land.sh` command. The reviewer is a fresh session, so the pipeline appends
 the `CLAUDE.md` it read at start to the review prompt. The reviewer loses the project skills and `.claude/rules/`; it reads files rather
 than following a procedure, and its prompt names the role `CLAUDE.md` files to check. A held phase
 gets `.claude/rules/` as text (`rules_text`): the reviewer and each resumed phase get the rules
-whose globs match a path in the batch's range, and the implement phase after a red phase gets
-every rule, because its range holds only the red author's tests. Skills stay out of reach.
+whose globs match a path in the batch's range. Skills stay out of reach.
 
-DECIDED: the implement phase keeps the project source only when no red phase ran before it.
-Without one it starts from the tree `worktree add` checked out, which no agent has written,
-and a fresh implementer needs the project skills and `.claude/rules/`. After a red phase the
-red author has had the worktree, and the red gate reads only the tracked range `base..red`. An
-ignored `.claude/settings.local.json`, a hook edit hidden with `--skip-worktree` or a planted
-`.pyc` is outside that range. That implement phase therefore runs on the held settings
-and gets the start-time `CLAUDE.md` as text, and so does every phase that resumes it. Like the reviewer, it loses the project skills and
-rules.
+DECIDED: the implement phase keeps the project source. It starts from the tree
+`worktree add` checked out, which no agent has written, and a fresh implementer needs the
+project skills and `.claude/rules/`.
 """
 
 import importlib.util

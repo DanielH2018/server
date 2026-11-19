@@ -190,9 +190,10 @@ def update_branch(ln: Landing, head: str, moved: list[str]) -> None:
         )
     except subprocess.CalledProcessError as exc:
         why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+        rebase = f"rebase it onto origin/{BRANCH}, push, and re-run this"
         ln.die(
             f"PR #{ln.opts.pr}'s base is behind {BRANCH} and GitHub refused to update its "
-            f"branch ({why}) — rebase it onto origin/{BRANCH}, push, and re-run this",
+            f"branch ({why}) — {ln.remedy(why, rebase)}",
             1,
         )
     except subprocess.TimeoutExpired:
@@ -208,15 +209,15 @@ def _why(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -> str:
 
 
 def ready_again(ln: Landing) -> None:
-    """Mark ready the PR `rejoin_line` converted to draft; die when GitHub refuses."""
+    """Mark the PR's draft ready; die when GitHub refuses, because a draft never merges."""
     pr = str(ln.opts.pr)
     try:
         ln.tools.gh("pr", "ready", pr)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as again:
+        why = _why(again)
+        remedy = ln.remedy(why, f"run `gh pr ready {pr}`, then re-run this")
         ln.die(
-            f"PR #{pr} is a draft and could not be marked ready ({_why(again)}); run "
-            f"`gh pr ready {pr}`, then re-run this",
-            1,
+            f"PR #{pr} is a draft and could not be marked ready ({why}); {remedy}", 1
         )
 
 

@@ -11,7 +11,7 @@
 | `release` | release this worktree's claim |
 | `claims` | the stale claims and a count of the live ones |
 | `reap` | release every stale claim |
-| `milestone` | open, show or close the branch's milestone for focused work |
+| `milestone` | open, show or close the branch's milestone for focused work, or change a project milestone's backlog |
 | `close` | close as fixed, refuted or accepted |
 | `list` | the open findings, for the review skill; marks manual, deferred and claimed issues rather than hiding any. Past findings are `history` |
 | `history` | search findings in any state by topic or cited file; prints how each closed |

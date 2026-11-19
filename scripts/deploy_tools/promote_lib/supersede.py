@@ -19,7 +19,7 @@ THE CONDITIONS. `verify_promotion.wait_settled` reads the first two and asks
   - T names no forward-only tag and no snapshot role against `last-good`, checked by
     `decide` on the promotion `_promotion` returns.
 A condition that fails returns `decide` to the wait, which promotes T once P settles.
-docs/target-architecture/deploy/d7-superseding-promotions.md has the design and the cases.
+docs/archive/deploy/d7-superseding-promotions.md has the design and the cases.
 
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py`
 """

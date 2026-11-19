@@ -4,8 +4,8 @@
 # observability_expected_hosts, and the generator's docstring lists the selectors and the
 # `${...}` placeholders. The rendered file is plain YAML, never Jinja: prometheus-rules.yaml.j2
 # carries it verbatim. The producer metric contract and the design are
-# docs/target-architecture/monitoring/m3-textfile-timer.md, "The rules". The host-plane rules at
-# the end are H3's (docs/target-architecture/host/h3-pi-pilot.md, "Host rules (PR H3.5d, C7)").
+# docs/archive/monitoring/m3-textfile-timer.md, "The rules". The host-plane rules at
+# the end are H3's (docs/archive/host/h3-pi-pilot.md, "Host rules (PR H3.5d, C7)").
 #
 # Every copy names its host as a literal `service`. A node is not a workload, so M2's
 # workload-service join cannot supply it, and deriving it from `origin` needs a label_replace
@@ -651,7 +651,7 @@ groups:
       # it cannot carry an absent_over_time arm, because only a check's name says which series
       # should exist, and a file that loses its deadline series silently drops out of it, which
       # is why M3 keeps the deadline out of every rule's verdict
-      # (docs/target-architecture/monitoring/m3-textfile-timer.md, "Three series"). Both sides
+      # (docs/archive/monitoring/m3-textfile-timer.md, "Three series"). Both sides
       # are restricted to the node jobs, because the pod exporters' rules in pods.yaml and
       # pod-producers.yaml already compare against the deadline. It fires beside every per-check
       # NotReporting rule's stale arm, at the same threshold, so an Alertmanager inhibit keyed on

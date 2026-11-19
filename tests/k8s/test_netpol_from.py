@@ -227,13 +227,36 @@ def test_every_verify_caller_is_a_label_a_verify_job_carries(verify_pod_labels):
     assert VERIFY_CALLERS <= verify_pod_labels
 
 
+def _configmap_pod_labels(doc) -> set[str]:
+    """The `app` label of each `kind: Pod` document a ConfigMap carries as a value.
+
+    Airflow's KubernetesExecutor starts its task pods from such a template, so their label
+    appears in no rendered workload.
+    """
+    if doc.get("kind") != "ConfigMap":
+        return set()
+    labels = set()
+    for value in (doc.get("data") or {}).values():
+        if "kind: Pod" not in value:
+            continue
+        embedded = yaml_fast.safe_load(value)
+        app = ((embedded.get("metadata") or {}).get("labels") or {}).get("app")
+        if embedded.get("kind") == "Pod" and app:
+            labels.add(app)
+    return labels
+
+
 @pytest.fixture(scope="module")
 def pod_labels(verify_pod_labels) -> set[str]:
     """The `app` label of every pod the manifests and the verify Jobs render."""
-    return verify_pod_labels | {
+    docs = [doc for _role, _template, doc in rendered_docs()]
+    labels = {
         (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
-        for _role, _template, doc in rendered_docs()
+        for doc in docs
     }
+    for doc in docs:
+        labels |= _configmap_pod_labels(doc)
+    return verify_pod_labels | labels
 
 
 def test_every_caller_is_a_label_some_rendered_pod_carries(pod_labels):

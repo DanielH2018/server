@@ -11,8 +11,21 @@ governs: []
 ## Status
 
 Accepted. The operator accepted it on 2026-10-24. Slice M6 step C-0 (the
-[M6 plan](../target-architecture/monitoring/m6-retire-kuma.md)) wrote this record, and PR
+[M6 plan](../archive/monitoring/m6-retire-kuma.md)) wrote this record, and PR
 C-1 required that acceptance before it could merge.
+
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-19. The decision stands: every check pages through Alertmanager, and Uptime Kuma is
+retired. Two statements below no longer hold.
+
+- *Decision* says the eight `kuma-check-*` timers keep their names. They did not. Each check
+  moved into a host component that ships its units under the `homelab-` prefix. Every
+  `kuma-check-*` name left under `hosts/` is a `legacy:` entry that `homelab-reconcile`
+  retires, and no host carries a `kuma-check-*` unit file. The down markers of the checks
+  that rerun while red moved with the units, from `/var/lib/kuma-check/` to
+  `/var/lib/homelab/check/`.
+- *Open questions* leaves the Pi's AutoKuma labels for H5 to drop. The `pi-compose` services
+  no longer carry them, so that question is closed.
 
 ## Context
 
@@ -21,7 +34,7 @@ Uptime Kuma carries one tile per check, and the bridge's checks and about 37 oth
 push a verdict to each tile through a token-keyed URL. Each check pages from one of the two
 planes, never both (M1 convention 5).
 
-The [target architecture](../target-architecture/design.md) (*Monitoring*) traces the
+The [target architecture](../archive/design.md) (*Monitoring*) traces the
 monitoring bucket's failures to three classes that Kuma causes:
 
 - **D1.** The Kuma database drifts from git.

@@ -26,7 +26,8 @@ def _github(answers: list[tuple[int, str, str]]):
     def run(argv, **_kwargs):
         argvs.append(argv)
         if argv[:3] == ["gh", "api", "rate_limit"]:
-            return subprocess.CompletedProcess(argv, 0, "9999999999\n", "")
+            spent = '{"remaining": 0, "reset": 9999999999}\n'
+            return subprocess.CompletedProcess(argv, 0, spent, "")
         code, out, err = answers.pop(0)
         return subprocess.CompletedProcess(argv, code, out, err)
 

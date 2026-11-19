@@ -323,87 +323,30 @@ if [ "$BUILD_DOCS_RC" -ne 0 ]; then
   GENERATORS_OK=0
 fi
 
-# WEIGHT EVERY NEW TEST MODULE, heavy or light, with nobody in the loop. CI's measured check
-# (`pytest_shard.py --check-durations`) only annotates an unweighted module costing
-# RUNNER_HEAVY_SECONDS or more and never fails the run, and an unweighted file is packed at the
-# suite median of 0.0s, so this step is what repairs the table.
-#
-# --record-missing, NEVER --record. It runs pytest over only the files the table lacks, which is
-# seconds and usually no files at all, where --record re-measures the whole suite and rewrites
-# every weight — churning the table twice a day for measurement noise. It also writes the same
-# bytes back when nothing is missing, so an ordinary run leaves no diff to publish. The drifted
-# entries it leaves alone are the next step's job.
+# REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs. Nothing
+# else writes it: CI's measured check (`pytest_shard.py --check-durations`) only annotates, and
+# a module the table lacks is packed at its directory's median. --refresh-runner 3 downloads
+# every pytest leg's log from the three newest runs that tested a green master tree, through
+# the deploy user's `gh`, the same CLI the publish step uses. A push to master skips its legs
+# when a pull-request run already tested its tree, and that run is then the one read. It adds modules the table lacks, drops deleted ones,
+# and rewrites a present row only past the DRIFT_RATIO band, so most runs leave it
+# byte-identical and publish nothing.
 #
 # IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
 # change reach a PR: most runs regenerate no page at all, and a table written after the gate
 # would be left unstaged and never published.
 #
-# A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT (GENERATORS_OK, not an early
-# exit). `measure_weights` exits non-zero when its sub-run does not pass, but a genuinely red
-# suite stops this cron further down anyway, at the explicit `pytest` run that gates the commit.
-# This path saves the cases where the suite is fine and the measurement alone is not: the
-# `timeout` firing, or a durations report that parses to nothing. There the pages are still worth
-# publishing, and the run still reports DOWN with the reason named.
-#
-# `timeout` bounds it so a wedged sub-run fails this run rather than hanging it, which would
-# leave DocsRefreshNotReporting as the only sign.
-WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py \
-  --record-missing 2>&1)"
-WEIGHTS_RC=$?
-if [ "$WEIGHTS_RC" -ne 0 ]; then
-  # Same flatten-and-cap as say_failure: logger takes one line, and a pytest
-  # failure's first few hundred characters carry the reason.
-  alert "docs-refresh: recording shard weights failed (exit ${WEIGHTS_RC}); $(printf '%s' \
-    "$WEIGHTS_MSG" | tr '\n' ' ' | tail -c 300)"
-  DEGRADED_MSG="recording shard weights failed (exit ${WEIGHTS_RC})"
-  GENERATORS_OK=0
-else
-  # A new row holding the runner seconds looks like any other row in the diff, so the journal
-  # is where the local reading it replaced stays visible.
-  printf '%s\n' "$WEIGHTS_MSG"
-fi
-
-# REFRESH THE WEIGHTS THAT DRIFTED, one eighth of the table per run. The step above never
-# touches a present entry, and CI's under-recorded arm fires only at 20x, so a module that grew
-# 1.5-2x past its weight would keep the old number and cost shard balance with nothing failing.
-# CI cannot catch drift that small, because its runner measures correctly recorded entries 1.1x
-# to 13x their weight. A serial run on this host can.
-#
-# --refresh-drifted 8 re-measures one hash slice of the table, so every entry is re-measured
-# every four days. The hash split is uneven, and the heaviest slice holds about twice the
-# recorded seconds of the average one. Only an entry more than 1.5x from what it measured is
-# rewritten, so noise inside that band leaves no diff and a run does not churn the table.
-#
-# A reading 20x or more above CI's runner table stays as recorded, and that leaves no diff, so a
-# successful run prints the step's report to the journal. Not `alert`: PUSH_MSG holds failures.
-#
-# Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.
-REFRESH_MSG="$(timeout 600 "$UV" run --frozen python scripts/dev/pytest_shard.py \
-  --refresh-drifted 8 2>&1)"
-REFRESH_RC=$?
-if [ "$REFRESH_RC" -ne 0 ]; then
-  alert "docs-refresh: refreshing drifted shard weights failed (exit ${REFRESH_RC}); $(printf '%s' \
-    "$REFRESH_MSG" | tr '\n' ' ' | tail -c 300)"
-  DEGRADED_MSG="refreshing drifted shard weights failed (exit ${REFRESH_RC})"
-  GENERATORS_OK=0
-else
-  printf '%s\n' "$REFRESH_MSG"
-fi
-
-# REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs. The two
-# steps above measure on this host; the split packs on what the runner measured instead, and
-# nothing else re-reads the runner. --refresh-runner 3 downloads every pytest leg's
-# log from the three newest green master runs through the deploy user's `gh`, the same CLI the
-# publish step uses. It adds modules the table lacks, drops deleted ones, and rewrites a present
-# row only past the same DRIFT_RATIO band, so most runs leave it byte-identical and publish nothing.
-#
 # A WAN outage does not reach this step: the unlanded check above reads origin first and exits.
-# Any other failure, such as a `gh` error or fewer than three green runs, writes nothing and
-# degrades the run like the two steps above, under its own `timeout`.
+# A FAILURE DEGRADES THE RUN, IT DOES NOT ABORT IT (GENERATORS_OK, not an early exit). A `gh`
+# error or fewer than three measured runs writes nothing, the pages are still worth publishing,
+# and the run reports DOWN with the reason named. `timeout` bounds the step so a wedged call
+# fails this run rather than hanging it, which would leave DocsRefreshNotReporting as the only
+# sign.
 RUNNER_MSG="$(timeout 300 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --refresh-runner 3 2>&1)"
 RUNNER_RC=$?
 if [ "$RUNNER_RC" -ne 0 ]; then
+  # Same flatten-and-cap as say_failure: logger takes one line.
   alert "docs-refresh: refreshing runner shard weights failed (exit ${RUNNER_RC}); $(printf '%s' \
     "$RUNNER_MSG" | tr '\n' ' ' | tail -c 300)"
   DEGRADED_MSG="refreshing runner shard weights failed (exit ${RUNNER_RC})"
@@ -425,7 +368,7 @@ fi
 # (scripts/dev/affected_lib/record.py:MODULE_TIMEOUT_SECONDS).
 #
 # The table holds nothing that moves with the clock, so a run that records unchanged rows
-# writes the same bytes and publishes nothing. Same degrade-not-abort handling as the steps
+# writes the same bytes and publishes nothing. Same degrade-not-abort handling as the step
 # above. A refused module is named on stdout, which reaches the journal.
 AFFECTED_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/affected_tests.py \
   record --slices 12 --budget 540 --jobs 6 2>&1)"
@@ -446,8 +389,8 @@ fi
 # THE TABLES ARE SANCTIONED EXTRA PATHS, not generated trees. They are derived output like
 # the pages are — the `pytest_shard.py` and `affected_tests.py` steps above reproduce them — and
 # staging them is what publishes them.
-git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json \
-  scripts/dev/pytest_shard_runner_weights.json scripts/dev/affected_tests.json
+git add docs/reference docs/assets/generated scripts/dev/pytest_shard_runner_weights.json \
+  scripts/dev/affected_tests.json
 
 # A STEP THAT WROTE OUTSIDE THOSE PATHS DEGRADES THE RUN. The commit leaves that write out and
 # the next prepare_tree discards it, so without this its output would never publish and nothing
@@ -497,7 +440,7 @@ LOG="$(mktemp)"
 # must not publish generated pages the suite rejects.
 #
 # AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
-# the regenerated pages off disk. `timeout` for the reason the weights measurement has one.
+# the regenerated pages off disk. `timeout` for the reason the runner refresh has one.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
@@ -527,7 +470,7 @@ fi
 # once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
-  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, the two pytest shard-weights tables and the test-dependency table. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py and scripts/dev/affected_tests.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, the pytest shard-weights table and the test-dependency table. The first two are reproducible by scripts/docs/build_docs.py and the tables by scripts/dev/pytest_shard.py and scripts/dev/affected_tests.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"
 PUB_RC=$?
 # The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock

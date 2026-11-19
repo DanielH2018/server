@@ -1,0 +1,59 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% from 'airflow-env.yaml.j2' import airflow_env, airflow_mounts, airflow_volumes, wait_for_migrations with context %}
+---
+# The api-server: the UI behind Authelia, and the execution API every task pod reports to.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  namespace: {{ k8s_namespace }}
+spec:
+{{ spec_shell('RollingUpdate') }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-best-effort', service_account='airflow-api', automount=true, run_as_user=airflow_k8s_uid, run_as_group=airflow_k8s_uid, fs_group=airflow_k8s_uid, non_root=true) }}
+{{ node_affinity_preference(airflow_k8s_node) }}
+      initContainers:
+{{ wait_for_migrations() }}
+      containers:
+        - name: airflow
+          image: {{ airflow_k8s_image }}
+          imagePullPolicy: Always
+          args: ["airflow", "api-server", "--port", "{{ container_item.port }}", "--workers", "1"]
+          ports:
+            - containerPort: {{ container_item.port }}
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+{{ airflow_env(true) }}
+          volumeMounts:
+{{ airflow_mounts() }}
+{# Unauthenticated by design in Airflow 3: it reports metadatabase and scheduler health. #}
+          readinessProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: {{ container_item.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v2/monitor/health
+              port: {{ container_item.port }}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+{{ container_resources(cpu_limit=airflow_k8s_api_cpu_limit, mem_limit=airflow_k8s_api_mem_limit, cpu_request=airflow_k8s_api_cpu_request, mem_request=airflow_k8s_api_mem_request) }}
+      volumes:
+{{ airflow_volumes() }}

@@ -252,30 +252,34 @@ SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
 
 
 def uid_problems(sysusers: str, passwd: str) -> list[str]:
-    """Each user a sysusers.d file declares that a `getent passwd` listing shows at another uid."""
+    """Each user a sysusers.d file declares that a `getent passwd` listing shows at other ids."""
     live = {
-        f[0]: f[2]
+        f[0]: f"{f[2]}:{f[3]}"
         for f in (line.split(":") for line in passwd.splitlines())
-        if len(f) > 2
+        if len(f) > 3
     }
-    declared = [
-        line.split()[1:3] for line in sysusers.splitlines() if line.startswith("u ")
-    ]
     return [
-        f"{name} has uid {live.get(name, 'none')}, not the declared {uid}"
-        for name, uid in declared
-        if live.get(name) != uid
+        f"{name} has uid:gid {live.get(name, 'none')}, not the declared {ids}"
+        for name, ids in sysusers_ids(sysusers)
+        if live.get(name) != ids
+    ]
+
+
+def sysusers_ids(sysusers: str) -> list[list[str]]:
+    """The [name, "uid:gid"] of each `u` line in a sysusers.d file."""
+    return [
+        line.split()[1:3] for line in sysusers.splitlines() if line.startswith("u ")
     ]
 
 
 def expect_declared_uids(c: Container) -> None:
-    """Every user the installed host package declares holds its declared uid in `c`.
+    """Every user the installed host package declares holds its declared uid and gid in `c`.
 
     Raises:
-        CaseFailed: The package declares no user, or a user is missing or at another uid.
+        CaseFailed: The package declares no user, or a user is missing or at other ids.
     """
     sysusers = c.read(SYSUSERS)
-    expect(sysusers.startswith("u "), f"{SYSUSERS} declares no user")
+    expect(bool(sysusers_ids(sysusers)), f"{SYSUSERS} declares no user")
     problems = uid_problems(sysusers, c.ok("getent passwd"))
     expect(not problems, "; ".join(problems))
 

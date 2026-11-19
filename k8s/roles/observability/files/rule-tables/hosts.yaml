@@ -1,7 +1,7 @@
 # The Prometheus arms of monitor-bridge's `disk`, `memory`, `host_temp` and `ups` checks, and the
 # Prometheus half of `pi_pressure`, as rules, plus HostClockUnsynchronised, which ports no bridge
 # check. scripts/dev/gen_host_rules.py renders this table into files/rules/hosts.yaml, plain
-# YAML that prometheus-rules.yaml.j2 carries verbatim. The design is M6's batch A1 (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A")
+# YAML that prometheus-rules.yaml.j2 carries verbatim. The design is M6's batch A1 (docs/archive/monitoring/m6-retire-kuma.md, "Phase A")
 # on M2's recipe.
 #
 # HostDiskFull and the five UPS rules are critical, so Discord and email; the rest are

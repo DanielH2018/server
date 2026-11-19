@@ -56,16 +56,19 @@ from deploy_tools.land_lib import line
 from deploy_tools.land_lib.fresh import TURN_FD_ENV
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.serial_lock import (
+    LOCK_DIR,
+    TURN_DIR_ENV,
+    TURN_HOST,
+    is_turn_host,
+)
 from lib.progress import OnChange
 
 # /run/lock is a tmpfs every user can create a file in, and one file there serves every
 # landing on the host, whichever user runs it.
-LOCK = _Path("/run/lock/homelab-land-turn.lock")
+LOCK = LOCK_DIR / "homelab-land-turn.lock"
 
 
-# The host whose file is the turn. The lander units run there.
-TURN_HOST = "daniel-box"
-TURN_DIR_ENV = "LAND_TURN_DIR"
 # How long a landing on another host waits for `TURN_HOST` to give up the lock it released.
 _SSH_EXIT_S = 10
 
@@ -254,11 +257,6 @@ def try_take_over_ssh(
     if answer == "busy":
         return None
     raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
-
-
-def is_turn_host(hostname: str) -> bool:
-    """Whether `hostname`, qualified or not, names the host that keeps the turn."""
-    return hostname.split(".")[0] == TURN_HOST
 
 
 def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:

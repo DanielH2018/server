@@ -18,8 +18,8 @@ one, and both make the same tree.
 What a member is. A draft from the line, written there by a landing of this landing's own
 user, that this landing would have been allowed to land: `merge.arm_merge` runs on it with
 this landing's options, the landing policy included. Its own landing ran the same checks
-with its own options before it stood in the line. A fork's branch and a PR that changes a
-forward-only pin, the `flux` role or cluster-vars are left in the line. A member merges
+with its own options before it stood in the line. A fork's branch and a serial PR
+(`live_limit.kind`) are left in the line. A member merges
 under its PR's title, whatever `--subject` its own landing was given.
 
 What the label must never do. A labelled run on a head that carries a record skips every
@@ -117,7 +117,7 @@ def _alone(ln: Landing, pr: str, reads: live_limit.Reads) -> str:
     except (gh_read.GhReadFailed, ValueError, KeyError) as exc:
         return f"its files could not be read ({exc})"
     if live_limit.kind(paths) == live_limit.SERIAL:
-        return "it changes a forward-only pin, the flux role or cluster-vars"
+        return f"it changes {live_limit.SERIAL_WHAT}"
     return ""
 
 

@@ -295,7 +295,7 @@ observability_tempo_retention: 720h
 # in whole seconds. alertmanager-secret.yaml.j2 renders it as the Watchdog route's
 # `repeat_interval`, so no reader parses a duration string. The check's 600s period must stay
 # well above it, or one late send pages. The M1 slice plan
-# (docs/target-architecture/monitoring/m1-alertmanager.md) sizes the check.
+# (docs/archive/monitoring/m1-alertmanager.md) sizes the check.
 observability_alertmanager_watchdog_repeat_seconds: 60
 
 # Prometheus's rule groups. Each name is one file, files/rules/<name>.yaml, holding one group of
@@ -379,7 +379,7 @@ observability_stabilise_workloads:
   - kind: deploy
     name: grafana
     restart_on: []
-    restart_secrets: [secret-grafana-admin.yaml]
+    restart_secrets: [secret-grafana-admin.yaml, grafana-warehouse-datasource-secret.yaml]
   - kind: deploy
     name: alertmanager
     restart_on: []

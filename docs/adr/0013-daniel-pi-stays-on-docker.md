@@ -56,7 +56,7 @@ SSH with `-e target=daniel-pi`, sets `has_gitops: false`, and is not a k3s node 
 ## Amendment (2026-10-28): the Pi's services ship in its host package
 
 The operator accepted this amendment on 2026-10-24, before H5.2b merged
-([h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md), *Open questions* 7). H5.12
+([h5-pi-compose.md](../archive/host/h5-pi-compose.md), *Open questions* 7). H5.12
 records it here.
 
 **The deploy path changes, and the decision does not.** `daniel-pi` keeps Docker Compose and

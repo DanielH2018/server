@@ -285,8 +285,7 @@ other final message is a progress report: a Stop hook sends you back to work, an
 """
 
 
-# `scripts/dev/repo_guards.py` holds the list. The whole suite still misses CI's weight step,
-# which is a workflow step and not a test, so the brief names that repair on its own.
+# `scripts/dev/repo_guards.py` holds the list.
 REPO_GUARD_STEP = """## Before you open the PR
 The tests beside your change do not reach the guards that read the whole tree: the module
 length ratchet, the census and exit-code tests, and the script-basename check. A new file is
@@ -299,10 +298,7 @@ Fix a red guard. Never skip or deselect it. When the run ends with a `facts noti
 re-read each section it names and edit any sentence your change made false. When it ends with
 a `removed names:` list, edit each doc and comment that still uses a name you removed. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
-whole suite on the PR and the pipeline resumes you with each failing check. CI's weight step also fails a heavy test module
-that `scripts/dev/pytest_shard_weights.json` does not list, and no test runs that step. For each
-test module you added, run `uv run python scripts/dev/pytest_shard.py --record-files <module>`
-after committing it, then commit the JSON it rewrites.
+whole suite on the PR and the pipeline resumes you with each failing check.
 """
 
 
@@ -315,9 +311,9 @@ def _test_proof_step(base: str) -> str:
     The wording follows `fanout_lib.review.base_check`, which runs the same check on the PR:
     the changed files outside the tests go back to the merge base, a file the PR added is
     deleted, the tests stay, and the new tests that still pass are reported. The implementer
-    and the reviewer then use the same terms. The red phase covers only a `red-green` batch,
-    and `test/vacuous` and `test/missing-coverage` drove 71 of the actionable findings in the
-    three days measured, so every batch gets this step.
+    and the reviewer then use the same terms. `test/vacuous` and `test/missing-coverage`
+    drove 71 of the actionable findings in the three days measured, so every batch gets this
+    step.
     """
     return f"""## Prove each new test can fail
 A test that passes on the code as it stood before your change cannot be checking what the

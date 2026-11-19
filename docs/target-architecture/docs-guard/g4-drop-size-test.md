@@ -159,7 +159,7 @@ worked case in *Verification*.
       records`, from the k8s role-doc test of that day, since merged into
       `test_role_claude_md.py`. The recorded-count arm caught a doc that grew while #2826
       merged. The gate was correct, and the cost was a red master.
-      [design.md](../design.md) cites the run among the red master runs this area caused.
+      [design.md](../../archive/design.md) cites the run among the red master runs this area caused.
     - #3245, closed 2026-10-02, was a bug in the CI copy of the budget. Deriving `MAX_CHARS`
       from the hook fixed it, and no later failure of that kind is on record.
     - In #2982, closed 2026-09-29, a session raised `initial_setup`'s recorded count from

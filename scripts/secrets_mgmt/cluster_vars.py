@@ -29,7 +29,7 @@ Every `sops` call that resolves a creation rule passes `--config secrets/.sops.y
 SOPS finds its config from the working directory and the rotation cron runs from the repo
 root.
 
-`docs/target-architecture/deploy/d3-secrets.md` is the plan.
+`docs/archive/deploy/d3-secrets.md` is the plan.
 
 Exit codes: 0 clean, or written; 1 a check failed, a value was refused, or a sops call failed;
 64 a usage error.

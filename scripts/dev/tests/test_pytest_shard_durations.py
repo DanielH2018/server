@@ -94,13 +94,12 @@ def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
     )
     assert len(problems) == 1
     assert "17.31s" in problems[0] and "0.09s" in problems[0]
-    assert "--record-files" in problems[0]
 
 
 def test_a_recorded_weight_inside_the_runner_noise_is_clean():
-    """The accept half, at the bound that decides it. Controls measured 1.10x to 1.46x their
-    recorded values, so 17.31s recorded against 14.00s measured is the scale
-    difference between the runner and the recording workstation, not a stale entry."""
+    """The accept half, at the bound that decides it. A leg's hardware runs a shard 0.67x to
+    1.22x its table, so 17.31s recorded against 14.00s measured is that spread, not a stale
+    entry."""
     stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
     assert (
@@ -140,12 +139,11 @@ def test_a_heavy_module_recorded_far_below_what_it_measured_is_flagged():
     assert len(problems) == 1
     assert NEW_MODULE in problems[0]
     assert "recorded 0.48s" in problems[0] and "26.4s" in problems[0]
-    assert "--record-files" in problems[0]
 
 
 def test_a_heavy_module_inside_the_runner_scale_is_clean():
-    """The accept half: 26.4s measured against 2.2s recorded is 12x, about the most a correctly
-    recorded module has reached on the runner (`UNDER_WEIGHT_RATIO`). Only the ratio decides."""
+    """The accept half: 26.4s measured against 2.2s recorded is 12x, under
+    `UNDER_WEIGHT_RATIO`. Only the ratio decides."""
     weights = RECORDED | {NEW_MODULE: 2.2}
     assert shard_weight_gate.durations_complaints(REPORT, weights) == []
     assert (
@@ -221,12 +219,12 @@ def _run_cli(tmp_path, report: str) -> int:
 
 
 def test_the_cli_annotates_a_heavy_unweighted_module_and_exits_zero(tmp_path, capsys):
-    """The contract with `ci.yml`: a bad weight reaches the run as an annotation naming its
-    repair, and never fails the leg."""
+    """The contract with `ci.yml`: a bad weight reaches the run as an annotation naming what
+    repairs it, and never fails the leg."""
     assert _run_cli(tmp_path, REPORT) == 0
     printed = capsys.readouterr().out
     assert printed.startswith("::warning::") and NEW_MODULE in printed
-    assert "--record-missing" in printed
+    assert "--refresh-runner" in printed
 
 
 def _recorded_pole() -> str:
@@ -235,7 +233,7 @@ def _recorded_pole() -> str:
     The CLI reads the real table, so a report naming a real module at a made-up cost trips the
     over- or under-recording arm on whatever that module's entry holds today.
     """
-    weights = pytest_shard.load_weights()
+    weights = shard_weight_gate.load_runner_weights()
     path = max(weights, key=weights.__getitem__)
     return f"{weights[path]:.2f}s call     {path}::test_the_pole\n"
 
@@ -247,16 +245,8 @@ def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys
     assert "no unweighted or under-recorded module" in capsys.readouterr().out
 
 
-def test_the_stale_repair_refuses_a_path_no_shard_runs():
-    """`--record-files` measures whatever it is handed, so a typo or an unstaged file would
-    otherwise write a table row no census ever reads back."""
-    with pytest.raises(SystemExit) as caught:
-        pytest_shard.record_named_weights(["nope/test_not_a_file.py"])
-    assert "nope/test_not_a_file.py" in str(caught.value)
-
-
 def test_no_mode_names_every_mode(capsys):
-    """The usage error lists all seven modes, not the three."""
+    """The usage error lists all six modes."""
     with pytest.raises(SystemExit) as exc:
         pytest_shard.main([])
     assert exc.value.code == 64
@@ -264,10 +254,9 @@ def test_no_mode_names_every_mode(capsys):
     for mode in (
         "--shard",
         "--summary",
-        "--record,",
-        "--record-missing",
-        "--record-files",
-        "--refresh-drifted",
+        "--record-runner",
+        "--refresh-runner",
+        "--leg-spread",
         "--check-durations",
     ):
         assert mode in err.splitlines()[-1], mode

@@ -256,15 +256,13 @@ def test_a_server_brief_names_the_guard_script_and_a_dotfiles_brief_does_not():
         assert re.search(r"^uv run python scripts/dev/repo_guards\.py$", brief, re.M)
         assert not re.search(r"^uv run pytest", brief, re.M)
         assert brief.index("## Before you open the PR") < brief.index("## Landing")
-        assert "pytest_shard.py --record-files <module>" in brief
     brief = render_brief(
         ISSUES, "daniel-box", "1345-1386", "worktree-orch", [], DOTFILES
     )
-    assert "## Before you open the PR" not in brief and "--record-files" not in brief
+    assert "## Before you open the PR" not in brief
 
 
 def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_section():
-    """The red phase covers only `red-green` batches, so every brief carries the step."""
     for host, target in (
         ("daniel-box", None),
         ("daniel-server", None),
