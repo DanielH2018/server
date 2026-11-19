@@ -43,7 +43,7 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.
 CI_GATE_NAME = "prek (lint + validate + tests + secrets)"
-# The check-run name of the `prove` job, whose `proven` and `pytest-proven` outputs the gate reads.
+# The check-run name of the `prove` job, whose `proven` output the gate reads.
 CI_PROVE_JOB = "prove the pushed tree was tested"
 # The check-run name of every other job in the gate's `needs`. GitHub names a matrix leg's
 # check-run after the leg, so each leg is listed.
@@ -93,11 +93,6 @@ def _legs(prefix: str) -> frozenset[str]:
     return frozenset(n for n in CI_GATE_NEEDS_JOBS if n.startswith(prefix))
 
 
-# The `pytest` legs, which skip on `pytest-proven` where every other dependent skips on `proven`.
-# A record from a pull-request run whose legs ran a selection proves every job but these.
-CI_PYTEST_JOBS = _legs("pytest (shard ")
-
-
 # GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
 # after its legs: the `name:` template with its expressions unexpanded, or the job id when it has
 # no `name:`. A run can report `host_packages` and the bootstrap template below as skipped, and
@@ -133,10 +128,7 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     Mirrors the `run:` script of the `prek` job in ci.yml. A job passes when it succeeded. A
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
-    `proven` was true, and a check-run cannot show that output itself. The `pytest` legs skip on
-    `pytest-proven` instead, which is never true while `proven` is false. So a run whose
-    dependents all skipped except the `pytest` legs, which passed, is the push after a selected
-    pull-request run, and passes too. `prove` is skipped on a
+    `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
     run that is neither a push nor a labelled pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
@@ -179,15 +171,9 @@ def jobs_verdict(check_runs: list[dict]) -> str:
             skipped += 1
     if not skipped:
         return "pass"
-    # The proven path skips EVERY dependent, or every dependent but the `pytest` legs. A lone
-    # skip beside a success is not a state the workflow produces, so it is not read as proof.
+    # The proven path skips EVERY dependent. A lone skip beside a success is not a state the
+    # workflow produces, so it is not read as proof.
     if prove == {"pass"} and skipped == len(CI_GATE_NEEDS_JOBS):
-        return "pass"
-    if (
-        prove == {"pass"}
-        and skipped == len(CI_GATE_NEEDS_JOBS - CI_PYTEST_JOBS)
-        and all("pass" in states[leg] for leg in CI_PYTEST_JOBS)
-    ):
         return "pass"
     return "pending"
 
