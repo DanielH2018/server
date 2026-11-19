@@ -1,4 +1,4 @@
-"""Every release download in ci.yml, promote.yml and the pytest-tools action sits behind an actions/cache keyed on its pin.
+"""Every release download in ci.yml and promote.yml sits behind an actions/cache keyed on its pin.
 
 On 2026-11-08 a GitHub release asset answered HTTP 504 for over an hour, longer than
 any step's `curl --retry` window, so each job that downloaded a pinned binary failed, and in
@@ -24,10 +24,7 @@ from _helpers import REPO
 from lib import yaml_fast
 
 WORKFLOWS = REPO / ".github" / "workflows"
-# The composite action that ci.yml's pytest legs and the nightly sweep install their tools
-# through, read as a workflow of one job.
-PYTEST_TOOLS = "pytest-tools"
-CHECKED = ("ci.yml", "promote.yml", PYTEST_TOOLS)
+CHECKED = ("ci.yml", "promote.yml")
 CACHE = "actions/cache@"
 PINNED = re.compile(r"\$RUNNER_TEMP/pinned/([\w-]+)")
 PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|hashFiles\()")
@@ -40,10 +37,9 @@ SCRIPT_CACHES = {
 }
 # Steps the census must find, so a reshaped workflow cannot pass empty.
 KNOWN_DOWNLOADS = {
-    ("ci.yml", "hooks", "Install Vale"),
+    ("ci.yml", "hooks", "Fetch the Vale style package"),
     ("ci.yml", "hooks", "Provision promtool, amtool, pint and lokitool"),
     ("ci.yml", "hooks", "Prove each alert tool rejects its bad fixture"),
-    (PYTEST_TOOLS, PYTEST_TOOLS, "Install sops, age and apt-utils for the tests"),
     ("ci.yml", "host_packages_build", "Scan the named package roots for secrets"),
     ("promote.yml", "render", "Scan the bundle for secrets"),
 }
@@ -119,10 +115,6 @@ def problems(workflow: dict) -> list[str]:
 
 
 def _load(name: str) -> dict:
-    if name == PYTEST_TOOLS:
-        action = WORKFLOWS.parent / "actions" / name / "action.yml"
-        steps = yaml_fast.safe_load(action.read_text(encoding="utf-8"))["runs"]["steps"]
-        return {"jobs": {name: {"steps": steps}}}
     return yaml_fast.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
 
 
@@ -162,18 +154,20 @@ def test_an_uncached_promote_download_is_flagged():
 
 
 def test_a_constant_cache_key_is_flagged():
-    broken = _load(PYTEST_TOOLS)
-    _step(broken, PYTEST_TOOLS, "Cache the sops release")["with"]["key"] = "sops-linux"
+    broken = _load("promote.yml")
+    _step(broken, "render", "Cache the gitleaks release")["with"]["key"] = "gitleaks"
     assert any(
-        "the cache key of $RUNNER_TEMP/pinned/sops does not read the pin" in p
+        "the cache key of $RUNNER_TEMP/pinned/gitleaks does not read the pin" in p
         for p in problems(broken)
     ), problems(broken)
 
 
 def test_a_curl_that_ignores_the_cache_is_flagged():
-    broken = _load(PYTEST_TOOLS)
-    step = _step(broken, PYTEST_TOOLS, "Install sops, age and apt-utils for the tests")
-    step["run"] = step["run"].replace('if [[ -f "$sops" ]]; then', "if true; then")
+    broken = _load("promote.yml")
+    step = _step(broken, "render", "Scan the bundle for secrets")
+    guard = 'if [[ -f "$dl/$asset" && -f "$dl/checksums.txt" ]]; then'
+    assert guard in step["run"], guard
+    step["run"] = step["run"].replace(guard, "if true; then")
     assert any("curls without checking the cache first" in p for p in problems(broken))
 
 

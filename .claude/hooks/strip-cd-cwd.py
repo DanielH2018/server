@@ -18,7 +18,9 @@ whose input a hook then changed, so `bash-pretool.py` does not ask this arm in a
 THE CWD IS THE PAYLOAD'S, never this process's. `run-hook.sh` changes into the primary
 checkout to find its `.venv`, so `os.getcwd()` here is `/home/ubuntu/server` for every
 worktree session. Comparing against it would strip `cd /home/ubuntu/server && x` inside a
-worktree, which moves the command into another checkout.
+worktree, which moves the command into another checkout. Claude Code sends `cwd` on every
+PreToolUse payload; one without it takes `_hook_common.parse_payload`'s process-cwd rule,
+shared by every arm.
 
 THE MATCH IS NARROW ON PURPOSE. Only a leading `cd <word> &&` is stripped, where the word is a
 bare token or a quoted string with no expansion in it. A word with `$` or a backtick names a
@@ -34,6 +36,8 @@ no path they resolve, so the typed and the stripped command get the same verdict
 
 import os
 import re
+
+from _hook_common import BashCall
 
 # One leading `cd <word> &&`. The word alternatives are a single-quoted string, a double-quoted
 # string without `$`, a backtick or a backslash, and a bare token without shell metacharacters.
@@ -65,16 +69,15 @@ def _is_cwd(word, cwd):
     return os.path.realpath(path) == os.path.realpath(cwd)
 
 
-def strip_command(cmd, cwd):
-    """`cmd` without its leading `cd <cwd> &&` prefixes, or None when there is none to drop.
+def rewrite(call: BashCall):
+    """The command of `call` without its leading `cd <cwd> &&` prefixes, or None when there is none.
 
     Repeated prefixes are all dropped, since each is the same no-op. A command that would be
     left empty is returned as None, because `cd <cwd> &&` with nothing after it is not a
     command the shell accepts and so not one to rewrite.
     """
-    if not cwd or not os.path.isabs(cwd):
-        return None
-    updated = cmd
+    cwd = str(call.cwd)
+    updated = call.command
     while True:
         match = _LEADING_CD.match(updated)
         if not match or not _is_cwd(_target(match), cwd):
@@ -83,15 +86,4 @@ def strip_command(cmd, cwd):
         if not rest.strip():
             break
         updated = rest
-    return updated if updated != cmd else None
-
-
-def rewrite(payload):
-    """The Bash command for `payload` without a leading `cd` into its cwd, or None."""
-    if payload.get("tool_name") != "Bash":
-        return None
-    cmd = (payload.get("tool_input") or {}).get("command") or ""
-    cwd = payload.get("cwd") or ""
-    if not cmd or not isinstance(cwd, str):
-        return None
-    return strip_command(cmd, cwd)
+    return updated if updated != call.command else None

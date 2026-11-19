@@ -31,8 +31,8 @@ runs:
   using: composite
   steps:
     # The cache holds the download, never the installed binary, so the digest check below runs
-    # on a hit too. The drills' inline fetches write the same key, path and file name, so a
-    # cache entry from either serves both.
+    # on a hit too. The inline fetches in promote.yml and prune-artifacts.yml write the same key,
+    # path and file name, so a cache entry from either serves both.
     - name: Cache the ${{ inputs.tool }} release
       uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]
       with:
@@ -67,6 +67,13 @@ runs:
           kind)
             url="https://github.com/kubernetes-sigs/kind/releases/download/$VERSION/kind-linux-amd64"
             probe=(version) ;;
+          cosign)
+            url="https://github.com/sigstore/cosign/releases/download/$VERSION/cosign-linux-amd64"
+            probe=(version) ;;
+          vale)
+            url="https://github.com/vale-cli/vale/releases/download/$VERSION/vale_${VERSION#v}_Linux_64-bit.tar.gz"
+            member=vale
+            probe=(--version) ;;
           *)
             echo "::error::pinned-tool has no release URL for '$TOOL'"
             exit 1 ;;

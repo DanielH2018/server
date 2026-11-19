@@ -41,7 +41,7 @@ import json
 import re
 import sys
 
-from _hook_common import read_payload, tagged
+from _hook_common import HookEvent, read_payload, tagged
 
 _GIT_PUSH = re.compile(r"(?:^|[\s;&|(])git\s+(?:-C\s+\S+\s+)?push(?:\s|$)")
 # GitHub's ruleset lines name the ref; the `[remote rejected]` line names only the branch.
@@ -59,13 +59,18 @@ def _branches(pattern: re.Pattern, text: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def push_refusal_note(payload: dict) -> str | None:
+def _pushes(event: HookEvent) -> bool:
+    """Whether `event` is a Bash call that runs `git push`."""
+    call = event.bash()
+    return call is not None and bool(_GIT_PUSH.search(call.command))
+
+
+def push_refusal_note(event: HookEvent) -> str | None:
     """Which command names the ruleset behind a refused `git push`, or None for any other failure."""
-    if payload.get("tool_name") != "Bash" or payload.get("is_interrupt"):
+    if event.raw.get("is_interrupt") or not _pushes(event):
         return None
-    if not _GIT_PUSH.search(payload.get("tool_input", {}).get("command", "")):
-        return None
-    branches = _branches(_REFUSED_REF, payload.get("error", "") or "")
+    error = event.raw.get("error")
+    branches = _branches(_REFUSED_REF, error if isinstance(error, str) else "")
     if not branches:
         return None
     commands = "; ".join(f"`{_PUSH_RULES} {b}`" for b in branches)
@@ -78,13 +83,11 @@ def push_refusal_note(payload: dict) -> str | None:
     )
 
 
-def push_bypass_note(payload: dict) -> str | None:
+def push_bypass_note(event: HookEvent) -> str | None:
     """Why a `git push` that printed a bypass notice still landed, or None for any other push."""
-    if payload.get("tool_name") != "Bash":
+    if not _pushes(event):
         return None
-    if not _GIT_PUSH.search(payload.get("tool_input", {}).get("command", "")):
-        return None
-    response = payload.get("tool_response")
+    response = event.raw.get("tool_response")
     if isinstance(response, dict):
         text = f"{response.get('stdout', '')}\n{response.get('stderr', '')}"
     else:
@@ -108,22 +111,22 @@ def main() -> None:
     `additionalContext` note; for a PostToolUse event, a push's bypass notice. Prints the corresponding hookSpecificOutput JSON and returns; any other
     payload is ignored.
     """
-    payload = read_payload()
-    if payload is None:
+    event = read_payload()
+    if event is None:
         return
 
-    event = payload.get("hook_event_name")
-    if event in ("PostToolUseFailure", "PostToolUse"):
-        if event == "PostToolUse":
-            note = push_bypass_note(payload)
+    name = event.hook_event_name
+    if name in ("PostToolUseFailure", "PostToolUse"):
+        if name == "PostToolUse":
+            note = push_bypass_note(event)
         else:
-            note = push_refusal_note(payload)
+            note = push_refusal_note(event)
         if note:
             print(
                 json.dumps(
                     {
                         "hookSpecificOutput": {
-                            "hookEventName": event,
+                            "hookEventName": name,
                             "additionalContext": tagged("auto-mode-bridge", note),
                         }
                     }

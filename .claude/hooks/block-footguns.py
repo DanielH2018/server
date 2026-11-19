@@ -66,6 +66,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from _hook_common import (
+    BashCall,
     Unsplittable,
     emit_pretooluse_decision,
     gh_repo,
@@ -554,16 +555,13 @@ def decide(
     return ("ask", asked) if asked else (None, None)
 
 
-def decision(payload) -> tuple[str, str] | None:
-    """The `(decision, reason)` pair `decide` returns for this payload, or None.
+def decision(call: BashCall) -> tuple[str, str] | None:
+    """The `(decision, reason)` pair `decide` returns for this call, or None.
 
     The arm entry point `bash-pretool.py` calls. `main()` below is the same arm run as its
     own process, which is what the tests and a hand invocation use.
     """
-    command = (payload.get("tool_input") or {}).get("command", "")
-    if not command:
-        return None
-    verdict, reason = decide(command, cwd=payload.get("cwd"))
+    verdict, reason = decide(call.command, cwd=str(call.cwd))
     return (verdict, reason) if verdict and reason else None
 
 
@@ -574,10 +572,11 @@ def main() -> int:
     Otherwise emits nothing. Always returns 0 (a decision is expressed through emitted JSON,
     not the exit code).
     """
-    payload = read_payload()
-    if payload is None:
+    event = read_payload()
+    call = event.bash() if event else None
+    if call is None:
         return 0
-    verdict = decision(payload)
+    verdict = decision(call)
     if verdict:
         emit_pretooluse_decision("block-footguns", *verdict)
     return 0
