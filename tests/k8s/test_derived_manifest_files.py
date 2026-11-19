@@ -100,7 +100,7 @@ def test_no_role_renders_a_secret_world_readable_is_clean():
     renders = rendered_texts()
     assert {
         ("cluster-base", "readonly-rbac.yaml.j2"),
-        ("sonarr", "secret-exportarr.yaml.j2"),
+        ("pihole", "secret.yaml.j2"),
     } <= {(role, name) for role, name, _text in renders}, (
         "the render corpus no longer carries the two Secret templates this guard is sized on"
     )

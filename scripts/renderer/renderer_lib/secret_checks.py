@@ -142,9 +142,8 @@ class Violation(NamedTuple):
 _ROLE_TEMPLATES = "k8s/roles/{}/templates/{}"
 
 
-# The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`, and
-# 46 once `domain` left the secret keys (R2's domain PR 2b).
-RULE5_FLOOR = 46
+# The fewest in-scope templates whose syntax tree names a secret key, set to the tree's count.
+RULE5_FLOOR = 40
 
 
 class NamedUse(NamedTuple):

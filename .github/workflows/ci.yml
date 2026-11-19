@@ -104,16 +104,13 @@ jobs:
   # (#5489). Of 235 squash commits from 2026-10-15 to 2026-10-17, 186 had the tree of their PR's
   # head run, and master runs were 21% of all runner time. A PR run whose `pytest` legs ran the
   # whole census is a full sweep (see the `hooks` job), so a master run on a tree it already
-  # swept repeats work and checks nothing new. A PR run whose legs ran a selection (#8458) ran
-  # every other job in full, and records its tree under a second context (#8943). The push run
-  # after it then repeats only `pytest`.
+  # swept repeats work and checks nothing new. A PR run whose legs ran a selection records its
+  # tree the same way: the push run would diff the same tree against the same base with the
+  # same table, so its selection would be the one the PR run already ran.
   #
   # `scripts/dev/tested_tree.py` reads the `ci/tested-tree` commit status that the `prek` gate
   # writes on the PR head, and answers `proven=true` only when that status carries the pushed
-  # commit's tree id. Every other job then skips. The script reads `ci/tested-tree-but-pytest`
-  # as well, which a selected run writes: for that record it answers `proven=true` and
-  # `pytest-proven=false`, and only `pytest` runs. `pytest` reads `pytest-proven` and every
-  # other job reads `proven`; `pytest-proven` is never true while `proven` is false. Any other
+  # commit's tree id. Every other job then skips. Any other
   # answer, including an unreadable
   # status, a token without access and a failed lookup, is `proven=false`, and the run proceeds
   # in full as it did before. The script exits 0 either way.
@@ -170,7 +167,6 @@ jobs:
       statuses: read
     outputs:
       proven: ${{ steps.prove.outputs.proven }}
-      pytest-proven: ${{ steps.prove.outputs.pytest-proven }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -563,10 +559,11 @@ jobs:
   # *.sh.j2. `scripts/dev/affected_tests.json` holds what each module's own run read and listed
   # under `strace`, so a module that walks a directory is selected when a file appears in it.
   # The accepted cost: a module can gain a dependency after its row was recorded, pass on the
-  # pull request for not being selected, and fail on master, where a red run parks every
-  # landing (`docs/landing.md`). The push run is the safety net, so a selected pull-request run
-  # records no tested tree and its push run sweeps in full (the `prek` gate's record steps).
-  # What neither run can reach is a test outside `testpaths`, which
+  # pull request for not being selected, and fail later. The net for that module is the
+  # nightly sweep in pytest-sweep.yml, which runs every module and reports a red run as an
+  # issue, and the push run of a tree no pull-request run tested, which sweeps in full. A
+  # selected pull-request run records its tested tree, so the push run of that tree skips.
+  # What no run can reach is a test outside `testpaths`, which
   # test_testpaths_covers_every_test_file guards.
   #
   # This job is the suite's only automated run before a merge. The prek `pytest` hook that
@@ -576,13 +573,14 @@ jobs:
   # then. By PR run 40125170130 (2026-10-24) its legs took 2m49s to 4m29s.
   pytest:
     needs: prove
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.pytest-proven != 'true')) && github.event.pull_request.draft != true }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     # `full` when the legs ran the whole census, `selected` when they ran a pull request's
     # selection. Every leg computes it from the same diff and the same table, so whichever
-    # leg writes last writes the same word. The `prek` gate reads it before it records a tree.
+    # leg writes last writes the same word. The `prek` gate records a tree for either word,
+    # and a landing batch's members for `full` alone.
     outputs:
       scope: ${{ steps.select.outputs.scope }}
     strategy:
@@ -1987,8 +1985,7 @@ jobs:
       #
       # A dependency passes when it succeeded. It also passes when it was skipped AND the `prove`
       # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
-      # green PR run swept. A skipped `pytest` passes only when `pytest-proven` is true as well,
-      # because a selected PR run proves every job but `pytest`. A job that reads the build's artifacts also passes when it was skipped
+      # green PR run swept. A job that reads the build's artifacts also passes when it was skipped
       # AND the build succeeded AND said it had no work for that job: `run-cases` for the cases
       # legs, `arm64-tools` for the arm64 job. An output the build never wrote is not `false`,
       # so it passes nothing. A skip on any other path is a failure, because a skipped job
@@ -2000,7 +1997,6 @@ jobs:
           ARM64_TOOLS: ${{ needs.host_packages_build.outputs.arm64-tools }}
           PROVE: ${{ needs.prove.result }}
           PROVEN: ${{ needs.prove.outputs.proven }}
-          PYTEST_PROVEN: ${{ needs.prove.outputs.pytest-proven }}
           HOOKS: ${{ needs.hooks.result }}
           PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
@@ -2012,7 +2008,7 @@ jobs:
           HOST_PACKAGES_BOOTSTRAP: ${{ needs.host_packages_bootstrap.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
-          echo "prove=$PROVE proven=${PROVEN:-} pytest-proven=${PYTEST_PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
             "lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
@@ -2023,15 +2019,11 @@ jobs:
           case "$PROVE" in success | skipped | cancelled | failure) ;; *) exit 1 ;; esac
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
-          # A record from a selected run proves every job but `pytest` (#8943).
-          pytest_proven=false
-          if [ "$proven" = true ] && [ "${PYTEST_PROVEN:-}" = true ]; then pytest_proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          ok_pytest() { [ "$1" = success ] || { [ "$pytest_proven" = true ] && [ "$1" = skipped ]; }; }
           # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
           # build's own result is required below, so a build that failed passes nothing here.
           idle() { [ "$1" = skipped ] && [ "$2" = false ]; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok_pytest "$PYTEST" && ok "$LOCKFILE" \
+          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$LOCKFILE" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
             && { ok "$HOST_PACKAGES" || idle "$HOST_PACKAGES" "${RUN_CASES:-}"; } \
             && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
@@ -2052,31 +2044,23 @@ jobs:
       # own reading: `prove` succeeded and said `true`. A `prove` that set `true` and was then
       # cancelled ran the sweep, and that run records.
       #
-      # A run whose pytest legs ran a selection (#8458) did not run every test module on this
-      # tree, so it records under `ci/tested-tree-but-pytest` instead (#8943). Every other job
-      # ran in full here, so the push run after its merge repeats only `pytest`.
-      # `needs.pytest.outputs.scope` is `full` when the legs ran the whole census and `selected`
-      # when they ran a selection; a leg that never reached its select step leaves it empty,
-      # and that run records nothing.
+      # A run whose pytest legs ran a selection records too: the push run of the same tree
+      # would select the same modules. `needs.pytest.outputs.scope` is `full` or `selected`
+      # once the legs chose what to run; a leg that never reached its select step leaves it
+      # empty, and that run records nothing.
       - name: Record the tested tree on the PR head
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !(needs.prove.result == 'success' && needs.prove.outputs.proven == 'true') && (needs.pytest.outputs.scope == 'full' || needs.pytest.outputs.scope == 'selected')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          SCOPE: ${{ needs.pytest.outputs.scope }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          case "$SCOPE" in
-            full) context=ci/tested-tree ;;
-            selected) context=ci/tested-tree-but-pytest ;;
-            *) exit 1 ;;
-          esac
           tree=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$GITHUB_SHA" --jq .tree.sha)
           gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-            -f state=success -f context="$context" -f description="$tree" -f target_url="$RUN_URL"
-          echo "Recorded tree $tree under $context on $HEAD_SHA."
+            -f state=success -f context=ci/tested-tree -f description="$tree" -f target_url="$RUN_URL"
+          echo "Recorded tree $tree on $HEAD_SHA."
 
       # A landing batch is a pull request from a `queue/` branch of this repository that holds
       # up to four PRs stacked on master, and this run is the one full run they share

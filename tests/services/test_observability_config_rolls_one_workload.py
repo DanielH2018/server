@@ -36,6 +36,7 @@ import pytest
 
 from _helpers import REPO, load_defaults
 from _k8s_render import pod_spec, pod_template, rendered_docs
+from lib.k8s_roles import SECRET_TEMPLATE, declared_secret_file
 
 
 _ROLE = "observability"
@@ -140,7 +141,11 @@ def _declared():
 def _secret_files():
     """Each role Secret's name, mapped to the rendered file that carries it."""
     return {
-        doc["metadata"]["name"]: template.removesuffix(".j2")
+        doc["metadata"]["name"]: (
+            declared_secret_file(doc["metadata"]["name"])
+            if template == SECRET_TEMPLATE.name
+            else template.removesuffix(".j2")
+        )
         for role, template, doc in rendered_docs()
         if role == _ROLE and doc and doc.get("kind") == "Secret"
     }

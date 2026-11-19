@@ -76,9 +76,6 @@ _CANCEL_ARM = (
     "(needs.prove.result == 'cancelled' || needs.prove.result == 'failure'"
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
 )
-# The `pytest` job's run arm, which reads `pytest-proven` where the others read `proven`.
-# `prove` is skipped on a dispatch, so it holds there too.
-_PYTEST_CANCEL_ARM = _CANCEL_ARM.replace("outputs.proven", "outputs.pytest-proven")
 # The draft arm of every job's condition. A dispatch carries no pull request, so the field is
 # unset and the comparison is true there.
 _DRAFT_ARM = "github.event.pull_request.draft != true"
@@ -142,7 +139,6 @@ def _job_runs_on_dispatch(condition: str | None) -> bool:
         return True
     condition = (
         condition.replace(_CANCEL_ARM, "true")
-        .replace(_PYTEST_CANCEL_ARM, "true")
         .replace(_PROOF_ARM, "true")
         .replace(_DRAFT_ARM, "true")
         .replace(_BUILD_ARM, "true")
