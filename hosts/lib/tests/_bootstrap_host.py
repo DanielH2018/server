@@ -80,18 +80,30 @@ case "$*" in
         ls "$cache" > "$HOMELAB_ROOT/tools-cache.listing" ;;
 esac
 """
-# Given a sysusers.d file, adds each `u` user missing from the fake passwd file at its declared
-# uid, or, as sysusers does when that uid is held, at the first free uid down from 999.
+# Given a sysusers.d file, adds each `g` group missing from the fake group file at its declared
+# gid, and each `u` user missing from the fake passwd file at its declared uid and gid. As
+# sysusers does, a held uid or gid is replaced by the first free one down from 999.
 SYSUSERS_STUB = """echo "sysusers $*" >> {log}
 [ -n "$1" ] || exit 0
-while read -r kind name uid _; do
+while read -r kind name ids _; do
+    if [ "$kind" = g ]; then
+        grep -q "^$name:" {group} && continue
+        gid=$ids
+        if cut -d: -f3 {group} | grep -qx "$gid"; then
+            gid=999
+            while cut -d: -f3 {group} | grep -qx "$gid"; do gid=$((gid - 1)); done
+        fi
+        echo "$name:x:$gid:" >> {group}
+        continue
+    fi
     [ "$kind" = u ] || continue
     grep -q "^$name:" {passwd} && continue
+    uid=${{ids%%:*}} gid=${{ids#*:}}
     if cut -d: -f3 {passwd} | grep -qx "$uid"; then
         uid=999
         while cut -d: -f3 {passwd} | grep -qx "$uid"; do uid=$((uid - 1)); done
     fi
-    echo "$name:x:$uid:$uid::/:/usr/sbin/nologin" >> {passwd}
+    echo "$name:x:$uid:$gid::/:/usr/sbin/nologin" >> {passwd}
 done < "$1"
 """
 NFPM_STUB = """#!/bin/sh
@@ -158,8 +170,11 @@ class FakeHost:
         self._stub("systemctl", f'echo "systemctl $*" >> {self.log}')
         self.passwd = tmp_path / "passwd"
         self.passwd.touch()
+        self.group = tmp_path / "group"
+        self.group.touch()
         self._stub(
-            "systemd-sysusers", SYSUSERS_STUB.format(log=self.log, passwd=self.passwd)
+            "systemd-sysusers",
+            SYSUSERS_STUB.format(log=self.log, passwd=self.passwd, group=self.group),
         )
         self._stub("systemd-tmpfiles", f'echo "tmpfiles $*" >> {self.log}')
         self._stub("fallocate", f'echo "fallocate $*" >> {self.log}; : > "$3"')
@@ -169,7 +184,9 @@ class FakeHost:
         )
         self._stub("id", "echo ubuntu")
         self._stub(
-            "getent", f'[ "$1" = passwd ] && grep "^$2:" {self.passwd} || exit 2'
+            "getent",
+            f'[ "$1" = passwd ] && grep "^$2:" {self.passwd} && exit 0\n'
+            f'[ "$1" = group ] && grep "^$2:" {self.group} || exit 2',
         )
         self._stub("groupadd", f'echo "groupadd $*" >> {self.log}')
         self._stub("usermod", f'echo "usermod $*" >> {self.log}')
@@ -205,9 +222,11 @@ class FakeHost:
         path.write_text(conf)
 
     def add_user(self, name: str, uid: int) -> None:
-        """Give the fake passwd file a user that exists before the script runs."""
+        """Give the fake passwd and group files a user and its group, at gid `uid`, before the run."""
         with self.passwd.open("a") as passwd:
             passwd.write(f"{name}:x:{uid}:{uid}::/:/usr/sbin/nologin\n")
+        with self.group.open("a") as group:
+            group.write(f"{name}:x:{uid}:\n")
 
     def pin(self, old: str, new: str) -> None:
         """Replace the production digest `old` with `new` in the scratch copy of the script."""

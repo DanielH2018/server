@@ -1,6 +1,6 @@
-"""The runner the red/green gate tests hand the gates, on a scratch repo.
+"""The runner the base-check tests hand the check, on a scratch repo.
 
-It hands `git` to git under a scrubbed environment and turns a gate's
+It hands `git` to git under a scrubbed environment and turns the check's
 `uv run --directory <tree> pytest ...` into this interpreter's pytest in that tree, so every
 verdict a test reads is one pytest really printed.
 """

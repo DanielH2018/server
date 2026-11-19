@@ -17,6 +17,7 @@ from _aide_check_run import (
     CHANGED_MODE,
     CLEAN_REPORT,
     HOST_MANIFEST,
+    RECONCILE_RECORD,
     _report,
     _run_check,
 )
@@ -27,6 +28,9 @@ SVC_PASSWD = "svc:x:906:906:Svc:/var/lib/svc:/usr/sbin/nologin\n"
 SVC_GROUP = "svc:x:906:\n"
 SVC_SHADOW = "svc:!*:20400::::::\n"
 SVC_GSHADOW = "svc:!::\n"
+# oldsvc left the users list, so the arm expired it and its record in applied.json names it.
+OLDSVC_SHADOW = "oldsvc:!*:20000::::::"
+OLDSVC_EXPIRED = "oldsvc:!*:20000:::::1:"
 # A password hash the fake shadow file holds; no logged line may carry it.
 HASH = "$6$NEWSECRETHASH"
 
@@ -70,7 +74,11 @@ ACCEPTED = {
             ),
         },
     ),
-    "a declared user's group moved, with its passwd gid": (
+    "an expired user's expiry date set to 1, as usermod --expiredate 1 writes it": (
+        (SHADOW,),
+        {"rewrite": _with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED))},
+    ),
+    "a declared user's group moved to its declared gid, with its passwd gid": (
         (PASSWD, GROUP),
         {
             "snapshot": {
@@ -143,7 +151,7 @@ REJECTED = {
     "a declared user's gid pointing at another group": (
         PASSWD,
         {"rewrite": _with(PASSWD, ("claude:x:900:985:", "claude:x:900:990:"))},
-        "declared user claude's gid is not its own group's",
+        "declared user claude's gid is not its declared gid",
     ),
     "an undeclared group gaining a declared member": (
         GROUP,
@@ -157,17 +165,32 @@ REJECTED = {
     "a declared group with gid 0": (
         GROUP,
         {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:0:"))},
-        "the gid of declared group claude is 0 or another group's",
+        "the gid of declared group claude is not its declared gid",
     ),
     "a declared group whose gid collides with another group": (
         GROUP,
         {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:990:"))},
-        "the gid of declared group claude is 0 or another group's",
+        "the gid of declared group claude is not its declared gid",
     ),
-    "a declared group whose gid leaves its user's": (
+    "a declared user and its group moved together to an undeclared, unshared gid": (
+        PASSWD,
+        {
+            "rewrite": {
+                **_with(PASSWD, ("claude:x:900:985:", "claude:x:900:987:")),
+                **_with(GROUP, ("claude:x:985:", "claude:x:987:")),
+            }
+        },
+        "declared user claude's gid is not its declared gid",
+    ),
+    "a declared group at its declared gid while another group holds it too": (
         GROUP,
-        {"rewrite": _with(GROUP, ("claude:x:985:", "claude:x:986:"))},
-        "declared user claude's gid is not its own group's",
+        {
+            "rewrite": _with(
+                GROUP, ("claude:x:985:", "claude:x:985:svc"), ("990", "985")
+            ),
+            "snapshot": _with(GROUP, ("990", "985")),
+        },
+        "the declared gid of group claude is another group's too",
     ),
     "a declared group with an undeclared member": (
         GROUP,
@@ -193,6 +216,39 @@ REJECTED = {
         GSHADOW,
         {"rewrite": _with(GSHADOW, ("claude:!::", "claude:!::ubuntu"))},
         "declared group claude has an administrator or a member in gshadow",
+    ),
+    "an expired user's expiry with its password changed too": (
+        SHADOW,
+        {"rewrite": _with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED.replace("!*", HASH)))},
+        "changes the line of an account the host package does not declare: oldsvc",
+    ),
+    "an expired user's expiry date set to another day": (
+        SHADOW,
+        {
+            "rewrite": _with(
+                SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED.replace(":1:", ":2:"))
+            )
+        },
+        "changes the line of an account the host package does not declare: oldsvc",
+    ),
+    "an expiry on an account the arm's record does not list": (
+        SHADOW,
+        {
+            "rewrite": _with(
+                SHADOW, ("root:!*:20000:0:99999:7:::", "root:!*:20000:0:99999:7::1:")
+            )
+        },
+        "changes the line of an account the host package does not declare: root",
+    ),
+    "an expiry with no readable reconcile record": (
+        SHADOW,
+        {
+            "rewrite": {
+                **_with(SHADOW, (OLDSVC_SHADOW, OLDSVC_EXPIRED)),
+                RECONCILE_RECORD: "{",
+            }
+        },
+        "changes the line of an account the host package does not declare: oldsvc",
     ),
     "a shadow line with no colon, all of it a hash": (
         SHADOW,

@@ -14,7 +14,7 @@ import pytest
 import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
-from deploy_tools.land_lib import batch, line, turn
+from deploy_tools.land_lib import batch, line, live_limit, turn
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -114,7 +114,7 @@ def test_a_draft_a_rule_bars_is_left_out_of_the_batch(batch_of, capsys, fakes, w
         pytest.param(
             {"files": [{"path": "k8s/roles/flux/defaults/main.yml"}]},
             {},
-            "it changes a forward-only pin, the flux role or cluster-vars",
+            f"it changes {live_limit.SERIAL_WHAT}",
             id="a-serial-pr",
         ),
         pytest.param(

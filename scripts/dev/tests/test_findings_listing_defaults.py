@@ -42,6 +42,16 @@ def test_list_filters_by_severity_and_domain(capsys):
     assert "#3 " in out and "#2 " not in out
 
 
+def test_list_milestone_counts_only_the_issues_that_milestone_holds(capsys):
+    backups = {"title": "Backups", "number": 9, "state": "open"}
+    issues = _register()
+    issues[2]["milestone"] = backups
+    milestones = {"repos/DanielH2018/server/milestones": [[backups]]}
+    tools, _ = build_tools(Fakes(issues=issues, api=milestones))
+    assert main(["list", "--milestone", "Backups"], tools) == 0
+    assert capsys.readouterr().out.startswith("1 open: 1 low")
+
+
 def test_list_limit_prints_how_many_it_left_out(capsys):
     tools, _ = build_tools(Fakes(issues=_register()))
     assert main(["list", "--limit", "1"], tools) == 0

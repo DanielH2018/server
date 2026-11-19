@@ -1,6 +1,7 @@
 #!/bin/sh
-# cc-wait's `findings` source: `cc-wait findings [--repo OWNER/NAME] [--after N]` waits until
-# `findings.py next` would list a free issue numbered above the baseline. The logic and its
+# cc-wait's `findings` source: `cc-wait findings [--repo OWNER/NAME] [--after N]
+# [--milestone TITLE]` waits until `findings.py next`, with the same `--milestone`, would list
+# a free issue numbered above the baseline. The logic and its
 # contract are scripts/dev/findings_lib/new_issue_probe.py, run as `findings.py new-issues`;
 # this only finds it. It runs under uv's 3.15 with no project environment, as the
 # `fanout-headroom` source does.

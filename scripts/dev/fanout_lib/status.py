@@ -22,8 +22,10 @@ from lib.exit_codes import (
     FANOUT_PLACE_OK,
     FANOUT_PLACE_UNREAD,
 )
+from deploy_tools.land_lib.detach import result_fields
 from fanout_lib.branch_pr import PR_URL, own_pr
-from fanout_lib.brief import lands
+from fanout_lib.brief import LANDS, lands
+from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.transport import Tools
 from fanout_lib.target import SERVER
@@ -49,6 +51,14 @@ NO_PR = "no-pr"
 # A batch on the landing host that opened its PR and ended its turn before `land.sh` printed a
 # verdict. The PR exists; the landing it owes did not finish.
 NO_VERDICT = "no-verdict"
+# A batch whose landing waits on a hold or a rule that is not its own: `land_result.park_line`
+# wrote its final line. Its sub-coordinator re-lands it, so it needs attention and no page.
+PARKED = "parked"
+PARKED_LINE = re.compile(r"(?im)^parked:")
+# Where the server lander keeps its landing logs on the landing host, for the user who runs
+# it: `autoland.STATE_DIR / "logs"`, spelled for a shell.
+LANDER_LOGS = "$HOME/.local/state/fanout-server-lander/logs"
+AWAITING_LANDER = "awaiting the server lander"
 
 
 @dataclass(frozen=True)
@@ -57,9 +67,9 @@ class BatchStatus:
 
     Attributes:
         batch: the batch id.
-        state: running, done, needs-input, no-pr, no-verdict, no-report, or failed. `done`
-            means the final text carries a PR URL, and on the landing host a verdict with
-            it.
+        state: running, done, parked, needs-input, no-pr, no-verdict, no-report, or failed.
+            `done` means the final text carries a PR URL, and on the landing host a verdict
+            with it.
         pr_url: the PR the final text names, or empty.
         final_text: the session's own `result` string, or empty.
         exit_code: the unit's ExecMainStatus, or None when it could not be read.
@@ -70,10 +80,11 @@ class BatchStatus:
         terminal_reason: why the session ended, when it says.
         unit_result: systemd's `Result` for the unit, such as `oom-kill` when the batch hit
             its MemoryMax or `timeout` when RuntimeMaxSec= expired.
+        note: a few words printed after the state, or empty.
     """
 
     batch: str
-    state: str  # running | done | needs-input | no-pr | no-verdict | no-report | failed
+    state: str
     pr_url: str
     final_text: str
     exit_code: int | None
@@ -82,6 +93,7 @@ class BatchStatus:
     permission_denials: int = 0
     terminal_reason: str = ""
     unit_result: str = ""
+    note: str = ""
 
 
 def _one(b: Batch) -> str:
@@ -146,6 +158,17 @@ def _result(report: str) -> dict:
     return {}
 
 
+def final_state(report: str) -> str:
+    """`parked`, `needs-input` or "" for the final text of a `report.json` stream.
+
+    The two states a batch's own final line names, whatever its unit or its PR says.
+    """
+    final = str(_result(report).get("result") or "")
+    if PARKED_LINE.search(final):
+        return PARKED
+    return NEEDS_INPUT if BLOCKER.search(final) else ""
+
+
 def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     known = {b.batch for b in batches}
     blocks: dict[str, str] = {}
@@ -192,12 +215,13 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         elif props.get("Result") == "success" and final and not is_error:
             # A non-empty final text is not a finish: a turn that ends on "Next I will open
             # the PR" exits the process just as cleanly as one that opened it.
-            if BLOCKER.search(final):
+            named = final_state(_section(body, "report"))
+            if named:
                 # Tested first, so a blocker line wins whatever URL follows it: the review
-                # holds (`held_for_findings`, `held_for_green`) end on the full PR URL, and
-                # read as `done` on daniel-server, where the URL alone is the finish.
+                # hold (`held_for_findings`) ends on the full PR URL, and
+                # reads as `done` on daniel-server, where the URL alone is the finish.
                 # `m` still fills the line's PR url below, which the orchestrator needs.
-                state = NEEDS_INPUT
+                state = named
             elif m and lands(b.host, b.repo) and not landed:
                 # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
                 # Without that, a PR URL only means `gh pr create` returned. Another repo's
@@ -335,17 +359,20 @@ def status_line(
 
     Returns:
         The line to print, and the exit tier: 0 for running/done/landed, 1 for an
-        unreconciled `no-report`, for a clean finish with no PR (`needs-input`, `no-pr`) and
-        for a PR with no `VERDICT:` line (`no-verdict`), 5 for a genuine failure.
+        unreconciled `no-report`, for a clean finish with no PR (`needs-input`, `no-pr`), for
+        a PR with no `VERDICT:` line (`no-verdict`) and for a parked landing (`parked`), 5
+        for a genuine failure.
     """
     s = reconciled(s, branch, merged_pr, repo)
     state = s.state
     line = f"{s.batch} on {host}: {state}"
+    if s.note:
+        line += f" ({s.note})"
     if s.pr_url:
         line += f" {s.pr_url}"
     if s.permission_denials:
         line += f" permission_denials={s.permission_denials}"
-    if state in ("done", NEEDS_INPUT, NO_PR, NO_VERDICT):
+    if state in ("done", PARKED, NEEDS_INPUT, NO_PR, NO_VERDICT):
         line += f" {one_line(s.final_text)}"
     if state in ("failed", NO_REPORT):
         exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
@@ -362,9 +389,10 @@ def status_line(
         # the forge can say what became of it. A 5 would send an operator to a stderr log
         # that a finished batch has already deleted along with its worktree.
         return line + f" no merged PR for {branch}", FANOUT_PLACE_FAILED
-    if state in (NEEDS_INPUT, NO_PR):
+    if state in (NEEDS_INPUT, NO_PR, PARKED):
         # Tier 1, not 5: the session ended cleanly and its final text is the thing to read,
-        # not a stderr log. Not 0 either: no PR exists to land, so an operator has to act.
+        # not a stderr log. Not 0 either: no PR exists to land, or a landing is owed again,
+        # so someone has to act.
         return line, FANOUT_PLACE_FAILED
     if state == NO_VERDICT:
         # Tier 1 for the same reason, and the PR url stays on the line: the work to do is to
@@ -390,6 +418,132 @@ def exit_tier(tiers: Iterable[int]) -> int:
 
 
 UNREAD = "unread"
+
+
+def host_statuses(
+    batches: Sequence[Batch], tools: Tools
+) -> list[tuple[Batch, BatchStatus | None]]:
+    """Each batch with its parsed status, one read per host; None where the read timed out."""
+    out: list[tuple[Batch, BatchStatus | None]] = []
+    for host in sorted({b.host for b in batches}):
+        mine = [b for b in batches if b.host == host]
+        try:
+            proc = tools.run(host, status_command(mine), STATUS_TIMEOUT_S, None)
+        except subprocess.TimeoutExpired:
+            out.extend((b, None) for b in mine)
+            continue
+        out.extend(zip(mine, parse_status(mine, proc.stdout), strict=True))
+    return out
+
+
+def _pr_number(url: str) -> str:
+    return url.rstrip("/").rsplit("/", 1)[-1]
+
+
+def lander_command(prs: Sequence[str]) -> str:
+    """Print the `LAND-RESULT:` and `VERDICT:` lines of each PR's newest server-lander log.
+
+    One block per PR, opened by `=== <pr>`, empty while that landing has no result. No
+    output at all means this user has no lander log directory.
+    """
+    reads = "; ".join(
+        f"echo '=== {pr}'; f=$(ls {LANDER_LOGS}/land{pr}-*.log 2>/dev/null | tail -n 1); "
+        f'[ -z "$f" ] || grep -h \'^LAND-RESULT:\\|^VERDICT:\' "$f"'
+        for pr in prs
+    )
+    return f"if [ -d {LANDER_LOGS} ]; then {reads}; fi"
+
+
+def lander_logs(stdout: str) -> dict[str, str]:
+    """`lander_command`'s reply as PR number -> the lines its newest log printed."""
+    logs = {}
+    for chunk in re.split(r"(?m)^=== ", stdout)[1:]:
+        pr, _, lines = chunk.partition("\n")
+        logs[pr.strip()] = lines
+    return logs
+
+
+def with_lander_verdict(s: BatchStatus, log: str) -> BatchStatus:
+    """A `done` batch the server lander lands, read with that landing's result.
+
+    Args:
+        s: the status of a batch that stopped at its PR.
+        log: the result and verdict lines of the lander's newest log for that PR, empty
+            when the lander has started no landing of it or that landing still runs.
+
+    Returns:
+        `landed` for a finished landing, `parked` for one `land_result.park_line` parks, and
+        `needs-input` naming the verdict for any other that ended. A landing not started or
+        still running stays `done`, noted as awaiting the lander.
+    """
+    result = result_fields(log)
+    if result is None:
+        return dataclasses.replace(s, note=AWAITING_LANDER)
+    verdict = VERDICT_LINE.search(log)
+    line = verdict.group(0) if verdict else ""
+    parked = park_line(result, line)
+    if parked:
+        text = f"{parked}\n{line}\n{s.pr_url}"
+        return dataclasses.replace(s, state=PARKED, final_text=text)
+    if result.get("verdict") in FINISHED_VERDICTS:
+        return dataclasses.replace(s, state="landed")
+    text = f"needs input: the server lander's landing ended short.\n{line}\n{s.pr_url}"
+    return dataclasses.replace(s, state=NEEDS_INPUT, final_text=text)
+
+
+def _lander_lands(b: Batch, s: BatchStatus) -> bool:
+    """Whether `s` is a batch that stopped at its PR for the server lander to land.
+
+    This repo's batch on a host that does not land, `done`, with no verdict of its own: a
+    batch that landed its own draft ends on its `VERDICT:` line or parks.
+    """
+    return (
+        b.repo == SERVER
+        and not lands(b.host, b.repo)
+        and s.state == "done"
+        and bool(s.pr_url)
+        and not VERDICT.search(s.final_text)
+    )
+
+
+def with_lander_verdicts(
+    pairs: Sequence[tuple[Batch, BatchStatus | None]], tools: Tools
+) -> list[tuple[Batch, BatchStatus | None]]:
+    """`pairs` with each server-lander batch read through `with_lander_verdict`.
+
+    One read on the landing host covers every such batch. A read that fails, times out or
+    finds no log directory changes nothing.
+    """
+    mine = [s.pr_url for b, s in pairs if s is not None and _lander_lands(b, s)]
+    if not mine:
+        return list(pairs)
+    try:
+        command = lander_command([_pr_number(url) for url in mine])
+        proc = tools.run(LANDS, command, STATUS_TIMEOUT_S, None)
+    except subprocess.TimeoutExpired:
+        return list(pairs)
+    logs = lander_logs(proc.stdout)
+    return [
+        (b, with_lander_verdict(s, logs[_pr_number(s.pr_url)]))
+        if s is not None and _lander_lands(b, s) and _pr_number(s.pr_url) in logs
+        else (b, s)
+        for b, s in pairs
+    ]
+
+
+def parked_batches(
+    batches: Sequence[Batch], tools: Tools
+) -> dict[tuple[str, str], str]:
+    """`(host, batch id)` -> the final text of each of `batches` that is parked.
+
+    It asks the hosts and never the forge, so `place runs` can call it over every run.
+    """
+    read = with_lander_verdicts(host_statuses(batches, tools), tools)
+    return {
+        (b.host, b.batch): s.final_text
+        for b, s in read
+        if s is not None and s.state == PARKED
+    }
 
 
 def collect(
@@ -428,26 +582,22 @@ def collect(
             line = f"{b.batch} on {b.host}: cleaned ({b.removed_at})"
             rows.append(row(b, b.host, "cleaned", "", line))
     live = [b for b in run.batches if not b.removed_at]
-    for host in sorted({b.host for b in live}):
-        mine = [b for b in live if b.host == host]
-        try:
-            proc = tools.run(host, status_command(mine), STATUS_TIMEOUT_S, None)
-        except subprocess.TimeoutExpired:
-            for b in mine:
-                line = f"{b.batch} on {host}: status read timed out"
-                rows.append(row(b, host, UNREAD, "", line))
-            tiers.append(FANOUT_PLACE_UNREAD)
-            continue
-        by_id = {b.batch: b for b in mine}
-        for st in parse_status(mine, proc.stdout):
-            b = by_id[st.batch]
+    read: list[tuple[Batch, BatchStatus | None]] = []
+    for b, st in host_statuses(live, tools):
+        if st is not None:
             earlier = partial(tools.earlier_prs, b.branch, b.repo, b.launched_at)
             st = reconciled(st, b.branch, tools.merged_pr, b.repo, earlier)
             st = with_own_pr(st, b.branch, tools.branch_prs, b.repo, earlier)
-            # Already reconciled, so `status_line` must not ask the forge a second time.
-            line, tier = status_line(
-                st, host, b.branch, lambda *_: "", one_line, b.repo
-            )
-            tiers.append(tier)
-            rows.append(row(b, host, st.state, st.pr_url, line))
+        read.append((b, st))
+    # After `with_own_pr`, so the lander's log is read for the batch's own PR.
+    for b, st in with_lander_verdicts(read, tools):
+        if st is None:
+            line = f"{b.batch} on {b.host}: status read timed out"
+            rows.append(row(b, b.host, UNREAD, "", line))
+            tiers.append(FANOUT_PLACE_UNREAD)
+            continue
+        # Already reconciled, so `status_line` must not ask the forge a second time.
+        line, tier = status_line(st, b.host, b.branch, lambda *_: "", one_line, b.repo)
+        tiers.append(tier)
+        rows.append(row(b, b.host, st.state, st.pr_url, line))
     return rows, exit_tier(tiers)

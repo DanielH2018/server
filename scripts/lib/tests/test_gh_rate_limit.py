@@ -1,4 +1,4 @@
-"""`gh_rate_limit.wait_s` turns a rate-limit refusal into a pause until the quota resets.
+"""`gh_rate_limit` turns a rate-limit refusal into a pause, and a refused write into its remedy.
 
 Run: uv run pytest scripts/lib/tests/test_gh_rate_limit.py
 """
@@ -8,6 +8,7 @@ import io
 import json
 import subprocess
 import urllib.error
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,10 +21,15 @@ GRAPHQL = "GraphQL: API rate limit already exceeded for user ID 41801780."
 NOW = 1_000_000.0
 
 
-def _run_answering(stdout: str):
+def _run_answering(reset, remaining=0):
+    """`gh api rate_limit` answering one quota, as its `--jq` filter asks for it."""
+
     def run(argv, **_kwargs):
         assert argv[:3] == ["gh", "api", "rate_limit"]
-        return subprocess.CompletedProcess(argv, 0, stdout, "")
+        jq = argv[argv.index("--jq") + 1]
+        quota = {"remaining": remaining, "reset": reset}
+        out = str(reset) if jq.endswith(".reset") else json.dumps(quota)
+        return subprocess.CompletedProcess(argv, 0, out + "\n", "")
 
     return run
 
@@ -39,14 +45,12 @@ def test_other_refusals_are_not_rate_limits(why):
 
 
 def test_the_quota_waits_until_its_reset():
-    got = gh_rate_limit.wait_s(
-        PRIMARY, _run_answering(f"{int(NOW) + 600}\n"), lambda: NOW
-    )
+    got = gh_rate_limit.wait_s(PRIMARY, _run_answering(int(NOW) + 600), lambda: NOW)
     assert got == 602
 
 
 def test_the_wait_never_exceeds_one_quota_window():
-    run = _run_answering(f"{int(NOW) + 10 * 3600}\n")
+    run = _run_answering(int(NOW) + 10 * 3600)
     assert gh_rate_limit.wait_s(PRIMARY, run, lambda: NOW) == gh_rate_limit.MAX_WAIT_S
 
 
@@ -71,9 +75,13 @@ def test_a_graphql_refusal_waits_for_the_graphql_reset():
     def run(argv, **_kwargs):
         assert argv[:3] == ["gh", "api", "rate_limit"]
         jq = argv[argv.index("--jq") + 1] if "--jq" in argv else ""
-        resources = {name: {"reset": reset} for name, reset in resets.items()}
+        resources = {
+            name: {"remaining": 0, "reset": reset} for name, reset in resets.items()
+        }
         if jq.endswith(".reset"):
             out = str(resets["graphql" if "graphql" in jq else "core"])
+        elif jq.startswith(".resources."):
+            out = json.dumps(resources[jq.removeprefix(".resources.")])
         elif jq == ".resources":
             out = json.dumps(resources)
         else:
@@ -82,6 +90,55 @@ def test_a_graphql_refusal_waits_for_the_graphql_reset():
 
     why = "GraphQL: API rate limit exceeded for user ID 41801780."
     assert gh_rate_limit.wait_s(why, run, lambda: NOW) == 102
+
+
+def test_a_refusal_in_primary_words_with_quota_left_waits_as_a_secondary_limit():
+    run = _run_answering(int(NOW) + 3000, remaining=4595)
+    assert gh_rate_limit.wait_s(GRAPHQL, run, lambda: NOW) == (
+        gh_rate_limit.SECONDARY_WAIT_S
+    )
+
+
+def _quota(remaining, reset=int(NOW) + 600):
+    return lambda _name: {"remaining": remaining, "reset": reset}
+
+
+def test_a_refusal_in_primary_words_with_quota_left_is_named_secondary():
+    got = gh_rate_limit.remedy(GRAPHQL, _quota(4595))
+    assert got is not None
+    assert got.startswith("GitHub's secondary rate limit refused it, with 4595 graphql")
+    assert got.endswith("wait a few minutes, then re-run this")
+
+
+def test_a_spent_quota_names_its_reset():
+    reset = int(datetime(2026, 11, 18, 15, 21, tzinfo=UTC).timestamp())
+    assert gh_rate_limit.remedy(GRAPHQL, _quota(0, reset)) == (
+        "the hourly graphql quota is spent until 15:21 UTC; re-run this after it resets"
+    )
+
+
+def test_a_refusal_naming_the_secondary_limit_reads_no_quota():
+    def read(_name):
+        raise AssertionError("GitHub already named the limit")
+
+    assert gh_rate_limit.remedy(SECONDARY, read) == (
+        "GitHub's secondary rate limit refused it; wait a few minutes, then re-run this"
+    )
+
+
+def test_an_unreadable_quota_still_says_to_wait():
+    def read(_name):
+        raise subprocess.CalledProcessError(1, ["gh"])
+
+    got = gh_rate_limit.remedy(PRIMARY, read)
+    assert (
+        got
+        == "GitHub refused it for its request rate; wait a few minutes, then re-run this"
+    )
+
+
+def test_a_refusal_that_is_no_rate_limit_has_no_remedy():
+    assert gh_rate_limit.remedy("HTTP 403: Resource not accessible", _quota(0)) is None
 
 
 def _http_403(body=b"", **headers):

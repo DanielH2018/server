@@ -47,14 +47,13 @@ skipped the hook. The docs-refresh cron does not run the generator: a write unde
 and never publish it.
 
 **What the cron DOES stage is a closed list, and a write outside it degrades the run.**
-Five paths: `docs/reference/`, `docs/assets/generated/`, `scripts/dev/pytest_shard_weights.json`
-(the test shard-weights table, which `pytest_shard.py --record-missing` records and
-`--refresh-drifted` re-measures where it drifted),
+Four paths: `docs/reference/`, `docs/assets/generated/`,
 `scripts/dev/pytest_shard_runner_weights.json` (the runner-seconds table the CI split packs on,
-which `--refresh-runner` refreshes from CI's own logs), and `scripts/dev/affected_tests.json`
+which `pytest_shard.py --refresh-runner` refreshes from CI's own logs), and
+`scripts/dev/affected_tests.json`
 (what each test module depends on, which `affected_tests.py record` traces and a pull
 request's CI run selects its test modules from).
-Adding a sixth means editing the cron's `git add` and
+Adding a fifth means editing the cron's `git add` and
 `hosts/tests/test_docs_refresh_records_shard_weights.py`, which holds each table against it. The
 cron works in its own worktree, so a path written but not staged parks nothing: the run reports
 it as a stray write, reads DOWN, and the next run discards it.

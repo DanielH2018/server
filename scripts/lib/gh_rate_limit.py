@@ -1,16 +1,23 @@
-"""How long a `gh` call that GitHub refused for rate limiting has to wait.
+"""How long a `gh` call that GitHub refused for rate limiting waits, and what its caller says.
 
 A rate-limit 403 is not an answer about the request. The shared token spends 5000 core calls an
 hour, and a landing that refused on the 403 was relaunched by hand, which spent more. A caller
 that reads through `gh` asks `wait_s` for the pause and retries after it; one that reads the
-REST API itself asks `http_wait_s`.
+REST API itself asks `http_wait_s`. A caller that reports a refused write asks `remedy` for
+the next step.
+
+A secondary limit can arrive in a primary quota's words: GitHub refused GraphQL writes as
+"API rate limit already exceeded" while that quota had 4595 of 5000 calls left. So a refusal
+counts as secondary when it says so, or when the quota it names still has calls left.
 """
 
+import json
 import re
 import subprocess
 import time
 import urllib.error
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 # gh prints the API's message: "API rate limit exceeded for user ID N" for the hourly core
 # quota, "API rate limit already exceeded for user ID N" for the GraphQL quota, and "You have
@@ -43,24 +50,73 @@ def wait_s(
 ) -> int:
     """Seconds to wait before a call that failed with `why` is worth repeating.
 
-    The hourly quota waits until `X-RateLimit-Reset`, which `gh api rate_limit` reports and
-    GitHub does not count against the quota. A GraphQL refusal waits on the `graphql` quota's
-    reset, any other on `core`'s. A secondary limit waits `SECONDARY_WAIT_S`.
+    A spent hourly quota waits until its reset, which `gh api rate_limit` reports and GitHub
+    does not count against the quota. A GraphQL refusal reads the `graphql` quota, any other
+    `core`'s. A secondary limit waits `SECONDARY_WAIT_S`.
     """
     if _SECONDARY.search(why):
         return SECONDARY_WAIT_S
-    resource = "graphql" if _GRAPHQL.search(why) else "core"
-    try:
+    quota = _quota(why, _reader(run))
+    if quota is None:
+        return UNKNOWN_RESET_WAIT_S
+    _name, remaining, reset = quota
+    return SECONDARY_WAIT_S if remaining > 0 else _until(reset, now())
+
+
+def remedy(why: str, read: Callable[[str], object] | None = None) -> str | None:
+    """What to do after GitHub refused a call with `why`; None if it was no rate limit.
+
+    Every remedy is to wait and re-run the caller, never to repeat the refused call by hand,
+    because the limit that refused it still holds.
+
+    Args:
+        why: gh's stderr for the refused call.
+        read: one quota's `.resources.<name>` object from `gh api rate_limit`, by name. The
+          default runs gh.
+    """
+    if not is_rate_limited(why):
+        return None
+    wait = "wait a few minutes, then re-run this"
+    if _SECONDARY.search(why):
+        return f"GitHub's secondary rate limit refused it; {wait}"
+    quota = _quota(why, read or _reader(subprocess.run))
+    if quota is None:
+        return f"GitHub refused it for its request rate; {wait}"
+    name, remaining, reset = quota
+    if remaining > 0:
+        return (
+            f"GitHub's secondary rate limit refused it, with {remaining} {name} calls left "
+            f"in the hourly quota (`docs/github-quota.md`); {wait}"
+        )
+    at = datetime.fromtimestamp(reset, UTC).strftime("%H:%M")
+    return (
+        f"the hourly {name} quota is spent until {at} UTC; re-run this after it resets"
+    )
+
+
+def _reader(run: Callable[..., subprocess.CompletedProcess]) -> Callable[[str], object]:
+    def read(name: str) -> object:
         proc = run(
-            ["gh", "api", "rate_limit", "--jq", f".resources.{resource}.reset"],
+            ["gh", "api", "rate_limit", "--jq", f".resources.{name}"],
             capture_output=True,
             text=True,
             timeout=30,
         )
-        reset = int(proc.stdout.strip())
-    except OSError, subprocess.TimeoutExpired, ValueError:
-        return UNKNOWN_RESET_WAIT_S
-    return _until(reset, now())
+        return json.loads(proc.stdout)
+
+    return read
+
+
+def _quota(why: str, read: Callable[[str], object]) -> tuple[str, int, int] | None:
+    """`(name, remaining, reset epoch)` of the quota `why` names; None when unreadable."""
+    name = "graphql" if _GRAPHQL.search(why) else "core"
+    try:
+        got = read(name)
+        if not isinstance(got, dict):
+            return None
+        return name, int(got["remaining"]), int(got["reset"])
+    except OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError:
+        return None
 
 
 def http_wait_s(

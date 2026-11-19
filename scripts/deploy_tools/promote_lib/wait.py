@@ -222,6 +222,8 @@ class WaitResult:
         suspended: the PR's tags suspended at M, which the wait left out.
         tags: the PR's tags, `services` joined with the changed set's own (`changed_tags`),
             as the last poll read them. Every flux-owned tag when the set widened.
+        hold_sha: the SHA DEPLOY_HOLD held, beside HOLD_CAUSE; "" otherwise.
+        hold_owner: `hold_owner`'s answer for that hold, beside HOLD_CAUSE; "" otherwise.
     """
 
     verdict: str
@@ -231,6 +233,8 @@ class WaitResult:
     widened: str = ""
     suspended: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    hold_sha: str = ""
+    hold_owner: str = ""
 
 
 # The changed-set names that are no deploy tag: the root, the shared kinds, and Flux's own
@@ -243,6 +247,51 @@ def changed_tags(names) -> set[str]:
     return {tag for name in names if (tag := split_kind(name)[0]) not in _NOT_A_TAG}
 
 
+HOLD_OWN = "own"
+HOLD_OTHER = "other"
+HOLD_UNATTRIBUTED = "unattributed"
+
+
+@dataclass(frozen=True)
+class _Hold:
+    """A DEPLOY_HOLD value, split and read against one landing's own services.
+
+    Attributes:
+        sha: the held SHA, the value's first word.
+        rest: what follows the SHA, "" for a bare one.
+        failed: the names of a `failed=` hold, empty for every other form.
+        own: the failed names that belong to one of the landing's services, sorted.
+    """
+
+    sha: str
+    rest: str
+    failed: tuple[str, ...]
+    own: tuple[str, ...]
+
+
+def _read_hold(hold: str, services: list[str] | None) -> _Hold:
+    sha, _, rest = hold.partition(" ")
+    failed: tuple[str, ...] = ()
+    if rest.startswith("failed="):
+        failed = tuple(rest.removeprefix("failed=").split(","))
+    own = sorted(n for n in failed if split_kind(n)[0] in (services or ()))
+    return _Hold(sha, rest, failed, tuple(own))
+
+
+def hold_owner(hold: str, services: list[str] | None = None) -> str:
+    """Whose failure a DEPLOY_HOLD value records, for the landing that names `services`.
+
+    Returns:
+        HOLD_OWN when a failed name is one of `services`, and HOLD_OTHER when the hold names
+        failures and none is. HOLD_UNATTRIBUTED when the hold names no failure or the
+        landing names no service, so nothing ties the hold to this PR or clears the PR of it.
+    """
+    read = _read_hold(hold, services)
+    if not read.failed or not services:
+        return HOLD_UNATTRIBUTED
+    return HOLD_OWN if read.own else HOLD_OTHER
+
+
 def hold_detail(hold: str, services: list[str] | None = None) -> str:
     """What a DEPLOY_HOLD value says: the held SHA and, for a `failed=` hold, its names.
 
@@ -252,21 +301,19 @@ def hold_detail(hold: str, services: list[str] | None = None) -> str:
     that run's commit too (D7). So a hold naming none of this PR's services was most likely
     caused by another merge in the same promotion.
     """
-    held, _, rest = hold.partition(" ")
-    detail = f"{HOLD_VARIABLE} holds {held}"
-    if rest.startswith("failed="):
-        names = rest.removeprefix("failed=").split(",")
-        detail += f", and these failed: {','.join(names)}"
+    read = _read_hold(hold, services)
+    detail = f"{HOLD_VARIABLE} holds {read.sha}"
+    if read.failed:
+        detail += f", and these failed: {','.join(read.failed)}"
         if services:
-            own = sorted(n for n in names if split_kind(n)[0] in services)
             detail += (
-                f". This PR's {', '.join(own)} failed"
-                if own
+                f". This PR's {', '.join(read.own)} failed"
+                if read.own
                 else f". None is this PR's ({', '.join(sorted(services))}), so another "
                 "merge in the same promotion, or a run it superseded, most likely caused it"
             )
-    elif rest:
-        detail += f" ({rest})"
+    elif read.rest:
+        detail += f" ({read.rest})"
     return (
         f"{detail}. That SHA may contain this merge or predate it. Clearing the hold is "
         f"the operator's decision, and an agent's clear asks them first: `gh variable set {HOLD_VARIABLE} --body none -R {forge.REPOSITORY}`"
@@ -476,6 +523,8 @@ def land_wait(
                 hold_detail(hold, own),
                 widened=widened,
                 tags=tuple(tags),
+                hold_sha=hold.partition(" ")[0],
+                hold_owner=hold_owner(hold, own),
             )
         if all_paused:
             return WaitResult(

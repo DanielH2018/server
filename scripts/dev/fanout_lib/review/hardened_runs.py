@@ -1,17 +1,12 @@
-"""The git and pytest calls the red/green measures make, so nothing the agent wrote steers them.
+"""The git and pytest calls the base check makes, so nothing the agent wrote steers them.
 
 Two kinds, by what the call reads. A call on the batch's worktree goes through `worktree_git`,
 under the `hardened` prefix: the agent can write that repo's config, hooks, attributes and
-replace refs, so each setting a call consults is pinned. `worktree_must` is the same
-call for a step that may not fail, and raises `ResetFailed`.
+replace refs, so each setting a call consults is pinned.
 
 A call that needs a tree nobody wrote goes to a fresh clone instead. `clone_at` checks a commit
 out with `BARE_GIT`, which reads no global, system or worktree configuration, and `bare_git`,
-`collect` and `pytest_argv` run there. `outcomes` reads the `-rA` summary of such a run,
-and `fixture_closures` the fixtures a `--setup-plan` run lists for each node.
-
-The red gate, the green gate, the worktree reset and the two red/green measures
-(`base_check`, `hunk_check`) all import from here.
+`collect` and `pytest_argv` run there. `outcomes` reads the `-rA` summary of such a run.
 """
 
 import re
@@ -22,13 +17,12 @@ from pathlib import Path
 # One process boundary for git: argv and stdin in, the finished process out.
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
-# Settings in the worktree's own git config that would run a command, move where a reset
-# writes, or keep an edit through `reset --hard`, each pinned to git's Linux default for
-# every call below. `post-index-change` fires on any index write and `reference-transaction`
-# on a HEAD update; a sparse checkout re-sets the skip-worktree bits `unhide_index` clears;
-# an edit of the same size with its mtime restored is stat-clean unless ctime counts; with
-# `fileMode` off a cleared exec bit is no change; `autocrlf` and `symlinks` change the bytes
-# or the kind of file a checkout writes.
+# Settings in the worktree's own git config that would run a command or change what a call
+# reads, each pinned to git's Linux default for every call below. A hook can fire on any
+# index write or HEAD update; a sparse checkout sets skip-worktree bits; an edit of the same
+# size with its mtime restored is stat-clean unless ctime counts; with `fileMode` off a
+# cleared exec bit is no change; `autocrlf` and `symlinks` change the bytes or the kind of
+# file a checkout writes.
 _PINNED = (
     ("core.hooksPath", "/dev/null"),
     ("core.fsmonitor", "false"),
@@ -40,8 +34,8 @@ _PINNED = (
     ("core.autocrlf", "false"),
     ("core.symlinks", "true"),
     ("core.untrackedCache", "false"),
-    # `ignoreCase` lets `clean` keep a planted case variant, `recurse` reaches into a
-    # submodule's own config, and a split index is a second file the reset reads.
+    # `ignoreCase` hides a planted case variant, `recurse` reaches into a submodule's own
+    # config, and a split index is a second file an index read takes.
     ("core.ignoreCase", "false"),
     ("submodule.recurse", "false"),
     ("core.splitIndex", "false"),
@@ -56,19 +50,16 @@ _NO_USER_CONFIG = ("GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
 def hardened(run: Runner, worktree: Path) -> list[str]:
     """The `env ... git` prefix every git call on the worktree runs under.
 
-    The red author, and later the implementer, can write the repo's config, its hooks, its
-    `info/attributes` and its replace refs, and the reset that clears the red phase would
-    otherwise run through all of them. No git switch skips the repository's config file, but
-    `GIT_CONFIG_COUNT` settings outrank every file, so each setting these commands consult
-    is pinned, and every filter driver the config names is blanked. `GIT_WORK_TREE`
-    overrides `core.worktree`. `GIT_NO_REPLACE_OBJECTS` stops a replace ref swapping the
-    commit being reset to. No setting turns `info/attributes` off, so `reset_worktree`
-    refuses a repo that has one.
+    The implementer can write the repo's config, its hooks, its `info/attributes` and its
+    replace refs, and a git call on the worktree would otherwise run through all of them.
+    No git switch skips the repository's config file, but `GIT_CONFIG_COUNT` settings
+    outrank every file, so each setting these commands consult is pinned, and every filter
+    driver the config names is blanked. `GIT_WORK_TREE` overrides `core.worktree`.
+    `GIT_NO_REPLACE_OBJECTS` stops a replace ref swapping the commit a call names.
 
     DECIDED: pin settings rather than snapshot and restore the config file. Every worktree
     shares the one in the common git dir and writes `branch.*` keys into it, so a restore
-    would undo other sessions' writes. The reset only stops running through a planted
-    `.git/config` or hook; `fanout_lib.review.git_state` is what fails the batch when one appears.
+    would undo other sessions' writes.
     """
     listed = run(
         [
@@ -101,24 +92,6 @@ def worktree_git(
     return run([*hardened(run, worktree), "-C", str(worktree), *args], None)
 
 
-class ResetFailed(RuntimeError):
-    """A git step that clears what the red phase left exited non-zero.
-
-    The worktree may then still hold a hidden edit or the refused red commit, so the batch
-    stops rather than hand it to the implementer. A leftover `index.lock` is one cause: every
-    index write refuses while it exists, and `git clean` still exits 0.
-    """
-
-
-def worktree_must(run: Runner, worktree: Path, *args: str) -> str:
-    proc = worktree_git(run, worktree, *args)
-    if proc.returncode:
-        raise ResetFailed(
-            f"`git {' '.join(args[:2])}` exited {proc.returncode}: {proc.stderr.strip()}"
-        )
-    return proc.stdout
-
-
 # One line of pytest's `-rA` short summary. SKIPPED lines carry a location, not a node id, so
 # a skipped node is simply absent and reads as not failed.
 _OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re.M)
@@ -127,27 +100,6 @@ _OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re
 def outcomes(output: str) -> dict[str, str]:
     """Each node id in a `pytest -rA` run's short summary, with its outcome."""
     return {m.group(2): m.group(1) for m in _OUTCOME.finditer(output)}
-
-
-_USED = " (fixtures used: "
-
-
-def fixture_closures(output: str, nodes: list[str]) -> dict[str, list[str]]:
-    """Each of `nodes` a `pytest --setup-plan` run lists, with every fixture it resolves.
-
-    The plan prints a node as its id, followed by `_USED` and its `item.fixturenames` when
-    it has any. A fixture's own SETUP line carries the same suffix, so a line counts only
-    when it starts with a node id given. A node the plan does not list is left out.
-    """
-    lines = {line.strip() for line in output.splitlines()}
-    found = {}
-    for node in nodes:
-        if node in lines:
-            found[node] = []
-        for line in lines:
-            if line.startswith(node + _USED) and line.endswith(")"):
-                found[node] = line[len(node + _USED) : -1].split(", ")
-    return found
 
 
 def pytest_argv(worktree: Path, *args: str) -> list[str]:
@@ -160,7 +112,7 @@ def pytest_argv(worktree: Path, *args: str) -> list[str]:
 
 # git with no configuration the implementer can write: no global or system file, which a
 # clone's own fresh config leaves as the only other sources, and no user attributes file. The
-# green gate checks HEAD out this way, so no filter, `info/attributes` line or config value
+# base check checks HEAD out this way, so no filter, `info/attributes` line or config value
 # from the worktree's repo can rewrite a file on its way to pytest.
 BARE_GIT = (
     "env", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
@@ -179,13 +131,12 @@ ORIGIN_MASTER = "refs/remotes/origin/master"
 
 
 def _origin_refs(run: Runner, clone: Path, origin: str) -> str:
-    """The `update-ref --stdin` input that leaves `clone` only the red gate's `origin/master`.
+    """The `update-ref --stdin` input that leaves `clone` only the caller's `origin/master`.
 
     A clone of a path maps the source's local branches to `origin/*`, so its `origin/master`
-    is the source's local `master`. Tests that diff against `origin/master` must see the base
-    the red gate saw, not that branch and not the source's live remote-tracking ref, which a
-    fetch or the implementer can move between the gates. One transaction may not name
-    a ref twice, so `origin/master` is set rather than deleted and recreated.
+    is the source's local `master`. Tests that diff against `origin/master` must see the
+    worktree's remote-tracking ref, not that branch. One transaction may not name a ref
+    twice, so `origin/master` is set rather than deleted and recreated.
     """
     mapped = run(
         [

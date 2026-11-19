@@ -369,6 +369,15 @@ the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
 
 `gh-quota` is a reporting tool. It runs no `gh` call for a caller, so it is not a second shim.
 
+`gh-quota status` reports only the primary quotas. GitHub publishes no count for the
+secondary limits, so `status` can read healthy while GitHub refuses writes. On 2026-11-18
+about ten landings and agents wrote at once, and GitHub refused `gh pr ready` with `API
+rate limit already exceeded` while the GraphQL quota had 4595 of 5000 calls left. The same
+landing succeeded five minutes later. A secondary limit can therefore arrive in the primary
+quota's words. `scripts/lib/gh_rate_limit.py:remedy` reads the named quota's headroom to
+tell the two apart. A refusal with calls left is the secondary limit, and the landing says
+to wait and re-run instead of repeating the refused call.
+
 ## What the design leaves out
 
 - **No `gh` shim on `PATH`.** A program installed as `/usr/local/bin/gh` reaches every caller,
