@@ -1,7 +1,7 @@
 """Service checks for monitor-bridge.
 
-Covers n8n, the *arrs, Bazarr, Prowlarr, the etcd restore drill, and the Home Assistant
-heartbeat with its ip_ban arm.
+Covers n8n, the *arrs, Bazarr, Prowlarr, the etcd restore drill, the Home Assistant
+heartbeat with its ip_ban arm, and Airflow's scheduler.
 
 Slice 7 of the check.py split. Reads config as `cfg.X`, queries through its `src` argument
 (`bridge.sources.Sources`, which a test replaces with a fake) and reads its streak counters as
@@ -21,6 +21,7 @@ from bridge.common import sanitize
 from bridge.parsing import parse_duration
 from bridge.types import CheckResult, as_object, as_object_list, optional_object
 from verdicts.service import (
+    airflow_scheduler_verdict,
     ha_ban_verdict,
     ha_heartbeat_fresh,
     indexers_down,
@@ -418,3 +419,22 @@ def check_ha_heartbeat(
         "deploy/restart grace",
     )
     return with_ha_ban(cfg, src, ok, msg)
+
+
+def check_airflow_scheduler(
+    cfg: Config, src: Sources, now: datetime | None = None
+) -> tuple[bool, str]:
+    """Is Airflow's scheduler alive? It launches every DAG run, so nothing else fails when it dies.
+
+    Reads the api-server's unauthenticated health endpoint (see airflow_scheduler_verdict).
+    Empty AIRFLOW_URL -> disabled (stays up), like check_n8n. An unreachable api-server is NOT
+    caught here: it bubbles up and _evaluate renders it `down`, the check_bazarr convention.
+    """
+    if not cfg.AIRFLOW_URL:
+        return True, "airflow scheduler monitoring disabled (no URL)"
+    health = as_object(
+        src.get_json(cfg.AIRFLOW_URL + "/api/v2/monitor/health"), "airflow health"
+    )
+    return airflow_scheduler_verdict(
+        health, now if now is not None else datetime.now(timezone.utc)
+    )

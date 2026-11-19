@@ -50,6 +50,7 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="etcd_restore_drill", fn=service.check_etcd_restore_drill, runbook="k3s-etcd-restore"),
     PushCheck(name="scrutiny", fn=host_thermal.check_scrutiny, gate="startup_grace", critical=True, runbook="alert-runbooks"),
     PushCheck(name="ha_heartbeat", fn=service.check_ha_heartbeat),
+    PushCheck(name="airflow_scheduler", fn=service.check_airflow_scheduler, gate="startup_grace"),
     # The producer is the bridge re-reading the newest result every cycle, not the 6-hourly run;
     # the check's staleness arm catches a dead scheduler.
     PushCheck(name="speedtest", fn=host_edge.check_speedtest, gate="startup_grace"),

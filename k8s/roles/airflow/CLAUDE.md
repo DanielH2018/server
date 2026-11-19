@@ -39,7 +39,8 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `tests/services/test_airflow_task_image.py::test_the_task_pod_template_names_the_schedulers_image_at_ghcr`
   holds it to the scheduler's.
 - **Two additive fences.** `k8s/roles/airflow/templates/networkpolicy.yaml.j2` admits
-  `airflow-task` and `airflow-dag-processor` to 8080, from the entry's `netpol_from`.
+  `airflow-task`, `airflow-dag-processor` and `monitor-bridge` to 8080, from the entry's
+  `netpol_from`.
   `k8s/roles/airflow/templates/networkpolicy-postgres.yaml.j2` admits the four Airflow apps
   and observability's Grafana to 5432. A source a DAG reads needs an allow for
   `app: airflow-task` in its own fence, after a caller census (ADR 0009). Prometheus's is
@@ -79,8 +80,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `airflow_postgres_password`, `airflow_warehouse_writer_password` or
   `airflow_warehouse_reader_password`, the operator runs `ALTER ROLE … PASSWORD` in the pod
   after the new value deploys. Nothing else changes the stored hash.
-- **Nothing pages on a dead scheduler yet.** The heartbeat deadman is the milestone's next
-  PR (#9201). Until it lands, a stopped scheduler shows only as runs that never start.
+- **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
+  row reads the api-server's `/api/v2/monitor/health` every cycle and goes down when the
+  scheduler is not `healthy` (`k8s/roles/monitor-bridge/files/verdicts/service.py:airflow_scheduler_verdict`).
+  The rule waits 10 minutes, so the weekly reboot does not page.
 
 ## Editing
 
