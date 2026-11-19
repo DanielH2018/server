@@ -1,7 +1,5 @@
 {#- docker-proxy and its sub-proxies. The networks, resources and label settings are written out
     here, because a service tree has no k8s/templates on its search path.
-    docker-proxy-codeserver renders only under has_code_server, which the recovery heartbeat
-    (hosts/components/pi-heartbeats) reads for the same gate. Both are false on the Pi.
 
     A dockerd restart replaces /var/run/docker.sock with a new inode. A container that bind-mounts
     the socket keeps the old inode, which has no listener, so the proxy answers 503 until it is
@@ -139,68 +137,6 @@ services:
           cpus: '0.05'
           memory: 16M
 
-{% if has_code_server %}
-  # Read-only proxy dedicated to code-server's in-IDE `docker` CLI (Security M1). Same
-  # least-privilege env as the main docker-proxy (POST=0/EXEC=0), but it lives SOLELY on the
-  # private `codeserver` network shared only with code-server — so the shared docker-proxy can
-  # stay off `apps` and the internet-facing app fleet can no longer read every container's Env
-  # (secrets) via CONTAINERS=1. code-server is the only apps-side consumer, hence its own proxy.
-  docker-proxy-codeserver:
-    image: lscr.io/linuxserver/socket-proxy:latest@sha256:6beb1743581ec3b2ed1a2bafd617e8c7a1d7ae2fe835293e333327618fc2b925
-    container_name: docker-proxy-codeserver
-    environment:
-      - CONTAINERS=1
-      - SERVICES=1
-      - TASKS=1
-      - POST=0        # Read-only: no write/lifecycle ops
-      - EXEC=0        # Read-only: no container exec
-      - INFO=1
-      - VERSION=1
-      - PING=1
-      - IMAGES=1
-      - VOLUMES=1
-      - NETWORKS=1
-      - EVENTS=1
-    networks:
-      - codeserver
-    volumes:
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-        read_only: true
-        bind: {create_host_path: false}
-    read_only: true
-    tmpfs:
-      - /run
-    # LSIO socket-proxy is haproxy on a high port — already read_only + tmpfs.
-    # Empty add; if haproxy can't drop to its user, add [SETUID, SETGID]. Verify on deploy.
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:2375/version || exit 1"]
-      interval: {{ container_healthcheck_interval | default('10s') }}
-      timeout: {{ container_healthcheck_timeout | default('5s') }}
-      retries: {{ container_healthcheck_retries | default(3) }}
-      start_period: 10s
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
-      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
-      # autokuma macro emitted this inert label.
-      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
-    # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 128M
-        reservations:
-          cpus: '0.05'
-          memory: 16M
-{% endif %}
-
 networks:
 {% for net in container_item.networks %}
   {{ net }}:
@@ -208,7 +144,3 @@ networks:
 {% endfor %}
   lifecycle:
     external: true
-{% if has_code_server %}
-  codeserver:
-    external: true
-{% endif %}

@@ -13,8 +13,6 @@ k3s_node_wifi_link: wlo1
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true
-# Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
-has_code_server: false
 # No Docker engine: this host is a k3s agent node.
 has_docker: false
 # DECIDED: no fwupd here, because LVFS carries no firmware for this hardware. The host is an

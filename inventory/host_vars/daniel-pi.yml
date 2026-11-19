@@ -60,7 +60,7 @@ container_healthcheck_retries: 5
 compose_services:
   # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
   # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,
-  # serves autoheal), and docker-proxy-codeserver under has_code_server.
+  # serves autoheal).
   - name: docker-proxy
     use_authelia: false
     networks:
