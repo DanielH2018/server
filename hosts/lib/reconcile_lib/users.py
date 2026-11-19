@@ -11,7 +11,8 @@ does not hold*. A host package's manifest lists "users" in `reconcilers` and car
 The renderer writes the same list to /usr/lib/sysusers.d/homelab.conf, a `g` line and a `u` line
 per user, and the arm creates the missing users with `systemd-sysusers`. sysusers creates only
 users that are missing, so a user that exists with another uid or gid would keep it. The arm
-therefore compares each declared uid and gid with `getent passwd` first. A mismatch is a fault:
+therefore compares each declared uid and gid with `getent passwd`, and the gid with `getent
+group` for the user's own group, first. A mismatch is a fault:
 the package shipped a wrong id, and the run fails and holds the host. The arm never renumbers an
 existing user or group. A user still missing after sysusers is a fault too.
 
@@ -87,21 +88,25 @@ def check(user: dict) -> str:
             ERR,
         )
         return "fault"
-    if int(fields[3]) != user["gid"]:
+    group = run("getent", "group", name).stdout.split(":")
+    group_gid = group[2] if len(group) > 2 and group[2].isdigit() else "none"
+    if int(fields[3]) != user["gid"] or group_gid != str(user["gid"]):
         log(
-            f"{name} has gid {fields[3]}; the package declares {user['gid']}. To move it, as root: stop every unit running as {name}; groupmod -g {user['gid']} {name}; find {home} /tmp /var/tmp /var/spool/cron/crontabs -xdev -gid {fields[3]} -exec chown -h :{user['gid']} {{}} +; start the units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
+            f"{name} has gid {fields[3]} and group {name} has gid {group_gid}; the package declares {user['gid']} for both. To move them, as root: stop every unit running as {name}; groupmod -g {user['gid']} {name}; usermod -g {user['gid']} {name}; find {home} /tmp /var/tmp /var/spool/cron/crontabs -xdev -gid {fields[3]} -exec chown -h :{user['gid']} {{}} +; start the units again; then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"
     return "live"
 
 
-def expire(name: str) -> bool:
-    gone = run("getent", "passwd", name).returncode == 2
-    if gone or run("usermod", "--expiredate", "1", name).returncode == 0:
-        return True
+def expire(name: str) -> str:
+    """`expired`, `gone` when no such user exists, or `failed`."""
+    if run("getent", "passwd", name).returncode == 2:
+        return "gone"
+    if run("usermod", "--expiredate", "1", name).returncode == 0:
+        return "expired"
     log(f"cannot expire {name}", ERR)
-    return False
+    return "failed"
 
 
 def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | None, int]:
@@ -125,9 +130,11 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
         if not users:
             names.add(name)
             drift += 1
-        elif expire(name):
+            continue
+        outcome = expire(name)
+        if outcome == "expired":
             expired.add(name)
-        else:
+        elif outcome == "failed":
             names.add(name)
             ok = False
     return ok, {"names": sorted(names), "expired": sorted(expired)}, drift

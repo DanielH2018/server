@@ -571,6 +571,9 @@ create_declared_users() {
         live=$(getent passwd "$name" | cut -d: -f3,4)
         [ "$live" = "$declared" ] ||
             die "$name has uid:gid ${live:-none}; homelab-$host declares $declared. Move any user or group that holds those ids, give $name and its group them, then rerun bootstrap-host.sh"
+        group_gid=$(getent group "$name" | cut -d: -f3)
+        [ "$group_gid" = "${declared#*:}" ] ||
+            die "group $name has gid ${group_gid:-none}; homelab-$host declares ${declared#*:}. Move any group that holds that gid, give group $name it, then rerun bootstrap-host.sh"
     done < "$users_conf"
 }
 

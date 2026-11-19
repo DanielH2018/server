@@ -88,7 +88,7 @@ def test_step_5_creates_the_declared_users_before_the_directories_that_name_them
 
 def test_step_5_creates_the_users_the_host_package_declares_before_any_install(host):
     host.declare_users(
-        'u node_exporter 904:904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+        'g node_exporter 904\nu node_exporter 904:904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
     )
 
     result = host.run("daniel-pi")
@@ -102,7 +102,7 @@ def test_step_5_creates_the_users_the_host_package_declares_before_any_install(h
 
 def test_step_5_dies_naming_both_uids_when_a_declared_uid_is_already_held(host):
     host.declare_users(
-        'u node_exporter 904:904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+        'g node_exporter 904\nu node_exporter 904:904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
     )
     host.add_user("lxd", 904)
 
@@ -111,6 +111,22 @@ def test_step_5_dies_naming_both_uids_when_a_declared_uid_is_already_held(host):
     assert result.returncode == 1
     assert (
         "node_exporter has uid:gid 999:904; homelab-daniel-pi declares 904:904"
+        in result.stderr
+    )
+    assert not [c for c in host.apt_calls() if c.startswith("install")]
+
+
+def test_step_5_dies_naming_the_group_when_a_declared_gid_is_already_held(host):
+    host.declare_users(
+        'g node_exporter 986\nu node_exporter 904:986 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+    )
+    host.add_user("lxd", 986)
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 1
+    assert (
+        "group node_exporter has gid 999; homelab-daniel-pi declares 986"
         in result.stderr
     )
     assert not [c for c in host.apt_calls() if c.startswith("install")]

@@ -47,7 +47,9 @@ def test_the_local_build_creates_the_users_the_host_deb_declares_before_the_inst
 ):
     host = FakeHost(tmp_path, hostname="daniel-box")
     host.stock_kit()
-    host.declare_users('u claude 996:996 "Claude agent" /var/lib/claude /bin/bash\n')
+    host.declare_users(
+        'g claude 996\nu claude 996:996 "Claude agent" /var/lib/claude /bin/bash\n'
+    )
 
     result = host.run(
         "daniel-box",
