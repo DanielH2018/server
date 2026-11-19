@@ -25,6 +25,13 @@ manifest the role ships (#4298). The role has no `tasks/`. Beside the template g
 `defaults/main.yml` holding the image pin, Renovate stance, resources and uid, and a
 `CLAUDE.md`. It then runs the role-glance generator over the new doc. Its output renders clean through `prek run --all-files` with no hand edits.
 
+**Each image pin is a row in Renovate's expected-dependency table.** The PR's
+`renovate config validator` job runs Renovate's own extract and fails until
+`scripts/validate/renovate_expected_deps.tsv` lists every dep the new defaults pin. The failure
+prints the missing rows and the `scripts/validate/renovate_extract.py` `write` command that
+regenerates the table from the report. To check before pushing, run
+`scripts/validate/renovate_config.sh extract` from the repository root.
+
 **Copying a sibling is what this replaced** (#2855). A sibling's files carry its narration, and
 that narration is dated — littlelink's Deployment cited a Compose template that had not existed
 since 2026-08-14. Read the generated files before you extend them; the TODOs in the CLAUDE.md
