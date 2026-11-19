@@ -21,21 +21,20 @@ from dev.findings_lib.issue_model import _TRAILER_RE, PR_REPO
 # `fanout.py` entry point, the `fanout-stop.py` hook) or any file
 # under `fanout_lib/` at any depth, `fanout_lib/review/` included, with or without its directory. Bare names count because most of these
 # issues cite a file such as `fanout_place.py` with no path, which `cited_paths` never captures. The
-# lookbehind keeps `test_fanout_red_gate.py` out: a test of the tooling does not run a batch.
+# lookbehind keeps `test_fanout_review.py` out: a test of the tooling does not run a batch.
 _FANOUT_TOOLING_RE = re.compile(
     r"(?<![\w-])(?:[\w.-]+/)*(?:fanout[\w-]*\.py|fanout_lib/(?:[\w.-]+/)*[\w.-]+\.\w+)(?![\w/])"
 )
 
-# DECIDED: the pipeline's own vocabulary, not a diff-based gate in `launch`. #5400 described
-# the green gate and the red lock in prose and named no file, so the path match above never
-# saw it. A diff check needs the batch's worktree, which exists only after `launch`
+# DECIDED: the pipeline's own vocabulary, not a diff-based gate in `launch`. An issue can
+# describe the pipeline in prose and name no file, so the path match above never
+# sees it. A diff check needs the batch's worktree, which exists only after `launch`
 # has claimed the issues and started the run, so it fires after the agent has spent its
 # budget. This match reads the issue text, before any claim, in both `next` and `launch`.
 # Whole phrases only: a bare "review" or "gate" appears in half the register. A miss costs
 # one batch that ends `needs input:`, so the phrase list stays short.
 _FANOUT_VOCABULARY_RE = re.compile(
-    r"(?<![\w-])(?:red[\s-]+(?:gate|lock|phase)|green[\s-]+(?:gate|lock)"
-    r"|fan[\s-]?out[\s-]+review)s?(?![\w-])",
+    r"(?<![\w-])fan[\s-]?out[\s-]+reviews?(?![\w-])",
     re.IGNORECASE,
 )
 
@@ -44,7 +43,7 @@ def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
     """The fan-out tooling files an issue body cites, sorted; empty for ordinary work.
 
     An issue citing one is solo-only: `next` marks it and `fanout.py place launch`
-    refuses a batch holding it. A batch that edits this code is reviewed, red-gated and
+    refuses a batch holding it. A batch that edits this code is reviewed and
     stopped by its own edited copy, and fan-out batches on these files caused the most
     rework in 68 review records. A solo session claims and works it as usual.
 
@@ -68,7 +67,7 @@ def solo_only_reasons(title: str, body: str, repo: str | None = None) -> list[st
     or body uses (lowercased, one spelling per phrase).
 
     Args:
-        title: the issue title, which names the red lock or green gate when the body is prose.
+        title: the issue title, which names the pipeline when the body is prose.
         body: the issue body.
         repo: the register the issue is in, as for `fanout_tooling_paths`.
     """

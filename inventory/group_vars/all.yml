@@ -581,8 +581,8 @@ weekly_reboot_timezone: UTC
 # and for a heartbeat window that was already half-spent when the shutdown landed.
 weekly_reboot_mute_lead_minutes: 5
 # How long after the reboot itself the mute stays open. Measured: daniel-server
-# was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
-# recorded ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
+# was down 07:35 to 07:48:25 and the in-cluster monitor was Ready again at ~07:51, and its
+# status-page sync recorded ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
 # for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
 # whose 1200s window meant a tile could flip DOWN up to 20 minutes after the last missed push.
 # With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
@@ -646,7 +646,7 @@ etcd_drill_full_cron: "20 11 1 * *"
 # days (2678400 s), plus four days of slack for a late run or a host that was down that day.
 # ENFORCED by tests/staging/test_etcd_drill_vm.py, which pins it between the cron's
 # period and twice it.
-etcd_drill_full_kuma_interval_s: 3024000
+etcd_drill_full_deadline_s: 3024000
 # has_claude_code gates the claude-code and worktree-holders components. Each defaults OFF and is opted into per host.
 has_github_cli: false
 has_chezmoi: false

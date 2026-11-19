@@ -94,9 +94,6 @@ services:
 {% for net in container_item.networks %}
       - {{ net }}
 {% endfor %}
-    labels:
-      # Inert: Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false).
-      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:

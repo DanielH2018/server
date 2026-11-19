@@ -73,7 +73,8 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     worktree — the claim names a branch nothing has checked out", which is what `claim 1132
     --worktree issue-1132` gets when the branch is `worktree-issue-1132`), and a `--worktree`
     naming a real branch whose state is REMOVABLE (`master`, or a resumed orchestrator that
-    came back without the lock its claims leaned on). Both end the same way: `next` re-offers
+    came back without the lock its claims leaned on) and that no live process works in. A
+    desktop-app session's unlocked tree passes, because the session itself works in it. Both end the same way: `next` re-offers
     the issue and `reap` releases it while the session is still working it, which is the
     exact double-assignment the protocol exists to prevent. Two guards with two exit codes
     would be worse than the bug, so there is one, and it exits 3 like every other "nothing
@@ -97,7 +98,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     facts = tools.worktree_facts()
     trees, dirty, merged, ok = facts
     if ok:
-        live, why = claim_is_live(args.worktree, trees, dirty, merged)
+        live, why = claim_is_live(args.worktree, trees, dirty, merged, tools.tree_held)
         if not live and not args.force:
             sys.stderr.write(
                 f"claim: `{args.worktree}` would be stale at birth — {why}\n"
@@ -133,7 +134,13 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
             stale = (
                 stale_holder(
-                    issue, trees, dirty, merged, lambda _n: batch_holds(), peer_trees
+                    issue,
+                    trees,
+                    dirty,
+                    merged,
+                    lambda _n: batch_holds(),
+                    peer_trees,
+                    tools.tree_held,
                 )
                 if ok
                 else None
@@ -270,6 +277,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
         merged,
         batch_holds=tools.batch_holds,
         peer_trees=tools.peer_trees,
+        held_tree=tools.tree_held,
     )
     others = 0
     if args.worktree:
@@ -328,6 +336,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         merged,
         batch_holds=tools.batch_holds,
         peer_trees=tools.peer_trees,
+        held_tree=tools.tree_held,
     )
     for s in states:
         if s.live:
@@ -357,7 +366,9 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     peer_trees = functools.cache(tools.peer_trees)
     closed = tools.close_idle_milestones(
         tools.owner_name,
-        lambda branch: branch_is_held(branch, trees, dirty, merged, peer_trees),
+        lambda branch: branch_is_held(
+            branch, trees, dirty, merged, peer_trees, tools.tree_held
+        ),
         dry_run=args.dry_run,
     )
     verb = "would be closed" if args.dry_run else "closed"

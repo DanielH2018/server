@@ -99,12 +99,20 @@ takes the turn, before its CI run, and again just before the merge. A refused la
 75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
 `slots._bar` owns the rules, and each read that fails bars nothing.
 
-- A PR that changes a k8s role is refused while `DEPLOY_HOLD` reads anything but `none`.
+- A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
+  anything but `none`.
 - A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
   takes the serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
-  until its process ends, so every other PR is refused meanwhile. A serial PR changes the
-  `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
-  cluster-vars file.
+  until its process ends, so every other PR is refused meanwhile. `live_limit.kind` decides
+  which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
+  forward-only pins, the `flux` role, the cluster-vars file, or a path in
+  `live_limit.SERIAL_PATHS`.
+- `SERIAL_PATHS` holds `cluster/services.yml`, the service list. Every tag promotes with
+  the bundle that list declares. One crashlooping new service fails the whole promotion and
+  sets `DEPLOY_HOLD`, which reports `deploy-failed` to every landing that shared it. So
+  every edit to the file lands alone, a field change on one service included: the operator
+  accepted that cost on 2026-11-19 in place of a rule that reads the diff. A refusal names
+  what a serial PR changes from `live_limit.SERIAL_WHAT`.
 - A serial PR that holds the turn waits for those landings instead of refusing. At the
   draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
   `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints

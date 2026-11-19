@@ -6,7 +6,7 @@
     recreated, and autoheal (which restarts only an unhealthy container) cannot see the fault.
     Fix: `docker compose -p homelab up -d --force-recreate docker-proxy docker-proxy-lifecycle`.
     The tell is `stat -c %i /var/run/docker.sock` differing from the same command inside the
-    container. Alloy's docker_sd stops finding targets and AutoKuma stops syncing. The engine
+    container. Alloy's docker_sd stops finding targets. The engine
     upgrade play recreates every project for this reason. -#}
 ---
 
@@ -59,9 +59,6 @@ services:
     labels:
       # Disable watchtower update
       - "com.centurylinklabs.watchtower.enable=false"
-      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
-      # autokuma macro emitted this inert label.
-      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:
@@ -124,9 +121,6 @@ services:
       start_period: 10s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-      # Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false), so the
-      # autokuma macro emitted this inert label.
-      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     deploy:
       resources:

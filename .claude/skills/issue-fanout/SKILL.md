@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: "Use when asked to work through the backlog, clear open findings or fan out on issues: claims every issue, then runs one agent, worktree and PR per batch. A single issue nobody will steer can run as a batch of one, to get the reviewer and red gate."
+description: "Use when asked to work through the backlog, clear open findings or fan out on issues: claims every issue, then runs one agent, worktree and PR per batch. A single issue nobody will steer can run as a batch of one, to get the reviewer."
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
@@ -70,9 +70,9 @@ two identical fixes.
 
 **An issue that cites the fan-out tooling goes in no batch.** `next` marks it
 `[solo-only: cites fan-out tooling]` (`solo_only` under `--json`) when its body names any
-`fanout*.py` or a file under `fanout_lib/`, or its title or body uses the pipeline's own
-vocabulary (`red gate`, `green gate`, `red lock`, `red phase`, `fan-out review`; #5880), and `launch` refuses a batch holding one before it
-touches a host. A batch that edits that code runs under its own edited reviewer, red gate and
+`fanout*.py` or a file under `fanout_lib/`, or its title or body uses the phrase
+`fan-out review` (#5880), and `launch` refuses a batch holding one before it
+touches a host. A batch that edits that code runs under its own edited reviewer and
 Stop hook, and those batches caused the most rework in 68 review records (#3959). Work it in a
 session of its own: claim it and fix it as usual. The gate covers this repo's register only:
 a `--repo DanielH2018/dotfiles` batch cannot edit this repo's pipeline, so a dotfiles issue
@@ -86,10 +86,12 @@ Both were measured on the 2026-09-10 fan-outs:
   hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
   value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
   stalled six hours on it. Hold the second secret issue for the next wave.
-- **A batch that adds a `containers_list` entry, or otherwise touches a path every tag
-  renders, runs alone.** `promote` publishes the whole bundle, so one crashlooping service
-  anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports `deploy-failed` to every
-  other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
+- **A batch that touches a path every tag renders runs alone.** `land.sh` holds this
+  itself for `cluster/services.yml`, where a `containers_list` entry lives: a PR that
+  changes the file lands as a serial PR (`docs/landing.md`, *Rules that refuse a merge*).
+  For any other such path the rule is yours. `promote` publishes the whole bundle, so one
+  crashlooping service anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports
+  `deploy-failed` to every other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
   Authelia change was mid-rollout (issue #1602), and the hold outlived the outage by twenty
   minutes.
 
@@ -175,7 +177,7 @@ uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288 
 
 `--size BATCH=RUNG` sets one batch's rung, and a batch it does not name runs at
 `opus-medium`. The rung sets the implementer's model, effort and spend cap, and the fix and
-CI-fix phases that resume its session. The red-test author and the reviewer stay on Opus at
+CI-fix phases that resume its session. The reviewer stays on Opus at
 `medium`. The launch line prints each batch's rung, and the run manifest records it.
 
 `scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
@@ -260,29 +262,8 @@ the PR comment counts them.
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
-**A reviewed batch whose every issue carries the `red-green` label also gets a red phase.**
-`findings.py open` applies the label when every path a finding cites is code this repo's suite
-runs: Python under `scripts/` and the hooks, and a role's `files/` when the
-role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
-remove it by hand where that rule is wrong. Before the implementer starts, a separate session
-writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour
-those miss, from the issue text alone. `scripts/dev/fanout_lib/review/red_gate.py` proves each new
-test fails on the unchanged code. A batch that runs no red phase records why, as
-`red_skipped`. The implementer gets that commit and may not edit it, what its tests call, or a
-fixture they reach, even through a builtin such as `tmp_path`, but may append tests to its files and update a test that was already there and that no red test
-reaches. It may also change a literal constant that only such older code reads, append a
-constant built from other constants, change a plain helper the issue names in backticks, and
-delete a `conftest.py` fixture that no red test requests (`fanout_lib/review/red_lock.py` says
-what is locked). A refused red commit is
-dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
-is not landed, and its `needs input:` line says whether the reviewers faulted the fix. The
-exception is a red test whose premise is false: the fix round may write `<node> is wrong:` with
-a cited `file:line`, and a contest the fresh delta reviewer upholds goes on to CI. A red CI run
-there holds the PR for a hand to correct the test, with no resume
-(`fanout_lib/review/green_contest.py`). Once it passes, each hunk of the fix is reverted on its own under the red tests,
-and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
-To see whether the red phase earns its cost, run `uv run python
-scripts/dev/fanout.py stats --dir <state dir> ...`, once per user whose records count. The PR comment and the local record carry both gates' results.
+To sum the review records into outcomes, mean cost and test findings, run `uv run python
+scripts/dev/fanout.py stats --dir <state dir> ...`, once per user whose records count.
 
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
@@ -308,8 +289,9 @@ answers for every run, other sessions' included, which `cc-wait fanout` cannot. 
 reads the hosts itself and never reuses an earlier wait's reading, so a wait started just
 after a launch counts that launch's batches (#6758). The source
 is `scripts/dev/fanout.py headroom`, which calls the same two placement functions `launch`
-does, so `room` is not a promise the issue-body gates pass. Launch within a minute of
-`room`: the probe's ssh connection to daniel-server persists for `MUX_PERSIST_S` (60s), and
+does, so `room` is not a promise the issue-body gates pass. Launch within three minutes
+of `room`: the probe's ssh connection to daniel-server persists for
+`scripts/dev/fanout_lib/transport.py:MUX_PERSIST_S`, and
 `launch` reuses it rather than spending another against `ufw limit ssh`.
 
 **Waiting for more work once the queue is empty.** When `next --json` lists nothing free,

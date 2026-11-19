@@ -223,8 +223,6 @@ services:
     ports:
       - "{{ server_ip }}:12345:12345/tcp"
     labels:
-      # Inert: Docker-type Kuma monitors are retired fleet-wide (kuma_docker_monitors: false).
-      - "org.homelab.kuma-docker-monitor=retired-slice7-phase-d"
       # The sha256 of the rendered config.alloy. Compose cannot see the file's content, so the
       # label is what makes `up -d` recreate the container when the config changes.
       - "homelab.config-sha256={{ alloy_config_sha256 }}"

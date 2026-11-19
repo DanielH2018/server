@@ -112,7 +112,7 @@ DENY = (
     "*.psk",
 )
 # Content that withholds the whole output rather than redacting it. The last four rows are the
-# shapes the tree itself renders into the hosts: a Kuma push token in a URL path, netplan's
+# shapes the tree itself renders into the hosts: a push token in an `/api/push/` path, netplan's
 # Wi-Fi `password:`, a healthchecks ping UUID, and a secret passed as the next word after its
 # flag. A `${VAR}` reference in those places names a secret without holding it, so it passes.
 REFUSE = re.compile(

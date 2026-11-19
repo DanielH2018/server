@@ -141,11 +141,11 @@ TAG=etcd-restore-drill-vm
 # The run writes two textfile verdicts: the drill's own under the script's name and the egress
 # fence's under its own, because the syslog tag is shared and a check file takes one verdict.
 # DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
-# slack (etcd_drill_full_kuma_interval_s). hosts/tests/test_b4_rule_literals.py pins the rules'
+# slack (etcd_drill_full_deadline_s). hosts/tests/test_b4_rule_literals.py pins the rules'
 # literals to this value.
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
-DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
+DEADLINE_S={{ etcd_drill_full_deadline_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 # DECIDED: a rehearsal writes no textfile verdict and no stamp. Both verdicts and the stamp answer

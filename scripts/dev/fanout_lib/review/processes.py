@@ -1,20 +1,18 @@
-"""The review pipeline's process boundary, and the reap that ends a red phase.
+"""The review pipeline's process boundary, and the reap that ends a test run it starts.
 
 `run_process` is the one call every `claude`, `git` and `gh` invocation goes through.
 
-`reaping` kills whatever the red phase left running. The red author runs with
-`--permission-mode auto`, so it could start
-`nohup sh -c 'sleep 120; echo ... > .claude/settings.local.json' &` and have it write after
-the worktree is reset. While the block is open the pipeline is a child subreaper, so an
-orphaned descendant reparents to it rather than to init, `setsid` or not, and the block's exit
-kills each one. The red author's tests can do the same when a later gate runs them, so the
-green gate, the hunk check and the base check are reaped as well.
+`reaping` kills whatever a test run left running. The base check runs tests the implementer
+wrote, and one of them could start `nohup sh -c 'sleep 120; ...' &` and have it write into the
+worktree after the reviewer read it. While the block is open the pipeline is a child
+subreaper, so an orphaned descendant reparents to it rather than to init, `setsid` or not,
+and the block's exit kills each one.
 
-DECIDED: the red phase and every test run the pipeline starts are reaped, and nothing else.
+DECIDED: every test run the pipeline starts is reaped, and nothing else.
 The landing runs `land.sh --detach`, which double-forks so the landing outlives the call
 (`land_lib/detach.py`). Under a subreaper the landing would reparent to the pipeline and be
-killed. The implement and fix phases run the red tests as well, and are not reaped: the
-implementer may leave a process on purpose.
+killed. The implement and fix phases are not reaped: the implementer may leave a process on
+purpose.
 
 A process started outside this tree, such as through `systemd-run --user`, is not reached.
 """

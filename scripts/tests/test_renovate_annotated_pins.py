@@ -132,6 +132,76 @@ def test_every_annotation_comment_in_role_defaults_is_read():
     )
 
 
+def tag_rewriting_pins(managers: list[dict], read: Callable[[str], str]) -> list[str]:
+    """`<file>: <variable>` for each `v`-prefixed annotated pin its own extractVersion rewrites.
+
+    Renovate writes the extracted version back into the pin, so an extractVersion that strips
+    the `v` turns `v0.16.0` into `0.16.2`, and a URL that renders the pin as a git ref 404s.
+    """
+    problems = []
+    for m in managers:
+        if "annotation" not in m or "extractVersionTemplate" not in m:
+            continue
+        path, variable = m["annotation"]["file"], m["annotation"]["variable"]
+        line = re.search(rf'(?m)^\s*{re.escape(variable)}:\s*"?([^"\s]+)"?', read(path))
+        current = line.group(1) if line else ""
+        if not current.startswith("v"):
+            continue
+        extracted = re.search(_to_python_regex(m["extractVersionTemplate"]), current)
+        if extracted is None or extracted["version"] != current:
+            problems.append(f"{path}: {variable}")
+    return problems
+
+
+def _annotated(extract: str, value: str = "v1.2.0") -> tuple[list[dict], Callable]:
+    managers = [
+        {
+            "annotation": {
+                "file": "roles/x/defaults/main.yml",
+                "variable": "x_version",
+            },
+            "extractVersionTemplate": extract,
+        }
+    ]
+    return managers, lambda _: f"x_version: {value}\n"
+
+
+def test_every_v_prefixed_annotated_pin_keeps_its_v():
+    checked = {
+        m["annotation"]["variable"]
+        for m in _MANAGERS
+        if "annotation" in m and "extractVersionTemplate" in m
+    }
+    assert "k3s_metallb_version" in checked
+    problems = tag_rewriting_pins(_MANAGERS, _read)
+    assert not problems, (
+        "an extractVersion strips the `v` from a pin that carries one, so Renovate writes the "
+        "bare version back and every URL built from the pin breaks. Capture the `v` inside "
+        "the version group:\n" + "\n".join(problems)
+    )
+
+
+def test_an_extract_version_keeping_the_v_is_clean():
+    assert tag_rewriting_pins(*_annotated(r"^(?<version>v\d+\.\d+\.\d+)$")) == []
+
+
+def test_an_extract_version_stripping_the_v_is_flagged():
+    assert tag_rewriting_pins(*_annotated(r"^v(?<version>.+)$")) == [
+        "roles/x/defaults/main.yml: x_version"
+    ]
+
+
+def test_the_metallb_anchor_drops_the_chart_releases():
+    metallb = next(
+        m
+        for m in _MANAGERS
+        if m.get("annotation", {}).get("variable") == "k3s_metallb_version"
+    )
+    anchor = re.compile(_to_python_regex(metallb["extractVersionTemplate"]))
+    assert anchor.search("v0.16.2")
+    assert not anchor.search("metallb-chart-0.16.1")
+
+
 def test_a_well_formed_annotation_is_read():
     text = '# renovate: datasource=github-releases depName=a/b\nb_version: "1.0"\n'
     assert unread_annotations(text) == 0

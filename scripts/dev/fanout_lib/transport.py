@@ -54,8 +54,9 @@ SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 # a master open a run's reads and launches cost one connection however many batches it
 # places. No call waits on the backgrounded master's pipes. ServerAlive bounds a master
 # whose network went away, which every call riding it would otherwise wait on. ssh falls
-# back to a fresh connection when the socket is dead, as after a reboot.
-MUX_PERSIST_S = 60
+# back to a fresh connection when the socket is dead, as after a reboot. The master outlives
+# the longest cc-wait poll that reads a host, or every poll opens a new sshd login.
+MUX_PERSIST_S = 180
 CONTROL_DIR_NAME = "fanout-ssh"
 READ_TIMEOUT_S = 20.0
 GH_TIMEOUT_S = 30.0

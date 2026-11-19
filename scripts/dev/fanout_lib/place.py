@@ -7,7 +7,7 @@ worktree there, and starts a headless agent, at the rung `--size` names
 (`fanout_lib.sizing`), as a transient user service. daniel-box agents land their PR;
 daniel-server agents stop at `gh pr create`. It shipped in commit bd8e62bf8.
 `launch` runs `fanout.py review` unless given `--no-review`: a review between each batch's PR
-and its landing, and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
+and its landing. `fanout_lib/review/review.py` has the phases.
 
 Usage::
 
@@ -59,7 +59,6 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 """
 
 import argparse
-import dataclasses
 import json
 import subprocess
 import sys
@@ -83,7 +82,6 @@ from fanout_lib import status as status_mod
 from fanout_lib.status_view import one_line, runs_lines, status_lines
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from findings_lib.tracked_paths import tracked_files
-from fanout_lib.review.api import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     live_by_host,
@@ -322,12 +320,11 @@ def cmd_launch(args, tools: Tools) -> int:
             if not numbers:
                 continue
         issues = [fetched[n] for n in numbers]
-        flags = review_flags(batch, issues, args.review, target.is_server)
         rung = sizing.size([label for i in issues for label in i.labels], chosen)
         brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
             launched = launch_mod.launch(
-                tools, host, batch, brief, numbers, target, *flags, rung=rung
+                tools, host, batch, brief, numbers, target, args.review, rung=rung
             )
             run.batches.append(launched)
             # Saved per batch, not once after the loop: a launch killed between batches
@@ -386,7 +383,7 @@ def cmd_runs(args, tools: Tools) -> int:
         if not args.orchestrator or r.orchestrator_branch == args.orchestrator
     ]
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in runs]))
+        print(json.dumps([r.to_json() for r in runs]))
         return 0
     if not runs:
         whose = f" for {args.orchestrator}" if args.orchestrator else ""

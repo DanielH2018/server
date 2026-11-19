@@ -128,14 +128,23 @@ def pi_ssh_argv(remote, hostname=None):
     return ["ssh", LANDING_HOST, shlex.join(["ssh", PI_HOST, remote])]
 
 
+VIA_PROXY_ENV = "HOMELAB_PROBE_VIA_PROXY"
+
+
 def k8s_endpoint(hostname):
     """(base_url, curl --resolve pin) for a cluster route.
 
     This host's resolver bypasses the LAN DNS, so a `.local` name does not resolve to the cluster
     edge from a shell here; curl pins it to the MetalLB ingress VIP instead. Containers get the
     right answer from Pi-hole and need no pin.
+
+    A T2 session sets HOMELAB_PROBE_VIA_PROXY=1 in its unit. The route is then plain HTTP with no
+    pin: curl sends it through the session's HTTP_PROXY, and squid opens the TLS connection to
+    Traefik itself, admitting only GETs on that route's paths.
     """
     host = f"{hostname}.local.{domain()}"
+    if os.environ.get(VIA_PROXY_ENV) == "1":
+        return f"http://{host}", None
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
 
 

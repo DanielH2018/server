@@ -70,6 +70,20 @@ def test_start_creates_the_milestone_under_its_title_with_the_branch_in_the_desc
     ]
 
 
+@pytest.mark.parametrize("state", ["open", "closed"])
+@pytest.mark.parametrize("project", [True, False], ids=["to-project", "to-session"])
+def test_start_refuses_to_change_a_milestone_form(state, project):
+    held = _m(
+        "Backups", state=state, description=description_for(WT, project=not project)
+    )
+    gh_json, gh, writes = _fake([held])
+    with pytest.raises(ValueError, match="start the other form"):
+        start(
+            "Backups", WT, REPO, dry_run=False, project=project, gh_json=gh_json, gh=gh
+        )
+    assert writes == []
+
+
 def test_start_twice_with_the_same_title_writes_nothing():
     gh_json, gh, writes = _fake([_m("Opt-in milestones")])
     start("Opt-in milestones", WT, REPO, dry_run=False, gh_json=gh_json, gh=gh)
@@ -158,3 +172,12 @@ def test_a_batch_pr_follows_the_issue_it_closes_to_the_orchestrator_branch():
 def test_a_pr_closing_no_session_issue_uses_its_head_branch():
     pr = {"headRefName": WT, "closingIssuesReferences": [{"number": 5}]}
     assert pr_branch(pr, lambda n: None) == WT
+
+
+def test_a_batch_pr_follows_its_issue_into_a_project_milestone():
+    pr = {
+        "headRefName": "worktree-fanout-batch-3",
+        "closingIssuesReferences": [{"number": 5}],
+    }
+    project = _m("Backups", description=description_for("worktree-lead", project=True))
+    assert pr_branch(pr, lambda n: project) == "worktree-lead"

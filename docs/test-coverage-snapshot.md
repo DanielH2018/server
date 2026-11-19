@@ -553,7 +553,6 @@ the other test files that cover at least one of those lines.
 | `hosts/tests/test_claude_cgroup_metrics.py` | 13 | 739 |
 | `k8s/roles/monitor-bridge/tests/test_domain_registration_expiry.py` | 13 | 739 |
 | `scripts/deploy_tools/tests/test_land_ci_budget.py` | 13 | 1109 |
-| `scripts/deploy_tools/tests/test_land_ci_wait_has_no_label.py` | 13 | 723 |
 | `scripts/dev/tests/test_findings_snapshot_import.py` | 13 | 720 |
 | `scripts/lib/tests/test_claude_worktree_import.py` | 13 | 720 |
 | `scripts/lib/tests/test_k8s_lookups.py` | 13 | 586 |

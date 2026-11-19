@@ -64,6 +64,16 @@ def _add_repo(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_milestone(parser: argparse.ArgumentParser) -> None:
+    """Add ``--milestone`` to ``parser``: `milestone.held_issues` filters the read by it."""
+    parser.add_argument(
+        "--milestone",
+        metavar="TITLE",
+        help="only the issues this milestone holds, a project's backlog say; `none` for "
+        "the issues no open milestone holds",
+    )
+
+
 def _parser(description: str) -> argparse.ArgumentParser:
     """Build the CLI parser.
 
@@ -262,18 +272,32 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     ms = sub.add_parser(
         "milestone",
-        help="open, show or close the branch's milestone for focused work",
+        help="open, show or close the branch's milestone for focused work, or change a "
+        "project milestone's backlog",
         example=_example(
             'milestone start "Opt-in session milestones" --worktree worktree-my-branch'
         ),
         epilog="Only `start` makes a milestone. Once one is open, `claim` files the "
         "branch's issues under it and the session-milestone workflow files its PR. The "
-        "workflow closes it once nothing in it is open, and a later claim or PR reopens it.",
+        "workflow closes it once nothing in it is open, and a later claim or PR reopens it. "
+        "`start --project` makes one that also holds a backlog: `add` files unclaimed "
+        "issues under it, `remove` takes them out, a released issue stays in it, and "
+        '`next --milestone "<title>"` lists its free issues.',
     )
     _add_dry_run(ms, suppress=True)
     _add_repo(ms)
-    ms.add_argument("action", choices=["start", "status", "close"])
-    ms.add_argument("title", nargs="?", help="for `start`: what the work is")
+    ms.add_argument("action", choices=["start", "status", "close", "add", "remove"])
+    ms.add_argument(
+        "subject",
+        nargs="*",
+        metavar="TITLE|ISSUE",
+        help="for `start`: what the work is; for `add` and `remove`: issue numbers",
+    )
+    ms.add_argument(
+        "--project",
+        action="store_true",
+        help="with `start`: a project milestone, which holds a backlog of unclaimed issues",
+    )
     ms.add_argument("--worktree", required=True, help="the branch doing the work")
 
     c = sub.add_parser(
@@ -322,6 +346,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     ls.add_argument("--json", action="store_true")
     ls.add_argument("--severity", choices=SEVERITIES, help="only this severity")
     ls.add_argument("--domain", choices=DOMAINS, help="only this domain")
+    _add_milestone(ls)
     ls.add_argument(
         "--limit",
         type=int,
@@ -421,6 +446,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="show at most N issues; every pickable issue by default",
     )
     nx.add_argument("--json", action="store_true")
+    _add_milestone(nx)
     nx.add_argument(
         "--waiting",
         action="store_true",
@@ -443,5 +469,6 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="end on a free issue numbered above N; the highest open number when the "
         "wait starts by default",
     )
+    _add_milestone(ni)
 
     return p

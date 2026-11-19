@@ -7,14 +7,16 @@ would need CAP_NET_ADMIN. squid parses its config on the host the same way.
 import re
 import shlex
 import shutil
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
 
+from diagnostics.probe_lib import alertmanager_api, alerts, obs_api
 from lib import yaml_fast
 from lib.estate import Inventory
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import HOST_VARS, REPO
+from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
 RULESET = "/usr/lib/homelab/t2-egress/t2-egress.nft"
@@ -145,7 +147,7 @@ def test_squid_binds_the_proxy_address_logs_to_a_file_and_never_to_syslog(box):
     conf = rendered(box, SQUID_CONF)
     assert f"http_port {proxy}\n" in conf
     assert "access_log daemon:/var/log/squid/t2-access.log t2" in conf
-    assert "squid" in box.depends
+    assert "squid-openssl" in box.depends and "squid" not in box.depends
     starts = [
         line
         for line in rendered(box, SQUID_DROPIN).splitlines()
@@ -163,6 +165,7 @@ def test_both_sessions_send_their_traffic_through_the_proxy(box):
         assert f"HTTPS_PROXY=http://{proxy} https_proxy=http://{proxy}" in text, unit
         assert f"HTTP_PROXY=http://{proxy} http_proxy=http://{proxy}" in text, unit
         assert "Wants=squid.service" in text, unit
+        assert "Environment=HOMELAB_PROBE_VIA_PROXY=1\n" in text, unit
 
 
 def test_no_session_sends_claude_codes_nonessential_traffic(box):
@@ -201,8 +204,6 @@ ALLOWED_HOSTS = frozenset(
     {
         "api.anthropic.com",
         "api.github.com",
-        "prometheus.local.daniel-hunter.com",
-        "alertmanager.local.daniel-hunter.com",
         "results-receiver.actions.githubusercontent.com",
         "cafe.github.com",
     }
@@ -259,8 +260,110 @@ def test_squid_admits_exactly_the_ruled_hosts_and_refuses_the_rest(box):
         "http_access deny to_linklocal",
         "http_access allow loopback CONNECT https_port t2_https",
         "http_access allow loopback CONNECT k3s_port t2_k3s",
+        "http_access allow loopback read_method prom_host prom_paths",
+        "http_access allow loopback read_method am_host am_paths",
+        "http_access allow loopback read_method loki_host loki_paths",
         "http_access deny all",
     ]
+    assert "acl read_method method GET HEAD" in conf
+    assert "server_persistent_connections off" in conf
+
+
+def read_hosts(conf: list[str]) -> dict[str, tuple[str, str]]:
+    """Each in-cluster read's acl name, mapped to (host, path regex), from the rendered config."""
+    acls = dict(
+        line.split(" ", 2)[1:]
+        for line in conf
+        if line.startswith("acl ") and line.split()[1].endswith(("_host", "_paths"))
+    )
+    return {
+        key[: -len("_host")]: (
+            acls[key].split()[-1],
+            acls[f"{key[:-5]}_paths"].split()[-1],
+        )
+        for key in acls
+        if key.endswith("_host")
+    }
+
+
+def admitted(conf: list[str], url: str) -> bool:
+    """Whether squid's read rules admit a GET of `url`, judged from the rendered acls."""
+    parts = urlsplit(url)
+    path = parts.path + (f"?{parts.query}" if parts.query else "")
+    return any(
+        parts.hostname == host and re.search(paths, path)
+        for host, paths in read_hosts(conf).values()
+    )
+
+
+def test_every_read_path_probe_builds_is_admitted_is_clean(box):
+    """The allowlist follows probe.py: a path it gains and the gateway lacks turns this red."""
+    conf = statements(rendered(box, SQUID_CONF))
+    assert set(read_hosts(conf)) == {"prom", "am", "loki"}
+    domain = yaml_fast.safe_load((ALL_VARS).read_text())["domain"]
+    prom, am, loki = (
+        f"http://{h}.local.{domain}"
+        for h in ("prometheus", "alertmanager", "loki-homelab")
+    )
+    built = [
+        obs_api.prom_query_url(prom, "up"),
+        obs_api.prom_targets_url(prom),
+        alerts.range_url(prom, 7, 1795000000),
+        alertmanager_api.alerts_url(am, "traefik"),
+        alertmanager_api.active_alerts_url(am),
+        alertmanager_api.silences_url(am),
+        obs_api.loki_labels_url(loki),
+        obs_api.loki_query_url(loki, '{job="x"}', 10, start=1, end=2),
+    ]
+    assert [url for url in built if not admitted(conf, url)] == []
+    for host, _ in read_hosts(conf).values():
+        peer = f"cache_peer {host} parent 443 0 originserver no-query no-digest tls forceddomain={host} "
+        assert any(line.startswith(peer) for line in conf), host
+
+
+def test_a_write_or_an_unlisted_read_is_refused_is_flagged(box):
+    conf = statements(rendered(box, SQUID_CONF))
+    domain = yaml_fast.safe_load((ALL_VARS).read_text())["domain"]
+    for url in (
+        f"http://loki-homelab.local.{domain}/loki/api/v1/push",
+        f"http://prometheus.local.{domain}/api/v1/admin/tsdb/delete_series",
+        f"http://prometheus.local.{domain}/api/v1/query_exemplars?query=up",
+        f"http://grafana.local.{domain}/api/v1/query?query=up",
+    ):
+        assert not admitted(conf, url), url
+
+
+def traefik_connects(conf: list[str], domain: str, vip: str) -> list[str]:
+    """Each CONNECT destination that lands on Traefik: a `.local` name or the MetalLB VIP."""
+    return [
+        line
+        for line in conf
+        if line.startswith(("acl t2_https ", "acl t2_k3s "))
+        and (line.endswith(f".local.{domain}") or line.split()[-1] == vip)
+    ]
+
+
+def test_no_connect_destination_lands_on_traefik_is_clean(box):
+    """A tunnel to Traefik's VIP would let the session pick any route inside it."""
+    inventory = yaml_fast.safe_load((ALL_VARS).read_text())
+    conf = statements(rendered(box, SQUID_CONF))
+    assert (
+        traefik_connects(
+            conf, inventory["domain"], inventory["k3s_metallb_ingress_vip"]
+        )
+        == []
+    )
+
+
+def test_a_connect_to_a_local_name_or_the_vip_is_flagged(box):
+    inventory = yaml_fast.safe_load((ALL_VARS).read_text())
+    domain, vip = inventory["domain"], inventory["k3s_metallb_ingress_vip"]
+    planted = [
+        f"acl t2_https dstdomain grafana.local.{domain}",
+        f"acl t2_k3s dst {vip}",
+    ]
+    conf = statements(rendered(box, SQUID_CONF)) + planted
+    assert traefik_connects(conf, domain, vip) == planted
 
 
 def test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts(box, box_off):

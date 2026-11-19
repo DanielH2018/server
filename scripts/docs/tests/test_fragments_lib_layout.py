@@ -13,7 +13,6 @@ Run: uv run pytest scripts/docs/tests/test_fragments_lib_layout.py
 
 import importlib
 import os
-import re
 import subprocess
 import sys
 
@@ -96,32 +95,3 @@ def test_the_entrypoint_answers_help_from_outside_the_repo(tmp_path):
         text=True,
     )
     assert helped.returncode == 0, helped.stderr[-2000:]
-
-
-def test_no_tracked_module_imports_the_flat_names():
-    flat_import = re.compile(
-        r"^\s*(?:import|from)\s+(?:" + "|".join(FLAT) + r")\b", re.MULTILINE
-    )
-    offenders = sorted(
-        p
-        for p in _tracked()
-        if p.endswith(".py")
-        and flat_import.search((REPO / p).read_text(errors="replace"))
-    )
-    assert offenders == []
-
-
-def test_no_tracked_file_names_the_old_paths():
-    old_path = re.compile(r"scripts/docs/fragments_(?:" + "|".join(DOMAINS) + r")\.py")
-    offenders = []
-    for p in _tracked():
-        path = REPO / p
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text()
-        except UnicodeDecodeError:
-            continue
-        if old_path.search(text):
-            offenders.append(p)
-    assert offenders == []

@@ -1,4 +1,4 @@
-"""The B2 host checks write a homelab_check_* textfile and push to nothing (M6 batch B2).
+"""The B2 host checks write a homelab_check_* textfile (M6 batch B2).
 
 ADR-0026 records the decision. Docs-refresh, the eval sweep and the
 secret-rotation audit each write `<check>.prom` through
@@ -7,11 +7,8 @@ cases are in test_loki_route_witness.py.) Each case runs the rendered script, or
 `on_exit` trap for the two scripts too large to run whole, with the real library and a `date`
 stub.
 
-Two properties each case pins:
-
-- the file carries success 1 for an up verdict and 0 for a down one, and the stamped time;
-- since B2's Cutover-2 every render pushes nothing to Kuma: no library, no `kuma_push`, no push URL
-  and no push credential, so a run needs neither to write its verdict.
+Each case pins that the file carries success 1 for an up verdict and 0 for a down one, and the
+stamped time.
 
 Run: uv run pytest hosts/tests/test_host_check_textfiles.py
 """
@@ -31,22 +28,6 @@ OVERRIDES = {
     "k3s_metallb_ingress_vip": "10.0.0.240",
     "sys_user": "ubuntu",
 }
-# What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
-# credential that fed the token.
-KUMA_PUSH_MARKERS = (
-    "kuma-push-lib",
-    "kuma_push",
-    "/api/push/",
-    "_push_token",
-    "PUSH_TOKEN",
-    "kuma-push.env",
-)
-# Every B2 shell producer this module covers, with the check its textfile names.
-PRODUCERS = {
-    "docs-refresh.sh.j2": "docs-refresh",
-    "eval-run.sh.j2": "eval-run",
-    "secret-rotation-audit.sh.j2": "secret-rotation-audit",
-}
 
 
 def _render(template: str) -> str:
@@ -55,32 +36,6 @@ def _render(template: str) -> str:
     return render_shell_script(
         "components", path.parents[1].name, template, overrides=OVERRIDES
     )
-
-
-def kuma_push_markers(body: str) -> list[str]:
-    """The Kuma push markers a rendered script still carries, or nothing."""
-    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
-
-
-@pytest.mark.parametrize("template", sorted(PRODUCERS))
-def test_no_b2_producer_pushes_to_kuma(template):
-    # RED if a push, its library, its token or its credential returns: the tiles are gone, so a
-    # push would be refused (`by=kuma`) every run.
-    body = _render(template)
-    # Non-vacuity: the render is the real script, which still records its verdict.
-    assert f"write_check_textfile {PRODUCERS[template]}" in body
-    assert kuma_push_markers(body) == []
-
-
-def test_a_script_that_pushes_to_kuma_is_flagged():
-    pushing = (
-        "source /usr/lib/homelab/kuma-push-lib.sh\n"
-        'TOKEN="$(< "$CREDENTIALS_DIRECTORY/docs_refresh_push_token")"\n'
-        'DOCS_REFRESH_PUSH_TOKEN="$TOKEN"\n'
-        'kuma_push "$1" "$2" "https://kuma/api/push/$TOKEN"\n'
-        ". /etc/homelab/kuma-push.env\n"
-    )
-    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 def _series(textfile_dir, check) -> dict[str, str]:

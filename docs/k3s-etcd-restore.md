@@ -46,7 +46,7 @@ and `homelab-etcd-restore-drill.timer` runs it as root on `etcd_drill_full_cron`
 5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and writes the verdict
    to the `etcd-restore-drill-vm` textfile. `EtcdRestoreDrillFailed` (critical) reads the verdict,
    and `EtcdRestoreDrillNotReporting` reads the file against a deadline
-   (`etcd_drill_full_kuma_interval_s`, 35 days) that derives from the timer's period.
+   (`etcd_drill_full_deadline_s`, 35 days) that derives from the timer's period.
 
 To run it by hand on daniel-server: `sudo systemctl start homelab-etcd-restore-drill.service`, and
 read it with `journalctl -u homelab-etcd-restore-drill`. It takes a lock,

@@ -56,6 +56,7 @@ SERIAL_NAME = "homelab-land-serial.lock"
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
+_SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
@@ -197,21 +198,15 @@ def _bar(ln: Landing, kind: str, lock: Locker) -> tuple[str, bool]:
     in_window = bool(kind) and live_limit.fail_open(ln.tools.in_reboot_window)
     if kind == live_limit.SERIAL:
         if _keep_serial(ln, lock):
-            return (
-                "another landing of a forward-only pin, flux or cluster-vars change is live",
-                not in_window,
-            )
+            return f"another {_SERIAL_LIVE}", not in_window
         if _held_by_another(lock, SLOT_NAMES):
             return (
-                "this PR changes a forward-only pin, flux or cluster-vars, and another "
-                "landing is past its merge",
+                f"this PR changes {live_limit.SERIAL_WHAT}, and another landing is past "
+                "its merge",
                 not in_window,
             )
     elif _held_by_another(lock, [SERIAL_NAME]):
-        return (
-            "a landing of a forward-only pin, flux or cluster-vars change is live",
-            False,
-        )
+        return f"a {_SERIAL_LIVE}", False
     if in_window and _held_by_another(lock, SLOT_NAMES):
         return (
             "inside the weekly reboot's no-promotion window, another landing is past its "

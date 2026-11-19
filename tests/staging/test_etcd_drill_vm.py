@@ -7,7 +7,7 @@ reads green from every other gate:
 
 - the guest's MAC and the staging network's DHCP reservation for it (a mismatch boots a guest
   on a dynamic lease, and the orchestrator waits on an address nothing answers);
-- the drill's deadline (`etcd_drill_full_kuma_interval_s`) and the schedule it is derived from
+- the drill's deadline (`etcd_drill_full_deadline_s`) and the schedule it is derived from
   (a deadline shorter than the period pages every month for nothing; one far longer lets a dead
   drill sit green for a year);
 - the timer's shape: root, armed by the flag, day-of-month cadence, off every backup window.
@@ -306,9 +306,9 @@ def test_the_drill_deadline_is_derived_from_the_cadence():
     _, _, dom, month, dow = gv["etcd_drill_full_cron"].split()
     assert dom.isdigit() and month == "*" and dow == "*"
     longest_gap_s = 31 * 86400
-    deadline = gv["etcd_drill_full_kuma_interval_s"]
+    deadline = gv["etcd_drill_full_deadline_s"]
     assert longest_gap_s < deadline < 2 * longest_gap_s, (
-        f"etcd_drill_full_kuma_interval_s={deadline}: below {longest_gap_s} it pages on every "
+        f"etcd_drill_full_deadline_s={deadline}: below {longest_gap_s} it pages on every "
         f"31-day month; above {2 * longest_gap_s} a dead drill sits green for a whole extra cycle"
     )
 

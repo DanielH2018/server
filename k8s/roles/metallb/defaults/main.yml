@@ -10,14 +10,15 @@
 #
 # extractVersion is load-bearing: metallb/metallb publishes the app (`v0.16.0`) and the Helm
 # chart (`metallb-chart-0.16.1`) into one releases feed, and the chart runs a minor ahead of
-# the app. Anchoring on a leading `v` reads app releases only.
-# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^v(?<version>.+)$
-k3s_metallb_version: v0.16.0
+# the app. Anchoring on a leading `v` reads app releases only. The `v` sits inside the version
+# group because Renovate writes the extracted version back here, and the url needs the tag.
+# renovate: datasource=github-releases depName=metallb/metallb extractVersion=^(?<version>v\d+\.\d+\.\d+)$
+k3s_metallb_version: v0.16.2
 metallb_vendored_manifests:
   - name: metallb-native.yaml
     url: "https://raw.githubusercontent.com/metallb/metallb/{{ k3s_metallb_version }}/config/manifests/metallb-native.yaml"
-    fetched_url: "https://raw.githubusercontent.com/metallb/metallb/v0.16.0/config/manifests/metallb-native.yaml"
-    sha256: "b0b9be2802f10aa32d45308b4457d06cde0c70544712c8d0cf5511657ffd2b69"
+    fetched_url: "https://raw.githubusercontent.com/metallb/metallb/v0.16.2/config/manifests/metallb-native.yaml"
+    sha256: "e5f7c268f114c446dc60aaad71b7cabf861f637743e033e354d7d48592807c6d"
 
 # LoadBalancer addresses. Must sit OUTSIDE the router's DHCP scope, or MetalLB will hand
 # out addresses the router also leases.

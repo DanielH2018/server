@@ -67,7 +67,7 @@ hypervisor_etcd_drill_armed: true
 # The drill's files, under a directory the package owns.
 hypervisor_etcd_drill_share_dir: /usr/lib/homelab/etcd-drill
 # The cadence (`etcd_drill_full_cron`) and the deadline derived from it
-# (`etcd_drill_full_kuma_interval_s`) live in
+# (`etcd_drill_full_deadline_s`) live in
 # group_vars/all.yml. The orchestrator renders the deadline as its textfile's DEADLINE_S.
 
 # Guest identity. The MAC is the staging network's one DHCP reservation (the guest attaches to

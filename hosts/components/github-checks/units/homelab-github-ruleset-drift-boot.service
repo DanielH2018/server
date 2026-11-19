@@ -4,7 +4,7 @@
 # when this unit's own condition fails.
 [Unit]
 Description=GitHub ruleset drift check (boot rerun while red)
-ConditionPathExists=/var/lib/kuma-check/github-ruleset-drift.down
+ConditionPathExists=/var/lib/homelab/check/github-ruleset-drift.down
 
 [Service]
 SyslogLevel=notice

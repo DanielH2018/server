@@ -48,9 +48,6 @@ message is structured JSON, with no PR URL to give. No phase owes a `VERDICT:` l
 pipeline runs `land.sh` itself (#3960), and a review batch's brief stops at the PR. With no
 phase file, the brief alone decides, as before.
 
-A `red` session never blocks either. It writes the failing tests a red/green batch starts
-from, and like a reviewer it ends with structured JSON and has no PR to name.
-
 THE PIPELINE'S OWN COPY. A review pipeline reads this file once at start and runs every phase
 from a copy outside the worktree, because the implementer can rewrite the worktree's copy
 (#3794). It names that copy in `.fanout/stop-hook`. This repo's `.claude/settings.json` still
@@ -89,7 +86,7 @@ MAX_BLOCKS = 3
 # Mirrors `review.OWN_COPY`: the pipeline writes it before each phase it runs.
 OWN_COPY = Path(".fanout") / "stop-hook"
 # The pipeline phases whose final message is structured JSON rather than a PR URL.
-UNBLOCKED_PHASES = frozenset({"review", "red"})
+UNBLOCKED_PHASES = frozenset({"review"})
 
 # Mirrors `status.PR_URL`, `status.BLOCKER` and `status.VERDICT`.
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")

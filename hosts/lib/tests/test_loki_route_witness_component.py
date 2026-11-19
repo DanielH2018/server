@@ -53,7 +53,7 @@ def test_the_service_loads_no_credential_and_reruns_while_red(package):
     assert f"ExecStart={LIB}/loki-read-route-health\n" in service
     assert "Restart=on-failure\nRestartSec=15min\n" in service
     boot = text(package, f"{UNITS}/homelab-loki-route-witness-boot.service")
-    assert "ConditionPathExists=/var/lib/kuma-check/loki-route-witness.down" in boot
+    assert "ConditionPathExists=/var/lib/homelab/check/loki-route-witness.down" in boot
 
 
 def test_the_timer_fires_hourly_at_minute_23_and_the_links_are_enabled(package):
@@ -77,6 +77,7 @@ def test_the_package_retires_the_ansible_era_timer_cron_and_files(package):
         "kuma-check-loki-read-route-boot.service",
         "Loki read-route witness",
         "/usr/local/bin/loki-read-route-health.sh",
+        "/var/lib/kuma-check/loki-route-witness.down",
     }
 
 

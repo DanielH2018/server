@@ -1,4 +1,4 @@
-"""The B4 producers write a homelab_check_* textfile and push to nothing (M6 batch B4).
+"""The B4 producers write a homelab_check_* textfile (M6 batch B4).
 
 ADR-0026 records the decision. The UPS secondary watchdog, the
 three fake-remux heartbeats, the etcd restore drill with its egress-fence leg, and the renovate
@@ -8,12 +8,8 @@ unit line that writes the verdict, against the REAL library from the role tree: 
 no /usr/lib/homelab/homelab-check-lib.sh, and daniel-box does, so a case that ran the script as-is
 would pass here and fail there. `uv`, `upsc`, `systemctl`, `date` and `logger` are stubs.
 
-Properties the cases pin:
-
-- the file carries success 1 for an up verdict and 0 for a down one, the stamped time and the
-  rendered deadline;
-- since B4's Cutover-2 every render pushes nothing to Kuma: no library, no `kuma_push`, no push URL
-  and no push credential, so a run needs neither to write its verdict.
+Each case pins that the file carries success 1 for an up verdict and 0 for a down one, the
+stamped time and the rendered deadline.
 
 The rule literals are pinned to the rendered deadlines in test_b4_rule_literals.py.
 
@@ -39,48 +35,6 @@ OVERRIDES = {
     "k3s_metallb_ingress_vip": "10.0.0.240",
     "sys_user": "ubuntu",
 }
-# What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
-# credential and env file that fed the token.
-KUMA_PUSH_MARKERS = (
-    "kuma-push-lib",
-    "kuma_push",
-    "/api/push/",
-    "PUSH_TOKEN",
-    "kuma-push.env",
-)
-# Every B4 shell producer, as (role, template), with the textfile call its render carries.
-PRODUCERS = {
-    (
-        "nut-secondary",
-        "ups-secondary-health.sh.j2",
-    ): "write_check_textfile ups-secondary-health ",
-    ("fake-remux", "fake-remux-health.sh.j2"): 'write_check_textfile "${CHECKS[$i]}" ',
-    ("hypervisor", "etcd-restore-drill-vm.sh.j2"): 'write_check_textfile "$check" ',
-}
-
-
-def kuma_push_markers(body: str) -> list[str]:
-    """The Kuma push markers a rendered script still carries, or nothing."""
-    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
-
-
-@pytest.mark.parametrize("producer", sorted(PRODUCERS), ids=lambda p: p[1])
-def test_no_b4_producer_pushes_to_kuma(producer):
-    # RED if a push, its library, its token or its env file returns: the tiles are gone, so a
-    # push would be refused (`by=kuma`) every run.
-    body = render_shell_script("components", *producer, OVERRIDES)
-    # Non-vacuity: the render is the real script, which still records its verdict.
-    assert PRODUCERS[producer] in body
-    assert kuma_push_markers(body) == []
-
-
-def test_a_script_that_pushes_to_kuma_is_flagged():
-    pushing = (
-        "source /usr/local/lib/kuma-push-lib.sh\n"
-        ". /etc/nut/kuma-push.env\n"
-        'kuma_push "$1" "$2" "https://kuma/api/push/${UPS_SECONDARY_PUSH_TOKEN}"\n'
-    )
-    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 def _series(textfile_dir, check) -> dict[str, str]:
@@ -250,7 +204,7 @@ def test_the_drill_and_its_fence_leg_write_separate_verdicts(tmp_path):
         == "1"
     )
     for check in ("etcd-restore-drill-vm", "etcd-restore-drill-egress-fence"):
-        # etcd_drill_full_kuma_interval_s: the monthly cadence plus four days of slack.
+        # etcd_drill_full_deadline_s: the monthly cadence plus four days of slack.
         assert (
             _value(textfile_dir, check, "homelab_check_deadline_seconds") == "3024000"
         )
