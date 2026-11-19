@@ -25,11 +25,6 @@ The values are fixture strings, never a secret. `docs/homelab-render.md` records
 behaviours.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path

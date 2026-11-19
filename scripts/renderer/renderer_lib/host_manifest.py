@@ -45,11 +45,6 @@ entry and no enable link.
 out of it, so a render changes only when the package's content does (H3, *Package rules*).
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import json
 import re
 from collections.abc import Callable

@@ -29,13 +29,6 @@ else leaves `soak` out of C2's changed set. This module imports neither Ansible 
 like `bundle.py`, which imports it.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-# `chained_timeout` imports `changed_set` bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
-
 import json
 import os
 import re
