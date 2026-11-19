@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """What one whole-tree run of the k8s manifest validator must report.
 
-`main()` renders every k8s role once — ~20s — and five guards below read different parts of that
+`main()` validates every k8s role once, reading each role's render off the run's shared k8s render
+(`_k8s_render.rendered_tags()`), and five guards below read different parts of that
 single run: unresolved claimNames, schema failures, an
 https route with no `tls:`, a NetworkPolicy on a Service's port, and the coverage tail naming
 any object no schema checked.
@@ -18,17 +19,37 @@ import io
 
 import pytest
 
+import _k8s_render
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.bundle import KUSTOMIZATION
+from renderer.shadow_diff import stub_vars
 from validate.validate_lib import k8s_schema
 from validate import k8s_manifests as vkm
 
 
 @pytest.fixture(scope="module")
-def real_tree():
+def shared_render():
+    """A `render` for `main()` that reads each role off the run's shared k8s render.
+
+    `_k8s_render` readers on the same leg build that render anyway, so `main()` renders
+    nothing a second time. A tree that fails to render leaves no shared tags, and each role
+    renders afresh, so `main()` still prints its own failure lines.
+    """
+    tags = {}
+    with contextlib.suppress(cluster.RenderError):
+        tags = _k8s_render.rendered_tags()
+
+    def render(role, stubs):
+        return tags[role] if role in tags else cluster.render_tag(role, stubs)
+
+    return render
+
+
+@pytest.fixture(scope="module")
+def real_tree(shared_render):
     """Run the validator over the real tree ONCE per worker: (exit code, stdout, stderr).
 
-    A full run renders every k8s role through the renderer, which takes several seconds.
+    A full run schema-checks every rendered object, which takes several seconds.
     Six guards below assert on different parts of the same run's output. The run is a pure
     function of the repo tree, so one capture of both streams serves all of them.
 
@@ -39,7 +60,7 @@ def real_tree():
     """
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        rc = vkm.main()
+        rc = vkm.main(render=shared_render)
     return rc, out.getvalue(), err.getvalue()
 
 
@@ -107,7 +128,9 @@ def test_the_real_tree_leaves_no_object_unchecked(real_tree_stdout):
     assert _UNCOVERED not in out, out[out.find(_UNCOVERED) - 80 :][:400]
 
 
-def test_an_object_no_vendored_schema_covers_is_flagged(monkeypatch, tmp_path):
+def test_an_object_no_vendored_schema_covers_is_flagged(
+    monkeypatch, tmp_path, shared_render
+):
     """The rejecting half of the test above: with no vendored schemas, the tail must appear.
 
     Without this, a guard asserting the ABSENCE of a phrase would pass identically if the
@@ -123,10 +146,16 @@ def test_an_object_no_vendored_schema_covers_is_flagged(monkeypatch, tmp_path):
     monkeypatch.setattr(k8s_schema, "CRD_SCHEMA_DIR", tmp_path)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
-        vkm.main()
+        vkm.main(render=shared_render)
     out = buf.getvalue()
     assert _UNCOVERED in out
     assert "traefik.io/v1alpha1/IngressRoute" in out
+
+
+def test_a_shared_tag_is_the_render_main_would_make():
+    assert _k8s_render.rendered_tags()["traefik"] == cluster.render_tag(
+        "traefik", stub_vars()
+    )
 
 
 def _run_with_render(render) -> tuple[int, str]:

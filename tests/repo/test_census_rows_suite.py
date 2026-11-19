@@ -264,7 +264,6 @@ ROWS = (
             **dict.fromkeys(
                 (
                     "tests/repo/test_ci_bootstrap_cases_own_job.py",
-                    "tests/repo/test_ci_pytest_apt_tools_cache.py",
                     "tests/repo/test_fix_skeptic_pass_documented.py",
                     "tests/repo/test_gitleaks_manifest_digest_allowlist.py",
                     "tests/repo/test_gitleaks_secret_key_name_allowlist.py",

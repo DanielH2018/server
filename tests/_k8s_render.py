@@ -19,7 +19,12 @@ from _role_census import role_dirs
 from lib.render_context import render_context
 from render_share import shared_value
 from renderer.renderer_lib.bundle import KUSTOMIZATION
-from renderer.renderer_lib.cluster import template_context, render_tag, role_context
+from renderer.renderer_lib.cluster import (
+    RenderedTag,
+    template_context,
+    render_tag,
+    role_context,
+)
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
 from renderer.shadow_diff import stub_vars
 from validate.k8s_manifests import K8S_ROLES, SKIP_ROLES, k8s_entries
@@ -40,28 +45,37 @@ def _render_texts(overrides: dict | None = None, *, only: frozenset[str] | None 
     than skipping it — a template that stopped rendering would otherwise quietly drop out of
     every guard built on this.
     """
-    entries = k8s_entries()
+    for role in _roles(only):
+        yield from _tag_texts(role, render_tag(role, _stubs(overrides)))
 
+
+def _roles(only: frozenset[str] | None = None):
+    """Each k8s role the validator renders, sorted, narrowed to `only` when given."""
+    entries = k8s_entries()
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        if only is not None and role not in only:
-            continue
-        tag = render_tag(role, _stubs(overrides))
-        for files in (tag.files, tag.deferred):
-            for name, text in sorted(files.items()):
-                if name != KUSTOMIZATION:
-                    yield role, tag.sources[name], text
+        if only is None or role in only:
+            yield role
 
 
-def _render_all():
+def _tag_texts(role: str, tag: RenderedTag):
+    """(role, template name, rendered TEXT) for each manifest in one role's `RenderedTag`."""
+    for files in (tag.files, tag.deferred):
+        for name, text in sorted(files.items()):
+            if name != KUSTOMIZATION:
+                yield role, tag.sources[name], text
+
+
+def _render_all(tags: dict[str, RenderedTag]):
     """(role, template name, parsed doc) for every manifest the validator would render."""
-    for role, name, rendered in _render_texts():
-        _TEXTS.append((role, name, rendered))
-        for doc in yaml_fast.safe_load_all(rendered):
-            if isinstance(doc, dict) and doc.get("kind"):
-                yield role, name, doc
+    for role, tag in tags.items():
+        for _role, name, rendered in _tag_texts(role, tag):
+            _TEXTS.append((role, name, rendered))
+            for doc in yaml_fast.safe_load_all(rendered):
+                if isinstance(doc, dict) and doc.get("kind"):
+                    yield role, name, doc
 
 
 _CACHE: tuple | None = None
@@ -69,15 +83,21 @@ _CACHE: tuple | None = None
 # second pass over the tree would double it. Only reachable through rendered_texts(), which
 # forces the render first.
 _TEXTS: list[tuple[str, str, str]] = []
+# Filled with _CACHE, from the same shared render. Only reachable through rendered_tags().
+_TAGS: dict[str, RenderedTag] = {}
 # The `render_share` key of the whole render. The tree is its only input.
 SHARE_KEY = ["k8s_rendered_docs"]
 
 
-def render() -> tuple[tuple, tuple]:
-    """The parsed docs and the texts `rendered_docs()` and `rendered_texts()` serve, rendered now."""
+def render() -> tuple[tuple, tuple, dict[str, RenderedTag]]:
+    """What `rendered_docs()`, `rendered_texts()` and `rendered_tags()` serve, rendered now.
+
+    Each tag is `render_tag(role, stub_vars())`, the call the validator's `main()` makes.
+    """
     _TEXTS.clear()
-    docs = tuple(_render_all())
-    return docs, tuple(_TEXTS)
+    tags = {role: render_tag(role, _stubs(None)) for role in _roles()}
+    docs = tuple(_render_all(tags))
+    return docs, tuple(_TEXTS), tags
 
 
 def rendered_docs():
@@ -97,8 +117,10 @@ def rendered_docs():
     """
     global _CACHE
     if _CACHE is None:
-        docs, texts = shared_value(SHARE_KEY, render)
+        docs, texts, tags = shared_value(SHARE_KEY, render)
         _TEXTS[:] = texts
+        _TAGS.clear()
+        _TAGS.update(tags)
         _CACHE = docs
     return iter(_CACHE)
 
@@ -112,6 +134,18 @@ def rendered_texts():
     """
     rendered_docs()
     return iter(tuple(_TEXTS))
+
+
+def rendered_tags() -> dict[str, RenderedTag]:
+    """Each role's stub-mode `RenderedTag`, from the shared render `rendered_docs()` reads.
+
+    The tags are shared, not copied, as the docs are.
+
+    Raises:
+        RenderError: a template failed to render.
+    """
+    rendered_docs()
+    return dict(_TAGS)
 
 
 def prebuild(read=rendered_docs) -> None:

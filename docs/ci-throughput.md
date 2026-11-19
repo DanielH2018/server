@@ -742,23 +742,37 @@ other eight jobs stay hosted, because they are short or need what a pod does not
 A pull-request run would stay hosted, because the launcher starts pods only for a run it
 dispatched. The pods would therefore serve one or two runs an hour and sit idle for the rest.
 
-The survey for C2 found three costs the plan had not counted:
+The survey for C2 found costs the plan had not counted. The list below gives each one and
+what has changed it:
 
-- **The jobs need root.** `hooks` and `pytest` call `sudo`, install apt packages and write to
-  `/usr/local/bin`, and a pod under the `restricted` standard can do none of it. A pod needs
-  an image of its own with those tools in it, and steps that differ between a pod and a
-  hosted runner. That is a second copy of the environment, which is how the sweep went wrong.
-  Since 2026-11-19 the two jobs' own tool installs write to no system path (#9126).
+- **The jobs needed root.** A pod under the `restricted` standard has no `sudo` and cannot
+  write a system path. Steps that differ between a pod and a hosted runner would be a second
+  copy of the environment, which is how the sweep went wrong. Since 2026-11-19 the two jobs'
+  own tool installs need no root
+  ([#9126](https://github.com/DanielH2018/server/issues/9126)).
   `.github/actions/pytest-tools` puts SOPS, age and apt-utils in `~/.local/bin`, which the
-  runner image has on PATH, and `hooks` unpacks Vale into `$RUNNER_TEMP/bin`. Three uses of
-  root remain. `pytest-tools` runs `sudo apt-get update` when the image's package lists are
-  stale. `.github/actions/setup` edits the apt mirror list, and installs `libyaml-dev` when
-  the image lacks it. A pod still needs a base image with what the hosted image ships,
-  such as `systemd-analyze`, Go and `jq`. About ten test modules skip when one of those
-  binaries is missing, so a pod's run needs a step that fails on a missing one before its
-  result can be set beside a hosted run's.
-- **A test refuses any ResourceQuota.** `test_no_resourcequota_is_declared_anywhere` fails on
-  one, and ADR-0032 names a quota as a bound on the launcher.
+  runner image has on PATH. It refreshes stale apt lists into a directory under
+  `$RUNNER_TEMP`, not `/var/lib/apt/lists`. `hooks` unpacks Vale into `$RUNNER_TEMP/bin`.
+  Two uses of root remain, both in `.github/actions/setup`, and an image that needs neither
+  skips both. The fallback apt mirror is added only when `/etc/apt/apt-mirrors.txt` exists,
+  and `libyaml-dev` is installed only when it is missing.
+- **A pod needs a base image and a writable home.** The base image carries what the hosted
+  image ships and the jobs do not install: `systemd-analyze`, Go, `jq`, `libyaml-dev` (PyYAML
+  ships no wheel for the pinned Python), and the binaries test modules skip without. It puts
+  `~/.local/bin` on PATH. The last step of `pytest-tools` fails a leg that lacks one of those
+  binaries, so a pod's run cannot pass the gated tests as skips.
+  `tests/repo/test_ci_baseline_binaries.py` holds the step's list against every skip gate in
+  the suite. `strace` is the one gated binary the hosted image lacks, so its test skips on both
+  runner types. `HOME` must be writable, because `~/.local/bin`, the dotfiles packages and
+  the real `uv`'s cache live under it; setting `UV_CACHE_DIR` moves the cache. Child
+  processes write `__pycache__` beside first-party modules in the checkout. A measurement on
+  2026-11-19 left open whether the suite needs a writable checkout.
+- **A quota is allowed in one namespace.**
+  `test_no_resourcequota_is_declared_outside_the_runner_namespace` refuses a ResourceQuota
+  anywhere but `ci-runners`, the runner namespace ADR-0032 bounds with one.
+- **The heaviest module rendered the tree twice.** `test_validate_k8s_manifests.py` hands the
+  validator each role's render from the run's shared k8s render, which other modules on the
+  leg build anyway. Its tests took 12.8 s on daniel-box before and take 1.8 s.
 - **The launcher's token takes operator steps.** It would reach daniel-box as the read-only
   token does: copied from the cluster into SOPS by hand, then synced to the host.
 

@@ -761,7 +761,7 @@ After H1, merging a pin is the upgrade. Two pieces move the runbook gates to the
       targets resolve the vendored workloads by name. The takeover census and the diff before
       each flip show every field that changes.
     - **Source-tree guards still read them.**
-      `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
+      `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_outside_the_runner_namespace`
       runs `git grep` over `ansible/`. H1.3 and H1.5a therefore grep their vendored file for
       each kind such a guard forbids, and strip or exempt each match in the same PR.
     - **One render-time guard reads them (#8447).**
