@@ -251,12 +251,15 @@ def arm_merge(ln: Landing) -> None:
 
 
 _RETRIGGER_DONE = (
-    "The landing already converted it to draft and back once for this head. "
+    "The landing already converted it to draft and back once for this head."
 )
 
 
 def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -> str:
     """Why a ready PR whose head's CI skipped as a draft cannot merge; "" while it is a draft.
+
+    The reason carries no remedy: `_toggle_by_hand` is the manual one, and a rate-limited
+    toggle replaces it with the wait (`_retrigger_ready_run`).
 
     A PR marked ready right after its push can get only the push's draft-era run. No run
     follows the ready flip, so nothing would ever supply a verdict. A PR still a draft gets its run once someone marks it ready, so the wait goes on.
@@ -267,8 +270,14 @@ def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -
     return (
         f"PR #{pr} is ready, but {head[:8]}'s only CI ran while it was a draft and skipped "
         "every job, and GitHub started no run on the ready flip; a re-run replays the draft "
-        f"event and skips again. {_RETRIGGER_DONE if retriggered else ''}Convert it to draft and back "
-        f"(`gh pr ready --undo {pr}`, then `gh pr ready {pr}`) or push, then re-run this"
+        f"event and skips again.{' ' + _RETRIGGER_DONE if retriggered else ''}"
+    )
+
+
+def _toggle_by_hand(pr: str) -> str:
+    return (
+        f"convert it to draft and back (`gh pr ready --undo {pr}`, then "
+        f"`gh pr ready {pr}`) or push, then re-run this"
     )
 
 
@@ -303,57 +312,47 @@ def _ready_run_on(ln: Landing, head: str) -> str:
     return ""
 
 
-def _retrigger_ready_run(ln: Landing, head: str) -> str:
+def _retrigger_ready_run(ln: Landing, head: str, dead_end: str) -> str:
     """Convert the PR to draft and back so GitHub starts a ready run; "" on success.
 
     GitHub starts no `ci.yml` run for the ready flip of a PR whose push run skipped as a
     draft, and a re-run replays the draft event. The conversion is the only thing
     that makes one, so the landing does it once per head instead of ending `merge-timeout`
-    for a person to do the same two commands. A failure is returned as the reason, and names
-    the PR's state when the first command had already run, because a draft PR never merges.
+    for a person to do the same two commands. A failure returns the landing's ending, which
+    leads with `dead_end`. It names the PR's state when the first command had already run,
+    because a draft PR never merges. A rate-limited step's remedy is the wait, never the
+    refused command.
     """
     pr = str(ln.opts.pr)
     say(
         f"PR #{pr} is ready but {head[:8]}'s only CI skipped as a draft; converting it to draft and back"
     )
-    for step, args in (
-        ("to draft", ("pr", "ready", "--undo", pr)),
-        ("back to ready", ("pr", "ready", pr)),
+    for step, args, by_hand in (
+        ("to draft", ("pr", "ready", "--undo", pr), _toggle_by_hand(pr)),
+        (
+            "back to ready",
+            ("pr", "ready", pr),
+            f"run `gh pr ready {pr}`, then re-run this",
+        ),
     ):
+        left = "" if step == "to draft" else f"; PR #{pr} is left as a draft"
         try:
             ln.tools.gh(*args)
         except subprocess.CalledProcessError as exc:
             why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-            left = (
-                ""
-                if step == "to draft"
-                else f"; PR #{pr} is left as a draft, run `gh pr ready {pr}`"
+            return (
+                f"{dead_end} Converting it {step} failed ({why}){left}; "
+                + ln.remedy(why, by_hand)
             )
-            return f"converting it {step} failed: {why}{left}"
         except subprocess.TimeoutExpired:
-            return f"converting it {step} timed out"
+            return f"{dead_end} Converting it {step} timed out{left}; {by_hand}"
     return ""
 
 
 def _mark_ready(ln: Landing) -> None:
     """Mark a draft PR ready: a draft's CI run runs no job, and a draft cannot merge."""
-    pr = str(ln.opts.pr)
-    try:
-        ln.tools.gh("pr", "ready", pr)
-    except subprocess.CalledProcessError as exc:
-        why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
-        ln.die(
-            f"PR #{pr} is a draft and could not be marked ready ({why}); run "
-            f"`gh pr ready {pr}`, then re-run this",
-            1,
-        )
-    except subprocess.TimeoutExpired:
-        ln.die(
-            f"PR #{pr} is a draft and marking it ready timed out; run `gh pr ready {pr}`, "
-            "then re-run this",
-            1,
-        )
-    say(f"PR #{pr} was a draft; marked it ready")
+    stale_base.ready_again(ln)
+    say(f"PR #{ln.opts.pr} was a draft; marked it ready")
 
 
 def _no_turn(draft: str) -> tuple[bool, int]:
@@ -616,13 +615,17 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     draft_since = waited
                 elif dead_end and head != retriggered_head:
                     retriggered_head = head
-                    failure = _retrigger_ready_run(ln, head)
+                    failure = _retrigger_ready_run(ln, head, dead_end)
                     if failure:
-                        ln.die(f"{dead_end}; {failure}", 75, Verdict.MERGE_TIMEOUT)
+                        ln.die(failure, 75, Verdict.MERGE_TIMEOUT)
                     # The new run takes a moment to register, so the grace starts again.
                     draft_since = waited
                 elif dead_end:
-                    ln.die(dead_end, 75, Verdict.MERGE_TIMEOUT)
+                    ln.die(
+                        f"{dead_end} To get a run, {_toggle_by_hand(o.pr)}",
+                        75,
+                        Verdict.MERGE_TIMEOUT,
+                    )
             if rc == CI_RED:
                 ln.die(
                     f"PR #{o.pr} cannot merge — its own CI is red ({line}); fix it, push, "

@@ -194,6 +194,19 @@ def test_a_draft_that_cannot_be_marked_ready_ends_the_landing_with_the_remedy(
     assert call_order(calls)[-1] == "release_turn"
 
 
+def test_a_draft_a_secondary_limit_refuses_says_to_wait_not_to_repeat_the_call(
+    landing,
+):
+    """GitHub names the GraphQL quota, which still has calls left, so a burst limit refused it."""
+    refused = "GraphQL: API rate limit already exceeded for user ID 41801780."
+    ln, _calls = turn_landing(landing, gh_merge_rc=[1], gh_stderr=refused)
+    with pytest.raises(Outcome) as exc:
+        land_in_turn(ln)
+    assert "GitHub's secondary rate limit refused it" in exc.value.error
+    assert exc.value.error.endswith("wait a few minutes, then re-run this")
+    assert "gh pr ready" not in exc.value.error
+
+
 def test_a_whole_landing_takes_the_turn_with_nothing_set(land_run):
     fakes = Fakes(
         gh_views={

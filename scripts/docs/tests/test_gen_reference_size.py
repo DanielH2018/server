@@ -236,7 +236,7 @@ def test_a_cron_commit_leaves_the_page_unwritten_the_next_day(
     cron = NEW | {
         "docs/reference/size.md": 40,
         "docs/assets/generated/map.svg": 12,
-        "scripts/dev/pytest_shard_weights.json": 9,
+        "scripts/dev/pytest_shard_runner_weights.json": 9,
     }
     _commit_state(repo, cron, -0.25)
     assert "unchanged" in _size_run(size, repo, out, _NOW + timedelta(hours=7), capsys)
