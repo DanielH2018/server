@@ -276,7 +276,7 @@ ROWS = (
         ),
         min_matches=300,
         must_find=frozenset(
-            {"scripts/docs/build_docs.py", "scripts/validate/k8s_manifests.py"}
+            {"scripts/docs/build_docs.py", "scripts/validate/render_templates.py"}
         ),
     ),
 )

@@ -61,7 +61,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
   "shellcheck-py==0.11.0.1",        # validate.render_lib.shell; pinned to match prek.toml's shellcheck-py rev
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
-  "jsonschema",                     # validate.k8s_manifests checks every object against the
+  "jsonschema",                     # validate.render_lib.k8s checks every object against the
   # schemas vendored in scripts/validate/schemas/: Kubernetes'
   # own OpenAPI files for core kinds, the catalog's for CRDs.
   "mkdocs",                         # test_mkdocs_repo_links renders with mkdocs.yml's extensions
@@ -107,7 +107,7 @@ testpaths = [                        # single source of truth for WHAT runs
 # `--dist loadscope` keeps a module's tests on ONE worker. xdist's default `load` hands tests
 # out one at a time regardless of the module they came from, so a module-scoped fixture is
 # rebuilt on every worker that draws any of its tests — and this suite has expensive ones,
-# chiefly `real_tree` in scripts/validate/tests/test_validate_k8s_manifests.py, which renders
+# chiefly `real_tree` in scripts/validate/tests/test_render_k8s.py, which renders
 # every k8s role.
 #
 # The saving is about 20% of wall and almost no CPU: worker idle time, not work removed. The
@@ -207,7 +207,7 @@ pythonpath = [
   # when that directory is itself on sys.path.
   #
   # `scripts/validate` and `scripts/diagnostics` are deliberately ABSENT. Their modules are
-  # packages (`validate.k8s_manifests`, `diagnostics.probe_lib.core`) reached through `scripts`
+  # packages (`validate.render_lib.k8s`, `diagnostics.probe_lib.core`) reached through `scripts`
   # alone, and leaving the directory listed would let a bare sibling import resolve here while
   # failing for the directly-invoked script that is how both actually run in production.
   "scripts",
@@ -613,7 +613,7 @@ unsupported-operator = "error"
 # The sites this rule finds are LATENT, not live. checks/b2.py
 # reaches `urllib.error.HTTPError` and imports only `urllib.parse`, but it also imports
 # `bridge.net`, which imports `urllib.error` — so in the real monitor-bridge process it always
-# resolved. validate/k8s_manifests.py gets `yaml.constructor` the same way, via `yaml.loader`.
+# resolved. validate/render_lib/k8s.py gets `yaml.constructor` the same way, via `yaml.loader`.
 # The rule is on because that is a guarantee held by a sibling module's import list rather than
 # by anything local, and it breaks silently when the sibling's imports are tidied.
 possibly-missing-submodule = "error"

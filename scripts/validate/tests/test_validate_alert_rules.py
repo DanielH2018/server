@@ -14,6 +14,11 @@ import threading
 import yaml
 
 from lib import yaml_fast
+from lib.guard_jinja_env import template_env
+from lib.k8s_roles import k8s_entries
+from lib.k8s_yaml import make_lookup
+from lib.render_context import render_context
+from lib.render_guard import render_or_error
 from lib.repo_paths import REPO
 from validate import alert_conventions, notification_renders, alert_rules
 
@@ -227,22 +232,20 @@ def test_a_raw_block_the_render_lost_is_flagged():
 
 def test_a_template_with_its_raw_blocks_removed_does_not_render(tmp_path):
     """Jinja refuses the Go expressions outright, through the validator's own environment."""
-    from validate import k8s_manifests as validator
-
     stripped = tmp_path / alert_rules.ALERTMANAGER_SOURCE.name
     stripped.write_text(
         alert_rules.ALERTMANAGER_SOURCE.read_text()
         .replace("{% raw %}", "")
         .replace("{% endraw %}", "")
     )
-    ctx = validator.render_context(
+    ctx = render_context(
         alert_rules.ROLE_DIR,
-        overrides={"container_item": validator.k8s_entries()[alert_rules.ROLE]},
+        overrides={"container_item": k8s_entries()[alert_rules.ROLE]},
     )
-    env = validator.template_env(tmp_path)
-    env.globals["lookup"] = validator.make_lookup(ctx)
+    env = template_env(tmp_path)
+    env.globals["lookup"] = make_lookup(ctx)
 
-    rendered, err = validator.render_or_error(env, stripped.name, ctx)
+    rendered, err = render_or_error(env, stripped.name, ctx)
 
     assert rendered is None and err, rendered
 

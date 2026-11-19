@@ -9,13 +9,11 @@ import pytest
 from _helpers import K8S_ROLES
 from lib import yaml_fast
 from lib.render_context import render_context
-from validate.k8s_manifests import (
-    SHARED_TPL,
-    k8s_entries,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-)
+from lib.guard_jinja_env import register_ansible_filters
+from lib.k8s_roles import k8s_entries
+from lib.k8s_yaml import make_lookup
+from lib.render_guard import make_env
+from lib.repo_paths import SHARED_TPL
 
 ROLE = K8S_ROLES / "slskd"
 

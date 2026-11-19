@@ -51,7 +51,7 @@ PORT_PROPERTIES = (
         reason=(
             "Kubernetes validates a container port name as an IANA_SVC_NAME: at most 15 "
             "characters, matching [a-z0-9]([a-z0-9-]*[a-z0-9])? with no '--', and holding a letter. "
-            "scripts/validate/k8s_manifests.py's OpenAPI validation does not check it, so "
+            "scripts/validate/render_lib/k8s.py's OpenAPI validation does not check it, so "
             "#6537's 16-character `dockerhub-mirror` passed every PR check and first failed "
             "at Flux's dry run, which held the deploy (#6543)."
         ),

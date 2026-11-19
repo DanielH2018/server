@@ -1056,7 +1056,7 @@
  "scripts/validate/tests/test_validate_host_packages.py": 11.92,
  "scripts/validate/tests/test_validate_jinja_bash_collisions.py": 0.06,
  "scripts/validate/tests/test_validate_k3s_binary_sum.py": 0.11,
- "scripts/validate/tests/test_validate_k8s_manifests.py": 14.91,
+ "scripts/validate/tests/test_render_k8s.py": 14.91,
  "scripts/validate/tests/test_validate_notification_renders.py": 0.0,
  "scripts/validate/tests/test_validate_render_diff_gates.py": 11.08,
  "scripts/validate/tests/test_validate_root_ignored_files.py": 0.04,

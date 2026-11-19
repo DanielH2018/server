@@ -1,5 +1,5 @@
 """Tests for scripts/validate/render_lib/units.py — the render-then-`systemd-analyze verify` guard
-for the systemd units that neither the shell family nor `k8s_manifests.py` covers.
+for the systemd units that neither the shell family nor `render_lib/k8s.py` covers.
 """
 
 import shutil

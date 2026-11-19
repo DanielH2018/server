@@ -772,7 +772,7 @@ what has changed it:
 - **A quota is allowed in one namespace.**
   `test_no_resourcequota_is_declared_outside_the_runner_namespace` refuses a ResourceQuota
   anywhere but `ci-runners`, the runner namespace ADR-0032 bounds with one.
-- **The heaviest module rendered the tree twice.** `test_validate_k8s_manifests.py` hands the
+- **The heaviest module rendered the tree twice.** `test_render_k8s.py` hands the
   validator each role's render from the run's shared k8s render, which other modules on the
   leg build anyway. Its tests took 12.8 s on daniel-box and take 1.8 s. A leg where it is
   the only reader of that render still pays the render once, 6.6 s on daniel-box.

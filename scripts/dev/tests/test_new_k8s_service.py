@@ -5,7 +5,7 @@ is the starting point every new service inherits. A generated Deployment that fa
 render, or an entry appended where `containers_list` no longer parses, is a failure the
 author meets only after they have already written the rest of the service.
 
-The rendering half goes through `validate.k8s_manifests`'s own machinery rather than a second
+The rendering half goes through `validate.render_lib.k8s`'s own machinery rather than a second
 Jinja environment, so what these tests accept cannot drift from what the repo's validator
 accepts.
 
@@ -24,16 +24,11 @@ from lib.k8s_roles import (
 from lib.inventory_lists import K8S_HOST
 from lib.render_guard import StubUndefined, host_layer
 from lib.repo_paths import HOST_VARS
-from validate.k8s_manifests import (
-    ALL_VARS,
-    K8S_ROLES,
-    BASE_CONTEXT,
-    load_yaml,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-)
+from lib.guard_jinja_env import register_ansible_filters
+from lib.k8s_context import resolve_vars
+from lib.k8s_yaml import make_lookup
+from lib.render_guard import BASE_CONTEXT, load_yaml, render_or_error
+from lib.repo_paths import ALL_VARS, K8S_ROLES
 
 import new_k8s_service as scaffold
 
@@ -56,7 +51,7 @@ def args():
 
 
 def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[dict]:
-    """Render a generated manifest the way `validate/k8s_manifests.py` renders a real one.
+    """Render a generated manifest the way `validate/render_lib/k8s.py` renders a real one.
 
     Written to a temporary templates directory first, because the validator's environment
     loads a role's own directory alongside the shared macros — rendering the string on its

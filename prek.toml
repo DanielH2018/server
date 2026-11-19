@@ -39,7 +39,7 @@ id = "check-yaml"
 stages = ["pre-commit"]
 # Flux's vendored install is a multi-document stream, which this hook refuses without
 # --allow-multiple-documents. Allowing that repo-wide would pass a stray `---` in every other
-# file, so the one stream is excluded instead: the validate-k8s-manifests hook parses its
+# file, so the one stream is excluded instead: the k8s family of validate-render-templates parses its
 # render, and tests/k8s/test_flux_role.py reads it.
 # An upstream file under files/upstream/ is such a stream too, and its own pin covers it.
 exclude = "^k8s/roles/(flux/files/gotk-components\\.yaml$|[^/]+/files/upstream/)"
@@ -110,17 +110,24 @@ repo = "local"
 
 [[repos.hooks]]
 id = "validate-render-templates"
-name = "Validate rendered compose, shell, unit and host component templates"
+name = "Validate rendered compose, shell, unit, host component and k8s manifest templates"
 entry = "uv run --frozen python scripts/validate/render_templates.py"
 language = "system"
 # The entry point runs only the families whose `files` pattern in its FAMILIES table matches a
 # passed file. Serial, so a full sweep is one invocation and not one per argv batch.
 require_serial = true
 # The union of the families' patterns: every file under hosts/, because the units family
-# renders every host package and a package unit may be a static file; the inventory the renders
-# layer in; secret_rotation.yml, the plaintext census of SOPS names
-# (never values) the setup family allows; and the render's import closure.
-files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint)\\.py|scripts/validate/(render_templates|render_lib/(compose|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.(sh|service|timer|socket|rules)\\.j2|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+# renders every host package and a package unit may be a static file; every `.j2` under a k8s
+# role and each role's defaults, which the k8s family renders; the vendored schemas it checks
+# the render against; the inventory the renders layer in; secret_rotation.yml, the plaintext
+# census of SOPS names (never values) the setup family allows; and the render's import closure.
+#
+# The `scripts/lib/k8s_*.py` modules are named one by one rather than matched by a `k8s_.*`
+# pattern: a rename makes an alternation fail loudly and a pattern match nothing.
+#
+# CI's sweep sets RENDER_TEMPLATES_SKIP=k8s, because its pytest job runs that family over the
+# same tree (.github/workflows/ci.yml).
+files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint|k8s_net_rules|k8s_schema)\\.py|scripts/validate/(render_templates|render_lib/(compose|k8s|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.j2|k8s/roles/[^/]+/defaults/main\\.yml|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/lib/plain_scalar\\.py|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -163,7 +170,7 @@ files = "^(k8s/roles/observability/files/dashboards/.*\\.json|k8s/roles/observab
 # list the groups and pin lokitool's version; the pint configs; its defaults, whose image tags
 # set the tool versions; the inventory and
 # the scrape_jobs filter, which feed prometheus.yml's loops; and the render's import closure,
-# as validate-k8s-manifests names it. pass_filenames = false, so prek runs one instance and
+# as validate-render-templates names it. pass_filenames = false, so prek runs one instance and
 # never races two provisions.
 [[repos.hooks]]
 id = "validate-alert-rules"
@@ -171,29 +178,7 @@ name = "Validate the alert plane and the Alloy config with promtool, amtool, pin
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
-
-# Same render-then-parse guard as validate-render-templates above, for the k8s manifests.
-# Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
-# static config and Authelia's configuration.yml is trivially valid whatever those opaque block
-# scalars contain, so an outer-only check would miss the indentation bugs that matter most. A
-# broken manifest otherwise first shows up as `error validating data` partway through a kubectl
-# apply, with some objects applied and some not.
-[[repos.hooks]]
-id = "validate-k8s-manifests"
-name = "Validate rendered k8s manifest templates"
-entry = "uv run --frozen python scripts/validate/k8s_manifests.py"
-language = "system"
-pass_filenames = false
-# daniel-box's host_vars is in scope because the validator renders each role with that host's
-# real containers_list entry (port, hostname) rather than a stub.
-#
-# The six `scripts/lib/k8s_*.py` modules are named one by one rather than matched by a
-# `k8s_.*` pattern. The validator's logic lives in them, so an entry naming only
-# `k8s_manifests.py` would stop firing on the code that does the work — a hook that quietly
-# covers less is exactly what a pattern here would hide next
-# time, since a rename makes an alternation fail loudly and a pattern match nothing.
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|scripts/validate/validate_lib/ok_lines\\.py|k8s/roles/.*\\.j2|k8s/templates/ingressroute\\.yml\\.j2|inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/k8s_manifests\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/(k8s_net_rules|k8s_schema)\\.py|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/renderer/template_filters/[^/]+\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(inventory_lists|guard_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -629,7 +614,7 @@ pass_filenames = false
 files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
-# render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's
+# render reaches scripts/validate/render_lib/k8s.py and its validate_lib through pytest's
 # `pythonpath`.
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
@@ -698,7 +683,7 @@ name = "Alert rules meet the alert conventions"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The unit-template census: every unit template the validator must find still exists.
 [[repos.hooks]]

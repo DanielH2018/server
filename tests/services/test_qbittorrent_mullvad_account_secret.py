@@ -10,7 +10,8 @@ deploy green and leave the mullvad mod with no account file.
 from lib import yaml_fast
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_docs
-from validate.k8s_manifests import make_env, register_ansible_filters
+from lib.guard_jinja_env import register_ansible_filters
+from lib.render_guard import make_env
 
 ROLE = "qbittorrent"
 MOUNT = "/mullvad"
