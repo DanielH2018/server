@@ -276,22 +276,26 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
   to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone
-  failing — the `timeout` firing, or a durations report that parses to nothing. The `timeout` is
-  there because this script holds the git-tree lock for its whole life.
-- **A generator that writes outside the three staged paths is a defect**: the write is unstaged,
-  and an unstaged file in the primary checkout parks every deploy on the box.
-- **Its abort valves** are the shared `/var/lock/server-git-tree.lock`, the dirty-tree gate at
-  the top (build the site, change no file), the unlanded-branch guard (`publish_pr.py unlanded`,
-  read against origin rather than the open-PR list), and the commit-failure stamp under
-  `/var/lib/homelab/docs-refresh.d`, which is what lets the next run tell its own leftover dirt
-  from a human's.
-- **Each failing run keeps its own log** in that directory, named `failure-<UTC start>.log`,
+  failing — the `timeout` firing, or a durations report that parses to nothing. The `timeout`
+  makes a wedged step fail the run rather than hang it.
+- **It works in its own worktree, never in the primary checkout.** `prepare_tree` checks out
+  `/var/lib/homelab/docs-refresh.d/tree` at the primary checkout's HEAD and runs
+  `git clean -ffdx`, keeping only `.venv`. The primary checkout keeps ignored debris CI never
+  sees, such as a deleted role's `__pycache__` or the `ansible/` tree the 2026-11-13 rename left,
+  and the suite failed on that debris on daniel-box alone (`039cae5bf` fixed one walker). The
+  tree also frees the run of the git-tree lock, whose 64-minute wait it lost twice to other
+  holders. The tree persists between runs, because the detached landing runs `land.py` from it.
+- **A step that writes outside the five staged paths degrades the run**: the commit leaves the
+  write out, and the next `prepare_tree` discards it, so the run reports DOWN and names it.
+- **Its abort valve** is the unlanded-branch guard (`publish_pr.py unlanded`, read against
+  origin rather than the open-PR list).
+- **Each failing run keeps its own log** in `/var/lib/homelab/docs-refresh.d`, named `failure-<UTC start>.log`,
   and the script prunes all but the newest five (#4764). One overwritten file lost the
   2026-10-12 06:17 traceback to the 18:17 failure of a different test.
 - **A red suite reports pytest's own verdict**: the count line and each `FAILED`/`ERROR` node id
   from the `short test summary info` block. The output's tail is only the fallback, for a run
   with no such block. On 2026-10-12 the tail was a shutdown traceback that named no test.
-- **Before adding a fourth staged path**, or a prek hook matching one of the three, check the
+- **Before adding a sixth staged path**, or a prek hook matching one of the five, check the
   hook cannot fail on generator output — a hook that can wedges this cron on every run, and
   `end-of-file-fixer` and Vale have both already tried. Vale is the one kept exception, on
   purpose (#3008): it gates `docs/assets/generated/fragments/` so a generator's prose is linted
