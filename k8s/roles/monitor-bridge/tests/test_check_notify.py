@@ -82,7 +82,7 @@ def test_discord_two_consecutive_failures_alert(cfg, state):
     ok, msg = result
     assert not ok
     assert "404" in msg
-    assert result.details == ("Kuma",)
+    assert result.details == ("Alertmanager",)
 
 
 def test_discord_valid_read_resets_streak(cfg, state):
@@ -115,7 +115,7 @@ def test_discord_unreachable_redacts_the_webhook_url(cfg, state):
     assert "s3cr3t-token" not in msg
     assert url not in msg
     assert "redacted" in msg  # non-vacuous: the branch ran and said something
-    assert "Kuma webhook" in msg  # and still names which channel failed
+    assert "Alertmanager webhook" in msg  # and still names which channel failed
 
 
 def test_discord_unreachable_preserves_an_ordinary_error(cfg, state):
@@ -142,7 +142,9 @@ def test_discord_disabled_without_url(cfg):
 
 def test_discord_verifies_all_configured_webhooks(cfg):
     # All three webhooks valid -> up, naming each verified hop.
-    cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma")
+    cfg = replace(
+        cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/alertmanager"
+    )
     cfg = replace(
         cfg, DISCORD_CROWDSEC_WEBHOOK_URL="https://discord.com/api/webhooks/2/crowdsec"
     )
@@ -152,16 +154,16 @@ def test_discord_verifies_all_configured_webhooks(cfg):
     src = FakeSources(get_json=lambda *a, **k: {"name": "Homelab Alerts"})
     ok, msg = checks.notify.check_discord(cfg, src)
     assert ok
-    assert "Kuma" in msg and "CrowdSec" in msg and "GitOps/Renovate" in msg
+    assert "Alertmanager" in msg and "CrowdSec" in msg and "GitOps/Renovate" in msg
 
 
 def test_discord_gitops_webhook_failure_pages(cfg):
     # A revoked GitOps/Renovate webhook (delivers rollback + Renovate digests, whose "alive"
     # marker greens regardless of delivery — no other alert covers it) pages, naming it, even
-    # though the webhook labelled "Kuma" is fine.
+    # though the Alertmanager webhook is fine.
     cfg = replace(
         cfg,
-        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma",
+        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/alertmanager",
         DISCORD_CROWDSEC_WEBHOOK_URL="",
     )
     cfg = replace(
@@ -182,8 +184,10 @@ def test_discord_gitops_webhook_failure_pages(cfg):
 
 def test_discord_crowdsec_webhook_failure_pages(cfg):
     # A revoked CrowdSec webhook (no other alert covers it) pages, naming it — even though
-    # the webhook labelled "Kuma" is fine.
-    cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma")
+    # the Alertmanager webhook is fine.
+    cfg = replace(
+        cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/alertmanager"
+    )
     cfg = replace(
         cfg, DISCORD_CROWDSEC_WEBHOOK_URL="https://discord.com/api/webhooks/2/crowdsec"
     )
@@ -202,8 +206,10 @@ def test_discord_crowdsec_webhook_failure_pages(cfg):
 
 def test_discord_healthchecks_webhook_failure_pages(cfg):
     # A revoked healthchecks.io app webhook (its own check-down alerts, no other alert covers
-    # it) pages, naming it — even though the webhook labelled "Kuma" is fine.
-    cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma")
+    # it) pages, naming it — even though the Alertmanager webhook is fine.
+    cfg = replace(
+        cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/alertmanager"
+    )
     cfg = replace(
         cfg, DISCORD_HEALTHCHECKS_WEBHOOK_URL="https://discord.com/api/webhooks/5/hc"
     )
@@ -265,7 +271,7 @@ def test_check_discord_email_backstop_failure_pages(cfg):
     # webhooks fine but the email 2nd channel's SMTP login fails -> Discord Delivery pages after streak
     cfg = replace(
         cfg,
-        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma",
+        DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/alertmanager",
         DISCORD_CROWDSEC_WEBHOOK_URL="",
         DISCORD_GITOPS_WEBHOOK_URL="",
         DISCORD_ARR_WEBHOOK_URL="",

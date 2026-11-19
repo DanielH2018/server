@@ -793,7 +793,7 @@ tests:
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord"}
         values: "0x12"
-      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord",detail="Kuma"}
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord",detail="Alertmanager"}
         values: "1x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage"}
         values: "0x12"
@@ -827,7 +827,7 @@ tests:
               service: discord
               requires: wan
             exp_annotations:
-              summary: Alert delivery is failing on Kuma.
+              summary: Alert delivery is failing on Alertmanager.
               description: >-
                 Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
                 SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs

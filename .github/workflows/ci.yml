@@ -518,9 +518,8 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
-  # The pytest suite, invoked as the prek `pytest` hook invokes it (`uv run python -m pytest`,
-  # addopts from pyproject.toml), so a local `prek run --all-files` and this job cannot disagree
-  # about what a test run is. A dispatch runs every module, and so does a push with no green
+  # The pytest suite, run as `uv run python -m pytest` with the addopts from pyproject.toml, so a
+  # local `uv run pytest` and this job agree about what a test run is. A dispatch runs every module, and so does a push with no green
   # ancestor in reach. A push that has one runs the modules the diff from it can affect, and a
   # pull request the modules its own diff can affect; the `Select` step below has the rule.
   #
