@@ -40,6 +40,9 @@ jobs:
     name: validate renovate.json against latest Renovate
     runs-on: ubuntu-26.04
     timeout-minutes: 20 # six install attempts at 60s, plus a wedged fetch
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v7.0.1
         with:
