@@ -67,7 +67,7 @@ from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
 from lib.inventory_lists import LANDING_HOST, host_vars_file
-from lib.repo_paths import HOST_LIB_FILES, REPO
+from lib.repo_paths import REPO
 
 from diagnostics.probe_lib.promote_state import (
     LIVE_PROMOTE_READS,
@@ -76,7 +76,7 @@ from diagnostics.probe_lib.promote_state import (
 )
 
 # The host-side verdict logic, so the CI rule is the builder's and not a copy.
-_sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS
 
 # deploy-ui's daemon on daniel-box: `deploy_ui_port` in

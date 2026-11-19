@@ -123,7 +123,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
-from lib.repo_paths import HOST_LIB_FILES, REPO
+from lib.repo_paths import REPO
 
 import bundle_census
 import forge
@@ -159,7 +159,7 @@ from deploy_tools.promote_lib.reads import (
 
 # The CI reduction every deploy path shares, so a promotion and checkout-sync agree on what
 # green means. It moved to `hosts/lib/` in H7.2e so the deployer could retire without it.
-sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import CIVerdict, ci_verdict
 
 # The revert rule's switch (contract C2). Open question 11 of

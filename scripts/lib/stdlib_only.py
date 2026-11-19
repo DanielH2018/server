@@ -45,7 +45,6 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import repo_paths, role_installs
 from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
 
