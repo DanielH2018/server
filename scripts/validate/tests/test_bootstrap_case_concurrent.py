@@ -190,6 +190,7 @@ def _run(
         image="img",
         work=tmp_path,
         python="3.12",
+        passed=[],
         failed=[],
         tools_cache=None,
         k3s_download=False,
@@ -206,18 +207,25 @@ def test_the_planned_items_run_concurrently(monkeypatch, tmp_path):
     assert overlap.peak >= 2, "every bootstrap item ran alone, one after another"
 
 
-def test_a_concurrent_run_prints_one_verdict_per_item_and_fails_only_the_bad_one(
+def test_a_concurrent_run_records_each_item_and_prints_only_the_bad_one(
     monkeypatch, tmp_path, capsys
 ):
     cases, planned, _ = _run(monkeypatch, tmp_path, misbehaving="red-nfpm")
 
     bad = planned["red-nfpm"].name
     err = capsys.readouterr().err
-    passed = sorted(re.findall(r"^\[PASS\] [^:]+: (.*)$", err, re.MULTILINE))
     failed = re.findall(r"^\[FAIL\] [^:]+: (.*?): ", err, re.MULTILINE)
-    assert cases.failed == [bad]
-    assert failed == [bad]
-    assert passed == sorted(p.name for p in planned.values() if p.name != bad)
+    assert {
+        "failed": cases.failed,
+        "printed failures": failed,
+        "passed": sorted(cases.passed),
+        "printed passes": re.findall(r"^\[PASS\]", err, re.MULTILINE),
+    } == {
+        "failed": [bad],
+        "printed failures": [bad],
+        "passed": sorted(p.name for p in planned.values() if p.name != bad),
+        "printed passes": [],
+    }
 
 
 def test_every_item_passed_or_failed_prints_how_long_it_took(

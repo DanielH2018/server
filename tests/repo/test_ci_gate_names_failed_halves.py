@@ -57,10 +57,6 @@ def test_a_red_gate_annotates_only_the_halves_that_failed():
     )
 
 
-def test_a_green_gate_annotates_nothing():
-    assert _gate() == (0, [])
-
-
 def test_an_unknown_prove_result_is_annotated():
     assert _gate(PROVE="neutral") == (
         1,

@@ -1221,7 +1221,7 @@
  "tests/repo/test_ci_dispatch_sweeps_everything.py": 0.0,
  "tests/repo/test_ci_empty_pr_merge_fails.py": 0.19,
  "tests/repo/test_ci_flux_cli_is_cached.py": 0.07,
- "tests/repo/test_ci_gate_names_failed_halves.py": 0.03,
+ "tests/repo/test_ci_gate_names_failed_halves.py": 0.02,
  "tests/repo/test_ci_jobs_verdict_matches_gate.py": 0.19,
  "tests/repo/test_ci_k3s_download_job_off_critical_path.py": 0.03,
  "tests/repo/test_ci_k3s_download_leg_does_not_gate.py": 0.01,
