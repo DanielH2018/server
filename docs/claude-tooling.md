@@ -838,7 +838,10 @@ prints a `⚠ … did not finish` line rather than nothing. The banner's problem
 
 - **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target.
 - **Primary checkout line** (`dirty_primary_problems`): a **dirty primary checkout**.
-- **Branch line**: this worktree is behind origin/master, so a deploy from it would be refused.
+- **Branch line**: origin/master moved on a file this worktree also changes, and the line names
+  those files. Being behind alone prints nothing, because every fresh worktree falls behind
+  within minutes; `.claude/hooks/_stale_probe_rule.py` still refuses a probe gate from a stale
+  tree when one is run.
 
 A failed import is loud and a failed read is silent. A module the banner cannot import (`lib.git`,
 `lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
