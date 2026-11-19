@@ -118,6 +118,17 @@ ACCOUNT_FILES = {
     ),
     "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\nssh-users:!::ubuntu\n",
 }
+# The host package's lines arm: a block in the package's conffile, as k3s-server adds one to
+# /etc/zsh/zshenv, and a line edit elsewhere.
+BLOCK_MARKER = "# {mark} MANAGED — tool kubeconfig"
+LINE_EDITS = [
+    {
+        "path": "/etc/tool.conf",
+        "marker": BLOCK_MARKER,
+        "block": "export K=1\nexport L=2\n",
+    },
+    {"path": "/etc/login.defs", "line": "UMASK\t\t027", "regexp": "^UMASK\\s"},
+]
 # The host package's manifest, whose users arm declares claude and a service user svc.
 HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
 DECLARED_USERS = [
@@ -186,7 +197,7 @@ def _fake_host(root):
     ]
     (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
     (fs / HOST_MANIFEST.lstrip("/")).write_text(
-        json.dumps({"users": {"users": DECLARED_USERS}})
+        json.dumps({"users": {"users": DECLARED_USERS}, "lines": {"edits": LINE_EDITS}})
     )
     for path, content in ACCOUNT_FILES.items():
         (fs / path.lstrip("/")).write_text(content)

@@ -206,7 +206,7 @@ def test_verdict_subcommand_help_names_the_unreadable_exit(path):
 
 
 def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
-    """`--json` stdout is one document, and the deck mod parses `landing --json` as one.
+    """`--json` stdout is one document, so `jq` and an agent can parse it as one.
 
     `landing-verdicts` reads one local file and nothing over a network, so the run is real;
     whatever the file holds, stdout must still parse as JSON.

@@ -1,9 +1,9 @@
-"""Rule 5's two alias clauses over small fixtures (target slice R2, PR 2b).
+"""Rule 5's alias clause and its vars-file clause over small fixtures.
 
 The template-local clause binds a name by `{% set %}`, a set block, `{% with %}`, a `for`
-target or a macro parameter, and holds each use of it to the key's forms. The second clause
-reads role defaults and inventory. The checks against the real tree are in
-`test_renderer_secret_checks_tree.py`.
+target or a macro parameter, and holds each use of it to the key's forms. The vars-file
+clause refuses any key a role default or inventory value names. The checks against the real
+tree are in `test_renderer_secret_checks_tree.py`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_secret_aliases.py
 """
@@ -132,28 +132,27 @@ def _rule5_with_defaults(tmp_path, defaults: str, template: str):
     return [(v.file.split("/")[-2], v.site, v.key) for v in result.violations]
 
 
-def test_a_role_default_aliasing_a_key_used_bare_is_clean(tmp_path):
-    defaults = 'x: "https://a.{{ fixture_key }}"\ny: "{{ x }}"\n'
-    assert _rule5_with_defaults(tmp_path, defaults, "{{ x }} {{ y }}") == []
+def test_a_role_default_naming_no_key_is_clean(tmp_path):
+    defaults = "x: \"https://a.{{ other }}\"\ny: \"{{ lookup('vars', 'other') }}\"\n"
+    assert _rule5_with_defaults(tmp_path, defaults, "{{ x | trim }} {{ y }}") == []
 
 
 @pytest.mark.parametrize(
-    ("defaults", "template", "found"),
+    ("defaults", "found"),
     [
-        ('x: "{{ fixture_key | trim }}"\n', "{{ x }}", ("defaults", "x: filter trim")),
-        ('x: "{{ fixture_key }}"\n', "{{ x | trim }}", ("templates", "filter trim")),
-        # An alias of an alias counts the same way.
+        ('x: "https://a.{{ fixture_key }}"\n', ("x: named in a vars file", KEY)),
         (
-            'x: "{{ fixture_key }}"\ny: "a.{{ x }}"\n',
-            "{{ y | trim }}",
-            ("templates", "filter trim"),
+            "x: \"{{ lookup('vars', 'fixture_key') }}\"\n",
+            ("x: vars lookup in a vars file", KEY),
+        ),
+        (
+            "x: \"{{ lookup('vars', name) }}\"\n",
+            ("x: non-literal vars lookup in a vars file", "name"),
         ),
     ],
 )
-def test_a_role_default_aliasing_a_key_transformed_is_flagged(
-    tmp_path, defaults, template, found
-):
-    assert _rule5_with_defaults(tmp_path, defaults, template) == [(*found, KEY)]
+def test_a_role_default_naming_a_key_is_flagged(tmp_path, defaults, found):
+    assert _rule5_with_defaults(tmp_path, defaults, "{{ x }}") == [("defaults", *found)]
 
 
 NOT_ALIAS = (("t.j2", "block"),)

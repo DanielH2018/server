@@ -65,8 +65,8 @@ WORKFLOW_ROWS = (
         reason=(
             "The merge-base fetch needs a token in a one-shot `extraheader`, because every "
             "checkout runs with persist-credentials: false. `scripts/dev/pr_changed_files.sh` "
-            "holds that fetch once, and image-smoke and the deck_mod job call it even though "
-            "they read none of its file lists (#3777). A workflow that inlines the header again "
+            "holds that fetch once, and image-smoke calls it even though it reads none of its "
+            "file lists (#3777). A workflow that inlines the header again "
             "is a copy the next change to the fetch has to find by hand."
         ),
         files=lambda: tracked(".github/workflows/*.yml"),
