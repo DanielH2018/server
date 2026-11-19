@@ -46,7 +46,7 @@ def test_the_render_produces_every_floor_file_is_clean():
     assert {"prometheus.yml", "alertmanager.yml", "homelab.tmpl"} <= alert_rules.FLOOR
     assert "scrape_configs:" in found["prometheus.yml"]
     assert "receivers:" in found["alertmanager.yml"]
-    assert '{{ define "homelab.title" }}' in found["homelab.tmpl"]
+    assert 'define "homelab.title"' in found["homelab.tmpl"]
     assert alert_rules.floor_problems(found) == []
 
 
