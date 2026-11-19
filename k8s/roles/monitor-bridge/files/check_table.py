@@ -44,23 +44,23 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="bazarr", fn=service.check_bazarr, gate="startup_grace"),
     PushCheck(name="prowlarr_indexers", fn=service.check_prowlarr_indexers, gate="startup_grace"),
     # Under EXPORTER_DEPENDENT["node"] in check.py as well.
-    PushCheck(name="host_packages", fn=host_packages.check_host_packages, gate="prometheus"),
+    PushCheck(name="host_packages", fn=host_packages.check_host_packages, gate="prometheus", runbook="host-packages"),
     # Reads the weekly drill's stamp off a hostPath, fail-closed, every cycle; the staleness window
     # is ETCD_DRILL_MAX_AGE_S.
     PushCheck(name="etcd_restore_drill", fn=service.check_etcd_restore_drill, runbook="k3s-etcd-restore"),
-    PushCheck(name="scrutiny", fn=host_thermal.check_scrutiny, gate="startup_grace", critical=True),
+    PushCheck(name="scrutiny", fn=host_thermal.check_scrutiny, gate="startup_grace", critical=True, runbook="alert-runbooks"),
     PushCheck(name="ha_heartbeat", fn=service.check_ha_heartbeat),
     # The producer is the bridge re-reading the newest result every cycle, not the 6-hourly run;
     # the check's staleness arm catches a dead scheduler.
     PushCheck(name="speedtest", fn=host_edge.check_speedtest, gate="startup_grace"),
-    PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True),
+    PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True, runbook="alert-runbooks"),
     # WAN-gated rather than startup-graced: the WAN gate covers the reboot transient.
     PushCheck(name="r2_usage", fn=r2.check_r2_usage, gate="wan_reachable", critical=True, runbook="longhorn-backup-tiering"),
     # cloudflare_ips gates Traefik's forwardedHeaders.trustedIPs. The bridge caches a success for a
     # day and re-probes a failure every cycle.
     PushCheck(name="cloudflare_ips_drift", fn=cloudflare_ips.check_cloudflare_ips_drift, gate="wan_reachable"),
     # Same cache shape as cloudflare_ips_drift.
-    PushCheck(name="healthchecks_drift", fn=healthchecks.check_healthchecks_drift, gate="wan_reachable"),
+    PushCheck(name="healthchecks_drift", fn=healthchecks.check_healthchecks_drift, gate="wan_reachable", runbook="healthchecks-io-deadman"),
     # Down only when RDAP cannot be read; the days-left gauge carries the expiry thresholds.
     PushCheck(name="domain_registration", fn=domain_registration.check_domain_registration, gate="wan_reachable"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
@@ -68,6 +68,6 @@ CHECKS: tuple[PushCheck, ...] = (
     # not coverage. There is no `prometheus` gate: the Watchdog covers a dead
     # Prometheus, and `host_packages` keeps the value as the label of its exporter suppression.
     PushCheck(name="b2_reachable", fn=b2.check_b2_reachable, is_gate=True, critical=True, runbook="longhorn-backup-tiering"),
-    PushCheck(name="wan_reachable", fn=wan.check_wan_reachable, is_gate=True, critical=True),
+    PushCheck(name="wan_reachable", fn=wan.check_wan_reachable, is_gate=True, critical=True, runbook="alert-runbooks"),
 )
 # fmt: on
