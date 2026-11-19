@@ -17,6 +17,7 @@ MODULES = frozenset(
         "merge",
         "serial_lock",
         "turn",
+        "pr_lock",
         "slots",
         "line",
         "batch",
@@ -102,6 +103,8 @@ ALLOWED = {
     # The one-landing-at-a-time lock the pipeline holds from the PR's CI run to its merge;
     # `fresh` names the variable a landing handed the turn reads it from.
     "turn": {"landing", "outcome", "line", "fresh", "serial_lock"},
+    # One live landing per PR: a lock beside the turn, taken before a landing forks or merges.
+    "pr_lock": {"turn", "serial_lock"},
     # The stdlib-only read of the serial lock, which `cc-wait landing-clear` runs without the venv.
     "serial_lock": set(),
     # The lock files that bound the landings polling GitHub after their merge, beside the turn.

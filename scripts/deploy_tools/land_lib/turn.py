@@ -202,21 +202,21 @@ def _adopt() -> LocalTurn | None:
     return LocalTurn(int(fd))
 
 
-def try_take_over_ssh(
-    paths: Sequence[_Path] = (LOCK,), cap: int = 1, host: str = TURN_HOST
-) -> Callable[[], None] | None:
-    """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
+def hold_over_ssh(
+    host: str, script: str, args: Sequence[str]
+) -> tuple[str, subprocess.Popen[str], Callable[[], None]]:
+    """Run `script` on `host` with `args`, through an ssh session it can outlast a call in.
 
-    The session holds the lock until the call it returns closes it. The turn is one file
-    under a cap of 1; the landing slots (`slots.py`) are several.
+    The script prints one line, then reads its stdin until that closes, which is how a
+    lock it took lasts as long as the session.
 
     Returns:
-        The call that gives the lock up, or None while other landings hold `cap` of the files.
+        The line the script printed, the session, and the call that ends the session.
 
     Raises:
-        OSError: `host` did not answer, or could not open a lock file.
+        OSError: `host` did not answer, or the script printed nothing.
     """
-    remote = shlex.join(["python3", "-c", _HOLD, str(cap), *map(str, paths)])
+    remote = shlex.join(["python3", "-c", script, *args])
     session = subprocess.Popen(
         [
             "ssh",
@@ -250,13 +250,34 @@ def try_take_over_ssh(
         stderr.close()
 
     answer = stdout.readline().strip()
+    if not answer:
+        why = stderr.read().strip().splitlines()
+        release()
+        raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
+    return answer, session, release
+
+
+def try_take_over_ssh(
+    paths: Sequence[_Path] = (LOCK,), cap: int = 1, host: str = TURN_HOST
+) -> Callable[[], None] | None:
+    """`lock_below(paths, cap)` on `host` without waiting, through an ssh session.
+
+    The session holds the lock until the call it returns closes it. The turn is one file
+    under a cap of 1; the landing slots (`slots.py`) are several.
+
+    Returns:
+        The call that gives the lock up, or None while other landings hold `cap` of the files.
+
+    Raises:
+        OSError: `host` did not answer, or could not open a lock file.
+    """
+    answer, _, release = hold_over_ssh(host, _HOLD, [str(cap), *map(str, paths)])
     if answer == "held":
         return release
-    why = stderr.read().strip().splitlines()
     release()
     if answer == "busy":
         return None
-    raise OSError(f"ssh {host}: {why[-1] if why else 'no answer'}")
+    raise OSError(f"ssh {host}: answered {answer!r}")
 
 
 def _taker(hostname: str) -> Callable[[], Callable[[], None] | None]:

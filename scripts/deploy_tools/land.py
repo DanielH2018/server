@@ -26,7 +26,7 @@ call leaves it running to its verdict. The mechanics are ``land_lib/detach.py``.
 THE WAIT IS cc-wait's, NOT THIS SCRIPT'S. ``cc-wait`` is the one wait loop every repo shares (the
 dotfiles ``cc-wait`` package), and ``land_probe.py`` is this repo's ``land`` source for it. A
 wait that runs out of budget exits 75 and prints the command that resumes it: re-run THAT, never
-``land.sh``, which would start a second landing.
+``land.sh``, which a live landing of the PR refuses (``land_lib/pr_lock.py``).
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
 hands this script a non-blocking pipe, and a Python write to a full one raises
@@ -85,7 +85,7 @@ Exit codes:
   75  gave up waiting -- the merge budget or CI budget elapsed, no promotion covered the
       merge in time, the health gate could not read its store, or the builder has not
       published a host package that contains the merge. From a `--detach` parent, 75 means
-      only that the group's live-landing limit was full, so no landing started
+      only that another landing of the PR is live, so no landing started
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
@@ -98,6 +98,11 @@ reaches only a setup role, which no landing applies.
 the merge in time, the builder has not published the host package, or the health gate could
 not read its store or found its tree older than origin/master (exit 75), so the deploy went
 ungraded. Re-run land.sh to grade it.
+ONE LANDING OF A PR RUNS AT A TIME. A second `land.sh --pr <n>` started while one is live, on
+either host and as any user, ends `refused` with exit 75 before it forks or merges anything.
+Its `LAND-RESULT:` line carries `cause=landing-live`, and its verdict names the live
+landing's host, pid and log and the `cc-wait land <n>` command that waits on it.
+`land_lib/pr_lock.py` has the rule.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
 has changed since, before `--arm-merge` merges anything
@@ -142,13 +147,21 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
-from lib.exit_codes import LAND_BAD_ARGS
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git import git
-from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline, turn
+from deploy_tools.land_lib import (
+    detach,
+    fresh,
+    handoff,
+    pin_gate,
+    pipeline,
+    pr_lock,
+    turn,
+)
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.ledger import annotation_line, result_line
+from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
-from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
+from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 
@@ -218,9 +231,36 @@ def main(
         landing = functools.partial(_land_fresh, opts.primary, tools, child)
     else:
         landing = functools.partial(_land, opts, tools, classifier, child)
-    if opts.detach:
-        return _detached(opts, landing)
-    return landing()
+    lock = pr_lock.take(opts.pr, tools.hostname())
+    if isinstance(lock, pr_lock.Holder):
+        return _refuse_second(opts, tools, lock)
+    try:
+        if opts.detach:
+            return _detached(opts, landing, lock)
+        return landing()
+    finally:
+        if lock:
+            lock.release()
+
+
+def _refuse_second(opts: Options, tools: Tools, holder: pr_lock.Holder) -> int:
+    """End a landing of a PR that `holder` is landing, before it forks or merges; exit 75.
+
+    It prints the `LAND-RESULT:` and `VERDICT:` lines a landing ends with and fills
+    `--verdict-file`. It writes no annotation and no verdict record: the PR's landing is the
+    live one, which writes both.
+    """
+    ledger = Ledger(pr=opts.pr, t_start=tools.clock())
+    ledger.cause = Cause.LANDING_LIVE
+    outcome = Outcome(
+        LAND_GAVE_UP, holder.refusal(opts.pr, tools.hostname()), Verdict.REFUSED
+    )
+    print(result_line(ledger, outcome))
+    outcome.emit()
+    if opts.verdict_file:
+        with contextlib.suppress(OSError):
+            write_verdict_file(opts.verdict_file, outcome.file_line())
+    return outcome.rc
 
 
 def _regate(opts: Options, tools: Tools) -> int:
@@ -295,10 +335,17 @@ def _resolve_since(opts: Options) -> Options:
     return dataclasses.replace(opts, since=head.stdout.strip())
 
 
-def _detached(opts: Options, landing: Callable[[], int]) -> int:
-    """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
+def _detached(
+    opts: Options, landing: Callable[[], int], lock: pr_lock.Held | None = None
+) -> int:
+    """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it.
+
+    The landing inherits `lock`, the PR lock this process took, and holds it to its end.
+    """
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, landing, f"land{opts.pr}")
+    pid = detach.fork(log, landing, f"land{opts.pr}", keep=lock.keep if lock else ())
+    if lock:
+        lock.pass_on(pid, log)
     detach.announce(pid, log, opts.pr)
     return 0
 
