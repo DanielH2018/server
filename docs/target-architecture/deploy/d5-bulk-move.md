@@ -1850,6 +1850,12 @@ promotion, an automerged one included, without having to page.
     - An in-scope pod created after T0 whose `homelab:pod_service:info` series is missing or
       reads `service="unmapped"` fails the soak rather than passing, because an empty join
       must not read as clean (failure class 3).
+    - A pod with no series whose Deployment or DaemonSet maps to a service outside the
+      scope, through `homelab:deployment_service:info` or `homelab:daemonset_service:info`,
+      is printed as advisory instead. Such a pod belongs to a workload that R did not roll,
+      recreated mid-soak before the pod rule mapped it
+      ([#9065](https://github.com/DanielH2018/server/issues/9065)). A pod whose workload
+      has no series, maps to `unmapped` or is a StatefulSet still fails.
 - **Alerts.** Any firing alert for a service in the scope, with `severity="critical"` or the
   label `verify="true"`, whose `ALERTS_FOR_STATE` value is at or after T0 fails the soak and is
   named. Both series are read with `shadow!="true",alertname!="Watchdog"`, the filter M1's
