@@ -530,3 +530,58 @@ def test_release_refuses_numbers_and_all_together(capsys):
     assert main(["release", "1132", "--all", "--worktree", WT], tools) == 64
     assert "not both or neither" in capsys.readouterr().err
     assert calls.gh == []
+
+
+LEAD = "worktree-backup-lead"
+MILESTONES = "repos/DanielH2018/server/milestones"
+
+
+def _project(branch=LEAD, state="open"):
+    return {
+        "title": "Backups",
+        "number": 9,
+        "state": state,
+        "description": description_for(branch, project=True),
+    }
+
+
+def _claim_from(held_in, capsys):
+    """`claim 1132 --worktree WT` on an issue the milestone ``held_in`` holds."""
+    issue = {**make_issue(1132), "milestone": held_in}
+    tools, _ = build_tools(
+        Fakes(
+            issues=[issue],
+            view=issue,
+            worktree_facts=LIVE,
+            api={MILESTONES: [[held_in]]},
+        )
+    )
+    code = main(["claim", "1132", "--worktree", WT, "--dry-run"], tools)
+    return code, capsys.readouterr()
+
+
+def test_claim_refuses_an_issue_another_branch_open_project_reserves(capsys):
+    code, captured = _claim_from(_project(), capsys)
+    assert code == 3
+    assert captured.out == ""
+    assert f"#1132 refused: reserved by project `Backups` of `{LEAD}`" in captured.err
+    assert f"`milestone remove 1132 --worktree {LEAD}` takes it out" in captured.err
+
+
+@pytest.mark.parametrize(
+    "held_in",
+    [
+        _project(branch=WT),
+        _project(state="closed"),
+        {**_project(), "description": description_for(LEAD)},
+    ],
+    ids=[
+        "the-branch-its-batches-claim-under",
+        "a-closed-project",
+        "a-session-milestone",
+    ],
+)
+def test_claim_takes_an_issue_no_project_reserves_against_the_branch(held_in, capsys):
+    code, captured = _claim_from(held_in, capsys)
+    assert code == 0
+    assert f"#1132 would be claimed by `{WT}`" in captured.out

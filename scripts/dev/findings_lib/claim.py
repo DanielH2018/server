@@ -29,6 +29,7 @@ from datetime import date, datetime
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.issue_model import Issue, pickable
+from dev.findings_lib.milestone import reservations
 from dev.findings_lib.solo_only import solo_only_reasons
 from lib.worktree_owner import other_clone_owner
 from lib.worktrees import REMOVABLE, Worktree, classify
@@ -303,13 +304,20 @@ def claim_states(
 
 
 def free_issues(
-    issues: list[Issue], tools: FindingsTools, *, pr_refs: set[int], today: date
-) -> tuple[list[dict], dict[int, str]]:
-    """The rows of ``issues`` a session may pick up, best first, and who holds each stale claim.
+    issues: list[Issue],
+    tools: FindingsTools,
+    *,
+    pr_refs: set[int],
+    today: date,
+    milestone: str | None = None,
+) -> tuple[list[dict], dict[int, str], list[dict]]:
+    """The rows of ``issues`` a session may pick up, who holds each stale claim, and the reserved rows.
 
     The one definition of "free" that `findings.py next` prints and the `findings` cc-wait
     source ends on. Each row is `pickable`'s, plus `solo_only` and `stale_claim_by` (the
-    holder of a claim `claim` would reap, null when unclaimed).
+    holder of a claim `claim` would reap, null when unclaimed). The free rows come best
+    first. The reserved rows are the otherwise free ones that `milestone.reservations`
+    withholds, each with the title of the project that holds it as `project`.
 
     A git-read failure cannot be read as "no claims are live": that would hand a claimed
     issue to a second session. So on failure this withholds every issue that is CURRENTLY
@@ -320,6 +328,8 @@ def free_issues(
         tools: the boundaries the worktree, running-batch and peer-host reads go through.
         pr_refs: issue numbers an open PR says it closes.
         today: the date a Not Before date is compared to.
+        milestone: the `--milestone` the caller reads, whose own project reserves nothing
+            against it.
     """
     trees, dirty, merged, ok = tools.worktree_facts()
     stale: dict[int, str] = {}
@@ -352,4 +362,12 @@ def free_issues(
         r["solo_only"] = bool(solo_only_reasons(*text_of[r["number"]], tools.repo))
         # An orchestrator reading `--json` told a free issue from one `claim` reaps.
         r["stale_claim_by"] = stale.get(r["number"])
-    return rows, stale
+    held = reservations(
+        issues, tools.owner_name, title=milestone, gh_json=tools.gh_json
+    )
+    reserved = [
+        {**r, "project": held[r["number"]]["title"]}
+        for r in rows
+        if r["number"] in held
+    ]
+    return [r for r in rows if r["number"] not in held], stale, reserved
