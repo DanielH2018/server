@@ -22,6 +22,7 @@ from renderer.renderer_lib.bundle import (
 
 import forge
 from deploy_tools.promote_lib import verify_promotion as vp
+from deploy_tools.promote_lib.flux_status import StatusState, flux_states
 
 T = "a" * 40
 PRIOR = "b" * 40
@@ -87,13 +88,25 @@ def ok(*names: str) -> dict[str, str]:
     return {f"flux/{n}": "success" for n in names}
 
 
+def test_the_status_map_keeps_flux_contexts_by_name_and_drops_an_unknown_state():
+    raw = {
+        "flux/sonarr": "failure",
+        "flux/radarr": "queued",
+        "homelab/promote-verdict": "success",
+        "fluxsonarr": "success",
+    }
+    assert flux_states(raw) == {"sonarr": StatusState.FAILURE}
+
+
 # -- the verdict -----------------------------------------------------------------------------
 
 
 def test_every_expected_status_success_is_good():
     expected = vp.expected_set(CHANGED, PROD)
     statuses = {T: ok("homelab", "bento-pdf", "bento-pdf-deferred")}
-    assert vp.verify(reads(statuses), T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads(statuses), T, PRIOR, expected) == vp.Verdict(
+        vp.VerifyVerdict.GOOD
+    )
 
 
 def test_one_failure_is_failed_naming_it():
@@ -117,7 +130,9 @@ def test_an_error_status_is_failed_and_a_pending_one_keeps_waiting():
 def test_a_timeout_names_each_expected_name_with_no_status():
     expected = vp.expected_set(CHANGED, PROD)
     verdict = vp.verify(reads({T: ok("homelab")}), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("bento-pdf", "bento-pdf-deferred"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("bento-pdf", "bento-pdf-deferred")
+    )
 
 
 def test_an_empty_status_list_keeps_waiting_and_never_reads_good():
@@ -125,7 +140,7 @@ def test_an_empty_status_list_keeps_waiting_and_never_reads_good():
     expected = vp.expected_set(PROD, PROD)
     clock = Clock()
     verdict = vp.verify(reads({}, clock), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("homelab",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("homelab",))
     assert clock.sleeps == expected.timeout_s // vp.POLL_S
 
 
@@ -141,7 +156,7 @@ def test_a_failed_status_read_is_retried_rather_than_read_as_good():
         return answer
 
     verdict = vp.verify(vp.StatusReads(statuses, clock.sleep, clock), T, "", expected)
-    assert verdict == vp.Verdict("good") and clock.sleeps == 1
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD) and clock.sleeps == 1
 
 
 # -- what it expects -------------------------------------------------------------------------
@@ -161,7 +176,9 @@ def test_an_unchanged_failing_tag_neither_holds_nor_blocks_last_good_is_clean():
         **ok("homelab", "bento-pdf", "bento-pdf-deferred"),
         "flux/sonarr": "failure",
     }
-    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict(
+        vp.VerifyVerdict.GOOD
+    )
 
 
 def test_an_unchanged_failing_tag_holds_once_every_name_is_expected_is_flagged():
@@ -224,7 +241,9 @@ def test_the_same_tag_unsuspended_that_never_posts_times_out_and_fails(tmp_path)
     target = _rendered(_sonarr_role(tmp_path / "t", "---\n"), "2")
     expected = vp.expected_set(target, prod)
     verdict = vp.verify(reads({T: ok("homelab")}), T, PRIOR, expected)
-    assert verdict == vp.Verdict("failed", ("soak", "sonarr", "sonarr-deferred"))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("soak", "sonarr", "sonarr-deferred")
+    )
 
 
 @pytest.mark.parametrize("flag, names", [(True, set()), (False, {"sonarr-deferred"})])
@@ -339,7 +358,7 @@ def test_a_dependent_that_read_failure_on_prods_commit_is_excused_is_clean(capsy
     verdict = vp.verify(
         reads({T: states}), T, PRIOR, expected, recorded={"longhorn": "failure"}
     )
-    assert verdict == vp.Verdict("good", excused=("longhorn",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.GOOD, excused=("longhorn",))
     assert "excused longhorn" in capsys.readouterr().out
 
 
@@ -353,7 +372,7 @@ def test_a_dependent_not_recorded_as_failure_still_holds_is_flagged(recorded):
     expected = vp.expected_set(CLUSTER_BASE_T, OUTAGE_PROD)
     states = {**EXPECTED_ELSEWHERE, "flux/longhorn": "failure"}
     verdict = vp.verify(reads({T: states}), T, PRIOR, expected, recorded=recorded)
-    assert verdict == vp.Verdict("failed", ("longhorn",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("longhorn",))
 
 
 def test_a_name_whose_footprint_t_changed_is_never_excused():
@@ -362,7 +381,7 @@ def test_a_name_whose_footprint_t_changed_is_never_excused():
     verdict = vp.verify(
         reads({T: states}), T, PRIOR, expected, recorded={"longhorn": "failure"}
     )
-    assert verdict == vp.Verdict("failed", ("longhorn",))
+    assert verdict == vp.Verdict(vp.VerifyVerdict.FAILED, ("longhorn",))
 
 
 def test_a_dependent_of_an_excused_name_with_no_status_times_out_and_holds():
@@ -376,7 +395,9 @@ def test_a_dependent_of_an_excused_name_with_no_status_times_out_and_holds():
     verdict = vp.verify(
         reads({T: states}, clock), T, PRIOR, expected, recorded={"longhorn": "failure"}
     )
-    assert verdict == vp.Verdict("failed", ("longhorn-reconcile",), ("longhorn",))
+    assert verdict == vp.Verdict(
+        vp.VerifyVerdict.FAILED, ("longhorn-reconcile",), ("longhorn",)
+    )
     assert clock.now >= expected.timeout_s
 
 
@@ -388,7 +409,9 @@ def test_an_outage_does_not_hold_a_revision_that_changes_neither_tag():
         "flux/longhorn": "failure",
         "flux/metallb": "failure",
     }
-    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict(
+        vp.VerifyVerdict.GOOD
+    )
 
 
 def test_decides_record_holds_each_changed_name_with_a_status_on_prods_commit():
@@ -425,7 +448,9 @@ def test_a_tag_file_holding_two_documents_expects_both_and_passes_when_both_succ
     expected = vp.expected_set(TWO_DOCUMENTS, PROD)
     assert expected.names == {"homelab", "bento-pdf", "bento-pdf-deferred"}
     states = ok("homelab", "bento-pdf", "bento-pdf-deferred")
-    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict("good")
+    assert vp.verify(reads({T: states}), T, PRIOR, expected) == vp.Verdict(
+        vp.VerifyVerdict.GOOD
+    )
 
 
 def test_a_missing_deferred_status_keeps_waiting_and_a_failure_holds():
@@ -433,11 +458,11 @@ def test_a_missing_deferred_status_keeps_waiting_and_a_failure_holds():
     expected = vp.expected_set(TWO_DOCUMENTS, PROD)
     clock = Clock()
     waited = vp.verify(reads({T: ok("homelab", "bento-pdf")}, clock), T, "", expected)
-    assert waited == vp.Verdict("failed", ("bento-pdf-deferred",))
+    assert waited == vp.Verdict(vp.VerifyVerdict.FAILED, ("bento-pdf-deferred",))
     assert clock.now >= expected.timeout_s
     states = {**ok("homelab", "bento-pdf"), "flux/bento-pdf-deferred": "failure"}
     held = vp.verify(reads({T: states}), T, "", expected)
-    assert held == vp.Verdict("failed", ("bento-pdf-deferred",))
+    assert held == vp.Verdict(vp.VerifyVerdict.FAILED, ("bento-pdf-deferred",))
 
 
 # -- the CLI ---------------------------------------------------------------------------------
@@ -457,14 +482,22 @@ def test_verify_without_a_handoff_exits_1_with_no_verdict(tmp_path, capsys):
 
 def test_a_good_verdict_exits_0_and_writes_the_outputs(tmp_path):
     output = tmp_path / "out"
-    assert vp.report(T, vp.Verdict("good"), str(output)) == 0
+    assert vp.report(T, vp.Verdict(vp.VerifyVerdict.GOOD), str(output)) == 0
     assert output.read_text() == "verdict=good\nfailed=\n"
 
 
 def test_a_failed_verdict_exits_1_after_writing_the_outputs(tmp_path):
     output = tmp_path / "out"
-    assert vp.report(T, vp.Verdict("failed", ("a", "b")), str(output)) == 1
+    assert (
+        vp.report(T, vp.Verdict(vp.VerifyVerdict.FAILED, ("a", "b")), str(output)) == 1
+    )
     assert output.read_text() == "verdict=failed\nfailed=a,b\n"
+
+
+def test_a_verdict_outside_the_set_is_refused_where_it_is_built():
+    """`report` would otherwise exit 1 on a misspelt `good` and write it for `settle`."""
+    with pytest.raises(ValueError, match="goood"):
+        vp.Verdict("goood")  # ty: ignore[invalid-argument-type]
 
 
 def test_verify_without_a_zoned_move_time_is_a_usage_error(tmp_path, capsys):

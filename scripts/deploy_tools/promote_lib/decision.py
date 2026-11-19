@@ -11,7 +11,8 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_decid
 """
 
 import sys as _sys
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 # `promote_lib` imports as `deploy_tools.promote_lib`, from scripts/.
@@ -75,11 +76,24 @@ class Decision:
     stateful_record: dict = field(default_factory=dict)
     hold: str = ""
     bundles: dict[str, dict[str, bytes] | None] = field(default_factory=dict)
-    recorded: dict[str, str] = field(default_factory=dict)
+    recorded: Mapping[str, str] = field(default_factory=dict)
     supersedes: str = ""
     hold_read: str = "none"
     lost_settle: str = ""
     lost_settle_digest: str = ""
+
+    @property
+    def hold_form(self) -> str:
+        """The hold `settle` and `reconcile` write for anything but a good verdict.
+
+        `stateful` when `stateful` names a snapshot role, whatever `no_reset` says, then
+        `no-reset` when `no_reset` names a forward-only tag, else `reset`.
+        """
+        if self.stateful:
+            return "stateful"
+        if self.no_reset:
+            return "no-reset"
+        return "reset"
 
 
 def _promotion(
@@ -148,7 +162,7 @@ def _promotion(
         verify.bundle_digests(base_bundle) if base_bundle is not None else None,
         digest,
     )
-    recorded: dict[str, str] = {}
+    recorded: Mapping[str, str] = {}
     if against_commit is not None and against is not None:
         recorded = verify.prior_statuses(
             target_bundle, against, lambda: reads.statuses(against_commit)
@@ -213,16 +227,21 @@ def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
     no_reset = forward_only.no_reset_names(
         forward_only.changed_tags(prod_digests, base or {}), flagged
     )
-    if record["stateful"] or no_reset:
-        hold = f"{commit} stateful=unverified" if record["stateful"] else commit
-        reason = verify.lost_settle(digest, last_good or "", commit, hold)
-    return Decision(
+    decision = Decision(
         verdict,
         reason=reason,
         no_reset=tuple(sorted(no_reset)),
         stateful=tuple(record["stateful"]),
         lost_settle=commit,
         lost_settle_digest=digest,
+    )
+    hold = {"stateful": f"{commit} stateful=unverified", "no-reset": commit}.get(
+        decision.hold_form
+    )
+    if hold is None:
+        return decision
+    return replace(
+        decision, reason=verify.lost_settle(digest, last_good or "", commit, hold)
     )
 
 

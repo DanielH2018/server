@@ -156,7 +156,10 @@ fi
 # the primary checkout, so that rebuild fails with EACCES; the session's own venv stands in.
 # With neither, the guards ask: the project-free interpreter lacks PyYAML, which
 # block-protected-bash's secret-path arm needs. A cd target with no project runs as is.
+# DECIDED: the hook's own scripts/ goes ahead of the venv's .pth, which names the venv's own
+# checkout, and a module this checkout lacks falls through to that checkout. (ADR-0039)
 if [[ -n "$project" ]]; then
+    export PYTHONPATH="${HOOKS_DIR%/.claude/hooks}/scripts"
     if [[ -x .venv/bin/python || ! -f pyproject.toml ]]; then
         exec "$uv" run --no-sync --quiet python "$script"
     fi
@@ -171,9 +174,10 @@ fi
 
 # stdout goes straight through on fd 3; only stderr is captured, for the failure line.
 # `--quiet` drops uv's own warnings, such as a `UV_*` setting that `--no-project` ignores,
-# which would otherwise be the last line; uv's errors still print.
+# which would otherwise be the last line; uv's errors still print. A no-venv run gets no
+# `.pth`, so `PYTHONPATH` supplies the import root: this checkout's `scripts/`.
 exec 3>&1
-err=$("$uv" run --quiet --no-project --no-python-downloads --python 3.15.2 \
+err=$(PYTHONPATH="${HOOKS_DIR%/.claude/hooks}/scripts" "$uv" run --quiet --no-project --no-python-downloads --python 3.15.2 \
     "$script" 2>&1 >&3 3>&-)
 rc=$?
 exec 3>&-

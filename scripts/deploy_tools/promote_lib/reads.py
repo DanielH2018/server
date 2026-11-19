@@ -87,7 +87,7 @@ class Reads:
     is_ancestor: Callable[[str, str], bool]
     walk: Callable[[str | None, str], list[str]]
     tag: Callable[[str], str | None]
-    check_runs: Callable[[str], list[dict]]
+    check_runs: Callable[[str], list[forge.CheckRun]]
     verify: Callable[[str], None]
     digest: Callable[[str], str | None]
     bundle: Callable[[str], dict[str, bytes] | None]

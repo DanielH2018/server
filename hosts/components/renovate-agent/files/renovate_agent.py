@@ -50,6 +50,7 @@ from host_lib import (
     read_untrusted,
     start_unit,
 )
+from renovate_identity import is_renovate
 from renovate_session import OUT_DIR, OUTPUT_FILE
 from run_requests import REQUESTS_DIR, Outcome, carry_out
 
@@ -58,9 +59,6 @@ from run_requests import REQUESTS_DIR, Outcome, carry_out
 # it, and the first armed tick would be its first execution.
 CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env")
 USER_AGENT = "renovate-agent"
-# The login gh reports for Renovate's PRs. The unit's LAND_REQUIRE_AUTHOR must match it, and
-# test_renovate_agent_unit.py reads it from here.
-RENOVATE_AUTHOR = "app/renovate"
 # The session's JSON result carries its whole closing summary, so it gets far more room than a
 # request file; the cap only stops a session filling the controller's memory.
 SESSION_OUTPUT_MAX = 1 << 20
@@ -111,7 +109,7 @@ def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
     )
 
 
-def _authored_by(listing: str, login: str) -> list[OpenPR]:
+def _renovate_prs(listing: str) -> list[OpenPR]:
     return [
         OpenPR(
             number=int(p["number"]),
@@ -120,7 +118,7 @@ def _authored_by(listing: str, login: str) -> list[OpenPR]:
             updated_at=p.get("updatedAt") or "",
         )
         for p in json.loads(listing)
-        if (p.get("author") or {}).get("login") == login
+        if is_renovate(p.get("author"))
     ]
 
 
@@ -133,7 +131,7 @@ def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
     rc, out = _open_pr_listing(repo, tools or TOOLS)
     if rc != 0:
         raise RuntimeError(f"gh pr list failed (exit {rc}): {out.strip()[:300]}")
-    return _authored_by(out, RENOVATE_AUTHOR)
+    return _renovate_prs(out)
 
 
 def pr_states(

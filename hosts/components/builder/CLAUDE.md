@@ -1,7 +1,7 @@
 # `hosts/components/builder` — the host-package builder and its apt repository (daniel-box)
 
 The builder half of target-architecture slice H3, whose plan is
-`docs/target-architecture/host/h3-pi-pilot.md`. It builds the host packages from master, signs
+`docs/archive/host/h3-pi-pilot.md`. It builds the host packages from master, signs
 them, and serves the apt repository the hosts' updater reads. daniel-box's package ships it.
 The `failure-alert` component ships the page that
 a failed run opens. This file holds the rules for the component; the plan's *The builder and the
@@ -23,7 +23,7 @@ repository (daniel-box)* holds the design.
   `StateDirectoryMode=0711`: the signer traverses the builder's directory to reach `staged/`, as
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
-  `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`,
+  `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`,
   `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the CI contexts the builder grades a

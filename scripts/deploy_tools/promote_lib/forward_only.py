@@ -3,7 +3,7 @@
 Longhorn supports no downgrade, and MetalLB's CRDs carry a conversion webhook, so resetting
 `prod` after a failed bump would re-apply an older vendored file over upgraded objects. Three
 rules keep a promotion from doing that. The plan is
-docs/target-architecture/host/h1-cluster-config-to-flux.md, *Forward-only tags and the promote
+docs/archive/host/h1-cluster-config-to-flux.md, *Forward-only tags and the promote
 rule* and *Longhorn and MetalLB bumps gate at the merge*; contracts.md C2 states them as *The
 forward-only gates* and *A hold without a reset*.
 

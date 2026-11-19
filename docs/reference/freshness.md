@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-19 18:17 UTC
-generated_sha: 4b7d27c10
+generated_at: 2026-11-19 22:10 UTC
+generated_sha: fc80e375d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,49 +12,27 @@ generated_sha: 4b7d27c10
 
 # Doc freshness
 
-140 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+133 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-11-13 | 186 | 134 | `hosts/bootstrap-host.sh` (2026-11-19) |
-| [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-11-14 | 80 | 64 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-11-14 | 93 | 64 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-11-14 | 88 | 62 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-11-13 | 75 | 61 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-11-13 | 72 | 58 | `scripts/renderer/renderer_lib/secret_checks.py` (2026-11-19) |
-| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-13 | 64 | 56 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-11-13 | 69 | 47 | `scripts/validate/tests/test_k8s_schema.py` (2026-11-19) |
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 54 | 46 | `CLAUDE.md` (2026-11-19) |
-| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-13 | 54 | 45 | `inventory/host_vars/daniel-box.yml` (2026-11-19) |
-| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-11-13 | 51 | 45 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-11-14 | 74 | 45 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-11-13 | 58 | 42 | `inventory/host_vars/daniel-pi.yml` (2026-11-19) |
-| [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-11-13 | 46 | 40 | `inventory/host_vars/daniel-box.yml` (2026-11-19) |
-| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-13 | 47 | 38 | `CLAUDE.md` (2026-11-19) |
-| [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-11-13 | 46 | 36 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [host-packages.md](../host-packages.md) | 2026-11-15 | 58 | 35 | `hosts/components/builder/CLAUDE.md` (2026-11-19) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 54 | 45 | `CLAUDE.md` (2026-11-19) |
 | [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-13 | 39 | 34 | `scripts/dev/fact_status.py` (2026-11-19) |
-| [claude-agent-user.md](../claude-agent-user.md) | 2026-11-15 | 49 | 34 | `prek.toml` (2026-11-19) |
-| [python-code-organization.md](../python-code-organization.md) | 2026-11-14 | 40 | 32 | `pyproject.toml` (2026-11-19) |
-| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-11-13 | 40 | 31 | `hosts/bootstrap-host.sh` (2026-11-19) |
-| [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-11-14 | 44 | 30 | `scripts/diagnostics/probe.py` (2026-11-19) |
+| [claude-agent-user.md](../claude-agent-user.md) | 2026-11-15 | 49 | 33 | `prek.toml` (2026-11-19) |
+| [python-code-organization.md](../python-code-organization.md) | 2026-11-14 | 41 | 32 | `pyproject.toml` (2026-11-19) |
+| [host-packages.md](../host-packages.md) | 2026-11-15 | 57 | 32 | `hosts/components/builder/CLAUDE.md` (2026-11-19) |
 | [break-glass.md](../break-glass.md) | 2026-11-14 | 49 | 28 | `secrets/.sops.yaml` (2026-11-19) |
-| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-11-13 | 31 | 24 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 28 | 24 | `k8s/roles/observability/files/rules/ingress-probes.yaml` (2026-11-19) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-11-13 | 28 | 23 | `CLAUDE.md` (2026-11-19) |
-| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-13 | 29 | 23 | `CLAUDE.md` (2026-11-19) |
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-11-13 | 25 | 22 | `scripts/dev/fact_status.py` (2026-11-19) |
-| [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-15 | 34 | 22 | `hosts/components/renovate-agent/CLAUDE.md` (2026-11-19) |
-| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-13 | 24 | 21 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-11-15 | 25 | 19 | `scripts/diagnostics/probe.py` (2026-11-19) |
-| [target-architecture/design.md](../target-architecture/design.md) | 2026-11-13 | 19 | 17 | `scripts/deploy_tools/land.py` (2026-11-19) |
+| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-13 | 28 | 22 | `CLAUDE.md` (2026-11-19) |
+| [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-15 | 35 | 22 | `hosts/components/renovate-agent/CLAUDE.md` (2026-11-19) |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-11-13 | 19 | 15 | `k8s/roles/pi-peer-backup/files/pull-pi-peers.sh` (2026-11-19) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-11-15 | 22 | 15 | `k8s/roles/system-upgrade/defaults/main.yml` (2026-11-19) |
 | [host-bring-up.md](../host-bring-up.md) | 2026-11-14 | 22 | 13 | `hosts/bootstrap-host.sh` (2026-11-19) |
-| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-13 | 16 | 12 | `CLAUDE.md` (2026-11-19) |
 | [adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md](../adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md) | 2026-11-14 | 19 | 12 | `secrets/.sops.yaml` (2026-11-19) |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-14 | 21 | 12 | `scripts/diagnostics/probe.py` (2026-11-19) |
 | [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-11-13 | 13 | 11 | `k8s/roles/autofix-bridge/CLAUDE.md` (2026-11-19) |
+| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-13 | 16 | 11 | `CLAUDE.md` (2026-11-19) |
 | [adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md) | 2026-11-14 | 16 | 11 | `CLAUDE.md` (2026-11-19) |
 | [claude-code-root-helpers.md](../claude-code-root-helpers.md) | 2026-11-14 | 11 | 11 | `CLAUDE.md` (2026-11-19) |
 | [adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | 2026-11-13 | 13 | 10 | `cluster/services.yml` (2026-11-19) |
@@ -68,8 +46,7 @@ generated_sha: 4b7d27c10
 | [observability-dashboards.md](../observability-dashboards.md) | 2026-11-13 | 15 | 8 | `k8s/roles/observability/CLAUDE.md` (2026-11-19) |
 | [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-11-14 | 10 | 8 | `k8s/roles/homepage/templates/config/services.yaml.j2` (2026-11-19) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-11-14 | 18 | 8 | `k8s/roles/longhorn/defaults/main.yml` (2026-11-19) |
-| [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-14 | 9 | 8 | `hosts/components/renovate-notify/tests/test_pending_soak.py` (2026-11-19) |
-| [target-architecture/deploy/d7-superseding-promotions.md](../target-architecture/deploy/d7-superseding-promotions.md) | 2026-11-14 | 11 | 8 | `.github/workflows/promote.yml` (2026-11-19) |
+| [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-14 | 10 | 8 | `hosts/components/renovate-notify/tests/test_pending_soak.py` (2026-11-19) |
 | [target-architecture/docs-guard/g11-binding-sweep.md](../target-architecture/docs-guard/g11-binding-sweep.md) | 2026-11-15 | 12 | 8 | `CLAUDE.md` (2026-11-19) |
 | [target-architecture/docs-guard/g7-removed-names.md](../target-architecture/docs-guard/g7-removed-names.md) | 2026-11-15 | 10 | 8 | `scripts/dev/fact_status.py` (2026-11-19) |
 | [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-11-13 | 9 | 7 | `k8s/roles/headlamp/CLAUDE.md` (2026-11-19) |
@@ -78,6 +55,7 @@ generated_sha: 4b7d27c10
 | [adr/0027-fanout-batches-stay-on-host-cgroups.md](../adr/0027-fanout-batches-stay-on-host-cgroups.md) | 2026-11-08 | 7 | 6 | `scripts/dev/fanout_lib/launch_gates.py` (2026-11-19) |
 | [adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md](../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | 2026-11-13 | 8 | 6 | `secrets/.sops.yaml` (2026-11-19) |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-11-13 | 10 | 6 | `k8s/roles/traefik/templates/edge-selfcheck-ingressroute.yaml.j2` (2026-11-19) |
+| [adr/0038-design-is-checked-where-code-is-written.md](../adr/0038-design-is-checked-where-code-is-written.md) | — | 5 | 5 | `CLAUDE.md` (2026-11-19) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-11-13 | 6 | 5 | `secrets/.sops.yaml` (2026-11-19) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-11-13 | 6 | 5 | `scripts/diagnostics/probe.py` (2026-11-19) |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-11-13 | 9 | 5 | `k8s/roles/homelab-mcp/tests/test_safe_reads.py` (2026-11-19) |
@@ -91,8 +69,9 @@ generated_sha: 4b7d27c10
 | [game-stats-internals.md](../game-stats-internals.md) | 2026-11-14 | 6 | 4 | `k8s/roles/game-stats/files/stats_lib.py` (2026-11-19) |
 | [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-11-14 | 9 | 4 | `k8s/roles/qbittorrent/files/apply_prefs.py` (2026-11-19) |
 | [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `k8s/roles/authelia/CLAUDE.md` (2026-11-19) |
+| [adr/0039-scripts-is-installed-in-place.md](../adr/0039-scripts-is-installed-in-place.md) | — | 3 | 3 | `.claude/hooks/run-hook.sh` (2026-11-19) |
+| [airflow-warehouse-plan.md](../airflow-warehouse-plan.md) | — | 4 | 3 | `k8s/roles/home-assistant/files/configuration.yaml` (2026-11-19) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-13 | 3 | 3 | `k8s/roles/longhorn-reconcile/defaults/main.yml` (2026-11-19) |
-| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-11-13 | 4 | 3 | `tests/repo/test_census_rows_text.py` (2026-11-19) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-11-13 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-19) |
 | [adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md](../adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) | 2026-11-13 | 3 | 3 | `hosts/components/github-checks/templates/github-ruleset-drift.sh.j2` (2026-11-18) |
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-11-13 | 4 | 3 | `scripts/diagnostics/probe_lib/core.py` (2026-11-19) |
@@ -101,6 +80,7 @@ generated_sha: 4b7d27c10
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-11-14 | 8 | 3 | `k8s/roles/longhorn-backup/defaults/main.yml` (2026-11-19) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-11-19) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 2 | `docs/secret-rotation.md` (2026-11-19) |
+| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-11-13 | 4 | 2 | `inventory/host_vars/daniel-server.yml` (2026-11-19) |
 | [adr/0019-fact-support-stops-at-the-repo-store.md](../adr/0019-fact-support-stops-at-the-repo-store.md) | 2026-11-13 | 2 | 2 | `CLAUDE.md` (2026-11-19) |
 | [adr/0035-skeptic-and-implementer-carry-no-maxturns.md](../adr/0035-skeptic-and-implementer-carry-no-maxturns.md) | 2026-11-14 | 2 | 2 | `.claude/skills/homelab-review/SKILL.md` (2026-11-19) |
 | [jellyfin-plugins.md](../jellyfin-plugins.md) | 2026-11-14 | 2 | 2 | `tests/services/test_mediacleaner_install.py` (2026-11-18) |
@@ -124,6 +104,20 @@ generated_sha: 4b7d27c10
 | [what-the-migration-built.md](../what-the-migration-built.md) | 2026-11-18 | 1 | 1 | `CLAUDE.md` (2026-11-19) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [jellyfin-attachment-latency.md](../jellyfin-attachment-latency.md) | 2026-10-30 | 0 | 0 | — |
+| [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-13 | 0 | 0 | — |
+| [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-11-14 | 0 | 0 | — |
+| [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-11-14 | 0 | 0 | — |
+| [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-11-15 | 0 | 0 | — |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-11-19 | 1 | 0 | — |
 | [adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) | 2026-11-19 | 2 | 0 | — |
 | [adr/0028-the-renderer-supports-a-closed-jinja-subset.md](../adr/0028-the-renderer-supports-a-closed-jinja-subset.md) | 2026-11-19 | 6 | 0 | — |
@@ -131,28 +125,27 @@ generated_sha: 4b7d27c10
 | [adr/0037-the-renderer-keeps-jinja-after-ansible.md](../adr/0037-the-renderer-keeps-jinja-after-ansible.md) | 2026-11-19 | 3 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-11-19 | 1 | 0 | — |
 | [alert-runbooks.md](../alert-runbooks.md) | 2026-11-19 | 10 | 0 | — |
-| [ci-throughput.md](../ci-throughput.md) | 2026-11-19 | 26 | 0 | — |
+| [ci-throughput.md](../ci-throughput.md) | 2026-11-19 | 28 | 0 | — |
 | [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-11-19 | 3 | 0 | — |
-| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 76 | 0 | — |
-| [failure-classes.md](../failure-classes.md) | 2026-11-19 | 20 | 0 | — |
-| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-19 | 94 | 0 | — |
+| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 77 | 0 | — |
+| [failure-classes.md](../failure-classes.md) | 2026-11-19 | 21 | 0 | — |
+| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-19 | 93 | 0 | — |
 | [github-quota.md](../github-quota.md) | 2026-11-19 | 22 | 0 | — |
 | [homelab-render.md](../homelab-render.md) | 2026-11-19 | 63 | 0 | — |
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-11-19 | 34 | 0 | — |
 | [index.md](../index.md) | 2026-11-19 | 1 | 0 | — |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-19 | 27 | 0 | — |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-19 | 36 | 0 | — |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-19 | 15 | 0 | — |
-| [landing.md](../landing.md) | 2026-11-19 | 45 | 0 | — |
-| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-19 | 43 | 0 | — |
+| [landing.md](../landing.md) | 2026-11-19 | 46 | 0 | — |
+| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-19 | 44 | 0 | — |
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-11-19 | 36 | 0 | — |
 | [pi-host-tuning-record.md](../pi-host-tuning-record.md) | 2026-11-19 | 23 | 0 | — |
-| [secret-rotation.md](../secret-rotation.md) | 2026-11-19 | 36 | 0 | — |
+| [secret-rotation.md](../secret-rotation.md) | 2026-11-19 | 35 | 0 | — |
 | [security-tools.md](../security-tools.md) | 2026-11-19 | 8 | 0 | — |
-| [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-11-19 | 40 | 0 | — |
+| [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-11-19 | 0 | 0 | — |
 | [target-architecture/docs-guard/g9-blocking-gate.md](../target-architecture/docs-guard/g9-blocking-gate.md) | 2026-11-19 | 8 | 0 | — |
 | [target-architecture/docs-guard/handoff.md](../target-architecture/docs-guard/handoff.md) | 2026-11-19 | 14 | 0 | — |
-| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-11-19 | 89 | 0 | — |
-| [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-11-19 | 50 | 0 | — |
-| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-11-19 | 245 | 0 | — |
-| [test-coverage-snapshot.md](../test-coverage-snapshot.md) | 2026-11-19 | 809 | 0 | — |
+| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-11-19 | 0 | 0 | — |
+| [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-11-19 | 0 | 0 | — |
+| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-11-19 | 0 | 0 | — |
 | [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-11-19 | 12 | 0 | — |

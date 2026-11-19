@@ -454,7 +454,7 @@ ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The k
 An absent ConfigMap, or one with no `last-success`, is a drill that has never passed: check 7
 pages, the upgrade gate fails gate 2, and the state page shows the row as never run. No reader
 falls back to the host directory the drill used before H2.3c, since H2.3f of
-`docs/target-architecture/host/h2-shrink-host-plane.md` dropped that fallback. A failed
+`docs/archive/host/h2-shrink-host-plane.md` dropped that fallback. A failed
 ConfigMap read is its own fault: the heartbeat reports it as a failed fetch, the upgrade gate
 exits 69, and the state page marks the row unreadable. A candidate with no `seen.<pvc>` key
 takes the ConfigMap's `creationTimestamp` as its seen time, so check 8 flags it once the

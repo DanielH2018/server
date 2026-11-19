@@ -37,11 +37,9 @@ DESCRIPTION_CAP = 300
 # Non-vacuity: critical rules the census must find, one of them loki-homelab's.
 CRITICAL = frozenset({"WANUnreachable", "HostFilesystemRemountedReadOnly"})
 DOCS = REPO / "docs"
-# A page the description cites as where to go next. Design docs under these directories
+# A page the description cites as where to go next. The archived design docs under archive/
 # explain why a rule exists; they are not where a paged reader goes.
-CITED_PAGE = re.compile(
-    r"(?<![\w/.-])docs/((?!target-architecture/|archive/)[\w/-]+)\.md\b"
-)
+CITED_PAGE = re.compile(r"(?<![\w/.-])docs/((?!archive/)[\w/-]+)\.md\b")
 # Non-vacuity: an alert that must link its runbook, and the page it links.
 NAMED = ("HostReconcileFailed", "host-packages")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.M)
@@ -204,7 +202,7 @@ def test_a_cited_page_with_no_runbook_url_is_flagged():
 
 
 def test_a_design_doc_citation_with_no_runbook_url_is_clean():
-    cited = "See docs/target-architecture/monitoring/m1-alertmanager.md."
+    cited = "See docs/archive/monitoring/m1-alertmanager.md."
     assert runbook_problems(_rule(cited), BASE) == []
 
 

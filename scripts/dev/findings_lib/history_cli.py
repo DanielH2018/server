@@ -199,7 +199,7 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
         # and a module-level import crashed every subcommand there on import.
         from dev.findings_lib.precomputed import precomputed
 
-        block = precomputed(cited_paths(issue.get("body") or ""))
+        block = precomputed(cited_paths(issue.get("body") or "", tools.tracked()))
         print(block.rstrip() if block else f"#{args.number} cites no repo path")
         return 0
     row = history_row(issue, tools.repo or PR_REPO)

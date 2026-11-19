@@ -77,9 +77,11 @@ names without putting their bytes in the annotation. The role's defaults list it
 `manifests_self_rollouts`, from
 `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads`. Each
 Secret reader names the rendered files its pod reads in `restart_secrets`:
-`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` for
-grafana and `alertmanager-secret.yaml` for alertmanager. The first two render from the
-role's `render_secrets` entries.
+`secret-prometheus-scrape-credentials.yaml` for prometheus, `secret-grafana-admin.yaml` and
+`grafana-warehouse-datasource-secret.yaml` for grafana, and `alertmanager-secret.yaml` for
+alertmanager. The first two render from the role's `render_secrets` entries. Grafana mounts
+the warehouse datasource Secret as a projected volume source, beside its provisioning
+ConfigMap.
 `tests/services/test_observability_config_rolls_one_workload.py` holds that
 declaration equal to the Secrets each pod reads. One Secret edit then rolls its readers alone.
 An Alertmanager config edit rolls Alertmanager alone.
@@ -128,7 +130,7 @@ Its config, credentials included, is the `alertmanager-config` Secret, and every
 expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file in
 `files/rules/` with a promtool test in `tests/rules/`, and ships only once
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
-are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
+are in `docs/archive/monitoring/m1-alertmanager.md`.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `k8s/roles/observability/tests/alertmanager/` holds
@@ -169,23 +171,27 @@ and drill alerts never escalate, and neither does a rule labelled `escalate: "fa
 daily instead of every 6h.
 `tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
 rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
-(`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
+(`docs/archive/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
 stored `ALERTS` samples of the last 48 hours against the Watchdog's instead, so a gap of
 about 2 hours does not restart the age. Prometheus cannot see an inhibit, so each inhibit
 whose target is a warning has a copy in `templates/alertmanager-secret.yaml.j2` that holds
 the escalation, and the same test module fails an inhibit with no copy.
 
-**A host-plane rule names its host as a literal, so a new host is a rule edit.** The
-`host-checks` group carries one `HostReconcileFailed` per inventory host, and one
-`HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
-`tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
-`tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and
-prints the rule a new entry needs. The same module fails a host whose package enables
-`homelab-updater.timer` with no `observability_expected_hosts` entry, so every armed host
-pages when its updates stop. `docs/host-packages.md` is the runbook for both pages. The
-group also carries one `WiredLinkDown` warning per node whose host_vars set
-`k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
-module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
+**The host-plane rule groups render from tables, so a new host is one host-table entry.**
+`scripts/dev/gen_host_rules.py` writes `files/rules/host-checks.yaml` and `files/rules/hosts.yaml`
+from `files/rule-tables/`. Each rule there names its hosts with a selector: every host, a
+list, a scrape job, a host-package component or a host_vars key. The generator renders one
+copy per host, and each copy names its host as a literal `service`, because a node has no
+workload-service join. The host table is
+`k8s/roles/observability/defaults/main.yml:observability_expected_hosts`, which gives each host
+its scrape job and its `HostUpdateStale` limit. To change a host-plane rule, edit its table
+entry, run the generator, and commit the table and the rule file together. The
+`gen-host-rules` prek hook and
+`scripts/dev/tests/test_gen_host_rules.py::test_the_committed_rule_files_are_the_render_of_their_tables_is_clean`
+fail a rule file that differs from its table. The generator refuses to render while an
+inventory host has no host-table entry, so every host pages for its reconcile and its updates. `docs/host-packages.md` is the
+runbook for both pages. `WiredLinkDown` takes one copy per node whose host_vars set
+`k3s_node_static_link`, reading that link's carrier and operstate (#5124).
 
 **`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
 One rule per host compares each check's timestamp with the
@@ -199,7 +205,7 @@ verdict of its own: host-maintenance's `systemd-units` check counts every failed
 on each host every 5 minutes (#8219). It fires once per failed unit, so a weekly scan's own
 `*Failed` alert holds the copy for the scan's unit through an inhibit, and the host's other
 failed units keep paging (`tests/services/test_alertmanager_scan_unit_inhibit.py`). The per-check literals and their pin tests stay, for the
-reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
+reason `docs/archive/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never
 moves. `homelab-reconcile-metrics.service` rewrites the reconcile file at boot, so a
@@ -247,9 +253,9 @@ temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp`
 checks and page since M6's batch A1 Cutover-b. Its Pi pressure rules replace the Prometheus half
 of `pi_pressure` and page since B8's. `HostClockUnsynchronised` ports no bridge check: it pages
 a host whose kernel reports its clock unsynchronised, or more than 0.5s off, for 15 minutes
-(#8518). A rule's `service` is a literal, so a host gets its
-own copy, and a fourth host needs rules added. A1 has no Alertmanager inhibit on
-`ScrapeTargetDown`, by the `DECIDED:` marker in the file's header. A missing-data arm starts from
+(#8518). The generator renders each host its own copy, as for `host-checks`. A1 has no
+Alertmanager inhibit on
+`ScrapeTargetDown`, by the `DECIDED:` marker in its table's header. A missing-data arm starts from
 `up == 1`, so it fires only while the scrape succeeds and the series is absent. A dead exporter
 pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts, so they carry
 neither `job` nor `instance`, and a dead exporter also pages through them.
@@ -261,7 +267,7 @@ target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules 
 from the target rather than from a literal. A new routed entry therefore changes
 `prometheus.yml` and rolls Prometheus. `tests/services/test_blackbox_ingress_targets.py`
 pins the targets to the filter's output, and
-`docs/target-architecture/monitoring/m4-blackbox-ingress.md` has the design.
+`docs/archive/monitoring/m4-blackbox-ingress.md` has the design.
 
 **A per-workload alert takes its `service` label from a recording rule.**
 `k8s/roles/observability/files/rules/workload-service.yaml` records one series per

@@ -2,8 +2,8 @@ name: promote
 
 # Publishes each green master commit as an OCI artifact, signs it, and moves the `prod` tag
 # that Flux follows to the newest published master commit. The plan and the reasons for every
-# guard below are in docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*), and
-# docs/target-architecture/contracts.md C2 is the contract. The operator's view is
+# guard below are in docs/archive/deploy/d1-flux-installed.md (*Decisions*), and
+# docs/archive/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
 # Thirteen jobs, so code that runs during a render or a decision never holds a token that can
@@ -69,7 +69,8 @@ name: promote
 # Every commit merged in the window was published by its own run, so this one skips render,
 # images and publish and starts at `promote`.
 #
-# tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
+# The promote rows of tests/repo/test_census_rows_workflows.py hold every guard, permission and
+# handoff here.
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
@@ -114,12 +115,13 @@ permissions: {}
 # command calls `annotate <level> <message>`, which builds the `::` prefix at run time. A
 # literal `::error::` here would show in every step's log, and test_promote_workflow_retry.py
 # fails one.
-# prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
+# prune-artifacts.yml carries a copy, and the `prune-retry-helper-equals-promotes` row of
+# tests/repo/test_census_rows_workflows.py holds the two equal.
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
   # groups, so an unreachable tool download (actionlint-py's build) cannot block a
-  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow_uv_groups.py fails a workflow
-  # without them.
+  # promotion. UV_NO_DEV drops only `dev`. The promote-env-installs-no-default-group row
+  # of tests/repo/test_census_rows_workflows.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
   # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
@@ -152,6 +154,35 @@ env:
     }
     ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
     ghcr_login() { retry ghcr_login_once; }
+  # The registry reads of the jobs that check out nothing. `ghcr_pull_token` prints the job
+  # token's pull token for the bundle package, or fails. `live_tag <tag>` HEADs that tag and
+  # prints its digest, prints nothing when GHCR answers 404, and fails on any other answer,
+  # naming it on stderr; each caller decides what a 404 means. curl reads each credential from
+  # stdin, so none reaches its argv. A step loads it with `eval "$REGISTRY_FUNCTIONS"`.
+  REGISTRY_FUNCTIONS: |
+    ghcr_pull_token() {
+      local token
+      token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+        | curl --retry 3 -fsS -K - \
+          "https://ghcr.io/token?scope=repository:danielh2018/homelab-manifests:pull&service=ghcr.io" \
+        | jq -r '.token // empty')" || return 1
+      [ -n "$token" ] || return 1
+      printf '%s\n' "$token"
+    }
+    live_tag() {
+      local token heads status
+      token="$(ghcr_pull_token)" || { echo "ghcr.io issued no pull token" >&2; return 1; }
+      heads="$RUNNER_TEMP/$1-head.txt"
+      status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+        | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+          -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+          "https://ghcr.io/v2/danielh2018/homelab-manifests/manifests/$1")" || return 1
+      case "$status" in
+        200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
+        404) ;;
+        *) echo "HEAD $1 answered HTTP $status" >&2; return 1 ;;
+      esac
+    }
   # `dispatch_newer_green <commit>`, which `settle` and `reconcile` run after they settle
   # <commit>, so a green commit newer than it does not wait for the next merge.
   # It dispatches one more run when CI's newest green push run on master is for a commit newer
@@ -278,9 +309,11 @@ jobs:
       # renders every tag. The bundle then holds the shared kinds and a root listing them, so
       # the first decryption of the cluster file gets a revision of its own (D3.3a).
       # A --role render writes only the named tags' image contexts, and --shared-only writes
-      # none, so both branches pass --all-images: the `images` job builds and pushes all ten
+      # none, so both branches pass --all-images: the `images` job builds and pushes every image
       # from out/images/ and refuses a render without tags.json.
-      # tests/repo/test_promote_workflow_bundle.py fails either branch without it.
+      # The promote-render-no-tag-branch-renders-the-shared-kinds and
+      # promote-render-tag-branch-writes-every-image-context rows of
+      # tests/repo/test_census_rows_workflows.py fail either branch without it.
       - name: Build the bundle
         id: build
         run: |
@@ -365,7 +398,7 @@ jobs:
   # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
   # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
   # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
-  # docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+  # docs/archive/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
   #
   # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
   # is success and is never rebuilt, because the push-once rule is what makes a content tag
@@ -598,6 +631,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          eval "$REGISTRY_FUNCTIONS"
           if ! printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
             echo "::error::the drill push handed on digest '$DIGEST'"
             exit 1
@@ -611,16 +645,9 @@ jobs:
             exit 1
           fi
 
-          # curl reads each credential from stdin, so none reaches its argv.
           body="$RUNNER_TEMP/drill-referrers.json"
-          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
-            | curl --retry 3 -fsS -K - \
-              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
-            | jq -r '.token // empty')"
-          if [ -z "$token" ]; then
-            echo "::error::ghcr.io issued no pull token for $name"
-            exit 1
-          fi
+          token="$(ghcr_pull_token)" \
+            || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
           fetch() {  # fetch <path> <accept>: prints the HTTP status, writes the body to $body
             printf 'header = "Authorization: Bearer %s"\n' "$token" \
               | curl --retry 3 -sS -K - -H "Accept: $2" -o "$body" -w '%{http_code}' \
@@ -709,8 +736,7 @@ jobs:
       reset_digest: ${{ steps.decide.outputs.reset_digest }}
       seed: ${{ steps.decide.outputs.seed }}
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
-      no_reset: ${{ steps.decide.outputs.no_reset }}
-      stateful: ${{ steps.decide.outputs.stateful }}
+      hold_form: ${{ steps.decide.outputs.hold_form }}
       supersedes: ${{ steps.decide.outputs.supersedes }}
       hold_read: ${{ steps.decide.outputs.hold_read }}
       lost_settle: ${{ steps.decide.outputs.lost_settle }}
@@ -888,6 +914,7 @@ jobs:
         run: |
           set -euo pipefail
           eval "$RETRY_FUNCTIONS"
+          eval "$REGISTRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
@@ -901,23 +928,8 @@ jobs:
             exit 0
           fi
 
-          # prod's live digest, from one HEAD. curl reads each credential from stdin.
-          name=danielh2018/homelab-manifests
-          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
-            | curl --retry 3 -fsS -K - \
-              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
-            | jq -r '.token // empty')"
-          [ -n "$token" ] || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
-          heads="$RUNNER_TEMP/prod-head.txt"
-          status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
-            | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
-              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-              "https://ghcr.io/v2/$name/manifests/prod")"
-          case "$status" in
-            200) live="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')" ;;
-            404) live="" ;;
-            *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
-          esac
+          # An absent prod reads as empty, which matches the first run's empty PRIOR_DIGEST.
+          live="$(live_tag prod)" || { echo "::error::prod's digest could not be read"; exit 1; }
           if [ "$live" != "$PRIOR_DIGEST" ]; then
             echo "::warning::prod is at '${live:-absent}', not the '${PRIOR_DIGEST:-absent}' decide read: another run moved it first, so this run moves nothing and verifies nothing. The run that moved it dispatches one more run once it settles, when a commit newer than its own is green."
             exit 0
@@ -938,12 +950,8 @@ jobs:
             # T's base and reset digest are last-good's as decide read it. A settle of the
             # superseded run that moved last-good since then would leave T resetting past a
             # verified revision, so T moves nothing and that settle's dispatch promotes again.
-            lg_status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
-              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
-                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-                "https://ghcr.io/v2/$name/manifests/last-good")"
-            [ "$lg_status" = 200 ] || { echo "::error::HEAD last-good answered HTTP $lg_status"; exit 1; }
-            lg="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')"
+            lg="$(live_tag last-good)" || { echo "::error::last-good's digest could not be read"; exit 1; }
+            [ -n "$lg" ] || { echo "::error::last-good is absent"; exit 1; }
             if [ "$lg" != "$RESET_DIGEST" ]; then
               echo "::warning::last-good is at '$lg', not the '$RESET_DIGEST' decide read: the run $SUPERSEDES settled first, so this run moves nothing"
               exit 0
@@ -1052,16 +1060,14 @@ jobs:
     steps:
       # `good` posts success and anything else failure, each described as
       # `<verdict> <digest> <form>`. The digest lets `reconcile` refuse a status that an earlier
-      # promotion of the same commit left. The form is the hold `settle` writes for anything
-      # but good: `stateful` when T changes a snapshot role, `no-reset` when it changes a
-      # forward-only tag, `reset` otherwise. A `superseded` verdict posts nothing: a later run
-      # owns `prod`.
+      # promotion of the same commit left. The form is `decide`'s `hold_form`, the hold `settle`
+      # writes for anything but good. A `superseded` verdict posts nothing: a later run owns
+      # `prod`.
       - name: Post the verdict status
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           DIGEST: ${{ needs.promote.outputs.digest }}
-          STATEFUL: ${{ needs.promote.outputs.stateful }}
-          NO_RESET: ${{ needs.promote.outputs.no_reset }}
+          HOLD_FORM: ${{ needs.promote.outputs.hold_form }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_TOKEN: ${{ github.token }}
@@ -1072,20 +1078,20 @@ jobs:
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+          case "$HOLD_FORM" in
+            stateful|no-reset|reset) ;;
+            *) echo "::error::decide's hold_form '$HOLD_FORM' is not stateful, no-reset or reset"; exit 1 ;;
+          esac
           case "$VERDICT" in
             good) state=success ;;
             superseded) echo "verify read prod moved past sha-$TARGET, so no status is posted"; exit 0 ;;
             failed) state=failure ;;
             *) state=failure VERDICT=none ;;
           esac
-          if [ -n "$STATEFUL" ]; then form=stateful
-          elif [ -n "$NO_RESET" ]; then form=no-reset
-          else form=reset
-          fi
           retry gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$TARGET" \
             -f state="$state" -f context=homelab/promote-verdict \
-            -f description="$VERDICT $DIGEST $form" -f target_url="$RUN_URL" > /dev/null
-          echo "posted homelab/promote-verdict=$state ($VERDICT $DIGEST $form) on $TARGET"
+            -f description="$VERDICT $DIGEST $HOLD_FORM" -f target_url="$RUN_URL" > /dev/null
+          echo "posted homelab/promote-verdict=$state ($VERDICT $DIGEST $HOLD_FORM) on $TARGET"
 
   settle:
     needs: [promote, tag, verify]
@@ -1140,17 +1146,18 @@ jobs:
       # the reset, and the step names both results. A verify that ended with no verdict holds
       # as `<T> unverified`, a form the revert rule never passes.
       #
-      # A hold without a reset (H1.1b): when `decide` named forward-only tags T changes
-      # against `last-good`, anything but good writes DEPLOY_HOLD as T's SHA alone, never
+      # A hold without a reset (H1.1b): when `decide`'s `hold_form` is `no-reset`, because T
+      # changes a forward-only tag against `last-good`, anything but good writes DEPLOY_HOLD as T's SHA alone, never
       # `failed=` or `unverified`, and leaves `prod` on T. A reset would re-apply an older
       # Longhorn or MetalLB over upgraded objects. It then tags T's digest `held`, which
       # `decide`'s in-flight wait reads once the operator clears the hold.
       #
-      # The stateful hold (D5.2b1): when `decide` named snapshot roles T changes, anything but
-      # good writes DEPLOY_HOLD as `<T> stateful=<names>`, or `<T> stateful=unverified` when
+      # The stateful hold (D5.2b1): when `hold_form` is `stateful`, because T changes a
+      # snapshot role, anything but good writes DEPLOY_HOLD as `<T> stateful=<names>`, or `<T> stateful=unverified` when
       # verify left no usable names, tags T `held` and leaves `prod`. A reset would apply the
-      # old image onto data T may have migrated. It comes before the forward-only branch, so a
-      # T that changes both writes the stateful form, which also never resets. The value goes
+      # old image onto data T may have migrated. A T that changes both gets the stateful form,
+      # which also never resets. A `hold_form` other than these and `reset` writes nothing and
+      # fails the step. The value goes
       # to the `stateful_hold` output once written, and the `post` job posts it.
       - name: Apply the verdict
         id: apply
@@ -1159,8 +1166,7 @@ jobs:
           DIGEST: ${{ needs.promote.outputs.digest }}
           RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
           CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
-          NO_RESET: ${{ needs.promote.outputs.no_reset }}
-          STATEFUL: ${{ needs.promote.outputs.stateful }}
+          HOLD_FORM: ${{ needs.promote.outputs.hold_form }}
           SUPERSEDES: ${{ needs.promote.outputs.supersedes }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           FAILED_NAMES: ${{ needs.verify.outputs.failed }}
@@ -1170,6 +1176,7 @@ jobs:
         run: |
           set -uo pipefail
           eval "$RETRY_FUNCTIONS"
+          eval "$REGISTRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
@@ -1179,32 +1186,11 @@ jobs:
           # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
           # later run has moved `prod` past T, that run owns the cluster, and this one writes
           # neither `last-good`, the hold, `held` nor the reset, and dispatches nothing.
-          # `live_tag <tag>` is the `tag` job's HEAD of a tag. It prints the digest, nothing
-          # when the tag is absent, and fails when the read fails.
-          live_tag() {
-            local name=danielh2018/homelab-manifests token heads status
-            token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
-              | curl --retry 3 -fsS -K - \
-                "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
-              | jq -r '.token // empty')" || return 1
-            [ -n "$token" ] || return 1
-            heads="$RUNNER_TEMP/$1-head.txt"
-            status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
-              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
-                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-                "https://ghcr.io/v2/$name/manifests/$1")" || return 1
-            case "$status" in
-              200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
-              404) ;;
-              *) return 1 ;;
-            esac
-          }
-          live_prod() { live_tag prod; }
           # A failed read keeps today's behaviour, the safe direction: a hold stops promotion,
           # and a later run that verifies moves `last-good` again.
           owns_prod() {
             local live
-            if ! live="$(live_prod)"; then
+            if ! live="$(live_tag prod)"; then
               echo "::warning::prod's digest could not be read, so this run applies its verdict as the owner"
               return 0
             fi
@@ -1239,7 +1225,12 @@ jobs:
             exit 0
           fi
 
-          if [ -n "$STATEFUL" ]; then
+          case "$HOLD_FORM" in
+            stateful|no-reset|reset) ;;
+            *) echo "::error::decide's hold_form '$HOLD_FORM' is not stateful, no-reset or reset, so this run writes no hold and resets nothing"; exit 1 ;;
+          esac
+
+          if [ "$HOLD_FORM" = stateful ]; then
             if [ "$VERDICT" = failed ] && printf '%s' "$FAILED_NAMES" | grep -Eqx '[a-z0-9-]+(,[a-z0-9-]+)*'; then
               hold="$TARGET stateful=$FAILED_NAMES"
             else
@@ -1250,7 +1241,7 @@ jobs:
               exit 1
             fi
             echo "stateful_hold=$hold" >> "$GITHUB_OUTPUT"
-            echo "DEPLOY_HOLD set to '$hold': T changes snapshot role(s) $STATEFUL, so prod stays on sha-$TARGET"
+            echo "DEPLOY_HOLD set to '$hold': T changes a snapshot role, so prod stays on sha-$TARGET"
             if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
@@ -1258,14 +1249,14 @@ jobs:
             exit 0
           fi
 
-          if [ -n "$NO_RESET" ]; then
+          if [ "$HOLD_FORM" = no-reset ]; then
             # `held` marks prod's run as settled, so it is tagged only once the hold is
             # written. With no hold, the next run's in-flight wait ends `current` instead.
             if ! retry gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
               echo "::error::writing DEPLOY_HOLD='$TARGET' failed, so prod stays on sha-$TARGET untagged"
               exit 1
             fi
-            echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
+            echo "DEPLOY_HOLD set to '$TARGET': T changes a forward-only tag, so prod stays on sha-$TARGET"
             if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
@@ -1389,8 +1380,9 @@ jobs:
   # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
   # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
   # moves `last-good`, and anything else writes the hold the status's form names. A missing
-  # status, or one for another digest, takes the form from what `decide` read `prod` changes
-  # against `last-good` (its `stateful` and `no_reset`), and else writes the unverified hold.
+  # status, or one for another digest, takes the form from `decide`'s `hold_form`, which it
+  # reads from what `prod` changes against `last-good`. The `reset` form writes the unverified
+  # hold.
   # It resets nothing: the operator decides on `reset_to_last_good` after a hold. After a move
   # it dispatches a run for a newer green commit, as `settle` does; after a hold it dispatches
   # nothing. No concurrency group, because a newer pending job in `promote` would evict it.
@@ -1450,45 +1442,27 @@ jobs:
         env:
           COMMIT: ${{ needs.promote.outputs.lost_settle }}
           DIGEST: ${{ needs.promote.outputs.lost_settle_digest }}
-          # What decide read prod changes against last-good, for a status that names no form.
-          STATEFUL: ${{ needs.promote.outputs.stateful }}
-          NO_RESET: ${{ needs.promote.outputs.no_reset }}
+          # decide's hold form for what prod changes against last-good, for a status that
+          # names no form.
+          HOLD_FORM: ${{ needs.promote.outputs.hold_form }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
         run: |
           set -uo pipefail
           eval "$RETRY_FUNCTIONS"
+          eval "$REGISTRY_FUNCTIONS"
           printf '%s' "$COMMIT" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's lost_settle '$COMMIT' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's lost_settle_digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
 
-          # `settle`'s HEAD of `prod`: the digest, nothing when absent, a failure when unread.
-          live_prod() {
-            local name=danielh2018/homelab-manifests token heads status
-            token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
-              | curl --retry 3 -fsS -K - \
-                "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
-              | jq -r '.token // empty')" || return 1
-            [ -n "$token" ] || return 1
-            heads="$RUNNER_TEMP/prod-head.txt"
-            status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
-              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
-                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-                "https://ghcr.io/v2/$name/manifests/prod")" || return 1
-            case "$status" in
-              200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
-              404) ;;
-              *) return 1 ;;
-            esac
-          }
           # Exits the step unless `prod` still names DIGEST: 0 when a later run moved it, 1
           # when the read failed.
           require_prod() {
             local live
-            live="$(live_prod)" || { echo "::error::prod's digest could not be read, so this job writes nothing"; exit 1; }
+            live="$(live_tag prod)" || { echo "::error::prod's digest could not be read, so this job writes nothing"; exit 1; }
             [ "$live" = "$DIGEST" ] && return 0
             echo "prod is at '${live:-absent}', not $COMMIT's $DIGEST: a later run moved it, so this job writes nothing"
             exit 0
@@ -1521,14 +1495,12 @@ jobs:
             exit 0
           fi
           # `settle`'s hold for the form the lost run recorded. A status for another digest, or
-          # none, takes the form from decide's STATEFUL and NO_RESET, and else holds `unverified`.
+          # none, takes decide's HOLD_FORM. Any form but stateful or no-reset holds `unverified`.
           if [ "$digest" != "$DIGEST" ]; then
-            form=
-            if [ -n "${STATEFUL:-}" ]; then
-              form=stateful
-            elif [ -n "${NO_RESET:-}" ]; then
-              form=no-reset
-            fi
+            case "$HOLD_FORM" in
+              stateful|no-reset|reset) form=$HOLD_FORM ;;
+              *) echo "::error::decide's hold_form '$HOLD_FORM' is not stateful, no-reset or reset, so this job writes nothing"; exit 1 ;;
+            esac
           fi
           case "$form" in
             stateful) new_hold="$COMMIT stateful=unverified" ;;
@@ -1692,27 +1664,14 @@ jobs:
         run: |
           set -euo pipefail
           eval "$RETRY_FUNCTIONS"
+          eval "$REGISTRY_FUNCTIONS"
           for digest in "$PROD" "$LAST_GOOD"; do
             printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}' \
               || { echo "::error::reset-check handed on digest '$digest', not sha256:<64 hex>"; exit 1; }
           done
 
-          # prod's live digest, from one HEAD. curl reads each credential from stdin.
-          name=danielh2018/homelab-manifests
-          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
-            | curl --retry 3 -fsS -K - \
-              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
-            | jq -r '.token // empty')"
-          [ -n "$token" ] || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
-          heads="$RUNNER_TEMP/prod-head.txt"
-          status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
-            | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
-              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
-              "https://ghcr.io/v2/$name/manifests/prod")"
-          case "$status" in
-            200) live="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')" ;;
-            *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
-          esac
+          live="$(live_tag prod)" || { echo "::error::prod's digest could not be read"; exit 1; }
+          [ -n "$live" ] || { echo "::error::prod is absent, so there is nothing to reset"; exit 1; }
           if [ "$live" = "$LAST_GOOD" ]; then
             echo "prod already names last-good $LAST_GOOD, so nothing moves"
             exit 0
@@ -1723,7 +1682,7 @@ jobs:
           fi
 
           ghcr_login
-          flux tag artifact "oci://ghcr.io/$name@$LAST_GOOD" --tag prod
+          flux tag artifact "oci://ghcr.io/danielh2018/homelab-manifests@$LAST_GOOD" --tag prod
           echo "prod moved from $PROD to last-good $LAST_GOOD"
           echo "moved=true" >> "$GITHUB_OUTPUT"
 

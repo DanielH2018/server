@@ -75,6 +75,10 @@ class Cause(StrEnum):
     `land_probe` reads them as a give-up rather than a plain deferral. A promotion wait that
     found no kubectl or no readable kubeconfig ends `gate-unreadable` too: nothing it waits on
     can be read until the host's setup is fixed.
+
+    `landing-live` rides beside a `refused` with exit 75 that started no landing, because
+    another landing of the PR holds its lock (`pr_lock.py`). It is on the `LAND-RESULT:` line
+    only: that stop writes no annotation, so the board never counts it.
     """
 
     TAG_MISS = "tag-miss"
@@ -83,6 +87,7 @@ class Cause(StrEnum):
     GATE_UNREADABLE = "gate-unreadable"
     GATE_STALE = "gate-stale"
     SOAK_FAILED = "soak-failed"
+    LANDING_LIVE = "landing-live"
     INVALID = "invalid-cause"
 
 

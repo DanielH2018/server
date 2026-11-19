@@ -104,6 +104,7 @@ FANOUT_PLACE_NO_HOST_READABLE = 4
 FANOUT_PLACE_BATCH_FAILED = 5
 FANOUT_PLACE_NO_SIGNING_HOST = 6
 FANOUT_PLACE_PARTLY_LAUNCHED = 7
+FANOUT_PLACE_LOCK_TIMEOUT = 8
 FANOUT_PLACE_BAD_ARGS = USAGE_ERROR
 FANOUT_PLACE_UNREAD = TEMP_FAIL
 
@@ -175,7 +176,7 @@ RENOVATE_SWEEP_GH_FAILED = 2
 RENOVATE_SWEEP_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/renderer/homelab_render.py -------------------------------------------------
-# C1 in docs/target-architecture/contracts.md fixes 2 for a render refused before it writes.
+# C1 in docs/archive/contracts.md fixes 2 for a render refused before it writes.
 # The parser exits 64 on a usage error, so 2 always means that refusal.
 RENDER_OK = OK
 RENDER_FAILED = FAILED
@@ -347,6 +348,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "FANOUT_PLACE_PARTLY_LAUNCHED",
             "`launch` started batches, but at least one issue's claim was refused and dropped.",
             "Each `dropped` line on stderr names an issue no batch carries.",
+        ),
+        _c(
+            FANOUT_PLACE_LOCK_TIMEOUT,
+            "FANOUT_PLACE_LOCK_TIMEOUT",
+            "`launch` did nothing: another launch held the launch lock for the whole wait.",
+            "stderr names the holder's pid and run; run `launch` again once it has ended.",
         ),
         _c(
             FANOUT_PLACE_BAD_ARGS,

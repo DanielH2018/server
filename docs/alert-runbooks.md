@@ -15,10 +15,22 @@ can carry.
 ### `AlertmanagerNotificationsFailing`
 
 Alertmanager failed at least one send through one integration (Discord or email) in the last
-30 minutes.
+30 minutes, for any reason but `rateLimited`.
 
 - Read `alertmanager_notifications_failed_total` by `reason` in Prometheus.
 - Read the `alertmanager` pod's log in the `observability` namespace for the send error.
+
+### `AlertmanagerNotificationsRateLimited`
+
+An integration answered Alertmanager's sends as rate limited in every 7-minute window for 15
+minutes. Alertmanager sends a group again at its next flush after a failed one, so a burst
+during a large rollout that fails one group for up to two flushes delivers late and never
+fires this alert. One that persists means
+the resends are failing too.
+
+- Read the `alertmanager` pod's log in the `observability` namespace for the receiver's answer.
+- Look in Karma for an alert group that changes on every evaluation and so sends on every
+  `group_interval`.
 
 ### `WarningUnresolved`
 

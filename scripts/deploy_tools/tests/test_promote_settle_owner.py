@@ -54,7 +54,11 @@ def test_a_failure_once_a_later_run_moved_prod_writes_no_hold_is_flagged(
 
 def test_a_stateful_failure_once_superseded_writes_no_hold_is_flagged(tmp_path, jobs):
     result, calls = _settle(
-        tmp_path, jobs, STATEFUL="sonarr", FAILED_NAMES="sonarr", FAKE_PROD_DIGEST=LATER
+        tmp_path,
+        jobs,
+        HOLD_FORM="stateful",
+        FAILED_NAMES="sonarr",
+        FAKE_PROD_DIGEST=LATER,
     )
     assert (result.returncode, calls) == (0, [])
 

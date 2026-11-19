@@ -11,7 +11,7 @@ governs: []
 ## Status
 
 Accepted. The operator accepted it on 2026-10-24. Slice M6 step C-0 (the
-[M6 plan](../target-architecture/monitoring/m6-retire-kuma.md)) wrote this record, and PR
+[M6 plan](../archive/monitoring/m6-retire-kuma.md)) wrote this record, and PR
 C-1 required that acceptance before it could merge.
 
 Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
@@ -34,7 +34,7 @@ Uptime Kuma carries one tile per check, and the bridge's checks and about 37 oth
 push a verdict to each tile through a token-keyed URL. Each check pages from one of the two
 planes, never both (M1 convention 5).
 
-The [target architecture](../target-architecture/design.md) (*Monitoring*) traces the
+The [target architecture](../archive/design.md) (*Monitoring*) traces the
 monitoring bucket's failures to three classes that Kuma causes:
 
 - **D1.** The Kuma database drifts from git.

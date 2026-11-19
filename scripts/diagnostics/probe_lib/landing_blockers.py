@@ -23,7 +23,7 @@ Every fact comes from a reader that already exists; this module only joins them:
   one GHCR manifest fetch, which costs a token request and one GET; and every suspended
   Kustomization and OCIRepository with the field manager of its `spec.suspend`, from a second
   read-only `kubectl` read (D5.1b). That is one `api.github.com` call, two `ghcr.io` requests
-  and two cluster reads per run (docs/target-architecture/deploy/d2-first-leaf.md, *What
+  and two cluster reads per run (docs/archive/deploy/d2-first-leaf.md, *What
   `probe.py landing` reads*). A failed read leaves its own field `null`, and the text view then
   never reports `prod` equal to `last-good`. `run_landing` passes the live reads; `collect`
   called without them reads none.

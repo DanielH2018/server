@@ -3,15 +3,19 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_turn_lock.py
 """
 
+import json
 import os
+import pwd
 import subprocess
+import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import fresh, line, turn
+from deploy_tools.land_lib import fresh, line, pr_lock, turn
 from lib.proc_testing import fake_bin, path_with
 
 HEAD = "a" * 40
@@ -185,3 +189,105 @@ def test_a_landing_handed_the_turn_never_hands_it_on(tmp_path, landing, monkeypa
     with turn.held(ln) as take_turn:
         take_turn("")
         assert ln.hand_over_turn("master moved again") is None
+
+
+def _live_landing(pr: str, hostname: str = "daniel-box", **where) -> pr_lock.Held:
+    """The PR lock as another process's landing holds it: this process names no held PR."""
+    held = pr_lock.take(pr, hostname, **where)
+    assert isinstance(held, pr_lock.Held)
+    del os.environ[pr_lock.HELD_ENV]
+    return held
+
+
+def test_a_second_landing_of_a_live_pr_is_refused_naming_the_first(land_run):
+    first = _live_landing("999")
+    try:
+        rc, out, _, calls, logline = land_run(["--arm-merge", "--await-merge"])
+    finally:
+        first.release()
+    result, verdict = out.rstrip().splitlines()[-2:]
+    assert rc == 75
+    assert result.startswith(
+        "LAND-RESULT: verdict=refused cause=landing-live exit=75 pr=999 "
+    )
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    assert f"(host daniel-box, pid {os.getpid()}, user {user}, " in verdict
+    # It read and merged nothing, and the live landing writes the PR's annotation.
+    assert [c[0] for c in calls if c[0] in ("gh", "gh_json", "logger")] == []
+    assert logline == ""
+
+
+def test_a_landing_of_another_pr_is_not_refused(land_run):
+    other = _live_landing("998")
+    files = {"files": [{"path": "docs/landing.md"}], "changedFiles": 1}
+    try:
+        rc, out, *_ = land_run(
+            [], Fakes(gh_views={"files,changedFiles": files}, derived=([], "pr"))
+        )
+    finally:
+        other.release()
+    assert rc == 0 and "VERDICT: nothing-to-deploy (PR #999" in out
+
+
+def test_a_landing_run_by_the_landing_that_holds_the_lock_is_not_refused(land_run):
+    """A landing that moves to a fresh checkout runs `land.sh` for its own PR as a child."""
+    parent = pr_lock.take("999", "daniel-box")
+    assert isinstance(parent, pr_lock.Held)
+    files = {"files": [{"path": "docs/landing.md"}], "changedFiles": 1}
+    try:
+        rc, out, *_ = land_run(
+            [], Fakes(gh_views={"files,changedFiles": files}, derived=([], "pr"))
+        )
+    finally:
+        parent.release()
+    assert rc == 0 and "VERDICT: nothing-to-deploy (PR #999" in out
+
+
+def test_a_lock_left_by_a_dead_landing_refuses_nothing():
+    scripts = Path(pr_lock.__file__).resolve().parents[2]
+    dies_holding = (
+        "import os, sys\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "from deploy_tools.land_lib import pr_lock\n"
+        "assert isinstance(pr_lock.take('7', 'daniel-box'), pr_lock.Held)\n"
+        "os._exit(0)\n"
+    )
+    dead = subprocess.Popen([sys.executable, "-c", dies_holding, str(scripts)])
+    assert dead.wait(timeout=60) == 0
+    left = Path(os.environ[turn.TURN_DIR_ENV]) / pr_lock.lock_name("7")
+    assert json.loads(left.read_text())["pid"] == dead.pid
+
+    held = pr_lock.take("7", "daniel-box")
+    assert isinstance(held, pr_lock.Held)
+    held.release()
+
+
+def test_a_landing_on_another_host_holds_the_same_pr_lock_over_ssh(
+    tmp_path, ssh_here, monkeypatch
+):
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
+    away = _live_landing("7", hostname="daniel-server", directory=tmp_path)
+    try:
+        # The ssh session writes the record after it answers, so the read waits for it.
+        deadline = time.monotonic() + 30
+        while not (tmp_path / pr_lock.lock_name("7")).read_text():
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        holder = pr_lock.take("7", "daniel-box", directory=tmp_path)
+    finally:
+        away.release()
+    assert isinstance(holder, pr_lock.Holder)
+    assert (holder.host, holder.pid) == ("daniel-server", str(os.getpid()))
+
+
+def test_a_turn_host_that_does_not_answer_lets_the_landing_go_on_without_the_pr_lock(
+    tmp_path, monkeypatch, capsys
+):
+    stubs = fake_bin(
+        tmp_path / "bin",
+        ssh="#!/usr/bin/env bash\necho 'ssh: no route' >&2\nexit 255\n",
+    )
+    monkeypatch.setenv("PATH", path_with(stubs))
+    monkeypatch.delenv(turn.TURN_DIR_ENV)
+    assert pr_lock.take("7", "daniel-server") is None
+    assert "going on without it" in capsys.readouterr().err

@@ -1,0 +1,117 @@
+---
+# Built from templates/Dockerfile.j2, which bakes the DAGs under files/dags/ into the image.
+# The promote workflow's `images` job builds it and pushes it to GHCR under its content tag, and
+# the renderer points this ref there with `imagePullPolicy: IfNotPresent`. A DAG edit moves the
+# content tag, so the next promotion rolls every Airflow pod onto the new DAGs.
+#
+# Renovate cannot track this var (a local registry ref); the Dockerfile's FROM line is what moves,
+# and Renovate's dockerfile manager watches it.
+airflow_k8s_image: "{{ k8s_registry_pull_host }}/airflow:{{ k8s_built_image_tags.get('airflow', 'latest') }}"
+
+# DECIDED: the task pods' image is the GHCR ref, written out. It sits in the pod-template
+# ConfigMap as text, and the renderer's GHCR rewrite (scripts/renderer/renderer_lib/images.py:
+# ghcr_text) moves only a container's `image:` key, so the in-cluster ref above would reach
+# every task pod unrewritten. tests/services/test_airflow_task_image.py holds it equal to the
+# scheduler's rewritten ref.
+airflow_k8s_task_image: "{{ k8s_ghcr_pull_host }}/airflow:{{ k8s_built_image_tags.get('airflow', 'latest') }}"
+
+# Renovate's k8s-defaults manager tracks this pin.
+airflow_k8s_postgres_image: postgres:17.11-alpine3.24@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "migrating state: an Airflow base bump runs `airflow db migrate` against the metadata database on the airflow-postgres-data claim, and a Postgres major bump cannot start on the old data directory at all, so both land by hand"
+
+# Preferred, not required: daniel-server has the RAM headroom (20% used), and a down
+# daniel-server moves the stack to daniel-box rather than stopping the nightly rollups.
+airflow_k8s_node: daniel-server
+
+# The image's own `airflow` user, and the alpine postgres image's `postgres` user.
+airflow_k8s_uid: 50000
+airflow_k8s_postgres_uid: 70
+
+# Per-component caps. Each request sits above that component's idle working set, measured on
+# 2026-11-19 with the first DAG loaded: api-server 253Mi, scheduler 447Mi, dag-processor
+# 162Mi, Postgres 50Mi, about 0.9 GiB for the stack.
+airflow_k8s_api_cpu_limit: "1"
+airflow_k8s_api_mem_limit: 1Gi
+airflow_k8s_api_cpu_request: "50m"
+airflow_k8s_api_mem_request: 384Mi
+airflow_k8s_scheduler_cpu_limit: "1"
+airflow_k8s_scheduler_mem_limit: 768Mi
+airflow_k8s_scheduler_cpu_request: "50m"
+airflow_k8s_scheduler_mem_request: 512Mi
+airflow_k8s_dag_processor_cpu_limit: "1"
+airflow_k8s_dag_processor_mem_limit: 768Mi
+airflow_k8s_dag_processor_cpu_request: "25m"
+airflow_k8s_dag_processor_mem_request: 256Mi
+airflow_k8s_postgres_cpu_limit: "1"
+airflow_k8s_postgres_mem_limit: 512Mi
+airflow_k8s_postgres_cpu_request: "25m"
+airflow_k8s_postgres_mem_request: 64Mi
+# One KubernetesExecutor task pod. A rollup task holds a day of one query's samples.
+airflow_k8s_task_cpu_limit: "1"
+airflow_k8s_task_mem_limit: 512Mi
+airflow_k8s_task_cpu_request: "50m"
+airflow_k8s_task_mem_request: 192Mi
+
+# How many task pods may run at once, cluster-wide. A 30-day backfill queues 30 runs; this caps
+# how many task pods it puts on the node together.
+airflow_k8s_parallelism: 4
+
+# Holds both databases: `airflow` (metadata, rebuildable) and `warehouse` (the rollups, the
+# only copy of history the sources have dropped).
+airflow_k8s_postgres_claim: airflow-postgres-data
+airflow_k8s_postgres_storage_class: longhorn
+airflow_k8s_postgres_size: 5Gi
+
+k8s_claims:
+  - name: "{{ airflow_k8s_postgres_claim }}"
+    storage_class: "{{ airflow_k8s_postgres_storage_class }}"
+    size: "{{ airflow_k8s_postgres_size }}"
+
+# The base pull is slim Airflow plus three providers, about 600 MB; GHCR has served this homelab
+# as slowly as 0.145 MB/s (n8n's defaults), which is ~4100s for a cold pull. The api-server,
+# scheduler and dag-processor all run this image, and the scheduler and dag-processor are
+# Recreate, so without the prepull Job a base bump stops both before the pull starts.
+flux_prepull_timeout: 4500s
+
+image_builder_builds:
+  - image_builder_name: airflow
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
+    # Raw files, not templates: the DAGs embed PromQL whose {{...}} braces Jinja would eat.
+    # Each key is the flat name the Dockerfile COPYs from the context root.
+    image_builder_context_files:
+      "{{ role_file('files/dags/prom_daily_rollup.py') }}": prom_daily_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/warehouse.py') }}": warehouse.py
+      "{{ role_file('files/dags/homelab_warehouse/prom_rollup.py') }}": prom_rollup.py
+      "{{ role_file('files/dags/.airflowignore') }}": airflowignore
+      "{{ role_file('files/check_dags.py') }}": check_dags.py
+
+# Macros only; the four workload templates import it.
+manifests_exclude_files: [airflow-env.yaml]
+
+# The routed Deployment is the api-server; the three below run beside it.
+manifests_rollout: airflow
+manifests_extra_rollouts:
+  - name: airflow-scheduler
+    image: airflow
+  - name: airflow-dag-processor
+    image: airflow
+  - name: airflow-postgres
+
+# Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml.
+render_secrets:
+  - name: airflow
+    string_data:
+      # The `airflow` Postgres superuser's, for the metadata database. Only the api-server,
+      # scheduler and dag-processor read it.
+      AIRFLOW_POSTGRES_PASSWORD: airflow_postgres_password
+      # `warehouse_writer`'s, which owns the warehouse database alone. Task pods write with it.
+      WAREHOUSE_WRITER_PASSWORD: airflow_warehouse_writer_password
+      # Read once, by the Postgres init script on an empty data directory. Grafana holds its
+      # own copy (observability's grafana-warehouse-datasource Secret).
+      WAREHOUSE_READER_PASSWORD: airflow_warehouse_reader_password
+      # Signs the execution-API tokens the scheduler hands each task pod. Every component must
+      # share one value, or every task fails its first API call with a 403.
+      AIRFLOW__API_AUTH__JWT_SECRET: airflow_api_jwt_secret

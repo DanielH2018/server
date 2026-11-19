@@ -7,7 +7,7 @@ components, and `flux-deferred` applies the sync objects, the root among them. T
 applies `flux-deferred` in turn. `sops-age` stays operator-created bootstrap material. A rebuilt
 cluster gets Flux from `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
 That page is the
-operator's view; the slice plans are `docs/target-architecture/deploy/d1-flux-installed.md`
+operator's view; the slice plans are `docs/archive/deploy/d1-flux-installed.md`
 and `d5-bulk-move.md`.
 
 ## At a glance
@@ -52,7 +52,8 @@ so a regeneration diffs as the pipeline plus upstream's change.
   on the new controller images. A `# renovate:` comment above each pin is what Renovate reads,
   and `scripts/tests/test_renovate_flux_cli.py` fails a pin that lost it (#4822). For a bump by
   hand, set every pin and the homelab-tools `flux` blocks yourself.
-  `tests/repo/test_promote_workflow.py` fails a drift.
+  The `promote-flux-cli-matches-the-controllers` row of
+  `tests/repo/test_census_rows_workflows.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -215,7 +216,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
 
 - **No agent token ever carries `write:packages`.** Pushing an artifact, signing it and moving
   the `prod` tag happen only in the promote workflow's code-free jobs, under that job's
-  `GITHUB_TOKEN` (`tests/repo/test_promote_workflow.py:PERMISSIONS`). An agent session's token never holds the scope.
+  `GITHUB_TOKEN` (`tests/repo/_promote_workflow.py:PERMISSIONS`). An agent session's token never holds the scope.
 - **`PROMOTE_TOKEN` rotation (operator-only).** The promote workflow reads `DEPLOY_HOLD` and
   writes `PROD_DIGEST` with the repository secret `PROMOTE_TOKEN`, a fine-grained token with
   Variables read and write on two repositories, `DanielH2018/server` and

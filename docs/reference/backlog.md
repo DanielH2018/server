@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-19 18:17 UTC
-generated_sha: 4b7d27c10
+generated_at: 2026-11-19 22:10 UTC
+generated_sha: fc80e375d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,10 +17,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#8296](https://github.com/DanielH2018/server/issues/8296) | high | gap | backup-observability | daniel-server's iscsid restores stale Longhorn iSCSI sessions at boot, and four volumes remounted read-only on 2026-11-11 — *no vetted remediation* | 2026-11-13 | 0 | - | ✓ |
-| [#9258](https://github.com/DanielH2018/server/issues/9258) | high | improvement | cicd | Parse CI check runs into one CheckRun type and CIVerdict enum | 2026-11-19 | 0 | - | ✓ |
-| [#9259](https://github.com/DanielH2018/server/issues/9259) | high | improvement | cicd | Make the landing pipeline's wait and verify verdicts enums and stateful.read a typed record | 2026-11-19 | 0 | - | ✓ |
-| [#9260](https://github.com/DanielH2018/server/issues/9260) | high | improvement | cicd | Parse the Claude Code hook payload once into a typed BashCall with one cwd rule | 2026-11-19 | 0 | - | ✓ |
-| [#9262](https://github.com/DanielH2018/server/issues/9262) | high | improvement | cicd | Give findings_lib one typed Issue model shared with fanout_lib | 2026-11-19 | 0 | - | ✓ |
+| [#9262](https://github.com/DanielH2018/server/issues/9262) | high | improvement | cicd | Give findings_lib one typed Issue model shared with fanout_lib | 2026-11-19 | 0 | claude/angry-leavitt-18833d | ✓ |
 | [#9263](https://github.com/DanielH2018/server/issues/9263) | high | improvement | cicd | Parse the homelab-reconcile manifest and applied state into typed records | 2026-11-19 | 0 | - | ✓ |
 | [#7490](https://github.com/DanielH2018/server/issues/7490) | medium | gap | cicd | The Pi's reconcile reaches its 30-minute timeout and holds its updates | 2026-11-06 | 0 | - | ✓ |
 | [#7688](https://github.com/DanielH2018/server/issues/7688) | medium | gap | cicd | Fix the pytest shard 5 and host_tools_arm64 CI flakes | 2026-11-08 | 0 | - | ✓ |
@@ -30,23 +27,18 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8593](https://github.com/DanielH2018/server/issues/8593) | medium | gap | backup-observability | probe.py uptime-robot needs its read-only API key in SOPS and a daily schedule | 2026-11-14 | 0 | - | ✓ |
 | [#8929](https://github.com/DanielH2018/server/issues/8929) | medium | feature | security | Guardrails B3-4: re-arm the Renovate agent once its egress chain enforces | 2026-11-15 | 0 | - | ✓ |
 | [#8952](https://github.com/DanielH2018/server/issues/8952) | medium | gap | backup-observability | Eval case homelab-review/008-recurrence-not-discovery has failed four weekly sweeps running, holding EvalSweepFailed up | 2026-11-16 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
-| [#9019](https://github.com/DanielH2018/server/issues/9019) | medium | improvement | backup-observability | The host-check and hosts alert groups copy each rule once per host, and the tests mirror every copy | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9036](https://github.com/DanielH2018/server/issues/9036) | medium | improvement | cicd | A standalone check file has no mechanical way to retire: only 41 checks are Census rows | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9061](https://github.com/DanielH2018/server/issues/9061) | medium | gap | - | PR 9028 landing: deploy-failed, promote held by DEPLOY_HOLD (karakeep, netpol-baseline) | 2026-11-18 | 0 | - | ✓ |
-| [#9065](https://github.com/DanielH2018/server/issues/9065) | medium | gap | cicd | A pod outside the soak's scope, recreated mid-soak, fails the soak and sets DEPLOY_HOLD — *no vetted remediation* | 2026-11-18 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
-| [#9088](https://github.com/DanielH2018/server/issues/9088) | medium | gap | backup-observability | A Discord rate limit during a large rollout fires AlertmanagerNotificationsFailing and fails the soak — *no vetted remediation* | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
 | [#9116](https://github.com/DanielH2018/server/issues/9116) | medium | improvement | cicd | A landing sleeps out a GitHub rate limit while it holds the landing turn — *no vetted remediation* | 2026-11-19 | 0 | - | ✓ |
-| [#9126](https://github.com/DanielH2018/server/issues/9126) | medium | improvement | cicd | Make the hooks and pytest jobs run without root, so a runner pod needs no second step definition | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | - |
-| [#9162](https://github.com/DanielH2018/server/issues/9162) | medium | gap | backup-observability | A Discord rate limit fails a soak and sets DEPLOY_HOLD on a healthy cluster | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | - |
 | [#9199](https://github.com/DanielH2018/server/issues/9199) | medium | gap | - | The fleet memory cap did not hold the 8 GiB MemAvailable floor on daniel-box (2026-11-18) or daniel-server (2026-11-14) — *no vetted remediation* | 2026-11-19 | 0 | - | ✓ |
-| [#9201](https://github.com/DanielH2018/server/issues/9201) | medium | gap | backup-observability | Airflow scheduler has no heartbeat deadman | 2026-11-19 | 0 | - | ✓ |
+| [#9201](https://github.com/DanielH2018/server/issues/9201) | medium | gap | backup-observability | Airflow scheduler has no heartbeat deadman | 2026-11-19 | 0 | claude/coord-alert-noise-d7b708 | ✓ |
 | [#9229](https://github.com/DanielH2018/server/issues/9229) | medium | gap | container | Prowlarr's app sync to Sonarr and Radarr has failed with 401 for at least a week, and nothing alerts on it | 2026-11-19 | 0 | - | ✓ |
-| [#9254](https://github.com/DanielH2018/server/issues/9254) | medium | improvement | cicd | Issue step 1 of #9036 is mostly undone and its Verify-by row count is not reached | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9261](https://github.com/DanielH2018/server/issues/9261) | medium | improvement | backup-observability | Parse kubectl, Longhorn and Prometheus objects into shared typed views | 2026-11-19 | 0 | - | ✓ |
-| [#9264](https://github.com/DanielH2018/server/issues/9264) | medium | improvement | cicd | Parse containers_list once into ContainerEntry before the render | 2026-11-19 | 0 | - | ✓ |
-| [#9267](https://github.com/DanielH2018/server/issues/9267) | medium | gap | cicd | The pinned-tool release-fetch census misses a URL whose repo is a spaced ${{ }} expression | 2026-11-19 | 0 | - | ✓ |
-| [#9294](https://github.com/DanielH2018/server/issues/9294) | medium | improvement | cicd | k8s_manifests.py is not merged: four of the five guards are | 2026-11-19 | 0 | - | ✓ |
+| [#9264](https://github.com/DanielH2018/server/issues/9264) | medium | improvement | cicd | Parse containers_list once into ContainerEntry before the render | 2026-11-19 | 0 | worktree-pdv-fanout | ✓ |
+| [#9294](https://github.com/DanielH2018/server/issues/9294) | medium | improvement | cicd | k8s_manifests.py is not merged: four of the five guards are | 2026-11-19 | 0 | claude/coord-ci-cleanup-2151e1 | ✓ |
 | [#9303](https://github.com/DanielH2018/server/issues/9303) | medium | gap | cicd | Pin whether a path-derived k8s tag with an empty changed set lands nothing-to-deploy | 2026-11-19 | 0 | - | ✓ |
+| [#9333](https://github.com/DanielH2018/server/issues/9333) | medium | improvement | cicd | Rule on the reconcile size ceiling: a typed manifest needs about 50 lines over 1450 | 2026-11-19 | 0 | - | ✓ |
+| [#9367](https://github.com/DanielH2018/server/issues/9367) | medium | gap | cicd | daniel-server's primary checkout is 584 commits behind, and a fan-out batch's clean-one leg runs its code — *no vetted remediation* | 2026-11-19 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
@@ -85,16 +77,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8982](https://github.com/DanielH2018/server/issues/8982) | low | improvement | cicd | Phase C of CI throughput: runner pods for hooks and pytest, set aside 2026-11-18 | 2026-11-18 | 0 | - | - |
 | [#8983](https://github.com/DanielH2018/server/issues/8983) | low | gap | cicd | A red landing batch has not run live | 2026-11-18 | 0 | - | ✓ |
 | [#8984](https://github.com/DanielH2018/server/issues/8984) | low | gap | cicd | The update-before-ready landing order (#8962) has not run live | 2026-11-18 | 0 | - | ✓ |
-| [#9014](https://github.com/DanielH2018/server/issues/9014) | low | improvement | docs | Move the finished deploy, host, render and monitoring slice plans to docs/archive and repoint the 441 citations | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
-| [#9015](https://github.com/DanielH2018/server/issues/9015) | low | gap | docs | inject-nested-docs repeats a rule for fork subagents and after a reboot | 2026-11-18 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
 | [#9017](https://github.com/DanielH2018/server/issues/9017) | low | improvement | docs | component.yml headers and inventory comments hold contract prose and Ansible provenance: 2,100 of 3,596 manifest lines | 2026-11-18 | 0 | - | ✓ |
-| [#9020](https://github.com/DanielH2018/server/issues/9020) | low | improvement | container | 23 Flux-gated Job templates hand-write one digest-Job skeleton, and about 11 roles copy one verify ServiceAccount | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
-| [#9021](https://github.com/DanielH2018/server/issues/9021) | low | improvement | backup-observability | monitor-bridge's check_table rows are restated by hand as alerts, with five test files holding the two equal | 2026-11-18 | 0 | - | ✓ |
-| [#9022](https://github.com/DanielH2018/server/issues/9022) | low | improvement | cicd | 60 host timers follow one hand-written shape, and 24 test files hold each schedule equal to a default | 2026-11-18 | 0 | - | ✓ |
 | [#9025](https://github.com/DanielH2018/server/issues/9025) | low | improvement | cicd | The workflows repeat one fetch-and-verify step sequence per pinned tool, with one test file per tool guarding each copy | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
-| [#9027](https://github.com/DanielH2018/server/issues/9027) | low | improvement | docs | Three doc-sync tools each bring their own driver, prek hook and equality test | 2026-11-18 | 0 | - | ✓ |
 | [#9029](https://github.com/DanielH2018/server/issues/9029) | low | improvement | cicd | Five render guards each keep their own entry point, prek hook and test file over one shared library | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
-| [#9030](https://github.com/DanielH2018/server/issues/9030) | low | improvement | cicd | 22 Renovate test files rebuild Renovate's regex manager in Python | 2026-11-18 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9032](https://github.com/DanielH2018/server/issues/9032) | low | improvement | security | Read-only-agent enforcement is implemented twice: claude-guard's denylist and this repo's allowlist hook | 2026-11-18 | 0 | - | ✓ |
 | [#9033](https://github.com/DanielH2018/server/issues/9033) | low | improvement | cicd | Two worktree pruners exist, and the dotfiles one cannot see squash and rebase merges | 2026-11-18 | 0 | - | ✓ |
 | [#9035](https://github.com/DanielH2018/server/issues/9035) | low | improvement | security | Homelab deploy-plane rules and Bash written-path extraction are split between claude-guard and this repo's hooks | 2026-11-18 | 0 | - | ✓ |
@@ -103,50 +88,36 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9040](https://github.com/DanielH2018/server/issues/9040) | low | improvement | cicd | Decide whether one golden snapshot per host package replaces the 80 render-and-grep test files | 2026-11-18 | 0 | - | ✓ |
 | [#9045](https://github.com/DanielH2018/server/issues/9045) | low | improvement | backup-observability | A unit with OnFailure=homelab-alert@ pages Discord twice: once from the hook, once as SystemdUnitsFailed | 2026-11-18 | 0 | - | ✓ |
 | [#9054](https://github.com/DanielH2018/server/issues/9054) | low | improvement | backup-observability | The weekly scan units fail on a DOWN verdict, so their verdict pages twice unless an inhibit holds the unit | 2026-11-18 | 0 | - | ✓ |
-| [#9075](https://github.com/DanielH2018/server/issues/9075) | low | gap | container | kubepods.slice outweighs system.slice 625 to 100, so busy pods can starve k3s's control plane | 2026-11-18 | 0 | worktree-fanout-orch-2026-11-19 | - |
 | [#9107](https://github.com/DanielH2018/server/issues/9107) | low | improvement | cicd | eval-run still runs its suite in the primary checkout, which keeps ignored debris CI never sees | 2026-11-19 | 0 | - | ✓ |
 | [#9108](https://github.com/DanielH2018/server/issues/9108) | low | improvement | cicd | Remove the ignored ansible/ remnant from the daniel-box primary checkout | 2026-11-19 | 0 | - | ✓ |
 | [#9112](https://github.com/DanielH2018/server/issues/9112) | low | improvement | security | AIDE pages on conffiles the lines arm changes with line edits | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | - |
 | [#9118](https://github.com/DanielH2018/server/issues/9118) | low | improvement | backup-observability | Alert summaries mix a host-first and a symptom-first shape, and no census checks either | 2026-11-19 | 0 | - | ✓ |
-| [#9119](https://github.com/DanielH2018/server/issues/9119) | low | improvement | backup-observability | Warning alert descriptions have no length cap, and the longest run to 800 characters | 2026-11-19 | 0 | - | ✓ |
+| [#9119](https://github.com/DanielH2018/server/issues/9119) | low | improvement | backup-observability | Warning alert descriptions have no length cap, and the longest run to 800 characters | 2026-11-19 | 0 | claude/coord-ci-cleanup-2151e1 | ✓ |
 | [#9120](https://github.com/DanielH2018/server/issues/9120) | low | improvement | cicd | Delete the not-before and severity label fallback once pre-merge findings.py sessions retire | 2026-11-19 | 0 | - | - |
 | [#9124](https://github.com/DanielH2018/server/issues/9124) | low | improvement | cicd | Run the prune-tests skill over the tests that assert removed code stays removed | 2026-11-19 | 0 | - | - |
 | [#9145](https://github.com/DanielH2018/server/issues/9145) | low | improvement | cicd | The renderer's flux_owned seam and its not-flux-owned edge branch outlive the last Ansible-owned role | 2026-11-19 | 0 | - | ✓ |
-| [#9156](https://github.com/DanielH2018/server/issues/9156) | low | improvement | cicd | Three comment-trim leftovers the sweep did not reach: a Kuma receiver label, a stale pytest-hook comment and the Renovate descriptions | 2026-11-19 | 0 | - | ✓ |
-| [#9166](https://github.com/DanielH2018/server/issues/9166) | low | improvement | cicd | promote.yml: define live_tag once and emit hold_form once, inside contract C2 | 2026-11-19 | 0 | - | ✓ |
-| [#9170](https://github.com/DanielH2018/server/issues/9170) | low | improvement | docs | Repoint the plan citations on rendered comment lines, after #9014 moves the plans | 2026-11-19 | 0 | - | ✓ |
+| [#9156](https://github.com/DanielH2018/server/issues/9156) | low | improvement | cicd | Three comment-trim leftovers the sweep did not reach: a Kuma receiver label, a stale pytest-hook comment and the Renovate descriptions | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
+| [#9170](https://github.com/DanielH2018/server/issues/9170) | low | improvement | docs | Repoint the plan citations on rendered comment lines, after #9014 moves the plans | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9181](https://github.com/DanielH2018/server/issues/9181) | low | gap | security | Name the T2 session caller that connects to cafe.github.com | 2026-11-19 | 0 | - | ✓ |
 | [#9200](https://github.com/DanielH2018/server/issues/9200) | low | gap | cicd | fanout status shows a finished batch as needs-input when its GitHub read fails | 2026-11-19 | 0 | - | ✓ |
 | [#9202](https://github.com/DanielH2018/server/issues/9202) | low | improvement | backup-observability | Airflow task logs vanish with their task pod | 2026-11-19 | 0 | - | - |
 | [#9205](https://github.com/DanielH2018/server/issues/9205) | low | gap | docs | ADR 0026 still says the kuma-check timers keep their names, which the tree contradicts | 2026-11-19 | 0 | - | ✓ |
-| [#9206](https://github.com/DanielH2018/server/issues/9206) | low | improvement | cicd | Stale down markers can keep /var/lib/kuma-check on the hosts with no legacy entry to remove them | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
 | [#9210](https://github.com/DanielH2018/server/issues/9210) | low | gap | cicd | cc-wait landing-clear returns at once while a forward-only landing holds the line | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
 | [#9211](https://github.com/DanielH2018/server/issues/9211) | low | improvement | cicd | The secret-rotation audit timer test pins an 08:30 slot whose reason is gone | 2026-11-19 | 0 | - | ✓ |
 | [#9218](https://github.com/DanielH2018/server/issues/9218) | low | gap | cicd | A milestone wait does not end when milestone add files an older issue in the project | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
-| [#9219](https://github.com/DanielH2018/server/issues/9219) | low | improvement | cicd | bootstrap-drill.yml fetches flux, sops and kind inline instead of through the pinned-tool action | 2026-11-19 | 0 | - | ✓ |
-| [#9220](https://github.com/DanielH2018/server/issues/9220) | low | improvement | cicd | flux-deletion-drill.yml fetches flux, kind and cosign inline, and pinned-tool cannot fetch cosign | 2026-11-19 | 0 | - | ✓ |
-| [#9221](https://github.com/DanielH2018/server/issues/9221) | low | improvement | cicd | prune-artifacts.yml fetches cosign inline instead of through the pinned-tool action | 2026-11-19 | 0 | - | ✓ |
-| [#9222](https://github.com/DanielH2018/server/issues/9222) | low | improvement | cicd | promote.yml's promote job fetches cosign inline although it checks the repository out | 2026-11-19 | 0 | - | ✓ |
-| [#9223](https://github.com/DanielH2018/server/issues/9223) | low | improvement | cicd | The pytest-tools action fetches sops inline instead of through the pinned-tool action | 2026-11-19 | 0 | - | ✓ |
-| [#9224](https://github.com/DanielH2018/server/issues/9224) | low | improvement | cicd | ci.yml's host-package legs repeat the hand-off download, unpack and tools-cache restore | 2026-11-19 | 0 | - | ✓ |
-| [#9225](https://github.com/DanielH2018/server/issues/9225) | low | gap | cicd | ci.yml downloads the Vale release with no sha256 check | 2026-11-19 | 0 | - | ✓ |
+| [#9221](https://github.com/DanielH2018/server/issues/9221) | low | improvement | cicd | prune-artifacts.yml fetches cosign inline instead of through the pinned-tool action | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
+| [#9222](https://github.com/DanielH2018/server/issues/9222) | low | improvement | cicd | promote.yml's promote job fetches cosign inline although it checks the repository out | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
+| [#9224](https://github.com/DanielH2018/server/issues/9224) | low | improvement | cicd | ci.yml's host-package legs repeat the hand-off download, unpack and tools-cache restore | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
 | [#9232](https://github.com/DanielH2018/server/issues/9232) | low | gap | cicd | The orphan-branch sweep never lists a desktop app's claude/* branch | 2026-11-19 | 0 | - | ✓ |
-| [#9233](https://github.com/DanielH2018/server/issues/9233) | low | improvement | cicd | The denylist-marker census still expands Renovate's annotation manager in Python | 2026-11-19 | 0 | - | ✓ |
 | [#9235](https://github.com/DanielH2018/server/issues/9235) | low | improvement | cicd | Fold the Renovate packageRules policy guards into one table-driven test module | 2026-11-19 | 0 | - | ✓ |
 | [#9237](https://github.com/DanielH2018/server/issues/9237) | low | improvement | cicd | Most single-predicate check files in tests/repo and tests/services are still files, not rows | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
-| [#9238](https://github.com/DanielH2018/server/issues/9238) | low | feature | cicd | No report lists check files that cite an incident and have not failed in months | 2026-11-19 | 0 | - | ✓ |
 | [#9239](https://github.com/DanielH2018/server/issues/9239) | low | gap | container | The DRI device plugin reported no healthy device for two minutes without a reboot — *no vetted remediation* | 2026-11-19 | 0 | - | ✓ |
 | [#9240](https://github.com/DanielH2018/server/issues/9240) | low | improvement | security | Five declared users keep gids from before the 900-949 band | 2026-11-19 | 0 | - | ✓ |
 | [#9246](https://github.com/DanielH2018/server/issues/9246) | low | improvement | cicd | promote.yml step scripts print literal ::error:: guard lines in their own step headers | 2026-11-19 | 1 | - | ✓ |
-| [#9251](https://github.com/DanielH2018/server/issues/9251) | low | improvement | cicd | k8s_manifests.py keeps its own entry point and hook beside render_templates.py | 2026-11-19 | 0 | - | ✓ |
+| [#9251](https://github.com/DanielH2018/server/issues/9251) | low | improvement | cicd | k8s_manifests.py keeps its own entry point and hook beside render_templates.py | 2026-11-19 | 0 | claude/coord-ci-cleanup-2151e1 | ✓ |
 | [#9256](https://github.com/DanielH2018/server/issues/9256) | low | improvement | cicd | gh-quota status shows no count of recent writes against GitHub's secondary limits | 2026-11-19 | 0 | - | ✓ |
-| [#9265](https://github.com/DanielH2018/server/issues/9265) | low | improvement | security | Type the secrets rotation registry, reaper config, Renovate author and Sonarr quality at their boundaries | 2026-11-19 | 0 | - | ✓ |
-| [#9268](https://github.com/DanielH2018/server/issues/9268) | low | improvement | cicd | Scripts packaging slice 0: put scripts/sitecustomize and scripts/usercustomize on the land approval list | 2026-11-19 | 0 | - | ✓ |
-| [#9269](https://github.com/DanielH2018/server/issues/9269) | low | improvement | cicd | Scripts packaging slice 0: a snapshot uv helper, so a land-gate run cannot re-point the caller's .pth | 2026-11-19 | 0 | - | ✓ |
-| [#9270](https://github.com/DanielH2018/server/issues/9270) | low | improvement | cicd | Scripts packaging slice 1: install scripts/ in place (package = true, uv_build) | 2026-11-19 | 0 | - | ✓ |
-| [#9271](https://github.com/DanielH2018/server/issues/9271) | low | improvement | cicd | Scripts packaging slice 2: no-venv launchers set PYTHONPATH to their checkout's scripts/ | 2026-11-19 | 0 | worktree-scripts-packaging | ✓ |
 | [#9272](https://github.com/DanielH2018/server/issues/9272) | low | gap | network | ssh daniel-pi from daniel-server fails host key verification | 2026-11-19 | 0 | - | ✓ |
-| [#9273](https://github.com/DanielH2018/server/issues/9273) | low | improvement | cicd | Scripts packaging slice 3: lib qualifies its imports, adds host_modules.py and the codemod | 2026-11-19 | 0 | - | ✓ |
+| [#9273](https://github.com/DanielH2018/server/issues/9273) | low | improvement | cicd | Scripts packaging slice 3: lib qualifies its imports, adds host_modules.py and the codemod | 2026-11-19 | 0 | worktree-scripts-packaging | ✓ |
 | [#9274](https://github.com/DanielH2018/server/issues/9274) | low | improvement | cicd | Scripts packaging slice 3: deploy_tools qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9275](https://github.com/DanielH2018/server/issues/9275) | low | improvement | cicd | Scripts packaging slice 3: renderer qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9276](https://github.com/DanielH2018/server/issues/9276) | low | improvement | cicd | Scripts packaging slice 3: secrets_mgmt qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
@@ -156,15 +127,28 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9280](https://github.com/DanielH2018/server/issues/9280) | low | improvement | cicd | Scripts packaging slice 3: docs qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9281](https://github.com/DanielH2018/server/issues/9281) | low | improvement | cicd | Delete the unread pytest_shard_weights.json once no open PR edits it | 2026-11-19 | 0 | - | ✓ |
 | [#9282](https://github.com/DanielH2018/server/issues/9282) | low | improvement | cicd | Scripts packaging slice 3: backup qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
-| [#9283](https://github.com/DanielH2018/server/issues/9283) | low | improvement | backup-observability | The host-plane promtool tests still assert each table entry on every host | 2026-11-19 | 0 | - | ✓ |
 | [#9284](https://github.com/DanielH2018/server/issues/9284) | low | improvement | cicd | Scripts packaging slice 3: infra_map qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9285](https://github.com/DanielH2018/server/issues/9285) | low | improvement | cicd | Scripts packaging slice 3: home_assistant qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9286](https://github.com/DanielH2018/server/issues/9286) | low | improvement | cicd | Scripts packaging slice 3: grafana qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9287](https://github.com/DanielH2018/server/issues/9287) | low | improvement | cicd | Scripts packaging slice 3: freshrss qualifies its imports and drops its bootstraps | 2026-11-19 | 0 | - | ✓ |
 | [#9288](https://github.com/DanielH2018/server/issues/9288) | low | improvement | cicd | Scripts packaging slice 4: retire the flat-layout machinery and the scripts/ pythonpath entries | 2026-11-19 | 0 | - | ✓ |
 | [#9295](https://github.com/DanielH2018/server/issues/9295) | low | gap | - | zigbee2mqtt broker-wait tests leave accept threads blocked and listeners bound for the rest of the session | 2026-11-19 | 0 | - | ✓ |
-| [#9298](https://github.com/DanielH2018/server/issues/9298) | low | improvement | cicd | The merged render-template hook runs all four families when one family's input changes | 2026-11-19 | 0 | - | ✓ |
-| [#9299](https://github.com/DanielH2018/server/issues/9299) | low | improvement | cicd | phase_timing still measures the collect-cost guard, so #9009 could not retire it | 2026-11-19 | 0 | - | ✓ |
+| [#9313](https://github.com/DanielH2018/server/issues/9313) | low | gap | cicd | The fan-out brief names pytest_shard.py --record-files, which no longer exists | 2026-11-19 | 0 | - | ✓ |
+| [#9314](https://github.com/DanielH2018/server/issues/9314) | low | improvement | cicd | The single-predicate refusal row sees only modules of three tests or fewer, so the ci.yml property checks stay files | 2026-11-19 | 0 | worktree-simplification-audit-wave3 | ✓ |
+| [#9315](https://github.com/DanielH2018/server/issues/9315) | low | improvement | cicd | The four prepull checks in tests/services render a Flux cluster of their own, which the property table cannot select | 2026-11-19 | 0 | worktree-fanout-orch-2026-11-19 | ✓ |
+| [#9319](https://github.com/DanielH2018/server/issues/9319) | low | improvement | cicd | Parse the remaining CI check readers into CheckRun and a CheckSuite type | 2026-11-19 | 0 | - | ✓ |
+| [#9328](https://github.com/DanielH2018/server/issues/9328) | low | improvement | cicd | Route the remaining registry and Renovate readers through the typed boundaries #9265 added | 2026-11-19 | 0 | - | ✓ |
+| [#9338](https://github.com/DanielH2018/server/issues/9338) | low | improvement | docs | bridge-exporter.yaml's startup-grace comment names six rows and a function that no longer exists | 2026-11-19 | 0 | claude/coord-alert-noise-d7b708 | ✓ |
+| [#9341](https://github.com/DanielH2018/server/issues/9341) | low | improvement | cicd | Delete the unused SESSION_ENV_FILE constant from renovate_session.py and its vulture ignore | 2026-11-19 | 0 | - | ✓ |
+| [#9342](https://github.com/DanielH2018/server/issues/9342) | low | improvement | cicd | Delete the two live lowered-entry ratchet tests the exact-match rule made redundant | 2026-11-19 | 0 | - | ✓ |
+| [#9347](https://github.com/DanielH2018/server/issues/9347) | low | gap | cicd | The render-template hook does not run when only a role's defaults/main.yml changes | 2026-11-19 | 0 | claude/coord-ci-cleanup-2151e1 | ✓ |
+| [#9348](https://github.com/DanielH2018/server/issues/9348) | low | improvement | - | Parse a k8s role's defaults once into RoleDefaults | 2026-11-19 | 0 | - | ✓ |
+| [#9349](https://github.com/DanielH2018/server/issues/9349) | low | improvement | - | Load each host package.yml and component.yml once into a PackageSpec / ComponentSpec in validate_lib | 2026-11-19 | 0 | - | ✓ |
+| [#9354](https://github.com/DanielH2018/server/issues/9354) | low | improvement | cicd | Clear the 26-file backlog of unused parameters that ARG001 and ARG002 ignore | 2026-11-19 | 0 | - | ✓ |
+| [#9371](https://github.com/DanielH2018/server/issues/9371) | low | improvement | cicd | Six k8s role comments name the removed validate/k8s_manifests.py | 2026-11-19 | 0 | - | ✓ |
+| [#9376](https://github.com/DanielH2018/server/issues/9376) | low | improvement | docs | Repoint the observability role's rendered plan citations to docs/archive (#9170 slice 2) | 2026-11-19 | 0 | - | ✓ |
+| [#9377](https://github.com/DanielH2018/server/issues/9377) | low | improvement | docs | Repoint the monitor-bridge and crowdsec shipped plan citations to docs/archive (#9170 slice 3) | 2026-11-19 | 0 | - | ✓ |
+| [#9378](https://github.com/DanielH2018/server/issues/9378) | low | improvement | docs | Repoint the last rendered plan citations and delete the remaining target-architecture stubs (#9170 slice 4) | 2026-11-19 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -204,14 +188,7 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 |---|---|---|
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | #8296 | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems |
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
-| [#9040](https://github.com/DanielH2018/server/issues/9040) | #9022, #9037 | Decide whether one golden snapshot per host package replaces the 80 render-and-grep test files |
-| [#9170](https://github.com/DanielH2018/server/issues/9170) | #9014, #9162 | Repoint the plan citations on rendered comment lines, after #9014 moves the plans |
-| [#9221](https://github.com/DanielH2018/server/issues/9221) | #9220 | prune-artifacts.yml fetches cosign inline instead of through the pinned-tool action |
-| [#9222](https://github.com/DanielH2018/server/issues/9222) | #9220 | promote.yml's promote job fetches cosign inline although it checks the repository out |
-| [#9233](https://github.com/DanielH2018/server/issues/9233) | #9030 | The denylist-marker census still expands Renovate's annotation manager in Python |
-| [#9235](https://github.com/DanielH2018/server/issues/9235) | #9030 | Fold the Renovate packageRules policy guards into one table-driven test module |
-| [#9270](https://github.com/DanielH2018/server/issues/9270) | #9268, #9269 | Scripts packaging slice 1: install scripts/ in place (package = true, uv_build) |
-| [#9273](https://github.com/DanielH2018/server/issues/9273) | #9270, #9271 | Scripts packaging slice 3: lib qualifies its imports, adds host_modules.py and the codemod |
+| [#9040](https://github.com/DanielH2018/server/issues/9040) | #9037 | Decide whether one golden snapshot per host package replaces the 80 render-and-grep test files |
 | [#9274](https://github.com/DanielH2018/server/issues/9274) | #9273 | Scripts packaging slice 3: deploy_tools qualifies its imports and drops its bootstraps |
 | [#9275](https://github.com/DanielH2018/server/issues/9275) | #9273 | Scripts packaging slice 3: renderer qualifies its imports and drops its bootstraps |
 | [#9276](https://github.com/DanielH2018/server/issues/9276) | #9273 | Scripts packaging slice 3: secrets_mgmt qualifies its imports and drops its bootstraps |
@@ -225,7 +202,8 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 | [#9286](https://github.com/DanielH2018/server/issues/9286) | #9273 | Scripts packaging slice 3: grafana qualifies its imports and drops its bootstraps |
 | [#9287](https://github.com/DanielH2018/server/issues/9287) | #9273 | Scripts packaging slice 3: freshrss qualifies its imports and drops its bootstraps |
 | [#9288](https://github.com/DanielH2018/server/issues/9288) | #9273, #9274, #9275, #9276, #9277, #9278, #9279, #9280, #9282, #9284, #9285, #9286, #9287 | Scripts packaging slice 4: retire the flat-layout machinery and the scripts/ pythonpath entries |
-| [#9298](https://github.com/DanielH2018/server/issues/9298) | #9029 | The merged render-template hook runs all four families when one family's input changes |
+| [#9377](https://github.com/DanielH2018/server/issues/9377) | #9376 | Repoint the monitor-bridge and crowdsec shipped plan citations to docs/archive (#9170 slice 3) |
+| [#9378](https://github.com/DanielH2018/server/issues/9378) | #9377 | Repoint the last rendered plan citations and delete the remaining target-architecture stubs (#9170 slice 4) |
 
 ## Settled findings — do not re-flag
 
@@ -318,6 +296,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#8774](https://github.com/DanielH2018/server/issues/8774) | accepted | 44 workflow runs from 2026-11-11 read as queued forever and inflate every count of the run queue | GitHub refuses cancel, force-cancel and delete on all 45 runs (comment 6899964353), and no repo tool counts the queued listing; an ad-hoc queued read subtracts runs created before 2026-11-12. The operator accepted this on 2026-11-15. |
 | [#8979](https://github.com/DanielH2018/server/issues/8979) | accepted | Renderer: build file-embedding ConfigMaps from a declared file list, not lookup \| indent | A survey on 2026-11-18 found only 8 ConfigMap templates that are pure file embeds, about 14 of the 77 lookup\|indent sites; the rest sit in templates that also do other things or that another template hashes by source text. A generator for 8 small templates adds about 50 renderer lines and removes about the same in templates, so the operator chose to keep the hand-written embeds. |
 | [#8980](https://github.com/DanielH2018/server/issues/8980) | accepted | Renderer: move config-payload secrets to env or file reads so rule 5 can narrow | Census on 2026-11-19: rule 5 finds 40 templates naming a key, and at least 13 must keep naming one by design (5 SOPS-manifest Secrets the sops-manifest-entries clause finds through rule 5's walk, 3 flat Secrets #9070 kept as templates, and 5 non-payload uses: the arr verify notifications, Longhorn's R2 target URL, traefik's ACME email). Rule 5's walk therefore stays whatever the other 27 payloads do, so moving them costs per-app deploy risk and deletes no code; the operator chose to keep the splices. |
+| [#9022](https://github.com/DanielH2018/server/issues/9022) | refuted | 60 host timers follow one hand-written shape, and 24 test files hold each schedule equal to a default | Re-measured on 2026-11-19 against origin/master at 150b7866e: 61 timers in 727 lines, and only 23 fit one shape, so a timers key saves 50 to 200 lines against the 1,500 the finding claimed, and generated units would rewrite every timer on all three hosts. Operator ruled to close on 2026-11-19. |
 | [#9024](https://github.com/DanielH2018/server/issues/9024) | refuted | promote.yml runs the promotion state machine as inline bash that no unit test calls | Contract C2 (docs/target-architecture/contracts.md:213-233) keeps the write jobs' bash inline, and the operator kept C2 on 2026-11-19. Six modules under scripts/deploy_tools/tests/ already run that bash under fake flux, gh, docker and curl, so it is not untested. |
 
 ### container
@@ -346,6 +325,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#7232](https://github.com/DanielH2018/server/issues/7232) | accepted | Read the G3 freshness measurement and bring the operator the decision | Operator declined G3 on 2026-11-12: post-G2 share 0.53 vs G1 0.675, above the 0.34 build threshold |
 | [#7505](https://github.com/DanielH2018/server/issues/7505) | accepted | Write the Pi rebuild runbook now every Pi package step is live | The operator ruled on 2026-11-08 not to run the Pi rebuild drill. The runbook in docs/break-glass.md (#7518) stays undrilled, and that page's drill table already marks it No. |
 | [#8418](https://github.com/DanielH2018/server/issues/8418) | refuted | design.md's docs-guard paragraph numbers slices G2 and G4 differently from the slice table and the slice files | The filer misread the paragraph. In design.md's docs-guard section, 'Removes by construction: G1, ...; G2, ...; and G4, ...' labels defect classes and defines each one inline, as the monitoring section does with 'D1 to D3'. It does not number slices. The slice table and the slice files agree with each other. The section does reuse the letters G1 to G5 for both defect classes and slices, which is what caused the misread, but no statement in it is wrong. |
+| [#9027](https://github.com/DanielH2018/server/issues/9027) | refuted | Three doc-sync tools each bring their own driver, prek hook and equality test | Re-measured on 2026-11-19 against origin/master at 150b7866e: the three doc-sync tools share 146 driver lines, and the tree keeps them apart on purpose for the docs-refresh cron, so one engine saves 100 to 300 lines against the estimate and couples a commit-time hook to the cron. Operator ruled to close on 2026-11-19. |
 
 ### network
 

@@ -17,6 +17,7 @@ import re
 import pytest
 
 from _renovate import (
+    EXPECTED_DEPS,
     N8N_ROLE_DIR,
     N8N_PIN_HISTORY,
     N8N_PINS,
@@ -28,27 +29,13 @@ from _renovate import (
 )
 
 
-# Renovate's BUILT-IN dockerfile manager's default managerFilePatterns, copied verbatim from source
-# (lib/modules/manager/dockerfile/index.ts). Only that manager tracks the fleet's Dockerfile base
-# pins, so a build file outside these shapes drops out of update tracking with no signal. The 2nd
-# pattern's `[^/]*$` matches suffixed names (`Dockerfile-runners.j2` IS visible); upstream is
-# `[Cc]ontainer`.
-DOCKERFILE_MANAGER_FILE_RES = [
-    re.compile(r"(^|/|\.)([Dd]ocker|[Cc]ontainer)file$"),
-    re.compile(r"(^|/)([Dd]ocker|[Cc]ontainer)file[^/]*$"),
-]
-
-
 def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
-    """Every FROM-bearing build file must sit where Renovate's dockerfile manager looks.
+    """Every FROM-bearing build file must be one Renovate's dockerfile manager extracts from.
 
-    The compose-template guard above covers `image:` lines; this is its sibling for built
-    images. Discovery is by CONTENT (any tracked k8s/ file with a FROM line), not by
-    name, so the check doesn't share the blind spot it guards against.
-
-    Whether the FROM carries a version is a separate question, and its own test below —
-    this one is purely about file NAMING, so a build file renamed out of the manager's
-    filePatterns still fails here even when its pin is explicit.
+    The table of what Renovate's extract finds (`scripts/validate/renovate_expected_deps.tsv`,
+    checked in CI) names the files. Discovery is by CONTENT (any tracked k8s/ file with a FROM
+    line), not by name, so a build file renamed out of the manager's filePatterns fails here
+    even when its pin is explicit. Whether the FROM carries a version is the next test.
     """
     from_re = re.compile(r"^FROM\s+\S+", re.MULTILINE)
     build_files = [
@@ -61,15 +48,11 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
     assert build_files, (
         "no FROM-bearing build files found under k8s/ (discovery drifted?)"
     )
-    escaped = [
-        f
-        for f in build_files
-        if not any(r.search(f) for r in DOCKERFILE_MANAGER_FILE_RES)
-    ]
+    extracted = {d.file for d in EXPECTED_DEPS if d.manager == "dockerfile"}
+    escaped = [f for f in build_files if f not in extracted]
     assert not escaped, (
-        "Build file(s) with a FROM line that Renovate's dockerfile manager will NOT scan "
-        "(name doesn't match its filePatterns) — their base-image pins will age silently:\n"
-        + "\n".join(escaped)
+        "Build file(s) with a FROM line that Renovate's dockerfile manager extracts nothing from "
+        "— their base-image pins will age silently:\n" + "\n".join(escaped)
     )
 
 
@@ -304,7 +287,7 @@ def test_shellcheck_py_pins_in_lockstep() -> None:
 
     The two pins back DIFFERENT execution paths of the same tool — the prek hook env lints
     committed shell scripts, the pyproject dev dep lints RENDERED .sh.j2 output via
-    validate.shell_templates — so a version skew means the two gates disagree about the same
+    validate.render_lib.shell — so a version skew means the two gates disagree about the same
     code. They are tracked by different Renovate datasources (github-tags vs pypi); a
     packageRule groups them into one PR, and this asserts that coupling actually held.
     """

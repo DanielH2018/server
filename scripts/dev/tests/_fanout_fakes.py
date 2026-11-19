@@ -81,6 +81,7 @@ def fake_tools(
     signing_error=None,
     merged_prs=None,
     branch_prs=None,
+    open_prs=(),
     findings_exit=0,
     refused_claims=(),
     head="worktree-orch",
@@ -101,6 +102,8 @@ def fake_tools(
             reads as in the real thing.
         branch_prs: branch -> the PR urls GitHub holds for it, newest first, as `branch_prs`
             answers. A branch absent from it has none; an entry of None is a read that failed.
+        open_prs: the head branches of the repo's open PRs, as `open_pr_branches` answers;
+            None is a read that failed.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
             in the FakeRun's `calls` under the pseudo-host `findings`.
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
@@ -160,6 +163,7 @@ def fake_tools(
         merged_pr=merged_pr,
         branch_prs=branch_pr_urls,
         earlier_prs=lambda *_: [],
+        open_pr_branches=lambda repo: None if open_prs is None else frozenset(open_prs),
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,

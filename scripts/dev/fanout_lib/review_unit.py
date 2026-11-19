@@ -41,7 +41,13 @@ def main(argv=None) -> int:
 
 
 def build(argv: list[str] | None, brief: str) -> Pipeline:
-    """The pipeline `argv` describes, in the cwd's worktree, fed `brief`."""
+    """The pipeline `argv` describes, in the cwd's worktree, fed `brief`.
+
+    It drops the launcher's `PYTHONPATH` from the environment the phases' children inherit.
+    That root names this batch's tree, and a child in another checkout, such as land.sh's
+    fresh one, would import from it ahead of its own `.pth`.
+    """
+    os.environ.pop("PYTHONPATH", None)
     p = ArgumentParser(
         prog="fanout.py review", description=__doc__.splitlines()[0], allow_abbrev=False
     )

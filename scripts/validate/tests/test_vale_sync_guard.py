@@ -59,8 +59,8 @@ printf 'lint %s\\n' "$*" >>"$VALE_LOG"
 exit 0
 """
 
-# Deliberately not in `releases/download/v<version>/` shape: `test_renovate_release_urls.py`
-# reads every tracked file for that pattern and demands a Renovate manager scan the file.
+# Deliberately not in `releases/download/v<version>/` shape: `renovate_extract.py check`
+# reads every tracked file for that pattern and demands a Renovate manager extract from it.
 # This is a fixture, not a pin.
 PACKAGES_URL = "https://example.invalid/style-packages/Google-v0.7.1.zip"
 

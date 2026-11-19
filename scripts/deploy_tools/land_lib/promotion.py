@@ -6,7 +6,7 @@ wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_
 on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
 tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
 bundle file waits on `homelab` alone and gates no tag. The plan is
-docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
+docs/archive/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
 
 `wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its outcomes map to a
 landing's words:
@@ -31,6 +31,7 @@ tags too, when only some were. Either way the gate leaves the suspended tags out
 
 import subprocess
 from collections.abc import Sequence
+from typing import assert_never
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -44,6 +45,7 @@ from deploy_tools.land_lib.outcome import (
     host_not_waited_note,
     say,
 )
+from deploy_tools.promote_lib.wait import WaitVerdict
 from lib.path_kinds import is_doc, is_test_only_path
 
 
@@ -196,62 +198,73 @@ def wait_on_promotion(ln: Landing) -> None:
             f"suspended at {sha[:12]}, so neither waited on nor gated: "
             + ", ".join(result.suspended)
         )
-    if result.verdict == "settled":
-        say(f"promoted: {result.detail}")
-        return
-    print(f"  {result.detail}")
-    # DECIDED: `suspended`, every published tag suspended, ends the landing as
-    # `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still
-    # waits on, or a plane is owed a hand, which ends `needs-manual-apply` as in
-    # `no_tag_outcome`. The suspend PR itself owes neither and ends at exit 0, so a failure
-    # verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume
-    # point, and a re-run waits on the same suspended tag again. A change that raced the gate onto
-    # a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
-    if result.verdict == "suspended":
-        if ln.host_targets and not ln.plane:
+    if result.verdict != WaitVerdict.SETTLED:
+        print(f"  {result.detail}")
+    match result.verdict:
+        case WaitVerdict.SETTLED:
+            say(f"promoted: {result.detail}")
             return
-        if ln.plane:
-            _print_what_else_it_owes(ln)
+        # DECIDED: `suspended`, every published tag suspended, ends the landing as
+        # `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still
+        # waits on, or a plane is owed a hand, which ends `needs-manual-apply` as in
+        # `no_tag_outcome`. The suspend PR itself owes neither and ends at exit 0, so a failure
+        # verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume
+        # point, and a re-run waits on the same suspended tag again. A change that raced the gate onto
+        # a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
+        case WaitVerdict.SUSPENDED:
+            if ln.host_targets and not ln.plane:
+                return
+            if ln.plane:
+                _print_what_else_it_owes(ln)
+                ln.finish(
+                    Verdict.NEEDS_MANUAL_APPLY,
+                    1,
+                    f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}, "
+                    "and what it owes a hand is above",
+                )
             ln.finish(
-                Verdict.NEEDS_MANUAL_APPLY,
-                1,
-                f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}, "
-                "and what it owes a hand is above",
+                Verdict.NOTHING_TO_DEPLOY,
+                0,
+                f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
             )
-        ln.finish(
-            Verdict.NOTHING_TO_DEPLOY,
-            0,
-            f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
-        )
-    _print_what_else_it_owes(ln)
-    if result.verdict == "deploy-failed" and result.cause == Cause.SOAK_FAILED:
-        ln.ledger.cause = Cause.SOAK_FAILED
-        ln.finish(
-            Verdict.DEPLOY_FAILED,
-            1,
-            f"PR #{pr}, {sha} — the soak failed on {result.revision[:12]}, so promote's "
-            f"verify holds it and {tags} is not verified",
-        )
-    if result.verdict == "deploy-failed":
-        ln.ledger.cause = Cause.PROMOTE_HELD
-        ln.ledger.hold_sha, ln.ledger.hold_owner = result.hold_sha, result.hold_owner
-        ln.finish(
-            Verdict.DEPLOY_FAILED,
-            1,
-            f"PR #{pr}, {sha} — DEPLOY_HOLD holds promotion, so {tags} is not applied",
-        )
-    if result.cause == Cause.GATE_UNREADABLE:
-        ln.ledger.cause = Cause.GATE_UNREADABLE
-        ln.finish(
-            Verdict.DEFERRED,
-            75,
-            f"PR #{pr}, {sha} — this host could not read the cluster, so the promotion "
-            f"wait ended at once; {tags} not verified",
-        )
-    print(PROMOTE_TIMEOUT_NOTE)
-    ln.ledger.cause = Cause.PROMOTE_TIMEOUT
-    ln.finish(
-        Verdict.DEFERRED,
-        75,
-        f"PR #{pr}, {sha} — no promotion covered it in time; {tags} not yet applied",
-    )
+        case WaitVerdict.DEPLOY_FAILED if result.cause == Cause.SOAK_FAILED:
+            _print_what_else_it_owes(ln)
+            ln.ledger.cause = Cause.SOAK_FAILED
+            ln.finish(
+                Verdict.DEPLOY_FAILED,
+                1,
+                f"PR #{pr}, {sha} — the soak failed on {result.revision[:12]}, so promote's "
+                f"verify holds it and {tags} is not verified",
+            )
+        case WaitVerdict.DEPLOY_FAILED:
+            _print_what_else_it_owes(ln)
+            ln.ledger.cause = Cause.PROMOTE_HELD
+            ln.ledger.hold_sha, ln.ledger.hold_owner = (
+                result.hold_sha,
+                result.hold_owner,
+            )
+            ln.finish(
+                Verdict.DEPLOY_FAILED,
+                1,
+                f"PR #{pr}, {sha} — DEPLOY_HOLD holds promotion, so {tags} is not applied",
+            )
+        case WaitVerdict.GAVE_UP if result.cause == Cause.GATE_UNREADABLE:
+            _print_what_else_it_owes(ln)
+            ln.ledger.cause = Cause.GATE_UNREADABLE
+            ln.finish(
+                Verdict.DEFERRED,
+                75,
+                f"PR #{pr}, {sha} — this host could not read the cluster, so the promotion "
+                f"wait ended at once; {tags} not verified",
+            )
+        case WaitVerdict.GAVE_UP:
+            _print_what_else_it_owes(ln)
+            print(PROMOTE_TIMEOUT_NOTE)
+            ln.ledger.cause = Cause.PROMOTE_TIMEOUT
+            ln.finish(
+                Verdict.DEFERRED,
+                75,
+                f"PR #{pr}, {sha} — no promotion covered it in time; {tags} not yet applied",
+            )
+        case unknown:
+            assert_never(unknown)

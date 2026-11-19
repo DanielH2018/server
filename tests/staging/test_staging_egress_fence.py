@@ -83,7 +83,7 @@ def _rendered_filter():
     """The nwfilter as the setup plane renders it, parsed as the XML libvirt will be handed.
 
     `_setup_render` rather than a hand-built context: it is the same layering
-    `validate/setup_templates.py` renders this role with, so a value that moves between
+    `validate/render_lib/setup_plane.py` renders this role with, so a value that moves between
     `group_vars/all.yml` and the role's defaults cannot change what this guard sees.
     """
     rendered = rendered_component_text("hypervisor", "staging-nwfilter.xml.j2")

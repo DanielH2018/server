@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Shared helpers for the render-guard scripts and other Ansible-inventory readers.
 
-Used by ``validate/compose_templates.py``, ``validate/k8s_manifests.py``, and
-``validate/shell_templates.py``, plus the other scripts that read the same Ansible
+Used by ``validate/render_lib/compose.py``, ``validate/k8s_manifests.py``, and
+``validate/render_lib/shell.py``, plus the other scripts that read the same Ansible
 inventory.
 
 Each render guard renders Jinja templates with stubbed variables and asserts the output is valid
@@ -83,6 +83,7 @@ __all__ = [
 # no longer reading the ref the cluster gets. The digests are arbitrary; their SHAPE and this
 # map's keys are asserted by tests/k8s/test_built_images_name_the_content_tag.py.
 BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
+    "airflow": "sha-a1f10e0aaaaa",
     "code-server": "sha-c0de5e2e7000",
     "homelab-mcp": "sha-70c1ab0e1111",
     "ical-proxy": "sha-1ca17e2d2222",
@@ -124,10 +125,10 @@ class StubUndefined(ChainableUndefined):
         return iter(())
 
     def __add__(self, other):  # {{ secret | indent(n) }}
-        return self._FILL + str(other)
+        return str(self) + str(other)
 
     def __radd__(self, other):
-        return str(other) + self._FILL
+        return str(other) + str(self)
 
 
 class StrictChainableUndefined(ChainableUndefined, StrictUndefined):

@@ -20,17 +20,26 @@ _GAVE_UP = "75"
 HOLD_OWN = "own"
 HOLD_OTHER = "other"
 PROMOTE_HELD = "promote-held"
+LANDING_LIVE = "landing-live"
 # What a batch's final line opens with when its landing waits on a hold or a rule that is
 # not its own. `status.PARKED_LINE` matches it.
 PARKED = "parked:"
+
+
+def another_has_it(result: Mapping[str, str]) -> bool:
+    """Whether `land.sh` started no landing because another landing of the PR is live."""
+    return result.get("cause") == LANDING_LIVE
 
 
 def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
     """The `parked:` line for a landing that waits on something not its own, or "".
 
     Read from the `LAND-RESULT:` fields alone, so rewording a landing message changes nothing
-    here. Two landings park:
+    here. Three landings park:
 
+    - one that never started, because another landing of the PR is live
+      (`land_lib/pr_lock.py`, exit 75). That landing's verdict is the PR's, and the line
+      quotes the command that waits on it;
     - one a rule refused before its merge (`land_lib/slots.py`, exit 75), which merged nothing;
     - one that merged and ended `deploy-failed` behind a `DEPLOY_HOLD` whose failed names are
       not this PR's services. A hold that names no failure, or a PR with no service, parks
@@ -43,8 +52,13 @@ def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
         verdict_line: the landing's `VERDICT:` line, quoted as the reason of a refusal.
     """
     pr = result.get("pr", "")
+    detail = _VERDICT_DETAIL.match(verdict_line)
+    if another_has_it(result):
+        why = detail.group(1) if detail else f"wait with cc-wait land {pr}"
+        return (
+            f"{PARKED} another landing has it, so none started; do not re-land ({why})"
+        )
     if result.get("verdict") == "refused" and result.get("exit") == _GAVE_UP:
-        detail = _VERDICT_DETAIL.match(verdict_line)
         why = detail.group(1) if detail else "a landing rule"
         return (
             f"{PARKED} refused before merge ({why}); re-land with land.sh --pr {pr} "

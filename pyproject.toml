@@ -9,8 +9,17 @@ dependencies = [
   "jinja2>=3",
 ]
 
+[build-system]
+requires = ["uv_build>=0.13,<0.15"]
+build-backend = "uv_build"
+
 [tool.uv]
-package = false                      # virtual project: manage deps/lock, do not build the repo
+# `scripts/` is installed in place as the one import root: the editable install's `.pth` puts it
+# on sys.path (docs/adr/0039-scripts-is-installed-in-place.md).
+package = true
+# The same range as `uv_build` above, so every uv that syncs uses its bundled backend rather than
+# fetching one. CI's setup-uv reads this too.
+required-version = ">=0.13,<0.15"
 default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops only `dev`
 # DECIDED: no `compile-bytecode` here. uv applies it to the sync inside every `uv run`, which
 # then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit
@@ -24,12 +33,33 @@ default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops o
 [tool.uv.extra-build-variables]
 pyyaml = { PYYAML_FORCE_LIBYAML = "1" }
 
+# Each area under `scripts/` is a PEP 420 namespace package with no `__init__.py`, imported from
+# the root as `lib.x`, `dev.x`, `renderer.x`.
+[tool.uv.build-backend]
+module-root = "scripts"
+namespace = true
+module-name = [
+  "backup",
+  "deploy_tools",
+  "dev",
+  "diagnostics",
+  "docs",
+  "freshrss",
+  "grafana",
+  "home_assistant",
+  "infra_map",
+  "lib",
+  "renderer",
+  "secrets_mgmt",
+  "validate",
+]
+
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
   "requests",                       # ical-proxy ical_proxy.py imports requests (test_app.py)
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
-  "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
+  "shellcheck-py==0.11.0.1",        # validate.render_lib.shell; pinned to match prek.toml's shellcheck-py rev
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "jsonschema",                     # validate.k8s_manifests checks every object against the
   # schemas vendored in scripts/validate/schemas/: Kubernetes'
@@ -261,6 +291,11 @@ per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py3
 #   indexes, iterates and compares without a diagnostic. That is legal, silent and wrong.
 #   The fix is a return type that is true (`lib.json_types.JsonValue`) and a narrowing step at
 #   the caller, never an ignore.
+# - ARG001 / ARG002: a parameter the function never reads. A caller that sets it gets the
+#   default behaviour and no error, which is legal, silent and wrong. A slot that a fixed
+#   signature must accept, such as a callback's or a table row's, takes a leading underscore,
+#   which the rule skips. Test paths are exempt below, because a fake mirrors the signature of
+#   what it replaces. ARG005 stays off: a lambda with an unused argument is a callback.
 #
 # DOCSTRING LAYOUT (D205/D415/D212/D209/D210) IS THE ONE EXCEPTION to "bug-catching rules only",
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
@@ -284,6 +319,7 @@ select = [
   "PLE", "T10", "PIE794", "PIE796", "PIE800", "PIE804",
   "RUF006", "RUF009", "RUF018", "RUF024", "RUF034",
   "ANN401",
+  "ARG001", "ARG002",
   "D205", "D415", "D212", "D209", "D210",
 ]
 # Explicit codes above, never the bare `D` prefix: D203/D211 and D212/D213 are mutually
@@ -293,9 +329,9 @@ select = [
 # it would be redundant rather than load-bearing.
 
 [tool.ruff.lint.per-file-ignores]
-# Vendored upstream script, byte-for-byte: tests/services/test_karakeep_time_tagger_script.py
-# asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
-# drift that test exists to catch.
+# Vendored upstream script, byte-for-byte: the `karakeep-time-tagger-script-matches-its-pinned-sha256`
+# row in tests/repo/_config_rows.py asserts its sha256 against the commit the archived Docker role
+# pins, so a lint fix here is a drift that row exists to catch.
 #
 # The docstring-layout rules are here for the same reason, and they are the load-bearing half:
 # this file's docstrings trip D212, so without this entry `ruff check --fix`
@@ -320,9 +356,38 @@ select = [
 # D415, D212 and D210 are NOT exempt, and that is deliberate. With D415 exempt here, nothing
 # would stop test docstrings from silently regressing at a colon — a fix with no gate behind
 # it lasts until the next mechanical pass.
-"**/tests/**" = ["D205", "D209"]
-"**/test_*.py" = ["D205", "D209"]
-"**/conftest.py" = ["D205", "D209"]
+"**/tests/**" = ["D205", "D209", "ARG001", "ARG002"]
+"**/test_*.py" = ["D205", "D209", "ARG001", "ARG002"]
+"**/conftest.py" = ["D205", "D209", "ARG001", "ARG002"]
+
+# The files that held an unused parameter when ARG001 and ARG002 were selected. The list only
+# shrinks: delete the parameter or give the slot a leading underscore, then delete the line.
+".claude/hooks/hooklib/read_only_agents.py" = ["ARG001"]
+".claude/hooks/session-health.py" = ["ARG001"]
+"hosts/components/deploy-ui/files/deploy_ui.py" = ["ARG002"]
+"hosts/lib/reconcile_lib/lines.py" = ["ARG001"]
+"k8s/roles/crowdsec/files/remote_allowlist.py" = ["ARG001"]
+"k8s/roles/monitor-bridge/files/bridge/config_io.py" = ["ARG001"]
+"k8s/roles/monitor-bridge/files/checks/service.py" = ["ARG001"]
+"k8s/roles/monitor-bridge/files/checks/wan.py" = ["ARG001"]
+"scripts/deploy_tools/land_lib/merge.py" = ["ARG001"]
+"scripts/deploy_tools/runbook_gates_lib/etcd_restore.py" = ["ARG001"]
+"scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py" = ["ARG001"]
+"scripts/deploy_tools/runbook_gates_lib/metallb_upgrade.py" = ["ARG001"]
+"scripts/dev/fanout_lib/place.py" = ["ARG001"]
+"scripts/dev/prune_worktrees.py" = ["ARG001"]
+"scripts/diagnostics/probe_lib/longhorn_budget.py" = ["ARG001"]
+"scripts/diagnostics/probe_lib/shed_set.py" = ["ARG001"]
+"scripts/docs/build_docs.py" = ["ARG001"]
+"scripts/docs/catalog_lib/catalog_backup.py" = ["ARG001"]
+"scripts/docs/_mkdocs_freshness.py" = ["ARG001"]
+"scripts/docs/_mkdocs_repo_links.py" = ["ARG001"]
+"scripts/home_assistant/ha_state_model.py" = ["ARG002"]
+"scripts/home_assistant/validate_ha_config.py" = ["ARG001"]
+"scripts/renderer/renderer_lib/jinja_filters.py" = ["ARG001"]
+"scripts/renderer/template_filters/flux_components.py" = ["ARG002"]
+"scripts/secrets_mgmt/host_secrets.py" = ["ARG001"]
+"scripts/secrets_mgmt/secret_rotation.py" = ["ARG001"]
 
 # A one-off dead-code sweep reads this, not a hook or CI job: `uvx vulture` from the
 # repo root. It scans every tracked Python root, so a caller outside scripts/, hosts/lib and the
@@ -409,7 +474,7 @@ ignore_names = [
   "worth_renavigating",
   # role_installs.py: test_host_python_invocations.py's shebang check.
   "no_project_spans",
-  # setup_templates.py: tests/_setup_render.py, which every setup-template census renders.
+  # render_lib/setup_plane.py: tests/_setup_render.py, which every setup-template census renders.
   "standalone_templates",
   # Fields of a test dataclass, read through dataclasses.fields().
   "KUMA_URL", "NEW_SERVICE_TOKEN", "NEW_DISCORD_WEBHOOK_URL",
@@ -417,8 +482,8 @@ ignore_names = [
 
 [tool.ty.environment]
 python-version = "3.15"
-# This repo has no `__init__.py` files and no installed package: a script reaches a sibling
-# directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
+# This repo has no `__init__.py` files. `scripts/` is installed in place, but a script still reaches
+# a sibling directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
 # test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
 # it reports import-not-found for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
@@ -460,6 +525,7 @@ extra-paths = [
   "hosts/components/fake-remux/files",
   "k8s/roles/ical-proxy/files",
   "k8s/roles/homelab-mcp/files",
+  "k8s/roles/airflow/files",
   "k8s/roles/crowdsec/files",
   "k8s/roles/traefik/files",
   "k8s/roles/artifacts/files",
@@ -562,8 +628,11 @@ possibly-missing-submodule = "error"
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
-# tree-wide. The role's own tests are what cover that file's imports.
+# tree-wide. The role's own tests are what cover that file's imports. airflow's two files
+# import Airflow, which only its image installs; the image build's check_dags run imports both.
 include = [
+  "k8s/roles/airflow/files/check_dags.py",
+  "k8s/roles/airflow/files/dags/prom_daily_rollup.py",
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",

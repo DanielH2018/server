@@ -20,7 +20,9 @@ WHAT. Every token in the command that names a path on disk inside a git checkout
 the docs the harness would have loaded for it: a `CLAUDE.md` in any ancestor directory below
 the checkout root, and every `.claude/rules/*.md` whose `paths:` frontmatter matches. Each
 doc is returned as PreToolUse `additionalContext` ONCE per session, and once more per
-subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
+subagent (its payload's `agent_id`). A context the hook holds no state for (a fork, a resumed
+session, a session after a reboot) is first credited with every block its transcript shows
+it already holds (`inherited_state`). Every injection is logged
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
 grades the fix. Each row ends in `bytes=<n>`, the UTF-8 size of the block injected for its
 doc, and the row of a doc delivered as a head, an outline or a pointer carries `form=head`,
@@ -29,7 +31,8 @@ doc, and the row of a doc delivered as a head, an outline or a pointer carries `
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
 the files opened are `CLAUDE.md` at an ancestor of that directory and the rule files under
-`.claude/rules/`. Command text never names a file this hook reads.
+`.claude/rules/`. Command text never names a file this hook reads. The one other file read is
+the context's transcript, which the payload's `transcript_path` and `agent_id` name.
 
 THE PAYLOAD BUDGET IS A HARNESS PROPERTY. On the local command-hook path an
 `additionalContext` longer than 10,000 chars (`sgr=1e4`) is persisted to disk and replaced by
@@ -76,6 +79,7 @@ from pathlib import PurePosixPath
 from typing import NamedTuple
 
 from _hook_common import (
+    BashCall,
     append_instructions_row,
     emit_pretooluse_context,
     instructions_log_path,
@@ -83,8 +87,9 @@ from _hook_common import (
     session_state_path,
     tagged,
 )
+from _inline_budget import blocks, inline_margins, print_report, rule_globs
 from _inline_budget import header as _header
-from _inline_budget import inline_margins, print_report, rule_globs
+from _transcript_docs import hook_contexts
 
 # Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
 # remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
@@ -292,8 +297,9 @@ def context_key(session_id, agent_id=None):
     """The id that "once" is counted against: the session, or one subagent inside it.
 
     A subagent's payload carries its parent's `session_id` plus its own `agent_id`, and its
-    context window starts empty. Keyed on the session alone, a doc the parent (or a sibling
-    subagent) already received would never be given to the subagent.
+    context window starts empty unless it is a fork. Keyed on the session alone, a doc the
+    parent (or a sibling subagent) already received would never be given to the subagent.
+    A fork's inherited docs come from its transcript instead (`inherited_state`).
     """
     return f"{session_id}-agent-{agent_id}" if agent_id else session_id
 
@@ -317,7 +323,7 @@ class SessionState(NamedTuple):
 
 
 def injected_this_session(session_id, now=None):
-    """This session's `SessionState`; a file older than the TTL reads as a fresh session.
+    """This session's `SessionState`, or None when no state file younger than the TTL exists.
 
     The first line is `<stamp> <spent> <preambled>`. A file holding only the stamp predates
     the budget, and reads as nothing spent.
@@ -333,7 +339,25 @@ def injected_this_session(session_id, now=None):
             return SessionState(set(paths), spent, preambled)
     except OSError, ValueError:
         pass
-    return SessionState(set())
+    return None
+
+
+def inherited_state(transcript_path, agent_id=None):
+    """The `SessionState` that the context's transcript shows this hook already gave it.
+
+    A fork inherits its parent's injections, and a resumed session its earlier id's, under a
+    state key that has no file yet; a reboot also empties the temp dir that holds the file.
+    Every block found is charged to the budget, and a pointer block records its
+    `_POINTER_KEY` entry, so the doc itself still arrives with the first write.
+    """
+    texts = hook_contexts(transcript_path, agent_id, tagged("inject-nested-docs", ""))
+    docs = {
+        (_POINTER_KEY if _form(block) == _POINTER_FORM else "") + doc
+        for text in texts
+        for doc, block in blocks(text)
+    }
+    spent = sum(len(text.encode("utf-8")) for text in texts)
+    return SessionState(docs, spent, bool(texts))
 
 
 def remember(session_id, state, now=None):
@@ -358,7 +382,8 @@ def loaded_by_harness(session_id, doc, log_path=None, agent_id=None):
     it. A row tagged `agent=` belongs to a subagent and never counts for the parent. A
     subagent skips the log entirely, because an untagged row may be its parent's; the
     cost is a repeat load when the subagent itself used Read on the role first. A
-    `form=pointer` row never counts, because it delivered a pointer, not the doc.
+    `form=pointer` row never counts, because it delivered a pointer, not the doc. A resumed
+    session's earlier rows carry its earlier id, so they never count either.
     """
     sid = (session_id or "")[:8]
     if not sid or agent_id:
@@ -446,7 +471,7 @@ def _form(block):
 
     Only the second line counts: a doc delivered whole may quote a notice in its body.
     """
-    notice = block.split("\n", 2)[1]
+    notice = (block.split("\n", 2) + [""])[1]
     if _HEAD_NOTICE_MARK in notice:
         return "head"
     if _OUTLINE_NOTICE_MARK in notice:
@@ -571,7 +596,9 @@ def render(root, doc, trigger, budget_chars, budget_lines):
     return _head_block(doc, text, header, budget_chars, budget_lines)
 
 
-def build_context(command, cwd, session_id, log_path=None, agent_id=None):
+def build_context(
+    command, cwd, session_id, log_path=None, agent_id=None, transcript_path=""
+):
     """(context_text, [(doc, trigger, block)]) for this command, or ("", []) when nothing is new.
 
     Docs that fit whole are rendered before any doc injected as its head, in the order
@@ -589,6 +616,10 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     """
     key = context_key(session_id, agent_id)
     state = injected_this_session(key)
+    if state is None:
+        # Written even when empty, so the transcript is read once per context, not per call.
+        state = inherited_state(transcript_path, agent_id)
+        remember(key, state)
     already = state.docs
     written = written_targets(command, cwd)
     # doc -> (root, rel, floor, pointer); a write of the doc replaces a pointer to it.
@@ -668,22 +699,24 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     return preamble + "\n".join(blocks), chosen
 
 
-def context(payload):
-    """The docs `build_context` chooses for this payload, as injectable text, or None.
+def context(call: BashCall):
+    """The docs `build_context` chooses for this call, as injectable text, or None.
 
     Records each chosen doc in `instructions.log` as it goes, which is the side effect that
     keeps the injection once-per-session. The arm entry point `bash-pretool.py` calls;
     `main()` below is the same arm run as its own process.
     """
-    if payload.get("tool_name") != "Bash":
+    if "/" not in call.command:
         return None
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    if "/" not in command:
-        return None
-    cwd = payload.get("cwd") or os.getcwd()
-    session_id = payload.get("session_id") or ""
-    agent_id = payload.get("agent_id") or None
-    text, chosen = build_context(command, cwd, session_id, agent_id=agent_id)
+    session_id = call.session_id
+    agent_id = call.agent_id
+    text, chosen = build_context(
+        call.command,
+        str(call.cwd),
+        session_id,
+        agent_id=agent_id,
+        transcript_path=call.transcript_path,
+    )
     if not chosen:
         return None
     tag = f" {AGENT_FIELD}{agent_id}" if agent_id else ""
@@ -703,10 +736,11 @@ def context(payload):
 
 def main():
     """Read the hook payload from stdin and inject the docs `context` chooses."""
-    data = read_payload()
-    if data is None:
+    event = read_payload()
+    call = event.bash() if event else None
+    if call is None:
         return 0
-    text = context(data)
+    text = context(call)
     if text:
         emit_pretooluse_context(text)
     return 0

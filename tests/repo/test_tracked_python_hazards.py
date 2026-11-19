@@ -39,7 +39,7 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    The predicate is the hazard, not the call shape. Most zero-arg
    `main()` calls in the tree are harmless — hook `main()`s read stdin,
    `renovate_notify` does a membership test on `sys.argv` that cannot exit,
-   `shell_templates.main(which=...)` takes an injected callable. So a call is flagged only when
+   `render_templates.main(argv, families)` takes an injected table. So a call is flagged only when
    the resolved callee's `main` routes argv into `parse_args` — `parse_args()` bare,
    `parse_args(argv)` for a parameter of `main`, or `parse_args(sys.argv[...])` — and the test
    module neither passes argv nor patches `sys.argv`. Both remedies are accepted: `main([])`

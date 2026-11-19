@@ -79,7 +79,7 @@ ROWS = (
         min_matches=MODULE_FLOOR,
         must_find=frozenset(
             {
-                "tests/_ci_scoping.py",
+                "tests/repo/test_ci_empty_pr_merge_fails.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/dev/tests/test_prune_worktrees.py",
@@ -242,9 +242,9 @@ ROWS = (
     Census(
         name="tests-cite-no-target-architecture-plan",
         reason=(
-            "The plans under `docs/target-architecture/` are finished and get archived, so a "
-            "test that reads one, or a docstring that sends the reader to one, breaks or goes "
-            "stale when they move (#8179). Anchor the fact to the ADR under `docs/adr/` that "
+            "The finished slice plans are history, archived under `docs/archive/`, so a test "
+            "that reads one, or a docstring that sends the reader to one, breaks or goes stale "
+            "when a plan moves (#8179). Anchor the fact to the ADR under `docs/adr/` that "
             "records it, writing it there first if no ADR does. A slice-plan file name "
             "(`d5-bulk-move.md`, `contracts.md`, `design.md`) is a hit without its directory too."
         ),
@@ -278,10 +278,6 @@ ROWS = (
             "tests/services/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"
-            ),
-            "tests/repo/test_documented_paths_exist.py": (
-                "its `_PLANS` prefix leaves the plans out of the heading-pointer corpus; "
-                "it reads no plan"
             ),
         },
     ),

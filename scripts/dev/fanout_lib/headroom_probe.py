@@ -14,6 +14,10 @@ names. So `room` here and `launch`'s exit 3 cannot disagree on memory headroom, 
 cap, the ssh budget or the signing gate. The gates that read issue bodies (labels, solo-only,
 shared files, a live claim) are not read: no wait clears them.
 
+A launch holds `fanout_lib.launch_lock` while it places. A read taken then would count the
+manifests before that launch saved its batches, so the probe reads nothing and reports `full`
+naming the holder. Every waiter that wakes on one freed slot would otherwise read `room`.
+
 THE STATE.
 
     full             (open)  launch would place nothing; the detail is launch's own reason
@@ -46,6 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from fanout_lib import launch_lock
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import place
 from fanout_lib.placement import HostReading
@@ -89,11 +94,15 @@ def read(
         tools: the process boundary.
         batches: how many batches the launch would carry.
         pin: the host `--host` would pin the launch to, or None to let placement choose.
-        root: the manifest directory the live-batch cap counts.
+        root: the manifest directory the live-batch cap counts, which also holds the
+            launch lock.
 
     Raises:
         Unreadable: no host could be read, or the registered signing keys could not.
     """
+    launching = launch_lock.holder(root)
+    if launching is not None:
+        return {"state": "full", "detail": f"launch lock held by {launching}"}
     registered = registered_keys(tools)
     if isinstance(registered, str):
         raise Unreadable(registered)

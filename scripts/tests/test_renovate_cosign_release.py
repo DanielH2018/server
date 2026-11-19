@@ -3,17 +3,17 @@
 
 Each workflow pins cosign in env as `COSIGN_VERSION` and `COSIGN_SHA256`, and its jobs fetch
 that release through a cache keyed on the pin. A custom manager reads each pin from the
-`# renovate:` comment on the line above it.
+`# renovate:` comment on the line above it; Renovate's extract, held against
+`scripts/validate/renovate_expected_deps.tsv` in CI, proves it reads version and digest in one
+match.
 
 The cosign version decides the signature format Flux's source-controller verifies, so a bump
-must not automerge. These tests hold three things. The manager finds every pin, version
-and digest in one match, and every pin equals promote.yml's. Each pin resolves to the one
-manual cosign group. And the rule stays off any other `sigstore/` dep.
+must not automerge. These tests hold three things. Every pin is in the table with its digest
+and equals promote.yml's. Each pin resolves to the one manual cosign group. And the rule stays
+off any other `sigstore/` dep.
 
 Run: uv run pytest scripts/tests/test_renovate_cosign_release.py
 """
-
-import re
 
 import pytest
 
@@ -21,21 +21,22 @@ from _renovate import (
     _CONFIG_MANAGERS,
     _PACKAGE_RULES,
     _REPO,
-    _file_pattern_to_regex,
     _resolve_setting,
-    _to_python_regex,
+    expected_deps,
+    workflow_env_pins,
 )
 
 WORKFLOW = ".github/workflows/promote.yml"
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
-# census and passing. Each value counts the jobs whose fetch reads the file's one pin.
+# census and passing. Each value counts the jobs whose fetch reads the file's one pin, inline
+# or through .github/actions/pinned-tool.
 COSIGN_PINS = {
     WORKFLOW: 2,
     ".github/workflows/prune-artifacts.yml": 1,
     ".github/workflows/flux-deletion-drill.yml": 1,
 }
 FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
-ANNOTATION = "# renovate: datasource=github-release-attachments depName=sigstore/cosign"
+ACTION_FETCH = "version: ${{ env.COSIGN_VERSION }}"
 
 UPDATE_TYPES = ("major", "minor", "patch", "digest", "pinDigest")
 
@@ -49,42 +50,16 @@ def _manager() -> dict:
     return manager
 
 
-def _matches(text: str) -> list[re.Match]:
-    return [
-        m
-        for ms in _manager()["matchStrings"]
-        for m in re.finditer(_to_python_regex(ms), text)
-    ]
-
-
-def _pin(workflow: str) -> tuple[str, str]:
-    (match,) = _matches((_REPO / workflow).read_text(encoding="utf-8"))
-    return match["currentValue"], match["currentDigest"]
-
-
 @pytest.mark.parametrize("workflow", sorted(COSIGN_PINS))
-def test_the_manager_reads_every_cosign_pin(workflow: str) -> None:
-    patterns = _manager().get("managerFilePatterns", [])
-    assert any(_file_pattern_to_regex(fp).search(workflow) for fp in patterns), patterns
+def test_every_cosign_pin_is_extracted_with_its_digest_and_equals_promotes(
+    workflow: str,
+) -> None:
+    assert [d.digest for d in expected_deps(workflow, "sigstore/cosign")] == ["digest"]
     text = (_REPO / workflow).read_text(encoding="utf-8")
-    assert text.count(FETCH) == COSIGN_PINS[workflow]
-    assert _pin(workflow) == _pin(WORKFLOW)
-
-
-@pytest.mark.parametrize("workflow", sorted(COSIGN_PINS))
-def test_a_cosign_pin_without_its_annotation_is_flagged(workflow: str) -> None:
-    text = (_REPO / workflow).read_text(encoding="utf-8")
-    stripped = re.sub(rf"\n[ \t]*{re.escape(ANNOTATION)}", "", text)
-    assert _matches(text)
-    assert _matches(stripped) == []
-
-
-def test_a_drifted_cosign_pin_is_flagged() -> None:
-    text = (_REPO / WORKFLOW).read_text(encoding="utf-8")
-    version, _ = _pin(WORKFLOW)
-    drifted = text.replace(f"COSIGN_VERSION: {version}", "COSIGN_VERSION: v0.0.1")
-    (match,) = _matches(drifted)
-    assert (match["currentValue"], match["currentDigest"]) != _pin(WORKFLOW)
+    assert text.count(FETCH) + text.count(ACTION_FETCH) == COSIGN_PINS[workflow]
+    pins = workflow_env_pins(workflow, "COSIGN_VERSION", "COSIGN_SHA256")
+    assert pins == workflow_env_pins(WORKFLOW, "COSIGN_VERSION", "COSIGN_SHA256")
+    assert len(pins) == 1
 
 
 @pytest.mark.parametrize("workflow", sorted(COSIGN_PINS))

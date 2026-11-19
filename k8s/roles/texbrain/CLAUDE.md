@@ -31,7 +31,7 @@ Pinning it directly would mean a bare commit SHA that Renovate cannot offer an u
 the failure `renovate.json` already records for the shellcheck-py pin. The fork's CI pushes
 `:latest` on every merge to `main`, so the `:latest@sha256` pin here gets ordinary digest-bump
 PRs (`k8s/roles/texbrain/defaults/main.yml`,
-`scripts/tests/test_renovate_managers.py::test_every_k8s_role_image_is_renovate_tracked`).
+`scripts/tests/test_renovate_managers.py::test_no_k8s_role_image_is_disabled_by_a_package_rule`).
 
 **To take a new upstream version:** merge `upstream/main` into the fork's `main`. Its CI
 rebuilds and pushes, and Renovate then opens the digest bump against

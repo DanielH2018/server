@@ -1,18 +1,12 @@
 {#
-  prowlarr's verify Job and the ConfigMap that carries its script.
+  prowlarr's verify Job and the ConfigMap that carries its script;
+  `k8s/templates/digest-job.yml.j2` has the shape both share with the other plain Jobs.
 
   The renderer emits `templates/verify/*.yaml.j2` into `prowlarr-verify` (`verify_files`), which
   Flux applies once the `prowlarr` Kustomization reads Ready. The manifests role takes only
   top-level `templates/*.yaml.j2`, so no Ansible path renders it. The Job replaced the
   `flaresolverr-netpol-probe` tasks and `netpol-probe-job.yaml.j2` in prowlarr's flip (#5594),
   which also dropped that probe's peer from prowlarr's `netpol_from`.
-
-  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
-  applies*): the ConfigMap's in `configmap_digest8` of its data, the Job's in
-  `job_spec_digest8` of its spec. Each is computed here from the same JSON those functions
-  hash, so the spec is written once as YAML text, parsed for the hash and emitted verbatim.
-  The renderer passes `flux_job_image` and `flux_job_connect`, the helper's text, to every
-  `templates/verify/` file (`render_tag`).
 
   DECIDED: the spec embeds a digest of flaresolverr's rendered NetworkPolicy and Deployment,
   not prowlarr's Deployment as sonarr's and tdarr's embed their app's. flaresolverr's fence is
@@ -32,94 +26,33 @@
       closed. k8s/roles/prowlarr/tests/test_prowlarr_verify.py fails if that fence
       admits the label.
 #}
-{% set script_name = 'prowlarr_verify.py' %}
-{% set script_dir = '/verify' %}
-{% set data = {
-  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
-  'flux_job_connect.py': flux_job_connect,
-} %}
-{% set configmap_name = 'prowlarr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+{% from 'digest-job.yml.j2' import digest_job with context %}
+{% set script = 'prowlarr_verify.py' %}
 {% set render_digest8 = ((lookup('template', 'networkpolicy-flaresolverr.yaml.j2') + lookup('template', 'deployment-flaresolverr.yaml.j2')) | hash('sha256'))[:8] %}
-{% set spec_text %}
+{% set head %}
 # A flaky check fails rather than passing on a retry.
 backoffLimit: 0
 # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
 # The control's 60s of connect retries, then one 5s connect.
 activeDeadlineSeconds: 180
-template:
-  metadata:
-    labels:
-      # A peer of prowlarr's fence, for the control, and not of flaresolverr's, which is what
-      # the isolation leg needs. It must never be `prowlarr`.
-      app: prowlarr-verify
-  spec:
-    serviceAccountName: prowlarr-verify
-    # The Job reads no Kubernetes API, so its pod holds no token.
-    automountServiceAccountToken: false
-    restartPolicy: Never
-    enableServiceLinks: false
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 65534
-      runAsGroup: 65534
-      seccompProfile:
-        type: RuntimeDefault
-    containers:
-      - name: verify
-        image: {{ flux_job_image }}
-        imagePullPolicy: IfNotPresent
-        command:
-          - python3
-          - {{ script_dir }}/{{ script_name }}
-        env:
-          - name: CONTROL_URL
-            value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}/
-          - name: FLARESOLVERR_URL
-            value: http://flaresolverr.{{ k8s_namespace }}.svc.cluster.local:{{ prowlarr_k8s_flaresolverr_port }}/
-          # Renames the Job whenever flaresolverr's policy or Deployment changes; see the note above.
-          - name: PROWLARR_RENDER_DIGEST8
-            value: "{{ render_digest8 }}"
-          - name: PYTHONDONTWRITEBYTECODE
-            value: "1"
-        resources:
-          requests:
-            cpu: 10m
-            memory: 32Mi
-          limits:
-            memory: 64Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-              - ALL
-        volumeMounts:
-          - name: script
-            mountPath: {{ script_dir }}
-            readOnly: true
-    volumes:
-      - name: script
-        configMap:
-          name: {{ configmap_name }}
 {% endset %}
-{% set spec = spec_text | from_yaml %}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ configmap_name }}
-  namespace: {{ k8s_namespace }}
-data:
-{% for key, text in data | dictsort %}
-  {{ key }}: {{ text | to_json }}
-{% endfor %}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: prowlarr-verify-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
-  namespace: {{ k8s_namespace }}
-  annotations:
-    homelab/job-kind: verify
-spec:
-{{ spec_text | indent(2, true) }}
+{% set label_note %}
+# A peer of prowlarr's fence, for the control, and not of flaresolverr's, which is what
+# the isolation leg needs. It must never be `prowlarr`.
+{% endset %}
+{% set env %}
+- name: CONTROL_URL
+  value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}/
+- name: FLARESOLVERR_URL
+  value: http://flaresolverr.{{ k8s_namespace }}.svc.cluster.local:{{ prowlarr_k8s_flaresolverr_port }}/
+# Renames the Job whenever flaresolverr's policy or Deployment changes; see the note above.
+- name: PROWLARR_RENDER_DIGEST8
+  value: "{{ render_digest8 }}"
+{% endset %}
+{{ digest_job(
+     name='prowlarr-verify',
+     script=script,
+     script_text=lookup('file', role_file('files/' + script), rstrip=False),
+     head=head,
+     env=env,
+     label_note=label_note) }}

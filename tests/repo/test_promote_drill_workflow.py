@@ -11,8 +11,8 @@ alone is not enough, because cosign v3.1.3 reads a registry error on its bundle 
 bundle". The last test runs the step's own script against a fake cosign and curl, since
 `workflow_run` never runs a branch's copy of the file.
 
-These checks sit beside `test_promote_workflow.py` rather than in it because that module was
-near the test-module line cap. `drill_problems` names every broken property. The real
+These checks stay a file beside the promote rows in `_promote_workflow_rows.py` because the
+last test runs the step's script. `drill_problems` names every broken property. The real
 file must produce none, and each red fixture breaks one.
 
 Run: uv run pytest tests/repo/test_promote_drill_workflow.py
@@ -26,7 +26,7 @@ import forge
 import pytest
 from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run
-from test_promote_workflow import WORKFLOW, _load, _steps
+from _workflow_rows import PROMOTE, load, steps
 
 DRILL_ANNOTATION = "--annotations=io.homelab.verify-drill=true"
 DRILL_IF = "${{ inputs.verify_drill }}"
@@ -38,11 +38,11 @@ DIGEST_FORM = "grep -Eqx 'sha256:[0-9a-f]{64}'"
 
 
 def _step(publish: dict, step_id: str) -> dict:
-    return next((s for s in _steps(publish) if s.get("id") == step_id), {})
+    return next((s for s in steps(publish) if s.get("id") == step_id), {})
 
 
 def _refuses_problems(publish: dict) -> list[str]:
-    ids = [s.get("id") for s in _steps(publish)]
+    ids = [s.get("id") for s in steps(publish)]
     if "drill-refuses" not in ids or ids.index("drill-refuses") < ids.index(
         "drill-push"
     ):
@@ -89,7 +89,7 @@ def drill_problems(wf: dict) -> list[str]:
 
 @pytest.fixture(scope="module")
 def workflow() -> dict:
-    return _load(WORKFLOW)
+    return load(PROMOTE)
 
 
 def test_the_drill_path_holds_every_property(workflow):
@@ -243,6 +243,7 @@ def test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature(
     answers, expected = REGISTRY_CASES[case]
     env = {
         **os.environ,
+        "REGISTRY_FUNCTIONS": workflow["env"]["REGISTRY_FUNCTIONS"],
         "RUNNER_TEMP": str(tmp_path),
         "DIGEST": "sha256:" + "5b" * 32,
         "IDENTITY": forge.SIGNER_IDENTITY,

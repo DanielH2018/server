@@ -264,6 +264,7 @@ FLOOR = [
     # The Renovate agent's grant points.
     "hosts/components/renovate-agent/files/t2-approval-floor",
     "hosts/components/renovate-agent/files/renovate_floor.py",
+    "hosts/lib/renovate_identity.py",
     "hosts/components/renovate-agent/files/land_renovate_pr.py",
     "hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2",
     "hosts/components/renovate-agent/templates/50-renovate-agent-land.rules.j2",
@@ -289,6 +290,8 @@ FLOOR = [
     "hosts/components/renovate-agent/templates/homelab-renovate-agent-setup.service.j2",
     "hosts/components/renovate-agent/component.yml",
     "scripts/deploy_tools/land",
+    "scripts/sitecustomize",
+    "scripts/usercustomize",
     "pyproject.toml",
     "uv.lock",
     "uv.toml",
@@ -341,6 +344,24 @@ LANDER_FILES = [
     "scripts/deploy_tools/land_lib/policy.py",
     ".github/workflows/ci.yml",
 ]
+
+
+STARTUP_HOOKS = [
+    "scripts/sitecustomize.py",
+    "scripts/usercustomize.py",
+    "scripts/sitecustomize/__init__.py",
+]
+
+
+@pytest.mark.parametrize("path", STARTUP_HOOKS)
+def test_a_pr_adding_an_interpreter_startup_hook_needs_the_operator(
+    path, tmp_path
+) -> None:
+    """Neither file exists, so only the list can catch one: the import walk sees loaded modules."""
+    assert not (REPO / path).exists(), f"{path} exists; move it to LANDER_FILES"
+    assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == [
+        path
+    ]
 
 
 @pytest.mark.parametrize("path", LANDER_FILES)

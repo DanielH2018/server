@@ -19,7 +19,7 @@ THE CONDITIONS. `verify_promotion.wait_settled` reads the first two and asks
   - T names no forward-only tag and no snapshot role against `last-good`, checked by
     `decide` on the promotion `_promotion` returns.
 A condition that fails returns `decide` to the wait, which promotes T once P settles.
-docs/target-architecture/deploy/d7-superseding-promotions.md has the design and the cases.
+docs/archive/deploy/d7-superseding-promotions.md has the design and the cases.
 
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py`
 """
@@ -34,6 +34,7 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from artifact_retention import SUPERSEDING_TAG
 from changed_set import ROOT, SOAK, ChangedSet, changed_set
 from deploy_tools.promote_lib import verify_promotion as verify
+from deploy_tools.promote_lib.flux_status import FAILED_STATES, flux_states
 from deploy_tools.promote_lib.reads import Reads
 
 # Each has its own provisional window in `verify`, which a superseding promotion does not
@@ -41,7 +42,6 @@ from deploy_tools.promote_lib.reads import Reads
 OWN_WINDOW = frozenset({"longhorn", "flux", "cluster-vars"})
 # Every changed set beside a tag holds these, so they never make two sets overlap.
 ALWAYS = frozenset({ROOT, SOAK})
-FAILED_STATES = frozenset({"failure", "error"})
 
 
 def supersedable(reads: Reads) -> Callable[[str], bool]:
@@ -96,11 +96,9 @@ def refusal(
             return f"{name} holds {', '.join(own)}, which verify waits on in its own window"
     if overlap := sorted((t_own.direct & p_set.names) - ALWAYS):
         return f"T changes {', '.join(overlap)}, which P is still verifying"
-    states = reads.statuses(prod)
+    states = flux_states(reads.statuses(prod))
     if failing := sorted(
-        name
-        for name in p_set.names | {ROOT}
-        if states.get(verify.STATUS_PREFIX + name) in FAILED_STATES
+        name for name in p_set.names | {ROOT} if states.get(name) in FAILED_STATES
     ):
         return f"P already reads failure for {', '.join(failing)}, so P settles first"
     return ""

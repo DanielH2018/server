@@ -1,8 +1,8 @@
 """The landing's wait on the hosts a merge reaches (H3, *Steps*, H3.9a and H3.9b).
 
 `pipeline.py:_step_ci` calls `host_targets` after master CI, and `_step_hosts` calls
-`wait_for_hosts` after the deploy phase. The plan is docs/target-architecture/host/h3-pi-pilot.md; the
-contract is C6's *Hosts* bullet in docs/target-architecture/contracts.md.
+`wait_for_hosts` after the deploy phase. The plan is docs/archive/host/h3-pi-pilot.md; the
+contract is C6's *Hosts* bullet in docs/archive/contracts.md.
 
 `host_targets` names the hosts whose package the merge changes. It renders every host package
 at the merge commit and at its first parent, each in a snapshot from `tools.gate_snapshot`,
@@ -74,27 +74,19 @@ from deploy_tools.land_lib.outcome import Verdict, say
 from diagnostics.probe_lib.builder import fetch_deadline_s
 from lib.progress import OnChange
 from deploy_tools.land_lib.tools import gate_snapshot
-from lib import yaml_fast
+from lib import snapshot_uv, yaml_fast
 from lib.git import git as run_git
 from lib.repo_paths import REPO, K8S_ROLES
 from lib.systemd_timer import timer_settings
 
 # The renderer's host mode, run from a gate snapshot's root. A daniel-pi render takes about
 # 2s; the bound stops a wedged one, which `host_targets` reads as a failed render.
-# DECIDED: `--no-sync`. Both snapshots share the primary's `.venv`, and `uv.lock` is a
+# DECIDED: `sync=False`. Both snapshots share the primary's `.venv`, and `uv.lock` is a
 # HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and
 # downgrade it at the first parent while a session or `homelab-checkout-sync` may be using
 # it. A render that needs a dependency the venv lacks fails instead, and a failed render
 # waits on every host.
-HOST_RENDER_ARGV = (
-    "uv",
-    "run",
-    "--no-sync",
-    "python",
-    "scripts/renderer/homelab_render.py",
-    "host",
-)
-PACKAGE_RENDER_ARGV = (*HOST_RENDER_ARGV[:-1], "package")
+RENDERER = "scripts/renderer/homelab_render.py"
 HOST_RENDER_TIMEOUT = 300
 # One rendered host package: each path under `hosts/<host>/` mapped to its kind (`file` or
 # `link`), its mode, and its bytes or its link target.
@@ -161,23 +153,23 @@ def render_host_tree(snapshot: Path, host: str) -> HostTree | None:
     and the renderer code are all the snapshot's commit's. `gate_snapshot` points
     `UV_PROJECT_ENVIRONMENT` at the primary's `.venv` for the life of the snapshot.
     """
-    return _render_tree(
-        snapshot, [*HOST_RENDER_ARGV, "--host", host], Path("hosts") / host
-    )
+    return _render_tree(snapshot, ["host", "--host", host], Path("hosts") / host)
 
 
 def render_package_tree(snapshot: Path, package: str) -> HostTree | None:
     """The shared `package` as the renderer in `snapshot` renders it; None when it failed."""
     return _render_tree(
-        snapshot, [*PACKAGE_RENDER_ARGV, "--name", package], Path("packages") / package
+        snapshot, ["package", "--name", package], Path("packages") / package
     )
 
 
-def _render_tree(snapshot: Path, argv: list[str], subdir: Path) -> HostTree | None:
+def _render_tree(snapshot: Path, args: list[str], subdir: Path) -> HostTree | None:
     with tempfile.TemporaryDirectory(prefix="land-host-render-") as out:
         try:
             done = subprocess.run(
-                [*argv, "--out", out],
+                snapshot_uv.argv(
+                    snapshot, "python", RENDERER, *args, "--out", out, sync=False
+                ),
                 cwd=snapshot,
                 capture_output=True,
                 text=True,

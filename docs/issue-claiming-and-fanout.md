@@ -399,6 +399,75 @@ them back beside the fields, so a `clean` run by one build does not erase what a
 recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
 key to the `Batch` constructor skips the whole run on a key it has no field for.
 
+### One launch at a time, and files held across runs
+
+Several coordinators launch from one host as one user: a root session, and one
+sub-coordinator per project. Each calls `fanout.py place launch`, and each reads the same
+manifest directory. Two rules keep their launches apart.
+
+**One launch runs at a time.** `launch` takes an exclusive `flock` on `launch.lock` in the
+manifest directory before its first gate and holds it through its last manifest save
+(`scripts/dev/fanout_lib/launch_lock.py:held`). Without the lock, two launches both read
+the manifests before either saves, so both pass the live-batch cap. Refill waits make that
+overlap the normal case, because every waiting coordinator wakes on the same freed slot. A
+launch that waits `scripts/dev/fanout_lib/launch_lock.py:WAIT_S` seconds without the lock
+exits `scripts/lib/exit_codes.py:FANOUT_PLACE_LOCK_TIMEOUT` and prints the holder's pid and
+run id. The kernel releases the lock when its holder exits, so a killed launch leaves
+nothing to clear. The `fanout-headroom` wait source reads `full` while a launch holds the
+lock (`scripts/dev/fanout_lib/launch_lock.py:holder`). The lock also makes run ids unique:
+`scripts/dev/fanout_lib/manifest.py:unused_run_id` picks the id once the lock is held.
+Two launches started in one second once shared an id, and the second saved over the
+first's manifest.
+
+The lock covers the launches that share a manifest directory, which is one user on one
+host. A launch from another host, or as another user, takes a different lock and reads
+different manifests. Every coordinator runs on daniel-box as `ubuntu`, so one lock covers
+them all.
+
+**A live batch holds the files it cites.** `launch` records on each batch the files its
+issues cite (`Batch.cited_paths`), resolved as the within-launch check resolves them
+(`scripts/dev/fanout_lib/launch_gates.py:batch_paths`).
+`scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files` then refuses a launch
+that cites a file a live batch in another run holds. The refusal names the file, the run
+and the orchestrator branch the run was launched under. Ask that coordinator to finish or
+release its batch. Do not clean another coordinator's run.
+
+A batch is live for this rule while its unit is active or its branch has an open PR. An
+uncleaned batch is not live for that reason alone: on 2026-11-19 `place runs` listed over
+20 standing batches, the oldest from 2026-10-22. A parked batch has an open PR, so it keeps
+its files. The gate reads the open PRs with one `gh pr list` call. It reads a unit's state
+only for a batch with no open PR that could collide. A read that fails refuses the launch.
+A batch saved before `cited_paths` existed has its issue bodies fetched instead.
+
+`--allow-shared-file <path>` excuses a path here as it does within one launch, and the
+launch records the path on the new batch as `Batch.excused_paths`, where the holder's
+coordinator can read it with `place runs --json`.
+`scripts/dev/fanout_lib/launch_gates.py:excusable` rules out `secrets/secrets.yml` and
+every `secrets/cluster-vars.` file: each is one encrypted document, and two branches that
+edit it cannot be rebased over each other.
+
+`scripts/dev/findings_lib/issue_model.py:cited_paths` is the one reading of an issue body
+that both gates, the brief and the `paths` field of `next --json` share. It resolves each
+citation against the files `git ls-files` lists. A path from the repo root counts as
+written. A path from a subdirectory, such as `fanout_lib/clean.py`, counts as the one
+tracked file that ends with it. A filename with no directory counts only when it stands
+alone in an inline code span and exactly one tracked file has that name: `` `ci.yml` ``
+holds `.github/workflows/ci.yml`.
+
+The rule has three known limits:
+
+- **A batch's diff can exceed its cited paths.** The gate compares what each batch was
+  briefed on, not what its agent edits. Two batches that cite different files can still
+  edit one.
+- **A filename that several tracked files share holds nothing.** `` `main.yml` `` and
+  `` `CLAUDE.md` `` name dozens of files, so `cited_paths` drops them, and so it drops a
+  filename written outside a code span. An issue that means one of those files must spell
+  its path. In the other direction, a file an issue names only in passing is held like one
+  it edits, as a full path always was; `--allow-shared-file` excuses it.
+- **A batch that ended with no PR holds nothing, and a resumed one still holds nothing.**
+  Someone who resumes such a batch by hand edits files a later launch was free to take,
+  until the resumed work opens a PR.
+
 The dispatcher scores a host on memory headroom, and an agent is throttled by two cgroup caps
 rather than one: `user.slice`, the fleet, and `user-1000.slice`, the login plane it runs in as
 a transient user service. It reads both and takes the smaller headroom, so the tighter cap
@@ -489,6 +558,165 @@ fast-forward skipped daniel-box, whose checkout the GitOps deployer already pull
 minutes. #3394 registered each hook through `$CLAUDE_PROJECT_DIR`, so a session runs the copy
 its own checkout carries, and deleted the fast-forward. H7.53 deleted the GitOps deployer;
 `homelab-checkout-sync` fast-forwards daniel-box's checkout.
+
+## The coordinator tree
+
+A coordinator tree runs several projects at once. One root session sets the order across
+projects, and one sub-coordinator session per project runs `issue-fanout` over that
+project's milestone. `.claude/skills/coordinate/SKILL.md` holds what each role does. This
+section is the record of the design: the shape, what the pilot measured, what the operator
+decided, who lands which PR, and what the design does not cover. It was written from the
+coordinator tree plan of 2026-11-15, revision 8 of 2026-11-19.
+
+### Target shape
+
+```text
+daniel-box, user ubuntu, one SSH connection
+root coordinator                 primary checkout, edits nothing, talks to the operator
+├── sub-coordinator: project A   own locked worktree, holds the project's context
+│   └── fanout.py place launch   places each batch on the host with headroom
+│       ├── batch on daniel-box     → PR → its own land.sh
+│       └── batch on daniel-server  → PR → its own land.sh, or the server lander
+└── sub-coordinator: project B
+    └── fanout.py place launch
+        └── batch on either host
+```
+
+Three rules give the tree that shape:
+
+- **The workers are fan-out batches, not app sessions.** `fanout.py place launch` starts
+  each batch as a headless systemd unit, so the app's rule on starting sessions does not
+  apply to it. App worker sessions remain for work the operator steers by hand: a
+  design-heavy issue, or a solo-only issue that cites the fan-out tooling.
+- **Only the coordinators are pinned to daniel-box.** `launch` runs there and places each
+  batch on whichever host has headroom. A daniel-server batch is recorded in daniel-box's
+  manifests like any other, so the launch lock and the cross-run file gate cover it.
+- **A project is the sub-coordinator's project milestone** (*Session milestones and project
+  milestones*). The claims and the milestone both belong to the sub-coordinator's branch,
+  so a restarted sub-coordinator reuses the same worktree and branch.
+
+Four changes on master carry the tree. Launches are serialised and gated across runs
+(*One launch at a time, and files held across runs*,
+[#9242](https://github.com/DanielH2018/server/pull/9242) and
+[#9310](https://github.com/DanielH2018/server/pull/9310)). A batch that another project's
+hold stopped parks (*A parked batch*,
+[#9252](https://github.com/DanielH2018/server/pull/9252)). A change to
+`cluster/services.yml` lands alone (`docs/landing.md`, *Rules that refuse a merge*,
+[#9167](https://github.com/DanielH2018/server/pull/9167) and
+[#9214](https://github.com/DanielH2018/server/pull/9214)). A milestone holds a project's
+backlog ([#9217](https://github.com/DanielH2018/server/pull/9217)).
+
+### What the pilot established
+
+The pilot ran on 2026-11-15. The root started a read-only sub-coordinator, and that
+sub-coordinator started one worker. It answered three questions:
+
+- **A sub-coordinator cannot start a session from the root's brief.** The app refuses to
+  start a session on a turn another session started. The operator's message in the
+  sub-coordinator's chat is the step that unlocks it, and the fan-out's grouping approval
+  is that message.
+- **Recaps travel up one level at a time.** The worker woke the sub-coordinator, and the
+  sub-coordinator woke the root. The root receives one recap per project, cut to about 400
+  characters, which is why the skill fixes the recap's format.
+- **The root lists only the sessions on its own SSH connection.** So the whole tree runs
+  from one connection to daniel-box.
+
+### Decisions, with their dates
+
+- **2026-11-15: a project is a milestone.** On 2026-11-19 the operator narrowed that to the
+  sub-coordinator's session milestone in its project form, for the reason *Session
+  milestones and project milestones* gives.
+- **2026-11-15: two sub-coordinators for the first run, each capped at 2 running batches.**
+  Nothing in the design limits the count of sub-coordinators. Memory is not the bound
+  either, because each host takes `scripts/dev/fanout_lib/launch_gates.py:live_batch_cap`
+  running batches. The bound is landing: one landing turn runs one PR's CI before its
+  merge at a time. The cap rises once a real run shows the landing turn keeps up. The
+  skill holds the cap, and no tool enforces it.
+- **2026-11-15: a sub-coordinator lands without asking.** It lands and re-lands only the
+  PRs of its own runs, after `probe.py lander`, inside root `CLAUDE.md`'s *When to wait*.
+  On 2026-11-19 the operator dropped a second limit, under which a PR that changes code
+  `land.py` imports waited for approval.
+- **2026-11-15: one approval covers one milestone plus the grouping rules.** The operator
+  types it once, in the sub-coordinator's chat. Refills stay inside that milestone, and a
+  new milestone needs a new approval.
+- **2026-11-15: build the serial turnstile, and defer a root status command.** The
+  turnstile landed as a wait in the landing turn. The root reads recaps until a real run
+  shows that it needs more.
+- **2026-11-19: a batch holds its files while its unit is active or its PR is open.** An
+  earlier draft held them until `clean`, which the 21 standing batches of that day would
+  have turned into refusals on files nobody was editing.
+
+### Who lands a daniel-server batch's PR
+
+A review batch lands its own draft on either host. On daniel-server it does so when the PR
+passes the PR rule the server lander applies
+(`scripts/dev/fanout_lib/review/review_ci.py:server_lands`), so the park outcomes reach the
+sub-coordinator through one path for both hosts. The server lander
+(`scripts/dev/fanout_lib/autoland.py`) keeps two cases: a `--no-review` batch, which stops
+at its PR, and a review batch whose PR the rule holds.
+
+| Server batch outcome | Who acts |
+|---|---|
+| A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
+| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. The sub-coordinator reads the reason and lands the PR, or passes an operator step to the operator. |
+| A `--no-review` batch that qualifies for the server lander | The server lander. The sub-coordinator never lands it. |
+| A server lander landing refused before merge | The server lander, which starts the PR again once the rule clears (`scripts/dev/fanout_lib/autoland.py:refused_for_now`). |
+| A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |
+
+Before a sub-coordinator runs `land.sh` on any server batch's PR, it runs `probe.py
+lander`, which shows what the server lander did with the PR and how that landing ended.
+The table above then says whose the PR is. The probe is not a guard against a second
+landing: `land.sh` refuses one while a landing of the PR is live (`docs/landing.md`, *One
+landing of a PR at a time*).
+
+A re-land of a PR that merged behind a hold starts no promotion, and clearing the hold
+starts none either (`docs/landing.md`, *A PR that merged behind a hold*). The skill states
+that beside its re-land step, because a sub-coordinator that re-lands with nothing merged
+since ends `deferred` after the whole promotion wait.
+
+### A coordinator locks its own worktree
+
+A coordinator edits nothing, so its worktree is clean and merged into `origin/master`.
+`scripts/lib/worktrees.py:classify` calls such a tree removable once it holds no live
+lock, and every claim under its branch then reads stale (*Staleness*). The project
+milestone belongs to the same branch. So a sub-coordinator runs `git worktree lock` with a
+reason that names its project.
+
+`scripts/lib/worktrees.py:lock_is_live` reads a lock reason in three ways. A reason in
+Claude Code's `(pid N start M)` form is live while that process runs. A reason that
+`scripts/lib/fanout_lock.py:REASON` matches is live while its batch unit runs. Any other
+reason counts as live until someone unlocks the tree. The coordinator's reason is the
+third kind, so the lock outlives the session, and a restarted sub-coordinator finds its
+claims still held. The way out is `git worktree unlock`, which the skill's last step runs.
+
+The desktop app creates a session's worktree unlocked, and `EnterWorktree` creates one
+locked with Claude Code's reason. The skill therefore locks first, and unlocks only when
+git reports the tree as already locked.
+
+### Known limits of the coordinator tree
+
+- **No two real launches have raced, and no landing has parked on a real hold.** Tests
+  cover both. The first two-project run exercises them, with one planned collision: two
+  issues that cite one file, placed in different projects.
+- **A stop-and-resume of a sub-coordinator has not been run.** The skill's resume reads
+  were each run once against a branch with no project.
+- **A milestone wait does not end when `milestone add` files an older issue**
+  ([#9218](https://github.com/DanielH2018/server/issues/9218)). The root messages the
+  sub-coordinator when it has an issue added to a project.
+- **A project lives as long as its sub-coordinator's branch.** `reap` closes only a
+  milestone with nothing open, so a dead sub-coordinator's backlog stays filed until the
+  sub-coordinator restarts or the root ends the project.
+- **A project's backlog cannot include an issue another open milestone holds**, until the
+  session that holds it releases the issue.
+- **The cap of 2 running batches and the refill pause under `DEPLOY_HOLD` are skill
+  rules.** `launch` checks neither.
+- **Only daniel-box's primary checkout follows master.** daniel-server's is never synced,
+  and its code reads only that host's own manifest directory, so a coordinator started
+  there would share no lock and no gate with the tree.
+- **The cross-run file gate has the two limits its own section lists**, and an issue that
+  adds a secret without citing `secrets/secrets.yml` passes the SOPS gate.
+- **The root's view can go stale.** The app holds recaps after many wake-ups in a row with
+  no operator message. The first real run measures whether that happens.
 
 ## The `/issue-fanout` skill
 

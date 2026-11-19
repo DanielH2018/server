@@ -8,7 +8,7 @@ dependency edge, lost its subject. R4.7 deleted arm 4, the retirement arm, with 
 teardown. The numbers of the arms that stay are kept, because docs and commit messages cite
 them. A tag counts for arm 2 whenever its
 `cluster/<tag>/` or `cluster/<tag>-deferred/` output moves; the image-pin exception went with
-arm 1 (docs/target-architecture/deploy/d6-delete-old-path.md, *The render-diff gates
+arm 1 (docs/archive/deploy/d6-delete-old-path.md, *The render-diff gates
 after D6*).
 
 - **Arm 2, edge first.** A tag that is flux-owned at both ends gains a `dependsOn` edge, and
@@ -38,7 +38,7 @@ Arm 3 reads the trailers from the PR's own commits, and the CI step runs on pull
 only, where `HEAD^1..HEAD` is those commits and the merge.
 
 There is no bypass for arm 2. Two PRs that merge back to back each pass alone; `docs/landing.md`
-states how to split a refused PR. The plan is docs/target-architecture/deploy/d4-ordering.md,
+states how to split a refused PR. The plan is docs/archive/deploy/d4-ordering.md,
 *The cross-plane gate*.
 
 Exit codes: 0 clean; 1 refused; 2 a render failed, so the gate could not judge.

@@ -81,7 +81,7 @@ Exit: a commit that changes the list the docs-refresh cron stages rewrites the c
    cardinal that opens the list, and the ordinal in "adding a fifth". With a fifth path
    added to the cron's `git add`, the script rewrote both and exited 1, then exited 0.
 3. The slice status fragment. Declined on 2026-11-14. The plan had the slice tables in
-   `docs/target-architecture/design.md` generated from each slice file's status line.
+   `docs/archive/design.md` generated from each slice file's status line.
    That page was archived on 2026-11-13, and its opening paragraph says a slice's
    `Status:` line records what merged and that the page does not repeat it. A generated
    fragment would add a second copy of the status to an archived page.

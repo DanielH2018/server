@@ -60,7 +60,7 @@ def _variant_runner(tmp_path: Path, cd_target: str) -> Path:
         f"RUN_HOOK_UV:-{_UV}}}",
         'cd "$project_dir" ||',
         'exec "$uv" run',
-        'err=$("$uv" run',
+        '"$uv" run --quiet --no-project',
     ):
         assert host_fact in text, f"run-hook.sh no longer holds {host_fact!r}"
     # Checked before the swap, because the runner-side values can live under /home/ubuntu too.
@@ -494,6 +494,18 @@ def test_accept_a_read_only_primary_venv_that_mismatches_its_pin_still_runs_the_
     proc = _run(runner, "probe", "--project", "--ask-on-cd")
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == str(primary / ".venv"), proc.stderr
+
+
+def test_the_project_leg_puts_the_hooks_own_scripts_ahead_of_the_venvs(tmp_path):
+    """The primary's venv runs the hook, but the hook's own checkout supplies its root."""
+    primary = _primary(tmp_path)
+    runner = _session_runner(tmp_path, primary)
+    (runner.parent / "probe.py").write_text(
+        "import sys\nprint(sys.path[1])\n", encoding="utf-8"
+    )
+    proc = _run(runner, "probe", "--project")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(tmp_path / "session" / "scripts"), proc.stderr
 
 
 def test_accept_a_working_primary_venv_still_runs_the_hook(tmp_path):

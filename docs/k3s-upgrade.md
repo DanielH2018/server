@@ -136,7 +136,7 @@ systemctl show k3s -p ExecMainStartTimestamp
 ```
 
 A **minor** bump first passes the guest rehearsal of
-`docs/target-architecture/host/h6-k3s-suc.md` (*Rehearsal in a drill guest*, H6.1b2), and its PR
+`docs/archive/host/h6-k3s-suc.md` (*Rehearsal in a drill guest*, H6.1b2), and its PR
 body quotes the result. A patch bump needs no rehearsal.
 
 Verify before touching the agent:

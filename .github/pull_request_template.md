@@ -38,3 +38,5 @@ pod. Say what you exercised.
       template). `promote` applies it to every tag that renders it, so do not hand-run anything.
       A host's setup plane ships in its host package, so a change there belongs under `hosts/`.
 - [ ] New check, guard, or probe — ships with a paired test: one input it must accept, one it must reject.
+- [ ] Removes instances of a pattern (dead code, copied tests, stale names) — adds the check that fails
+      on the next instance, or its commit message says why no check can.
