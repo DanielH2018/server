@@ -53,8 +53,10 @@ ConfigMap
 CRDs
 DaemonSet
 IngressRoute
+Jsonnet
 Kubernetes
 Kustomize
+Pkl
 NetworkPolicy
 PVC
 [Cc]laimName

@@ -4,8 +4,9 @@ One coverage run of the whole pytest suite, with per-test contexts, measured on 
 commit `ec7b15021` (#8516). It ran outside CI and gates nothing. Coverage is not part of CI and
 has no threshold. The counts and lists leave out `test_terraria_stats_follows_the_server.py`, which
 master deleted after that commit (f5c1c8636b). They also leave out `test_jsonpath_quoting.py`,
-deleted later because no Ansible command task remained for it to scan, and
-`test_renderer_ansible_free.py`, deleted once `test_ansible_core_census.py` covered it.
+deleted later because no Ansible command task remained for it to scan,
+`test_renderer_ansible_free.py`, deleted once `test_ansible_core_census.py` covered it, and
+`test_manifests_apply_verdict.py`, deleted once each role kept one file list (#9068).
 
 This page lists deletion candidates for later issues. An entry is not a verdict: a later issue
 reads each test file before it deletes anything.
@@ -458,7 +459,6 @@ the other test files that cover at least one of those lines.
 | `scripts/validate/tests/test_alert_tools_guard.py` | 51 | 798 |
 | `tests/longhorn/test_every_longhorn_pvc_has_a_tier.py` | 51 | 662 |
 | `tests/services/test_ingress_probe_targets.py` | 50 | 411 |
-| `tests/deploy/test_manifests_apply_verdict.py` | 47 | 91 |
 | `tests/services/test_pihole_redundancy.py` | 45 | 91 |
 | `scripts/dev/tests/test_prune_worktrees_orphan_dirs.py` | 43 | 731 |
 | `scripts/lib/tests/test_invocation_sites.py` | 43 | 1026 |
