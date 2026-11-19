@@ -1,18 +1,21 @@
 # The Project board resync on daniel-box. homelab-board-sync.timer starts
 # homelab-board-sync.service every hour at :47, as sys_user, in the primary checkout. The service
 # runs `findings.py sync-board`, which makes each open issue's item on the Server Issue Tracking
-# board agree with the issue's state, claim comments and labels (scripts/dev/findings_lib/board.py).
+# board, and its Severity and Not Before issue fields, agree with the issue's state, claim
+# comments and labels (scripts/dev/findings_lib/board.py).
 #
 # findings.py syncs the board for every issue a subcommand writes, so a run only matters for the
 # changes findings.py never saw: a label edited in the GitHub UI, or a findings.py run as the
 # `claude` user, whose gh login cannot write a Project that DanielH2018 owns. The service uses
 # sys_user's own gh login, as docs-refresh does, and loads no credential.
 #
-# Autonomous-role contract (the timer writes the Project board with no human in the loop).
+# Autonomous-role contract (the timer writes the Project board and two issue fields with no human
+# in the loop).
 #
-# - Scope / exclusions: one GitHub object, the Server Issue Tracking board. It adds an open issue
-#   the board lacks and writes its Status, Severity and Not before fields. It changes no issue,
-#   label or repository setting, and writes nothing under the checkout.
+# - Scope / exclusions: the Server Issue Tracking board, and two issue fields on each open issue.
+#   It adds an open issue the board lacks, writes the board's Status field, and sets the
+#   issue's Severity and Not Before issue fields from its labels. It changes no label, comment,
+#   issue state or repository setting, and writes nothing under the checkout.
 # - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
 #   link from a package version, or reverting this component, stops the timer on the install that
 #   drops it, and `systemctl stop homelab-board-sync.timer` stops it until the next install.
@@ -27,8 +30,9 @@
 #   in a row exits 1, and OnFailure= pages Discord through homelab-alert, then every 24th after
 #   it: a failure that lasts pages once a day, and one the next run clears pages never.
 # - Next-run review: a page names homelab-board-sync.service. Read `journalctl -t board-sync`.
-#   A `board has no "<field>" field` or `has no option` line means the board's schema moved, and
-#   recurs every hour until the board or board.py changes. Any other reason is gh or GitHub.
+#   A `board has no "<field>" field`, `no "<field>" issue field` or `has no option` line means
+#   the board's or the account's field schema moved, and recurs every hour until the schema or
+#   board.py changes. Any other reason is gh or GitHub.
 #
 # ENFORCED: hosts/lib/tests/test_board_sync_component.py, which renders the package and holds the
 # unit, the timer, its enable link and this contract, and hosts/tests/test_board_sync_paging.py,
