@@ -1,14 +1,22 @@
-"""The Server Issue Tracking board, kept equal to what each issue's state and labels say.
+"""The Server Issue Tracking board and two issue fields, kept equal to each issue.
 
-The board holds three fields findings.py owns, each derived from the issue alone:
+findings.py owns three fields, each derived from the issue alone:
 
-    Status      Done when the issue is closed; In Progress while a worktree holds its
-                `Claim:` comment or an open pull request will close it; Todo otherwise.
-    Severity    the `severity/<level>` label's level, or empty.
-    Not before  the `not-before:<date>` label's date, or empty.
+    Status      a board field. Done when the issue is closed; In Progress while a worktree
+                holds its `Claim:` comment or an open pull request will close it; Todo
+                otherwise.
+    Severity    an issue field: the `severity/<level>` label's level as `High`, `Medium`
+                or `Low`, or empty.
+    Not Before  an issue field: the `not-before:<date>` label's date, or empty.
 
 The board's Status is what GitHub shows in an issue's sidebar and logs on its timeline. It
-is not the issue's own `status`, a preview this account cannot set.
+is not the issue's own `status`, a preview this account cannot set, so GitHub reserves the
+issue-field name `Status`.
+
+Severity and Not Before are issue fields so that issue search filters them
+(`field."not before":>2026-12-01`) and a Project reads them from the issue. The account
+owns their definitions under Settings > Planning > Issue fields; this token cannot create
+one, but `repository.issueFields` lists them.
 
 THE ISSUE STAYS THE RECORD. `next`, `claim` and the fan-out read labels and comments, never
 the board, so a board write is best-effort: `findings.main` syncs every issue a command
@@ -17,8 +25,8 @@ exit code. `findings.py sync-board` is the repair path, and daniel-box's
 `homelab-board-sync.timer` runs it hourly for the edits findings.py never saw.
 
 Every call is `gh api graphql`. Issues are read in chunks of aliased lookups. A chunk's
-writes go out as aliased mutations, a few to a request: the adds first, because the field
-writes need their item ids.
+writes go out as aliased mutations, a few to a request: the board adds first, because the
+board field writes need their item ids.
 
 Typical usage example:
 
@@ -42,7 +50,9 @@ from dev.findings_lib.issue_model import PR_REPO, current_claim, not_before
 from lib.gh import gh as real_gh
 
 PROJECT_TITLE = "Server Issue Tracking"
-STATUS, SEVERITY, NOT_BEFORE = "Status", "Severity", "Not before"
+STATUS, SEVERITY, NOT_BEFORE = "Status", "Severity", "Not Before"
+BOARD_FIELDS = (STATUS,)
+ISSUE_FIELDS = (SEVERITY, NOT_BEFORE)
 TODO, IN_PROGRESS, DONE = "Todo", "In Progress", "Done"
 CHUNK = 25
 # GitHub answered HTTP 502 to one request carrying 25 adds and to one carrying 75 field writes.
@@ -66,6 +76,10 @@ fragment I on Issue {
   labels(first: 100) { nodes { name } }
   comments(first: 100) { nodes { body createdAt authorAssociation viewerDidAuthor } }
   closedByPullRequestsReferences(first: 10, includeClosedPrs: false) { nodes { state } }
+  issueFieldValues(first: 25) { nodes {
+    ... on IssueFieldSingleSelectValue {
+      name field { ... on IssueFieldSingleSelect { name } } }
+    ... on IssueFieldDateValue { value field { ... on IssueFieldDate { name } } } } }
   projectItems(first: 20) {
     nodes { id project { id } fieldValues(first: 30) { nodes {"""
     + _FIELD_VALUE
@@ -83,25 +97,31 @@ _BOARD = """
         ... on ProjectV2Field { id name }
         ... on ProjectV2SingleSelectField { id name options { id name } }
       } }
-    } } } }"""
+    } } } }
+    issueFields(first: 30) { nodes {
+      ... on IssueFieldSingleSelect { id name options { id name } }
+      ... on IssueFieldDate { id name }
+    } }"""
 
 
 @dataclass(frozen=True)
 class Field:
-    """One board field findings.py writes.
+    """One field findings.py writes, on the board item or on the issue.
 
     Attributes:
         id: the field's node id.
         options: option name to option id for a single-select field, None for a date.
+        on_issue: True for an issue field, False for a board field.
     """
 
     id: str
     options: dict[str, str] | None
+    on_issue: bool = False
 
 
 @dataclass(frozen=True)
 class Board:
-    """The board's node id and the fields findings.py writes that it carries."""
+    """The board's node id, and the fields findings.py writes that the board or account has."""
 
     id: str
     fields: dict[str, Field]
@@ -117,7 +137,7 @@ class BoardIssue:
         wanted: field name to the value the issue's state, claim and labels call for, None
             for empty.
         item_id: the issue's item on the board, or None when it is not on it.
-        held: field name to the value the item holds; a field it leaves empty is absent.
+        held: field name to the value the item or issue holds; an empty field is absent.
     """
 
     number: int
@@ -130,7 +150,7 @@ class BoardIssue:
 def wanted_fields(
     state: str, labels: set[str], open_prs: int, claimed: bool
 ) -> dict[str, str | None]:
-    """The value each board field takes for one issue.
+    """The value each field takes for one issue.
 
     Args:
         state: the issue's GraphQL state, `OPEN` or `CLOSED`.
@@ -145,7 +165,12 @@ def wanted_fields(
     else:
         status = TODO
     severity = next(
-        (n.split("/", 1)[1] for n in sorted(labels) if n.startswith("severity/")), None
+        (
+            n.split("/", 1)[1].capitalize()
+            for n in sorted(labels)
+            if n.startswith("severity/")
+        ),
+        None,
     )
     day = not_before({"labels": [{"name": n} for n in labels]})
     return {
@@ -155,25 +180,34 @@ def wanted_fields(
     }
 
 
+def _fields(
+    nodes: list | None, names: tuple[str, ...], on_issue: bool
+) -> dict[str, Field]:
+    fields = {}
+    for f in nodes or []:
+        if f and f.get("name") in names:
+            options = f.get("options")
+            fields[f["name"]] = Field(
+                f["id"],
+                None if options is None else {o["name"]: o["id"] for o in options},
+                on_issue,
+            )
+    return fields
+
+
 def parse_board(repository: dict) -> Board | None:
     """The board titled exactly `PROJECT_TITLE` from a read's `repository`, or None.
 
     The `projectsV2(query:)` search is fuzzy, so a board named "Server Issue Tracking
-    archive" must not take the writes.
+    archive" must not take the writes. The issue fields come from the repository, which
+    inherits them from its owner.
     """
     owner = repository.get("owner") or {}
+    issue_fields = (repository.get("issueFields") or {}).get("nodes")
     for node in (owner.get("projectsV2") or {}).get("nodes") or []:
         if node and node.get("title") == PROJECT_TITLE:
-            fields = {}
-            for f in node["fields"]["nodes"]:
-                if f and f.get("name") in (STATUS, SEVERITY, NOT_BEFORE):
-                    options = f.get("options")
-                    fields[f["name"]] = Field(
-                        f["id"],
-                        None
-                        if options is None
-                        else {o["name"]: o["id"] for o in options},
-                    )
+            fields = _fields(node["fields"]["nodes"], BOARD_FIELDS, on_issue=False)
+            fields |= _fields(issue_fields, ISSUE_FIELDS, on_issue=True)
             return Board(node["id"], fields)
     return None
 
@@ -192,8 +226,12 @@ def parse_issue(node: dict, board: Board) -> BoardIssue:
             item_id = item["id"]
             for value in item["fieldValues"]["nodes"]:
                 name = ((value or {}).get("field") or {}).get("name")
-                if name:
+                if name in BOARD_FIELDS:
                     held[name] = value.get("name") or value.get("date")
+    for value in (node.get("issueFieldValues") or {}).get("nodes") or []:
+        name = ((value or {}).get("field") or {}).get("name")
+        if name in ISSUE_FIELDS:
+            held[name] = value.get("name") or value.get("value")
     claimed = current_claim({"comments": node["comments"]["nodes"]}) is not None
     return BoardIssue(
         node["number"],
@@ -215,10 +253,15 @@ def plan_issue(issue: BoardIssue, board: Board) -> tuple[list[str], list[str]]:
     for name, want in issue.wanted.items():
         field = board.fields.get(name)
         if field is None:
-            problems.append(f'board has no "{name}" field')
+            problems.append(
+                f'no "{name}" issue field; add it under Settings > Planning > Issue fields'
+                if name in ISSUE_FIELDS
+                else f'board has no "{name}" field'
+            )
             continue
         if want is not None and field.options is not None and want not in field.options:
-            problems.append(f'board field "{name}" has no option "{want}"')
+            where = "issue field" if field.on_issue else "board field"
+            problems.append(f'{where} "{name}" has no option "{want}"')
             continue
         if issue.held.get(name) != want:
             changes.append(name)
@@ -252,6 +295,19 @@ def _read(gh: Gh, numbers: Sequence[int], owner: str, name: str) -> dict:
         f"{lookups}\n{_BOARD}\n  }}\n}}\n{_ISSUE}"
     )
     return _graphql(gh, query, owner=owner, name=name, title=PROJECT_TITLE)
+
+
+def _issue_field_write(field: Field, issue: str, want: str | None) -> str:
+    if want is None:
+        value = "delete: true"
+    elif field.options is None:
+        value = f"dateValue: {json.dumps(want)}"
+    else:
+        value = f"singleSelectOptionId: {json.dumps(field.options[want])}"
+    return (
+        f"setIssueFieldValue(input: {{issueId: {json.dumps(issue)}, issueFields: "
+        f"[{{fieldId: {json.dumps(field.id)}, {value}}}]}}) {{ issue {{ id }} }}"
+    )
 
 
 def _field_write(board: Board, item: str, name: str, want: str | None) -> str:
@@ -300,7 +356,11 @@ def _write(gh: Gh, board: Board, plans: list[tuple[BoardIssue, list[str]]]) -> N
             items[int(key[1:])] = value["item"]["id"]
     writes = [
         f"f{issue.number}_{i}: "
-        + _field_write(board, items[issue.number], name, issue.wanted[name])
+        + (
+            _issue_field_write(board.fields[name], issue.content_id, issue.wanted[name])
+            if board.fields[name].on_issue
+            else _field_write(board, items[issue.number], name, issue.wanted[name])
+        )
         for issue, changes in plans
         for i, name in enumerate(changes)
     ]
