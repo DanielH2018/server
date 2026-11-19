@@ -20,8 +20,10 @@ from lib import yaml_fast
 
 ACTION = ".github/actions/pinned-tool/action.yml"
 USES = "$/.github/actions/pinned-tool"
+# A path segment; a `${{ … }}` expression counts as one, spaces and all.
+SEGMENT = r"(?:\$\{\{[^}]*\}\}|[^\s\"'/])+"
 RELEASE = re.compile(
-    r"github\.com/([^\s\"'/]+(?:/[^\s\"'/]+)?)/releases/(?:latest/)?download\b"
+    rf"github\.com/({SEGMENT}(?:/{SEGMENT})?)/releases/(?:latest/)?download\b"
 )
 # The repo a release URL built from a variable reads as; no EXEMPT row can name it.
 UNRESOLVED = "<repo built from a variable>"
@@ -39,7 +41,7 @@ GITLEAKS = (
     "gitleaks checks against the release's checksums.txt, so its version has one home in "
     "prek.toml"
 )
-FLUX, SOPS, KIND = "fluxcd/flux2", "getsops/sops", "kubernetes-sigs/kind"
+FLUX = "fluxcd/flux2"
 COSIGN = "sigstore/cosign"
 # (file, job, release repo) -> why that inline fetch stays. `test_every_exemption_still_fetches`
 # fails on a row whose job no longer fetches that repo.
@@ -50,18 +52,10 @@ EXEMPT = {
     ("promote.yml", "settle", FLUX): NO_CHECKOUT,
     ("promote.yml", "reconcile", FLUX): NO_CHECKOUT,
     ("promote.yml", "reset-move", FLUX): NO_CHECKOUT,
-    ("ci.yml", "hooks", "vale-cli/vale"): "Vale has no sha256 pin to check (#9225)",
     ("ci.yml", "host_packages_build", "gitleaks/gitleaks"): GITLEAKS,
     ("promote.yml", "render", "gitleaks/gitleaks"): GITLEAKS,
     ("promote.yml", "promote", COSIGN): "moves to the action in #9222",
-    ("bootstrap-drill.yml", "drill", FLUX): "moves to the action in #9219",
-    ("bootstrap-drill.yml", "drill", SOPS): "moves to the action in #9219",
-    ("bootstrap-drill.yml", "drill", KIND): "moves to the action in #9219",
-    ("flux-deletion-drill.yml", "drill", FLUX): "moves to the action in #9220",
-    ("flux-deletion-drill.yml", "drill", KIND): "moves to the action in #9220",
-    ("flux-deletion-drill.yml", "drill", COSIGN): "moves to the action in #9220",
     ("prune-artifacts.yml", "prune", COSIGN): "moves to the action in #9221",
-    ("pytest-tools", "pytest-tools", SOPS): "moves to the action in #9223",
 }
 # installer action -> why it stays.
 INSTALLERS = {
@@ -76,6 +70,14 @@ KNOWN_CALLERS = {
     ("ci.yml", "sops_manifest_type_proof", "sops"),
     ("ci.yml", "sops_manifest_type_proof", "kind"),
     ("ci.yml", "host_packages_build", "nfpm"),
+    ("ci.yml", "hooks", "vale"),
+    ("bootstrap-drill.yml", "drill", "flux"),
+    ("bootstrap-drill.yml", "drill", "sops"),
+    ("bootstrap-drill.yml", "drill", "kind"),
+    ("flux-deletion-drill.yml", "drill", "flux"),
+    ("flux-deletion-drill.yml", "drill", "cosign"),
+    ("flux-deletion-drill.yml", "drill", "kind"),
+    ("pytest-tools", "pytest-tools", "sops"),
 }
 
 
@@ -258,6 +260,10 @@ NFPM = "goreleaser/nfpm"
         ),
         (
             'curl -fsSLo f "https://github.com/${OWNER}/nfpm/releases/download/fixture/n"',
+            UNRESOLVED,
+        ),
+        (
+            'curl -fsSLo f "https://github.com/${{ env.REPO }}/releases/download/fixture/n"',
             UNRESOLVED,
         ),
     ],

@@ -213,7 +213,7 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
         # python is absent on purpose: its minor and major bumps resolve to the cross-manager
         # `python (manual` group, held by test_renovate_python_group.py.
         ("node", ".github/actions/setup/action.yml", "node-version"),
-        ("vale-cli/vale", ".github/workflows/ci.yml", "github-releases"),
+        ("vale-cli/vale", ".github/workflows/ci.yml", "github-release-attachments"),
         ("goreleaser/nfpm", ".github/workflows/ci.yml", "github-release-attachments"),
         ("vale-cli/Google", ".vale.ini", "github-releases"),
     ],
