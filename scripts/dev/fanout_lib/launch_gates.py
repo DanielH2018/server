@@ -26,8 +26,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import REQUIRED_LABEL, Issue
+from fanout_lib.brief import REQUIRED_LABEL
 from fanout_lib.manifest import Batch, Manifest, live_batches, standing_batches
+from findings_lib.issue_model import Issue
 from fanout_lib.placement import HostReading
 from fanout_lib.status import BatchStatus, parse_status
 from fanout_lib.target import SERVER
@@ -214,6 +215,12 @@ def fetch_issues(
             fetched[number] = tools.gh_issue(number, repo)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             error(f"could not fetch issue {number}: {error_text(exc)}")
+            return None
+        except KeyError as exc:
+            error(f"could not read issue {number}: gh's answer has no {exc} field")
+            return None
+        except ValueError as exc:
+            error(f"could not read issue {number}: {exc}")
             return None
     unlabelled = [
         n for n, issue in fetched.items() if REQUIRED_LABEL not in issue.labels

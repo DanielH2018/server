@@ -9,14 +9,14 @@ import subprocess
 
 import pytest
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 ISSUES = [
-    Issue(1, "one", "body one", ("claude",)),
-    Issue(2, "two", "body two", ("claude",)),
+    Issue(1, "one", IssueState.OPEN, body="body one", labels=frozenset({"claude"})),
+    Issue(2, "two", IssueState.OPEN, body="body two", labels=frozenset({"claude"})),
 ]
 
 
@@ -139,7 +139,10 @@ def test_a_failed_reap_warns_and_the_launch_still_claims(tmp_path, capsys):
 
 def test_a_placement_refusal_claims_nothing(tmp_path):
     """Seven batches on one host is over what it admits: exit 3 before any launch."""
-    issues = [Issue(n, str(n), "b", ("claude",)) for n in range(1, 8)]
+    issues = [
+        Issue(n, str(n), IssueState.OPEN, body="b", labels=frozenset({"claude"}))
+        for n in range(1, 8)
+    ]
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
     assert _launch(tools, tmp_path, *map(str, range(1, 8))) == 3
     assert _findings(run) == []

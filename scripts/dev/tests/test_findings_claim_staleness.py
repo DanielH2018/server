@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
-from _findings_fakes import foreign_comment, operator_comment
+from _findings_fakes import foreign_comment, make_issue, operator_comment, typed
 
 from dev.findings_lib.claim import claim_is_live, claim_states
 from dev.findings_lib.issue_model import claim_comment, release_comment
@@ -20,6 +20,11 @@ WT = "worktree-issue-1132"
 # `claim_states`, so "5 days" is exactly 5 whatever the wall clock reads.
 NOW = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
+
+
+def _issue(number, comments):
+    """An issue carrying ``comments``, parsed."""
+    return typed(make_issue(number, comments=comments))
 
 
 def _foreign_claim(worktree=WT, created=None):
@@ -113,8 +118,8 @@ def test_a_worktree_on_a_different_branch_does_not_satisfy_the_claim():
 
 def test_claim_states_reports_one_row_per_claimed_issue_and_skips_the_rest():
     issues = [
-        {"number": 1132, "comments": [_claimed()]},
-        {"number": 1140, "comments": []},
+        _issue(1132, [_claimed()]),
+        _issue(1140, []),
     ]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
     assert [r.number for r in rows] == [1132]
@@ -127,13 +132,13 @@ def test_age_days_computed_from_createdAt():
     """Verify age_days is computed from the claim comment's createdAt.
 
     This test proves the computing path of age_days is active. If the path is neutered
-    (e.g. _claim_age_days returns None as its first line), this test fails.
+    (e.g. `Claim.age_days` returns None as its first line), this test fails.
     """
 
     # Create a comment with createdAt timestamp from 5 days ago.
     five_days_ago = (NOW - timedelta(days=5)).isoformat()
 
-    issues = [{"number": 1132, "comments": [_claimed(created=five_days_ago)]}]
+    issues = [_issue(1132, [_claimed(created=five_days_ago)])]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never, now=NOW)
     assert len(rows) == 1
     assert rows[0].age_days == 5
@@ -152,14 +157,14 @@ def test_age_days_from_currently_open_episode_after_claim_release_reclaim():
     one_day_ago = (NOW - timedelta(days=1)).isoformat()
 
     issues = [
-        {
-            "number": 2000,
-            "comments": [
+        _issue(
+            2000,
+            [
                 _claimed(created=five_days_ago),
                 _released(created=three_days_ago),
                 _claimed(created=one_day_ago),
             ],
-        }
+        )
     ]
     rows = claim_states(
         issues, [_tree(branch=WT)], dirty=_always, merged=_never, now=NOW
@@ -177,7 +182,7 @@ def test_age_days_returns_none_for_naive_datetime():
     None.
     """
     # A date-only string (naive datetime).
-    issues = [{"number": 1132, "comments": [_claimed(created="2026-09-01")]}]
+    issues = [_issue(1132, [_claimed(created="2026-09-01")])]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never)
     assert len(rows) == 1
     assert rows[0].age_days is None
@@ -226,34 +231,34 @@ def test_a_readable_worktree_still_gets_the_ordinary_verdict():
 
 
 def test_a_foreign_claim_produces_no_claim_row_at_all():
-    """`claim_states` folds through `current_claim`, so a drive-by claim is not a row.
+    """`claim_states` folds through `Issue.claim`, so a drive-by claim is not a row.
 
     Without this, a single foreign comment made `claims` show a claim, `next` withhold the
     issue and `claim` refuse it.
     """
-    issues = [{"number": 1132, "comments": [_foreign_claim()]}]
+    issues = [_issue(1132, [_foreign_claim()])]
     assert claim_states(issues, [_tree()], dirty=_always, merged=_never) == []
 
 
 def test_the_age_of_a_claim_ignores_a_foreign_comment_between_its_episodes():
-    """`_claim_age_days` must skip exactly what `current_claim` skips.
+    """The age of a claim must skip exactly what the claim fold skips.
 
     A foreign `Released:` between the operator's claim and now would, if folded, close the
-    episode `_claim_age_days` is measuring — so the row would age the claim from a later
+    episode the age is measuring — so the row would age the claim from a later
     comment than the one the register thinks is current, or report no age at all.
     """
     five_days_ago = (NOW - timedelta(days=5)).isoformat()
     two_days_ago = (NOW - timedelta(days=2)).isoformat()
     issues = [
-        {
-            "number": 1132,
-            "comments": [
+        _issue(
+            1132,
+            [
                 _claimed(created=five_days_ago),
                 foreign_comment(
                     release_comment(WT, "t", "not mine"), createdAt=two_days_ago
                 ),
             ],
-        }
+        )
     ]
     rows = claim_states(issues, [_tree()], dirty=_always, merged=_never, now=NOW)
     assert [r.worktree for r in rows] == [WT]

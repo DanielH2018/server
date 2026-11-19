@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status.py
 import dataclasses
 import subprocess
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.status import (
     parse_status,
@@ -267,7 +267,7 @@ def test_stop_never_removes_the_worktree():
 def test_cli_launch_places_and_starts_the_agent_with_one_launch_call(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM), "daniel-server": ok(HEADROOM)},
-        issues=[Issue(1, "t", "b", ("claude",))],
+        issues=[Issue(1, "t", IssueState.OPEN, body="b", labels=frozenset({"claude"}))],
     )
     assert _launch(tools, tmp_path, "--host", "daniel-box") == 0
     # headroom read, health read, one combined launch call for the one batch.
@@ -278,7 +278,7 @@ def test_cli_launch_places_and_starts_the_agent_with_one_launch_call(tmp_path):
 def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(f"1\nmax\n1\nmax\n0\n{HOST_KEY}\n")},
-        issues=[Issue(1, "t", "b", ("claude",))],
+        issues=[Issue(1, "t", IssueState.OPEN, body="b", labels=frozenset({"claude"}))],
     )
     assert _launch(tools, tmp_path) == 3
     # NoHeadroom stops before any launch call.
@@ -291,7 +291,7 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
     # refuses a batch id live in any run under the root it is given.
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
-        issues=[Issue(1, "t", "b", ("claude",))],
+        issues=[Issue(1, "t", IssueState.OPEN, body="b", labels=frozenset({"claude"}))],
     )
     run.answers_by_call = [
         ok(HEADROOM),
@@ -305,7 +305,15 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
 
     tools, run = fake_tools(
         answers={"daniel-server": ok(HEADROOM)},
-        issues=[Issue(1, "t", "k8s/roles/sonarr/tasks/main.yml", ("claude",))],
+        issues=[
+            Issue(
+                1,
+                "t",
+                IssueState.OPEN,
+                body="k8s/roles/sonarr/tasks/main.yml",
+                labels=frozenset({"claude"}),
+            )
+        ],
     )
     run.answers_by_call = [ok(HEADROOM), ok("sonarr line one\nsonarr line two\n")]
     assert _launch(tools, tmp_path / "second-run", "--host", "daniel-server") == 0
@@ -317,7 +325,7 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
 def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
-        issues=[Issue(1, "t", "b", ("claude",))],
+        issues=[Issue(1, "t", IssueState.OPEN, body="b", labels=frozenset({"claude"}))],
     )
     run.answers_by_call = [
         ok(HEADROOM),

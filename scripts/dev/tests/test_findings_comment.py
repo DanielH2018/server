@@ -4,7 +4,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_comment.py
 """
 
 import pytest
-from _findings_fakes import Fakes, make_issue
+from _findings_fakes import Fakes, make_issue, typed
 
 from dev import findings
 from lib.exit_codes import FINDINGS_BAD_ARGS
@@ -18,27 +18,27 @@ _NOTE = "The gate in the body is too early: the census still lists 146 items."
 
 @pytest.mark.parametrize("state", ["OPEN", "CLOSED"])
 def test_comment_posts_the_body_and_nothing_else(state):
-    assert plan_comment(make_issue(6643, state=state), _NOTE) == [
+    assert plan_comment(typed(make_issue(6643, state=state)), _NOTE) == [
         ["issue", "comment", "6643", "--body", _NOTE]
     ]
 
 
 def test_comment_naming_a_marker_mid_text_is_clean():
     body = "Nothing here is a `Re-observed` sighting or a Claim: `x` trailer."
-    assert plan_comment(make_issue(6643), body)
+    assert plan_comment(typed(make_issue(6643)), body)
 
 
 def test_comment_outside_the_register_is_refused():
     issue = make_issue(6643)
     issue["labels"] = []
     with pytest.raises(ClaimRefused) as exc:
-        plan_comment(issue, _NOTE)
+        plan_comment(typed(issue), _NOTE)
     assert "not in the register" in exc.value.reason
 
 
 def test_comment_with_a_blank_body_is_refused():
     with pytest.raises(ClaimRefused) as exc:
-        plan_comment(make_issue(6643), "  \n")
+        plan_comment(typed(make_issue(6643)), "  \n")
     assert "empty" in exc.value.reason
 
 
@@ -55,7 +55,7 @@ def test_comment_with_a_blank_body_is_refused():
 def test_comment_carrying_a_fold_marker_is_refused(body, marker):
     """Each body would otherwise count a sighting, settle a close, or move a claim."""
     with pytest.raises(ClaimRefused) as exc:
-        plan_comment(make_issue(6643), body)
+        plan_comment(typed(make_issue(6643)), body)
     assert marker in exc.value.reason
 
 

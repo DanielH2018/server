@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from fanout_lib.brief import Issue
+from findings_lib.issue_model import Issue, IssueState
 from fanout_lib.launch import (
     REVIEW_RUNTIME_MAX_S,
     RUNTIME_MAX_S,
@@ -45,8 +45,13 @@ from lib.proc_testing import fake_bin
 from lib.repo_paths import REPO as REPO_ROOT
 
 ISSUES = [
-    Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),
-    Issue(1386, "Healthchecks key", "second body"),
+    Issue(
+        1345,
+        "Traefik startupProbe has no red-proof",
+        IssueState.OPEN,
+        body="body one\nline two",
+    ),
+    Issue(1386, "Healthchecks key", IssueState.OPEN, body="second body"),
 ]
 
 

@@ -36,10 +36,11 @@ from dev.findings_lib.issue_model import (
     _LINE_SUFFIX,
     PR_REPO,
     _TRAILER_RE,
+    Comment,
+    Issue,
     cited_paths,
     close_outcome,
-    is_operator_comment,
-    label_names,
+    parse_issue,
     settled_reason,
 )
 from lib.json_types import as_object
@@ -50,46 +51,41 @@ from lib.exit_codes import FINDINGS_BAD_ARGS
 _FIXED_BY_RE = re.compile(r"^Fixed by PR (?:([\w.-]+/[\w.-]+))?#(\d+)\.", re.M)
 
 
-def closing_prs(issue: dict, repo: str) -> list[int]:
+def closing_prs(issue: Issue, repo: str) -> list[int]:
     """The PR numbers that closed ``issue``, sorted, from either record of it.
 
     Args:
-        issue: a gh issue carrying `closedByPullRequestsReferences` and `comments`.
+        issue: an issue read with `closedByPullRequestsReferences` and `comments`.
         repo: the register's `OWNER/NAME`. A reference to a PR in another repo is dropped,
             because a bare `#N` printed beside it would name this repo's PR N.
     """
-    prs = set()
-    for ref in issue.get("closedByPullRequestsReferences") or []:
-        where = ref.get("repository") or {}
-        slug = f"{(where.get('owner') or {}).get('login')}/{where.get('name')}"
-        if slug.lower() == repo.lower():
-            prs.add(ref["number"])
-    for comment in issue.get("comments", []):
+    prs = {n for slug, n in issue.closing_prs if slug.lower() == repo.lower()}
+    for comment in issue.comments:
         # This repo is public; a `Fixed by PR` line from any other account records nothing.
-        if is_operator_comment(comment):
+        if comment.by_operator:
             # A qualified line names a PR in that repo; a bare one names this register's own.
             prs.update(
                 int(n)
-                for where, n in _FIXED_BY_RE.findall(comment.get("body") or "")
+                for where, n in _FIXED_BY_RE.findall(comment.body)
                 if not where or where.lower() == repo.lower()
             )
     return sorted(prs)
 
 
-def history_row(issue: dict, repo: str) -> dict:
+def history_row(issue: Issue, repo: str) -> dict:
     """One `history` row: what a session needs to judge whether a finding was settled."""
     return {
-        "number": issue["number"],
-        "title": issue["title"],
+        "number": issue.number,
+        "title": issue.title,
         "outcome": close_outcome(issue),
-        "closed": (issue.get("closedAt") or "")[:10] or None,
+        "closed": issue.closed_at[:10] or None,
         "reason": settled_reason(issue),
         "prs": closing_prs(issue, repo),
-        "url": issue.get("url", ""),
+        "url": issue.url,
     }
 
 
-def cites(issue: dict, path: str) -> bool:
+def cites(issue: Issue, path: str) -> bool:
     """Whether ``issue``'s body cites ``path``, or a file under it when it is a directory.
 
     Not `cited_paths`: it needs a `/` and a file extension, so it never captures `CLAUDE.md`,
@@ -99,7 +95,7 @@ def cites(issue: dict, path: str) -> bool:
     `:<line>` or sentence punctuation, but not by more of a name. The trailer is cut first,
     because it names `scripts/dev/findings.py` on every issue.
     """
-    body = _TRAILER_RE.sub("", (issue.get("body") or "").replace("\r\n", "\n"))
+    body = _TRAILER_RE.sub("", issue.body.replace("\r\n", "\n"))
     token = re.compile(rf"(?<![\w/.-]){re.escape(path.rstrip('/'))}(?![\w-]|\.\w)")
     return token.search(body) is not None
 
@@ -157,9 +153,9 @@ def cmd_history(args: argparse.Namespace, tools: FindingsTools) -> int:
 COMMENT_PREVIEW_CHARS = 200
 
 
-def _comment_text(comment: dict, full: bool) -> str:
+def _comment_text(comment: Comment, full: bool) -> str:
     """A comment whole under `--full`, else its first line cut to `COMMENT_PREVIEW_CHARS`."""
-    body = (comment.get("body") or "").strip()
+    body = comment.body.strip()
     if full:
         return body
     first = body.splitlines()[0][:COMMENT_PREVIEW_CHARS] if body else ""
@@ -183,12 +179,13 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
     Returns:
         3 if the issue is not in the `claude` register, 0 otherwise.
     """
-    # Read as a plain dict, the shape every `issue_model` reader takes.
-    issue: dict = as_object(
-        tools.gh_json("issue", "view", str(args.number), "--json", HISTORY_FIELDS),
-        "gh issue view",
+    issue = parse_issue(
+        as_object(
+            tools.gh_json("issue", "view", str(args.number), "--json", HISTORY_FIELDS),
+            "gh issue view",
+        )
     )
-    if "claude" not in label_names(issue):
+    if "claude" not in issue.labels:
         sys.stderr.write(f"show: #{args.number} is not a `claude` finding\n")
         return 3
     if args.brief:
@@ -199,31 +196,29 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
         # and a module-level import crashed every subcommand there on import.
         from dev.findings_lib.precomputed import precomputed
 
-        block = precomputed(cited_paths(issue.get("body") or "", tools.tracked()))
+        block = precomputed(cited_paths(issue.body, tools.tracked()))
         print(block.rstrip() if block else f"#{args.number} cites no repo path")
         return 0
     row = history_row(issue, tools.repo or PR_REPO)
     comments = [
         {
-            "author": (c.get("author") or {}).get("login"),
-            "operator": is_operator_comment(c),
-            "createdAt": c.get("createdAt"),
-            "body": c.get("body") or "",
+            "author": c.author or None,
+            "operator": c.by_operator,
+            "createdAt": c.created_at or None,
+            "body": c.body,
         }
-        for c in issue.get("comments", [])
+        for c in issue.comments
     ]
     if args.json:
-        print(
-            json.dumps({**row, "body": issue.get("body") or "", "comments": comments})
-        )
+        print(json.dumps({**row, "body": issue.body, "comments": comments}))
         return 0
     _print_row(row)
     print(f"       {row['url']}\n")
-    print((issue.get("body") or "").strip())
-    for c in issue.get("comments", []):
-        who = (c.get("author") or {}).get("login")
-        if not is_operator_comment(c):
+    print(issue.body.strip())
+    for c in issue.comments:
+        who = c.author or None
+        if not c.by_operator:
             who = f"{who} (not the operator)"
-        day = (c.get("createdAt") or "")[:10]
+        day = c.created_at[:10]
         print(f"\n--- {day} {who}\n{_comment_text(c, args.full)}")
     return 0
