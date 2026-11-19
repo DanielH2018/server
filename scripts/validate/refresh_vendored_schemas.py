@@ -60,7 +60,7 @@ KUBERNETES_OPENAPI = "https://raw.githubusercontent.com/kubernetes/kubernetes/{t
 # which reads the manifests, so a manifest in a new group fails there until its group is added
 # here. apiextensions.k8s.io is listed ahead of its first manifest, for the Flux
 # CustomResourceDefinitions that slice D1's flux role renders
-# (docs/target-architecture/deploy/d1-flux-installed.md).
+# (docs/archive/deploy/d1-flux-installed.md).
 CORE_GROUP_FILES = [
     "api__v1_openapi.json",
     "apis__apiextensions.k8s.io__v1_openapi.json",

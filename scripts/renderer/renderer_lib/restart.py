@@ -35,7 +35,7 @@ the YAML parser marks, so no other byte of the file moves: a re-serialised docum
 the quotes around a `"${key}"` and change the type Flux substitutes into it.
 
 `pod_references` is also what the outside-role reference test reads, so the checksum and that
-test agree on what a pod names. The plan is docs/target-architecture/deploy/d3-secrets.md,
+test agree on what a pod names. The plan is docs/archive/deploy/d3-secrets.md,
 *Restart triggers (D3.3c)*.
 """
 

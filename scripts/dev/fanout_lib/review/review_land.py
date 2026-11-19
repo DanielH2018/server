@@ -17,21 +17,29 @@ landing ended the batch `needs input`. The staleness check stays as it is. The i
 already runs arbitrary commands as this user, so the base's copy adds no boundary, and for
 the agent user the landing itself runs in `homelab-claude-land@<n>.service` from the
 operator's checkout either way.
+
+PARKING. A landing that another PR's `DEPLOY_HOLD` stopped is neither this batch's to fix
+nor a question for a person: `land_result.park_line` reads it from the `LAND-RESULT:` line, and the batch
+ends `parked:`. It never waits in the unit for the hold to clear, which would spend the
+unit's run time and keep its memory reservation. The sub-coordinator that owns the batch
+re-lands it after `cc-wait landing-clear`.
 """
 
-import re
 import subprocess
-from collections.abc import Callable
-from dataclasses import dataclass
+import sys as _sys
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/dev
+_sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # scripts/
+from deploy_tools.land_lib.detach import result_in
+from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 # The verdicts after which an apply is owed or the deploy needs a look. The landing is
 # finished for every other verdict, or gave up at a resume point an operator re-runs.
 RESUME_VERDICTS = frozenset({"unhealthy", "deploy-failed", "needs-manual-apply"})
-# The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: a host's
-# updater applies its package, and cc-wait ends it with exit 4, not 0.
-FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
 # The verdict of a landing whose PR failed its own CI run. `review_ci.land_draft` resumes the
 # implementer for it.
 PR_CI_RED = "pr-ci-red"
@@ -42,7 +50,6 @@ STILL_WAITING = 75
 LAND_MARGIN_S = 90 * 60
 # A wait started with less than this left on the unit's run time could be cut off mid-wait.
 WAIT_MARGIN_S = 600
-VERDICT_LINE = re.compile(r"(?m)^VERDICT: (\S+).*$")
 TAIL_LINES = 40
 
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
@@ -62,6 +69,7 @@ class Landing:
         checkout: the fresh checkout `land.sh` ran from, set only for a verdict in
             `RESUME_VERDICTS`, whose resumed implementer re-lands from it. The caller
             removes it with `release` once that session ends.
+        result: the fields of the log's `LAND-RESULT:` line, empty when it holds none.
     """
 
     rc: int
@@ -70,6 +78,17 @@ class Landing:
     tail: str = ""
     wait: str = ""
     checkout: Path | None = None
+    result: Mapping[str, str] = field(default_factory=dict)
+
+    @property
+    def parked(self) -> str:
+        """`park_line` for this landing."""
+        return park_line(self.result, self.line)
+
+    @property
+    def resumes(self) -> bool:
+        """Whether the implementer is resumed: a `RESUME_VERDICTS` verdict that is not parked."""
+        return self.verdict in RESUME_VERDICTS and not self.parked
 
 
 def login(argv: list[str]) -> list[str]:
@@ -155,18 +174,19 @@ def land(
     text = log.read_text(errors="replace") if log else ""
     matches = list(VERDICT_LINE.finditer(text))
     found = matches[-1] if matches else None
-    verdict = found.group(1) if found else ""
-    resume = verdict in RESUME_VERDICTS
-    if waited.returncode != STILL_WAITING and not resume:
-        _release(run, worktree, checkout)
-    return Landing(
+    landing = Landing(
         waited.returncode,
-        verdict=verdict,
+        verdict=found.group(1) if found else "",
         line=found.group(0) if found else "",
         tail=_tail(text or waited.stdout + waited.stderr),
         wait=" ".join(wait) if waited.returncode == STILL_WAITING else "",
-        checkout=checkout if resume else None,
+        result=(result_in(log) if log else None) or {},
     )
+    if landing.resumes:
+        landing.checkout = checkout
+    elif waited.returncode != STILL_WAITING:
+        _release(run, worktree, checkout)
+    return landing
 
 
 def release(run: Runner, worktree: Path, landing: Landing) -> None:
@@ -187,11 +207,14 @@ def out_of_time(pr: str) -> dict:
 def report(pr: str, landing: Landing) -> dict:
     """The batch's final report for a landing the implementer is not resumed for.
 
-    A finished landing reads `done` in `status`: the VERDICT line and the PR URL. Anything
-    else is a `needs input:` line, because no session is left to act on it.
+    A finished landing reads `done` in `status`: the VERDICT line and the PR URL. A parked
+    one reads `parked`, which its sub-coordinator re-lands. Anything else is a `needs input:`
+    line, because no session is left to act on it.
     """
     if landing.wait:
         text = f"needs input: the landing of {pr} is still running; wait with `{landing.wait}`"
+    elif landing.parked:
+        text = f"{landing.parked}\n{landing.line}"
     elif not landing.line:
         text = (
             f"needs input: land.sh printed no VERDICT for {pr} (exit {landing.rc}):\n"

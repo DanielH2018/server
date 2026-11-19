@@ -34,7 +34,7 @@ renders it. `PlaceholderRender.sops_manifests` keeps each dropped file's sentine
 `sops-manifest-entries` check in `sops_entries.py`.
 
 `docs/homelab-render.md` is the operator's page, and
-`docs/target-architecture/render/r2-secret-placeholders.md` the plan.
+`docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
 import sys as _sys
@@ -360,7 +360,7 @@ def render_placeholders(
     pass 2. The image contexts, as `contexts` renders them, render first with the same
     sentinels, and each tag's refs read their tags (D5.4a1). Only the roles among `tags`
     build, since a consumer reads its own role's images alone; `all_images` builds every
-    builder role's, for the publish job that pushes all ten. A test passes its own
+    builder role's, for the publish job that pushes every one. A test passes its own
     `entries` and `contexts`, and its own `roles` tree for the tags' templates.
 
     Raises:

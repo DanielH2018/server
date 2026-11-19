@@ -41,11 +41,10 @@
 #
 # ENFORCED: hosts/lib/tests/test_builder_component.py.
 users:
-  # Declared by uid only: the install adopts the live
-  # accounts, and a rebuilt host gets groups with gid equal to uid. The uids sit in the homelab
-  # band 900-949, below the ones Ubuntu hands out from 999 down.
-  - {name: homelab-builder, uid: 902, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
-  - {name: homelab-signer, uid: 903, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
+  # The uids sit in the homelab band 900-949, below the ones Ubuntu hands out from 999 down. The
+  # gids are the live groups' from before the band, which a rebuilt host gets too.
+  - {name: homelab-builder, uid: 902, gid: 983, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
+  - {name: homelab-signer, uid: 903, gid: 982, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
 defaults:
   builder_repo_port: 8791
   builder_github_repo: DanielH2018/server
@@ -65,6 +64,7 @@ files:
   - {lib: homelab_repo_sign.py, dst: /usr/lib/homelab/builder/homelab_repo_sign.py, mode: "0755"}
   - {lib: homelab_tool_fetch.py, dst: /usr/lib/homelab/builder/homelab_tool_fetch.py, mode: "0755"}
   - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/builder/builder_ci_grade.py, mode: "0755"}
+  - {lib: ci_verdict.py, dst: /usr/lib/homelab/builder/ci_verdict.py, mode: "0755"}
   - {lib: builder_rollout_gate.py, dst: /usr/lib/homelab/builder/builder_rollout_gate.py, mode: "0755"}
   - {lib: builder_python.py, dst: /usr/lib/homelab/builder/builder_python.py, mode: "0755"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/builder/host_lib.py, mode: "0755"}

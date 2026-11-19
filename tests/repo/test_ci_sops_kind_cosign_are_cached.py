@@ -4,8 +4,8 @@ A GitHub release-host 504 fails any job that fetches a binary uncached with a sh
 window, so each fetch is cached.
 Each fetch takes the shape `test_ci_flux_cli_is_cached.py` holds the flux CLI to: an
 `actions/cache` step keyed on the pin, a curl only on a miss with nfpm's `--retry-all-errors`
-window, and a `sha256sum -c` against the pin on every run. cosign leaves its installer action
-for a pinned, cached fetch of the release binary.
+window, and a `sha256sum -c` against the pin on every run.
+tests/repo/test_release_fetches_use_pinned_tool.py refuses an installer action.
 
 The jobs are named rather than derived, because the fix removes the strings a derivation would
 match. A job whose fetch already holds a property is left out of that property's set.
@@ -20,9 +20,7 @@ import sys
 import pytest
 from _helpers import REPO
 from lib import yaml_fast
-from lib.proc_testing import run
 
-COSIGN_ACTION = "sigstore/cosign-installer@"
 CACHE = "actions/cache@"
 PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|inputs\.|hashFiles\()")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
@@ -35,10 +33,8 @@ RELEASES = {
 # Every job that fetches each tool.
 FETCHES = (
     ("sops", "ci.yml", "pytest"),
-    ("sops", "ci.yml", "sops_manifest_type_proof"),
     ("sops", "pytest-sweep.yml", "sweep"),
     ("sops", "bootstrap-drill.yml", "drill"),
-    ("kind", "ci.yml", "sops_manifest_type_proof"),
     ("kind", "bootstrap-drill.yml", "drill"),
     ("kind", "flux-deletion-drill.yml", "drill"),
     ("cosign", "flux-deletion-drill.yml", "drill"),
@@ -135,17 +131,18 @@ def _unguarded_curls(text: str) -> list[str]:
     return found
 
 
-def _nfpm_retry_window() -> int:
-    """The nfpm fetch's retries times delay, the window #7655 set for a release outage."""
-    _, steps = _job("ci.yml", "host_packages_build")
+def _pinned_tool_retry_window() -> int:
+    """The pinned-tool action's retries times delay, the window a release outage needs."""
+    steps = (_load(".github/actions/pinned-tool/action.yml").get("runs") or {}).get(
+        "steps"
+    )
     windows = [
         int(m[1]) * int(m[2])
-        for s in steps
-        if "pinned/nfpm" in str(s.get("run", ""))
+        for s in steps or []
         for line in _curls(str(s.get("run", "")))
         if (m := RETRY.search(line))
     ]
-    assert windows, "host_packages_build no longer curls nfpm with a retry window"
+    assert windows, "the pinned-tool action no longer curls with a retry window"
     return max(windows)
 
 
@@ -158,21 +155,6 @@ def _cosign_pins(workflow: str, job: str) -> set[str]:
     values = [str(v) for e in envs for k, v in (e or {}).items() if "COSIGN" in k]
     text = "\n".join(values + [str(s.get("run", "")) for s in installs])
     return set(SHA256.findall(text))
-
-
-def test_no_workflow_installs_cosign_through_the_action():
-    tracked = run(
-        ["git", "ls-files", ".github/workflows/*.yml", ".github/actions/*/action.yml"],
-        cwd=REPO,
-        check=True,
-    ).stdout.split()
-    assert ".github/workflows/promote.yml" in tracked
-    offenders = [
-        p for p in tracked if COSIGN_ACTION in (REPO / p).read_text(encoding="utf-8")
-    ]
-    assert offenders == [], (
-        "sigstore/cosign-installer downloads cosign uncached with a fixed retry window"
-    )
 
 
 @pytest.mark.parametrize(("tool", "workflow", "job"), UNCACHED)
@@ -210,7 +192,7 @@ def test_each_job_fetches_the_tool_only_on_a_cache_miss(tool, workflow, job):
 
 @pytest.mark.parametrize(("tool", "workflow", "job"), FETCHES)
 def test_each_fetch_outlasts_a_release_outage(tool, workflow, job):
-    floor = _nfpm_retry_window()
+    floor = _pinned_tool_retry_window()
     _, steps = _job(workflow, job)
     curls = [
         line
@@ -327,18 +309,3 @@ def test_a_cosign_fetch_without_its_digest_check_is_flagged(monkeypatch):
     )
     with pytest.raises(AssertionError, match="no cosign step runs sha256sum -c"):
         test_each_job_checks_the_pinned_sha256("cosign", "prune-artifacts.yml", "prune")
-
-
-def test_a_workflow_using_the_cosign_action_is_flagged(monkeypatch):
-    path = REPO / ".github/workflows/promote.yml"
-    text = path.read_text(encoding="utf-8")
-    real = type(path).read_text
-
-    def with_action(self, *args, **kwargs):
-        if self == path:
-            return text + f"\n# uses: {COSIGN_ACTION}0000\n"
-        return real(self, *args, **kwargs)
-
-    monkeypatch.setattr(type(path), "read_text", with_action)
-    with pytest.raises(AssertionError, match="cosign-installer downloads cosign"):
-        test_no_workflow_installs_cosign_through_the_action()

@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_clean.py
 """
 
+import dataclasses
 import json
 import re
 from pathlib import Path
@@ -10,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from fanout_lib.clean import clean_one, remote_clean_command
+from fanout_lib.clean import PARKED_KEPT, clean_one, remote_clean_command
 from fanout_lib.manifest import (
     Batch,
     Manifest,
@@ -94,6 +95,27 @@ def test_an_unmerged_tree_is_kept_and_named():
         locker=_noop_locker,
     )
     assert state == "kept" and "not merged" in why
+
+
+@pytest.mark.parametrize(
+    ("merged", "verdict"), [(False, ("kept", PARKED_KEPT)), (True, ("removed", ""))]
+)
+def test_a_parked_batch_is_kept_until_its_pr_has_merged(tmp_path, merged, verdict):
+    """Its claims expire with the worktree, while the open PR still holds the edits."""
+    (tmp_path / ".fanout").mkdir()
+    report = {"type": "result", "result": "parked: refused before merge (a hold)\nPR"}
+    (tmp_path / ".fanout" / "report.json").write_text(json.dumps(report) + "\n")
+    got = clean_one(
+        "/r",
+        dataclasses.replace(_tree(), path=str(tmp_path)),
+        ask=lambda *a, **k: merged,
+        dirty=lambda p: False,
+        remover=lambda r, t: (True, ""),
+        unlocker=_noop_unlocker,
+        locker=_noop_locker,
+        brancher=lambda r, b: (True, ""),
+    )
+    assert got == verdict
 
 
 def test_a_dirty_tree_is_kept_even_when_merged():

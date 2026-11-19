@@ -42,6 +42,10 @@ class Ledger:
     verdict: str = ""
     cause: str = ""
     tags_label: str = ""
+    # Beside cause `promote-held`: the SHA DEPLOY_HOLD held and `promote_lib.wait.hold_owner`'s
+    # answer. `tags_label` cannot give the owner, since it holds every tag the promotion carried.
+    hold_sha: str = ""
+    hold_owner: str = ""
 
     def __setattr__(self, name: str, value: object) -> None:
         """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
@@ -64,9 +68,11 @@ RESULT_PREFIX = "LAND-RESULT:"
 
 
 def result_line(ledger: Ledger, outcome: Outcome) -> str:
-    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count>`, for a reader.
+    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count> hold_sha=.. hold_owner=.. merge=..`.
 
-    A field the landing never reached reads `-`, so every value is one bare token.
+    A field the landing never reached reads `-`, so every value is one bare token. `sha` is
+    the merge commit's first 8 characters and `merge` is all of it. `hold_sha` and
+    `hold_owner` are set beside cause `promote-held` only.
     """
     tags = [t for t in ledger.tags_label.split(",") if t]
     fields = {
@@ -76,6 +82,9 @@ def result_line(ledger: Ledger, outcome: Outcome) -> str:
         "pr": ledger.pr or "-",
         "sha": ledger.merge_sha[:8] or "-",
         "tags": len(tags),
+        "hold_sha": ledger.hold_sha or "-",
+        "hold_owner": ledger.hold_owner or "-",
+        "merge": ledger.merge_sha or "-",
     }
     return f"{RESULT_PREFIX} {logfmt(fields)}"
 

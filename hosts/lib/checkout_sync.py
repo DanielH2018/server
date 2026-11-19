@@ -48,8 +48,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from builder_ci_grade import read_check_pages, token_refused
-from ci_verdict import ci_verdict, ci_walk_candidates
+from builder_ci_grade import CiSettings, read_check_pages, token_refused
+from ci_verdict import CIVerdict, ci_verdict, ci_walk_candidates, parse_check_runs
 from host_lib import (
     ERR,
     github_get,
@@ -131,7 +131,7 @@ class CheckoutSync:
         self.started = self.now()
         dirty = None
         try:
-            contexts, bound, token = self.settings()
+            settings, token = self.settings()
             branch = self.git("rev-parse", "--abbrev-ref", "HEAD")
             status = self.git("status", "--porcelain")
             dirty = bool(status)
@@ -143,7 +143,7 @@ class CheckoutSync:
                     "dirty", f"working tree dirty (untracked files count): {paths}"
                 )
             self.git("fetch", "--quiet", "origin", "master")
-            self.sync(contexts, bound, token)
+            self.sync(settings, token)
             self.sync_venv()
         except Refused as exc:
             log(f"refused ({exc.reason}): {exc}")
@@ -157,18 +157,11 @@ class CheckoutSync:
         self.write_prom(None, dirty)
         return 0
 
-    def settings(self) -> tuple[frozenset[str], int, str]:
-        contexts = frozenset(
-            c.strip() for c in self.env.get("CI_CONTEXTS", "").split(",") if c.strip()
-        )
-        bound = self.env.get("CI_ANCESTOR_WALK_MAX", "").strip()
-        # ci_verdict reads an empty set as a disarmed gate and returns `pass`, so refuse it here.
-        if not contexts:
-            raise Refused("ci", "CI_CONTEXTS is empty")
-        if not bound.isdigit() or int(bound) <= 0:
-            raise Refused(
-                "ci", f"CI_ANCESTOR_WALK_MAX={bound!r} is not a positive integer"
-            )
+    def settings(self) -> tuple[CiSettings, str]:
+        try:
+            settings = CiSettings.parse(self.env)
+        except ValueError as exc:
+            raise Refused("ci", str(exc)) from exc
         source = {}
         cred = Path(self.env.get("CREDENTIALS_DIRECTORY", "/-"), "github_token")
         if cred.is_file():
@@ -176,9 +169,9 @@ class CheckoutSync:
         token = github_token(source, _no_gh)
         if token is None:
             raise Refused("token", "no github_token credential")
-        return contexts, int(bound), token
+        return settings, token
 
-    def sync(self, contexts: frozenset[str], bound: int, token: str) -> None:
+    def sync(self, settings: CiSettings, token: str) -> None:
         head = self.git("rev-parse", "HEAD")
         tip = self.git("rev-parse", "refs/remotes/origin/master")
         if head == tip:
@@ -196,13 +189,13 @@ class CheckoutSync:
                 "only a fast-forward is allowed",
             )
         revs = self.git("rev-list", "--first-parent", f"{head}..{tip}").split()
-        candidates = [(0, tip), *ci_walk_candidates(revs, None, bound)]
+        candidates = [(0, tip), *ci_walk_candidates(revs, None, settings.walk_max)]
         for distance, sha in candidates:
             if self.now() - self.started > WALK_BUDGET_S:
                 log(f"ci: walk stopped after {WALK_BUDGET_S}s, before {sha[:12]}")
                 break
-            verdict = self.verdict(sha, contexts, token)
-            if verdict == "pass":
+            verdict = self.verdict(sha, settings.contexts, token)
+            if verdict is CIVerdict.PASS:
                 self.git("merge", "--ff-only", "--quiet", sha)
                 log(
                     f"fast-forwarded {head[:12]} to {sha[:12]}, {distance} behind the tip {tip[:12]}"
@@ -239,7 +232,7 @@ class CheckoutSync:
                 err=True,
             )
 
-    def verdict(self, sha: str, contexts: frozenset[str], token: str) -> str:
+    def verdict(self, sha: str, contexts: frozenset[str], token: str) -> CIVerdict:
         repo = self.env.get("GITHUB_REPO", "")
 
         def read(listing: str, key: str) -> list[dict]:
@@ -255,17 +248,17 @@ class CheckoutSync:
             return read_check_pages(page, key)
 
         try:
-            runs = read("check-runs", "check_runs")
+            runs = parse_check_runs(read("check-runs", "check_runs"))
         except urllib.error.HTTPError as exc:
             if token_refused(exc):
                 raise Refused(
                     "token", f"GitHub refused the token reading {sha[:12]}: {exc}"
                 ) from exc
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
-            return "pending"
+            return CIVerdict.PENDING
         except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
-            return "pending"
+            return CIVerdict.PENDING
         return ci_verdict(runs, contexts, lambda: read("check-suites", "check_suites"))
 
     def write_prom(self, reason: str | None, dirty: bool | None) -> None:

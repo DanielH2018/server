@@ -695,6 +695,19 @@ installed at 23:03:00, and the `homelab-daniel-pi` 0.7708 that ships the file in
 23:03:09, in the same updater run. The option takes effect from the next `apt-get` run. Every deb
 cached before it clears at the first `apt-daily-upgrade.service` run after the file lands.
 
+Both halves held on daniel-pi (#8933):
+
+- The daily clean drained the backlog. Between 05:16 and 05:46 UTC on 2026-11-16 the root
+  filesystem's free space rose by 747 MB, as `node_filesystem_avail_bytes` reads it.
+- The updater's `apt-get` deletes the debs it installs. It installed `homelab-daniel-pi` at
+  15:17:13 and 16:35:48 UTC on 2026-11-19, after that day's clean, according to
+  `/var/log/dpkg.log`. At 17:46 UTC that day `/var/cache/apt/archives/` held no deb.
+
+`apt-get` and `apt` share one install path in `libapt-private`, which reads
+`APT::Keep-Downloaded-Packages`. Only the default differs: `libapt-pkg` sets
+`Binary::apt::APT::Keep-Downloaded-Packages` to `false` for the `apt` command alone. The
+updater needs no cleanup step of its own.
+
 The weekly autoclean (`APT::Periodic::AutocleanInterval "7"`) never removed a homelab deb. It
 deletes only a deb whose version no index lists, and the homelab index lists every version the
 pool holds.

@@ -21,7 +21,7 @@ from _helpers import HOST_VARS, REPO, load_yaml
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
-from validate.shell_templates import COMPONENTS
+from validate.render_lib.shell import COMPONENTS
 
 
 COMPONENT = COMPONENTS / "pi-heartbeats"
@@ -128,7 +128,7 @@ def render(name, tmp_path, jinja_vars=None):
     `compose_services` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
     the accessor's inventory context does not carry it -- it goes in as an override. Everything
     else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
-    that same context, the one `validate/shell_templates.py` lints
+    that same context, the one `validate/render_lib/shell.py` lints
     against. `jinja_vars` is laid on top, for a caller overriding any key by name -- the
     gz-integrity state-file path, most often.
     """

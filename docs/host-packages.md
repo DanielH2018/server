@@ -4,7 +4,7 @@ The host-package pipeline builds `homelab-*` Debian packages from master on dani
 them, and serves them as an apt repository at `http://<daniel-box server_ip>:8791`. The
 `builder` component of `homelab-daniel-box` installs the builder half on daniel-box; its
 rules are in `hosts/components/builder/CLAUDE.md`, and its design is in
-[the H3 plan](target-architecture/host/h3-pi-pilot.md). Until H7.41b the Ansible role
+[the H3 plan](archive/host/h3-pi-pilot.md). Until H7.41b the Ansible role
 `homelab_builder` installed it.
 
 This page holds the procedures an operator runs when the pipeline stops or must be stopped:
@@ -66,7 +66,7 @@ lists.
 `homelab-reconcile` is the only process that starts or restarts a unit outside the boot path,
 unless the manifest marks the unit `windowed`. `homelab-secrets` calls no `systemctl`, and
 systemd's own `Restart=` policy and an operator's hand command stay outside the rule. The
-design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*.
+design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*.
 
 - **Hand path.** `systemctl start homelab-reconcile` runs one reconcile now. A person who
   restarts `homelab-secrets` by hand restarts no dependent: that run queues the dependents of
@@ -75,7 +75,7 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
 - **`windowed` units.** Reconcile neither starts nor restarts a unit the manifest marks
   `windowed` (`k3s.service` and `k3s-agent.service`, once H6 marks them). Its queue entry is
   dropped. Two other processes restart such a unit, each under its own condition
-  ([the H4 plan](target-architecture/host/h4-secrets-unit.md), *The restart contract*):
+  ([the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*):
     - **SUC's upgrade container** restarts it after replacing the binary. It runs when `promote`
       applies a changed Plan, behind the Plan's `prepare` gates, outside any window.
     - **`homelab-k3s-restart.service`** (the `k3s-restart` component, H6.3b) restarts it inside
@@ -581,7 +581,7 @@ A host whose `HostUpdateStale` still fires after the last step has not recovered
 
 `hosts/bootstrap-host.sh` puts a stock Ubuntu install back on the package path. Every step in
 this section is **operator-only**, and the guest drill below has not run yet. The design is
-[H7](target-architecture/host/h7-delete-ansible.md), *The cluster-node bring-up*.
+[H7](archive/host/h7-delete-ansible.md), *The cluster-node bring-up*.
 
 ### What the packages do not hold yet
 
@@ -886,7 +886,7 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 ### The guest drill
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
-upgrade. *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
+upgrade. *The proofs* in [H7](archive/host/h7-delete-ansible.md) holds its fence, its
 identity and its three guest-local deviations.
 
 To run it, use a checkout on daniel-server whose `HEAD` is a green first-parent commit of master,
@@ -934,7 +934,7 @@ the guest clones GitHub at that checkout's `HEAD`. The run's directory under
 ## Adding a host
 
 Steps 1 and 3 to 5 go in the host's first PR, and step 7 is a second PR. The design is
-[H7](target-architecture/host/h7-delete-ansible.md), *Adding a host*. A host on another
+[H7](archive/host/h7-delete-ansible.md), *Adding a host*. A host on another
 architecture first needs `homelab-tools` built for it, and `bootstrap-host.sh` pins amd64 and
 arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To give a second
 `arm64` host another tool, add the tool to `tools_on` in
@@ -1022,7 +1022,7 @@ arm64 only. The `arm64` build ships only the tools daniel-pi's packages name. To
    stays in `NEVER_CANARY`, because a canary holds every other host's package until it
    reports. daniel-box runs the builder, the signer and the repository, so it is never a
    canary: a package that breaks daniel-box can stop the publish of its own fix
-   (`docs/target-architecture/host/h3-pi-pilot.md`, *Staged rollout (C5)*).
+   (`docs/archive/host/h3-pi-pilot.md`, *Staged rollout (C5)*).
 
 `hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
 from both `CANARY_ORDER` and `NEVER_CANARY`, or from `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`

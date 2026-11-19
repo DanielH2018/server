@@ -90,6 +90,14 @@ def test_a_landed_batch_pages_nothing(tmp_path) -> None:
     assert run.calls == []
 
 
+def test_a_parked_batch_reads_parked_and_pages_nothing(tmp_path) -> None:
+    run = Recorder()
+    report = f"parked: merged, unverified behind DEPLOY_HOLD abc\nVERDICT: deploy-failed\n{PR}"
+    d = fanout(tmp_path, report, verdict="VERDICT: deploy-failed")
+    assert notify(B, EXITED_0, d, no_merge, run) == "fanout-b: parked, no page"
+    assert run.calls == []
+
+
 def test_a_tidied_batch_whose_pr_merged_pages_nothing(tmp_path) -> None:
     # No report, because the agent removed it, and the forge holds the merged PR.
     run = Recorder()

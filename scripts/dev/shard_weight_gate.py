@@ -23,6 +23,7 @@ import re
 import statistics
 from pathlib import Path
 
+import tested_tree
 from lib import gh as gh_mod
 from lib.repo_paths import REPO
 
@@ -39,42 +40,31 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 # light one.
 # Only running the file says what it costs, and CI already runs it.
 #
-# WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
-# holds workstation seconds — the two are not the same scale, so the number is set against the
-# shard it would skew rather than against the table. A shard projects around 40s at six ways,
-# so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess. The
-# runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
-# recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
+# WHY TEN. The table and the report both hold runner seconds, and an unweighted module is packed
+# at its directory's median whatever it costs. Ten measured seconds is the weight the split
+# placed by that guess. A lighter module costs less balance than the hardware two legs draw
+# differs by (`leg_speed`).
 RUNNER_HEAVY_SECONDS = 10.0
 
 # How many times its measured runner seconds a RECORDED weight may claim before the shard check
 # annotates it, and the recorded seconds below which nobody cares.
 #
 # WHY AN OVER-RECORDING ARM. The unweighted arm asks "is this file missing from the
-# table". It never asks "is a recorded number still roughly what the file costs", so an entry that
-# has become far too high stands until someone runs a full `--record`: `--record-missing` only
-# fills gaps. A recorded 17.31s for `tests/k8s/test_secret_consumer_census.py` that
+# table". It never asks "is a recorded number still roughly what the file costs", so an entry
+# that has become far too high stands until `--refresh-runner` reads the module off a green
+# master run. A recorded 17.31s for `tests/k8s/test_secret_consumer_census.py` that
 # measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
 # weight for as long as the entry stood — the skew of an unweighted heavy file with the sign
 # flipped.
 #
-# WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
-# seconds, and the two are not the same scale. Controls
-# run 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
-# difference rather than a stale entry. FIVE leaves room above that noise; a busy recording
-# host still overshoots it on its own (`LOCAL_READING_MAX_RATIO`).
+# WHY A RATIO AND NOT A DELTA. One leg's hardware runs a shard 0.67x to 1.22x its table
+# (`leg_speed`), and one module can measure 2x apart on two runs of the same code, so anything
+# under about 3x is that variance rather than a stale entry. FIVE leaves room above it.
 #
 # WHY A FLOOR ON THE RECORDED VALUE. The parser's own floor is pytest's 0.005s, so a file
 # recorded at 0.05s and measuring 0.005s is a 10x ratio and pure rounding. The floor is what
-# makes this arm about shard balance rather than about noise: a shard projects around 40s at
-# six ways, and 17 of the 795 recorded files clear 3s. Those are the files whose placement
-# decides the pole.
-#
-# THE OTHER WAY IT CAN FIRE, which is the gate being right rather than wrong: a module whose
-# expensive tests SKIP on the runner and run on the workstation measures a fraction of its
-# recorded weight there. The shard does not pay that cost on the runner either, so the entry is
-# wrong for the split's purpose; `--record-files` from a checkout where the same tests skip is
-# what records it honestly.
+# makes this arm about shard balance rather than about noise: only the files heavy enough for
+# their placement to decide the pole are compared.
 #
 # THE BLIND SPOT. A file whose every test measures under pytest's `--durations-min` contributes
 # no line and cannot be compared at all, so an entry that collapsed to literally nothing is
@@ -83,27 +73,16 @@ RUNNER_HEAVY_SECONDS = 10.0
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
 
-# How many times the runner table's seconds a local reading may claim before the docs-refresh
-# cron treats it as a cost of the recording host alone. `--refresh-drifted` then keeps the
-# recorded weight, and `--record-missing` writes the runner seconds.
-#
-# WHY TWENTY. A host busy with fan-out batches reads up to about nine times what the runner
-# measures. A cost that is real on one host alone reads further off still, such as a test
-# walking untracked files. `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
-LOCAL_READING_MAX_RATIO = 20.0
-
 # How many times its recorded weight a module may measure on the runner before the shard check
 # reads the entry as too LOW. The arm annotates from `UNDER_WEIGHT_WARN_SECONDS` below.
 #
-# WHY A THIRD ARM. The stale arm above catches a recorded number far too high, and
-# `--record-missing` never touches a present entry, so a weight far too low would stand unseen:
-# a module that grew after its weight was recorded is packed as free, the skew of an
-# unweighted heavy file, with an entry present.
+# WHY A THIRD ARM. The stale arm above catches a recorded number far too high. A module that
+# grew after its weight was recorded is packed as free until `--refresh-runner` reads it again:
+# the skew of an unweighted heavy file, with an entry present.
 #
-# WHY TWENTY. The runner is not a fixed multiple of the workstation: a module can run 6.3x
-# its serial seconds on daniel-box, and one module can vary 2x between two runs of the same
-# code. A correctly recorded module can therefore reach about 13x, and twenty clears it. The
-# entries this arm exists for are 34x to 1500x off.
+# WHY TWENTY. One module can vary 2x between two runs of the same code, and the hardware a leg
+# draws adds its own factor. Twenty clears both. The entries this arm exists for are 34x to
+# 1500x off.
 UNDER_WEIGHT_RATIO = 20.0
 
 # Where the under-recorded arm starts ANNOTATING, below the 10s the unweighted arm uses.
@@ -121,28 +100,20 @@ UNDER_WEIGHT_WARN_SECONDS = 5.0
 # Used as the divisor's floor, which cannot then be zero.
 _DURATIONS_MIN_SECONDS = 0.005
 
-# The repair for the arm that finds a MISSING entry. `census()` reads `git ls-files`, so
-# the file has to be staged before the measurement can see it.
-RECORD_MISSING_HINT = (
-    "stage the new file, then `uv run python scripts/dev/pytest_shard.py "
-    "--record-missing` and commit scripts/dev/pytest_shard_weights.json"
-)
-
-# The repair for the stale arm, which `--record-missing` cannot do: it only fills gaps, and a
-# present-but-wrong entry is not a gap. A full `--record` re-measures the whole suite in
-# minutes; `--record-files` re-measures the named files in seconds.
-RECORD_FILES_HINT = (
-    "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
-    "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json"
+# What every complaint ends on. A pull request cannot repair a weight: only green master runs
+# write the table.
+REPAIR = (
+    "Nothing to repair in this pull request: the docs-refresh cron's `pytest_shard.py "
+    "--refresh-runner` reads the module off green master runs within a day of the merge"
 )
 
 
 def parse_durations(text: str) -> dict[str, float]:
     """Per-file seconds summed out of a pytest `--durations` report.
 
-    One parser for both readers: `pytest_shard.measure_weights`, which runs pytest itself, and
-    `heavy_unweighted` below, which reads the log CI's own test step already produced. A
-    second parser would drift from the first and the drift would read green.
+    One parser for both readers: `runner_weights`, which writes the table from CI's leg logs,
+    and `heavy_unweighted` below, which checks one leg's log against it. A second parser would
+    drift from the first and the drift would read green.
 
     Every phase of every test counts — `setup` and `teardown` are what an expensive
     module-scoped fixture costs, and `--dist loadscope` exists precisely because those
@@ -203,9 +174,7 @@ def stale_overweight(
     seconds or more are compared — see `STALE_WEIGHT_RATIO` for why both bounds are where they
     are, and for the one shape this cannot see.
 
-    Over-recording only: the runner is slower per test than the recording workstation, so a
-    measured value ABOVE its recorded one is the normal case and not this arm's subject.
-    `heavy_underweighted` takes a measured value FAR above it.
+    Over-recording only: `heavy_underweighted` takes a measured value far above its recorded one.
     """
     measured = parse_durations(text)
     flagged = [
@@ -236,21 +205,13 @@ def heavy_underweighted(
     return sorted(flagged, key=lambda item: (-item[2], item[0]))
 
 
-def _repair(hint: str) -> str:
-    return (
-        "The docs-refresh cron repairs it unattended within a day; to repair it in this PR "
-        f"instead, {hint}"
-    )
-
-
 def _stale_complaint(stale: list[tuple[str, float, float]], ratio: float) -> str:
     listed = ", ".join(
         f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale
     )
     return (
         f"recorded at {ratio:.0f}x or more of what it measured on this runner, so the "
-        f"shard split reserves time the file does not cost: {listed}. "
-        f"{_repair(RECORD_FILES_HINT)}"
+        f"shard split reserves time the file does not cost: {listed}. {REPAIR}"
     )
 
 
@@ -258,8 +219,7 @@ def _heavy_complaint(heavy: list[tuple[str, float]], threshold: float) -> str:
     listed = ", ".join(f"{f} ({s:.1f}s)" for f, s in heavy)
     return (
         f"measured {threshold:.0f}s or more on this runner with no recorded weight, so "
-        f"the shard split packs it as the lightest thing in the suite: {listed}. "
-        f"{_repair(RECORD_MISSING_HINT)}"
+        f"the shard split packs it at its directory's median: {listed}. {REPAIR}"
     )
 
 
@@ -272,7 +232,7 @@ def _under_complaint(
     return (
         f"measured {threshold:.0f}s or more on this runner and {ratio:.0f}x or more its "
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
-        f"{_repair(RECORD_FILES_HINT)}. If it records near 0s again, the time is a "
+        f"{REPAIR}. If its weight stays near 0s, the time is a "
         "per-process cache its first test built: build that cache outside the timed phases, "
         "as tests/render_share.py does for the k8s and fleet renders"
     )
@@ -290,9 +250,7 @@ def durations_complaints(
 
     Three arms over the one report, and all are reported: a heavy module with NO recorded
     weight, a recorded weight far HIGHER than what the module measured here, and a module
-    whose recorded weight is far LOWER. Each complaint carries its own repair, because the
-    repairs differ: `--record-missing` fills a gap and cannot refresh an entry that is merely
-    wrong.
+    whose recorded weight is far LOWER. Each complaint ends on `REPAIR`.
 
     An EMPTY report is itself a complaint. The check's whole subject is found by parsing, so a
     report format change would leave it reporting nothing forever.
@@ -314,25 +272,19 @@ def durations_complaints(
 
 # ── The runner-seconds table the shards are packed on ─────────────────────────────────
 #
-# WHY A SECOND TABLE. `pytest_shard_weights.json` holds workstation seconds, and the runner does
-# not scale them evenly. The middle 90% of the modules recorded at 0.5s or more measure
-# 1.0x to 5.5x their recorded weight on the runner, with a median of 2.3x, so shards that
-# record 157-159s each measure 327-612s there. Packing on what the runner measures projects
-# every shard at about the same runner seconds.
+# WHY THE RUNNER'S SECONDS AND NOT A WORKSTATION'S. The runner does not scale a workstation's
+# serial seconds evenly. The middle 90% of the modules a workstation measured at 0.5s or more
+# measure 1.0x to 5.5x that on the runner, with a median of 2.3x, so shards packed at 157-159
+# workstation seconds each measured 327-612s there. Packing on what the runner measures
+# projects every shard at about the same runner seconds.
 #
-# WHY NOT WRITE RUNNER SECONDS INTO THE WEIGHT TABLE. The docs-refresh cron's
-# `--refresh-drifted` re-measures that table on daniel-box and rewrites any entry 1.5x away from
-# what it measured, so runner seconds there would drift back within days. The shard
-# check's ratio arms also compare that table with the runner on purpose, at bounds wide enough
-# for the scale gap. So the weight table keeps feeding the check and the cron, and this one feeds
-# only `assign`.
-#
-# STALENESS IS GRACEFUL, as with the weight table. A module this table lacks is packed at its
-# recorded weight times the median runner-to-recorded ratio, and an entry for a deleted module
+# STALENESS IS GRACEFUL. A module this table lacks is packed at the median of its directory's
+# rows (`pytest_shard.packing_seconds`), and an entry for a deleted module
 # is ignored. The docs-refresh cron refreshes it twice a day with `pytest_shard.py
-# --refresh-runner 3`, which downloads every pytest leg's log from the three newest green master
-# runs and rewrites only the rows that drifted. Each module takes the median of what the
-# logs measured, because one module can measure about 8s on one run and 15.6s on the next.
+# --refresh-runner 3`, which downloads every pytest leg's log from the three newest runs that
+# tested a green master tree, and rewrites only the rows that drifted. Each module takes the
+# median of what the logs measured, because one module can measure about 8s on one run and
+# 15.6s on the next.
 # `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
 #
 # EACH LEG'S READINGS ARE SCALED TO ONE REFERENCE RUNNER FIRST, because the hardware a leg draws
@@ -354,15 +306,12 @@ RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
 # How far apart a module's recorded and measured seconds may sit, either way, before
-# `--refresh-drifted` rewrites the entry. It is the table's Verify-by bound, so a refreshed table
-# holds every module within it, and a re-measurement inside it is treated as noise.
+# `--refresh-runner` rewrites the entry. A measurement inside it is treated as noise.
 DRIFT_RATIO = 1.5
 # An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
 # measuring 0.05s is 2.5x and changes no shard's balance.
 DRIFT_FLOOR_SECONDS = 0.5
 
-# A recorded weight below this is too small to give a meaningful runner-to-recorded ratio.
-_RATIO_FLOOR_SECONDS = 0.5
 # A GitHub job log prefixes each line with a timestamp, and pytest colours its report.
 _LOG_NOISE = re.compile(r"^\S+Z |\x1b\[[0-9;]*m", re.M)
 
@@ -458,35 +407,6 @@ def load_runner_weights(path: Path = RUNNER_WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
-def host_only_readings(readings: dict[str, float]) -> dict[str, float]:
-    """The local readings `LOCAL_READING_MAX_RATIO`x the runner table or more, as runner seconds.
-
-    A module the runner table lacks has no CI seconds to judge against, so it is never included.
-    """
-    runner = load_runner_weights()
-    return {
-        module: runner[module]
-        for module, reading in readings.items()
-        if module in runner
-        and over_recorded(reading, runner[module], LOCAL_READING_MAX_RATIO)
-    }
-
-
-def runner_backed_readings(readings: dict[str, float]) -> dict[str, float]:
-    """The local readings `host_only_readings` leaves out.
-
-    A line on stdout names each one dropped.
-    """
-    rejected = host_only_readings(readings)
-    for module, seconds in rejected.items():
-        print(
-            f"kept the recorded weight of {module}: this host read {readings[module]:.2f}s, the "
-            f"runner table holds {seconds:.2f}s, and a reading {LOCAL_READING_MAX_RATIO:g}x or "
-            "more above it is a cost of this host alone"
-        )
-    return {m: r for m, r in readings.items() if m not in rejected}
-
-
 def write_runner_weights(
     reports: list[str], keep: list[str], path: Path = RUNNER_WEIGHTS_PATH
 ) -> dict[str, float]:
@@ -532,36 +452,18 @@ def refresh_runner_weights(
     return moved
 
 
-def packing_weights(
-    recorded: dict[str, float], runner: dict[str, float]
-) -> dict[str, float]:
-    """The weights `assign` packs: runner seconds where measured, else scaled recorded ones."""
-    ratios = [
-        runner[m] / recorded[m]
-        for m in runner
-        if recorded.get(m, 0.0) >= _RATIO_FLOOR_SECONDS
-    ]
-    scale = statistics.median(ratios) if ratios else 1.0
-    return {**{m: w * scale for m, w in recorded.items()}, **runner}
-
-
-def packing_table(recorded: dict[str, float]) -> dict[str, float]:
-    """`packing_weights` over the committed runner table."""
-    return packing_weights(recorded, load_runner_weights())
-
-
-# Where `--refresh-runner` reads its logs: the green runs of CI's workflow on pushes to master.
-# A pull request's run also measures modules that may never land, and a merge-queue run repeats
-# a commit master runs again, so only the push runs count.
+# Where `--refresh-runner` reads its logs: the trees of the green pushes to master. A push
+# that skipped its legs is read through the pull-request run that tested its tree
+# (`_tested_run`). Any other pull request's run measures modules that may never land, and a
+# merge-queue run repeats a commit master runs again, so neither counts.
 CI_WORKFLOW = "ci.yml"
 CI_BRANCH = "master"
 # Every pytest leg is named `pytest (shard N of M)` in ci.yml. A prefix rather than a count, so
 # changing the matrix needs no edit here.
 PYTEST_JOB_PREFIX = "pytest (shard "
-# How many green master runs `fetch_runner_logs` reads through to find the ones that ran pytest.
-# A push whose paths the matrix does not cover skips every leg, so many of the newest green
-# runs ran none. The listing is one call whatever its length, and each run read costs
-# one more.
+# How many green master runs `fetch_runner_logs` looks behind for the runs that measured their
+# trees. A merge whose diff selects no test module measured nothing, and one landing batch's
+# run stands behind up to four master commits, so the newest few do not always yield three.
 RUN_WINDOW = 30
 
 
@@ -594,33 +496,64 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
     }
 
 
-def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
-    """The raw log of every pytest leg in the newest `runs` green master runs that ran them.
+def _tested_run(run: dict, gh) -> int | None:
+    """The id of the run that tested master run `run`'s tree before it merged, or None.
 
-    The docs-refresh cron runs this twice a day. Three runs of six legs is at
-    most 1 + `RUN_WINDOW` + 18 calls, against the authenticated 5000 an hour.
+    A push to master runs no pytest leg when a pull-request run already tested its tree, so
+    that run's logs are the tree's measurement. `tested_tree.tested_run` finds it from the
+    record the push itself was proven by. `run` is one row of GitHub's workflow-runs listing.
+    """
+    url, _ = tested_tree.tested_run(
+        lambda path: json.loads(gh("api", path, cwd=REPO).stdout),
+        run["repository"]["full_name"],
+        run["head_sha"],
+        (run.get("head_commit") or {}).get("tree_id", ""),
+    )
+    return int(url.rsplit("/", 1)[1]) if url else None
+
+
+def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
+    """The raw pytest leg logs of the newest `runs` runs that measured a green master tree.
+
+    Each green master run is read through its own pytest legs, or through the run
+    `_tested_run` names when it has none. A run counts once, however many master commits it
+    tested, and only when one of its logs holds a durations line.
+
+    The docs-refresh cron runs this twice a day. A master run costs up to four calls to look
+    at and six more to read, so three runs found at once is about 30 calls and a whole
+    `RUN_WINDOW` of unmeasured runs is 121, against the authenticated 5000 an hour.
 
     Raises:
-        RuntimeError: fewer than `runs` of the newest `RUN_WINDOW` green runs carried a pytest
-            log. A median over fewer
+        RuntimeError: fewer than `runs` runs measured the newest `RUN_WINDOW` green master
+            trees. A median over fewer
             runs is one noisy reading per module, so nothing is written from it.
         subprocess.CalledProcessError: any `gh` call failed.
     """
-    list_args = (
-        f"run list --workflow {CI_WORKFLOW} --branch {CI_BRANCH} --event push"
-        f" --status success --limit {RUN_WINDOW} --json databaseId"
-    ).split()
-    listed = json.loads(gh(*list_args, cwd=REPO).stdout or "[]")
-    reports, measured_runs = [], 0
+    listing = (
+        f"repos/{{owner}}/{{repo}}/actions/workflows/{CI_WORKFLOW}/runs"
+        f"?branch={CI_BRANCH}&event=push&status=success&per_page={RUN_WINDOW}"
+    )
+    listed = json.loads(gh("api", listing, cwd=REPO).stdout)["workflow_runs"]
+    seen: set[int] = set()
+
+    def measured(run_id: int | None) -> list[str]:
+        if run_id is None or run_id in seen:
+            return []
+        seen.add(run_id)
+        logs = list(green_pytest_legs(run_id, gh).values())
+        with_durations = any(parse_durations(_LOG_NOISE.sub("", log)) for log in logs)
+        return logs if with_durations else []
+
+    reports: list[list[str]] = []
     for run in listed:
-        if measured_runs == runs:
+        if len(reports) == runs:
             break
-        legs = green_pytest_legs(run["databaseId"], gh)
-        measured_runs += bool(legs)
-        reports += legs.values()
-    if measured_runs < runs:
+        logs = measured(run["id"]) or measured(_tested_run(run, gh))
+        if logs:
+            reports.append(logs)
+    if len(reports) < runs:
         raise RuntimeError(
-            f"found pytest logs in {measured_runs} of the newest {len(listed)} green "
-            f"{CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
+            f"read pytest durations from {len(reports)} run(s) behind the newest "
+            f"{len(listed)} green {CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
         )
-    return reports
+    return [log for logs in reports for log in logs]

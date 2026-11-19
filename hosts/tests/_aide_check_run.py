@@ -102,21 +102,25 @@ SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
 # The host package's apt hook and a script root runs, which dpkg lists with no digest here.
 HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
 # The user and group databases as the last accepted run copied them: root, a login user, the
-# declared claude with the gid its group kept from before the 900-949 band, and a group the setup
-# script manages.
+# declared claude with the gid its group kept from before the 900-949 band, oldsvc, which the users
+# arm no longer declares, and a group the setup script manages.
 ACCOUNT_FILES = {
     "/etc/passwd": (
         "root:x:0:0:root:/root:/bin/bash\n"
         "ubuntu:x:1000:1000:Ubuntu:/home/ubuntu:/bin/bash\n"
         "claude:x:900:985:Claude agent:/var/lib/claude:/bin/bash\n"
+        "oldsvc:x:907:907:Old svc:/var/lib/oldsvc:/usr/sbin/nologin\n"
     ),
-    "/etc/group": "root:x:0:\nubuntu:x:1000:\nclaude:x:985:\nssh-users:x:990:ubuntu\n",
+    "/etc/group": (
+        "root:x:0:\nubuntu:x:1000:\nclaude:x:985:\noldsvc:x:907:\nssh-users:x:990:ubuntu\n"
+    ),
     "/etc/shadow": (
         "root:!*:20000:0:99999:7:::\n"
         "ubuntu:$6$SECRETHASH:20000:0:99999:7:::\n"
         "claude:!*:20000::::::\n"
+        "oldsvc:!*:20000::::::\n"
     ),
-    "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\nssh-users:!::ubuntu\n",
+    "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\noldsvc:!::\nssh-users:!::ubuntu\n",
 }
 # The host package's lines arm: a block in the package's conffile, as k3s-server adds one to
 # /etc/zsh/zshenv, and a line edit elsewhere.
@@ -131,10 +135,14 @@ LINE_EDITS = [
 ]
 # The host package's manifest, whose users arm declares claude and a service user svc.
 HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
+# homelab-reconcile's record, whose users arm has expired oldsvc.
+RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
+EXPIRED_USERS = ["oldsvc"]
 DECLARED_USERS = [
     {
         "name": "claude",
         "uid": 900,
+        "gid": 985,
         "home": "/var/lib/claude",
         "shell": "/bin/bash",
         "comment": "Claude agent",
@@ -142,6 +150,7 @@ DECLARED_USERS = [
     {
         "name": "svc",
         "uid": 906,
+        "gid": 906,
         "home": "/var/lib/svc",
         "shell": "/usr/sbin/nologin",
         "comment": "Svc",
@@ -199,6 +208,9 @@ def _fake_host(root):
     (fs / HOST_MANIFEST.lstrip("/")).write_text(
         json.dumps({"users": {"users": DECLARED_USERS}, "lines": {"edits": LINE_EDITS}})
     )
+    record = fs / RECONCILE_RECORD.lstrip("/")
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({"users": {"expired": EXPIRED_USERS}}))
     for path, content in ACCOUNT_FILES.items():
         (fs / path.lstrip("/")).write_text(content)
     (dpkg / "info" / "homelab-host.list").write_text(

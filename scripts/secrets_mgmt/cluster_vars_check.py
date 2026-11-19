@@ -15,7 +15,7 @@ The cluster files are three kinds:
   manifest's key, the manifest's file name. The ciphertext is public, so the digest exposes
   nothing. The third field lets `check --no-render` see which manifest a key belongs to.
 
-`docs/target-architecture/deploy/d3-secrets.md` (*Design*) is the plan.
+`docs/archive/deploy/d3-secrets.md` (*Design*) is the plan.
 """
 
 import hashlib

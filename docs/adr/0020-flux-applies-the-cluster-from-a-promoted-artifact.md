@@ -26,7 +26,7 @@ deployer and deferred Flux. It rested on three premises: the deployer's decision
 controller-native equivalent, Ansible had to stay the renderer and the secret plane, and
 `daniel-box` had little memory to spare.
 
-The [target architecture](../target-architecture/design.md) re-measured all three, in its
+The [target architecture](../archive/design.md) re-measured all three, in its
 section *Cluster deploy plane*. The deployer's decision logic grew from 1,928 to 9,499 lines.
 Five path narrowings exist "because a path moved while the rendered bytes did not"
 ([#2810](https://github.com/DanielH2018/server/issues/2810)). Flux decrypts age natively.
@@ -40,7 +40,7 @@ The answer was:
 > The Target Architecture docs are the source of truth
 
 That ruling adopts the slices from D1 on, beginning with
-[D1](../target-architecture/deploy/d1-flux-installed.md). [#4695](https://github.com/DanielH2018/server/issues/4695)
+[D1](../archive/deploy/d1-flux-installed.md). [#4695](https://github.com/DanielH2018/server/issues/4695)
 opened this record.
 
 ## Decision
@@ -48,7 +48,7 @@ opened this record.
 CI renders every k8s manifest and publishes the result as an OCI artifact. A `promote`
 workflow moves the tag that Flux follows, and Flux applies the artifact server-side with prune
 and wait. Neither the GitOps deployer nor Ansible applies a k8s workload.
-[Contracts](../target-architecture/contracts.md) C2 owns the artifact and its promotion, and
+[Contracts](../archive/contracts.md) C2 owns the artifact and its promotion, and
 C3 owns the Flux objects.
 
 Every k8s `containers_list` entry is Flux's, and a service stays Flux-owned or retires. H1.9

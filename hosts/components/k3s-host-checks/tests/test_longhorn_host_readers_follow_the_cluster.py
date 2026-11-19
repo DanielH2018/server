@@ -28,7 +28,7 @@ from _longhorn_reader_stubs import (
     reader_argv,
 )
 from lib.repo_paths import K3S_HOST_CHECKS
-from validate import shell_templates as v
+from validate.render_lib import shell as v
 from validate.validate_lib.shipped_render import render_shipped_text
 
 SHIM = K3S_HOST_CHECKS / "templates" / "longhorn-backup-health.sh.j2"

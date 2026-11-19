@@ -28,7 +28,7 @@ tip], and the procedure that clears a hold runs it while the hold is set.
 What this covers, and what it cannot. It runs only in `land.sh --arm-merge`'s own merge. A
 merge from the GitHub UI or a bare `gh pr merge` bypasses it; H1.1b's
 backstop in `promote` holds such a merge until an operator runs `--regate` and clears the
-hold. The plan is docs/target-architecture/host/h1-cluster-config-to-flux.md, *At most one
+hold. The plan is docs/archive/host/h1-cluster-config-to-flux.md, *At most one
 unverified bump per pin* and *Longhorn and MetalLB bumps gate at the merge*.
 """
 

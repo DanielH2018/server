@@ -10,8 +10,10 @@ as `--of`, so the split follows the matrix by construction — this guard pins t
 hardcoded `--of 4` beside a five-entry matrix would drop a fifth of the suite with no error to
 read anywhere.
 
-This module does not check whether a file is missing from the recorded weights table: the
-docs-refresh cron fills those gaps. Balance is reported by `pytest_shard.py --check-durations`,
+Every assignment here packs the committed runner-seconds table,
+`scripts/dev/pytest_shard_runner_weights.json`. This module does not check whether a file is
+missing from it: the docs-refresh cron fills those gaps from CI's logs. Balance is reported by
+`pytest_shard.py --check-durations`,
 run as a step of CI's own `pytest` job. It measures each module while running it, so it sees a
 heavy unweighted file in a quiet directory and a stale recorded number, which a static check
 cannot. This module keeps the partition properties, which are about correctness rather than
@@ -68,7 +70,7 @@ def partition_problems(placed: dict[str, int], files, shards: int) -> list[str]:
 @pytest.mark.parametrize("shards", [1, 2, 3, 4, 5, 6, 8])
 def test_every_test_file_lands_in_exactly_one_shard(shards):
     files = pytest_shard.census()
-    placed = pytest_shard.assign(files, shards, pytest_shard.load_weights())
+    placed = pytest_shard.assign(files, shards)
     assert partition_problems(placed, files, shards) == []
 
 
@@ -95,18 +97,16 @@ def test_the_census_finds_the_files_it_must_find():
 def test_the_assignment_is_deterministic():
     """Two legs of the matrix compute the split independently on separate runners. They agree
     only if the same census and weights always give the same answer."""
-    files, weights = pytest_shard.census(), pytest_shard.load_weights()
-    assert pytest_shard.assign(files, 4, weights) == pytest_shard.assign(
-        files, 4, weights
-    )
+    files = pytest_shard.census()
+    assert pytest_shard.assign(files, 4) == pytest_shard.assign(files, 4)
 
 
 def test_a_moved_file_still_lands_in_exactly_one_shard():
     """A file whose path changes is a file with no recorded weight. It must still be placed —
-    the median fallback, not a KeyError and not a silent drop."""
+    at its directory's median, not a KeyError and not a silent drop."""
     files = pytest_shard.census()
     moved = files[:-1] + ["tests/repo/test_moved_somewhere_new.py"]
-    placed = pytest_shard.assign(moved, 4, pytest_shard.load_weights())
+    placed = pytest_shard.assign(moved, 4)
     assert partition_problems(placed, moved, 4) == []
     assert "tests/repo/test_moved_somewhere_new.py" in placed
 
@@ -114,7 +114,7 @@ def test_a_moved_file_still_lands_in_exactly_one_shard():
 def test_a_dropped_file_is_flagged():
     """The reject half. Without it, a checker that always returned no problems would pass."""
     files = pytest_shard.census()
-    placed = pytest_shard.assign(files, 4, pytest_shard.load_weights())
+    placed = pytest_shard.assign(files, 4)
     del placed[files[0]]
     assert partition_problems(placed, files, 4) == [
         f"assigned to no shard: {[files[0]]}"
@@ -124,7 +124,7 @@ def test_a_dropped_file_is_flagged():
 def test_an_out_of_range_shard_is_flagged():
     """The second reject half: a file placed in a shard the matrix does not run."""
     files = pytest_shard.census()
-    placed = pytest_shard.assign(files, 4, pytest_shard.load_weights())
+    placed = pytest_shard.assign(files, 4)
     placed[files[0]] = 9
     assert any(
         "outside 0..3" in problem for problem in partition_problems(placed, files, 4)
@@ -135,7 +135,7 @@ def test_an_empty_shard_is_flagged():
     """The third: more shards than files leaves a leg collecting nothing, which pytest exits 5
     on rather than passing."""
     files = pytest_shard.census()[:2]
-    placed = pytest_shard.assign(files, 4, pytest_shard.load_weights())
+    placed = pytest_shard.assign(files, 4)
     assert any(
         "is empty" in problem for problem in partition_problems(placed, files, 4)
     )

@@ -75,7 +75,7 @@ The rules below shaped those memberships.
 The role `CLAUDE.md` keeps the rules; this is the wiring.
 
 - **The check exporter.** `files/verdict_export.py` serves each row's verdict
-  (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *The bridge as an exporter*). It
+  (`docs/archive/monitoring/m6-retire-kuma.md`, *The bridge as an exporter*). It
   runs on the `metrics` item of the role's `containers_list` entry, and observability's
   `monitor-bridge` scrape job collects it. `homelab_check_success`,
   `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` carry

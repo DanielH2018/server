@@ -13,7 +13,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 ## Notable
 
 - **Karma replaces Alertmanager's own UI**, which has no route of its own.
-  `docs/target-architecture/monitoring/alertmanager-ui-and-readers.md` records why. Karma
+  `docs/archive/monitoring/alertmanager-ui-and-readers.md` records why. Karma
   reads Alertmanager in-cluster, and `proxy: true` sends the silence writes its UI makes
   through the Karma pod, because a browser cannot reach the in-cluster URI.
   `k8s/roles/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2` admits it.

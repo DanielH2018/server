@@ -60,7 +60,7 @@ outage (#7625). `test_ci_lint_group.py` holds the split. `test_promote_runtime_i
 and `ci.yml`, and fails on a third-party import outside that list's closure.
 `uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
-`validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
+`validate-render-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
 
 `[tool.uv] package = false` in `pyproject.toml`. uv's own guidance is that a project does not
 need a package when it is "writing scripts, building a simple application, using a flat

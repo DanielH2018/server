@@ -99,7 +99,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   `node-exporter-dockerhub-mirror-textfile` emptyDir, a fourth textfile directory.
   observability's `DockerhubMirrorPullFailed` and `DockerhubMirrorPullNotReporting` page on it.
 - **M3's producer metric contract governs every file here**
-  (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
+  (`docs/archive/monitoring/m3-textfile-timer.md`, *The producer metric
   contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,
   such as `claude_cgroup.prom`, carries measurements only. It is exempt from the
   `homelab_check_*` series, because the check that reads it owns its absence, and it still

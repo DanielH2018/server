@@ -5,9 +5,9 @@ each secret reference as Flux's `${<key>}`, and stub mode renders each as a stub
 package modes render the host packages (*Render a host package*). The renderer writes only to
 the directory it is given. `promote` and Flux carry a published bundle to the cluster.
 
-The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
-and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
-[the contracts](target-architecture/contracts.md) defines the interface. Each slice lands in
+The plans are [R1, shadow render with zero diff](archive/render/r1-shadow-render.md)
+and [R2, secret placeholders](archive/render/r2-secret-placeholders.md). C1 in
+[the contracts](archive/contracts.md) defines the interface. Each slice lands in
 steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
@@ -106,7 +106,7 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
 is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
-(`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
+(`docs/archive/host/h1-cluster-config-to-flux.md`) says why that is accepted. The
 one exception is the per-container resources guard in
 `tests/k8s/test_namespace_resource_defaults.py`, which reads each vendored workload with its
 patches applied.
@@ -125,9 +125,9 @@ renders for that image, byte for byte as its `data` parses. `DIR/images/tags.jso
 name to its content tag, `sha-<12 hex>`, which image-builder's own expression computes over
 that `data`. The renderer renders each role among the render's tags that includes
 `k8s/image-builder`, because a consumer reads only the images its own role builds. A render
-without `--role` therefore writes all ten. A `--role` render writes the named builders'
-contexts alone, and no `DIR/images/` when it names none (#5374). `--all-images` renders all
-ten whatever `--role` names, and the publish job passes it, because its `images` job builds
+without `--role` therefore writes every one. A `--role` render writes the named builders'
+contexts alone, and no `DIR/images/` when it names none (#5374). `--all-images` renders every
+one whatever `--role` names, and the publish job passes it, because its `images` job builds
 every context. Every placeholder render refuses an `--out` whose `images/` already holds a
 file. A consumer's ref reads its tag
 from the same computation, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS`. No
@@ -828,7 +828,7 @@ they belong to the host plane (*Render a host package*).
 ## Render a host package
 
 Host mode renders one host's package, and package mode renders one shared package. The plan
-is [H3, Pi pilot](target-architecture/host/h3-pi-pilot.md), whose *Shared names for the host
+is [H3, Pi pilot](archive/host/h3-pi-pilot.md), whose *Shared names for the host
 slices* fixes the source tree.
 
 ```bash

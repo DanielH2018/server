@@ -72,7 +72,7 @@ operator runs it (**operator-only**). A hand edit breaks the file's SOPS MAC. CI
 refuses a hand-edited file, and a `.source` hash that no longer matches `secrets.yml`. A
 value changed with `sops set` therefore reaches the cluster only after `write` runs.
 
-`docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*, lists every store a
+`docs/archive/deploy/d3-secrets.md`, *What one secret costs*, lists every store a
 secret can touch.
 
 ### Rotating a value the cluster reads
@@ -418,7 +418,7 @@ SOPS name.
    on the authelia pod, which hashes the `.source` line of each key its Secret references.
    The portal therefore rolls in the revision that carries the new value. D3's exit
    criterion 3 showed the same path for peanut
-   (`docs/target-architecture/deploy/d3-secrets.md`).
+   (`docs/archive/deploy/d3-secrets.md`).
 5. A `claude-agent` rotation also needs the `claude_code` apply, which writes the new
    plaintext into the agent user's home. Run it only after authelia has converged on the new
    digest: step 4's landing reads `settled`. If the authelia deploy failed, the old digest is
@@ -501,7 +501,7 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   `server` repository, with *Actions* read and *Variables* read and no other permission.
   GitHub caps the display name at 40 characters, so it differs from the SOPS key. The
   deploy-pipeline exporter in monitor-bridge (D2.6d in
-  `docs/target-architecture/deploy/d2-first-leaf.md`) reads `DEPLOY_HOLD`, `PROD_DIGEST`
+  `docs/archive/deploy/d2-first-leaf.md`) reads `DEPLOY_HOLD`, `PROD_DIGEST`
   and master's CI runs with it. It holds no write scope, so a leaked copy can neither clear a
   hold nor move a tag. Flux owns monitor-bridge, so run `cluster_vars.py write` and land the
   change without `--tags`.

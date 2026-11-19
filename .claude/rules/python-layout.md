@@ -67,14 +67,22 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
   A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
   `test_census_rows_test_renders.py`.
+- An ordering or flag rule over an operator-only runbook's section goes in a `RunbookRule`
+  row of `tests/repo/test_runbook_rules.py`: the doc, the heading, the unit, a selector, and
+  the strings it requires, the pattern it forbids or the step that must come first.
 - `tests/_row_table.py` is the harness the tables share. A property needing a second
   render context, a cross-document join or a long exemption list keeps its own file.
+- The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
+  refuses a new module under `tests/repo/` or `tests/services/` with three test functions or
+  fewer that reads tracked text, by a walk or by one file's path, and runs no code: no
+  subprocess other than `git ls-files`, no render and no scratch tree. A file that must stay
+  one goes in that row's `allow` with the reason.
 
 ## A new check ships with a proof it can go red
 
 Any validator, guard, health check or probe lands with a paired test: one input it must
 accept, one it must reject. Without the rejecting half there is no evidence it can fail.
-`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: name the
+`scripts/validate/tests/test_render_compose.py` is the worked example: name the
 pair `..._is_clean` / `..._is_flagged`.
 
 ## A check that finds its subject by pattern names a member it must find

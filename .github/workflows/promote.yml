@@ -2,8 +2,8 @@ name: promote
 
 # Publishes each green master commit as an OCI artifact, signs it, and moves the `prod` tag
 # that Flux follows to the newest published master commit. The plan and the reasons for every
-# guard below are in docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*), and
-# docs/target-architecture/contracts.md C2 is the contract. The operator's view is
+# guard below are in docs/archive/deploy/d1-flux-installed.md (*Decisions*), and
+# docs/archive/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
 # Thirteen jobs, so code that runs during a render or a decision never holds a token that can
@@ -365,7 +365,7 @@ jobs:
   # out/images/ and pushes ghcr.io/danielh2018/<name>:<content tag> when GHCR does not serve that
   # tag (D5.4a2). It runs no renderer code: it reads `render`'s artifact and this workflow's own
   # scripts/deploy_tools/ci_images.py, which imports only the stdlib and lib.cli_help. The plan is
-  # docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
+  # docs/archive/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*.
   #
   # `publish` needs it, so a failing image stops every promotion until it is fixed. A served tag
   # is success and is never rebuilt, because the push-once rule is what makes a content tag

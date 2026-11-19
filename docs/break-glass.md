@@ -198,7 +198,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       (**operator-only**) and its consumers redeployed. That list includes the keys the
       cluster manifests hold. *Rotating the cluster key* in `docs/secret-rotation.md` has
       the steps.
-   Source: `docs/target-architecture/deploy/d3-secrets.md` ("Where the values come from")
+   Source: `docs/archive/deploy/d3-secrets.md` ("Where the values come from")
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 
 11. **daniel-server's host age key.** `/etc/homelab/age.key` (root, mode 0600) is the key
@@ -230,7 +230,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       the cluster files to the retired user-home key, so deleting that key's private half
       is what closes it. Rotate through `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server`
       (**operator-only**) to refresh the host file's copies.
-   Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
+   Source: `docs/archive/host/h4-secrets-unit.md` ("Which ciphertext each host
    carries") and `hosts/bootstrap-host.sh` (step 3).
 12. **daniel-pi's host age key.** `/etc/homelab/age.key` (root, mode 0600) on the Pi is the
     key `homelab-secrets.service` decrypts `secrets/hosts/daniel-pi.sops.yaml` with. The
@@ -258,7 +258,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       package's `credentials:` and the outputs it renders. Rotate each through
       `docs/secret-rotation.md`, then `host_secrets.py sync daniel-pi` (**operator-only**)
       to refresh the host file's copies.
-   Source: `docs/target-architecture/host/h4-secrets-unit.md` (H4.4, H4.5) and
+   Source: `docs/archive/host/h4-secrets-unit.md` (H4.4, H4.5) and
    `hosts/bootstrap-host.sh` (step 3).
 
 ### The age keys
@@ -845,7 +845,7 @@ what each source records — not what "should" have happened.
 | SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `docs/host-bring-up.md` §5; the `sops_setup` role created the key until H7.24b |
 | daniel-pi rebuild from a blank SD card (*daniel-pi must be rebuilt from a blank SD card*) | **No, and waived.** The operator ruled on 2026-11-08 not to run the rebuild at the Pi's console ([#7505](https://github.com/DanielH2018/server/issues/7505)). CI's bootstrap cases run the script in a container against stub or simulated installs, so they cover neither the console steps nor the WireGuard restore. | `scripts/validate/validate_lib/bootstrap_repo_case.py` |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Its `fresh-cluster` case, added on 2026-11-08 (#7669), is written to run the fresh-cluster steps on a second kind cluster that resolves no name outside the cluster, on the node or in a pod: the controllers and the registry run from image archives, and the registry role's render serves the bundle at `flux_break_glass_url`. Read its `case=fresh-cluster` line in the latest run before you count it as drilled. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), k3s's image import directory, and the way back from the hostPath PV to Longhorn. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass`, `break-glass-red` and `fresh-cluster` |
-| Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/target-architecture/host/h7-delete-ansible.md`, *The proofs* |
+| Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/archive/host/h7-delete-ansible.md`, *The proofs* |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)

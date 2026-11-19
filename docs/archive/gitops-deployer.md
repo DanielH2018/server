@@ -236,7 +236,7 @@ applies, defers, alerts on or owes such a role. Without that branch of
 Every `platform: k8s` entry is Flux's, which applies the tag through `promote`. The tick skips
 such a tag, so the deployer never applies, defers, alerts on or owes it. D2's plan has the
 design:
-[The ownership flag and its three readers](../target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
+[The ownership flag and its three readers](../archive/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
 H1.9 dropped the flag itself, and `scripts/lib/k8s_roles.py:k8s_tags` reads the tags.
 
 ### Both apply arms are forward-only
@@ -760,7 +760,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   clone, state dir and lock. Only daniel-box has one.
   - **By design, the Pi's services are NOT deployed by this tick.** The Pi has
     `has_gitops: false`, and its Compose services ship in its `homelab-daniel-pi` package,
-    which the Pi installs itself. `docs/target-architecture/host/h5-pi-compose.md` is the
+    which the Pi installs itself. `docs/archive/host/h5-pi-compose.md` is the
     plan that moved them there, and `land.sh` waits for the Pi to apply a merge that changes
     its package.
 

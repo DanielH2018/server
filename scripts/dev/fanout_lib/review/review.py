@@ -109,7 +109,6 @@ from fanout_lib.review.review_ci import (
 )
 from fanout_lib.review.review_land import (
     LAND_MARGIN_S,
-    RESUME_VERDICTS,
     out_of_time,
     release,
 )
@@ -446,7 +445,7 @@ class Pipeline:
             try:
                 if still_red:
                     return still_red
-                if landing.verdict in RESUME_VERDICTS and self.session:
+                if landing.resumes and self.session:
                     log_dir = str(self.worktree / ".fanout")
                     prompt = apply_prompt(self.record.pr, landing, log_dir)
                     return self._claude("apply", self._resume(), prompt).report

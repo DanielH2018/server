@@ -47,7 +47,8 @@ from lib.cli_help import ArgumentParser
 from lib.exit_codes import OK
 
 # Every state `parse_status` or `reconciled` gives a stopped unit that pages. `done` and
-# `landed` do not. The polkit rule admits exactly these, and a test holds the two equal.
+# `landed` do not, and neither does `parked`: the sub-coordinator that owns the batch re-lands
+# it once the hold clears. The polkit rule admits exactly these, and a test holds the two equal.
 PAGED_STATES = ("failed", NEEDS_INPUT, NO_PR, NO_VERDICT, NO_REPORT)
 ALERT_UNIT = "fanout-alert@{unit}:{state}.service"
 START_TIMEOUT_S = 30.0

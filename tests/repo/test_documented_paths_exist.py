@@ -173,9 +173,9 @@ def test_the_guard_finds_citations_to_check():
     hits = sum(
         len(cited_paths(line)) for doc in DOCS for line in doc.read_text().splitlines()
     )
-    # About 30. A floor just under it catches the pattern breaking; setting it at the exact
+    # About 7. A floor just under it catches the pattern breaking; setting it at the exact
     # count would instead fail every time a doc drops a citation, which is not a defect.
-    assert hits >= 25, (
+    assert hits >= 5, (
         f"only {hits} line-numbered citations found across {len(DOCS)} docs -- the pattern "
         "has stopped matching, so the existence check below is passing on an empty set."
     )
@@ -432,14 +432,7 @@ def test_the_walk_still_finds_this_repos_own_docs():
 # The citing doc is still right about the file, so no path check sees a renamed heading. The
 # reader who follows the pointer searches a long page for text that is gone.
 
-# A plan points at the tree as it stood when the plan was written, and a finished plan is
-# not rewritten when a heading it names moves.
-_PLANS = "docs/target-architecture/"
-POINTER_CORPUS = [
-    d
-    for d in DOCS
-    if d.is_file() and not d.relative_to(REPO).as_posix().startswith(_PLANS)
-]
+POINTER_CORPUS = [d for d in DOCS if d.is_file()]
 
 
 def dangling_pointers(corpus: list[Path]) -> list[str]:
@@ -480,7 +473,6 @@ def test_the_pointer_walk_finds_pointers_to_check():
     """A shrunken walk is a bug: about 80 pointers stood in the live docs on 2026-11-14."""
     found = sum(len(heading_pointers(d.read_text())) for d in POINTER_CORPUS)
     assert found >= 50, found
-    assert not any(_PLANS in d.as_posix() for d in POINTER_CORPUS)
 
 
 def test_every_heading_pointer_in_the_live_docs_resolves():

@@ -6,8 +6,8 @@ content tag, `sha-<12 hex>` over that `data` as `image_builder_content_tag` comp
 
 The contexts render from each role among the render's tags that includes `k8s/image-builder`,
 because a consumer reads only the images its own role builds (`role_tags`). A full render
-names every builder, so it writes all ten. A `--role` render writes the named builders'
-contexts alone, and no `DIR/images/` when it names none; `--all-images` renders all ten
+names every builder, so it writes every one. A `--role` render writes the named builders'
+contexts alone, and no `DIR/images/` when it names none; `--all-images` renders every one
 whatever it names, as the publish job's `images` job needs. Each renders with its role's play context and
 its `image_builder_builds` entry's vars (`task_inputs.image_contexts`). The consumer pass reads the
 same `ImageContext` tags (`render_tag`'s `built`), so a consumer's ref and `tags.json` come from
@@ -18,7 +18,7 @@ No Kustomization applies these files. D5.4a2's `images` job builds and pushes th
 `ghcr_refs` points each flux-owned tag's refs to a built image at that push, with
 `imagePullPolicy: IfNotPresent` beside each (D5.4b). An Ansible-owned tag keeps the in-cluster
 registry and its `Always`. `pull_policy_offences` refuses a GHCR content-tag ref whose policy is
-`Always` or unset. The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Images built
+`Always` or unset. The plan is docs/archive/deploy/d5-bulk-move.md, *Images built
 by CI (D5.4)*.
 """
 

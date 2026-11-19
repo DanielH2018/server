@@ -87,6 +87,47 @@ ROLE_DIRS_CALLERS = frozenset(
 )
 
 
+# A module that reads tracked content: a walk a Census selector stands in for, or one file
+# read by its path, which a selector naming that file stands in for.
+READS_THE_TREE = re.compile(
+    r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
+    r"|\.read_text\(|\.read_bytes\(|\bopen\(|\bsafe_load\(|\bload_\w+\(|\b_load\("
+    r"|^from test_\w+ import",
+    re.MULTILINE,
+)
+# A module that runs code rather than reading text: a subprocess other than `git ls-files`,
+# a render, a scratch tree or a patched callable. A row holds none of these.
+RUNS_CODE = re.compile(
+    r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
+    r"|\btmp_path\b|\bmonkeypatch\b|\burlopen\("
+)
+TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
+BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
+# A module with this many test functions or fewer is a selector, a predicate and its red
+# proof: a row's shape.
+ROW_SIZED = 3
+# The files the row found when it shipped, before anyone judged whether each fits a row.
+_PREDATES = (
+    "predates the rule; #9237 converts it to a row or replaces this with the reason it "
+    "stays a file"
+)
+
+
+def _standalone_check_offence(subject: Subject) -> list[str]:
+    text = subject.text
+    tests = len(TEST_FUNCTION.findall(text))
+    if (
+        tests > ROW_SIZED
+        or BUILDS_A_ROW.search(text)
+        or not READS_THE_TREE.search(text)
+        or RUNS_CODE.search(text)
+    ):
+        return []
+    return [
+        f"a standalone check of {tests} test function(s) over tracked text; make it a row"
+    ]
+
+
 ROWS = (
     Census(
         name="glob-census-carries-a-non-vacuity-assertion",
@@ -163,6 +204,91 @@ ROWS = (
         green=(Subject("a.py", "for p in role_dirs(K8S):\n"),),
         min_matches=len(ROLE_DIRS_CALLERS),
         must_find=ROLE_DIRS_CALLERS,
+    ),
+    Census(
+        name="a-single-predicate-check-is-a-row",
+        reason=(
+            "A one-selector, one-predicate check is a row, not a file "
+            "(.claude/rules/python-layout.md). A row fails `subject gone: delete this row` "
+            "once its selector matches nothing, so it retires with its subject; a file "
+            "passes over an empty census until someone notices. Write the check as a "
+            "`Census` row, a rendered-property row or a `RunbookRule` row. A check that needs "
+            "a second render context, a cross-document join or a long exemption list keeps "
+            "its file and goes in `allow` with that reason."
+        ),
+        files=lambda: tracked("tests/repo/test_*.py", "tests/services/test_*.py"),
+        offence=_standalone_check_offence,
+        red=(
+            Subject(
+                "tests/repo/test_x.py",
+                "def test_ci_pins_its_runner():\n"
+                "    ci = safe_load((REPO / '.github/workflows/ci.yml').read_text())\n"
+                "    assert ci['jobs']['pytest']['runs-on'] != 'ubuntu-latest'\n",
+            ),
+            Subject(
+                "tests/repo/test_x.py",
+                "def test_every_doc_is_short():\n"
+                "    for p in DOCS.glob('*.md'):\n"
+                "        assert len(p.read_text()) < 9000\n",
+            ),
+        ),
+        green=(
+            Subject(
+                "tests/repo/test_x.py",
+                "ROWS = (Census(files=lambda: tracked('docs/*.md')),)\n"
+                "def test_row_holds(): ...\n",
+            ),
+            Subject(
+                "tests/repo/test_x.py", "def test_parse(): assert parse('a') == 1\n"
+            ),
+            Subject(
+                "tests/repo/test_x.py",
+                "def test_the_render_names_a_port():\n"
+                "    assert 'port' in render_role_template('a', 'b.j2')\n",
+            ),
+        ),
+        min_matches=100,
+        must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
+        allow={
+            "tests/repo/test_ci_k3s_download_leg_does_not_gate.py": (
+                "an existential claim over every workflow: some step runs the cases outside "
+                "the gate, which no per-file offence can hold"
+            ),
+            "tests/repo/test_shed_offline_hold_order.py": (
+                "a pinned sentence with a must-refuse case table, which no RunbookRule "
+                "field holds"
+            ),
+            "tests/services/test_host_check_rule_literals.py": (
+                "a join of the rule file against the inventory, which #9019 rewrites"
+            ),
+            **dict.fromkeys(
+                (
+                    "tests/repo/test_ci_bootstrap_cases_own_job.py",
+                    "tests/repo/test_fix_skeptic_pass_documented.py",
+                    "tests/repo/test_gitleaks_manifest_digest_allowlist.py",
+                    "tests/repo/test_gitleaks_secret_key_name_allowlist.py",
+                    "tests/repo/test_host_package_cases_run_on_their_inputs.py",
+                    "tests/repo/test_prek_hooks_run_only_at_commit.py",
+                    "tests/repo/test_prek_uv_entries_are_frozen.py",
+                    "tests/repo/test_promote_workflow.py",
+                    "tests/repo/test_promote_workflow_bundle.py",
+                    "tests/repo/test_promote_workflow_schedule.py",
+                    "tests/repo/test_promote_workflow_starters.py",
+                    "tests/repo/test_promote_workflow_uv_groups.py",
+                    "tests/repo/test_promote_workflow_verify.py",
+                    "tests/repo/test_prune_artifacts_workflow.py",
+                    "tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py",
+                    "tests/repo/test_setup_action_uv_cache.py",
+                    "tests/repo/test_vale_matches_the_ci_pin.py",
+                    "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py",
+                    "tests/services/test_deploy_pipeline_reboot_window_rule.py",
+                    "tests/services/test_flux_not_ready_comment_pager.py",
+                    "tests/services/test_karakeep_time_tagger_script.py",
+                    "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py",
+                ),
+                _PREDATES,
+            ),
+        },
     ),
 )
 

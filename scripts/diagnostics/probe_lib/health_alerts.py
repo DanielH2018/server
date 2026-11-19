@@ -1,8 +1,8 @@
 """The alert-plane half of `probe.py health <tag>`: firing alerts and ingress probes.
 
 `run_health` calls `gate` after the rollout rollup passes (M6 B-1,
-docs/target-architecture/monitoring/m6-retire-kuma.md *Phase B*, item 1). The selector is
-C7's *Health gate* in docs/target-architecture/contracts.md, with its six departures from the
+docs/archive/monitoring/m6-retire-kuma.md *Phase B*, item 1). The selector is
+C7's *Health gate* in docs/archive/contracts.md, with its six departures from the
 literal `ALERTS{alertstate="firing",service="<tag>"}`. D5's soak reads the same set, so a
 change to `gated_selectors` is a contract change, not a local tweak.
 
