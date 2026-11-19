@@ -36,7 +36,7 @@ spec:
       # caused the pressure, so it ranks with the edge rather than with the dashboards.
 {{ pod_shell(services | tier_priority_class('wg-easy')) }}
       securityContext:
-        # Both namespaced; kubelet only admits them because setup/k3s allow-lists them.
+        # Both namespaced; kubelet admits them only because k3s-server and k3s-agent allow-list them.
         # ip_forward: the SERVER routes between wg0 and eth0 inside the pod netns, and
         # /proc/sys is ro in a pod even with NET_ADMIN, so the spec is the only way in.
         # src_valid_mark: wg-quick requires it; pre-setting it makes wg-quick skip its own doomed write.
