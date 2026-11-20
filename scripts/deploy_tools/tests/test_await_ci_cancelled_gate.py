@@ -7,7 +7,7 @@ nobody cancelled, so only the check suite's own `cancelled` conclusion excuses t
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_cancelled_gate.py
 """
 
-import await_ci
+from deploy_tools import await_ci
 from lib.exit_codes import CI_PENDING
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, parse_check_runs
 

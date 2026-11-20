@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-import forge
-import promote
+from deploy_tools import forge
+from deploy_tools import promote
 from _promote_fakes import World, digest_of
 
 PROMOTE = Path(promote.__file__)
@@ -87,26 +87,28 @@ ALLOWED_DEPLOYER_LIB: frozenset[str] = frozenset()
 
 # Each package whose imports are held to an allowlist, by the package name.
 ALLOWLISTS = {"lib": ALLOWED_LIB, "deployer_lib": ALLOWED_DEPLOYER_LIB}
+# The packages whose `from <package> import <name>` imports a module named `<package>.<name>`.
+PACKAGES = {*ALLOWLISTS, "deploy_tools"}
 
 # The `os` functions that start a process, which promote.py's `import os` would reach.
 _OS_EXEC = ("system", "popen", "exec", "spawn", "posix_spawn", "fork")
 
 # The adapter itself: the one member the census must find, so a rename that leaves promote.py
 # importing nothing cannot pass as "imports nothing forbidden".
-ADAPTER = "forge"
+ADAPTER = "deploy_tools.forge"
 
 
 def imported_modules(source: str) -> set[str]:
     """Every module name an `import` or `from ... import` in `source` names.
 
     `from lib import yaml_fast` names `lib.yaml_fast`, so an allowlist in ALLOWLISTS sees the
-    module rather than the package.
+    module rather than the package, and `from deploy_tools import forge` names the adapter.
     """
     names = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module in ALLOWLISTS:
+        elif isinstance(node, ast.ImportFrom) and node.module in PACKAGES:
             names.update(f"{node.module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)

@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_own_checkout.py
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -88,8 +89,7 @@ _INCIDENT_READERS = frozenset(
 
 _LOADED_AFTER_IMPORT = """
 import sys
-sys.path[:0] = ["scripts", "scripts/deploy_tools"]
-import land
+from deploy_tools import land
 from deploy_tools.land_lib import own_checkout
 print("\\n".join(own_checkout.loaded_paths(own_checkout.OWN_CHECKOUT, list(sys.modules.values()))))
 """
@@ -101,6 +101,7 @@ def test_importing_land_loads_the_incident_readers():
     run = subprocess.run(
         [sys.executable, "-c", _LOADED_AFTER_IMPORT],
         cwd=root,
+        env={**os.environ, "PYTHONPATH": "scripts"},
         capture_output=True,
         text=True,
         check=True,
@@ -219,8 +220,7 @@ if args and args[0] in ("log", "diff"):
 
 _STALE_WITH_A_LAZY_MODULE_UNLOADED = """
 import sys
-sys.path[:0] = ["scripts", "scripts/deploy_tools"]
-import land
+from deploy_tools import land
 from deploy_tools.land_lib import own_checkout
 sys.modules.pop("lib.inventory_lists", None)
 sys.modules.pop("inventory_lists", None)
@@ -237,7 +237,7 @@ def test_a_module_a_later_phase_imports_lazily_is_compared(tmp_path):
     run = subprocess.run(
         [sys.executable, "-c", _STALE_WITH_A_LAZY_MODULE_UNLOADED],
         cwd=own_checkout.OWN_CHECKOUT,
-        env={**scrubbed_env(), "PATH": path_with(bin_dir)},
+        env={**scrubbed_env(), "PATH": path_with(bin_dir), "PYTHONPATH": "scripts"},
         capture_output=True,
         text=True,
         check=True,

@@ -46,7 +46,6 @@ from pathlib import PurePosixPath as _PurePosixPath
 from types import ModuleType
 from typing import NoReturn
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say

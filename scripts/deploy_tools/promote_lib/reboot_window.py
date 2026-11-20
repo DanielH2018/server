@@ -32,11 +32,7 @@ from pathlib import Path
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, REPO
 

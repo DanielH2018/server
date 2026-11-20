@@ -18,11 +18,8 @@ new read therefore starts by adding its field here. Nested fields the lander doe
 dropped.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
 from typing import TypedDict
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import JsonObject, JsonValue, as_object, as_object_list
 
 

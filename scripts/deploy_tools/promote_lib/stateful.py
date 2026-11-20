@@ -69,19 +69,14 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `changed_set` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.repo_paths import REPO
 
-import forge
-from changed_set import own_digests
+from deploy_tools import forge
+from deploy_tools.changed_set import own_digests
 from deploy_tools.promote_lib.prune import ReadError
 from deploy_tools.promote_lib.verify_promotion import VerifyVerdict
 from renderer.renderer_lib.ordering import split_kind

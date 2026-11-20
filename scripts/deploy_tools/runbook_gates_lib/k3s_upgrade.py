@@ -32,11 +32,7 @@ Usage:
 
 import sys
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from deploy_tools.runbook_gates_lib import gate_runner
 from deploy_tools.runbook_gates_lib.gate_runner import (
@@ -58,8 +54,7 @@ from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
 # The Backup CR reader the backup-health cron ships; it imports host_lib.
 from lib import host_modules  # noqa: F401
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_backups
+from lib.longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"

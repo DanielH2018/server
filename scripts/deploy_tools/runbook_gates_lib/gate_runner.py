@@ -27,19 +27,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path as _Path
 
-# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
-from lib.repo_paths import MONITOR_BRIDGE_FILES
 
-# The robustness allow-list is monitor-bridge's, shared rather than restated. Appended,
-# not prepended, so that role's `check.py` and packages cannot shadow anything a caller of this
-# module imports later.
-sys.path.append(str(MONITOR_BRIDGE_FILES))
+# The robustness allow-list is monitor-bridge's, shared rather than restated.
+from lib import host_modules  # noqa: F401
 from longhorn_robustness import unsafe_volumes as _unsafe_states
 
 EX_UNAVAILABLE = 69

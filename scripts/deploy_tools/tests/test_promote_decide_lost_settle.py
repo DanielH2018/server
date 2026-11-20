@@ -13,7 +13,7 @@ import dataclasses
 import pytest
 from _promote_fakes import NOW, World, digest_of
 
-import promote
+from deploy_tools import promote
 from deploy_tools.promote_lib import verify_promotion as vp
 
 

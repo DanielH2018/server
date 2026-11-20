@@ -25,12 +25,9 @@ Run: uv run python scripts/deploy_tools/promote.py check-bundle out
 """
 
 import re
-import sys as _sys
 from collections.abc import Iterable
 from pathlib import Path
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import yaml
 
 from lib import yaml_fast

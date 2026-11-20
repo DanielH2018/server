@@ -32,17 +32,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import gh_rate_limit
-from lib.repo_paths import HOST_LIB_FILES
 
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
-_sys.path.insert(0, str(HOST_LIB_FILES))
+from lib import host_modules  # noqa: F401
 from ci_verdict import CheckRun, parse_check_runs
-from forge_transport import (
+from deploy_tools.forge_transport import (
     TIMEOUT_S,
     ForgeError,
     Response as Response,
@@ -53,8 +49,8 @@ from forge_transport import (
     urllib_post as urllib_post,
     urllib_transport,
 )
-from forge_transport import DISCORD_MAX as DISCORD_MAX, Discord as Discord
-from forge_registry import (
+from deploy_tools.forge_transport import DISCORD_MAX as DISCORD_MAX, Discord as Discord
+from deploy_tools.forge_registry import (
     ARTIFACT,
     MANIFEST_ACCEPT as MANIFEST_ACCEPT,
     REGISTRY,

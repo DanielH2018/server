@@ -84,20 +84,20 @@ from typing import assert_never
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge`, `changed_set` and `chained_timeout` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
-import forge
-from artifact_retention import HELD_TAG, LAST_GOOD_TAG, PROD_TAG, SUPERSEDING_TAG
-from changed_set import ROOT, changed_set, footprints, suspended_tags
-from chained_timeout import promote_timeout
+from deploy_tools import forge
+from deploy_tools.artifact_retention import (
+    HELD_TAG,
+    LAST_GOOD_TAG,
+    PROD_TAG,
+    SUPERSEDING_TAG,
+)
+from deploy_tools.changed_set import ROOT, changed_set, footprints, suspended_tags
+from deploy_tools.chained_timeout import promote_timeout
 from deploy_tools.kustomizations import kustomization_graph
 from deploy_tools.promote_lib import controller_rollout, storage_rollout, superseded
 from deploy_tools.promote_lib.flux_status import (
