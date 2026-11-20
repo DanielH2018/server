@@ -2,9 +2,10 @@
 
 `scripts/dev/pytest_shard.py --changed-since` picks the modules and
 `scripts/dev/tests/test_pytest_shard_selection.py` covers it. This module holds the workflow
-to the three things the script cannot see: which events hand it a base, that a leg with an
-empty list skips every later step rather than running pytest on nothing, and that the gate
-can read whether the legs ran the whole census.
+to the four things the script cannot see: which events hand it a base, that the matrix
+starts the legs `prove` planned, that a leg with an empty list skips every later step rather
+than running pytest on nothing, and that the gate can read whether the legs ran the whole
+census.
 
 Run: uv run pytest tests/repo/test_ci_pytest_selects_affected_modules.py
 """
@@ -54,7 +55,6 @@ def _arguments(tmp_path, event: str, green_base: str = "") -> str:
     step = next(s for s in _job()["steps"] if s.get("name") == SELECT)
     passed = {
         "${{ matrix.shard }}": "2",
-        "${{ strategy.job-total }}": "6",
         "${{ needs.prove.outputs.base }}": green_base,
     }
     stubs = fake_bin(tmp_path / "bin", uv='echo "$@"\n')
@@ -77,7 +77,7 @@ def test_a_pull_request_diffs_against_the_commit_it_was_merged_onto(tmp_path):
     arguments = _arguments(tmp_path, "pull_request")
 
     assert "--changed-since HEAD^1" in arguments
-    assert "--of 6 --shard 2" in arguments
+    assert "--shard 2" in arguments
 
 
 def test_a_push_diffs_against_the_green_base_the_prove_job_named(tmp_path):
@@ -97,6 +97,13 @@ def test_a_push_with_no_base_and_a_dispatch_hand_the_split_no_base(
     arguments = _arguments(tmp_path, event, green_base)
 
     assert "pytest_shard.py" in arguments and "--changed-since" not in arguments
+
+
+def test_the_matrix_starts_the_legs_prove_planned_and_every_leg_without_a_plan():
+    axis = " ".join(_job()["strategy"]["matrix"]["shard"].split())
+
+    assert axis.startswith("${{ fromJSON(needs.prove.outputs.legs || '[")
+    assert "prove" in _job()["needs"]
 
 
 def test_every_step_after_the_selection_skips_on_an_empty_leg():
