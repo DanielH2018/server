@@ -54,7 +54,7 @@ from lib.k8s_roles import (
     declared_secret_file,
     k8s_tags,
     resolved_manifest_files,
-    role_fields,
+    role_defaults,
 )
 from lib.render_guard import SHARED_TPL, k8s_services
 from lib.repo_paths import JOB_FILES, K8S_ROLES, K8S_SERVICES, INVENTORY
@@ -222,10 +222,10 @@ def bundle_ordering(
     Raises:
         ValueError: A role's `flux_suspend`, `flux_prune`,
             `manifests_rollout_timeout` or `flux_verify_after` is not a literal
-            (`role_fields`, `ordering.verify_after`).
+            (`role_defaults`, `ordering.verify_after`).
     """
     tags = k8s_tags(services)
-    fields, problems = role_fields(tags, roles)
+    defaults, problems = role_defaults(tags, roles)
     after, after_problems = verify_after(tags, roles)
     problems += after_problems
     if problems:
@@ -238,7 +238,7 @@ def bundle_ordering(
         namespace_roles={
             str(group[var]): role for var, role in NAMESPACE_ROLE_VARS.items()
         },
-        suspended=frozenset(tag for tag, own in fields.items() if own.get("suspend")),
+        suspended=frozenset(tag for tag, own in defaults.items() if own.suspend),
         workload_namespace=str(group["k8s_namespace"]),
         verify_after=after,
     )

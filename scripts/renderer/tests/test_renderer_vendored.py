@@ -12,7 +12,7 @@ from deploy_tools.bundle_census import census
 from deploy_tools.bundle_gates import source
 from lib import yaml_fast
 from lib.exit_codes import RENDER_FAILED, RENDER_OK
-from lib.k8s_roles import role_fields
+from lib.k8s_roles import role_defaults
 from renderer import homelab_render, shadow_diff
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, bundle_files
 from renderer.renderer_lib.roundtrip import render_sides, stub_passes
@@ -190,7 +190,7 @@ def test_a_roles_rollout_timeout_renders_as_its_kustomization_timeout(tmp_path):
 )
 def test_a_field_that_is_not_a_literal_is_a_problem(tmp_path, defaults):
     _role(tmp_path, defaults, vendors=False)
-    found, problems = role_fields([TAG], tmp_path)
+    found, problems = role_defaults([TAG], tmp_path)
     assert found == {}
     assert len(problems) == 1 and problems[0].startswith(f"{TAG}'s ")
 

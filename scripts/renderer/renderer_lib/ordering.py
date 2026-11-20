@@ -189,7 +189,7 @@ def prepull_timeouts(
     The value calls for `<tag>-prepull` and is that Kustomization's `timeout`. The
     renderer (`prepull.py`, `bundle.bundle_files`) and the publish census read this one
     function, as they read `verify_files`. A value must be a literal Go duration, as
-    `role_fields` requires of `manifests_rollout_timeout`; any other value is a problem and
+    `role_defaults` requires of `manifests_rollout_timeout`; any other value is a problem and
     its tag is left out.
     """
     found, problems = {}, []

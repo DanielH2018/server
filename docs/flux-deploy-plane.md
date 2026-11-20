@@ -1441,7 +1441,7 @@ The bundle holds:
   (`docs/archive/contracts.md`, *Deletion policy*).
   A role's `defaults/main.yml` changes two of those fields. `flux_prune: false` renders
   `prune: false`, and `manifests_rollout_timeout` replaces the default `timeout`. Each must
-  be a literal, and `scripts/lib/k8s_roles.py:role_fields` refuses a Jinja expression.
+  be a literal, and `scripts/lib/k8s_roles.py:role_defaults` refuses a Jinja expression.
   It substitutes exactly when the render of its own directory, `cluster/<tag>/`, holds a
   placeholder, as *Which Kustomizations substitute* below says.
 - `flux/cluster-vars.yaml` and `cluster/cluster-vars/`, the `cluster-vars` shared kind,
@@ -1705,7 +1705,7 @@ A published tag's object also holds two fields (D5.1a2):
 
 - `claims` lists the snapshot claims the tag's role declares in
   `k8s_autodeploy_snapshot_pvcs`, sorted. The publish census's `-snapshot` rule reads the
-  same function, `scripts/lib/k8s_roles.py:snapshot_claims`.
+  same function, `scripts/lib/k8s_roles.py:role_defaults`.
 - `suspended` is true when the tag's rendered Kustomization sets `spec.suspend: true`.
 
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
