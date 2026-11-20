@@ -16,7 +16,7 @@ spec:
 {# One scheduler, and one migrator: a rolling update would run the old scheduler beside a
      new one whose init container is migrating the schema under it. #}
 {{ spec_shell('Recreate') }}
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: airflow-scheduler
