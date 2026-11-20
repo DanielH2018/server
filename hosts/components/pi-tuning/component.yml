@@ -14,8 +14,8 @@
 # - /etc/default/earlyoom (earlyoom, a conffile) becomes a drop-in for earlyoom.service that
 #   clears EnvironmentFile= and sets EARLYOOM_ARGS.
 #
-# Lines the Ansible role wrote stay in the files as harmless duplicates: the line arm adopts each
-# line by its regexp, and the arm never removes one.
+# Older lines stay in the files as harmless duplicates: the line arm adopts each line by its
+# regexp, and the arm never removes one.
 #
 # Activation. zram, Log2Ram, the watchdog and the GPU split take effect at boot, so each of those
 # files declares `reboot`; the weekly reboot applies them. The watchdog reads its file on start,
@@ -75,7 +75,7 @@ files:
   # this wins where the two disagree.
   - {src: templates/60-homelab-pi.conf, dst: /etc/systemd/journald.conf.d/60-homelab-pi.conf, activate: "try-restart:systemd-journald.service"}
   # The apt timers, pinned to the quiet hour. Managed drop-ins, so reconcile restarts a timer when
-  # its drop-in changes and leaves a masked one alone. The copies the Ansible role wrote under
+  # its drop-in changes and leaves a masked one alone. The older copies under
   # /etc/systemd/system/<timer>.d/quiet-hour.conf hold the same schedule and stay as harmless
   # duplicates: `quiet-hour.conf` sorts after `50-homelab.conf`, so a change here loses to them
   # until the operator removes those files by hand.

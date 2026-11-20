@@ -8,7 +8,7 @@ header carries the rules a session must not break; this page is the working-out,
 edit one of them. The task and tag names below name the Ansible-era steps, which the git history
 keeps (`git show 4e5d0b8f9:ansible/roles/setup/optimize_pi/tasks/main.yml`). The three
 heartbeats below left the role in H3.8b. The `homelab-daniel-pi` package ships them
-from `hosts/components/pi-heartbeats/`, whose `component.yml` header carries the recovery
+from `hosts/components/pi-heartbeats/`, whose `CLAUDE.md` carries the recovery
 heartbeat's Autonomous-role contract.
 
 The board is a Raspberry Pi Zero 2 W with 512 MB of RAM, so nearly every number here was
@@ -714,6 +714,6 @@ pool holds.
 
 ## See also
 
-- `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
+- `hosts/components/pi-heartbeats/CLAUDE.md` — the container-recovery contract.
 - [Security tools](security-tools.md) — the triage rows for `sar`, `lastcomm` and `ausearch`,
   whose retention the log RAM budget caps.

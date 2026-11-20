@@ -15,17 +15,16 @@ import pytest
 from _checkout_package import render_daniel_box
 
 from lib import yaml_fast
+from _component_contract import component_contract
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "docs-refresh" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/docs-refresh"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-docs-site.conf"
 CONTRACT_PARTS = (
-    "Autonomous-role contract",
     "Scope:",
     "Mode:",
     "Abort valves:",
@@ -112,8 +111,6 @@ def test_the_timer_keeps_the_crons_two_slots(package):
     assert re.search(r"^OnCalendar=\*-\*-\* 06,18:17:00$", timer, re.M)
 
 
-def test_the_component_header_carries_the_contract():
-    header = "\n".join(
-        line for line in COMPONENT.read_text().splitlines() if line.startswith("#")
-    )
-    assert [part for part in CONTRACT_PARTS if part not in header] == []
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("docs-refresh")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []

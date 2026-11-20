@@ -1,24 +1,7 @@
 # The Renovate reporting half on daniel-box as a packaged timer. CLAUDE.md beside this file holds
 # the rules.
 #
-# The notifier merges, closes and edits nothing, so it owes no Autonomous-role contract beyond the
-# fields below: it reads GitHub and posts to Discord.
-#
-# Autonomous-role contract (the timer posts a digest to Discord with no human in the loop).
-#
-# - Scope / exclusions: reads the repo's open Renovate PRs and the dependency dashboard, and posts a
-#   Discord digest when what needs a human changes. It writes only /var/lib/renovate-notify.
-# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
-#   link from a package version, or reverting this component, stops the timer on the install that
-#   drops it.
-# - Authoritative sources: GitHub's REST API, as host_lib.github_get reads it.
-# - Abort valves: the fingerprint gate, which keeps a standing problem to one page, and reconcile's
-#   `hold_sha`.
-# - Required evidence, every run: renovate-notify.prom in node_exporter's textfile directory, which
-#   RenovateNotifyNotReporting reads, and a page from homelab-alert@ on a crash.
-# - Next-run review: `journalctl -u homelab-renovate-notify` before you change a threshold.
-#
-# ENFORCED: this component's tests/ and hosts/lib/tests/test_h737_box_components.py.
+# The notifier merges, closes and edits nothing: it reads GitHub and posts to Discord.
 files:
   - {src: files/renovate_notify.py, dst: /usr/lib/homelab/renovate-notify/renovate_notify.py, mode: "0755"}
   - {src: files/notify_logic.py, dst: /usr/lib/homelab/renovate-notify/notify_logic.py}

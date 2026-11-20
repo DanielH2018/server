@@ -5,8 +5,8 @@
 # is landing a PR. renovate-agent-land@.service keeps its name, because the polkit rule and the
 # session's prompt start it by name, and a template unit's name is what polkit matches.
 #
-# The grant on /var/lib/gitops-deploy stays out of this component: the ACL Ansible set stays on the
-# directory until the operator's cleanup removes it.
+# The grant on /var/lib/gitops-deploy stays out of this component: the ACL already on the
+# directory stays until the operator's cleanup removes it.
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: renovate-agent, uid: 901, gid: 986, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}

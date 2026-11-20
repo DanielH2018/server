@@ -1,43 +1,9 @@
-# The host-package builder, the signer and the apt repository on daniel-box.
-#
-# - homelab-builder.timer runs homelab-builder.service every 2 minutes. A run that exits 0 starts
-#   homelab-repo-sign.service through OnSuccess=, a held run included.
-# - homelab-apt-repo.service serves the signer's published tree on `server_ip` at `builder_repo_port`.
-# - A failure of either oneshot starts `homelab-alert@%n.service` (the `failure-alert` component).
-# - The builder reads its GitHub token from $CREDENTIALS_DIRECTORY/github_token. `homelab-secrets`
-#   writes /run/credstore/homelab_builder_github_token from daniel-box's SOPS file, and config.env
-#   holds no secret.
-# - The builder's three tools come from `homelab-tools` (nfpm and uv) and from the unit (the
-#   interpreter): an ExecStartPre= installs the pinned Python into the state directory, and only
-#   ExecStart= sets UV_PYTHON_DOWNLOADS=never.
-# - An ExecStartPre=+ script (`builder-fingerprint`) writes /etc/homelab-builder/archive-key.fpr from
-#   the signer's GnuPG home on every run, so a restored signing key needs no Ansible apply.
-# - The units keep the names the Ansible copies had. Reconcile's shadow handoff removes each copy in
-#   /etc/systemd/system, runs one daemon-reload, and restarts each packaged unit whose file differed.
-#
-# The signing key is not generated here. docs/break-glass.md item 9 holds the restore and the
-# rebuild procedures.
+# The host-package builder, the signer and the apt repository on daniel-box. CLAUDE.md beside
+# this file holds the rules and the autonomous-role contract.
 #
 # A host that lists this component lists `secrets-unit`, `failure-alert` and the `homelab-tools`
 # dependency too, and has `server_ip`, `host_python_version`, `ci_required_contexts` and
 # `ci_ancestor_walk_max` in its inventory.
-#
-# Autonomous-role contract (the builder and the signer publish host packages with no human in the loop).
-# - Scope / exclusions: the builder builds only a commit on origin/master's first-parent chain with
-#   green required CI, and it never builds without a GitHub token. The signer signs only what the
-#   builder staged. The repository serves public, signed packages to the two peer hosts.
-# - Mode (explicit and reversible): the timer's enable link arms the builder. `sudo systemctl mask
-#   --now homelab-builder.timer` pauses it, and `unmask` then `start` resumes it. The hold file
-#   under the builder's state directory stops a build without stopping the timer
-#   (docs/host-packages.md).
-# - Abort valves: the CI grade, the rollout gate, the hold file, `TimeoutStartSec=20min`, and the
-#   once-per-condition failure record in the state directory.
-# - Authoritative sources: GitHub's check-runs API for master, the rendered keyring for the
-#   fingerprint file, and the canary host's applied version for the rollout gate.
-# - Required evidence: `homelab_builder_*` and `homelab_repo_*` series in the node-exporter textfile
-#   directory, and a `homelab-alert@` page for a failed run. Notice lines in the journal name a
-#   failed run's reason.
-# - Next-run review: read `journalctl -u homelab-builder -p notice` before changing the unit.
 #
 # ENFORCED: hosts/lib/tests/test_builder_component.py.
 users:
