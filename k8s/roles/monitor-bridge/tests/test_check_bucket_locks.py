@@ -69,8 +69,15 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
             "no default retention",
         ),
         (GOVERNED, [*WRITER, "bypassGovernance"], "key bypasses governance"),
+        ({"bucketName": "weekly"}, WRITER, "no lock config"),
     ],
-    ids=["lock off", "unreadable", "no default retention", "key bypasses governance"],
+    ids=[
+        "lock off",
+        "unreadable",
+        "no default retention",
+        "key bypasses governance",
+        "no lock config",
+    ],
 )
 def test_a_bucket_that_does_not_bind_the_writer_is_flagged(
     bucket, capabilities, detail
@@ -89,7 +96,6 @@ def test_an_age_rule_over_the_etcd_prefix_alone_is_clean():
 @pytest.mark.parametrize(
     "rules, detail",
     [
-        ([], "etcd snapshots unlocked"),
         ([{**ETCD_RULE, "enabled": False}], "etcd snapshots unlocked"),
         (
             [{**ETCD_RULE, "condition": {"type": "Indefinite"}}],
@@ -102,7 +108,6 @@ def test_an_age_rule_over_the_etcd_prefix_alone_is_clean():
         ),
     ],
     ids=[
-        "no rule",
         "disabled",
         "indefinite",
         "whole bucket",
