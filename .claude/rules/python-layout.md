@@ -98,9 +98,8 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
 - The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
   refuses a module under `tests/repo/` or `tests/services/` that reads tracked text, by a
   walk or by one file's path, and runs no code: no subprocess other than `git ls-files`, no
-  render and no scratch tree. It counts a module of up to
-  `tests/repo/test_census_rows_suite.py:ROW_SIZED` test functions. A file that must stay one
-  goes in that row's `allow`, with a reason naming the join or the render that keeps it.
+  render and no scratch tree, whatever its number of test functions. A file that must stay
+  one goes in that row's `allow`, with a reason naming the join or the render that keeps it.
 
 ## A new check ships with a proof it can go red
 
