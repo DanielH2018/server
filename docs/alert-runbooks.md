@@ -377,6 +377,23 @@ draining them.
   `loki-homelab` names.
 - Restart k3s-agent. The lock check runs every 5 minutes, and its next run resolves the alert.
 
+### `WiredLinkDown`
+
+The node's wired link has had no carrier, or has been down, for 5 minutes, and the node runs
+on its WiFi fallback. The node stays Ready and keeps serving Longhorn replicas over WiFi. A
+Longhorn engine on the other node times out on those replicas after 16 seconds and returns
+I/O errors, so ext4 aborts its journal and remounts the volume read-only.
+
+- A cable in the wrong port reads the same as a pulled one. `ip -br link` on the node shows
+  which port has carrier, and the rule reads only the link `k3s_node_static_link` names.
+- After both nodes lose power, Longhorn salvages each volume to one replica, so the WiFi link
+  is the only path to that replica until the rebuild ends. On 2026-11-20 five volumes
+  remounted read-only on daniel-server while daniel-box ran on WiFi for 50 minutes.
+- After a full power cycle the alert can fire about 20 minutes late, because Prometheus is
+  recovering its own storage. Run `ip -br link` on both nodes at the first check.
+- Once the link has carrier, `grep -E ' ro,' /proc/mounts` on each node lists any Longhorn
+  mount still read-only. Restart the pod that holds one.
+
 ### `ClaudeMemorySyncNotReporting`
 
 The copy of the memory store from daniel-box to daniel-server has not reported within its
