@@ -5,7 +5,7 @@ and `hosts/tests/test_k3s_server_component.py` runs the parser over the rendered
 """
 
 import pytest
-from longhorn_lib import longhorn_etcd_s3_logic as logic
+from lib.longhorn_lib import longhorn_etcd_s3_logic as logic
 
 NOW = 1_800_000_000.0
 DROP_IN = 'etcd-s3: true\netcd-snapshot-schedule-cron: "0 */12 * * *"\n'

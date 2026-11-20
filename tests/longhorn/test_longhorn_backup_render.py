@@ -17,7 +17,7 @@ defaults, so a flag flips while the template stays fixed.
 Run: uv run pytest tests/longhorn/test_longhorn_backup_render.py
 """
 
-import bundle_census
+from deploy_tools import bundle_census
 import pytest
 from _k8s_render import render_role_template
 

@@ -42,7 +42,7 @@ from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 DRILL = DRILL_TEMPLATE
 
-from longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
+from lib.longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 CRONJOB = ("longhorn-restore-drill", "cronjob.yaml.j2")

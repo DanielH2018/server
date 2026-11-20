@@ -24,7 +24,7 @@ Run: uv run pytest tests/k8s/test_flux_role.py
 import copy
 import re
 
-import chained_timeout
+from deploy_tools import chained_timeout
 import pytest
 from lib.guard_jinja_env import FilterError, repo_filters
 

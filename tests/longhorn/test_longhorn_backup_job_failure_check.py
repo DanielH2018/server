@@ -28,7 +28,7 @@ Run: uv run pytest tests/longhorn/test_longhorn_backup_job_failure_check.py
 
 from _shell_render import rendered_shell_text
 
-from longhorn_lib import longhorn_backup_health_logic as logic
+from lib.longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z

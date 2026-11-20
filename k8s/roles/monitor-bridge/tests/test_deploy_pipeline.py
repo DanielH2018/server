@@ -14,7 +14,7 @@ from dataclasses import replace
 import pytest
 
 import deploy_pipeline
-import forge
+from deploy_tools import forge
 from _deploy_pipeline_fakes import (
     NEWER,
     NOW,

@@ -11,7 +11,7 @@ import os
 import re
 import shutil
 
-import forge
+from deploy_tools import forge
 import pytest
 from lib.proc_testing import fake_bin
 from lib.proc_testing import run as proc_run

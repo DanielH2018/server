@@ -13,7 +13,7 @@ The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_
 Run: uv run pytest scripts/lib/tests/test_longhorn_backup_health.py
 """
 
-from longhorn_lib import longhorn_backup_health_logic as logic
+from lib.longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
 DAY = 86400.0

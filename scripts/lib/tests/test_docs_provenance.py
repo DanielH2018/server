@@ -9,7 +9,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from docs_provenance import (
+from lib.docs_provenance import (
     finish_generator,
     generated_banner,
     head_sha,
