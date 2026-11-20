@@ -6,6 +6,7 @@ id replaced, and the day's two metric-query results.
 """
 
 import io
+import itertools
 import json
 import re
 import urllib.parse
@@ -113,13 +114,16 @@ class FakeLoki:
     def __init__(self, lines):
         self.lines = lines
         self.windows = []
+        self.pages = []
 
     def __call__(self, url, timeout):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
         start, end = int(query["start"][0]), int(query["end"][0])
         self.windows.append(end - start)
         stream = {"stream": {"event_name": "tool_decision"}, "values": []}
-        stream["values"] = [[str(start + i), ""] for i in range(self.lines(start, end))]
+        count = self.lines(start, end)
+        self.pages.append((start, end, count))
+        stream["values"] = [[str(start + i), ""] for i in range(count)]
         body = {"status": "success", "data": {"result": [stream]}}
         return io.BytesIO(json.dumps(body).encode())
 
@@ -130,8 +134,12 @@ def test_a_full_page_is_halved_and_fetched_again():
 
     events = cd.fetch_events("http://loki", ["s"], DAY, opener=loki, lead=timedelta(0))
 
+    kept = sorted((s, e) for s, e, n in loki.pages if n < cd.PAGE_LIMIT)
+    day_start = int(datetime(2026, 11, 16, tzinfo=timezone.utc).timestamp() * 10**9)
+
     assert len(events) == 24 * 2 * 10
-    assert loki.windows.count(hour_ns) == 24
+    assert kept[0][0] == day_start and kept[-1][1] == day_start + 24 * hour_ns
+    assert all(a[1] == b[0] for a, b in itertools.pairwise(kept))
 
 
 def test_a_page_still_full_at_the_narrowest_width_is_refused():
