@@ -21,7 +21,8 @@ conventions.
   no Accept unless the module sets one. Without the header, `http_sso_302` reads all 23 SSO
   targets as down while they serve. The same holds for M6 batch B8's `http_401` and
   keyword modules. ENFORCED:
-  `tests/services/test_blackbox_exporter_modules.py`.
+  the `blackbox-exporter-http-modules-send-accept-any` row of
+  `tests/repo/_config_file_rows.py:CONFIG_FILE_ROWS`.
 - **Ingress names resolve pinned to the VIP.** The pod's `hostAliases` come from the
   `ingress_host_aliases()` macro in `k8s/templates/ingress-host-aliases.yml.j2`, and this
   role's Deployment is its only caller. Every ingress name is pinned to the ingress VIP, so a
