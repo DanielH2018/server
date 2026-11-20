@@ -151,7 +151,7 @@ Two host components install Longhorn's host half on each node: `k3s-server`
 `/etc/multipath/conf.d/50-homelab-longhorn.conf`. No host file writes a
 Longhorn object that Flux owns: this role owns the Settings and classes, the CSI sidecar
 requests among them (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the
-credentials, the backup targets and the RecurringJobs. `k3s-server`'s `legacy:` list removes
+credentials, the backup targets and the RecurringJobs. `homelab-reconcile` removed
 the manifests once staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB and RBAC
 ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from.
 The first bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a

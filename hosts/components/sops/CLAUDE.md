@@ -2,8 +2,8 @@
 
 The component ships `/usr/bin/sops`, which execs the pinned binary
 `hosts/packages/homelab-tools/package.yml` installs at `/usr/lib/homelab/bin/sops`. It makes the
-package depend on `age`. All three host packages list it, and each lists the old
-`/usr/local/bin/sops` as a legacy entry, because `/usr/local/bin` comes first on `PATH`.
+package depend on `age`. All three host packages list it. `homelab-reconcile` removed the old
+`/usr/local/bin/sops` from every host, because `/usr/local/bin` comes first on `PATH`.
 `hosts/bootstrap-host.sh` creates the host's own age key, `/etc/homelab/age.key`, which
 `homelab-secrets` decrypts the host's SOPS file with.
 

@@ -241,22 +241,6 @@ enable:
   homelab-k3s-kubeconfig.service: multi-user.target
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
-  # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
-  # reconcile removes it.
-  - {path: /etc/systemd/system/k3s.service.d/10-log-to-file.conf}
-  # The manifests staged on the server before Flux owned their objects. A hand `kubectl apply -f` of
-  # one would be a second writer, and the R2 target's file holds the real bucket name at mode 0644.
-  - {path: /etc/rancher/k3s/longhorn-backuptarget-r2.yaml}
-  - {path: /etc/rancher/k3s/longhorn-recurringjob.yaml}
-  - {path: /etc/rancher/k3s/longhorn-metrics-networkpolicy.yaml}
-  - {path: /etc/rancher/k3s/longhorn-storageclass.yaml}
-  - {path: /etc/rancher/k3s/longhorn-storageclass-nobackup.yaml}
-  - {path: /etc/rancher/k3s/longhorn-storageclass-configmap-patch.json}
-  - {path: /etc/rancher/k3s/coredns-corefile-patch.json}
-  - {path: /etc/rancher/k3s/metallb-pool.yaml}
-  - {path: /etc/rancher/k3s/priorityclass.yaml}
-  - {path: /etc/rancher/k3s/readonly-rbac.yaml}
-  - {path: /etc/rancher/k3s/traefik-clusterrole.yaml}
   # Emptying a link is the way back from the pin or the fallback: the next package drops the file
   # and this retires the path Ansible wrote. The link's live value stays until the next reboot.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}

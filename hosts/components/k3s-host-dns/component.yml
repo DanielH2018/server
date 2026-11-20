@@ -32,18 +32,6 @@ defaults:
   common_resolver_nameservers: "{{ k3s_node_dns_upstreams }}"
   common_resolver_options: "{{ k3s_node_dns_options }}"
   common_resolver_timeout: "{{ k3s_node_dns_timeout }}"
-# Reconcile removes the /etc copy of the unit, reloads systemd and restarts the unit on the packaged
-# file, whose ExecStart names the homelab-tools binary. The old tree stays until that restart has
-# run, because the entries retire in this order within one run.
-legacy:
-  - {path: /etc/systemd/system/coredns-host.service}
-  - {path: /etc/systemd/system/multi-user.target.wants/coredns-host.service}
-  - {path: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf}
-  - {path: /usr/local/lib/coredns/coredns}
-  - {path: /usr/local/lib/coredns/1.14.7/coredns}
-  - {path: /usr/local/lib/coredns/1.14.7/coredns_1.14.7_linux_amd64.tgz}
-  - {path: /usr/local/lib/coredns/1.14.7}
-  - {path: /usr/local/lib/coredns}
 # Pod-to-host traffic terminates in a host process, so it meets UFW's default-deny INPUT. The second
 # rule admits a scrape from the other node: flannel masquerades a pod's traffic to any address outside
 # the pod CIDR, and Prometheus lands wherever the scheduler puts it. The live rules carry no comment,

@@ -280,8 +280,7 @@ def _render_maintainer_scripts(
         confined(directory, src)
         ctx, reasons = host_context(host, {}, inventory, withheld)
         # Only `homelab-*` units: reconcile and the prerm lint stop nothing else. A unit that keeps
-        # its Ansible-era name (the Pi's node_exporter.service, handed over by a legacy entry)
-        # stays running through a removal of the package. A template unit such as
+        # its Ansible-era name (the Pi's node_exporter.service) stays running through a removal of the package. A template unit such as
         # `homelab-alert@.service` is no unit to stop, so it is omitted too.
         ctx["package_units"] = [
             unit

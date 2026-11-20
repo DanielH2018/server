@@ -30,7 +30,3 @@ files:
   - {src: tmpfiles.d/homelab-node-exporter.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-node-exporter.conf}
 enable:
   node_exporter.service: multi-user.target
-legacy:
-  - {path: /etc/systemd/system/node_exporter.service}
-  - {path: /etc/systemd/system/multi-user.target.wants/node_exporter.service}
-  - {path: /usr/local/bin/node_exporter}

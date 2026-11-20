@@ -417,23 +417,6 @@ def test_the_key_pins_the_directory_the_cronjob_pulls(package):
     assert pinned and pinned.group(1) == k8s.replace("{{ sys_user }}", user)
 
 
-def test_the_package_retires_the_interim_token_files_nothing_reads(package):
-    paths = [e["path"] for e in package.legacy if "path" in e]
-    tokens = {
-        "/etc/homelab/interim/pi_sd_health_push_token",
-        "/etc/homelab/interim/pi_recovery_push_token",
-    }
-    assert tokens <= set(paths)
-    # Reconcile removes a directory only once it is empty, so it follows both files.
-    assert all(
-        paths.index("/etc/homelab/interim") > paths.index(token) for token in tokens
-    )
-    # The units read the tokens from /run/credstore instead.
-    for dst, (data, _) in package.files.items():
-        if dst.startswith("/usr/lib/systemd/system/homelab-pi-"):
-            assert b"/etc/homelab/interim" not in data, dst
-
-
 # The node exporter's textfile directory.
 
 

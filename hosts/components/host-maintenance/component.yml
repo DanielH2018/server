@@ -57,14 +57,7 @@ enable:
   homelab-systemd-units.timer: timers.target
   homelab-firmware-update.timer: {target: timers.target, when: has_fwupd}
 legacy:
-  - {cron: "Weekly apt autoremove", user: root}
-  - {cron: "Weekly dpkg purge orphaned configs", user: root}
-  - {cron: "Weekly system restart", user: root}
-  # Root's crontab, not sys_user's.
-  - {cron: "Clean unused Docker images", user: root}
   - {cron: "Weekly firmware update", user: root, when: has_fwupd}
-  # What the crons above ran and sourced. They sit here so a kept cron keeps them too. daniel-box
-  # keeps the key file because its k3s health crons and worktree sweep read it.
-  - {path: /usr/local/bin/host-maintenance.sh}
+  # daniel-box keeps the key file because its k3s health crons and worktree sweep read it.
   - {path: /etc/healthchecks/ping.env, when: "inventory_hostname != 'daniel-box'"}
   - {path: /etc/healthchecks, when: "inventory_hostname != 'daniel-box'"}

@@ -71,10 +71,3 @@ lines:
   # and held the dpkg lock for about 2 minutes on the Pi, so APT_AUTOGEN stays off.
   # No package owns the file.
   - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="false"', regexp: '^APT_AUTOGEN='}
-legacy:
-  - {cron: "Weekly rkhunter malware scan", user: root}
-  - {cron: "Weekly AIDE file integrity check", user: root}
-  - {path: /usr/local/bin/rkhunter-check.sh}
-  - {path: /usr/local/bin/aide-check.sh}
-  - {path: /var/lib/homelab/setup-render-manifest.d/rkhunter-check}
-  - {path: /var/lib/homelab/setup-render-manifest.d/aide-check}

@@ -99,18 +99,6 @@ def test_the_timer_fires_every_minute_and_names_no_other_unit(package):
     assert "Unit=" not in timer
 
 
-def test_the_package_retires_the_ansible_era_units_and_script(package):
-    assert [
-        entry.get("unit") or entry.get("path")
-        for entry in package.legacy
-        if "crowdsec" in str(entry)
-    ] == [
-        "crowdsec-edge-probe.timer",
-        "crowdsec-edge-probe.service",
-        "/usr/local/bin/crowdsec-edge-probe",
-    ]
-
-
 def test_every_unit_writing_pi_health_names_the_same_user(package):
     units = _pi_health_units(package)
     declaring = {

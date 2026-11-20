@@ -66,15 +66,3 @@ files:
   - {src: compose-adopt, dst: /usr/lib/homelab/compose-adopt, mode: "0755"}
   # Marked inputs_sha256: it renders after every other file, with the hash over the project's files.
   - {src: units/homelab-compose.service.j2, dst: /usr/lib/systemd/system/homelab-compose.service, inputs_sha256: true}
-# Files a project wrote before the package. Reconcile removes each file in its step 4, after step 3 has
-# restarted homelab-compose.service, so a file goes only once the project has run its service. Each
-# service's docker-compose.yml is listed here.
-legacy:
-  - {path: /home/ubuntu/server/containers/docker-proxy/docker-compose.yml}
-  - {path: /home/ubuntu/server/containers/autoheal/docker-compose.yml}
-  # alloy's role rendered its config at 0640 beside the compose file. Its password reaches the
-  # container through the Compose env file, and the package installs a config without it.
-  - {path: /home/ubuntu/server/containers/alloy/docker-compose.yml}
-  - {path: /home/ubuntu/server/containers/alloy/config/config.alloy}
-  # wg-easy's role rendered only its compose file. The peer keys in ./config are data, not legacy.
-  - {path: /home/ubuntu/server/containers/wg-easy/docker-compose.yml}

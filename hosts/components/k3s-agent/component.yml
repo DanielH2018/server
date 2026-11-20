@@ -184,11 +184,6 @@ enable:
   homelab-kubelet-shutdown-lock.timer: timers.target
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
-  # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
-  # reconcile removes it.
-  - {path: /etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf}
-  # The installer the join task kept here. bootstrap-host.sh fetches its own copy per run.
-  - {path: /usr/local/bin/k3s-install.sh}
   # Emptying a link is the way back from the pin: the next package drops the file and this retires
   # the path Ansible wrote. The link's live value stays until the next reboot, which is harmless.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}

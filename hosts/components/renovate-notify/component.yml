@@ -38,17 +38,3 @@ outputs:
     link: true
 enable:
   homelab-renovate-notify.timer: timers.target
-# What the renovate_notify role installed. Reconcile retires each once the timer above
-# has started. /var/lib/renovate-notify stays: it holds the digest's state, and monitor-bridge reads
-# it.
-legacy:
-  - {unit: renovate-notify.timer}
-  - {unit: renovate-notify.service}
-  - {unit: renovate-notify-alert.service}
-  - {path: /etc/renovate-notify/alert-webhook.env}
-  - {path: /opt/renovate-notify/renovate_notify.py}
-  - {path: /opt/renovate-notify/notify_logic.py}
-  - {path: /opt/renovate-notify/pending_logic.py}
-  - {path: /opt/renovate-notify/host_lib.py}
-  - {path: /var/lib/homelab/setup-render-manifest.d/renovate-notify}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/renovate-notify}

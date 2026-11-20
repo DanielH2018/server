@@ -108,8 +108,8 @@ pinned package, one `dpkg-query` each. The Ansible-era report compared `docker-c
 
 Install without uninstall is a one-way door. `docker_install`'s `tasks/teardown.yml` was the way
 back out when a host flipped to `has_docker: false`, until H7.48 moved what it reaped into the
-cluster nodes' `legacy:` lists. Both nodes measured free of Docker on 2026-11-09, and a node that
-gains it again is rebuilt.
+cluster nodes' `legacy:` lists, which `homelab-reconcile` retired. Both nodes measured free of
+Docker on 2026-11-09, and a node that gains it again is rebuilt.
 
 **HISTORY — the role was gated `when: has_docker` until 2026-08-17, so that flip skipped it and nothing declarative cleaned up.** daniel-server's imperative uninstall on 2026-08-14 missed a still-enabled `docker-compose-qbittorrent.service` and two crons for retired services.
 
@@ -149,7 +149,8 @@ updater interlock the upgrade takes. A dockerd restart gives docker-proxy a stal
 the `docker` form also recreates the project with `--force-recreate`. The same command applies a
 `daemon.json` or containerd block change. Judge each the next day by `rate(node_vmstat_pswpin{job="node-pi"}[1d])` against the
 136–181/s of 2026-09-03 → 09-17, and by the daemon's own `go_gc_duration_seconds_count` rate.
-The cluster nodes' `legacy:` lists remove the Ansible-era drop-ins and their directories.
+`homelab-reconcile` removed the Ansible-era drop-ins and their directories from the cluster
+nodes.
 
 ## The deb822 repo migration
 

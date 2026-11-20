@@ -67,12 +67,6 @@ def test_the_timer_fires_every_15_minutes_and_is_linked(package):
     assert "homelab-infra-map.timer" in package.enable_links()
 
 
-def test_the_package_retires_the_ansible_era_cron(package):
-    assert {"cron": "Refresh homelab infrastructure map", "user": "ubuntu"} in [
-        entry for entry in package.legacy
-    ]
-
-
 def test_the_component_header_carries_the_contract():
     header = "\n".join(
         line for line in COMPONENT.read_text().splitlines() if line.startswith("#")

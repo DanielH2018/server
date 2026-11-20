@@ -4,7 +4,7 @@ Until H7.36 `initial_setup` installed the sweep as the `Weekly git object-store 
 `/etc/cron.d/git-object-store-repair`. These tests hold what the move carries: the unit that runs
 the script as `sys_user`, the timer's slot, which equals the component's
 `worktree_sweep_cron_*` defaults the deadman fragment reads, the Healthchecks.io key credential
-every package shipping the sweep lists (#6815), and the legacy entry. The script's exit-code ping is run in
+every package shipping the sweep lists (#6815). The script's exit-code ping is run in
 `hosts/tests/test_worktree_sweep_cron_reports_its_exit.py`.
 
 Run: uv run pytest hosts/lib/tests/test_worktree_sweep_component.py
@@ -129,7 +129,3 @@ def test_a_timer_moved_off_the_defaults_slot_is_flagged(package):
         "04:20:00", "05:20:00"
     )
     assert slot_problems(timer, defaults) == ["timer (0, 5, 20) != (0, 4, 20)"]
-
-
-def test_the_package_retires_the_cron_file(package):
-    assert {"cron_file": "git-object-store-repair"} in package.legacy
