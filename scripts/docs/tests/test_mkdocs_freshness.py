@@ -42,26 +42,23 @@ def test_an_uncommitted_page_is_stamped_as_such():
 
 def test_a_hand_written_page_gets_the_footer_with_a_depth_relative_link():
     _prime({"docs/adr/0011-x.md": "2026-08-01"}, {"docs/adr/0011-x.md"})
-    out = hook.on_page_markdown("# A decision\n", _page("adr/0011-x.md"), None, None)
+    out = hook.on_page_markdown("# A decision\n", _page("adr/0011-x.md"))
     assert out.startswith("# A decision\n\n---\n\n")
     assert "[freshness table](../reference/freshness.md)" in out
 
 
 def test_a_top_level_page_links_the_table_directly():
     _prime({"docs/a.md": "2026-08-01"}, {"docs/a.md"})
-    out = hook.on_page_markdown("# A\n", _page("a.md"), None, None)
+    out = hook.on_page_markdown("# A\n", _page("a.md"))
     assert "[freshness table](reference/freshness.md)" in out
 
 
 def test_a_generated_page_is_left_alone():
     _prime({}, set())
     text = "---\ngenerated_from: scripts/docs/x.py\n---\n\n# X\n"
-    assert hook.on_page_markdown(text, _page("reference/x.md"), None, None) == text
+    assert hook.on_page_markdown(text, _page("reference/x.md")) == text
 
 
 def test_an_archived_page_is_left_alone():
     _prime({}, set())
-    assert (
-        hook.on_page_markdown("# old\n", _page("archive/old.md"), None, None)
-        == "# old\n"
-    )
+    assert hook.on_page_markdown("# old\n", _page("archive/old.md")) == "# old\n"

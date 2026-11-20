@@ -206,7 +206,7 @@ def on_files(files, config):
     return files
 
 
-def on_page_content(page_html, page, config, files):
+def on_page_content(page_html, page, files, **_kwargs):
     """Rewrite bare repo-path mentions in `page_html` into links, using the `on_files` index."""
     from mkdocs.utils import get_relative_url
 
