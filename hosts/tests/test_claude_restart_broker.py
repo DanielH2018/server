@@ -65,9 +65,13 @@ def test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule() -> No
         f"templates/{UNIT}",
     }
     assert {e["when"] for e in entries} == {"claude_code_restart_enabled"}
-    rules = sorted((CLAUDE_CODE / "templates").glob("*.rules.j2"))
-    assert "50-claude-land.rules.j2" in {r.name for r in rules}
-    assert not [r.name for r in rules if "claude-restart" in r.read_text()]
+    rules = sorted(p.name for p in (CLAUDE_CODE / "templates").glob("*.rules.j2"))
+    assert "50-claude-land.rules.j2" in rules
+    assert not [
+        name
+        for name in rules
+        if "claude-restart" in render_component_text("claude-code", name)
+    ]
 
 
 @pytest.mark.parametrize(
