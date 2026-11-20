@@ -428,9 +428,6 @@ ignore_names = [
   "restore_sigint", "ssh_here",
   # Called from the extensionless hosts/lib/homelab-reconcile, which vulture does not read.
   "refresh_pending",
-  # Nothing reads it. It records the session unit's EnvironmentFile path in
-  # renovate_session.py, a file on the landers' approval lists.
-  "SESSION_ENV_FILE",
   # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.

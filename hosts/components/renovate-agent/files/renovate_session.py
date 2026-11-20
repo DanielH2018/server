@@ -33,8 +33,6 @@ from run_requests import REQUESTS_DIR
 CONFIG = "/usr/lib/homelab/renovate-agent/session.conf"
 OUT_DIR = "out"
 OUTPUT_FILE = "session.out"
-# The unit's EnvironmentFile: the session's read-only GitHub token and Claude credential, root 0600.
-SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
 
 
 def session_argv(cfg: dict[str, str], requests_dir: str, settings: str) -> list[str]:
