@@ -270,7 +270,7 @@ def draft_skipped(runs: list[CheckRun], required) -> bool:
     A draft run is the only shape that skips the gate, so no CI ran on such a head and none
     arrives until the PR is marked ready or pushed. It reads the gate's own name rather than
     the jobs `jobs_verdict` aggregates: a skipped matrix job reports its unexpanded name, such
-    as `pytest (shard ${{ matrix.shard }} of ...)`. A ready run's gate beside the skipped one
+    as `pytest (shard ${{ matrix.shard }})`. A ready run's gate beside the skipped one
     makes this False, but the gate gets its check run only once every job it needs finishes,
     so a ready run still in progress reads as True; `land_lib/merge.py` reads the workflow
     runs before it acts on this.

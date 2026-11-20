@@ -56,13 +56,19 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   row was recorded. The whole census runs when the diff touches a path that decides what a
   run is, such as `pyproject.toml`, `uv.lock`, a `conftest.py` or `ci.yml`, and when a
   changed file is in no row.
-- **The legs.** The matrix stays at six legs, because GitHub fixes the leg count before any
-  step runs. The selection is packed into as few legs as keep each no heavier than a full
-  sweep's leg. A leg past that count gets an empty list and skips every later step, so it
-  still takes a runner for its checkout and setup. `scripts/dev/ci_slot_cost.py --recent 20
-  --pull-requests` prints the empty legs' slot-seconds beside what one planning job on every
-  run would cost instead (#8944). A planning job pays off only once enough pull requests run
-  a selection, and on 2026-11-16 none of the 20 newest green pull-request runs had.
+- **The legs.** The selection is packed into as few legs as keep each no heavier than a full
+  sweep's leg, out of `pytest_shard.CI_LEGS`. GitHub fixes the leg count before any step
+  runs, so the `pytest_plan` job plans the legs first: `pytest_shard.py --plan` runs the
+  selection once and publishes the leg numbers, and the `pytest` matrix starts only those
+  (#8944). A selection of no modules starts one leg, because GitHub fails a job whose matrix
+  is empty, and that leg skips every step after its select step. A run with no base, and a
+  run whose plan failed, starts every leg. `scripts/dev/ci_slot_cost.py --recent 20
+  --pull-requests` counts the empty legs.
+- **What the plan costs.** On the 20 pull-request runs measured on 2026-11-20, the empty
+  legs held 1046 slot-seconds, about twice what one planning job on each run costs. Only
+  `pytest` waits for the planning job, which starts its legs about 28s later. That wait does
+  not lengthen the run, because `hooks` and the host packages finish minutes after a
+  selected leg.
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
   A pull request that changes the dependency then leaves the module out, and nothing runs
   it until the nightly sweep below. The operator accepted that cost.
