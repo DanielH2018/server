@@ -23,12 +23,12 @@ merged before the batch's `launched_at`.
 """
 
 import json
+from dataclasses import dataclass
 import re
 import subprocess
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass
 
 # `.claude/hooks/fanout-stop.py` copies this pattern (the hooks stay stdlib-only) and
 # `test_fanout_stop.py` holds the copies equal. `status.PR_URL` re-exports it.
@@ -55,11 +55,29 @@ def branch_pr_argv(branch: str, repo: str) -> list[str]:
     ]
 
 
-def parse_branch_prs(stdout: str, only: str = "") -> list[str] | None:
-    """The branch's open then merged PR urls, newest first in each; None if unreadable.
+@dataclass(frozen=True)
+class BranchPrs:
+    """The PRs GitHub holds for one branch, newest first in each state.
+
+    Attributes:
+        open: the urls of its open PRs.
+        merged: the urls of its merged PRs.
+    """
+
+    open: tuple[str, ...] = ()
+    merged: tuple[str, ...] = ()
+
+    @property
+    def urls(self) -> list[str]:
+        """Every url, open before merged."""
+        return [*self.open, *self.merged]
+
+
+def parse_branch_prs(stdout: str) -> BranchPrs | None:
+    """The branch's open and merged PRs; None if unreadable.
 
     A closed PR that never merged is dropped. A row with no `state` reads as open,
-    which `gh pr list --json state` never omits. `only` keeps one state, `OPEN` or `MERGED`.
+    which `gh pr list --json state` never omits.
     """
     try:
         data = json.loads(stdout)
@@ -68,19 +86,14 @@ def parse_branch_prs(stdout: str, only: str = "") -> list[str] | None:
     if not isinstance(data, list):
         return None
     try:
-        rows = [
-            row
-            for row in data
-            if str(row.get("state", "OPEN")).upper() != "CLOSED"
-            and only in ("", str(row.get("state", "OPEN")).upper())
+        rows = sorted(data, key=lambda row: -int(row["number"]))
+        states = [
+            (str(row.get("state", "OPEN")).upper(), str(row["url"])) for row in rows
         ]
-        rows.sort(
-            key=lambda row: (
-                str(row.get("state", "OPEN")).upper() != "OPEN",
-                -int(row["number"]),
-            )
+        return BranchPrs(
+            open=tuple(url for state, url in states if state == "OPEN"),
+            merged=tuple(url for state, url in states if state == "MERGED"),
         )
-        return [str(row["url"]) for row in rows]
     except KeyError, TypeError, ValueError, AttributeError:
         return None
 
@@ -165,14 +178,14 @@ def worktree_own_pr(
         return OwnPr()
     head = run(["git", "-C", str(worktree), "symbolic-ref", "--short", "HEAD"], None)
     branch = head.stdout.strip()
-    prs = None
-    earlier: Sequence[str] = ()
+    held = None
     if branch:
         proc = run(branch_pr_argv(branch, repo), None)
         if proc.returncode == 0:
-            prs = parse_branch_prs(proc.stdout, "OPEN")
-            earlier = parse_branch_prs(proc.stdout, "MERGED") or ()
-    return own_pr(text, branch or "(no branch)", prs, earlier)
+            held = parse_branch_prs(proc.stdout)
+    if held is None:
+        return own_pr(text, branch or "(no branch)", None)
+    return own_pr(text, branch, held.open, held.merged)
 
 
 def needs_input_report(problem: str) -> dict:

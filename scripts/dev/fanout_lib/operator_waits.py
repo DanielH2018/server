@@ -18,8 +18,11 @@ WHAT COUNTS. Only a reason that a person must clear:
 - `findings-remain`: findings left after the fix round, which hold the batch.
 - `needs-input`: the batch ended `needs-input`.
 
-A transient reason, such as a head that moved since the review or a draft, waits on the
-pipeline and is not counted. A PR-based wait ends when its PR closes or merges, so a record
+A transient reason, such as a draft, waits on the pipeline and is not counted. A reason in
+`COORDINATOR_REASONS` waits on the session that coordinates the batch, because the lander
+judges the same review record on every pass: a head that moved since the review, a CI gate
+that did not pass, and a review that did not complete. `reason_of` names those too, so
+`place status` reads them as `needs-input`, and the gauge leaves them out. A PR-based wait ends when its PR closes or merges, so a record
 counts only while its PR is open. Its age runs from the record's save time, which is when
 the batch handed the PR over. On daniel-box, a batch lands its own PR whatever it touches,
 so a daniel-box record counts only as `needs-input` or `findings-remain`.
@@ -60,6 +63,8 @@ REASONS = (
     "findings-remain",
     "needs-input",
 )
+# Rulings the lander repeats until the batch's coordinator acts. Not gauge labels.
+COORDINATOR_REASONS = ("head-moved", "ci-gate", "review-incomplete")
 # Each pattern matches the text `autoland.problems` returns for that reason. The test that
 # pins this table feeds `problems` a record for every reason, so a rewording fails there.
 _PROBLEM_REASONS = (
@@ -70,6 +75,9 @@ _PROBLEM_REASONS = (
     (re.compile(r"^an unchecked box under |^the body says "), "operator-step"),
     (re.compile(r"^\d+ findings remain after the fix round$"), "findings-remain"),
     (re.compile(r"^the batch ended 'needs-input'"), "needs-input"),
+    (re.compile(r"^the head moved since the review "), "head-moved"),
+    (re.compile(r"^the CI gate did not pass "), "ci-gate"),
+    (re.compile(r"^the review did not complete "), "review-incomplete"),
 )
 _BOX_REASONS = frozenset({"findings-remain", "needs-input"})
 _STAMP = re.compile(r"-(\d{8}T\d{6}Z)\.json$")
@@ -79,7 +87,10 @@ STAMP_KEEP_S = 60 * 86400
 
 
 def reason_of(problem: str) -> str:
-    """The waiting reason a `problems` text names, or "" when nobody has to act on it."""
+    """The waiting reason a `problems` text names, or "" for a ruling the lander clears itself.
+
+    One of `REASONS`, which wait on a person, or of `COORDINATOR_REASONS`.
+    """
     for pattern, reason in _PROBLEM_REASONS:
         if pattern.search(problem):
             return reason
@@ -87,13 +98,15 @@ def reason_of(problem: str) -> str:
 
 
 def counted_reason(host: str, problem: str) -> str:
-    """The waiting reason `problem` counts for under `host` ("server" or "box"), else "".
+    """The reason the gauge counts `problem` under for `host` ("server" or "box"), else "".
 
-    On daniel-box a batch lands its own PR whatever it touches, so only the reasons in
-    `_BOX_REASONS` hold it.
+    Only a reason in `REASONS` counts. On daniel-box a batch lands its own PR whatever it
+    touches, so only the reasons in `_BOX_REASONS` hold it.
     """
     reason = reason_of(problem)
-    return "" if host == "box" and reason not in _BOX_REASONS else reason
+    if reason not in REASONS or (host == "box" and reason not in _BOX_REASONS):
+        return ""
+    return reason
 
 
 def saved_at(rec: Mapping) -> float | None:

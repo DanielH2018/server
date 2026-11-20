@@ -20,6 +20,7 @@ from pathlib import Path as _Path
 from dev.fanout_lib import signing
 from dev.fanout_lib.branch_pr import (
     branch_pr_argv,
+    BranchPrs,
     parse_branch_prs,
     parse_merged_before,
 )
@@ -256,10 +257,10 @@ def merged_pr_url(branch: str, repo: str = SERVER) -> str:
     return str(data[0]["url"]) if data else ""
 
 
-def branch_pr_urls(branch: str, repo: str = SERVER) -> list[str] | None:
-    """Every PR url GitHub holds for `branch` in `repo`, newest first; None when unreadable.
+def branch_pr_urls(branch: str, repo: str = SERVER) -> BranchPrs | None:
+    """The open and merged PRs GitHub holds for `branch` in `repo`; None when unreadable.
 
-    An empty list means GitHub answered and knows of none. None means it could not be asked
+    An empty answer means GitHub answered and knows of none. None means it could not be asked
     (a `gh` that failed, timed out or printed something unparseable), which a caller must not
     read as "no PR": `branch_pr.own_pr` words the two differently.
     """
@@ -387,7 +388,7 @@ class Tools:
         gh_issue: fetch one issue by number from a repo.
         signing_keys: the signing keys GitHub verifies for the account.
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
-        branch_prs: every PR url for a branch in a repo, newest first, or None when unreadable.
+        branch_prs: the open and merged PRs of a branch in a repo, or None when unreadable.
         earlier_prs: the PR urls of a branch in a repo that merged before a launch time.
         open_pr_files: the files each open PR in a repo changes, by head branch, complete
             for the branches named; None when unreadable.
@@ -403,7 +404,7 @@ class Tools:
     gh_issue: Callable[[int, str], Issue] = gh_issue
     signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
     merged_pr: Callable[[str, str], str] = merged_pr_url
-    branch_prs: Callable[[str, str], list[str] | None] = branch_pr_urls
+    branch_prs: Callable[[str, str], BranchPrs | None] = branch_pr_urls
     earlier_prs: Callable[[str, str, str], list[str]] = earlier_pr_urls
     open_pr_files: Callable[..., dict[str, frozenset[str]] | None] = open_pr_files
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings

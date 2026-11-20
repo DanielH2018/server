@@ -3,6 +3,7 @@
 import json
 import re
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Sequence
 import dataclasses
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from lib.exit_codes import (
 )
 from deploy_tools.land_lib.detach import result_fields
 from dev.fanout_lib import operator_waits
-from dev.fanout_lib.branch_pr import PR_URL, own_pr
+from dev.fanout_lib.branch_pr import PR_URL, BranchPrs, own_pr
 from dev.fanout_lib.brief import LANDS, lands
 from dev.fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
 from dev.fanout_lib.manifest import Batch, Manifest
@@ -56,6 +57,12 @@ PARKED_LINE = re.compile(r"(?im)^parked:")
 # it: `autoland.STATE_DIR / "logs"`, spelled for a shell.
 LANDER_LOGS = "$HOME/.local/state/fanout-server-lander/logs"
 AWAITING_LANDER = "awaiting the server lander"
+# How long a batch may await the lander with no landing of its PR started: three lander
+# passes (`claude_code_fanout_server_lander_interval`). Past it the lander is not going to
+# take the PR, and the batch reads `needs-input`.
+AWAIT_LANDER_S = 30 * 60
+# The line `lander_command` prints for a PR whose newest lander log exists.
+LANDER_LOG = "LANDER-LOG:"
 # The unit whose journal holds the lander's ruling on each candidate PR, one line a pass
 # (`autoland.run`). `probe_lib/lander.py:UNIT` names the same unit.
 LANDER_UNIT = "homelab-claude-fanout-server-lander.service"
@@ -71,7 +78,12 @@ NEXT_STEP = {
     "operator-step": "pass its operator step to the operator",
     "findings-remain": "read the findings in its review comment",
     "needs-input": "read the batch's final message",
+    "head-moved": "read the commits pushed since the review, then land it with land.sh",
+    "ci-gate": "read its PR's checks, then land it with land.sh once they pass",
+    "review-incomplete": "review its diff, then land it with land.sh",
 }
+# The same, for a PR that outlasted `AWAIT_LANDER_S` under no ruling or one the lander clears.
+OVERDUE_STEP = "run probe.py lander, then land it with land.sh"
 
 
 @dataclass(frozen=True)
@@ -94,6 +106,9 @@ class BatchStatus:
         unit_result: systemd's `Result` for the unit, such as `oom-kill` when the batch hit
             its MemoryMax or `timeout` when RuntimeMaxSec= expired.
         note: a few words printed after the state, or empty.
+        merged: whether GitHub holds `pr_url` as merged.
+        awaiting_lander: whether the batch is `done` only until the server lander lands its PR.
+        ended_at: the epoch second its report was last written, or None when unread.
     """
 
     batch: str
@@ -107,6 +122,9 @@ class BatchStatus:
     terminal_reason: str = ""
     unit_result: str = ""
     note: str = ""
+    merged: bool = False
+    awaiting_lander: bool = False
+    ended_at: float | None = None
 
 
 def _one(b: Batch) -> str:
@@ -114,6 +132,7 @@ def _one(b: Batch) -> str:
         f"{unit_props_command(b)}; "
         f"echo '--- stderr'; tail -c 2000 {b.worktree}/.fanout/stderr.log 2>/dev/null; "
         f"echo; echo '--- report'; cat {b.worktree}/.fanout/report.json 2>/dev/null; "
+        f"echo; echo '--- ended'; stat -c %Y {b.worktree}/.fanout/report.json 2>/dev/null; "
         # The landing's own record, read because a batch can land correctly and still not
         # echo the verdict into its final message. Only the last line is needed, and
         # `land.sh` prints one verdict per run.
@@ -130,7 +149,7 @@ def stop_command(unit: str) -> str:
     return f"systemctl --user stop {unit}"
 
 
-_SECTION_NAMES = ("stderr", "report", "verdict")
+_SECTION_NAMES = ("stderr", "report", "ended", "verdict")
 
 
 def _section(block: str, name: str) -> str:
@@ -217,6 +236,7 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         is_error = bool(result.get("is_error"))
         code_text = props.get("ExecMainStatus", "")
         code = int(code_text) if code_text.isdigit() else None
+        ended = _section(body, "ended").strip()
         m = PR_URL.search(final)
         # Either the agent echoed the verdict or the land log holds it; the log is what keeps
         # a batch that landed correctly but reported tersely out of `no-verdict`.
@@ -282,6 +302,7 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
                 permission_denials=len(result.get("permission_denials") or []),
                 terminal_reason=str(result.get("terminal_reason") or ""),
                 unit_result=props.get("Result", ""),
+                ended_at=float(ended) if ended.isdigit() else None,
             )
         )
     return out
@@ -290,11 +311,13 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
 def with_own_pr(
     s: BatchStatus,
     branch: str,
-    branch_prs: Callable[[str, str], list[str] | None],
+    branch_prs: Callable[[str, str], BranchPrs | None],
     repo: str,
     earlier_prs: Callable[[], list[str]] = list,
 ) -> BatchStatus:
     """`s` with the PR GitHub holds for `branch`, in place of the first URL its text names.
+
+    `merged` is set from the same answer, when that PR has merged.
 
     `parse_status` reads `pr_url` as the first PR URL in the final text, so a body that links
     another PR before its own reads as that PR. A `done` or `no-verdict` batch whose
@@ -306,13 +329,15 @@ def with_own_pr(
     """
     if not s.pr_url or s.state == "landed":
         return s
-    prs = branch_prs(branch, repo)
+    held = branch_prs(branch, repo)
+    prs = None if held is None else held.urls
     earlier = earlier_prs() if prs else []
     found = own_pr(
         s.final_text, branch, prs and [u for u in prs if u not in earlier], earlier
     )
     if found.url:
-        return dataclasses.replace(s, pr_url=found.url)
+        merged = held is not None and found.url in held.merged
+        return dataclasses.replace(s, pr_url=found.url, merged=merged)
     if s.state in ("done", NO_VERDICT):
         if not found.problem:
             return dataclasses.replace(s, state=NO_PR, pr_url="")
@@ -456,14 +481,15 @@ def _pr_number(url: str) -> str:
 def lander_command(prs: Sequence[str]) -> str:
     """Print the `LAND-RESULT:` and `VERDICT:` lines of each PR's newest server-lander log.
 
-    One block per PR, opened by `=== <pr>`, empty while that landing has no result. A last
+    One block per PR, opened by `=== <pr>`: empty with no log, a `LANDER-LOG:` line alone
+    while that landing has no result. A last
     block, `=== lander-rulings`, holds the lander unit's state and invocation id, then the
     journal lines the lander printed about these PRs, as JSON. No output at all means this
     user has no lander log directory.
     """
     reads = "; ".join(
         f"echo '=== {pr}'; f=$(ls {LANDER_LOGS}/land{pr}-*.log 2>/dev/null | tail -n 1); "
-        f'[ -z "$f" ] || grep -h \'^LAND-RESULT:\\|^VERDICT:\' "$f"'
+        f'[ -z "$f" ] || {{ echo "{LANDER_LOG} $f"; grep -h \'^LAND-RESULT:\\|^VERDICT:\' "$f"; }}'
         for pr in prs
     )
     rulings = (
@@ -521,33 +547,55 @@ def lander_rulings(block: str) -> dict[str, str]:
     }
 
 
-def with_lander_verdict(s: BatchStatus, log: str, ruling: str = "") -> BatchStatus:
+def _awaiting(s: BatchStatus, log: str, ruling: str, now: float | None) -> BatchStatus:
+    """A batch whose PR the lander has no landing result for: its state without one."""
+    if s.merged:
+        return dataclasses.replace(s, state="landed")
+    reason = operator_waits.reason_of(ruling)
+    overdue = (
+        not log.strip()
+        and now is not None
+        and s.ended_at is not None
+        and now - s.ended_at > AWAIT_LANDER_S
+    )
+    if not reason and not overdue:
+        note = f"{AWAITING_LANDER}: {ruling}" if ruling else AWAITING_LANDER
+        return dataclasses.replace(s, note=note, awaiting_lander=True)
+    pr = _pr_number(s.pr_url)
+    # The next step comes first: a surface ruling lists every file, and the line is cut.
+    if reason:
+        text = f"the server lander will not land #{pr}; {NEXT_STEP[reason]}"
+    else:
+        minutes = AWAIT_LANDER_S // 60
+        text = f"the server lander has not taken #{pr} in {minutes} minutes; {OVERDUE_STEP}"
+    text = f"needs input: {text}. Its ruling: {ruling or 'none'}\n{s.pr_url}"
+    return dataclasses.replace(s, state=NEEDS_INPUT, final_text=text)
+
+
+def with_lander_verdict(
+    s: BatchStatus, log: str, ruling: str = "", now: float | None = None
+) -> BatchStatus:
     """A `done` batch the server lander lands, read with that landing's result.
 
     Args:
         s: the status of a batch that stopped at its PR.
-        log: the result and verdict lines of the lander's newest log for that PR, empty
-            when the lander has started no landing of it or that landing still runs.
+        log: the lines `lander_command` printed for that PR: empty when the lander has
+            started no landing of it, a `LANDER-LOG:` line alone while that landing runs.
         ruling: why the lander's newest pass ruled the PR ineligible, or "".
+        now: the epoch second, or None to leave an old wait unjudged.
 
     Returns:
         `landed` for a finished landing, `parked` for one `land_result.park_line` parks, and
-        `needs-input` naming the verdict for any other that ended. With no result, a ruling
-        that waits on a person (`operator_waits.reason_of`) is `needs-input` naming the next
-        step. Any other stays `done`, noted as awaiting the lander with the ruling.
+        `needs-input` naming the verdict for any other that ended. With no result, a PR
+        GitHub holds as merged is `landed`: someone landed it by hand. A ruling the lander
+        does not clear itself (`operator_waits.reason_of`) is `needs-input` naming the next
+        step. So is a batch that ended more than `AWAIT_LANDER_S` before `now` with no
+        landing started. Any other stays `done`, noted as awaiting the lander with the
+        ruling, and `awaiting_lander` is set.
     """
     result = result_fields(log)
     if result is None:
-        reason = operator_waits.reason_of(ruling)
-        if not reason:
-            note = f"{AWAITING_LANDER}: {ruling}" if ruling else AWAITING_LANDER
-            return dataclasses.replace(s, note=note)
-        # The next step comes first: a surface ruling lists every file, and the line is cut.
-        text = (
-            f"needs input: the server lander will not land #{_pr_number(s.pr_url)}; "
-            f"{NEXT_STEP[reason]}. Its ruling: {ruling}\n{s.pr_url}"
-        )
-        return dataclasses.replace(s, state=NEEDS_INPUT, final_text=text)
+        return _awaiting(s, log, ruling, now)
     verdict = VERDICT_LINE.search(log)
     line = verdict.group(0) if verdict else ""
     parked = park_line(result, line)
@@ -576,28 +624,38 @@ def _lander_lands(b: Batch, s: BatchStatus) -> bool:
 
 
 def with_lander_verdicts(
-    pairs: Sequence[tuple[Batch, BatchStatus | None]], tools: Tools
+    pairs: Sequence[tuple[Batch, BatchStatus | None]],
+    tools: Tools,
+    now: float | None = None,
 ) -> list[tuple[Batch, BatchStatus | None]]:
     """`pairs` with each server-lander batch read through `with_lander_verdict`.
 
     One read on the landing host covers every such batch. A read that fails, times out or
-    finds no log directory changes nothing.
+    finds no log directory leaves a batch as it was, unless its PR has merged: that one
+    reads `landed`.
+
+    Args:
+        pairs: each batch with its status, None where its host was not read.
+        tools: the process boundary.
+        now: the epoch second, passed only by a caller that asked GitHub whether each PR
+            merged. Without that answer an old wait cannot be told from a hand landing.
     """
     mine = [s.pr_url for b, s in pairs if s is not None and _lander_lands(b, s)]
     if not mine:
         return list(pairs)
     try:
         command = lander_command([_pr_number(url) for url in mine])
-        proc = tools.run(LANDS, command, STATUS_TIMEOUT_S, None)
+        logs = lander_logs(tools.run(LANDS, command, STATUS_TIMEOUT_S, None).stdout)
     except subprocess.TimeoutExpired:
-        return list(pairs)
-    logs = lander_logs(proc.stdout)
+        logs = {}
     rulings = lander_rulings(logs.get(RULINGS, ""))
     out = []
     for b, s in pairs:
         pr = _pr_number(s.pr_url) if s is not None and _lander_lands(b, s) else ""
         if s is not None and pr in logs:
-            s = with_lander_verdict(s, logs[pr], rulings.get(pr, ""))
+            s = with_lander_verdict(s, logs[pr], rulings.get(pr, ""), now)
+        elif s is not None and pr and s.merged:
+            s = dataclasses.replace(s, state="landed")
         out.append((b, s))
     return out
 
@@ -609,7 +667,8 @@ def landing_holds(
 
     That is a `parked` batch, and a batch that stopped at its PR and reads `needs-input`
     from the server lander's log or ruling. It asks the hosts and never the forge, so
-    `place runs` can call it over every run.
+    `place runs` can call it over every run. For the same reason it leaves a batch that
+    awaited the lander past `AWAIT_LANDER_S` out: only `collect` knows whether its PR merged.
     """
     own = host_statuses(batches, tools)
     held = {}
@@ -622,16 +681,20 @@ def landing_holds(
 
 
 def collect(
-    run: Manifest, tools: Tools, one_line: Callable[[str], str]
+    run: Manifest,
+    tools: Tools,
+    one_line: Callable[[str], str],
+    clock: Callable[[], float] = time.time,
 ) -> tuple[list[dict], int]:
     """One row per batch in `run`, and the worst exit tier among them; `status`'s whole read.
 
     The tier is `exit_tier` over every batch's: 75 for a host whose read timed out, unless a
     batch elsewhere reports 1 or 5.
 
-    Each row carries `batch`, `host`, `branch`, `state`, `pr_url` and `line`, the text line
-    `status` prints. `status --json` prints the rows themselves, so `fanout.py probe` reads the
-    state field instead of a regex over the line. Two states come from here rather
+    Each row carries `batch`, `host`, `branch`, `state`, `pr_url`, `line`, the text line
+    `status` prints, and `awaiting_lander`, true for a `done` batch whose PR the server lander
+    has yet to land. `status --json` prints the rows themselves, so `fanout.py probe` reads
+    those fields instead of a regex over the line. Two states come from here rather
     than from a host: `cleaned` for a batch `clean` removed, and `unread` for a host whose
     read timed out, which still counts as running.
 
@@ -642,7 +705,9 @@ def collect(
     """
     rows, tiers = [], []
 
-    def row(b: Batch, host: str, state: str, pr_url: str, line: str) -> dict:
+    def row(
+        b: Batch, host: str, state: str, pr_url: str, line: str, awaiting: bool = False
+    ) -> dict:
         return {
             "batch": b.batch,
             "host": host,
@@ -650,6 +715,7 @@ def collect(
             "state": state,
             "pr_url": pr_url,
             "line": line,
+            "awaiting_lander": awaiting,
         }
 
     for b in run.batches:
@@ -665,7 +731,7 @@ def collect(
             st = with_own_pr(st, b.branch, tools.branch_prs, b.repo, earlier)
         read.append((b, st))
     # After `with_own_pr`, so the lander's log is read for the batch's own PR.
-    for b, st in with_lander_verdicts(read, tools):
+    for b, st in with_lander_verdicts(read, tools, clock()):
         if st is None:
             line = f"{b.batch} on {b.host}: status read timed out"
             rows.append(row(b, b.host, UNREAD, "", line))
@@ -674,5 +740,5 @@ def collect(
         # Already reconciled, so `status_line` must not ask the forge a second time.
         line, tier = status_line(st, b.host, b.branch, lambda *_: "", one_line, b.repo)
         tiers.append(tier)
-        rows.append(row(b, b.host, st.state, st.pr_url, line))
+        rows.append(row(b, b.host, st.state, st.pr_url, line, st.awaiting_lander))
     return rows, exit_tier(tiers)
