@@ -11,6 +11,7 @@ import socket
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from _k8s_render import rendered_k8s_text
@@ -53,17 +54,19 @@ def _wait_command() -> str:
     return container["command"][2]
 
 
-def _listener() -> socket.socket:
+@contextmanager
+def _serve(reply: bytes, received: list[bytes], port: int = 0):
+    """Run a fake broker on 127.0.0.1 and yield (port, held connections).
+
+    Each CONNECT is recorded in `received` and answered with `reply` (b"" = stay silent and
+    hold the connection). Exit shuts the listener down, joins the accept thread, then closes
+    the held connections.
+    """
+
+    held: list[socket.socket] = []
     sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
+    sock.bind(("127.0.0.1", port))
     sock.listen()
-    return sock
-
-
-def _serve(sock: socket.socket, reply: bytes, received: list[bytes]) -> None:
-    """Accept connections, record each CONNECT, and answer with `reply` (b"" = stay silent)."""
-
-    held = []
 
     def loop():
         while True:
@@ -78,7 +81,20 @@ def _serve(sock: socket.socket, reply: bytes, received: list[bytes]) -> None:
             else:
                 held.append(conn)
 
-    threading.Thread(target=loop, daemon=True).start()
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    try:
+        yield sock.getsockname()[1], held
+    finally:
+        # close() alone does not wake a thread blocked in accept() on Linux.
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        sock.close()
+        thread.join(timeout=5)
+        for conn in held:
+            conn.close()
 
 
 def _run(command: str, tmp_path: Path, port: int, timeout: float = 30):
@@ -93,9 +109,8 @@ def _run(command: str, tmp_path: Path, port: int, timeout: float = 30):
 
 def test_a_connack_refusing_the_anonymous_login_ends_the_wait(tmp_path):
     received: list[bytes] = []
-    with _listener() as sock:
-        _serve(sock, CONNACK_NOT_AUTHORISED, received)
-        result = _run(_wait_command(), tmp_path, sock.getsockname()[1])
+    with _serve(CONNACK_NOT_AUTHORISED, received) as (port, _):
+        result = _run(_wait_command(), tmp_path, port)
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "nc-args").read_text().split("\n")[0] == "mosquitto 1883"
     [connect] = received
@@ -107,32 +122,42 @@ def test_a_broker_that_accepts_but_never_answers_keeps_z2m_waiting(tmp_path):
     command = _wait_command()
     assert command.startswith("timeout 180 ")
     received: list[bytes] = []
-    with _listener() as sock:
-        _serve(sock, b"", received)
-        result = _run(
-            command.replace("timeout 180 ", "timeout 5 ", 1),
-            tmp_path,
-            sock.getsockname()[1],
-        )
+    with _serve(b"", received) as (port, _):
+        result = _run(command.replace("timeout 180 ", "timeout 5 ", 1), tmp_path, port)
     assert result.returncode == 124
     assert "waiting for a CONNACK from mosquitto:1883" in result.stdout
     assert received
 
 
 def test_a_refused_port_is_retried_until_the_broker_answers(tmp_path):
-    with _listener() as sock:
-        port = sock.getsockname()[1]
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    outcome = []
+    waiter = threading.Thread(
+        target=lambda: outcome.append(_run(_wait_command(), tmp_path, port)),
+        daemon=True,
+    )
+    waiter.start()
+    time.sleep(3)
     received: list[bytes] = []
-
-    def start_late():
-        time.sleep(3)
-        late = socket.socket()
-        late.bind(("127.0.0.1", port))
-        late.listen()
-        _serve(late, CONNACK_NOT_AUTHORISED, received)
-
-    threading.Thread(target=start_late, daemon=True).start()
-    result = _run(_wait_command(), tmp_path, port)
+    with _serve(CONNACK_NOT_AUTHORISED, received, port):
+        waiter.join(timeout=30)
+    [result] = outcome
     assert result.returncode == 0, result.stdout + result.stderr
     assert "waiting for a CONNACK" in result.stdout
     assert received
+
+
+def test_a_broker_that_exits_stops_its_thread_and_closes_held_connections():
+    threads_before = set(threading.enumerate())
+    received: list[bytes] = []
+    with _serve(b"", received) as (port, _):
+        client = socket.create_connection(("127.0.0.1", port))
+        client.sendall(b"x")
+        while not received:
+            time.sleep(0.05)
+    with client:
+        client.settimeout(5)
+        assert client.recv(1) == b""
+    assert not [t for t in set(threading.enumerate()) - threads_before if t.is_alive()]
