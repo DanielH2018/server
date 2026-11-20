@@ -192,17 +192,59 @@ def test_with_repo_reads_that_register_and_judges_claims_against_its_checkout(ca
     assert calls.checkouts == [REGISTER_CHECKOUTS["DanielH2018/dotfiles"]]
 
 
-def test_a_milestone_wait_ends_only_on_a_new_issue_that_milestone_holds(tmp_path):
-    backups = {"title": "Backups", "number": 9, "state": "open"}
-    issues = [{**_rest_issue(8), "milestone": backups}, _rest_issue(7), _rest_issue(5)]
-    tools, _ = _tools(issues, **{f"{REG}/milestones": [[backups]]})
-    reading = new_issue_probe.read(tools, 5, tmp_path / "b.json", TODAY, "Backups")
-    assert [i["number"] for i in json.loads(reading["detail"])["issues"]] == [8]
+BACKUPS = {"title": "Backups", "number": 9, "state": "open"}
+
+
+def _held(number, **kwargs):
+    return {**_rest_issue(number, **kwargs), "milestone": BACKUPS}
+
+
+def test_a_project_wait_ends_on_an_older_issue_milestone_add_files(tmp_path):
+    baseline = tmp_path / "b.json"
+    tools, calls = _tools([_held(8)], **{f"{REG}/milestones": [[BACKUPS]]})
+    first = new_issue_probe.read_project(tools, "Backups", baseline, TODAY)
+    assert first["state"] == "none"
+    assert any("milestone=9" in argv[1] for argv in calls.gh_json)
+
+    tools, _ = _tools([_held(8), _held(3)], **{f"{REG}/milestones": [[BACKUPS]]})
+    second = new_issue_probe.read_project(tools, "Backups", baseline, TODAY)
+    assert second["state"] == "new"
+    assert [i["number"] for i in json.loads(second["detail"])["issues"]] == [3]
+
+
+def test_a_resumed_project_wait_ends_on_an_issue_added_before_the_resume(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    argv = ["new-issues", "--milestone", "Backups"]
+    tools, _ = _tools([_held(8)], **{f"{REG}/milestones": [[BACKUPS]]})
+    assert main(argv, tools) == 0
+    tools, _ = _tools([_held(8), _held(3)], **{f"{REG}/milestones": [[BACKUPS]]})
+    assert main([*argv, "--describe"], tools) == 0
+    assert main(argv, tools) == 0
+    readings = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert readings[-1]["state"] == "new"
+
+
+def test_a_project_wait_stays_open_on_the_free_issues_it_started_with(tmp_path):
+    baseline = tmp_path / "b.json"
+    tools, _ = _tools([_held(8), _held(3)], **{f"{REG}/milestones": [[BACKUPS]]})
+    new_issue_probe.read_project(tools, "Backups", baseline, TODAY)
+    again = new_issue_probe.read_project(tools, "Backups", baseline, TODAY)
+    assert again == {"state": "none", "detail": "no new free issue in `Backups`"}
+
+
+def test_after_with_a_milestone_title_is_refused(capsys):
+    tools, calls = _tools([_held(8)], **{f"{REG}/milestones": [[BACKUPS]]})
+    argv = ["new-issues", "--after", "5", "--milestone", "Backups"]
+    assert main(argv, tools) == 64
+    assert "drop --after" in capsys.readouterr().err
+    assert calls.none()
 
 
 def test_a_wait_on_an_unknown_milestone_ends_unknown_milestone(capsys):
     tools, _ = _tools([_rest_issue(7)], **{f"{REG}/milestones": [[]]})
-    assert main(["new-issues", "--after", "5", "--milestone", "Backup"], tools) == 0
+    assert main(["new-issues", "--milestone", "Backup"], tools) == 0
     assert json.loads(capsys.readouterr().out) == {
         "state": "unknown-milestone",
         "detail": "no milestone is titled `Backup`",
@@ -211,8 +253,7 @@ def test_a_wait_on_an_unknown_milestone_ends_unknown_milestone(capsys):
 
 def test_a_milestone_wait_records_a_baseline_of_its_own(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    backups = {"title": "Backups", "number": 9, "state": "open"}
-    tools, _ = _tools([_rest_issue(7)], **{f"{REG}/milestones": [[backups]]})
+    tools, _ = _tools([_held(7)], **{f"{REG}/milestones": [[BACKUPS]]})
     assert main(["new-issues", "--milestone", "Backups"], tools) == 0
     here = (None, Path.cwd())
     assert new_issue_probe.baseline_file(*here, "Backups").exists()
