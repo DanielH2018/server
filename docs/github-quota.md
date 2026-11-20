@@ -32,7 +32,8 @@ Every figure is a measurement from 2026-11-14 on daniel-box, with 39 live sessio
 - **The lander spends the operator's quota too.** `claude-land@.service` runs as the
   operator's user and uses the operator's `gh` token, because it merges and deploys.
 - **Every handler acts after GitHub refuses.** `scripts/lib/gh_rate_limit.py` computes the
-  wait from a 403, and `land_lib/gh_read.py` and `await_ci.py` call it.
+  wait from a 403, and `land_lib/gh_read.py` and `await_ci.py` call it. A `gh` caller sleeps
+  through `wait_out`, which re-reads the quota and ends the wait at its reset.
   GitHub sends the first 403 when the quota is already empty for every caller.
 - **Nothing attributes a call to a session.** No log or ledger records which session made
   which GitHub call, so "which session spiked" has no answer.
