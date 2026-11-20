@@ -1089,6 +1089,45 @@ The desktop app creates a session's worktree unlocked, and `EnterWorktree` creat
 locked with Claude Code's reason. The skill therefore locks first, and unlocks only when
 git reports the tree as already locked.
 
+### A project with no live sub-coordinator is reported
+
+A coordinator's lock outlives its session, so nothing in the lock says the session is gone.
+The dead project's `parked` batches and the PRs the server lander holds then wait on
+nobody, and the root can start a replacement only on a turn the operator types
+([#9533](https://github.com/DanielH2018/server/issues/9533)).
+
+`scripts/dev/fanout_lib/coordinators.py:projects` is the one read. A project is a worktree
+whose lock reason opens with `scripts/lib/worktrees.py:COORDINATOR_LOCK`. A project the
+operator ended is unlocked, so the read does not list it.
+
+`scripts/lib/worktrees.py:has_live_session` decides whether a session holds the project. The
+project is live while a process has its cwd or its `CLAUDE_PROJECT_DIR` inside the
+worktree, read by `scripts/lib/worktrees.py:processes_using`. That is the read behind the
+pruner's `in use by a live process` refusal. A desktop session keeps its process between
+turns, so an idle sub-coordinator reads live. `classify` still reads the lock through
+`lock_is_live`, so the weekly sweep keeps a dead project's worktree for its replacement.
+
+For a project with no live session, the read names the branch, the worktree and each
+batch `scripts/dev/fanout_lib/status.py:landing_holds` returns: a `parked` batch, or a PR
+the server lander refuses to land. Two callers use it:
+
+- `uv run python .claude/hooks/session-health.py --sessions` prints one line per project
+  with no live session, and leaves that worktree out of the live sessions it lists.
+- Each pass of the server lander ends with `scripts/dev/fanout_lib/coordinators.py:report`.
+  It pages the operator through `fanout-alert@fanout-coordinator-<worktree>:no-coordinator`
+  when a project with no live session also holds a waiting batch. No session polls.
+
+The page is sent on the second pass in a row that reads the project so, and once. A desktop
+session's process restarts mid-session, so one pass with no process in the worktree is not
+a death. The lander forgets the project when a pass reads it live or with nothing waiting,
+so a later death pages again
+(`scripts/dev/tests/test_fanout_coordinators.py::test_a_project_that_recovers_and_is_orphaned_again_pages_again`).
+
+Three limits. Any process left in the worktree counts as a session, so a background wait
+that outlived its session delays the page until it exits. A project with no waiting batch
+is printed and never paged. The read covers daniel-box's worktrees and the run manifests
+of the user who runs the lander, which is where every coordinator runs.
+
 ### Known limits of the coordinator tree
 
 - **The cross-run file gate has refused no real launch, and no landing has parked on a
