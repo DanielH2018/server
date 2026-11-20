@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -43,6 +44,22 @@ class KeptStreak(NamedTuple):
     line: str = ""
     passes: int = 0
     merged_pr: str | None = None
+
+# A value a shell reads as itself wherever a command names it: as a bare word, inside single
+# or double quotes, and inside a systemd `Exec` line. No leading `-`, which ssh and git read
+# as an option.
+_PLAIN_WORD = re.compile(r"[A-Za-z0-9_+./:@][A-Za-z0-9_+./:@-]*")
+
+
+def _refuse_unless_plain_words(record: object, names: tuple[str, ...]) -> None:
+    """Raise ValueError for the first of `record`'s `names` that is not a plain word."""
+    for name in names:
+        value = getattr(record, name)
+        if not isinstance(value, str) or not _PLAIN_WORD.fullmatch(value):
+            raise ValueError(
+                f"{type(record).__name__.lower()} {name} {value!r} is not a plain word "
+                "(letters, digits and _+./:@-, with no leading -)"
+            )
 
 
 @dataclass(frozen=True)
@@ -93,12 +110,28 @@ class Batch:
     excused_paths: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict, compare=False)
 
+    def __post_init__(self) -> None:
+        """Refuse a `batch`, `host`, `worktree`, `branch` or `unit` that is not a plain word.
+
+        The fan-out commands name these five, unquoted, in shell text they run on `host`. A
+        manifest is a file on disk, so the check is here, where every batch is built, and no
+        command builder quotes or checks one.
+
+        Raises:
+            ValueError: one of the five is not a string of letters, digits and `_+./:@-`, or
+                starts with `-`.
+        """
+        _refuse_unless_plain_words(
+            self, ("batch", "host", "worktree", "branch", "unit")
+        )
+
     @classmethod
     def from_json(cls, data: dict) -> Batch:
         """Build a batch from its manifest entry, keeping the keys that are not fields.
 
         Raises:
             TypeError: `data` is not an object, or lacks a field that has no default.
+            ValueError: a field a command names is not a plain word.
         """
         if not isinstance(data, dict):
             raise TypeError(f"a batch entry is an object, not {type(data).__name__}")
@@ -181,6 +214,15 @@ class Manifest:
     orchestrator_branch: str
     batches: list[Batch]
 
+    def __post_init__(self) -> None:
+        """Refuse a `run_id` or `orchestrator_branch` that is not a plain word.
+
+        Raises:
+            ValueError: either is not a string of letters, digits and `_+./:@-`, or starts
+                with `-`.
+        """
+        _refuse_unless_plain_words(self, ("run_id", "orchestrator_branch"))
+
     @classmethod
     def from_json(cls, data: dict) -> Manifest:
         """Build a run from the object `to_json` wrote.
@@ -188,6 +230,7 @@ class Manifest:
         Raises:
             KeyError: `data` lacks one of the three keys.
             TypeError: `data` or one of its batches has the wrong shape.
+            ValueError: the run or one of its batches holds a field that is not a plain word.
         """
         return cls(
             data["run_id"],
@@ -298,6 +341,7 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     Raises:
         FileNotFoundError: no manifest for `run_id` under `root`, live or retired. The error
             names the live path, so a mistyped run id reads as it always did.
+        ValueError: the file is not JSON, or holds a field that is not a plain word.
     """
     try:
         text = path(run_id, root).read_text()

@@ -504,6 +504,15 @@ them back beside the fields, so a `clean` run by one build does not erase what a
 recorded. `to_json` never nests them under an `extra` key, because a reader that passes every
 key to the `Batch` constructor skips the whole run on a key it has no field for.
 
+A batch's `batch`, `host`, `worktree`, `branch` and `unit` are plain words: letters, digits
+and `_+./:@-`, with no leading `-`. So are a run's `run_id` and `orchestrator_branch`. The
+fan-out commands name these fields unquoted in the shell text they run on a host, and a
+manifest is a file on disk. `Batch` and `Manifest` in `scripts/dev/fanout_lib/manifest.py`
+raise `ValueError` for any other value, so `load` refuses that run and `all_runs` skips it:
+`status`, `clean`, the sweep and the launch gates never build a command from it
+(`scripts/dev/tests/test_fanout_runs.py::test_a_batch_field_a_command_names_must_be_a_plain_word`).
+A command builder therefore neither quotes nor checks a manifest field.
+
 ### One launch at a time, and files held across runs
 
 Several coordinators launch from one host as one user: a root session, and one
