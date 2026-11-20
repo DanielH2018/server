@@ -4,9 +4,9 @@ The action restores the asset from an actions/cache keyed on the tool, version a
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
 problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
-a third-party installer action. An exempt fetch in a job that checks out nothing is held to the
-action's own cache, retry and digest shape. A script a step runs is out of scope: its downloads are held to a
-cache by tests/repo/test_ci_release_downloads_are_cached.py.
+a third-party installer action. Every exempt fetch is held to the action's own cache, retry and
+digest shape. A script a step runs is out of scope: the `a-downloading-script-runs-after-its-cache`
+row of the workflow-row table holds its downloads to a cache.
 
 Run: uv run pytest tests/repo/test_release_fetches_use_pinned_tool.py
 """
@@ -44,6 +44,7 @@ GITLEAKS = (
 )
 FLUX = "fluxcd/flux2"
 COSIGN = "sigstore/cosign"
+GITLEAKS_REPO = "gitleaks/gitleaks"
 # (file, job, release repo) -> why that inline fetch stays. `test_every_exemption_still_fetches`
 # fails on a row whose job no longer fetches that repo.
 EXEMPT = {
@@ -53,12 +54,17 @@ EXEMPT = {
     ("promote.yml", "settle", FLUX): NO_CHECKOUT,
     ("promote.yml", "reconcile", FLUX): NO_CHECKOUT,
     ("promote.yml", "reset-move", FLUX): NO_CHECKOUT,
-    ("ci.yml", "host_packages_build", "gitleaks/gitleaks"): GITLEAKS,
-    ("promote.yml", "render", "gitleaks/gitleaks"): GITLEAKS,
+    ("ci.yml", "host_packages_build", GITLEAKS_REPO): GITLEAKS,
+    ("promote.yml", "render", GITLEAKS_REPO): GITLEAKS,
 }
 # release repo -> the tool name an inline fetch's `pinned/<tool>` path and `<TOOL>_*` pins use.
-INLINE_TOOLS = {FLUX: "flux", COSIGN: "cosign"}
-NO_CHECKOUT_FETCHES = sorted(k for k, why in EXEMPT.items() if why == NO_CHECKOUT)
+INLINE_TOOLS = {FLUX: "flux", COSIGN: "cosign", GITLEAKS_REPO: "gitleaks"}
+# file -> the pin the gitleaks cache key reads: prek.toml's rev in ci.yml, the URL in promote.yml.
+GITLEAKS_PINS = {
+    "ci.yml": "steps.gitleaks.outputs.version",
+    "promote.yml": "env.GITLEAKS_URL",
+}
+GITLEAKS_DIGEST = r"sha256sum -c --ignore-missing --strict checksums\.txt"
 # installer action -> why it stays.
 INSTALLERS = {
     "astral-sh/setup-uv": "fetches uv into its own cache keyed on uv.lock",
@@ -161,14 +167,14 @@ def callers(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
 def fetch_problems(
     steps: list[dict],
     pins: tuple[str, ...] = ("inputs.tool", "inputs.version", "inputs.sha256"),
-    digest: str = "SHA256",
+    digest: str = r"\$SHA256 .*\| sha256sum -c --strict",
 ) -> list[str]:
     """What a cache step and the fetch step after it lack of a cached, retried, checked fetch.
 
     Args:
         steps: The steps of one tool's fetch, the action's by default.
         pins: The expressions the cache key must read.
-        digest: The shell variable holding the sha256 the fetch checks the download against.
+        digest: The pattern of the line that checks the download's sha256.
     """
     found = []
     cache = next(
@@ -199,22 +205,26 @@ def fetch_problems(
                 found.append(f"curl retries only some errors: {text}")
             elif int(m[1]) * int(m[2]) < TOOL_RETRY_WINDOW_S:
                 found.append(f"curl retries for under {TOOL_RETRY_WINDOW_S}s: {text}")
-    if not re.search(rf"\${digest} .*\| sha256sum -c --strict", run):
-        found.append(f"the fetch does not check the download against ${digest}")
+    if not re.search(digest, run):
+        found.append("the fetch does not check the download's sha256")
     return found
 
 
-def inline_problems(workflow: dict, job: str, repo: str) -> list[str]:
+def inline_problems(workflow: dict, file: str, job: str, repo: str) -> list[str]:
     """What a job's inline fetch from `repo` lacks of the action's cache, retry and digest check."""
     tool = INLINE_TOOLS[repo]
-    pin = tool.upper()
     steps = [
         s
         for s in workflow["jobs"][job]["steps"]
         if f"pinned/{tool}" in str(s.get("run", "")) + str(s.get("with", ""))
     ]
+    if repo == GITLEAKS_REPO:
+        return fetch_problems(steps, (GITLEAKS_PINS[file],), GITLEAKS_DIGEST)
+    pin = tool.upper()
     return fetch_problems(
-        steps, (f"env.{pin}_VERSION", f"env.{pin}_SHA256"), f"{pin}_SHA256"
+        steps,
+        (f"env.{pin}_VERSION", f"env.{pin}_SHA256"),
+        rf"\${pin}_SHA256 .*\| sha256sum -c --strict",
     )
 
 
@@ -227,9 +237,9 @@ def test_the_action_fetches_from_a_pinned_cache_with_a_retried_digest_checked_cu
     assert fetch_problems(_action_steps()) == []
 
 
-@pytest.mark.parametrize(("file", "job", "repo"), NO_CHECKOUT_FETCHES)
-def test_an_inline_fetch_without_a_checkout_has_the_actions_shape(file, job, repo):
-    assert inline_problems(_sources()[file], job, repo) == []
+@pytest.mark.parametrize(("file", "job", "repo"), sorted(EXEMPT))
+def test_an_exempt_inline_fetch_has_the_actions_shape(file, job, repo):
+    assert inline_problems(_sources()[file], file, job, repo) == []
 
 
 def test_the_census_finds_the_known_callers():
@@ -362,6 +372,36 @@ def test_a_weakened_inline_fetch_is_flagged(old, new, problem):
     text = (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
     assert old in text, old
     found = inline_problems(
-        yaml_fast.safe_load(text.replace(old, new)), "publish", COSIGN
+        yaml_fast.safe_load(text.replace(old, new)), "promote.yml", "publish", COSIGN
+    )
+    assert any(problem in p for p in found), found
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "problem"),
+    [
+        (
+            "-${{ steps.gitleaks.outputs.version }}",
+            "",
+            "the cache key does not read steps.gitleaks.outputs.version",
+        ),
+        ("}}/pinned/gitleaks\n", "}}/elsewhere\n", "no actions/cache step runs before"),
+        (
+            'if [[ -f "$dl/$archive" && -f "$dl/checksums.txt" ]]; then',
+            "if true; then",
+            "outside the cache-miss",
+        ),
+        ("--retry 12", "--retry 3", "curl retries for under"),
+        ("--ignore-missing --strict checksums.txt", "--version", "does not check"),
+    ],
+)
+def test_a_weakened_gitleaks_fetch_is_flagged(old, new, problem):
+    text = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert old in text, old
+    found = inline_problems(
+        yaml_fast.safe_load(text.replace(old, new)),
+        "ci.yml",
+        "host_packages_build",
+        GITLEAKS_REPO,
     )
     assert any(problem in p for p in found), found

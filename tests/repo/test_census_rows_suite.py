@@ -321,10 +321,6 @@ ROWS = (
         min_matches=100,
         must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
         allow={
-            "tests/repo/test_ci_release_downloads_are_cached.py": (
-                "one of the per-tool cache checks that #9025 folds into one composite "
-                "action, which leaves it no file to judge"
-            ),
             "tests/repo/test_ci_lint_group.py": (
                 "a join of pyproject.toml's lint group and default groups against every "
                 "workflow that installs the project"
