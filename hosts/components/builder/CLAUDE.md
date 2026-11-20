@@ -23,7 +23,7 @@ repository (daniel-box)* holds the design.
   `StateDirectoryMode=0711`: the signer traverses the builder's directory to reach `staged/`, as
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
-  `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`,
+  `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`, `prom_envelope.py`,
   `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the CI contexts the builder grades a

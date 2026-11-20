@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from prom_envelope import PromAnswerError, prom_result
 from host_lib import log as host_log
 
 RELEASE = "/etc/homelab-builder/release"
@@ -78,10 +79,6 @@ def admit(
     return staged, deferred, gate
 
 
-class PromAnswerError(ValueError):
-    """A Prometheus answer that is not a successful instant vector."""
-
-
 @dataclass(frozen=True)
 class Series:
     """One instant-vector sample: its string labels and its value."""
@@ -93,32 +90,14 @@ class Series:
 def parse_vector(body: object) -> list[Series]:
     """The samples of a Prometheus instant query's answer.
 
-    An absent `data` or `result` reads as no series, as monitor-bridge's
-    `bridge/net.py:_query_result` reads it.
-
     Raises:
-        PromAnswerError: `body` is not a `{status: success, data: {result: [...]}}` envelope, or a
-            sample is not `{metric, value: [time, "number"]}`. A `"data": null` or
-            `"result": null` raises here rather than reading as no series.
+        PromAnswerError: `host_lib.prom_result` refuses `body`, or a sample is not
+            `{metric, value: [time, "number"]}`.
     """
-    if not isinstance(body, dict):
-        raise PromAnswerError(f"the answer is not a JSON object: {body!r:.80}")
-    if body.get("status") != "success":
-        raise PromAnswerError(
-            f"the answer's status is {body.get('status')!r}: {body.get('error')}"
-        )
-    data = body.get("data", {})
-    if not isinstance(data, dict):
-        raise PromAnswerError(f"the answer's data is not an object: {data!r:.80}")
-    result = data.get("result", [])
-    if not isinstance(result, list):
-        raise PromAnswerError(f"the answer's result is not a list: {result!r:.80}")
-    return [_series(sample) for sample in result]
+    return [_series(sample) for sample in prom_result(body)]
 
 
-def _series(sample: object) -> Series:
-    if not isinstance(sample, dict):
-        raise PromAnswerError(f"a sample is not an object: {sample!r:.80}")
+def _series(sample: dict) -> Series:
     metric = sample.get("metric") or {}
     pair = sample.get("value")
     if not isinstance(metric, dict) or not isinstance(pair, list) or len(pair) != 2:
