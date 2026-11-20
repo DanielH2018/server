@@ -9,8 +9,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_cross_role_restart.py
 
 import importlib
 
-from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import CLUSTER_VARS_SOURCE
 from renderer import homelab_render
 from renderer.renderer_lib.restart import (
@@ -41,11 +41,11 @@ def _exporter_checksum(tmp_path, name: str, password_digest: str) -> str | None:
     assert code == RENDER_OK
     found = {}
     for path in sorted((out / "cluster" / TAG).glob("*.yaml")):
-        for obj in yaml_fast.safe_load_all(path.read_text()):
+        for obj, _ in parse_documents([path.read_text()]):
             template = any_pod_template(obj)
             if template is not None:
                 annotations = (template.get("metadata") or {}).get("annotations") or {}
-                found[obj["metadata"]["name"]] = annotations.get(RESTART_ANNOTATION)
+                found[obj.name] = annotations.get(RESTART_ANNOTATION)
     assert len(found) >= 1, f"{TAG} rendered no workload"
     return found[TAG]
 

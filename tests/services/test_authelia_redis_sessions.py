@@ -26,6 +26,7 @@ from _helpers import REPO
 from _jinja_env import render_expr
 from _k8s_render import rendered_docs
 from lib import yaml_fast
+from lib.k8s_objects import K8sObject
 from renderer.renderer_lib.restart import pod_references, pod_template
 from renderer.renderer_lib.task_inputs import include_vars
 
@@ -197,8 +198,8 @@ def test_the_rendered_redis_pod_reads_only_its_own_secret():
     found = [
         pod_references(template)
         for _role, _tpl, doc in rendered_docs()
-        if (doc.get("metadata") or {}).get("name") == REDIS_SERVICE
-        and (template := pod_template(doc)) is not None
+        if (obj := K8sObject.from_item(doc)).name == REDIS_SERVICE
+        and (template := pod_template(obj)) is not None
     ]
     assert len(found) == 1, (
         f"expected one rendered {REDIS_SERVICE} workload; got {len(found)}"

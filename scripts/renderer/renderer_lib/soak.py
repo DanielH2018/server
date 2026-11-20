@@ -40,6 +40,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.git import git_stdout
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import ALL_VARS, JOB_FILES, K8S_ROLES, REPO, SCRIPTS
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -163,15 +164,11 @@ def longest_for(rules: Path = RULES) -> dict[str | None, int]:
 def _namespaces(files: Mapping[str, str]) -> set[str]:
     """Every namespace a directory's documents sit in, and every Namespace it creates."""
     found = set()
-    for text in files.values():
-        for doc in yaml_fast.safe_load_all(text):
-            if not isinstance(doc, dict):
-                continue
-            meta = doc.get("metadata") or {}
-            if doc.get("kind") == "Namespace" and meta.get("name"):
-                found.add(str(meta["name"]))
-            elif meta.get("namespace"):
-                found.add(str(meta["namespace"]))
+    for obj, _ in parse_documents(files.values()):
+        if obj.kind == "Namespace" and obj.name:
+            found.add(obj.name)
+        elif obj.namespace:
+            found.add(obj.namespace)
     return found
 
 
@@ -451,16 +448,17 @@ def soak_pair(
         flux: The bundle's other `flux/` files, `flux/kustomization.yaml` included. The
             published files carry that index again, now listing `soak.yaml`.
     """
-    others = [
-        doc
-        for path, text in sorted(flux.items())
-        if path != FLUX_INDEX
-        for doc in yaml_fast.safe_load_all(text)
-        if isinstance(doc, dict) and doc.get("kind") == "Kustomization"
+    parsed = [
+        (obj, doc)
+        for obj, doc in parse_documents(
+            text for path, text in sorted(flux.items()) if path != FLUX_INDEX
+        )
+        if obj.kind == "Kustomization"
     ]
+    others = [doc for _, doc in parsed]
     # A `--role` render may publish a tag whose edge names a flux-owned tag it leaves out.
     # Flux applies that one from its own render, so it adds nothing to this bundle's chain.
-    held = {doc["metadata"]["name"] for doc in others}
+    held = {obj.name for obj, _ in parsed}
     for doc in others:
         spec = doc["spec"]
         kept = [d for d in spec.get("dependsOn") or [] if d.get("name") in held]

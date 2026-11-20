@@ -10,8 +10,18 @@ comparison to notice.
 import types
 from pathlib import Path
 
-from _k3s_gates_fixtures import backup, fake_get, listing, node, volume, with_routes
+from _k3s_gates_fixtures import (
+    backup,
+    fake_get,
+    kustomization,
+    listing,
+    node,
+    plan,
+    volume,
+    with_routes,
+)
 from deploy_tools.runbook_gates_lib import gate_runner, k3s_upgrade
+from lib.k8s_objects import K8sObject
 from lib.kubectl import CLUSTER_NODES
 
 import k3s_gates
@@ -128,3 +138,24 @@ def test_zero_volumes_is_refused_by_the_script_and_passed_by_the_runbook():
     empty = listing()
     assert runbook_volumes(empty) == []
     assert k3s_gates.check_volumes(fake_get(with_routes(volumes=empty))) != []
+
+
+def test_the_scripts_object_view_reads_each_field_as_k8s_objects_does():
+    docs = [
+        volume(),
+        node("daniel-box", "Unknown", server=True),
+        plan("k3s-server", complete="False"),
+        kustomization("homelab"),
+    ]
+    for doc in docs:
+        view, shared = k3s_gates._Object.parse(doc), K8sObject.from_item(doc)
+        assert (view.name, view.namespace, view.labels, view.spec, view.status) == (
+            shared.name,
+            shared.namespace,
+            shared.labels,
+            shared.spec,
+            shared.status,
+        )
+        assert {t: view.condition(t) for t in view.conditions} == {
+            t: c.status for t, c in shared.conditions.items()
+        }

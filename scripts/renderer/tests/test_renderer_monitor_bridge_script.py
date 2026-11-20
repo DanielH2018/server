@@ -15,6 +15,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_objects import K8sObject
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.placeholders import references
@@ -117,7 +118,7 @@ def test_the_projected_volume_names_exactly_the_rendered_config_maps(rendered):
     """The name derivation sits in two templates; a drift between them is a pod that never
     starts, because a projected source naming an absent ConfigMap blocks the mount."""
     files, _ = rendered
-    template = pod_template(_deployment(files))
+    template = pod_template(K8sObject.from_item(_deployment(files)))
     assert template is not None
     mounted = {name for kind, name in pod_references(template) if kind == "ConfigMap"}
     held = {cm["metadata"]["name"] for cm in _config_maps(files)}

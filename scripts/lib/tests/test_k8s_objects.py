@@ -46,6 +46,12 @@ def test_an_object_reads_its_metadata_and_a_missing_field_as_empty():
     )
     assert (obj.kind, obj.name, obj.namespace) == ("Volume", "pvc-a", "longhorn-system")
     assert (obj.labels, obj.annotations, obj.status, obj.conditions) == ({}, {}, {}, {})
+    assert obj.spec == {}
+
+
+def test_an_object_carries_its_spec_unparsed():
+    spec = {"template": {"spec": {"containers": []}}}
+    assert K8sObject.from_item({"kind": "Deployment", "spec": spec}).spec == spec
 
 
 def test_a_volume_keeps_the_last_group_label_and_an_unknown_state_reads_unknown():

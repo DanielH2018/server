@@ -49,8 +49,9 @@ from pathlib import Path
 import jinja2
 import yaml
 
-from lib import yaml_fast
 from lib.k8s_context import resolve_vars
+from lib.k8s_objects import K8sObject
+from renderer.renderer_lib.documents import parse_documents
 from lib.render_guard import StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.environment import RenderError, evaluate, renderer_env
@@ -201,21 +202,21 @@ def _kinds(triggers: Iterable[str]) -> frozenset[str]:
     return frozenset(TRIGGER_KINDS[t] for t in triggers if t in TRIGGER_KINDS)
 
 
-def pod_template(obj: object) -> dict | None:
+def pod_template(obj: K8sObject) -> dict | None:
     """The pod template of a workload document, or None for any other document."""
-    if not isinstance(obj, dict) or obj.get("kind") not in WORKLOAD_KINDS:
+    if obj.kind not in WORKLOAD_KINDS:
         return None
-    template = (obj.get("spec") or {}).get("template")
+    template = obj.spec.get("template")
     return template if isinstance(template, dict) else None
 
 
-def any_pod_template(obj: object) -> dict | None:
+def any_pod_template(obj: K8sObject) -> dict | None:
     """The pod template of any document that runs a pod: a workload, a Job or a CronJob."""
-    if isinstance(obj, dict) and obj.get("kind") == "CronJob":
-        job = ((obj.get("spec") or {}).get("jobTemplate") or {}).get("spec") or {}
+    if obj.kind == "CronJob":
+        job = (obj.spec.get("jobTemplate") or {}).get("spec") or {}
         template = job.get("template")
-    elif isinstance(obj, dict) and obj.get("kind") == "Job":
-        template = (obj.get("spec") or {}).get("template")
+    elif obj.kind == "Job":
+        template = obj.spec.get("template")
     else:
         return pod_template(obj)
     return template if isinstance(template, dict) else None
@@ -258,16 +259,6 @@ def pod_references(template: Mapping) -> set[Ref]:
     return found
 
 
-def _documents(files: Iterable[str]) -> list[dict]:
-    """Each mapping document of `files`, in order."""
-    return [
-        obj
-        for text in files
-        for obj in yaml_fast.safe_load_all(text)
-        if isinstance(obj, dict)
-    ]
-
-
 def sops_secrets(sops: Mapping[str, str | None], keys: Iterable[str]) -> dict[str, set]:
     """Each Secret name a `render_sops_manifests` entry renders, mapped to its keys.
 
@@ -278,10 +269,9 @@ def sops_secrets(sops: Mapping[str, str | None], keys: Iterable[str]) -> dict[st
     sentinels = Sentinels(keys)
     found: dict[str, set] = {}
     for entry, text in sops.items():
-        for obj in _documents([text or ""]):
-            name = (obj.get("metadata") or {}).get("name")
-            if obj.get("kind") == "Secret" and name:
-                found.setdefault(name, set()).update(
+        for obj, _ in parse_documents([text or ""]):
+            if obj.kind == "Secret" and obj.name:
+                found.setdefault(obj.name, set()).update(
                     sentinels.key_set({entry: text or ""})
                 )
     return found
@@ -316,14 +306,12 @@ def restart_values(
     """
     keys = frozenset(keys)
     texts = [text for files in directories.values() for text in files.values()]
-    docs = _documents(texts)
-    own = {
-        (obj.get("kind"), (obj.get("metadata") or {}).get("name")): obj for obj in docs
-    }
+    docs = parse_documents(texts)
+    own = {(obj.kind, obj.name): doc for obj, doc in docs}
     shipped = sops_secrets(sops or {}, keys)
     workloads = {
-        (obj.get("metadata") or {}).get("name"): template
-        for obj in docs
+        obj.name: template
+        for obj, _ in docs
         if (template := pod_template(obj)) is not None
     }
     outside = outside or {}

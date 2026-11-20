@@ -1,10 +1,12 @@
 """Typed views of the kubectl objects several readers share.
 
 Three records: any object (`K8sObject`), a Longhorn Volume and a Longhorn BackupTarget.
+The module imports with the stdlib alone (`lib/stdlib_only.py`), so a YAML reader parses first:
+`renderer/renderer_lib/documents.py:parse_documents` does it for a rendered manifest.
 
 A reader that runs `kubectl get ... -o json` builds one of these right after parsing the body,
 then passes the record on. The record owns the field names, the defaults for a missing field and
-the one rule each derived value follows. No caller indexes `.metadata`, `.status` or
+the one rule each derived value follows. No caller indexes `.metadata`, `.spec`, `.status` or
 `.status.conditions` itself.
 
 Every `from_item` takes one parsed object and never raises on a missing field: a missing string
@@ -85,6 +87,7 @@ class K8sObject:
         namespace: `.metadata.namespace`; "" for a cluster-scoped object.
         labels: `.metadata.labels`.
         annotations: `.metadata.annotations`.
+        spec: `.spec`, unparsed, for the fields only one kind has.
         status: `.status`, unparsed, for the fields only one kind has.
         conditions: `.status.conditions`, as `parse_conditions` reads them.
     """
@@ -94,6 +97,7 @@ class K8sObject:
     namespace: str
     labels: Mapping[str, str]
     annotations: Mapping[str, str]
+    spec: Mapping
     status: Mapping
     conditions: dict[str, Condition]
 
@@ -107,6 +111,7 @@ class K8sObject:
             namespace=str(meta.get("namespace") or ""),
             labels=meta.get("labels") or {},
             annotations=meta.get("annotations") or {},
+            spec=item.get("spec") or {},
             status=item.get("status") or {},
             conditions=parse_conditions(item),
         )
@@ -188,7 +193,7 @@ class BackupTarget:
     def from_item(cls, item: Mapping) -> BackupTarget:
         """One BackupTarget object, from a list's `.items` or a single read."""
         obj = K8sObject.from_item(item)
-        url = str((item.get("spec") or {}).get("backupTargetURL") or "").strip()
+        url = str(obj.spec.get("backupTargetURL") or "").strip()
         first = next(iter(obj.conditions.values()), None)
         return cls(
             name=obj.name,

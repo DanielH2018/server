@@ -13,6 +13,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from renderer.renderer_lib.documents import parse_documents
 from render_share import sharing_placeholder_renders
 from renderer import homelab_render, standalone_map
 from lib.k8s_roles import k8s_tags
@@ -276,11 +277,11 @@ def _annotations(out, tag: str) -> dict[str, str | None]:
     """Each rendered workload of `tag` mapped to its `checksum/restart`, or None."""
     found = {}
     for path in sorted((out / "cluster" / tag).glob("*.yaml")):
-        for obj in yaml_fast.safe_load_all(path.read_text()):
+        for obj, _ in parse_documents([path.read_text()]):
             template = any_pod_template(obj)
             if template is not None:
                 annotations = (template.get("metadata") or {}).get("annotations") or {}
-                found[obj["metadata"]["name"]] = annotations.get(RESTART_ANNOTATION)
+                found[obj.name] = annotations.get(RESTART_ANNOTATION)
     return found
 
 
@@ -362,22 +363,25 @@ def outside_references(
     found = []
     forms = {t.tag: t for t in render.tags}
     for tag in sorted(tags):
-        docs = [
+        objs = [
             obj
-            for files in forms[tag].directories().values()
-            for text in files.values()
-            for obj in yaml_fast.safe_load_all(text)
-            if isinstance(obj, dict)
+            for obj, _ in parse_documents(
+                [
+                    *(
+                        text
+                        for files in forms[tag].directories().values()
+                        for text in files.values()
+                    ),
+                    *(
+                        text or ""
+                        for text in (render.sops_manifests.get(tag) or {}).values()
+                    ),
+                ]
+            )
         ]
-        docs += [
-            obj
-            for text in (render.sops_manifests.get(tag) or {}).values()
-            for obj in yaml_fast.safe_load_all(text or "")
-            if isinstance(obj, dict)
-        ]
-        own = {(d.get("kind"), (d.get("metadata") or {}).get("name")) for d in docs}
+        own = {(obj.kind, obj.name) for obj in objs}
         own |= {("Secret", name) for name in outside_secrets(tag)}
-        for obj in docs:
+        for obj in objs:
             template = any_pod_template(obj)
             for kind, name in sorted(pod_references(template or {})):
                 if (kind, name) not in own and (
@@ -441,9 +445,8 @@ def test_the_outside_role_test_resolves_peanuts_three_references(fleet):
         obj
         for t in fleet.tags
         if t.tag == "peanut"
-        for text in t.files.values()
-        for obj in yaml_fast.safe_load_all(text)
-        if isinstance(obj, dict) and obj.get("kind") == "Deployment"
+        for obj, _ in parse_documents(t.files.values())
+        if obj.kind == "Deployment"
     ]
     template = any_pod_template(deployment)
     assert template is not None
