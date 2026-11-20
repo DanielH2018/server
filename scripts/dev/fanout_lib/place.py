@@ -24,8 +24,8 @@ One `launch` runs at a time for a user on a host: it holds `fanout_lib.launch_lo
 first gate to its last manifest save, so a second launch reads the batches the first placed.
 `resume` holds the same lock for the same span.
 
-`resume` restarts one finished batch whose PR's last landing ended `merge-conflict`, on the
-batch's own host, against the same live-batch cap and memory reservation as a launch. Its
+`resume` restarts one finished batch whose PR's last landing ended `merge-conflict`, or
+whose PR conflicts with master and was never landed, on the batch's own host, against the same live-batch cap and memory reservation as a launch. Its
 unit runs only the conflict resume of `fanout_lib/review/conflict_resume.py`.
 `fanout_lib/resume.py` has what it refuses and where it reads the verdict.
 

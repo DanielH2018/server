@@ -387,7 +387,9 @@ conflicted with master a second time, or with too little run time left for its o
 reads `needs-input` with the conflicting files named. Run
 `fanout.py place resume <run-id> <batch>`, which restarts the batch's implementer to
 rebase, reviews the resolution and lands the PR again. Run the same command when your own
-`land.sh` on a finished batch's PR ends `merge-conflict`. Do not rebase or merge the branch
+`land.sh` on a finished batch's PR ends `merge-conflict`, and for a batch that reads
+`needs-input: PR #N conflicts with master`, whose PR conflicted before its first CI run.
+Do not rebase or merge the branch
 by hand: nobody reviews that resolution. A batch that ends `needs-input: the conflict
 resolution of <PR> passed its review` is one the pipeline does not land: land it with the
 `land.sh` command its line names (`docs/issue-claiming-and-fanout.md`, *A conflict found

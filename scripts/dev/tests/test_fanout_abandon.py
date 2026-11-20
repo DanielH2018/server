@@ -239,12 +239,14 @@ CONFLICT_LOG = (
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 
-def _host_read(state="inactive", tree="standing\n", own_log=""):
+CONFLICTS = "tree0\nscripts/a.py\ndocs/b.md\nexit=1\n"
+
+
+def _host_read(state="inactive", tree="standing\n", own_log="", merge=CONFLICTS):
     """What `resume.read_command` prints for a batch whose PR conflicts in two files."""
     return ok(
         f"=== 7\nActiveState={state}\nResult=success\nExecMainStatus=0\n"
-        f"--- tree\n{tree}--- landing\n{own_log}"
-        "--- conflicts\ntree0\nscripts/a.py\ndocs/b.md\nexit=1\n"
+        f"--- tree\n{tree}--- landing\n{own_log}--- conflicts\n{merge}"
     )
 
 
@@ -330,9 +332,13 @@ LOCK_RECORD = json.dumps(
             f"fanout.py place status {RUN_ID}",
         ),
         (
-            {"landing": ""},
+            {
+                "landing": "",
+                "reads": [_host_read(merge="tree0\nexit=0\n"), ok("free\n")],
+            },
             "found no landing log for #4000",
-            "name it with --log <path>, or land the PR with `land.sh --pr 4000 ",
+            "its branch merges cleanly with origin/master; name the log with --log <path>, "
+            "or land the PR with `land.sh --pr 4000 ",
         ),
     ],
     ids=[
@@ -343,7 +349,7 @@ LOCK_RECORD = json.dumps(
         "closed",
         "landing-live",
         "red",
-        "no-log",
+        "no-log-no-conflict",
     ],
 )
 def test_resume_refuses_with_its_reason_and_the_command_that_fits(
@@ -353,6 +359,20 @@ def test_resume_refuses_with_its_reason_and_the_command_that_fits(
     assert code == 1 and not _started(run)
     err = capsys.readouterr().err
     assert reason in err and instead in err
+
+
+def test_resume_takes_a_pr_that_conflicts_with_master_before_any_landing(tmp_path):
+    # A PR that conflicts when it is marked ready gets no CI run, so no landing either.
+    code, run = _resume(tmp_path, landing="")
+    assert code == 0
+    ((_, command, request),) = _started(run)
+    assert "--resume-conflict" in command
+    assert json.loads(request) == {
+        "pr": PR,
+        "line": "VERDICT: merge-conflict (PR #4000 conflicts with origin/master in "
+        "2 file(s), read with git merge-tree; no landing has run on it)",
+    }
+    assert load(RUN_ID, tmp_path / "runs").batches[0].conflict_resumes == 1
 
 
 def test_the_batchs_own_landing_decides_when_it_is_newer_than_a_sessions(tmp_path):
@@ -392,3 +412,10 @@ def test_resume_past_the_limit_refuses_and_names_the_conflicting_files(
     err = capsys.readouterr().err
     assert "was resumed 2 times for a conflict, which is the limit" in err
     assert "conflicts with origin/master in: scripts/a.py, docs/b.md" in err
+
+
+def test_a_conflict_before_any_landing_counts_against_the_same_limit(tmp_path, capsys):
+    spent = RESUMED.resumed_for_conflict().resumed_for_conflict()
+    code, run = _resume(tmp_path, batch=spent, landing="")
+    assert code == 1 and not _started(run)
+    assert "which is the limit" in capsys.readouterr().err

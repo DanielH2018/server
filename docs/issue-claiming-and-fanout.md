@@ -608,8 +608,11 @@ conflict resolution of <PR> passed its review at head <sha>`, with the hold and 
 
 A PR the pipeline did not land is landed after the batch's unit has stopped: by the server
 lander, or by a sub-coordinator's own `land.sh` for a PR that lander holds. A
-`merge-conflict` there has no unit left to resume. `fanout.py place resume <run-id> <batch>`
-starts one:
+`merge-conflict` there has no unit left to resume. Neither has a conflict that no landing
+met: GitHub starts no CI run on a PR that conflicts with master, so a batch whose PR
+conflicts when it is marked ready ends `needs input: PR #N conflicts with master`
+(`scripts/dev/fanout_lib/review/review_ci.py:ready_for_ci`). `fanout.py place resume <run-id>
+<batch>` starts a unit for either:
 
 ```bash
 uv run python scripts/dev/fanout.py place resume <run-id> <batch>
@@ -621,10 +624,14 @@ pipeline's own resume both call `scripts/dev/fanout_lib/review/conflict_resume.p
 so the two share one prompt and one review.
 
 - **What it resumes.** A batch of this repo whose unit has stopped, whose worktree still
-  stands, whose PR is open, and whose newest landing ended `merge-conflict`. It refuses
-  anything else with the reason and the command that fits: a running batch, a cleaned
-  batch, a missing worktree, a merged or closed PR, a PR whose landing lock is held
-  (`scripts/deploy_tools/land_lib/pr_lock.py`), and a newest verdict that is not a conflict.
+  stands, whose PR is open, and whose newest landing ended `merge-conflict`. A PR with no
+  landing log is resumed when its branch conflicts with master, which the command reads
+  with `git merge-tree` in the batch's worktree
+  (`scripts/dev/fanout_lib/resume.py:unlanded_conflict`). It refuses anything else with the
+  reason and the command that fits: a running batch, a cleaned batch, a missing worktree, a
+  merged or closed PR, a PR whose landing lock is held
+  (`scripts/deploy_tools/land_lib/pr_lock.py`), a newest verdict that is not a conflict,
+  and a PR with no landing log whose branch merges cleanly.
 - **Where it reads the verdict.** `land.sh --detach` writes `land<pr>-<stamp>.log`, and
   the newest stamp is the PR's last landing. The command reads the batch's own log in its
   worktree's `.fanout/`, the directory this session's `land.sh --detach` writes to (the
