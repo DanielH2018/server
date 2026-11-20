@@ -1,10 +1,15 @@
 """What each workflow job downloads from: a release repo, another host, or neither.
 
 `release_fetches` splits each step's run into its curl and wget invocations and its
-`gh release download` calls. An invocation fed by a pipe is a registry or API call, and one
-whose output goes to /dev/null is a probe; neither counts. Each other one reads as the
-release repo, or failing that the host, of the URL it names, or of the URL its variables
-hold.
+`gh release download` calls. An invocation fed by a pipe is a registry or API call, and a
+probe throws its body away; neither counts. Each other one reads as the release repo, or
+failing that the host, of the URL it names, or of the URL its variables hold.
+
+An invocation is a probe when every file it writes with `-o`, `--output` or `-O` is
+/dev/null, or, when it names no such file, when it redirects its stdout there (`>`, `1>` or
+`&>`). Its own words end at the first `;`, `&&`, `||` or `|`, so a later command's redirect
+does not count. A redirect of stderr alone (`2>/dev/null`) never makes a probe, because the body
+still lands in the file or on stdout.
 """
 
 import re
@@ -25,14 +30,28 @@ URL = re.compile(r"https?://(?:\$\{\{[^}]*\}\}|[^\s\"'])+")
 HOST = re.compile(r"https?://([^/\s\"']+)")
 VARIABLE = re.compile(r"\$(?:\{(\w+)[^}]*\}|(\w+))")
 ASSIGNMENT = re.compile(r"^\s*(?:local\s+)?(\w+)=\"?([^\"\n]*)", re.M)
-DISCARDED = re.compile(r">\s*/dev/null")
+# The file an -o, --output or wget -O option names; curl's -O names the URL here, never /dev/null.
+OUTPUT = re.compile(r"(?<=\s)(?:-[A-Za-z]*[oO]|--output)[\s=]*(\S+)")
+# A redirect of stdout; the lookbehind leaves `2>/dev/null` out.
+STDOUT_TO_NULL = re.compile(r"(?<!\d)(?:&|1)?>\s*/dev/null(?=[\s;&|)]|$)")
+# Where an invocation's own words end and the next command's begin.
+OWN_WORDS_END = re.compile(r"\s*(?:;|&&|\|\|?)")
+
+
+def _is_probe(text: str) -> bool:
+    """Whether a curl or wget invocation throws its body away."""
+    own = OWN_WORDS_END.split(text, 1)[0]
+    if files := [f.strip("\"'") for f in OUTPUT.findall(own)]:
+        return all(f == "/dev/null" for f in files)
+    return bool(STDOUT_TO_NULL.search(own))
 
 
 def _downloads(run: str) -> list[str]:
     """The text of each curl or wget invocation in `run` that downloads.
 
     An invocation runs to the next one or the end of its line, continuations joined. One fed
-    by a pipe is a registry or API call, and one whose output goes to /dev/null is a probe.
+    by a pipe is a registry or API call, and a probe (see the module docstring) throws its
+    body away.
     """
     found = []
     for line in run.replace("\\\n", " ").splitlines():
@@ -43,7 +62,7 @@ def _downloads(run: str) -> list[str]:
         for m, end in zip(starts, ends, strict=False):
             text = line[m.end(1) : end]
             piped = m[1].rstrip().endswith("|") and not m[1].rstrip().endswith("||")
-            if not piped and not DISCARDED.search(text):
+            if not piped and not _is_probe(text):
                 found.append(text)
     return found
 

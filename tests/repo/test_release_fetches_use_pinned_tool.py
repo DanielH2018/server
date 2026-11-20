@@ -279,6 +279,7 @@ NFPM = "goreleaser/nfpm"
         ('gh release download v1 --repo "${{ env.REPO }}" -p x', UNRESOLVED),
         ('gh release download v1 -R "$REPO" -p x', UNRESOLVED),
         ("gh release download v1 -p x", UNRESOLVED),
+        (f"curl -fsSL {NFPM_URL} -o tool 2>/dev/null", NFPM),
     ],
 )
 def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
@@ -317,6 +318,16 @@ def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
         ("timeout 60 curl -fsSLo /tmp/k https://dl.k8s.io/k", "dl.k8s.io"),
         ("if curl -fsSLo /tmp/k https://dl.k8s.io/k; then true; fi", "dl.k8s.io"),
         ('u=https://dl.k8s.io/k\ncurl -fsSLo f "$u"', "dl.k8s.io"),
+        ("curl -fsSL -o f https://get.helm.sh/h.tgz 2> /dev/null", "get.helm.sh"),
+        ("curl -fsSLo f https://get.helm.sh/h.tgz > /dev/null", "get.helm.sh"),
+        (
+            "curl -fsSL https://get.helm.sh/h.tgz | tar -xz > /dev/null",
+            "get.helm.sh",
+        ),
+        (
+            "curl -fsSLo f https://get.helm.sh/h.tgz; tar -xz f > /dev/null",
+            "get.helm.sh",
+        ),
     ],
 )
 def test_a_download_from_another_host_is_flagged(run, host):
@@ -334,6 +345,11 @@ def test_a_download_from_another_host_is_flagged(run, host):
     [
         'printf \'%s\' "$auth" | curl -fsS -K - -o "$body" https://ghcr.io/v2/x',
         "curl -fsS http://127.0.0.1:5010/v2/ > /dev/null 2>&1 && break",
+        "curl -fsS -o /dev/null http://127.0.0.1:5010/v2/",
+        "curl -fsS --output /dev/null https://get.helm.sh/h.tgz 2>&1",
+        "wget -q -O /dev/null https://get.helm.sh/h.tgz",
+        "curl -fsS http://127.0.0.1:5010/v2/ 1>/dev/null",
+        "curl -fsS http://127.0.0.1:5010/v2/ &>/dev/null",
     ],
 )
 def test_a_curl_that_downloads_nothing_is_not_a_fetch(run):
