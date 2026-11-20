@@ -18,8 +18,8 @@ points one at a ``tmp_path`` tree; nothing here reads a module constant past it.
 Typical usage example:
 
     estate = Estate()
-    estate.vars("daniel-pi")["has_docker"]  # True
-    estate.source("daniel-pi", "has_docker")  # "host": daniel-pi's own file declares it
+    estate.vars("daniel-pi")["has_fwupd"]  # False
+    estate.source("daniel-pi", "has_fwupd")  # "group": only group_vars/all.yml declares it
 """
 
 from dataclasses import dataclass, field

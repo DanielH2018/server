@@ -142,7 +142,8 @@ def deadman_crons(
     registry: dict,
     group_vars: dict,
     host_timers: dict,
-    has_docker: dict[str, bool],
+    hosts: list[str],
+    docker_hosts: list[str],
     observability: dict,
     sweep_hosts: list[str],
 ) -> list[tuple[str, str, str]]:
@@ -151,8 +152,8 @@ def deadman_crons(
     Shared with tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
 
-    `has_docker` is `{host: bool}` over every host. The weekly reboot
-    pings a slug per host, and the Docker prune pings one per host that installs it.
+    The weekly reboot pings a slug for each of `hosts`, and the Docker prune pings one for
+    each of `docker_hosts`, the hosts whose package lists the `pi-docker` component.
     `sweep_hosts` names each host whose package lists the `worktree-sweep` component; each
     pings its own `<host>-worktree-sweep` slug.
 
@@ -205,20 +206,19 @@ def deadman_crons(
             reboot,
             f"`weekly_reboot_weekday` / `_hour` / `_minute`, on {host}",
         )
-        for host in has_docker
+        for host in hosts
     ]
     prune = (
-        f"{host_timers['host_maintenance_docker_prune_cron_minute']} "
-        f"{host_timers['host_maintenance_docker_prune_cron_hour']} * * *"
+        f"{host_timers['docker_prune_cron_minute']} "
+        f"{host_timers['docker_prune_cron_hour']} * * *"
     )
     rows += [
         (
             f"{host}-docker-prune",
             prune,
-            f"`host_maintenance_docker_prune_cron_hour` / `_minute`, on {host}",
+            f"`docker_prune_cron_hour` / `_minute`, on {host}",
         )
-        for host, docker in has_docker.items()
-        if docker
+        for host in docker_hosts
     ]
     sweep = (
         f"{host_timers['worktree_sweep_cron_minute']} "
@@ -242,7 +242,8 @@ def render_deadman_cadences(
     registry: dict,
     group_vars: dict,
     host_timers: dict,
-    has_docker: dict[str, bool],
+    hosts: list[str],
+    docker_hosts: list[str],
     observability: dict,
     sweep_hosts: list[str],
 ) -> str:
@@ -253,7 +254,8 @@ def render_deadman_cadences(
         registry,
         group_vars,
         host_timers,
-        has_docker,
+        hosts,
+        docker_hosts,
         observability,
         sweep_hosts,
     )

@@ -36,6 +36,16 @@
 # - Required evidence: the unit's journal, and the DockerEnginePinUnapplied alert.
 # - Next-run review: after a failed run, read `journalctl -u homelab-docker-engine` on daniel-pi
 #   and unmask homelab-updater.timer once the cause is fixed.
+#
+# Autonomous-role contract (homelab-docker-prune removes Docker objects with no human in the loop).
+#
+# - Scope: images, containers, networks and build cache that nothing uses and that were created
+#   more than a week ago. Nothing else.
+# - Mode: the timer's enable link in this package arms it, at the `docker_prune_cron_*` slot in
+#   defaults/main.yml. Dropping the link stops the timer on the install that drops it.
+# - Abort valves: a failed prune leaves its Healthchecks.io ping unsent.
+# - Required evidence: a `docker-prune` line in the journal and the `<host>-docker-prune`
+#   Healthchecks.io check.
 defaults:
   # The Ubuntu release in the apt version suffix, `-*~ubuntu.24.04~noble`. The renderer has no
   # facts, so these restate the Pi's release, as the Renovate annotations do.
@@ -80,8 +90,12 @@ files:
   - {src: templates/daemon.json.j2, dst: /etc/docker/daemon.json, activate: "manual:docker.service"}
   - {src: templates/dockerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/docker.service.d/50-homelab.conf, activate: "manual:docker.service"}
   - {src: templates/containerd-go-runtime.conf.j2, dst: /usr/lib/systemd/system/containerd.service.d/50-homelab.conf, activate: "manual:containerd.service"}
+  - {src: templates/docker-prune.j2, dst: /usr/lib/homelab/docker-prune, mode: "0755"}
+  - {src: units/homelab-docker-prune.service.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.service}
+  - {src: units/homelab-docker-prune.timer.j2, dst: /usr/lib/systemd/system/homelab-docker-prune.timer}
 enable:
   homelab-docker-engine.timer: timers.target
+  homelab-docker-prune.timer: timers.target
 lines:
   # containerd's metrics listener, scraped as `containerd-pi`, and the shim environment that
   # undoes the daemon's GOGC=off for every shim and runc it spawns. containerd appends this `env`

@@ -37,7 +37,7 @@ as_agent() {
 
 # The groups: the worktree holder scan's socket, the root inspector's socket, the journal and
 # the ssh login. `usermod -G` sets the whole list, so a group dropped here is left.
-groups=({{ claude_code_worktree_holders_group }}{{ ' ' ~ claude_code_rootq_socket_group if claude_code_rootq_socket_armed else '' }}{{ ' systemd-journal' if claude_code_agent_journal_access else '' }}{{ ' ssh-users' if claude_agent_ssh_login_enabled else '' }})
+groups=({{ claude_code_worktree_holders_group }} {{ claude_code_rootq_socket_group }}{{ ' systemd-journal' if claude_code_agent_journal_access else '' }}{{ ' ssh-users' if claude_agent_ssh_login_enabled else '' }})
 for group in "${groups[@]}"; do
   getent group "$group" > /dev/null || groupadd --system "$group"
 done

@@ -12,6 +12,7 @@ from _helpers import K8S_ROLES
 from lib import yaml_fast
 from lib.repo_paths import HOST_VARS
 from _setup_render import CLAUDE_CODE
+from docs.fragment_readers import hosts_listing_component
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "hosts.yaml"
 
@@ -24,7 +25,7 @@ def rules_named(alert: str) -> list[dict]:
 
 
 def test_the_cgroup_pairs_follow_the_inventory():
-    """Every `has_claude_code` host requires fleet, and claude-rc only where its RC unit runs.
+    """Every host listing claude-code requires fleet, and claude-rc only where its RC unit runs.
 
     The pairs in `ClaudeCgroupNotReporting` are literals, so this is what makes them follow the
     inventory: a host that gains Claude Code without a rule is a writer nothing checks, and a host
@@ -35,13 +36,11 @@ def test_the_cgroup_pairs_follow_the_inventory():
         (CLAUDE_CODE / "defaults" / "main.yml").read_text()
     )["claude_code_rc_enabled"]
     derived = set()
-    for path in HOST_VARS.glob("*.yml"):
-        host = yaml_fast.safe_load(path.read_text()) or {}
-        if host.get("has_claude_code") is True:
-            rc = host.get("claude_code_rc_enabled", rc_default)
-            derived.add((path.stem, "fleet"))
-            if rc:
-                derived.add((path.stem, "claude-rc"))
+    for name in hosts_listing_component("claude-code"):
+        host = yaml_fast.safe_load((HOST_VARS / f"{name}.yml").read_text()) or {}
+        derived.add((name, "fleet"))
+        if host.get("claude_code_rc_enabled", rc_default):
+            derived.add((name, "claude-rc"))
     assert derived == {
         ("daniel-box", "claude-rc"),
         ("daniel-box", "fleet"),

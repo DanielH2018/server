@@ -39,8 +39,7 @@ how that sync behaves.
   copies of those keys must equal this role's, which
   `hosts/lib/tests/test_claude_artifacts_node_timers.py` holds.
 - **The agent user's tree is a third source.** `artifacts_agent_dir`
-  (`/var/lib/claude/.claude/artifacts`, set only while `claude_code_agent_user_enabled` is true)
-  mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host
+  (`/var/lib/claude/.claude/artifacts`) mounts read-only at `/srv/artifacts/daniel-box-claude`, so the index lists it as the host
   `daniel-box-claude` beside the operator's `daniel-box`. An empty value removes the volume and
   the mount. The hostPath is `type: Directory`, never `DirectoryOrCreate`: a missing directory
   holds the new pod in ContainerCreating while the old one keeps serving, where kubelet would

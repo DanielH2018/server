@@ -14,7 +14,6 @@ import pytest
 from docs import fragment_readers as readers
 from docs import fragment_renderers as renderers
 from docs import gen_doc_fragments as g
-from lib.estate import Estate, Inventory
 
 DOCS = g.REPO / "docs"
 INCLUDE = re.compile(
@@ -280,8 +279,8 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         "ops_cron_host": "box",
     }
     host_timers = {
-        "host_maintenance_docker_prune_cron_minute": 30,
-        "host_maintenance_docker_prune_cron_hour": 6,
+        "docker_prune_cron_minute": 30,
+        "docker_prune_cron_hour": 6,
         "worktree_sweep_cron_minute": 20,
         "worktree_sweep_cron_hour": 4,
         "worktree_sweep_cron_weekday": 0,
@@ -292,7 +291,8 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         registry,
         group_vars,
         host_timers,
-        {"box": False, "pi": True},
+        ["box", "pi"],
+        ["pi"],
         {"observability_alertmanager_watchdog_repeat_seconds": 60},
         ["box", "server"],
     )
@@ -332,13 +332,14 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
             "ops_cron_host": "box",
         },
         {
-            "host_maintenance_docker_prune_cron_minute": 30,
-            "host_maintenance_docker_prune_cron_hour": 6,
+            "docker_prune_cron_minute": 30,
+            "docker_prune_cron_hour": 6,
             "worktree_sweep_cron_minute": 20,
             "worktree_sweep_cron_hour": 4,
             "worktree_sweep_cron_weekday": 0,
         },
-        {"box": False},
+        ["box"],
+        [],
         {"observability_alertmanager_watchdog_repeat_seconds": 60},
         ["box"],
     )
@@ -349,22 +350,8 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
         renderers.render_deadman_cadences(
-            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}, {}, []
+            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, [], [], {}, []
         )
-
-
-def test_host_has_docker_lets_host_vars_override_group_vars(tmp_path):
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
-    (host_vars / "box.yml").write_text("server_ip: 10.0.0.1\n")
-    (host_vars / "pi.yml").write_text("has_docker: true\n")
-    (host_vars / "_example.yml").write_text("has_docker: true\n")
-    (tmp_path / "all.yml").write_text("has_docker: false\n")
-    inventory = Inventory(all_vars=tmp_path / "all.yml", host_vars=host_vars)
-    assert readers.host_has_docker(Estate(inventory)) == {
-        "box": False,
-        "pi": True,
-    }
 
 
 def test_hosts_listing_component_names_each_package_that_lists_it(tmp_path):

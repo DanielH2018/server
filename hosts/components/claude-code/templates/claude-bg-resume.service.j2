@@ -23,12 +23,10 @@ WorkingDirectory={{ claude_code_bg_resume_home }}
 RemainAfterExit=yes
 KillMode=process
 
-{% if claude_code_fleet_caps_enabled %}
 # The supervisor this unit starts hosts every background session dispatched afterwards, until
 # it idles out, so it sits under the same fleet bound as claude-rc.service. claude-rc.service.j2
 # has why user.slice is the only slice that can parent both Claude planes.
 Slice={{ claude_code_fleet_slice }}
-{% endif %}
 MemoryHigh={{ claude_code_rc_memory_high }}
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 

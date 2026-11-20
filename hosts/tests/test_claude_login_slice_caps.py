@@ -138,15 +138,6 @@ def test_pytest_cap_follows_the_same_variable_as_the_unit(
     )
 
 
-def test_login_caps_var_defaults_to_enabled() -> None:
-    assert re.search(
-        r"^claude_code_login_caps_enabled: *true\b", DEFAULTS.read_text(), re.M
-    ), (
-        "claude_code_login_caps_enabled must default to true, or the login-session caps "
-        "this issue adds ship disabled"
-    )
-
-
 def test_login_uids_defaults_to_the_one_login_uid() -> None:
     assert role_context(ROLE_DIR)["claude_code_login_uids"] == [1000]
     renumbered = role_context(ROLE_DIR, {"claude_code_login_uid": 1500})

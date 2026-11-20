@@ -145,7 +145,7 @@ def test_a_component_renders_a_sibling_components_template_over_its_defaults(tmp
         {
             "src": "component:templates/login-slice-caps.conf.j2",
             "dst": "/usr/lib/systemd/system/user-995.slice.d/x.conf",
-            "when": "claude_code_login_caps_enabled",
+            "when": "claude_code_agent_user_enabled",
         }
     ]
     package = render_with(tmp_path, {"component": "claude-code", "files": files})
@@ -192,7 +192,7 @@ def test_a_package_renders_a_borrowed_components_template_over_its_defaults(tmp_
         {
             "src": "component:templates/login-slice-caps.conf.j2",
             "dst": "/usr/lib/systemd/system/user-995.slice.d/x.conf",
-            "when": "claude_code_login_caps_enabled",
+            "when": "claude_code_agent_user_enabled",
         }
     ]
     package = render_with(tmp_path, {}, {"component": "claude-code", "files": files})
@@ -247,20 +247,10 @@ def render_daniel_server_with(tmp_path, **overrides):
     )
 
 
-def test_the_background_resume_ships_while_its_toggle_is_on(package, manifest):
+def test_the_background_resume_ships_with_its_policy_and_link(package, manifest):
     assert all(path in package.files for path in BG_RESUME)
     assert manifest["units"]["homelab-claude-bg-resume.service"] == {"policy": "manual"}
     assert "homelab-claude-bg-resume.service" in manifest["enable_links"]
-
-
-def test_the_background_resume_toggle_off_drops_its_unit_script_policy_and_link(
-    tmp_path,
-):
-    off = render_daniel_server_with(tmp_path, claude_code_bg_resume_enabled=False)
-    off_manifest = json.loads(off.files["/usr/lib/homelab/manifest.json"][0])
-    assert not any(path in off.files for path in BG_RESUME)
-    assert "homelab-claude-bg-resume.service" not in off_manifest["units"]
-    assert "homelab-claude-bg-resume.service" not in off_manifest["enable_links"]
 
 
 AUTHORIZED_KEYS = "/usr/lib/homelab/claude-agent/authorized_keys"

@@ -83,7 +83,6 @@ UMask=0027
 Environment=XDG_RUNTIME_DIR=/run/user/{{ runtime_uid }}
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
 
-{% if claude_code_fleet_caps_enabled %}
 # DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so
 # that it shares ONE parent cgroup with the other half of the Claude fleet — the login-session
 # plane in user-{{ claude_code_login_uid }}.slice. A cap on each plane reads as one bound and is
@@ -107,7 +106,6 @@ Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
 # Changing Slice= does not migrate a running unit — it takes effect at the next start, so the
 # deploy that lands this restarts the host and drops the sessions it had spawned.
 Slice={{ claude_code_fleet_slice }}
-{% endif %}
 
 # Claude Code is a PER-USER install (binary under ~/.local/share/claude, launcher symlinked
 # at ~/.local/bin/claude) and reads its OAuth token from ~/.claude/.credentials.json, so

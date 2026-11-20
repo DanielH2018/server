@@ -13,13 +13,12 @@
 # writes its own ledger file there. The files hold call counts and a token's fingerprint, never
 # a token. The directory is on disk so the record outlives the weekly reboot.
 #
-# Each file carries `has_claude_code`, so a host that stops running Claude sessions stops
-# recording with its next package version. /var/lib/gh-quota stays behind, because the package
-# removes no state directory.
+# A host whose package stops listing this component stops recording with its next package version.
+# /var/lib/gh-quota stays behind, because the package removes no state directory.
 defaults:
   gh_quota_mode: record
 files:
-  - {src: files/gh_quota.py, dst: /usr/lib/homelab/gh_quota.py, when: has_claude_code}
-  - {src: files/gh_quota.py, dst: /usr/bin/gh-quota, mode: "0755", when: has_claude_code}
-  - {src: templates/gh-quota.conf.j2, dst: /etc/gh-quota.conf, when: has_claude_code}
-  - {src: tmpfiles.d/homelab-gh-quota.conf, dst: /usr/lib/tmpfiles.d/homelab-gh-quota.conf, when: has_claude_code}
+  - {src: files/gh_quota.py, dst: /usr/lib/homelab/gh_quota.py}
+  - {src: files/gh_quota.py, dst: /usr/bin/gh-quota, mode: "0755"}
+  - {src: templates/gh-quota.conf.j2, dst: /etc/gh-quota.conf}
+  - {src: tmpfiles.d/homelab-gh-quota.conf, dst: /usr/lib/tmpfiles.d/homelab-gh-quota.conf}

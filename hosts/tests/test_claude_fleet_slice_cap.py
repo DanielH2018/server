@@ -43,7 +43,6 @@ RC_UNIT = "claude-rc.service.j2"
 # empties the parse fails here rather than passing an all() over nothing.
 REQUIRED_VARS = frozenset(
     {
-        "claude_code_fleet_caps_enabled",
         "claude_code_fleet_slice",
         "claude_code_fleet_memory_high",
         "claude_code_fleet_swap_max",
@@ -201,17 +200,6 @@ def test_rc_unit_is_placed_in_the_fleet_slice(defaults: dict[str, object]) -> No
     )
 
 
-def test_rc_unit_leaves_the_fleet_slice_when_the_shared_parent_is_disabled() -> None:
-    """The way out. claude_code_fleet_caps_enabled: false removes the drop-in, so the unit
-    must stop naming the slice as well — otherwise it sits in an uncapped user.slice and the
-    rollback silently drops its own plane's parent."""
-    rendered = render(RC_UNIT, claude_code_fleet_caps_enabled=False)
-    assert not re.search(r"^Slice=", rendered, re.M), (
-        "with claude_code_fleet_caps_enabled false the unit must fall back to the default "
-        "system.slice, not stay in a slice whose cap has just been removed"
-    )
-
-
 def test_every_plane_cap_is_within_the_fleet_bound(defaults: dict[str, object]) -> None:
     """A sub-bound above its parent's can never be reached, so it means the parent's number.
 
@@ -236,18 +224,6 @@ def test_the_sub_bound_check_rejects_a_plane_larger_than_the_fleet() -> None:
     assert to_bytes("2G") == to_bytes("2048M")
 
 
-def test_the_package_ships_the_parent_drop_in_only_while_the_toggle_is_on(
-    tmp_path,
-) -> None:
-    """Both directions: shipped when enabled, absent from the next version when not.
-
-    A drop-in with no way out is a one-way door: flipping the var back would leave the shared
-    ceiling in place with nothing in the repo saying so.
-    """
+def test_the_package_ships_the_parent_drop_in(tmp_path) -> None:
     drop_in = "/usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf"
-    on = render_daniel_server_with(tmp_path / "on", claude_code_fleet_caps_enabled=True)
-    off = render_daniel_server_with(
-        tmp_path / "off", claude_code_fleet_caps_enabled=False
-    )
-    assert drop_in in on.files
-    assert drop_in not in off.files
+    assert drop_in in render_daniel_server_with(tmp_path).files

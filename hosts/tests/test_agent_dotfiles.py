@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 from _agent_package import agent_setup_script
-from _helpers import HOST_VARS, load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text
+from lib.estate import Estate
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import run, write_exec
 
@@ -169,6 +169,6 @@ def test_the_operator_reads_the_seed_only_under_operator_read(
 def test_every_agent_host_switches_the_dotfiles_on(host: str) -> None:
     """Each host with the agent user gives it the dotfiles, whose claude-guard shim every
     headless launch needs."""
-    host_vars = load_yaml(HOST_VARS / f"{host}.yml")
-    assert host_vars["claude_code_agent_user_enabled"] is True
-    assert host_vars["claude_code_agent_dotfiles"] is True
+    merged = Estate().role_vars(ROLE, host)
+    assert merged["claude_code_agent_user_enabled"] is True
+    assert merged["claude_code_agent_dotfiles"] is True

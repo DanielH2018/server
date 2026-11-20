@@ -22,7 +22,7 @@ from lib.cli_help import ArgumentParser
 from lib import yaml_fast
 from lib.estate import Estate, Inventory
 from lib.inventory_lists import K8S_HOST
-from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES, REPO
+from lib.repo_paths import HOST_VARS, K8S_SERVICES, REPO
 
 UNKNOWN = "unknown"
 HOSTS = REPO / "hosts"
@@ -39,36 +39,30 @@ ROLES = {
 }
 
 
-def _flag(estate: Estate, host: str, key: str) -> str:
-    """Host value, else the group default, else unknown.
-
-    A host that declares nothing still inherits group_vars/all.yml, so "not in host_vars"
-    is not the same as "nobody said". Reading host_vars alone would report `unknown
-    (has_docker not declared)` for daniel-pi — which inherits `has_docker: true` — on the
-    same page whose own text calls the Pi the only remaining Docker host.
-
-    The provenance stays visible rather than collapsing into a bare "yes": the convention
-    here is to never let a default read as something the host asserted.
-    """
-    source = estate.source(host, key)
-    if source is None:
-        return f"{UNKNOWN} ({key} not declared)"
-    value = "yes" if estate.vars(host)[key] else "no"
-    return value if source == "host" else f"{value} (group default)"
-
-
-def _package(name: str, hosts_root: Path) -> str:
-    """The host's package and how many components it lists, or why there is none to name."""
+def _components(name: str, hosts_root: Path) -> list[str] | None:
+    """The components the host's package lists, or None when it has no package."""
     spec = hosts_root / name / "package.yml"
     if not spec.is_file():
+        return None
+    return (yaml_fast.safe_load(spec.read_text()) or {}).get("components") or []
+
+
+def _package(name: str, components: list[str] | None) -> str:
+    """The host's package and how many components it lists, or why there is none to name."""
+    if components is None:
         return f"{UNKNOWN} (no hosts/{name}/package.yml)"
-    components = (yaml_fast.safe_load(spec.read_text()) or {}).get("components") or []
     return f"`homelab-{name}` ({len(components)} components)"
+
+
+def _docker(name: str, components: list[str] | None) -> str:
+    """Whether the host's package ships the Docker engine, the `pi-docker` component."""
+    if components is None:
+        return f"{UNKNOWN} (no hosts/{name}/package.yml)"
+    return "yes" if "pi-docker" in components else "no"
 
 
 def build_rows(
     host_vars: Path = HOST_VARS,
-    all_vars: Path = ALL_VARS,
     hosts_root: Path = HOSTS,
     services: Path = K8S_SERVICES,
 ) -> list[dict[str, str]]:
@@ -80,21 +74,16 @@ def build_rows(
     Args:
         host_vars: Directory holding each host's `host_vars` file.
         services: The k8s service list.
-        all_vars: Path to `group_vars/all.yml`, read for group-default flag values.
         hosts_root: The `hosts/` tree, read for each host's package.
 
     Returns:
         One dict per host, keyed by the columns rendered in `render_markdown`.
     """
-    # A parameter, not the module constant read directly: a test builds a synthetic
-    # inventory in a tmp dir, and reaching past it to the real group_vars would make that
-    # fixture depend on the repo it is meant to stand in for.
-    estate = Estate(
-        Inventory(all_vars=all_vars, host_vars=host_vars, services=services)
-    )
+    estate = Estate(Inventory(host_vars=host_vars, services=services))
     rows = []
     for name in estate.hosts():
         data = estate.own_vars(name)
+        components = _components(name, hosts_root)
         declared = (
             estate.services if name == K8S_HOST else data.get("compose_services") or []
         )
@@ -103,9 +92,9 @@ def build_rows(
                 "name": name,
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
-                "package": _package(name, hosts_root),
+                "package": _package(name, components),
                 "services": str(len(declared)),
-                "docker": _flag(estate, name, "has_docker"),
+                "docker": _docker(name, components),
             }
         )
     return rows

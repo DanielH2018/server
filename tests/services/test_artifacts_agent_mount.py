@@ -44,11 +44,6 @@ def test_an_empty_agent_dir_removes_the_volume_and_the_mount() -> None:
     assert "artifacts-agent" not in {v["name"] for v in pod["volumes"]}
 
 
-def test_the_default_follows_whether_the_agent_user_is_enabled() -> None:
-    assert _agent(_pod({"claude_code_agent_user_enabled": True}))[0] != []
-    assert _agent(_pod({"claude_code_agent_user_enabled": False})) == ([], [])
-
-
 TRIAGE_DIR = "/var/lib/claude-triage-ctl/reports"
 TRIAGE_MOUNT = "/srv/artifacts/daniel-box-claude-triage"
 

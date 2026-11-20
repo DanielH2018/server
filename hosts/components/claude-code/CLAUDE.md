@@ -32,9 +32,11 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   inputs. It sets the agent's groups, home directories, profile, git identity and signing key,
   and it clones the dotfiles and the repo when they are missing. The agent's gh token is a
   declared output of the host's SOPS file.
-- **The role's toggles still decide each subject there.** Every file, output and enable link
-  carries the `when:` of the toggle that gated its task, so setting one false in a host's
-  host_vars drops that subject from the next package version. The agent user is the one
+- **A toggle decides each subject a host can switch off.** That subject's files, outputs and
+  enable links carry the toggle's `when:`, so setting it false in a host's host_vars drops the
+  subject from the next package version. A subject every host listing the component ships, such
+  as rootq, the caps, the two alerts and the background resume, carries no `when:`; taking one
+  back means removing its entries from `component.yml`. The agent user is the one
   exception: the users arm takes no `when:`, so switching the agent off means deleting the
   host's `users:` entry, which the arm then expires. A test holds the two together.
 - **A toggle takes a packaged subject back through the package, not an apply.** Set it false in
@@ -125,8 +127,7 @@ directory.
   (#6021), which the package ships with `templates/50-claude-stop-alert.rules.j2`, which
   lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
   a user that cannot read the webhook, so it starts the instance, named by the error cause in
-  `[a-z0-9_]+`. `claude_code_stop_alert_enabled: false` removes the unit, the rule and the
-  webhook file. ENFORCED: `hosts/tests/test_claude_stop_alert.py`.
+  `[a-z0-9_]+`. ENFORCED: `hosts/tests/test_claude_stop_alert.py`.
 - **A timer that stops firing pages through a textfile, because `OnFailure=` sees only a failed
   run** (#6165). The clone, dotfiles and memory syncs, the triage poller and the fan-out server
   lander write `<unit>.prom` from the `ExecStartPost=` in `templates/timer-textfile.j2`.
@@ -160,7 +161,7 @@ directory.
 - **A session started with `claude agents` reads none of the unit's directives**: it lands in
   `user-<uid>.slice`. `login-slice-caps.conf.j2` and `pytest-fanout-cap.conf.j2` carry
   the unit's caps there for each uid in `claude_code_login_uids` and the agent's. A uid that
-  leaves the list loses both; `claude_code_login_caps_enabled: false` removes all.
+  leaves the list loses both.
 - **The background-shell pressure reaper is off** (`claude_code_rc_disable_bg_shell_pressure_reap`):
   Node reads the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
 - **The weekly restart uses `try-restart`**, which never starts a host kept stopped on purpose.
@@ -174,7 +175,7 @@ directory.
 ## The fleet bound, and why it lives on `user.slice`
 
 `claude_code_fleet_memory_high` / `claude_code_fleet_swap_max` bound both Claude cgroups on
-`user.slice`, their shared parent; `claude_code_fleet_caps_enabled: false` removes both.
+`user.slice`, their shared parent.
 The same drop-in sets
 `hosts/components/claude-code/defaults/main.yml:claude_code_fleet_cpu_weight`, which ranks the
 fleet below `system.slice`, where k3s runs, while the CPU is contended. A weight on
@@ -207,7 +208,6 @@ sessions waited five hours, until the operator ran `claude agents`.
   later dispatch until it idles out. Under the default kill the unit would take every
   session down when it finished or stopped.
 - **The role enables the unit and never starts it.** Its job is the next boot.
-  `claude_code_bg_resume_enabled: false` stops, disables and removes it, and no session dies.
   ENFORCED: `hosts/tests/test_claude_bg_resume_unit.py`.
 - **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
   --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
@@ -687,6 +687,6 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 
 `docs/claude-code-root-helpers.md` holds both grants. The takeover check
 (`claude_code_takeover_check_enabled`) runs a D5 flip PR's dry runs as root on daniel-box.
-rootq (`claude_code_rootq_enabled`) reads root-only host state through a sudo line, and the
+rootq reads root-only host state through a sudo line, and the
 agent user reaches it through `homelab-rootq.socket`. Read that page before you change a
 helper, its allowlist or its grant.
