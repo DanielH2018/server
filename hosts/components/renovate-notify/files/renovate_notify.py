@@ -262,7 +262,7 @@ def pending_state_lost(seen_path: str, last_run_path: str) -> bool:
 
 
 def write_pending_seen(path: str, seen: dict[str, float]) -> None:
-    """Persist the first-seen map, unconditionally — NOT behind Discord delivery.
+    """Persist the first-seen map on every run that read the dashboard — NOT behind Discord delivery.
 
     The `last_notified` fingerprint beside it is written only on a confirmed post, because a
     failed post must be retried. This map is the opposite: it is a clock, and most runs post
@@ -272,20 +272,33 @@ def write_pending_seen(path: str, seen: dict[str, float]) -> None:
     atomic_write(path, json.dumps(seen, sort_keys=True))
 
 
-def get_open(repo: str, kind: str, until_dashboard: bool = False) -> list[dict]:
+def get_open(repo: str, kind: str) -> list[dict]:
     """Return every open item of `kind` ("pulls" or "issues"), paging newest first.
 
     One page misses the oldest items once more than 100 are open, and the oldest are the
-    stuck PRs and the Dependency Dashboard. Stops at a short page or MAX_OPEN_PAGES, and
-    with `until_dashboard` also at the page holding the dashboard.
+    stuck PRs. Stops at a short page or MAX_OPEN_PAGES.
     """
     items: list[dict] = []
     for page in range(1, MAX_OPEN_PAGES + 1):
         batch = get("repos/%s/%s?state=open&per_page=100&page=%d" % (repo, kind, page))
         items += batch
-        if len(batch) < 100 or (until_dashboard and find_dashboard(batch) is not None):
+        if len(batch) < 100:
             break
     return items
+
+
+def renovate_issues(repo: str) -> list[dict]:
+    """Renovate's open issues and PRs, oldest first, in one request: the dashboard's source.
+
+    Not a walk of every open issue: the dashboard is the oldest open item, so it sits on the
+    last page, and closures between two page reads shift it onto a page already read. Only
+    Renovate's own open PRs share the creator filter, and oldest-first puts the dashboard at
+    the top of the one page.
+    """
+    return get(
+        "repos/%s/issues?state=open&creator=%s&sort=created&direction=asc&per_page=100"
+        % (repo, urllib.parse.quote(renovate_identity.BOT_LOGIN))
+    )
 
 
 def main() -> int:
@@ -316,7 +329,7 @@ def main() -> int:
     # stale/missing dashboard means Renovate itself stopped (broken App or renovate.json) —
     # a state with NO PRs, which the digest alone would read as a healthy "backlog cleared".
     # Fold it into the fingerprint so it notifies on transition, not every daily tick.
-    issues = get_open(repo, "issues", until_dashboard=True)
+    issues = renovate_issues(repo)
     stale = dashboard_stale(find_dashboard(issues))
     # Repository Problems (per-package lookup failures, config warnings) get no PR and
     # don't touch dashboard staleness — a package can silently stop updating forever
@@ -417,8 +430,10 @@ def main() -> int:
 
     if not dry:
         # The dwell clock, written every run regardless of what was posted — see
-        # write_pending_seen for why it must not ride the delivery gate.
-        write_pending_seen(seen_file, seen)
+        # write_pending_seen for why it must not ride the delivery gate. A run that found no
+        # dashboard parsed no items, and rewriting from them would restart every clock.
+        if body is not None:
+            write_pending_seen(seen_file, seen)
         # Liveness marker for monitor-bridge — only on a clean completion (a fetch
         # exception propagates and skips this, so a broken notifier goes stale). Atomic
         # (via write_state) so a torn read can't false-page Renovate Notifier — Alive.
