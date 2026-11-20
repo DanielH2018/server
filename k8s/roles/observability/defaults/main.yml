@@ -330,6 +330,7 @@ observability_rule_groups:
   - pod-producers
   - pods
   - k3s-upgrade
+  - arr-apps
 
 # The host table: every host, each with the scrape job that reads its node exporter and the age
 # in seconds past which its last successful update pages. scripts/dev/gen_host_rules.py renders
