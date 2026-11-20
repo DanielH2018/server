@@ -197,7 +197,7 @@ question — is this worktree done with — is a question that module already an
 A claim on another repo's register is judged against that repo's worktrees. With
 `--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout
 and merges against its `origin/main`, through the checkout table `REGISTER_CHECKOUTS` in
-`scripts/dev/findings_lib/boundaries.py`. A repo missing from that table makes `claim`,
+`scripts/dev/fanout_lib/target.py`. A repo missing from that table makes `claim`,
 `claims`, `reap` and `next` exit 2. Against this repo's worktrees, every claim on it would
 name a branch nothing here has checked out, so each would read as stale.
 

@@ -672,7 +672,7 @@ Every step works on the dotfiles register (`DanielH2018/dotfiles`) once each `fi
 `fanout.py place launch` call carries `--repo DanielH2018/dotfiles`. The flag sends each gh read
 and write there. It also makes `claim`, `claims`, `reap` and `next` judge claims against the
 chezmoi checkout and its `origin/main` (`REGISTER_CHECKOUTS` in
-`scripts/dev/findings_lib/boundaries.py`). `launch --repo` accepts exactly the repos that table
+`scripts/dev/fanout_lib/target.py`). `launch --repo` accepts exactly the repos that table
 lists. Three steps differ from the sections above.
 
 a. **Triage** with `next --json --repo DanielH2018/dotfiles`; `launch --repo` runs the reap.
