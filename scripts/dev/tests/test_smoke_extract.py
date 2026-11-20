@@ -8,8 +8,8 @@ from dev.smoke_extract import extract_changed_images
 
 def test_extracts_added_image_line():
     diff = (
-        "diff --git a/ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2 "
-        "b/ansible/roles/containers/cadvisor/templates/docker-compose.yml.j2\n"
+        "diff --git a/hosts/components/pi-compose/services/cadvisor/compose.yaml.j2 "
+        "b/hosts/components/pi-compose/services/cadvisor/compose.yaml.j2\n"
         "--- a/...\n+++ b/...\n"
         "@@ -1 +1 @@\n"
         "-    image: ghcr.io/google/cadvisor:v0.53.0\n"
@@ -116,10 +116,10 @@ def test_k8s_default_image_ignores_removed_and_non_image_vars():
 def test_a_moved_defaults_file_with_identical_pins_selects_nothing():
     """An unpaired move: the old path's lines all removed, the new path's all added."""
     diff = (
-        "diff --git a/ansible/roles/k8s/homepage/defaults/main.yml "
-        "b/ansible/roles/k8s/homepage/defaults/main.yml\n"
+        "diff --git a/k8s/roles/dashboard/defaults/main.yml "
+        "b/k8s/roles/dashboard/defaults/main.yml\n"
         "deleted file mode 100644\n"
-        "--- a/ansible/roles/k8s/homepage/defaults/main.yml\n"
+        "--- a/k8s/roles/dashboard/defaults/main.yml\n"
         "+++ /dev/null\n"
         "@@ -1,2 +0,0 @@\n"
         "-homepage_k8s_image: ghcr.io/gethomepage/homepage:v1.4.0\n"
