@@ -239,6 +239,15 @@ def _stripped(rel: str) -> Subject:
     return Subject(rel, re.sub(r" KUBECONFIG=(?:\{\{.*?\}\}|[^\s{])*", "", text))
 
 
+def _stripped_as(rel: str, user_line: str) -> Subject:
+    """`_stripped(rel)` with its `User=` line replaced by `user_line`."""
+    text, n = re.subn(
+        r"^User=.*\n", user_line, _stripped(rel).text, count=1, flags=re.M
+    )
+    assert n == 1, f"{rel} has no User= line to replace"
+    return Subject(rel, text)
+
+
 UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
     name="non-root-units-reaching-the-cluster-set-kubeconfig",
     reason=(
@@ -260,6 +269,9 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
     green=(
         Subject(_B2_BUDGET),
         Subject("hosts/components/claude-code/templates/claude-memory-sync.service.j2"),
+        # A unit running as root reads k3s.yaml itself, and so does one with no User= line.
+        _stripped_as(_B2_BUDGET, "User=root\n"),
+        _stripped_as(_B2_BUDGET, ""),
     ),
     # 79 units and templates when the row landed (2026-11-12).
     min_matches=60,
