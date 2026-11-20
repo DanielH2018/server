@@ -91,6 +91,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/ha_rollup.py') }}": ha_rollup.py
       "{{ role_file('files/dags/claude_usage_rollup.py') }}": claude_usage_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/claude_usage.py') }}": claude_usage.py
+      "{{ role_file('files/dags/claude_decisions_rollup.py') }}": claude_decisions_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/claude_decisions.py') }}": claude_decisions.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 
