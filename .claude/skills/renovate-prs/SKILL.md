@@ -249,8 +249,9 @@ gh run list --workflow ci.yml --event workflow_dispatch --limit 1
 The branch is read and pasted in two commands because a command substitution never
 auto-approves (`docs/claude-shell-permissions.md`).
 
-A CI-toolchain pin inherits `minimumReleaseAge` from the catch-all rule (`renovate.json`, the
-`{{depName}}` rule's own description says so), so the first line exits 3 while the PR soaks.
+A CI-toolchain pin inherits `minimumReleaseAge` from the catch-all rule in `renovate.json`,
+because the `{{depName}}` rule sets no age of its own. The first line therefore exits 3 while
+the PR soaks.
 Stop there: the dispatch needs the refreshed branch, and dispatching the unrefreshed one
 sweeps the old image.
 

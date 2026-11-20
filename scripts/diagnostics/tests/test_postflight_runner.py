@@ -8,17 +8,12 @@ decrypts nothing, so it needs none of that module's autouse stubs.
 Run: uv run pytest scripts/diagnostics/tests/test_postflight_runner.py
 """
 
-import os
 import socket
-import sys
 
 import pytest
 
-# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
-# module puts its own parent directory on `sys.path` — the insert every sibling here carries.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import postflight
+from diagnostics import postflight
 
 
 def only_checks(monkeypatch, checks):

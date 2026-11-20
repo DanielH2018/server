@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-import forge
+from deploy_tools import forge
 
 LIMITED = "gh: API rate limit exceeded for user ID 41801780. (HTTP 403)"
 

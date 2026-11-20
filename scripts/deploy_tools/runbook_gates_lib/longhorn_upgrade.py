@@ -44,9 +44,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path as _Path
 
-# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from deploy_tools.runbook_gates_lib import gate_runner
 from deploy_tools.runbook_gates_lib.gate_runner import (
@@ -68,9 +65,8 @@ from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 # The backup target names, shared with the backup-health cron; it imports host_lib.
 from lib import host_modules  # noqa: F401
 
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_backups
-from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
+from lib.longhorn_lib import longhorn_backups
+from lib.longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"

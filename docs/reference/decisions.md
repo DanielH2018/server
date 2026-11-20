@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-20 00:20 UTC
-generated_sha: 97727c54d
+generated_at: 2026-11-20 01:49 UTC
+generated_sha: a1215438a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,15 @@ generated_sha: 97727c54d
 
 # Decisions
 
-628 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+629 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
 
     * `.claude/hooks/_claude_guard.py` and `scripts/lib/_claude_worktree.py`: no fallback to a stale local copy when the deploy is missing.
+    * `.github/actions/host-packages-handoff/action.yml` and `.github/actions/pinned-tool/action.yml`: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`,
+    * `.github/actions/host-packages-handoff/action.yml` and `.github/actions/pytest-tools/action.yml`: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`,
+    * `.github/actions/host-packages-handoff/action.yml` and `.github/actions/setup/action.yml`: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`,
     * `.github/actions/pinned-tool/action.yml` and `.github/actions/pytest-tools/action.yml`: the step below names actions/cache by version tag with `zizmor: ignore[unpinned-uses]`,
     * `.github/actions/pinned-tool/action.yml` and `.github/actions/setup/action.yml`: the step below names actions/cache by version tag with `zizmor: ignore[unpinned-uses]`,
     * `.github/actions/pytest-tools/action.yml` and `.github/actions/setup/action.yml`: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`,
@@ -672,6 +675,8 @@ generated_sha: 97727c54d
 | `ha-review` stays its own skill, not a `/homelab-review` domain (#2428, | `.claude/skills/ha-review/SKILL.md` | 2026-09-24 |
 | no skeptic cap and no `maxTurns` on `skeptic` (#4615). | `.claude/skills/homelab-review/SKILL.md` | 2026-11-14 |
 | no `maxTurns` on `implementer` (#4652, #4663). | `.claude/skills/homelab-review/SKILL.md` | 2026-11-14 |
+| the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-20 |
+| no download-artifact step in ci.yml, promote.yml or an action they call retries, unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure that a rerun cleared; every red one followed a build that never uploaded. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-20 |
 | the step below names actions/cache by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/pinned-tool/action.yml` | 2026-11-19 |
 | the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/pytest-tools/action.yml` | 2026-11-18 |
 | callers write `uses: $/.github/actions/setup`, which pins this action to the workflow's own commit, and the `actionlint` prek hook runs through scripts/validate/actionlint_dollar_refs.py (2026-11-12). actionlint 1.7.12 rejects `$/` as "ref is missing" and then skips checking the caller's `with:` keys against the inputs below (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and its test. The pin costs every job a download of this repository's tarball during `Set up job`, a median 2.3s on pytest legs (0.9s to 2.7s), accepted on 2026-11-15; a `./` reference reads the job's checkout and downloads nothing. | `.github/actions/setup/action.yml` | 2026-11-12 |
@@ -682,8 +687,7 @@ generated_sha: 97727c54d
 | six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14) | `.github/workflows/ci.yml` | 2026-11-14 |
 | only master saves, once per shard per UTC day: about 7 MB per shard, so six entries a day. A per-run key would write about 42 MB per run against a cache budget already over 10 GB, and evict the pinned-tool caches first. A PR branch's entry is visible to that branch alone, so a PR save would help no other run. | `.github/workflows/ci.yml` | 2026-11-14 |
 | the step annotates and never fails, on every event. at most that module's own seconds, until the docs-refresh cron's `--refresh-runner` reads the module off green master runs, within a day. A failed run costs a full rerun from the 20-job runner pool. A failing version kept failing PRs on a weight the PR could not have known about. | `.github/workflows/ci.yml` | 2026-11-13 |
-| no download-artifact step in ci.yml or promote.yml retries, unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure that a rerun cleared; every red one followed a build that never uploaded. | `.github/workflows/ci.yml` | 2026-11-12 |
-| the download-artifact steps run once, unlike the curl and gh calls. 2026-10-13..11-12 no promote download failed at all; ci.yml's host_packages job carries the full measurement. | `.github/workflows/promote.yml` | 2026-11-12 |
+| the download-artifact steps run once, unlike the curl and gh calls. 2026-10-13..11-12 no promote download failed at all; the host-packages-handoff action carries the full measurement. | `.github/workflows/promote.yml` | 2026-11-12 |
 | statuses: write sits in a job that checks out nothing, never in `verify`, which runs repository code (contract C2). | `.github/workflows/promote.yml` | 2026-11-09 |
 | a job that checks out nothing holds packages: write to move `last-good` for a run that lost its `settle` (contract C2). statuses: read is the verdict-status read. actions: write is the dispatch step's. | `.github/workflows/promote.yml` | 2026-11-09 |
 | `[A-Z][A-Z]+`, not `[A-Z]{2,}`. `{2,}` form parses as two broken patterns. The first attempt silently ignored nothing; wrapped in a group, it failed with "missing closing )". | `.vale.ini` | 2026-09-25 |

@@ -20,6 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from pathlib import Path
 
 from lib import yaml_fast
+from lib.container_entry import ContainerEntry
 from lib.inventory_lists import K8S_HOST
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import render_context
@@ -39,9 +40,13 @@ def load_stubs(path: Path) -> dict:
     return yaml_fast.safe_load(path.read_text()) or {}
 
 
-def sorted_services(entries: list[dict]) -> list[dict]:
+def sorted_services(
+    entries: tuple[ContainerEntry, ...],
+) -> tuple[ContainerEntry, ...]:
     """`entries` in the order the templates read them, toposorted."""
-    return toposort_containers(entries, build_k8s_dep_map(entries, str(K8S_ROLES)))
+    return tuple(
+        toposort_containers(entries, build_k8s_dep_map(entries, str(K8S_ROLES)))
+    )
 
 
 def template_context(

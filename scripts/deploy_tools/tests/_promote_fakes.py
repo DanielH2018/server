@@ -18,8 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-import forge
-import promote
+from deploy_tools import forge
+from deploy_tools import promote
 from deploy_tools.promote_lib import reboot_window
 
 CONTEXT = "prek (lint + validate + tests + secrets)"

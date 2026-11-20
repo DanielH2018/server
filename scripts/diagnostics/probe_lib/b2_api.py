@@ -10,14 +10,6 @@ longhorn.py keeps the `b2-longhorn` and `b2-budget` subcommands that drive this.
 reads the live Volume/Backup/PV objects.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from diagnostics.probe_lib.core import DEFAULT_TIMEOUT, Unreadable
 
 # Re-exported only: longhorn.py prints it in the `--dry-run` description of both subcommands.

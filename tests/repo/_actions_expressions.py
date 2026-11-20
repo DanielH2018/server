@@ -1,6 +1,6 @@
 """A small GitHub Actions expression evaluator, and the runner's `$GITHUB_OUTPUT` parser.
 
-`test_ci_arm64_tools_download_gates.py` and `test_ci_k3s_download_job_off_critical_path.py`
+`test_ci_arm64_tools_download_gates.py` and `_ci_k3s_download_rows.py`
 walk a job's steps with these: `condition` decides a step's `if:`, `interpolate` resolves
 `${{ }}` in its `env:` and `run:`, and `read_outputs` turns what a step wrote into
 `steps.<id>.outputs`. The evaluator

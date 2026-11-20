@@ -22,7 +22,8 @@ live tip, a pin master raised after the merge ref was built reads as one this PR
 ref's first parent in CI, the fork point on a local branch, and HEAD itself on master.
 
 The comparison needs the `origin/master` ref. It skips, naming the reason, when the ref is not
-fetched — `test_ci_pytest_job_fetch_depth.py` is what keeps it resolvable on the runner, the
+fetched — the `ci-pytest-job-checks-out-full-history` row of `tests/repo/_ci_job_rows.py`
+is what keeps it resolvable on the runner, the
 same arrangement `test_module_length_ratchet.py` relies on. A stale local ref yields an older
 base, which can only make the check lenient.
 

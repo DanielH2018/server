@@ -28,7 +28,7 @@ FLUX = ("authelia", "bento-pdf", "texbrain")
 @pytest.fixture
 def land_run_main(monkeypatch, capsys):
     """`land.main(["--pr", "999"])` over the given tools and classifier; (rc, stdout)."""
-    import land
+    from deploy_tools import land
 
     def run(tools, classifier, *args):
         monkeypatch.setenv("LAND_PRIMARY", str(PRIMARY))

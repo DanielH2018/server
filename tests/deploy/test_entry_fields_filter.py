@@ -23,7 +23,6 @@ ENTRIES = [
     },
     {"name": "dns", "extra_hostnames": ["dns-alias"]},
     {"name": "glances", "port": 61208, "hostname": "glances"},
-    "not-an-entry",
 ]
 
 

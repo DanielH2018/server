@@ -101,8 +101,8 @@ DNS.
 
 ### `DiscordDeliveryFailing`
 
-One of the five Discord webhooks (Kuma, CrowdSec, `gitops-deploy`, *arr, healthchecks) no longer
-resolves, or the Gmail SMTP backstop login failed.
+One of the five Discord webhooks (Alertmanager, CrowdSec, `gitops-deploy`, *arr, healthchecks) no
+longer resolves, or the Gmail SMTP backstop login failed.
 
 - Read which: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN discord '`.
 - Rotate the named webhook in SOPS with the `add-secret` skill's flow, then let `promote`

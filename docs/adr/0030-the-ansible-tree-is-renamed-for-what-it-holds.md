@@ -93,7 +93,8 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   pauses for it, and every open branch that touches `ansible/` rebases afterwards.
 - The rotation register holds no secret. Under `secrets/`, the generic `.sops.yaml`
   creation rule and any check that expects every YAML file there to be encrypted would also
-  match it. Step 2 checks `test_sops_creation_rules.py` and the protected-edits hook before it
+  match it. Step 2 checks the `sops-creation-rules-*` rows, the
+  `sops-cluster-rules-resolve-as-adr-0022-decides` row and the protected-edits hook before it
   places the register.
 - Copies of `ansible/` paths outside the repository do not move with it. The dotfiles
   repo's auto-mode classifier text names the secrets, inventory and cluster-base paths, and it
@@ -112,7 +113,7 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   `(^|secrets/)hosts/daniel-pi\.sops\.yaml$`. Each rule then matches a path relative to
   `secrets/`, to the repo root, or absolute, and matches no file outside `secrets/`, so
   `sops --config secrets/.sops.yaml` run on any other file finds no rule.
-  `tests/repo/test_sops_creation_rules.py` holds both halves. The generic rule matches a YAML
+  The `sops-creation-rules-*` rows of `tests/repo/test_census_rows_roles.py` hold both halves. The generic rule matches a YAML
   file directly under `secrets/` or `secrets/cluster-manifests/`, and no per-host file. The
   plaintext rotation register matches it, and no command encrypts it.
 - The secret-rotation history walk reads `secrets.yml` at both paths. A `git log` on the new

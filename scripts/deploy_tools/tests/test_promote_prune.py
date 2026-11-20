@@ -13,9 +13,9 @@ from urllib.parse import urlsplit
 
 import pytest
 
-import artifact_retention
-import forge
-import promote
+from deploy_tools import artifact_retention
+from deploy_tools import forge
+from deploy_tools import promote
 from _promote_fakes import World, digest_of, package_version
 
 NOW = datetime(2026, 11, 1, tzinfo=UTC)

@@ -37,9 +37,10 @@ The root runs in the primary checkout and stays thin. It does six things:
   project. Relay every line under `asks:` to the operator.
 - **Set project order.** When two projects want the same file or the same landing, say
   which goes first, and message both sub-coordinators.
-- **Sequence a serial PR across projects.** `land.sh` lands a serial PR alone
-  (`docs/landing.md`, *Rules that refuse a merge*). When a sub-coordinator's recap names
-  one, tell the other sub-coordinators to pause refills until it reports the verdict.
+- **Sequence a serial PR across projects.** `land.sh` lands a serial PR alone and refuses
+  every other merge meanwhile (`docs/landing.md`, *Rules that refuse a merge*). When a
+  recap's `asks:` says a serial PR's landing has started, tell the other sub-coordinators
+  to pause refills until it reports the verdict. A planned or in-review one pauses nothing.
 - **Triage a park flagged `unattributed`.** The hold named no failed service, so no
   sub-coordinator can say whose it is. Read `uv run python scripts/diagnostics/probe.py
   landing` and the hold's `deploy-failed` line (`docs/landing.md`, *Reading a
@@ -105,6 +106,8 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
     - **Pause refills while `DEPLOY_HOLD` is set or the root asks.** `probe.py landing`
       prints the hold. Batches that are running finish; launch nothing until `cc-wait
       landing-clear` ends 0 or the root says to go on.
+    - **Report a serial PR when its landing starts, not at triage.** Put `root: serial #N
+      landing` under `asks:` on that turn, and `root: serial #N <verdict>` when it ends.
     - **Exit 8 from `launch` is another coordinator's launch.** Run the same command again.
       A refusal that names another run's file is that coordinator's batch: hold the issue,
       and never clean its run.
@@ -121,22 +124,19 @@ Land and re-land **only the PRs of your own runs**, without asking, inside `CLAU
 *When to wait*. A review batch lands its own draft on either host, so most PRs need nothing
 from you. `place status` names the ones that do.
 
-- **Before any `land.sh` on a daniel-server batch's PR, run `uv run python
-  scripts/diagnostics/probe.py lander`.** It shows what the server lander did with the PR
-  and how that landing ended, which decides whether the PR is yours to land. `land.sh`
-  itself refuses a second landing of a PR whose landing is live (`docs/landing.md`, *One
-  landing of a PR at a time*), so the probe is no guard against a double landing.
-- **Never land a PR the server lander qualifies.** `docs/issue-claiming-and-fanout.md`,
-  *Who lands a daniel-server batch's PR*, says which outcome is the lander's and which is
-  yours.
+- **Pass `--fresh` to every `land.sh` you run, from the first attempt.** Your locked
+  worktree never follows master, so a landing from it ends `refused` for landing code
+  older than master's (`land-after-merge`, *The invocation*).
+- **Never land a PR the server lander qualifies** (`docs/issue-claiming-and-fanout.md`,
+  *Who lands a daniel-server batch's PR*).
 - **A PR the lander's rule held** reads `needs-input: the server lander will not land #N`
   in `place status`, with the next step and the lander's ruling. An operator step goes
-  under `asks:`. A PR held for the lander's own surface is yours to land once the probe
-  shows no landing for it. `done (awaiting the server lander: <ruling>)` is not yours: the
-  lander clears that ruling itself.
+  under `asks:`. A PR held for the lander's own surface is yours to land, by the step the
+  line names. `done (awaiting the server lander: <ruling>)` is the lander's to clear.
 - **Re-land each `parked` PR.** Run `cc-wait landing-clear`, then the `land.sh` command the
   park line names. A park line that opens `another landing has it` is the exception: run
-  the `cc-wait land` command it quotes and read that landing's verdict. A park line ending `unattributed` also goes under `asks:` for the root.
+  the `cc-wait land` command it quotes and read that landing's verdict. A park line ending
+  `unattributed` also goes under `asks:` for the root.
 - **A batch that still ends on a merge conflict is a spawned agent's to rebase.** The
   batch already spent its one resume, or had no run time for it, and its `needs-input`
   line names the conflicting files. Hand those files to one agent that rebases the
@@ -181,7 +181,7 @@ asks: <one line per ask, or none>
   `blocked` means refills are paused, by a hold or by the root.
 - `last` holds the three newest PRs of your runs with each landing's verdict, or `open`.
 - An ask names who it is for and the one thing needed: `operator: dispatch promote for
-  <sha>`.
+  <sha>`, or `root: serial #<n> landing`.
 
 Done when: the block is the first thing in the turn's last message and is under 300
 characters.

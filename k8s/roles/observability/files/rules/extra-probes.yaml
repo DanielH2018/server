@@ -1,6 +1,6 @@
 # The extra probes and the Pi's port arm, read from the `blackbox-extra` and
 # `blackbox-pi-ports` scrape jobs. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries
-# this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# this file verbatim. The design is docs/archive/monitoring/m6-retire-kuma.md,
 # "B0, B5, B7 and B8".
 #
 # ExtraProbeFailedCritical is critical, so Discord and email; the rest are warnings, so
