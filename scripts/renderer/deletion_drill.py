@@ -35,6 +35,12 @@ import yaml
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
+from lib.k8s_conditions import (
+    NO_CONDITION,
+    Condition,
+    ConditionStatus,
+    parse_conditions,
+)
 from lib.repo_paths import K8S_ROLES
 from renderer.homelab_render import secret_keys
 from renderer.renderer_lib.bundle import flux_files, kustomization_text
@@ -257,11 +263,8 @@ def _find(
     return None
 
 
-def _condition(obj: dict | None, kind: str) -> dict:
-    for cond in (obj or {}).get("status", {}).get("conditions", []):
-        if cond.get("type") == kind:
-            return cond
-    return {}
+def _condition(obj: dict | None, kind: str) -> Condition:
+    return parse_conditions(obj or {}).get(kind, NO_CONDITION)
 
 
 def _survives(obj: dict | None) -> bool:
@@ -295,8 +298,9 @@ def revision_1_problems(items: list[dict]) -> list[str]:
     problems = []
     for tag in TAGS:
         ks = _find(items, "Kustomization", tag, FLUX_NAMESPACE)
-        if _condition(ks, "Ready").get("status") != "True":
-            message = _condition(ks, "Ready").get("message", "no Ready condition")
+        ready = _condition(ks, "Ready")
+        if ready.status is not ConditionStatus.TRUE:
+            message = ready.message or "no Ready condition"
             problems.append(f"Kustomization {tag} is not Ready: {message[:200]}")
     for ns, claim in (
         (AS_RENDERED, "data"),
@@ -348,7 +352,7 @@ def inventory_prune_problems(items: list[dict]) -> list[str]:
     problems = []
     if not revision.startswith(f"{DRILL_REPO}@"):
         problems.append(f"the served revision {revision!r} is not the drill bundle's")
-    if _condition(ks, "Ready").get("status") != "True":
+    if _condition(ks, "Ready").status is not ConditionStatus.TRUE:
         problems.append(f"Kustomization {KEEP} is not Ready")
     if (ks or {}).get("status", {}).get("lastAppliedRevision") != revision:
         problems.append(f"Kustomization {KEEP} has not applied {revision}")
@@ -366,10 +370,11 @@ def break_glass_problems(items: list[dict]) -> list[str]:
     source = _find(items, "OCIRepository", ROOT, FLUX_NAMESPACE)
     revision = _artifact_revision(items)
     problems = []
-    if _condition(source, "Ready").get("status") != "True":
-        message = _condition(source, "Ready").get("message", "no Ready condition")
+    ready = _condition(source, "Ready")
+    if ready.status is not ConditionStatus.TRUE:
+        message = ready.message or "no Ready condition"
         problems.append(f"OCIRepository {ROOT} is not Ready: {message[:200]}")
-    if _condition(source, "SourceVerified").get("status") != "True":
+    if _condition(source, "SourceVerified").status is not ConditionStatus.TRUE:
         problems.append(f"OCIRepository {ROOT} reports no SourceVerified=True")
     if not revision.startswith(f"{BG_REPO}@"):
         problems.append(
@@ -395,16 +400,16 @@ def break_glass_red_problems(items: list[dict]) -> list[str]:
     ready = _condition(source, "Ready")
     problems = []
     meta = (source or {}).get("metadata", {})
-    if ready.get("observedGeneration") != meta.get("generation"):
+    if ready.observed_generation != meta.get("generation"):
         problems.append("the OCIRepository has not yet judged the red source")
-    elif ready.get("status") == "True":
+    elif ready.status is ConditionStatus.TRUE:
         problems.append(
             f"OCIRepository {ROOT} is Ready on a bundle signed by another key"
         )
-    elif not VERIFICATION_WORDS.search(ready.get("message", "")):
+    elif not VERIFICATION_WORDS.search(ready.message):
         problems.append(
             f"OCIRepository {ROOT} failed, but not on verification: "
-            f"{ready.get('message', '')[:200]!r}"
+            f"{ready.message[:200]!r}"
         )
     if _artifact_revision(items).startswith(f"{BG_RED_REPO}@"):
         problems.append("source-controller served the red bundle")

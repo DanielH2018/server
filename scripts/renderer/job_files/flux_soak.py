@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from changed_set import ROOT, changed_set
+from k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 from soak_pods import (
     UNMAPPED,
     WORKLOADS,
@@ -150,15 +151,8 @@ class Verdict:
         return sorted({service for service, _ in self.failures})
 
 
-def _condition(obj: Mapping, kind: str) -> Mapping:
-    for condition in (obj.get("status") or {}).get("conditions") or []:
-        if condition.get("type") == kind:
-            return condition
-    return {}
-
-
 def _true(obj: Mapping, kind: str) -> bool:
-    return _condition(obj, kind).get("status") == "True"
+    return parse_conditions(obj).get(kind, NO_CONDITION).status is ConditionStatus.TRUE
 
 
 def anchor(source: Mapping, revision: str) -> float:
@@ -345,9 +339,9 @@ def wait_seconds(inputs: Inputs, services: Iterable[str]) -> int:
 
 
 def _ready_since(pod: Mapping) -> float | None:
-    ready = _condition(pod, "Ready")
-    if ready.get("status") == "True" and ready.get("lastTransitionTime"):
-        return parse_time(ready["lastTransitionTime"])
+    ready = parse_conditions(pod).get("Ready", NO_CONDITION)
+    if ready.status is ConditionStatus.TRUE and ready.last_transition:
+        return parse_time(ready.last_transition)
     return None
 
 

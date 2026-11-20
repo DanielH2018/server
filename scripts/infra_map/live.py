@@ -15,7 +15,7 @@ from infra_map.constants import HOST_PLANE, LOCAL_TIMEOUT, SSH_TIMEOUT
 # KUBECONFIG, so k3s falls back to the root-owned kubeconfig and returns nothing. The same
 # `find_tool` covers docker and ssh below.
 from lib import kubectl as kubectl_lib
-from lib.k8s_objects import ConditionStatus, parse_conditions
+from lib.k8s_conditions import ConditionStatus, parse_conditions
 from lib.kubectl import MissingKubectl, WrongCluster, cluster_for_host, find_tool
 
 
