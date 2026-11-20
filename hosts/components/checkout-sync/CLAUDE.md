@@ -27,4 +27,9 @@
 
 ENFORCED: hosts/lib/tests/test_checkout_sync.py (the sync over a fixture repository) and
 hosts/lib/tests/test_checkout_sync_component.py (the units), and
-tests/services/test_not_reporting_rule_deadlines.py (the rule's deadline).
+tests/services/test_b6a_rule_literals.py (the rules' deadline on every host).
+
+The contract is per host. daniel-box and daniel-server list the component, and each host's
+copy of the two rules names that host
+(`k8s/roles/observability/files/rule-tables/host-checks.yaml`, selector
+`{component: checkout-sync}`).

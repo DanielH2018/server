@@ -2413,3 +2413,82 @@ tests:
                 homelab-kubelet-shutdown-lock.timer` and `journalctl -t kubelet-shutdown-lock`
                 on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlocknotreporting
+
+  # checkout-sync on daniel-server refused (a dirty tree, say) from hour 3. CheckoutSyncFailed
+  # fires for daniel-server alone, and daniel-box's green verdict keeps its copy quiet.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_success{check="checkout-sync", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x3 0x3'
+      - series: 'homelab_check_success{check="checkout-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x6'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CheckoutSyncFailed
+        exp_alerts: []
+      - eval_time: 4h
+        alertname: CheckoutSyncFailed
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
+            exp_annotations:
+              summary: 'daniel-server: the primary checkout sync is refusing to fast-forward.'
+              description: >-
+                homelab-checkout-sync on daniel-server refused its last run, so the primary
+                checkout is not following master. The homelab_checkout_sync_refused metric names
+                the reason; a dirty tree, an untracked file included, is the usual one. Read
+                `journalctl -t homelab-checkout-sync` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncfailed
+
+  # daniel-server's timestamp froze at 0 while daniel-box's stays fresh. The stale arm fires for
+  # daniel-server once the timestamp is more than 7200s old, after hour 2.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="checkout-sync", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x4'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x4'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="checkout-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+3600x4'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
+            exp_annotations:
+              summary: 'daniel-server: the primary checkout sync has stopped reporting.'
+              description: >-
+                No checkout-sync verdict newer than 2 hours reached Prometheus from
+                daniel-server, so nothing confirms the primary checkout follows master. A fetch
+                that keeps failing or a git-tree lock held for hours writes no verdict. Read
+                `journalctl -t homelab-checkout-sync` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
+
+  # No checkout-sync series at all: the absent_over_time arm fires for every host whose package
+  # lists the component.
+  - interval: 1h
+    input_series: []
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, origin: daniel-box, severity: warning, service: daniel-box}
+            exp_annotations:
+              summary: 'daniel-box: the primary checkout sync has stopped reporting.'
+              description: >-
+                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
+                so nothing confirms the primary checkout follows master. A fetch that keeps
+                failing or a git-tree lock held for hours writes no verdict. Read `journalctl -t
+                homelab-checkout-sync` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
+          - exp_labels: {check: checkout-sync, origin: daniel-server, severity: warning, service: daniel-server}
+            exp_annotations:
+              summary: 'daniel-server: the primary checkout sync has stopped reporting.'
+              description: >-
+                No checkout-sync verdict newer than 2 hours reached Prometheus from
+                daniel-server, so nothing confirms the primary checkout follows master. A fetch
+                that keeps failing or a git-tree lock held for hours writes no verdict. Read
+                `journalctl -t homelab-checkout-sync` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting

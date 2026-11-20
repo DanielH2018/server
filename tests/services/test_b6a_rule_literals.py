@@ -6,6 +6,7 @@ twice: the `> N` of the stale-file arm and the `[Ns]` window of the absent_over_
 producer script renders that deadline from the role default its timer's `OnCalendar` also
 reads. A timer moved to a slower cadence without the rule would page on every healthy gap (M1
 convention 1).
+checkout-sync is Python, so its rules are pinned to the module's `DEADLINE_S` rather than a render.
 The same pin for disk-health is `test_disk_health_rule_literals.py`.
 
 Run: uv run pytest tests/services/test_b6a_rule_literals.py
@@ -14,6 +15,7 @@ Run: uv run pytest tests/services/test_b6a_rule_literals.py
 import json
 import re
 
+import checkout_sync
 import pytest
 from _helpers import K8S_ROLES
 from _setup_render import render_component_text
@@ -195,4 +197,23 @@ def test_the_weekly_summary_rules_against_a_longer_deadline_are_flagged():
         assert literal_problems("ClaudeWeeklySummaryNotReporting", expr, 1213200) == [
             "the `>` threshold reads 608400s, and the producer renders 1213200",
             "the absent_over_time window reads 608400s, and the producer renders 1213200",
+        ]
+
+
+def test_the_checkout_sync_rules_carry_its_deadline_on_every_host_is_clean():
+    exprs = rule_exprs("CheckoutSyncNotReporting")
+    assert any('origin="daniel-box"' in expr for expr in exprs)
+    for expr in exprs:
+        assert f'check="{checkout_sync.CHECK}"' in expr
+        assert (
+            literal_problems("CheckoutSyncNotReporting", expr, checkout_sync.DEADLINE_S)
+            == []
+        )
+
+
+def test_the_checkout_sync_rules_against_a_shorter_deadline_are_flagged():
+    for expr in rule_exprs("CheckoutSyncNotReporting"):
+        assert literal_problems("CheckoutSyncNotReporting", expr, 3600) == [
+            "the `>` threshold reads 7200s, and the producer renders 3600",
+            "the absent_over_time window reads 7200s, and the producer renders 3600",
         ]
