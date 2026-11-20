@@ -14,11 +14,10 @@ and the per-leg setup it prints is what a cut to the setup steps is measured by.
 For each run it prints:
 
 - the slot-seconds, summed over every job that ran, then per job family (the name before
-  ` (`, so the six `pytest (shard N of 6)` legs are one `pytest` row);
+  ` (`, so the `pytest (shard N)` legs are one `pytest` row);
 - the queue wait at p50 and p90 over the run's jobs, and each family's median wait;
 - the median time a pytest leg spent outside `Run the test suite`, and that time per step;
-- the pytest legs a pull request's selection left empty, against what a planning job would
-  cost instead.
+- how many pytest legs ran empty, and the slot-seconds they held.
 
 A job's queue wait is `started_at - created_at`. GitHub creates a job's record when the jobs
 it `needs` have finished, not when the run starts, so `created_at` already marks the moment
@@ -28,16 +27,14 @@ out.
 
 `--recent N` reads the newest N green `push` runs on master that ran at least one pytest leg,
 then prints one line per run and a pooled block over all of them; `--all` prints each run's
-full block instead of its line. `--pull-requests` reads green `pull_request` runs instead,
-the only runs whose legs can be empty.
+full block instead of its line. `--pull-requests` reads green `pull_request` runs instead.
 
 AN EMPTY LEG is one whose `Run the test suite` step concluded `skipped`: the selection packed
 nothing into it, so it ran the checkout, the setup and the select step, then ended green. The
 API stamps a skipped step with equal start and end times, so its span counts in no leg's setup.
-A job that ran one select step and published the leg list would do the same work as one empty
-leg, so the estimate takes the median empty leg's span as its slot cost. Every pytest leg
-would be created only once that job finished, so each leg would start later by the median
-empty leg's queue wait plus that span, on every run.
+A run starts only the legs `pytest_plan` planned, so its one empty leg is the leg a selection
+of no modules still starts. A run whose plan failed starts every leg, and its spare legs run
+empty.
 """
 
 import re
@@ -170,13 +167,8 @@ def run_cost(jobs: list[dict]) -> dict:
         },
         "leg_outside_s": [outside for outside, _ in legs],
         "leg_steps": [steps for _, steps in legs],
-        "empty_legs": [
-            {
-                "slot_s": s["finished"] - s["started"],
-                "wait_s": s["started"] - s["queued"],
-            }
-            for s in pytest_spans
-            if leg_is_empty(s)
+        "empty_legs_s": [
+            s["finished"] - s["started"] for s in pytest_spans if leg_is_empty(s)
         ],
     }
 
@@ -202,18 +194,14 @@ def _setup_lines(outside: list[float], steps: list[dict[str, float]]) -> list[st
 
 
 def empty_leg_line(costs: list[dict]) -> str:
-    """The empty pytest legs' slot-seconds over `costs`, against a planning job on each run."""
-    empty = [leg for c in costs for leg in c["empty_legs"]]
-    selected = sum(1 for c in costs if c["empty_legs"])
+    """How many pytest legs over `costs` ran empty, and the slot-seconds they held."""
+    empty = [seconds for c in costs for seconds in c["empty_legs_s"]]
     if not empty:
         return f"empty pytest legs: none in {len(costs)} run(s)"
-    job_s = statistics.median(leg["slot_s"] for leg in empty)
-    wait_s = statistics.median(leg["wait_s"] for leg in empty)
+    runs = sum(1 for c in costs if c["empty_legs_s"])
     return (
-        f"empty pytest legs: {len(empty)} in {selected} of {len(costs)} run(s), "
-        f"{sum(leg['slot_s'] for leg in empty):.0f} slot-seconds; a planning job on each "
-        f"run: about {job_s * len(costs):.0f} slot-seconds, and every pytest leg starting "
-        f"{wait_s + job_s:.0f}s later ({wait_s:.0f}s queue wait, {job_s:.0f}s run)"
+        f"empty pytest legs: {len(empty)} in {runs} of {len(costs)} run(s), "
+        f"{sum(empty):.0f} slot-seconds"
     )
 
 
@@ -374,7 +362,7 @@ def main(
     parser.add_argument(
         "--pull-requests",
         action="store_true",
-        help="with --recent, read pull-request runs, whose selections can leave legs empty",
+        help="with --recent, read green pull-request runs instead of master pushes",
     )
     args = parser.parse_args(argv)
     if bool(args.run_ids) == bool(args.recent):

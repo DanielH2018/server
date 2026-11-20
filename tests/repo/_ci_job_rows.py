@@ -15,6 +15,7 @@ from _row_table import Census, Subject, tracked
 from _workflow_rows import (
     CI,
     Workflow,
+    axis_values,
     checkouts,
     condition,
     judge,
@@ -110,7 +111,7 @@ def _matrix_jobs(job: dict) -> int | str:
     matrix = (job.get("strategy") or {}).get("matrix")
     if matrix is None:
         return 1
-    axes = [v for k, v in matrix.items() if k != "include"]
+    axes = [axis_values(v) for k, v in matrix.items() if k != "include"]
     if "exclude" in matrix or (axes and "include" in matrix):
         return f"unhandled matrix: {matrix}"
     return len(matrix["include"]) if "include" in matrix else prod(len(v) for v in axes)

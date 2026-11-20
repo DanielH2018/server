@@ -50,6 +50,7 @@ BUILD_CONSUMERS = {
 DEPENDENTS = (
     "hooks",
     "pr_gates",
+    "pytest_plan",
     "pytest",
     "lockfile",
     "flux_roundtrip",
@@ -63,6 +64,7 @@ DEPENDENTS = (
 GATE_ENV = (
     "HOOKS",
     "PR_GATES",
+    "PYTEST_PLAN",
     "PYTEST",
     "LOCKFILE",
     "FLUX_ROUNDTRIP",

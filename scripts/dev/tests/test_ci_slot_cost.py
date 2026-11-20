@@ -43,7 +43,7 @@ def _job(name, created, started, completed, conclusion="success", steps=()):
 
 def _leg(shard: int, created: int, started: int, suite: tuple[int, int]) -> dict:
     return _job(
-        f"pytest (shard {shard} of 2)",
+        f"pytest (shard {shard})",
         created,
         started,
         suite[1] + 2,
@@ -97,7 +97,7 @@ def _empty_leg(
     shard: int, created: int, started: int, completed: int, conclusion="success"
 ) -> dict:
     return _job(
-        f"pytest (shard {shard} of 6)",
+        f"pytest (shard {shard})",
         created,
         started,
         completed,
@@ -123,14 +123,9 @@ def test_an_empty_leg_is_counted_apart_and_kept_out_of_the_setup_median():
     full = run_cost([_leg(1, 0, 5, (20, 140))])
 
     assert selected["leg_outside_s"] == [17]
-    assert selected["empty_legs"] == [
-        {"slot_s": 30, "wait_s": 10},
-        {"slot_s": 30, "wait_s": 20},
-    ]
+    assert selected["empty_legs_s"] == [30, 30]
     assert empty_leg_line([selected, full]) == (
-        "empty pytest legs: 2 in 1 of 2 run(s), 60 slot-seconds; a planning job on each "
-        "run: about 60 slot-seconds, and every pytest leg starting 45s later "
-        "(15s queue wait, 30s run)"
+        "empty pytest legs: 2 in 1 of 2 run(s), 60 slot-seconds"
     )
     assert empty_leg_line([full]) == "empty pytest legs: none in 1 run(s)"
 

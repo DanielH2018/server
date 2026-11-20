@@ -45,6 +45,7 @@ KNOWN_JOBS = frozenset(
     {
         "hooks",
         "pr_gates",
+        "pytest_plan",
         "pytest",
         "lockfile",
         "flux_roundtrip",
@@ -72,6 +73,7 @@ GATE_READS = frozenset(
     {
         "hooks",
         "pr_gates",
+        "pytest_plan",
         "pytest",
         "lockfile",
         "flux_roundtrip",
