@@ -105,7 +105,7 @@ def _main(kube: Slices) -> int:
     ids=["ready", "readiness-unstated"],
 )
 def test_a_ready_sibling_lets_instance_1_roll(endpoint, capsys):
-    # The API reads an absent `ready` as true, and so does the guard.
+    # fact: k8s/roles/pihole/CLAUDE.md#The sibling guard and its break-glass
     kube = Slices([_list(READY)], [_list(endpoint)])
     assert _main(kube) == 0
     assert "pihole-2-web has 1 ready endpoint(s), so pihole may roll" in (

@@ -78,6 +78,11 @@ tighter or looser allow-list than the baseline
   `netpol_baseline_probe_active` table. `job.yaml.j2` carries the caller census and the
   `DECIDED:` notes on the digest and the initContainer.
   `tests/test_netpol_baseline_verify.py` runs the Job census over its render.
+- **The gate counts an endpoint only when its `ready` is explicitly true**, though the API
+  reads an absent `ready` as true. Most legs are inverted and pass on a failed connection, so
+  an endpoint of unknown readiness cannot open the gate
+  (`k8s/roles/netpol-baseline/files/netpol_baseline_verify.py:ready`). pihole's sibling guard
+  reads the same `EndpointState` the other way.
 
 ## Where a per-workload policy lives
 
