@@ -111,8 +111,9 @@ fi
 # journal and from forwarding.
 logger -p daemon.notice -t rkhunter-check "status=${STATUS} ${MSG}"
 
-write_check_textfile rkhunter-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
-  || logger -t rkhunter-check "textfile write failed (status=${STATUS})"
-
-# Cron ignores the exit code; it is non-zero after a DOWN so a run by hand reads the same way.
-[[ "$STATUS" == up ]] || exit 1
+# A DOWN is the verdict, not this unit's failure: exiting 1 for it would put the unit under
+# `systemctl --failed` and page SystemdUnitsFailed beside RkhunterScanFailed.
+write_check_textfile rkhunter-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" || {
+  logger -t rkhunter-check "textfile write failed (status=${STATUS})"
+  exit 1
+}

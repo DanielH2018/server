@@ -190,11 +190,14 @@ DETAIL_MAX_ENTRIES=50
 # Logs the verdict, then writes the textfile the host-checks rules read. The log line is
 # unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
 # rather than INFO — journald here caps MaxLevelStore=notice, so an info line is dropped from the
-# journal and from forwarding.
+# journal and from forwarding. Returns 1 when the textfile write failed, so no verdict reached
+# Prometheus.
 report() {
   logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
   write_check_textfile aide-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
-    || logger -t aide-check "textfile write failed (status=${STATUS})"
+    && return
+  logger -t aide-check "textfile write failed (status=${STATUS})"
+  return 1
 }
 
 # Moves aide.db.new over aide.db. Refuses when aide.db is missing, so a deleted baseline stays an
@@ -236,8 +239,8 @@ if ! flock -n 8; then
   fi
   STATUS=down
   MSG="the previous aide-check run still holds ${LOCK_FILE}, so this week's check did not start; ps -C aide shows how long it has run"
-  report
-  exit 1
+  report || exit 1
+  exit 0
 fi
 
 if [[ "$MODE" == accept ]]; then
@@ -727,7 +730,6 @@ if [[ "$STATUS" == up ]] && ! advance_baseline; then
   MSG="${MSG}; baseline not advanced, ${AIDE_DIR}/aide.db.new missing"
 fi
 
-report
-
-# Cron ignores the exit code; it is non-zero after a DOWN so a run by hand reads the same way.
-[[ "$STATUS" == up ]] || exit 1
+# A DOWN is the verdict, not this unit's failure: exiting 1 for it would put the unit under
+# `systemctl --failed` and page SystemdUnitsFailed beside AideCheckFailed.
+report || exit 1
