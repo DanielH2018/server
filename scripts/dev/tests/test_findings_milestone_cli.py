@@ -60,6 +60,28 @@ def test_start_project_posts_the_description_is_project_reads(capsys):
     assert capsys.readouterr().out.startswith("project milestone `Backups` open")
 
 
+def test_status_counts_the_project_issues_apart_from_its_pull_requests(capsys):
+    # fact: .claude/skills/coordinate/SKILL.md#Resume
+    project = {**PROJECT, "open_issues": 3, "closed_issues": 4, "html_url": "URL"}
+    pr = {"pull_request": {"url": "pulls/1"}}
+    items = [
+        {"state": "open"},
+        {"state": "open"},
+        {"state": "open", **pr},
+        {"state": "closed"},
+        {"state": "closed"},
+        {"state": "closed", **pr},
+        {"state": "closed", **pr},
+    ]
+    tools, _ = build_tools(
+        Fakes(api={MILESTONES: [[project]], "repos/DanielH2018/server/issues": [items]})
+    )
+    assert main(["milestone", "status", "--worktree", WT], tools) == 0
+    assert capsys.readouterr().out == (
+        "`Backups` open project: issues 2 open, 2 closed; PRs 1 open, 2 closed  URL\n"
+    )
+
+
 def _backlog(*issues, milestones=(PROJECT,)):
     return build_tools(
         Fakes(

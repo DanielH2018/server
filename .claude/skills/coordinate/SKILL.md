@@ -218,7 +218,9 @@ uv run python scripts/dev/findings.py claims --worktree <branch>
 ```
 
 The first shows whether the lock still carries the project's reason; lock again when it
-does not. `place runs` gives the run ids, and no batch's state: a batch that is running,
+does not. `milestone status` prints `issues N open, M closed; PRs N open, M closed`: compare
+the issue pair with `claims` and `next --milestone`, never the PR pair
+(`scripts/dev/tests/test_findings_milestone_cli.py::test_status_counts_the_project_issues_apart_from_its_pull_requests`). `place runs` gives the run ids, and no batch's state: a batch that is running,
 done or landed reads `standing` there alike (`scripts/dev/fanout_lib/status_view.py:runs_lines`).
 Run `place status <run-id>` once for each run id it lists. That read tells a `running`
 batch from a `parked` one.
