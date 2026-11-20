@@ -31,7 +31,7 @@ groups:
           service: mosquitto
           verify: "true"
         annotations:
-          summary: The mosquitto-lan Service does not hold its pinned LAN address.
+          summary: 'mosquitto: the mosquitto-lan Service does not hold its pinned LAN address.'
           description: >-
             homelab/mosquitto-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
             kube-state-metrics is not scraped. Home Assistant and the LAN publishers cannot reach
@@ -51,7 +51,7 @@ groups:
           service: jellyfin
           verify: "true"
         annotations:
-          summary: The jellyfin-lan Service does not hold its pinned LAN address.
+          summary: 'jellyfin: the jellyfin-lan Service does not hold its pinned LAN address.'
           description: >-
             homelab/jellyfin-lan has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
             kube-state-metrics is not scraped. TV and phone clients that dial the VIP cannot reach
@@ -73,7 +73,7 @@ groups:
           service: pihole
           verify: "true"
         annotations:
-          summary: The pihole-dns Service does not hold its pinned LAN address.
+          summary: 'pihole: the pihole-dns Service does not hold its pinned LAN address.'
           description: >-
             homelab/pihole-dns has no LoadBalancer ingress at its pinned VIP for 5 minutes, or
             kube-state-metrics is not scraped. LAN clients that took the VIP from DHCP have no DNS
@@ -94,7 +94,7 @@ groups:
           service: traefik
           verify: "true"
         annotations:
-          summary: The traefik Service does not hold the reserved ingress VIP.
+          summary: 'traefik: the Service does not hold the reserved ingress VIP.'
           description: >-
             homelab/traefik has no LoadBalancer ingress at the reserved VIP for 5 minutes, or
             kube-state-metrics is not scraped. Cloudflare, the router and the LAN DNS cannot reach

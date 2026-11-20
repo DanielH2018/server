@@ -17,7 +17,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: The ingress probe of {{ $labels.service }} is failing.
+          summary: '{{ $labels.service }}: the ingress probe is failing.'
           description: >-
             Read probe_http_status_code for {{ $labels.instance }}, then the workload's log.
             blackbox_exporter's {{ $labels.module }} probe has failed for 2 minutes. A probe behind
@@ -31,7 +31,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: The ingress probe of {{ $labels.service }} is failing.
+          summary: '{{ $labels.service }}: the ingress probe is failing.'
           description: >-
             blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed for
             2 minutes. A probe behind SSO expects Authelia's 302 and never reaches the backend, so a
@@ -47,7 +47,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus has lost the blackbox-ingress scrape job.
+          summary: 'observability: Prometheus has lost the blackbox-ingress scrape job.'
           description: >-
             No up{job="blackbox-ingress"} series exists, so the blackbox-ingress job is gone
             from prometheus.yml or renders no target. No ingress probe can fire until the
@@ -63,7 +63,7 @@ groups:
           severity: critical
           service: blackbox-exporter
         annotations:
-          summary: Prometheus cannot scrape blackbox_exporter for any ingress probe.
+          summary: 'blackbox-exporter: Prometheus cannot scrape it for any ingress probe.'
           description: >-
             Every blackbox-ingress target has failed its scrape for 5 minutes, so the exporter
             is down or unreachable from Prometheus and no ingress probe runs. The per-service

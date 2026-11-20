@@ -40,8 +40,7 @@ tests:
               severity: critical
               service: alert-escalation
             exp_annotations:
-              summary: >-
-                DocsRefreshFailed (daniel-box) has fired as a warning for 48 hours.
+              summary: 'daniel-box: DocsRefreshFailed has fired as a warning for 48 hours.'
               description: >-
                 Fix the warning DocsRefreshFailed for daniel-box, which has fired for 48 hours; the
                 Karma link lists it with its own description and runbook. This page resolves when
@@ -75,8 +74,8 @@ tests:
               service: alert-escalation
             exp_annotations:
               summary: >-
-                SystemdUnitsFailed (daniel-box, nut-monitor.service) has fired as a warning for
-                48 hours.
+                daniel-box: SystemdUnitsFailed (nut-monitor.service) has fired as a warning for 48
+                hours.
               description: >-
                 Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
                 Karma link lists it with its own description and runbook. This page resolves when
@@ -93,7 +92,7 @@ tests:
               service: alert-escalation
             exp_annotations:
               summary: >-
-                SystemdUnitsFailed (daniel-box, systemd-fsck@dev-disk-by\x2duuid-1.service) has
+                daniel-box: SystemdUnitsFailed (systemd-fsck@dev-disk-by\x2duuid-1.service) has
                 fired as a warning for 48 hours.
               description: >-
                 Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
@@ -126,7 +125,7 @@ tests:
               service: alert-escalation
             exp_annotations:
               summary: >-
-                SystemdUnitsFailed (daniel-box, homelab-builder.service) has fired as a warning for
+                daniel-box: SystemdUnitsFailed (homelab-builder.service) has fired as a warning for
                 48 hours.
               description: >-
                 Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
@@ -157,8 +156,7 @@ tests:
               severity: critical
               service: alert-escalation
             exp_annotations:
-              summary: >-
-                EvalSweepFailed (daniel-box) has fired as a warning for 48 hours.
+              summary: 'daniel-box: EvalSweepFailed has fired as a warning for 48 hours.'
               description: >-
                 Fix the warning EvalSweepFailed for daniel-box, which has fired for 48 hours; the
                 Karma link lists it with its own description and runbook. This page resolves when

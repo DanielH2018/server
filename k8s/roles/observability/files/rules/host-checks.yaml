@@ -9,7 +9,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's root disk check is red.
+      summary: 'daniel-box: the root disk check is red.'
       description: >-
         disk-health.sh on daniel-box read the root filesystem above its threshold, or df failed. Longhorn
         stops scheduling replicas on the node at 75%. homelab_disk_root_used_ratio{check="disk-health"}
@@ -27,7 +27,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's root disk check has stopped reporting.
+      summary: 'daniel-box: the root disk check has stopped reporting.'
       description: >-
         No disk-health verdict newer than 25 minutes reached Prometheus from daniel-box's textfile collector,
         so nothing is watching the root disk. Read the `daniel-box disk health` cron and the `disk-health`
@@ -39,7 +39,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The peer artifact sync on daniel-box is failing.
+      summary: 'daniel-box: the peer artifact sync is failing.'
       description: >-
         sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures consecutive
         runs, so that peer's artifacts are stale in the browser. Run `journalctl -t sync-artifacts` on
@@ -56,7 +56,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The peer artifact sync on daniel-box has stopped reporting.
+      summary: 'daniel-box: the peer artifact sync has stopped reporting.'
       description: >-
         No sync-artifacts verdict newer than 15 minutes reached Prometheus from daniel-box, so the cron
         stopped, or a hung run holds its flock. Read the `Sync peer Claude artifacts` cron and `journalctl
@@ -67,7 +67,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
+      summary: 'daniel-box: the telemetry OTLP receiver on loopback refuses connections.'
       description: >-
         Claude Code cannot export telemetry even with every pod Ready, because the hostPort DNAT is an
         iptables rule rather than a socket. Check the otel-collector DaemonSet pod on daniel-box, then
@@ -84,7 +84,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
+      summary: 'daniel-box: the telemetry OTLP-door check has stopped reporting.'
       description: >-
         No claude-otel-health verdict newer than 25 minutes reached Prometheus from daniel-box, so nothing
         is watching the OTLP door. Read the `Claude Code telemetry health` cron and `journalctl -t claude-otel-health`,
@@ -95,7 +95,8 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The audit watches on daniel-box's Claude Code guardrail paths are not in place.
+      summary: >-
+        daniel-box: the audit watches on the Claude Code guardrail paths are not in place.
       description: >-
         claude-guardrail-audit on daniel-box ended with status=down: auditd is not running, kernel auditing
         is off, or a guardrail path has no watch, so guardrail writes leave no audit record. Run `journalctl
@@ -109,7 +110,7 @@ groups:
       service: daniel-server
     annotations:
       summary: >-
-        The audit watches on daniel-server's Claude Code guardrail paths are not in place.
+        daniel-server: the audit watches on the Claude Code guardrail paths are not in place.
       description: >-
         claude-guardrail-audit on daniel-server ended with status=down: auditd is not running, kernel
         auditing is off, or a guardrail path has no watch, so guardrail writes leave no audit record.
@@ -127,7 +128,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The guardrail audit check on daniel-box has stopped reporting.
+      summary: 'daniel-box: the guardrail audit check has stopped reporting.'
       description: >-
         No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from daniel-box, so
         nothing reloads a watch an auditd restart dropped. Read `systemctl status homelab-claude-guardrail-audit.timer`
@@ -146,7 +147,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The guardrail audit check on daniel-server has stopped reporting.
+      summary: 'daniel-server: the guardrail audit check has stopped reporting.'
       description: >-
         No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from daniel-server,
         so nothing reloads a watch an auditd restart dropped. Read `systemctl status homelab-claude-guardrail-audit.timer`
@@ -159,7 +160,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The guardrail change poster on daniel-box is failing.
+      summary: 'daniel-box: the guardrail change poster is failing.'
       description: >-
         claude-guardrail-ack on daniel-box ended with status=down: it could not read a guardrail path,
         render the dotfiles, or deliver its Discord post. Until it clears, a change to a hook or a settings
@@ -170,7 +171,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The guardrail change poster on daniel-server is failing.
+      summary: 'daniel-server: the guardrail change poster is failing.'
       description: >-
         claude-guardrail-ack on daniel-server ended with status=down: it could not read a guardrail path,
         render the dotfiles, or deliver its Discord post. Until it clears, a change to a hook or a settings
@@ -187,7 +188,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The guardrail change poster on daniel-box has stopped reporting.
+      summary: 'daniel-box: the guardrail change poster has stopped reporting.'
       description: >-
         No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from daniel-box, so no
         guardrail change is being posted. Read `systemctl status homelab-claude-guardrail-ack.timer` and
@@ -204,7 +205,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The guardrail change poster on daniel-server has stopped reporting.
+      summary: 'daniel-server: the guardrail change poster has stopped reporting.'
       description: >-
         No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from daniel-server, so
         no guardrail change is being posted. Read `systemctl status homelab-claude-guardrail-ack.timer`
@@ -215,7 +216,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The dotfiles root mirror on daniel-box refused a tag or could not fetch.
+      summary: 'daniel-box: the dotfiles root mirror refused a tag or could not fetch.'
       description: >-
         claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch the repo, or the
         newest tag is unsigned, signed by another key, or does not descend from the last verified tag.
@@ -228,7 +229,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The dotfiles root mirror on daniel-server refused a tag or could not fetch.
+      summary: 'daniel-server: the dotfiles root mirror refused a tag or could not fetch.'
       description: >-
         claude-dotfiles-mirror on daniel-server ended with status=down: it could not fetch the repo, or
         the newest tag is unsigned, signed by another key, or does not descend from the last verified
@@ -247,7 +248,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The dotfiles root mirror on daniel-box has stopped reporting.
+      summary: 'daniel-box: the dotfiles root mirror has stopped reporting.'
       description: >-
         No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from daniel-box, so
         no new dotfiles tag is being verified. Read `systemctl status homelab-claude-dotfiles-mirror.timer`
@@ -266,7 +267,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The dotfiles root mirror on daniel-server has stopped reporting.
+      summary: 'daniel-server: the dotfiles root mirror has stopped reporting.'
       description: >-
         No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from daniel-server,
         so no new dotfiles tag is being verified. Read `systemctl status homelab-claude-dotfiles-mirror.timer`
@@ -279,7 +280,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The weekly Claude runs summary on daniel-box did not post, or read a source.
+      summary: 'daniel-box: the weekly Claude runs summary did not post, or read a source.'
       description: >-
         claude-weekly-summary on daniel-box ended with status=down: the Discord post failed, or a source
         of run records could not be read. A failed post is retried by the next run. Run `journalctl -t
@@ -296,7 +297,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The weekly Claude runs summary on daniel-box has stopped reporting.
+      summary: 'daniel-box: the weekly Claude runs summary has stopped reporting.'
       description: >-
         No claude-weekly-summary verdict newer than 169 hours from daniel-box, so last week's unattended
         runs were not summarised. Read `systemctl status homelab-claude-weekly-summary.timer` and `journalctl
@@ -309,7 +310,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's Longhorn backup check is red.
+      summary: 'daniel-box: the Longhorn backup check is red.'
       description: >-
         longhorn_backup_health.py on daniel-box reported a failing backup-plane check: an unavailable
         backup target, a stale or errored backup, a failed job, or a restore drill that is overdue. `journalctl
@@ -327,7 +328,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's longhorn-backup-health check has stopped reporting.
+      summary: 'daniel-box: the longhorn-backup-health check has stopped reporting.'
       description: >-
         Read the `longhorn-backup-health` syslog tag on daniel-box, then /var/lib/node-exporter-textfile/longhorn-backup-health.prom.
         No verdict newer than 25 minutes reached Prometheus, so nothing watches the Longhorn backup plane.
@@ -339,7 +340,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's cluster-token drift check is red.
+      summary: 'daniel-box: the cluster-token drift check is red.'
       description: >-
         etcd-token-drift.sh on daniel-box found the cluster token changed since the off-box copy was stamped,
         or could not compare the two. `journalctl -t etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md
@@ -357,7 +358,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
+      summary: 'daniel-box: the etcd-snapshot-offbox check has stopped reporting.'
       description: >-
         Read the `etcd-snapshot-offbox` syslog tag on daniel-box, then /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom.
         No verdict newer than 25 hours reached Prometheus, so nothing compares the cluster token with
@@ -371,7 +372,7 @@ groups:
       service: daniel-box
       escalate: 'false'
     annotations:
-      summary: daniel-box's weekly AIDE check failed or found an unexplained change.
+      summary: 'daniel-box: the weekly AIDE check failed or found an unexplained change.'
       description: >-
         aide-check on daniel-box ended with status=down: an unexplained file change, an AIDE error, or
         a held lock. Run `journalctl -t aide-check` on daniel-box. Once every path is reviewed, run `sudo
@@ -384,7 +385,7 @@ groups:
       service: daniel-server
       escalate: 'false'
     annotations:
-      summary: daniel-server's weekly AIDE check failed or found an unexplained change.
+      summary: 'daniel-server: the weekly AIDE check failed or found an unexplained change.'
       description: >-
         aide-check on daniel-server ended with status=down: an unexplained file change, an AIDE error,
         or a held lock. Run `journalctl -t aide-check` on daniel-server. Once every path is reviewed,
@@ -402,7 +403,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly AIDE check has stopped reporting.
+      summary: 'daniel-box: the weekly AIDE check has stopped reporting.'
       description: >-
         No aide-check verdict newer than 626400s reached Prometheus from daniel-box, so nothing confirms
         the file-integrity scan still runs. Read the `Weekly AIDE file integrity check` cron and `journalctl
@@ -419,7 +420,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly AIDE check has stopped reporting.
+      summary: 'daniel-server: the weekly AIDE check has stopped reporting.'
       description: >-
         No aide-check verdict newer than 626400s reached Prometheus from daniel-server, so nothing confirms
         the file-integrity scan still runs. Read the `Weekly AIDE file integrity check` cron and `journalctl
@@ -431,7 +432,7 @@ groups:
       service: daniel-box
       escalate: 'false'
     annotations:
-      summary: daniel-box's weekly rkhunter scan warned or did not complete.
+      summary: 'daniel-box: the weekly rkhunter scan warned or did not complete.'
       description: >-
         rkhunter-check.sh on daniel-box ended with status=down: rkhunter raised a warning, a suspect file
         or a possible rootkit, or the scan wrote no summary. Read /var/log/rkhunter.log and `journalctl
@@ -444,7 +445,7 @@ groups:
       service: daniel-pi
       escalate: 'false'
     annotations:
-      summary: daniel-pi's weekly rkhunter scan warned or did not complete.
+      summary: 'daniel-pi: the weekly rkhunter scan warned or did not complete.'
       description: >-
         rkhunter-check.sh on daniel-pi ended with status=down: rkhunter raised a warning, a suspect file
         or a possible rootkit, or the scan wrote no summary. Read /var/log/rkhunter.log and `journalctl
@@ -457,7 +458,7 @@ groups:
       service: daniel-server
       escalate: 'false'
     annotations:
-      summary: daniel-server's weekly rkhunter scan warned or did not complete.
+      summary: 'daniel-server: the weekly rkhunter scan warned or did not complete.'
       description: >-
         rkhunter-check.sh on daniel-server ended with status=down: rkhunter raised a warning, a suspect
         file or a possible rootkit, or the scan wrote no summary. Read /var/log/rkhunter.log and `journalctl
@@ -475,7 +476,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly rkhunter scan has stopped reporting.
+      summary: 'daniel-box: the weekly rkhunter scan has stopped reporting.'
       description: >-
         No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-box, so nothing confirms
         the malware scan still runs. Read the `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`,
@@ -492,7 +493,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's weekly rkhunter scan has stopped reporting.
+      summary: 'daniel-pi: the weekly rkhunter scan has stopped reporting.'
       description: >-
         No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-pi, so nothing confirms
         the malware scan still runs. Read the `Weekly rkhunter malware scan` cron and `journalctl -t rkhunter-check`,
@@ -509,7 +510,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly rkhunter scan has stopped reporting.
+      summary: 'daniel-server: the weekly rkhunter scan has stopped reporting.'
       description: >-
         No rkhunter-check verdict newer than 612000s reached Prometheus from daniel-server, so nothing
         confirms the malware scan still runs. Read the `Weekly rkhunter malware scan` cron and `journalctl
@@ -520,7 +521,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly apt autoremove failed.
+      summary: 'daniel-box: the weekly apt autoremove failed.'
       description: >-
         host-maintenance.sh apt-autoremove on daniel-box wrote success 0: apt-get autoremove exited non-zero.
         Read `journalctl -t apt-autoremove` on daniel-box for the command's output.
@@ -530,7 +531,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's weekly apt autoremove failed.
+      summary: 'daniel-pi: the weekly apt autoremove failed.'
       description: >-
         host-maintenance.sh apt-autoremove on daniel-pi wrote success 0: apt-get autoremove exited non-zero.
         Read `journalctl -t apt-autoremove` on daniel-pi for the command's output.
@@ -540,7 +541,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly apt autoremove failed.
+      summary: 'daniel-server: the weekly apt autoremove failed.'
       description: >-
         host-maintenance.sh apt-autoremove on daniel-server wrote success 0: apt-get autoremove exited
         non-zero. Read `journalctl -t apt-autoremove` on daniel-server for the command's output.
@@ -560,7 +561,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly apt autoremove has stopped reporting.
+      summary: 'daniel-box: the weekly apt autoremove has stopped reporting.'
       description: >-
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-box, so nothing confirms
         the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl -t
@@ -582,7 +583,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's weekly apt autoremove has stopped reporting.
+      summary: 'daniel-pi: the weekly apt autoremove has stopped reporting.'
       description: >-
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-pi, so nothing confirms
         the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl -t
@@ -604,7 +605,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly apt autoremove has stopped reporting.
+      summary: 'daniel-server: the weekly apt autoremove has stopped reporting.'
       description: >-
         No apt-autoremove verdict newer than 612000s reached Prometheus from daniel-server, so nothing
         confirms the weekly apt autoremove still runs. Read the `Weekly apt autoremove` cron and `journalctl
@@ -616,7 +617,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly dpkg purge of orphaned configs failed.
+      summary: 'daniel-box: the weekly dpkg purge of orphaned configs failed.'
       description: >-
         host-maintenance.sh dpkg-purge on daniel-box wrote success 0: the dpkg purge of removed packages'
         configs exited non-zero. Read `journalctl -t dpkg-purge` on daniel-box for the command's output.
@@ -626,7 +627,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's weekly dpkg purge of orphaned configs failed.
+      summary: 'daniel-pi: the weekly dpkg purge of orphaned configs failed.'
       description: >-
         host-maintenance.sh dpkg-purge on daniel-pi wrote success 0: the dpkg purge of removed packages'
         configs exited non-zero. Read `journalctl -t dpkg-purge` on daniel-pi for the command's output.
@@ -636,7 +637,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly dpkg purge of orphaned configs failed.
+      summary: 'daniel-server: the weekly dpkg purge of orphaned configs failed.'
       description: >-
         host-maintenance.sh dpkg-purge on daniel-server wrote success 0: the dpkg purge of removed packages'
         configs exited non-zero. Read `journalctl -t dpkg-purge` on daniel-server for the command's output.
@@ -656,7 +657,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly dpkg purge of orphaned configs has stopped reporting.
+      summary: 'daniel-box: the weekly dpkg purge of orphaned configs has stopped reporting.'
       description: >-
         No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-box, so nothing confirms
         the weekly dpkg purge still runs. Read the `Weekly dpkg purge orphaned configs` cron in root's
@@ -678,7 +679,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's weekly dpkg purge of orphaned configs has stopped reporting.
+      summary: 'daniel-pi: the weekly dpkg purge of orphaned configs has stopped reporting.'
       description: >-
         No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-pi, so nothing confirms
         the weekly dpkg purge still runs. Read the `Weekly dpkg purge orphaned configs` cron in root's
@@ -700,7 +701,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's weekly dpkg purge of orphaned configs has stopped reporting.
+      summary: 'daniel-server: the weekly dpkg purge of orphaned configs has stopped reporting.'
       description: >-
         No dpkg-purge verdict newer than 612000s reached Prometheus from daniel-server, so nothing confirms
         the weekly dpkg purge still runs. Read the `Weekly dpkg purge orphaned configs` cron in root's
@@ -712,7 +713,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly firmware update failed.
+      summary: 'daniel-box: the weekly firmware update failed.'
       description: >-
         host-maintenance.sh firmware-update on daniel-box wrote success 0: fwupdmgr update exited with
         an error rather than 0 or 2 (nothing to update). Read `journalctl -t fwupd-auto` on daniel-box
@@ -733,7 +734,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's weekly firmware update has stopped reporting.
+      summary: 'daniel-box: the weekly firmware update has stopped reporting.'
       description: >-
         No firmware-update verdict newer than 612000s reached Prometheus from daniel-box, so nothing confirms
         the weekly firmware update still runs. Read the `Weekly firmware update` cron in root's crontab
@@ -754,8 +755,8 @@ groups:
       service: daniel-box
     annotations:
       summary: >-
-        {{ with $labels.unit }}{{ . }} has failed on daniel-box.{{ else }}daniel-box has failed system
-        units that its check did not name.{{ end }}
+        daniel-box: {{ with $labels.unit }}{{ . }} has failed.{{ else }}system units have failed that
+        the check did not name.{{ end }}
       description: >-
         Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the cause, then
         run `systemctl reset-failed <unit>`; the next check resolves this alert. A summary that names
@@ -776,8 +777,8 @@ groups:
       service: daniel-pi
     annotations:
       summary: >-
-        {{ with $labels.unit }}{{ . }} has failed on daniel-pi.{{ else }}daniel-pi has failed system units
-        that its check did not name.{{ end }}
+        daniel-pi: {{ with $labels.unit }}{{ . }} has failed.{{ else }}system units have failed that the
+        check did not name.{{ end }}
       description: >-
         Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-pi, fix the cause, then
         run `systemctl reset-failed <unit>`; the next check resolves this alert. A summary that names
@@ -798,8 +799,8 @@ groups:
       service: daniel-server
     annotations:
       summary: >-
-        {{ with $labels.unit }}{{ . }} has failed on daniel-server.{{ else }}daniel-server has failed
-        system units that its check did not name.{{ end }}
+        daniel-server: {{ with $labels.unit }}{{ . }} has failed.{{ else }}system units have failed that
+        the check did not name.{{ end }}
       description: >-
         Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-server, fix the cause,
         then run `systemctl reset-failed <unit>`; the next check resolves this alert. A summary that names
@@ -821,7 +822,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's failed-unit check has stopped reporting.
+      summary: 'daniel-box: the failed-unit check has stopped reporting.'
       description: >-
         No systemd-units verdict newer than 900s reached Prometheus from daniel-box, so nothing is counting
         its failed units. Read `systemctl status homelab-systemd-units.timer` and `journalctl -t systemd-units`
@@ -842,7 +843,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's failed-unit check has stopped reporting.
+      summary: 'daniel-pi: the failed-unit check has stopped reporting.'
       description: >-
         No systemd-units verdict newer than 900s reached Prometheus from daniel-pi, so nothing is counting
         its failed units. Read `systemctl status homelab-systemd-units.timer` and `journalctl -t systemd-units`
@@ -863,7 +864,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's failed-unit check has stopped reporting.
+      summary: 'daniel-server: the failed-unit check has stopped reporting.'
       description: >-
         No systemd-units verdict newer than 900s reached Prometheus from daniel-server, so nothing is
         counting its failed units. Read `systemctl status homelab-systemd-units.timer` and `journalctl
@@ -877,7 +878,7 @@ groups:
       service: daniel-server
     annotations:
       summary: >-
-        daniel-server's kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
+        daniel-server: the kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
       description: >-
         Without the lock, a shutdown stops pods undrained and can abort Longhorn's ext4 journals. Read
         {job="k3s"} in loki-homelab for "Failed to start node shutdown manager" and the logind value it
@@ -899,7 +900,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's kubelet shutdown-lock check has stopped reporting.
+      summary: 'daniel-server: the kubelet shutdown-lock check has stopped reporting.'
       description: >-
         No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from daniel-server, so nothing
         reads kubelet's shutdown lock. Read `systemctl status homelab-kubelet-shutdown-lock.timer` and
@@ -920,7 +921,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's {{ $labels.check }} check is past its own deadline.
+      summary: 'daniel-box: the {{ $labels.check }} check is past its own deadline.'
       description: >-
         The {{ $labels.check }} textfile on daniel-box holds a verdict older than the homelab_check_deadline_seconds
         it declares, so its producer stopped writing. Read /var/lib/node-exporter-textfile/{{ $labels.check
@@ -939,7 +940,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's {{ $labels.check }} check is past its own deadline.
+      summary: 'daniel-pi: the {{ $labels.check }} check is past its own deadline.'
       description: >-
         The {{ $labels.check }} textfile on daniel-pi holds a verdict older than the homelab_check_deadline_seconds
         it declares, so its producer stopped writing. Read /var/lib/node-exporter-textfile/{{ $labels.check
@@ -958,7 +959,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's {{ $labels.check }} check is past its own deadline.
+      summary: 'daniel-server: the {{ $labels.check }} check is past its own deadline.'
       description: >-
         The {{ $labels.check }} textfile on daniel-server holds a verdict older than the homelab_check_deadline_seconds
         it declares, so its producer stopped writing. Read /var/lib/node-exporter-textfile/{{ $labels.check
@@ -972,7 +973,7 @@ groups:
       shadow: 'true'
     annotations:
       summary: >-
-        node_exporter on daniel-box cannot read a textfile, candidates: {{ $files := query `count by (file)
+        daniel-box: node_exporter cannot read a textfile, candidates: {{ $files := query `count by (file)
         (last_over_time(node_textfile_mtime_seconds{origin="daniel-box"}[7d])) unless count by (file)
         (node_textfile_mtime_seconds{origin="daniel-box"})` }}{{ if $files }}{{ range $i, $s := $files
         }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
@@ -990,7 +991,7 @@ groups:
       shadow: 'true'
     annotations:
       summary: >-
-        node_exporter on daniel-pi cannot read a textfile, candidates: {{ $files := query `count by (file)
+        daniel-pi: node_exporter cannot read a textfile, candidates: {{ $files := query `count by (file)
         (last_over_time(node_textfile_mtime_seconds{origin="daniel-pi"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="daniel-pi"})`
         }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end
         }}{{ else }}none known{{ end }}.
@@ -1008,7 +1009,7 @@ groups:
       shadow: 'true'
     annotations:
       summary: >-
-        node_exporter on daniel-server cannot read a textfile, candidates: {{ $files := query `count by
+        daniel-server: node_exporter cannot read a textfile, candidates: {{ $files := query `count by
         (file) (last_over_time(node_textfile_mtime_seconds{origin="daniel-server"}[7d])) unless count
         by (file) (node_textfile_mtime_seconds{origin="daniel-server"})` }}{{ if $files }}{{ range $i,
         $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
@@ -1025,7 +1026,7 @@ groups:
       service: daniel-box
     annotations:
       summary: >-
-        daniel-box's iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state
+        daniel-box: the iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state
         }}.
       description: >-
         {{ $labels.session }} on daniel-box has read {{ $labels.state }} for 15 minutes (target {{ $labels.target
@@ -1040,7 +1041,7 @@ groups:
       service: daniel-server
     annotations:
       summary: >-
-        daniel-server's iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state
+        daniel-server: the iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state
         }}.
       description: >-
         {{ $labels.session }} on daniel-server has read {{ $labels.state }} for 15 minutes (target {{
@@ -1059,7 +1060,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's iSCSI session check has stopped reporting.
+      summary: 'daniel-box: the iSCSI session check has stopped reporting.'
       description: >-
         No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-box's textfile collector,
         so nothing is watching the node's iSCSI sessions. Read the log of the node-exporter pod's `iscsi-sessions`
@@ -1076,7 +1077,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's iSCSI session check has stopped reporting.
+      summary: 'daniel-server: the iSCSI session check has stopped reporting.'
       description: >-
         No iscsi-sessions verdict newer than 5 minutes reached Prometheus from daniel-server's textfile
         collector, so nothing is watching the node's iSCSI sessions. Read the log of the node-exporter
@@ -1093,7 +1094,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The agent clone sync on daniel-box has stopped reporting.
+      summary: 'daniel-box: the agent clone sync has stopped reporting.'
       description: >-
         No claude-clone-sync verdict newer than 2100s from daniel-box, so the agent's clone fast-forward
         has not completed a clean run. Read `systemctl status claude-clone-sync.timer` and `journalctl
@@ -1111,7 +1112,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The agent clone sync on daniel-server has stopped reporting.
+      summary: 'daniel-server: the agent clone sync has stopped reporting.'
       description: >-
         No claude-clone-sync verdict newer than 2100s from daniel-server, so the agent's clone fast-forward
         has not completed a clean run. Read `systemctl status claude-clone-sync.timer` and `journalctl
@@ -1129,7 +1130,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The agent dotfiles sync on daniel-box has stopped reporting.
+      summary: 'daniel-box: the agent dotfiles sync has stopped reporting.'
       description: >-
         No claude-dotfiles-sync verdict newer than 2100s from daniel-box, so the agent's dotfiles apply
         has not completed a clean run. Read `systemctl status claude-dotfiles-sync.timer` and `journalctl
@@ -1148,7 +1149,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: The agent dotfiles sync on daniel-server has stopped reporting.
+      summary: 'daniel-server: the agent dotfiles sync has stopped reporting.'
       description: >-
         No claude-dotfiles-sync verdict newer than 2100s from daniel-server, so the agent's dotfiles apply
         has not completed a clean run. Read `systemctl status claude-dotfiles-sync.timer` and `journalctl
@@ -1167,7 +1168,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The Claude memory sync from daniel-box has stopped reporting.
+      summary: 'daniel-box: the Claude memory sync has stopped reporting.'
       description: >-
         No claude-memory-sync verdict newer than 2100s from daniel-box, so the memory store copy to daniel-server
         has not completed a clean run. Read `systemctl status homelab-claude-memory-sync.timer` and `journalctl
@@ -1186,7 +1187,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The triage poller on daniel-box has stopped reporting.
+      summary: 'daniel-box: the triage poller has stopped reporting.'
       description: >-
         No claude-triage-poll verdict newer than 660s from daniel-box, so the monitor triage poll has
         not completed a clean run. Read `systemctl status homelab-claude-triage-poll.timer` and `journalctl
@@ -1205,7 +1206,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The fan-out server lander on daniel-box has stopped reporting.
+      summary: 'daniel-box: the fan-out server lander has stopped reporting.'
       description: >-
         No claude-fanout-server-lander verdict newer than 3300s from daniel-box, so the lander has not
         completed a clean run. Read `systemctl status homelab-claude-fanout-server-lander.timer` and `journalctl
@@ -1224,7 +1225,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: The pipeline timeline snapshot on daniel-box has stopped reporting.
+      summary: 'daniel-box: the pipeline timeline snapshot has stopped reporting.'
       description: >-
         No claude-pipeline-timeline verdict newer than 174900s from daniel-box, so the PR timeline snapshot
         is not running, and the journal inputs it saves rotate after about ten days. Read `systemctl status
@@ -1241,7 +1242,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box's wired link eno1 is down, so the node runs on WiFi.
+      summary: 'daniel-box: the wired link eno1 is down, so the node runs on WiFi.'
       description: >-
         eno1 on daniel-box has had no carrier, or has been down, for 5 minutes, so the node routes over
         its slower WiFi fallback, which carries Longhorn replication. Check the cable and the switch port,
@@ -1256,7 +1257,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server's wired link enp88s0 is down, so the node runs on WiFi.
+      summary: 'daniel-server: the wired link enp88s0 is down, so the node runs on WiFi.'
       description: >-
         enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes, so the node routes
         over its slower WiFi fallback, which carries Longhorn replication. Check the cable and the switch
@@ -1268,7 +1269,8 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box's homelab package reconcile failed, so it installs no newer package.
+      summary: >-
+        daniel-box: the homelab package reconcile failed, so it installs no newer package.
       description: >-
         Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-box, fix the cause, then run
         `sudo /usr/lib/homelab/homelab-updater --clear-hold`. homelab_host_reconcile_ok has read 0 for
@@ -1281,7 +1283,8 @@ groups:
       severity: critical
       service: daniel-pi
     annotations:
-      summary: daniel-pi's homelab package reconcile failed, so it installs no newer package.
+      summary: >-
+        daniel-pi: the homelab package reconcile failed, so it installs no newer package.
       description: >-
         Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-pi, fix the cause, then run
         `sudo /usr/lib/homelab/homelab-updater --clear-hold`. homelab_host_reconcile_ok has read 0 for
@@ -1295,7 +1298,7 @@ groups:
       service: daniel-server
     annotations:
       summary: >-
-        daniel-server's homelab package reconcile failed, so it installs no newer package.
+        daniel-server: the homelab package reconcile failed, so it installs no newer package.
       description: >-
         Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server, fix the cause, then
         run `sudo /usr/lib/homelab/homelab-updater --clear-hold`. homelab_host_reconcile_ok has read 0
@@ -1308,7 +1311,7 @@ groups:
       service: daniel-pi
       shadow: 'true'
     annotations:
-      summary: The Pi's last Compose run did not bring the project up.
+      summary: 'daniel-pi: the last Compose run did not bring the project up.'
       description: >-
         compose-run on daniel-pi wrote homelab_compose_up_result 0 at package {{ $labels.sha }}: a key
         check, the config check, an image pull, compose-adopt or `docker compose up --wait` failed. Read
@@ -1327,7 +1330,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: The Pi's Compose project has not run since daniel-pi booted.
+      summary: 'daniel-pi: the Compose project has not run since boot.'
       description: >-
         daniel-pi booted more than 1690s ago, and homelab_compose_up_timestamp_seconds still predates
         that boot or is missing, so the boot's compose-run wrote no result. Read `systemctl status homelab-compose`
@@ -1342,7 +1345,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+      summary: 'daniel-pi: the Compose project wrote no result for reconcile''s last start of it.'
       description: >-
         homelab-reconcile started homelab-compose.service on daniel-pi, and homelab_compose_up_timestamp_seconds
         still predates that call, so compose-run wrote no result for it. Read `journalctl -u homelab-compose
@@ -1360,7 +1363,7 @@ groups:
       severity: warning
       service: daniel-box
     annotations:
-      summary: daniel-box has owed a reboot for more than 8 days.
+      summary: 'daniel-box: a reboot has been owed for more than 8 days.'
       description: >-
         Reconcile recorded a reboot-class package change on daniel-box more than 8 days ago, and the host
         has not booted since. Read `journalctl -t weekly-restart` on daniel-box and docs/host-packages.md,
@@ -1378,7 +1381,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi has owed a reboot for more than 8 days.
+      summary: 'daniel-pi: a reboot has been owed for more than 8 days.'
       description: >-
         Reconcile recorded a reboot-class package change on daniel-pi more than 8 days ago, and the host
         has not booted since. Read `journalctl -t weekly-restart` on daniel-pi and docs/host-packages.md,
@@ -1396,7 +1399,7 @@ groups:
       severity: warning
       service: daniel-server
     annotations:
-      summary: daniel-server has owed a reboot for more than 8 days.
+      summary: 'daniel-server: a reboot has been owed for more than 8 days.'
       description: >-
         Reconcile recorded a reboot-class package change on daniel-server more than 8 days ago, and the
         host has not booted since. Read `journalctl -t weekly-restart` on daniel-server and docs/host-packages.md,
@@ -1414,7 +1417,7 @@ groups:
       severity: warning
       service: daniel-pi
     annotations:
-      summary: daniel-pi's Docker engine has sat off its pins for more than 26 hours.
+      summary: 'daniel-pi: the Docker engine has sat off its pins for more than 26 hours.'
       description: >-
         The Docker engine on daniel-pi has sat off its pins for 26 hours, so the 00:30 UTC homelab-docker-engine.timer
         did not apply them. Read `systemctl status homelab-docker-engine.timer homelab-updater.timer`
@@ -1435,7 +1438,7 @@ groups:
       severity: critical
       service: daniel-box
     annotations:
-      summary: daniel-box has had no successful homelab update for 60 minutes.
+      summary: 'daniel-box: no successful homelab update for 60 minutes.'
       description: >-
         Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on daniel-box.
         No homelab-updater run there has succeeded in 60 minutes, or its exporter is up and serves no
@@ -1456,7 +1459,7 @@ groups:
       severity: critical
       service: daniel-pi
     annotations:
-      summary: daniel-pi has had no successful homelab update for 25 hours.
+      summary: 'daniel-pi: no successful homelab update for 25 hours.'
       description: >-
         Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on daniel-pi.
         No homelab-updater run there has succeeded in 25 hours, or its exporter is up and serves no success
@@ -1477,7 +1480,7 @@ groups:
       severity: critical
       service: daniel-server
     annotations:
-      summary: daniel-server has had no successful homelab update for 60 minutes.
+      summary: 'daniel-server: no successful homelab update for 60 minutes.'
       description: >-
         Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on daniel-server.
         No homelab-updater run there has succeeded in 60 minutes, or its exporter is up and serves no

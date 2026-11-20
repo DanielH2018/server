@@ -20,7 +20,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus sees too few scrape targets.
+              summary: 'observability: Prometheus sees too few scrape targets.'
               description: >-
                 Fewer than 3 scrape targets outside daniel-server, or none on it, have reported for
                 10 minutes. The metrics estate is missing, so target health is unknown rather than
@@ -62,7 +62,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus sees too few scrape targets.
+              summary: 'observability: Prometheus sees too few scrape targets.'
               description: >-
                 Fewer than 3 scrape targets outside daniel-server, or none on it, have reported for
                 10 minutes. The metrics estate is missing, so target health is unknown rather than
@@ -85,7 +85,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus sees too few scrape targets.
+              summary: 'observability: Prometheus sees too few scrape targets.'
               description: >-
                 Fewer than 3 scrape targets outside daniel-server, or none on it, have reported for
                 10 minutes. The metrics estate is missing, so target health is unknown rather than
@@ -112,7 +112,9 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus cannot scrape the alertmanager target alertmanager.observability.svc:9093.
+              summary: >-
+                alertmanager: Prometheus cannot scrape the target
+                alertmanager.observability.svc:9093.
               description: >-
                 alertmanager.observability.svc:9093 of job alertmanager has failed its scrape
                 for 10 minutes, so its exporter is down or unreachable from Prometheus and its
@@ -149,7 +151,8 @@ tests:
               severity: warning
               service: game-stats
             exp_annotations:
-              summary: Prometheus cannot scrape the valheim-stats target valheim-stats.homelab.svc:9420.
+              summary: >-
+                valheim-stats: Prometheus cannot scrape the target valheim-stats.homelab.svc:9420.
               description: >-
                 valheim-stats.homelab.svc:9420 of job valheim-stats has failed its scrape for 10
                 minutes, so its exporter is down or unreachable from Prometheus and its series
@@ -174,7 +177,8 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: Prometheus cannot scrape the loki-homelab target loki-homelab.homelab.svc:3100.
+              summary: >-
+                loki-homelab: Prometheus cannot scrape the target loki-homelab.homelab.svc:3100.
               description: >-
                 loki-homelab.homelab.svc:3100 of job loki-homelab has failed its scrape for 10
                 minutes, so its exporter is down or unreachable from Prometheus and its series
@@ -200,7 +204,8 @@ tests:
               severity: warning
               service: autofix-bridge
             exp_annotations:
-              summary: Prometheus cannot scrape the autofix-bridge target autofix-bridge.homelab.svc:9183.
+              summary: >-
+                autofix-bridge: Prometheus cannot scrape the target autofix-bridge.homelab.svc:9183.
               description: >-
                 autofix-bridge.homelab.svc:9183 of job autofix-bridge has failed its scrape for 10
                 minutes, so its exporter is down or unreachable from Prometheus and its series
@@ -226,7 +231,9 @@ tests:
               severity: warning
               service: blackbox-exporter
             exp_annotations:
-              summary: Prometheus cannot scrape the blackbox-ingress target blackbox-exporter.homelab.svc:9115.
+              summary: >-
+                blackbox-ingress: Prometheus cannot scrape the target
+                blackbox-exporter.homelab.svc:9115.
               description: >-
                 blackbox-exporter.homelab.svc:9115 of job blackbox-ingress has failed its scrape
                 for 10 minutes, so its exporter is down or unreachable from Prometheus and its
@@ -249,7 +256,7 @@ tests:
               severity: warning
               service: unmapped
             exp_annotations:
-              summary: Prometheus cannot scrape the brand-new-exporter target new:9100.
+              summary: 'brand-new-exporter: Prometheus cannot scrape the target new:9100.'
               description: >-
                 new:9100 of job brand-new-exporter has failed its scrape for 10 minutes, so its
                 exporter is down or unreachable from Prometheus and its series have gone stale.
@@ -287,7 +294,7 @@ tests:
               severity: warning
               service: alloy
             exp_annotations:
-              summary: Prometheus's scrapes of the alloy-pi target daniel-pi:12345 keep failing.
+              summary: "alloy-pi: Prometheus's scrapes of the target daniel-pi:12345 keep failing."
               description: >-
                 daniel-pi:12345 of job alloy-pi failed more than 30% of its scrapes over 30
                 minutes, failing at least twice and answering in between, so it flaps rather
@@ -342,7 +349,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: Prometheus cannot scrape the flux target flux:8080.
+              summary: 'flux: Prometheus cannot scrape the target flux:8080.'
               description: >-
                 flux:8080 of job flux has failed its scrape for 10 minutes, so its exporter is
                 down or unreachable from Prometheus and its series have gone stale. Read the
@@ -391,7 +398,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: Prometheus cannot scrape the flux target flux:8080.
+              summary: 'flux: Prometheus cannot scrape the target flux:8080.'
               description: >-
                 flux:8080 of job flux has failed its scrape for 10 minutes, so its exporter is
                 down or unreachable from Prometheus and its series have gone stale. Read the
@@ -422,7 +429,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: Prometheus's scrapes of the flux target flux:8080 keep failing.
+              summary: "flux: Prometheus's scrapes of the target flux:8080 keep failing."
               description: >-
                 flux:8080 of job flux failed more than 30% of its scrapes over 30 minutes,
                 failing at least twice and answering in between, so it flaps rather than

@@ -30,7 +30,7 @@ groups:
           severity: critical
           service: wan
         annotations:
-          summary: monitor-bridge cannot reach the public internet.
+          summary: 'wan: monitor-bridge cannot reach the public internet.'
           description: >-
             Check the router and the modem. Both WAN probe providers failed from monitor-bridge, so
             the house has no working link or no DNS, and the rows that need the internet are held.
@@ -45,7 +45,10 @@ groups:
           requires: wan
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='discord'}" }}Alert delivery is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Discord webhook no longer resolves, or the SMTP backstop login failed.{{ end }}
+            discord: {{ with query "homelab_check_detail{job='monitor-bridge',check='discord'}"
+            }}alert delivery is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i
+            }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}a Discord webhook no longer
+            resolves, or the SMTP backstop login failed.{{ end }}
           description: >-
             Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
             SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
@@ -59,7 +62,10 @@ groups:
           requires: wan
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='r2_usage'}" }}R2 usage is past 80% of the free tier on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}R2 usage is past 80% of the free tier on at least one arm.{{ end }}
+            r2: {{ with query "homelab_check_detail{job='monitor-bridge',check='r2_usage'}" }}usage
+            is past 80% of the free tier on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i
+            }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}usage is past 80% of the free
+            tier on at least one arm.{{ end }}
           description: >-
             Month-to-date R2 storage, Class A operations, Class B operations or incomplete multipart
             uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this is the only
@@ -73,7 +79,11 @@ groups:
           requires: wan
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='cloudflare_ips_drift'}" }}Cloudflare's IP ranges differ from cloudflare_ips: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.{{ end }}
+            cloudflare: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='cloudflare_ips_drift'}" }}the
+            published IP ranges differ from cloudflare_ips: {{ range $i, $s := . | sortByLabel
+            "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}the published
+            IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.{{ end }}
           description: >-
             cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
             allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge. A
@@ -86,7 +96,11 @@ groups:
           requires: wan
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='healthchecks_drift'}" }}Healthchecks.io checks differ from the documented schedule: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Healthchecks.io dead-man check differs from the documented schedule.{{ end }}
+            healthchecks: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='healthchecks_drift'}" }}checks differ
+            from the documented schedule: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }},
+            {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}a dead-man check differs from the
+            documented schedule.{{ end }}
           description: >-
             The monitor-bridge log names each differing or missing slug. Fix the console, or
             change docs/healthchecks-io-deadman.md and monitor_bridge_healthchecks_expected
@@ -100,7 +114,7 @@ groups:
           service: domain
           requires: wan
         annotations:
-          summary: monitor-bridge cannot read the domain's registration expiry over RDAP.
+          summary: 'domain: monitor-bridge cannot read the registration expiry over RDAP.'
           description: >-
             The registry's RDAP record did not answer or carries no expiration event, so the
             days-left gauge holds its last read, or is absent after a restart. The
@@ -117,8 +131,7 @@ groups:
           severity: warning
           service: domain
         annotations:
-          summary: >-
-            The domain registration expires in {{ $value | printf "%.0f" }} days.
+          summary: 'domain: the registration expires in {{ $value | printf "%.0f" }} days.'
           description: >-
             The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
             days out. Renew it at the registrar, and turn on auto-renew if it is off.
@@ -128,8 +141,7 @@ groups:
           severity: critical
           service: domain
         annotations:
-          summary: >-
-            The domain registration expires in {{ $value | printf "%.0f" }} days.
+          summary: 'domain: the registration expires in {{ $value | printf "%.0f" }} days.'
           description: >-
             The registry's RDAP record dates the domain's expiry {{ $value | printf "%.0f" }}
             days out. A lapse takes down ACME renewal, every public route, the WireGuard
@@ -146,7 +158,7 @@ groups:
           severity: critical
           service: monitor-bridge
         annotations:
-          summary: Prometheus cannot scrape monitor-bridge's check exporter.
+          summary: 'monitor-bridge: Prometheus cannot scrape the check exporter.'
           description: >-
             up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
             monitor-bridge pod is down or the monitor-bridge scrape job is gone from
@@ -176,7 +188,12 @@ groups:
           service: monitor-bridge
         annotations:
           summary: >-
-            {{ with query "time() - homelab_check_last_run_timestamp_seconds{job='monitor-bridge'} > homelab_check_deadline_seconds{job='monitor-bridge'}" }}monitor-bridge's verdicts have gone stale for {{ range $i, $s := . | sortByLabel "check" }}{{ if $i }}, {{ end }}{{ $s.Labels.check }}{{ end }}.{{ else }}monitor-bridge exports fewer check rows than homelab_check_rows counts.{{ end }}
+            monitor-bridge: {{ with query "time() -
+            homelab_check_last_run_timestamp_seconds{job='monitor-bridge'} >
+            homelab_check_deadline_seconds{job='monitor-bridge'}" }}verdicts have gone stale for {{
+            range $i, $s := . | sortByLabel "check" }}{{ if $i }}, {{ end }}{{ $s.Labels.check }}{{
+            end }}.{{ else }}the exporter has fewer check rows than homelab_check_rows counts.{{ end
+            }}
           description: >-
             Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but for 10
             minutes a row has aged past its deadline or fewer rows export homelab_check_success than
@@ -198,7 +215,7 @@ groups:
           severity: critical
           service: b2
         annotations:
-          summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
+          summary: "b2: Backblaze refuses monitor-bridge's key, or the transaction cap is exceeded."
           description: >-
             monitor-bridge authenticates against B2 at most every 30 minutes. A cap denial looks the
             same as data loss, so read the monitor-bridge log message before assuming either.
@@ -213,7 +230,10 @@ groups:
           requires: b2
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='b2_storage'}" }}The B2 storage check failed: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}B2 bucket usage is past the free-tier threshold.{{ end }}
+            b2: {{ with query "homelab_check_detail{job='monitor-bridge',check='b2_storage'}" }}the
+            storage check failed: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end
+            }}{{ $s.Labels.detail }}{{ end }}.{{ else }}bucket usage is past the free-tier
+            threshold.{{ end }}
           description: >-
             A drain is nearly free, but a prune pays per deleted backup, so read
             longhorn-backup-tiering before deleting anything.
@@ -232,7 +252,10 @@ groups:
           service: arr
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='arr_queue'}" }}Queue items need review: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.{{ end }}
+            arr: {{ with query "homelab_check_detail{job='monitor-bridge',check='arr_queue'}"
+            }}queue items need review: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{
+            end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}a Sonarr or Radarr queue item needs
+            review, or an arr API stayed unreachable.{{ end }}
           description: >-
             A queue item is in warning, importBlocked, or importPending with a status message.
             An arr API that stays
@@ -244,7 +267,7 @@ groups:
           severity: warning
           service: etcd
         annotations:
-          summary: The weekly etcd restore drill has not passed within 8 days.
+          summary: 'etcd: the weekly restore drill has not passed within 8 days.'
           description: >-
             No list-only drill has ever passed, the last-success-list-only stamp on daniel-box is
             older than 8 days, or the pod cannot read the stamp. Run `journalctl -t
@@ -257,7 +280,11 @@ groups:
           service: home-assistant
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='ha_heartbeat'}" }}Home Assistant's check is failing on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Home Assistant's scheduler heartbeat is stale, or HA banned an IP.{{ end }}
+            home-assistant: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='ha_heartbeat'}" }}the check is failing
+            on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{
+            $s.Labels.detail }}{{ end }}.{{ else }}the scheduler heartbeat is stale, or HA banned an
+            IP.{{ end }}
           description: >-
             Either HA is up with its automations not running, or HA banned an IP in the last
             hour. A ban of a cluster gateway locks out everything behind it, so read
@@ -284,7 +311,11 @@ groups:
           service: host-packages
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='host_packages'}" }}The host-package builder is stalled: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}The host-package builder has stopped fetching master or has left a commit unbuilt.{{ end }}
+            host-packages: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='host_packages'}" }}the builder is
+            stalled: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{
+            $s.Labels.detail }}{{ end }}.{{ else }}the builder has stopped fetching master or has
+            left a commit unbuilt.{{ end }}
           description: >-
             The builder fetched master over 30 minutes ago, or a commit has waited over 7200
             seconds to be built. The monitor-bridge log names the reason and sha, and
@@ -307,7 +338,10 @@ groups:
           service: n8n
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='n8n'}" }}n8n workflows failing repeatedly: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}An active n8n workflow failed repeatedly, or several workflows are failing.{{ end }}
+            n8n: {{ with query "homelab_check_detail{job='monitor-bridge',check='n8n'}" }}workflows
+            failing repeatedly: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end
+            }}{{ $s.Labels.detail }}{{ end }}.{{ else }}an active workflow failed repeatedly, or
+            several workflows are failing.{{ end }}
           description: >-
             An active workflow failed 3 times in a row, or 2 or more workflows are each failing
             repeatedly. The monitor-bridge log names the workflow; open its last execution in n8n.
@@ -320,7 +354,10 @@ groups:
           service: bazarr
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='bazarr'}" }}Bazarr reports a problem with {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Bazarr rejects its sonarr or radarr API key, or reports a health issue.{{ end }}
+            bazarr: {{ with query "homelab_check_detail{job='monitor-bridge',check='bazarr'}"
+            }}reports a problem with {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{
+            end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}rejects its sonarr or radarr API key, or
+            reports a health issue.{{ end }}
           description: >-
             Bazarr's own copy of the sonarr or radarr API key is rejected, or Bazarr reports a
             health issue. Bazarr holds those keys in its UI, so a key rotation misses it. The
@@ -334,7 +371,11 @@ groups:
           service: prowlarr
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='prowlarr_indexers'}" }}Prowlarr indexers failing for a week or more: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}A Prowlarr indexer has been failing for a week or more.{{ end }}
+            prowlarr: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='prowlarr_indexers'}" }}indexers
+            failing for a week or more: {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }},
+            {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}an indexer has been failing for a
+            week or more.{{ end }}
           description: >-
             Prowlarr's own initialFailure puts an indexer at a week or more of failures. The Pirate
             Bay and 1337x are ignored as chronic flappers. The monitor-bridge log names the
@@ -348,7 +389,10 @@ groups:
           service: scrutiny
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='scrutiny'}" }}Scrutiny reports {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}Scrutiny reports a failing drive, stale collector data or high NVMe wear.{{ end }}
+            scrutiny: {{ with query "homelab_check_detail{job='monitor-bridge',check='scrutiny'}"
+            }}reports {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{
+            $s.Labels.detail }}{{ end }}.{{ else }}reports a failing drive, stale collector data or
+            high NVMe wear.{{ end }}
           description: >-
             A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear passed
             80%, or its collector data is older than 26h. This is the only drive-failure page. The
@@ -363,7 +407,10 @@ groups:
           service: speedtest
         annotations:
           summary: >-
-            {{ with query "homelab_check_detail{job='monitor-bridge',check='speedtest'}" }}The newest speedtest result failed on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}The newest speedtest result is stale, incomplete or under 100 Mbps.{{ end }}
+            speedtest: {{ with query "homelab_check_detail{job='monitor-bridge',check='speedtest'}"
+            }}the newest result failed on {{ range $i, $s := . | sortByLabel "detail" }}{{ if $i }},
+            {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}the newest result is stale,
+            incomplete or under 100 Mbps.{{ end }}
           description: >-
             The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
             under 100 Mbps. Open the speedtest UI and check its scheduler and last result.
@@ -374,7 +421,7 @@ groups:
           severity: warning
           service: airflow
         annotations:
-          summary: Airflow's scheduler is not running, so no warehouse rollup starts.
+          summary: 'airflow: the scheduler is not running, so no warehouse rollup starts.'
           description: >-
             The scheduler's own health server answers 503, or does not answer at all. Read the
             airflow-scheduler pod's state and log in the homelab namespace.

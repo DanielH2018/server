@@ -16,7 +16,7 @@ groups:
           severity: info
           service: observability
         annotations:
-          summary: The alert pipeline is alive. This alert always fires.
+          summary: 'observability: the alert pipeline is alive. This alert always fires.'
       # prometheus_config_last_reload_successful covers the rule files as well as
       # prometheus.yml: a rule file that fails to load fails the whole reload, and Prometheus
       # keeps evaluating the last good set.
@@ -27,7 +27,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus failed to reload its config or rule files.
+          summary: 'observability: Prometheus failed to reload its config or rule files.'
           description: >-
             {{ $labels.instance }} has reported a failed reload for 10 minutes, so it still
             evaluates the last rule set it loaded. Its log names the file it refused.
@@ -42,7 +42,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus failed to evaluate a rule in {{ $labels.rule_group }}.
+          summary: >-
+            observability: Prometheus failed to evaluate a rule in {{ $labels.rule_group }}.
           description: >-
             At least one rule in {{ $labels.rule_group }} failed an evaluation in the last 10
             minutes, so its output is missing or stale. The Prometheus log names the rule and
@@ -61,7 +62,8 @@ groups:
           severity: critical
           service: observability
         annotations:
-          summary: Alertmanager failed to deliver through {{ $labels.integration }}.
+          summary: >-
+            observability: Alertmanager failed to deliver through {{ $labels.integration }}.
           description: >-
             Alertmanager's {{ $labels.integration }} integration failed at least one send in
             the last 30 minutes, for a reason other than a rate limit. Read
@@ -82,7 +84,9 @@ groups:
           severity: critical
           service: observability
         annotations:
-          summary: Alertmanager's {{ $labels.integration }} sends have been rate limited for 15 minutes.
+          summary: >-
+            observability: Alertmanager's {{ $labels.integration }} sends have been rate limited for
+            15 minutes.
           description: >-
             The {{ $labels.integration }} integration refused Alertmanager's sends as rate
             limited in every 7-minute window for 15 minutes, so its resends are not getting
@@ -108,7 +112,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+          summary: >-
+            observability: Prometheus has lost Alertmanager's scrape job or its delivery counter.
           description: >-
             Either no up{job="alertmanager"} series exists, so the alertmanager job is gone from
             prometheus.yml, or the scrape works and alertmanager_notifications_failed_total is
@@ -156,8 +161,8 @@ groups:
           service: alert-escalation
         annotations:
           summary: >-
-            {{ $labels.escalated_from }} ({{ $labels.escalated_service }}{{ with $labels.unit }}, {{ . }}{{ end }})
-            has fired as a warning for 48 hours.
+            {{ $labels.escalated_service }}: {{ $labels.escalated_from }}{{ with $labels.unit }} ({{
+            . }}){{ end }} has fired as a warning for 48 hours.
           description: >-
             Fix the warning {{ $labels.escalated_from }} for {{ $labels.escalated_service }}, which
             has fired for 48 hours; the Karma link lists it with its own description and runbook.

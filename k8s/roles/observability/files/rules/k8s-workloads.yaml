@@ -46,7 +46,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.deployment }}: the Deployment has unavailable
+            replicas.
           description: >-
             {{ $labels.deployment }} has had {{ $value | printf "%.0f" }} unavailable replicas for
             15 minutes.
@@ -79,7 +81,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has no available replica.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.deployment }}: the Deployment has no available
+            replica.
           description: >-
             {{ $labels.deployment }} wants replicas and has had none available for 10 minutes.
       - alert: K8sDeploymentRolloutStalled
@@ -108,7 +112,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: The rollout of {{ $labels.namespace }}/{{ $labels.deployment }} has stalled.
+          summary: '{{ $labels.namespace }}/{{ $labels.deployment }}: the rollout has stalled.'
           description: >-
             {{ $labels.deployment }} has had fewer updated replicas than it wants for 15 minutes.
       # The 1h window is the evidence and the 30m window the recency gate: a pod that crash
@@ -173,7 +177,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} is crash looping.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.pod }}: container {{ $labels.container }} is crash
+            looping.
           description: >-
             {{ $labels.container }} restarted more than 3 times in the last hour, at least once in
             the last 30 minutes. Readiness can pass between restarts, so the replica alerts may
@@ -198,7 +204,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has unavailable pods.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.daemonset }}: the DaemonSet has unavailable pods.
           description: >-
             {{ $labels.daemonset }} has had {{ $value | printf "%.0f" }} unavailable pods for 5 minutes. The bridge
             paged this on one 300s sample, and the hold keeps that span.
@@ -217,7 +224,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
+          summary: >-
+            observability: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
           description: >-
             The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity
             floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics
@@ -235,7 +243,8 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
+          summary: >-
+            observability: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
           description: >-
             11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or
             kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged
@@ -261,7 +270,7 @@ groups:
           service: dri-device-plugin
           verify: "true"
         annotations:
-          summary: No node advertises the devic.es/dri GPU resource.
+          summary: 'dri-device-plugin: no node advertises the devic.es/dri GPU resource.'
           description: >-
             No node reports allocatable resource="devic_es_dri" above 0 for 5 minutes, so jellyfin
             and tdarr cannot schedule. Check the dri-device-plugin DaemonSet.
@@ -272,7 +281,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus holds no kube_node_status_allocatable series.
+          summary: 'observability: Prometheus holds no kube_node_status_allocatable series.'
           description: >-
             kube-state-metrics is not collecting nodes, so K8sExtendedResourceMissing cannot see the
             GPU resource. The bridge read this as INERT; this rule pages it.
@@ -294,7 +303,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus holds no {{ $labels.family }} series.
+          summary: 'observability: Prometheus holds no {{ $labels.family }} series.'
           description: >-
             An alert or mapping in k8s-workloads that reads {{ $labels.family }} evaluates to
             nothing. Check kube-state-metrics' --resources and its scrape job's
@@ -338,7 +347,9 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: A workload in {{ $labels.namespace }} has no deploy tag in workload-service.
+          summary: >-
+            observability: a workload in {{ $labels.namespace }} has no deploy tag in
+            workload-service.
           description: >-
             {{ with $labels.deployment }}Deployment {{ . }}{{ end }}{{ with $labels.daemonset }}DaemonSet {{ . }}{{ end }}{{ with $labels.pod }}Pod {{ . }}{{ end }}
             has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add

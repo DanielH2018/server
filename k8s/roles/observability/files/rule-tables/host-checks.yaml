@@ -20,7 +20,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s root disk check is red.
+          summary: '${host}: the root disk check is red.'
           description: >-
             disk-health.sh on ${host} read the root filesystem above its threshold, or df
             failed. Longhorn stops scheduling replicas on the node at 75%.
@@ -52,7 +52,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s root disk check has stopped reporting.
+          summary: '${host}: the root disk check has stopped reporting.'
           description: >-
             No disk-health verdict newer than 25 minutes reached Prometheus from ${host}'s
             textfile collector, so nothing is watching the root disk. Read the `${host} disk
@@ -74,7 +74,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The peer artifact sync on ${host} is failing.
+          summary: '${host}: the peer artifact sync is failing.'
           description: >-
             sync-artifacts.sh has failed a peer for claude_code_artifacts_sync_alert_after_failures
             consecutive runs, so that peer's artifacts are stale in the browser. Run `journalctl -t
@@ -92,7 +92,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The peer artifact sync on ${host} has stopped reporting.
+          summary: '${host}: the peer artifact sync has stopped reporting.'
           description: >-
             No sync-artifacts verdict newer than 15 minutes reached Prometheus from ${host}, so
             the cron stopped, or a hung run holds its flock. Read the `Sync peer Claude artifacts`
@@ -105,7 +105,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The telemetry OTLP receiver on ${host}'s loopback refuses connections.
+          summary: '${host}: the telemetry OTLP receiver on loopback refuses connections.'
           description: >-
             Claude Code cannot export telemetry even with every pod Ready, because the hostPort
             DNAT is an iptables rule rather than a socket. Check the otel-collector DaemonSet pod
@@ -123,7 +123,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The telemetry OTLP-door check on ${host} has stopped reporting.
+          summary: '${host}: the telemetry OTLP-door check has stopped reporting.'
           description: >-
             No claude-otel-health verdict newer than 25 minutes reached Prometheus from ${host},
             so nothing is watching the OTLP door. Read the `Claude Code telemetry health` cron
@@ -141,7 +141,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The audit watches on ${host}'s Claude Code guardrail paths are not in place.
+          summary: '${host}: the audit watches on the Claude Code guardrail paths are not in place.'
           description: >-
             claude-guardrail-audit on ${host} ended with status=down: auditd is not running,
             kernel auditing is off, or a guardrail path has no watch, so guardrail writes leave
@@ -161,7 +161,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The guardrail audit check on ${host} has stopped reporting.
+          summary: '${host}: the guardrail audit check has stopped reporting.'
           description: >-
             No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
             ${host}, so nothing reloads a watch an auditd restart dropped. Read `systemctl
@@ -177,7 +177,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The guardrail change poster on ${host} is failing.
+          summary: '${host}: the guardrail change poster is failing.'
           description: >-
             claude-guardrail-ack on ${host} ended with status=down: it could not read a guardrail
             path, render the dotfiles, or deliver its Discord post. Until it clears, a change
@@ -196,7 +196,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The guardrail change poster on ${host} has stopped reporting.
+          summary: '${host}: the guardrail change poster has stopped reporting.'
           description: >-
             No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
             ${host}, so no guardrail change is being posted. Read `systemctl status
@@ -209,7 +209,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The dotfiles root mirror on ${host} refused a tag or could not fetch.
+          summary: '${host}: the dotfiles root mirror refused a tag or could not fetch.'
           description: >-
             claude-dotfiles-mirror on ${host} ended with status=down: it could not fetch the
             repo, or the newest tag is unsigned, signed by another key, or does not
@@ -229,7 +229,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The dotfiles root mirror on ${host} has stopped reporting.
+          summary: '${host}: the dotfiles root mirror has stopped reporting.'
           description: >-
             No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
             ${host}, so no new dotfiles tag is being verified. Read `systemctl status
@@ -245,7 +245,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The weekly Claude runs summary on ${host} did not post, or read a source.
+          summary: '${host}: the weekly Claude runs summary did not post, or read a source.'
           description: >-
             claude-weekly-summary on ${host} ended with status=down: the Discord post
             failed, or a source of run records could not be read. A failed post is retried by
@@ -263,7 +263,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The weekly Claude runs summary on ${host} has stopped reporting.
+          summary: '${host}: the weekly Claude runs summary has stopped reporting.'
           description: >-
             No claude-weekly-summary verdict newer than 169 hours from ${host}, so last week's
             unattended runs were not summarised. Read `systemctl status
@@ -283,7 +283,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s Longhorn backup check is red.
+          summary: '${host}: the Longhorn backup check is red.'
           description: >-
             longhorn_backup_health.py on ${host} reported a failing backup-plane check: an
             unavailable backup target, a stale or errored backup, a failed job, or a restore drill
@@ -303,7 +303,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s longhorn-backup-health check has stopped reporting.
+          summary: '${host}: the longhorn-backup-health check has stopped reporting.'
           description: >-
             Read the `longhorn-backup-health` syslog tag on ${host}, then
             /var/lib/node-exporter-textfile/longhorn-backup-health.prom. No verdict newer than 25
@@ -316,7 +316,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s cluster-token drift check is red.
+          summary: '${host}: the cluster-token drift check is red.'
           description: >-
             etcd-token-drift.sh on ${host} found the cluster token changed since the off-box copy
             was stamped, or could not compare the two. `journalctl -t etcd-snapshot-offbox` names
@@ -335,7 +335,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s etcd-snapshot-offbox check has stopped reporting.
+          summary: '${host}: the etcd-snapshot-offbox check has stopped reporting.'
           description: >-
             Read the `etcd-snapshot-offbox` syslog tag on ${host}, then
             /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom. No verdict newer than 25
@@ -360,7 +360,7 @@ groups:
           service: ${host}
           escalate: "false"
         annotations:
-          summary: ${host}'s weekly AIDE check failed or found an unexplained change.
+          summary: '${host}: the weekly AIDE check failed or found an unexplained change.'
           description: >-
             aide-check on ${host} ended with status=down: an unexplained file change, an AIDE
             error, or a held lock. Run `journalctl -t aide-check` on ${host}. Once every path is
@@ -380,7 +380,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly AIDE check has stopped reporting.
+          summary: '${host}: the weekly AIDE check has stopped reporting.'
           description: >-
             No aide-check verdict newer than 626400s reached Prometheus from ${host}, so
             nothing confirms the file-integrity scan still runs. Read the `Weekly AIDE file
@@ -394,7 +394,7 @@ groups:
           service: ${host}
           escalate: "false"
         annotations:
-          summary: ${host}'s weekly rkhunter scan warned or did not complete.
+          summary: '${host}: the weekly rkhunter scan warned or did not complete.'
           description: >-
             rkhunter-check.sh on ${host} ended with status=down: rkhunter raised a warning, a
             suspect file or a possible rootkit, or the scan wrote no summary. Read
@@ -414,7 +414,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly rkhunter scan has stopped reporting.
+          summary: '${host}: the weekly rkhunter scan has stopped reporting.'
           description: >-
             No rkhunter-check verdict newer than 612000s reached Prometheus from ${host}, so
             nothing confirms the malware scan still runs. Read the `Weekly rkhunter malware
@@ -443,7 +443,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly apt autoremove failed.
+          summary: '${host}: the weekly apt autoremove failed.'
           description: >-
             host-maintenance.sh apt-autoremove on ${host} wrote success 0: apt-get autoremove exited non-zero. Read
             `journalctl -t apt-autoremove` on ${host} for the command's output.
@@ -464,7 +464,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly apt autoremove has stopped reporting.
+          summary: '${host}: the weekly apt autoremove has stopped reporting.'
           description: >-
             No apt-autoremove verdict newer than 612000s reached Prometheus from ${host}, so
             nothing confirms the weekly apt autoremove still runs. Read the `Weekly apt
@@ -478,7 +478,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly dpkg purge of orphaned configs failed.
+          summary: '${host}: the weekly dpkg purge of orphaned configs failed.'
           description: >-
             host-maintenance.sh dpkg-purge on ${host} wrote success 0: the dpkg purge of removed packages' configs exited non-zero. Read
             `journalctl -t dpkg-purge` on ${host} for the command's output.
@@ -499,7 +499,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly dpkg purge of orphaned configs has stopped reporting.
+          summary: '${host}: the weekly dpkg purge of orphaned configs has stopped reporting.'
           description: >-
             No dpkg-purge verdict newer than 612000s reached Prometheus from ${host}, so
             nothing confirms the weekly dpkg purge still runs. Read the `Weekly dpkg purge
@@ -512,7 +512,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly firmware update failed.
+          summary: '${host}: the weekly firmware update failed.'
           description: >-
             host-maintenance.sh firmware-update on ${host} wrote success 0: fwupdmgr update exited with an error rather than 0 or 2 (nothing to update). Read
             `journalctl -t fwupd-auto` on ${host} for the command's output.
@@ -533,7 +533,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s weekly firmware update has stopped reporting.
+          summary: '${host}: the weekly firmware update has stopped reporting.'
           description: >-
             No firmware-update verdict newer than 612000s reached Prometheus from ${host}, so
             nothing confirms the weekly firmware update still runs. Read the `Weekly firmware
@@ -565,7 +565,8 @@ groups:
           service: ${host}
         annotations:
           summary: >-
-            {{ with $labels.unit }}{{ . }} has failed on ${host}.{{ else }}${host} has failed system units that its check did not name.{{ end }}
+            ${host}: {{ with $labels.unit }}{{ . }} has failed.{{ else }}system units have failed
+            that the check did not name.{{ end }}
           description: >-
             Read `systemctl status <unit>` and `journalctl -u <unit> -b` on ${host}, fix the
             cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert. A
@@ -589,7 +590,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s failed-unit check has stopped reporting.
+          summary: '${host}: the failed-unit check has stopped reporting.'
           description: >-
             No systemd-units verdict newer than 900s reached Prometheus from ${host}, so
             nothing is counting its failed units. Read `systemctl status
@@ -610,7 +611,9 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s kubelet holds no shutdown delay lock, so its next shutdown skips the pod drain.
+          summary: >-
+            ${host}: the kubelet holds no shutdown delay lock, so its next shutdown skips the pod
+            drain.
           description: >-
             Without the lock, a shutdown stops pods undrained and can abort Longhorn's ext4
             journals. Read {job="k3s"} in loki-homelab for "Failed to start node shutdown
@@ -633,7 +636,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s kubelet shutdown-lock check has stopped reporting.
+          summary: '${host}: the kubelet shutdown-lock check has stopped reporting.'
           description: >-
             No kubelet-shutdown-lock verdict newer than 900s reached Prometheus from ${host},
             so nothing reads kubelet's shutdown lock. Read `systemctl status
@@ -675,7 +678,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s {{ $labels.check }} check is past its own deadline.
+          summary: '${host}: the {{ $labels.check }} check is past its own deadline.'
           description: >-
             The {{ $labels.check }} textfile on ${host} holds a verdict older than the
             homelab_check_deadline_seconds it declares, so its producer stopped writing. Read
@@ -697,7 +700,11 @@ groups:
           shadow: "true"
         annotations:
           summary: >-
-            node_exporter on ${host} cannot read a textfile, candidates: {{ $files := query `count by (file) (last_over_time(node_textfile_mtime_seconds{origin="${host}"}[7d])) unless count by (file) (node_textfile_mtime_seconds{origin="${host}"})` }}{{ if $files }}{{ range $i, $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{ end }}.
+            ${host}: node_exporter cannot read a textfile, candidates: {{ $files := query `count by
+            (file) (last_over_time(node_textfile_mtime_seconds{origin="${host}"}[7d])) unless count
+            by (file) (node_textfile_mtime_seconds{origin="${host}"})` }}{{ if $files }}{{ range $i,
+            $s := $files }}{{ if $i }}, {{ end }}{{ $s.Labels.file }}{{ end }}{{ else }}none known{{
+            end }}.
           description: >-
             Read the node-exporter log on ${host} for the textfile it rejects: a file in
             /var/lib/node-exporter-textfile is malformed or unreadable, so every series in it is
@@ -721,7 +728,8 @@ groups:
           service: ${host}
         annotations:
           summary: >-
-            ${host}'s iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{ $labels.state }}.
+            ${host}: the iSCSI session {{ $labels.session }} to {{ $labels.target }} reads {{
+            $labels.state }}.
           description: >-
             {{ $labels.session }} on ${host} has read {{ $labels.state }} for 15 minutes
             (target {{ $labels.target }}). The next attach of that volume fails, and Longhorn
@@ -741,7 +749,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s iSCSI session check has stopped reporting.
+          summary: '${host}: the iSCSI session check has stopped reporting.'
           description: >-
             No iscsi-sessions verdict newer than 5 minutes reached Prometheus from ${host}'s
             textfile collector, so nothing is watching the node's iSCSI sessions. Read the
@@ -769,7 +777,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The agent clone sync on ${host} has stopped reporting.
+          summary: '${host}: the agent clone sync has stopped reporting.'
           description: >-
             No claude-clone-sync verdict newer than 2100s from ${host}, so the agent's clone
             fast-forward has not completed a clean run. Read `systemctl status
@@ -789,7 +797,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The agent dotfiles sync on ${host} has stopped reporting.
+          summary: '${host}: the agent dotfiles sync has stopped reporting.'
           description: >-
             No claude-dotfiles-sync verdict newer than 2100s from ${host}, so the agent's
             dotfiles apply has not completed a clean run. Read `systemctl status
@@ -809,7 +817,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The Claude memory sync from ${host} has stopped reporting.
+          summary: '${host}: the Claude memory sync has stopped reporting.'
           description: >-
             No claude-memory-sync verdict newer than 2100s from ${host}, so the memory store
             copy to daniel-server has not completed a clean run. Read `systemctl status
@@ -829,7 +837,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The triage poller on ${host} has stopped reporting.
+          summary: '${host}: the triage poller has stopped reporting.'
           description: >-
             No claude-triage-poll verdict newer than 660s from ${host}, so the monitor triage
             poll has not completed a clean run. Read `systemctl status
@@ -849,7 +857,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The fan-out server lander on ${host} has stopped reporting.
+          summary: '${host}: the fan-out server lander has stopped reporting.'
           description: >-
             No claude-fanout-server-lander verdict newer than 3300s from ${host}, so the lander
             has not completed a clean run. Read `systemctl status
@@ -870,7 +878,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The pipeline timeline snapshot on ${host} has stopped reporting.
+          summary: '${host}: the pipeline timeline snapshot has stopped reporting.'
           description: >-
             No claude-pipeline-timeline verdict newer than 174900s from ${host}, so the PR
             timeline snapshot is not running, and the journal inputs it saves rotate after
@@ -895,7 +903,8 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s wired link ${k3s_node_static_link} is down, so the node runs on WiFi.
+          summary: >-
+            ${host}: the wired link ${k3s_node_static_link} is down, so the node runs on WiFi.
           description: >-
             ${k3s_node_static_link} on ${host} has had no carrier, or has been down, for 5
             minutes, so the node routes over its slower WiFi fallback, which carries Longhorn
@@ -916,7 +925,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host}'s homelab package reconcile failed, so it installs no newer package.
+          summary: '${host}: the homelab package reconcile failed, so it installs no newer package.'
           description: >-
             Read `journalctl -u homelab-updater -u homelab-reconcile` on ${host}, fix the
             cause, then run `sudo /usr/lib/homelab/homelab-updater --clear-hold`.
@@ -936,7 +945,7 @@ groups:
           service: ${host}
           shadow: "true"
         annotations:
-          summary: The Pi's last Compose run did not bring the project up.
+          summary: '${host}: the last Compose run did not bring the project up.'
           description: >-
             compose-run on ${host} wrote homelab_compose_up_result 0 at package
             {{ $labels.sha }}: a key check, the config check, an image pull, compose-adopt or
@@ -969,7 +978,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The Pi's Compose project has not run since ${host} booted.
+          summary: '${host}: the Compose project has not run since boot.'
           description: >-
             ${host} booted more than 1690s ago, and homelab_compose_up_timestamp_seconds
             still predates that boot or is missing, so the boot's compose-run wrote no result.
@@ -996,7 +1005,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The Pi's Compose project wrote no result for reconcile's last start of it.
+          summary: "${host}: the Compose project wrote no result for reconcile's last start of it."
           description: >-
             homelab-reconcile started homelab-compose.service on ${host}, and
             homelab_compose_up_timestamp_seconds still predates that call, so compose-run wrote
@@ -1024,7 +1033,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host} has owed a reboot for more than 8 days.
+          summary: '${host}: a reboot has been owed for more than 8 days.'
           description: >-
             Reconcile recorded a reboot-class package change on ${host} more than 8 days ago,
             and the host has not booted since. Read `journalctl -t weekly-restart` on ${host}
@@ -1063,7 +1072,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s Docker engine has sat off its pins for more than 26 hours.
+          summary: '${host}: the Docker engine has sat off its pins for more than 26 hours.'
           description: >-
             The Docker engine on ${host} has sat off its pins for 26 hours, so the 00:30 UTC
             homelab-docker-engine.timer did not apply them. Read `systemctl status
@@ -1088,7 +1097,7 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: ${host} has had no successful homelab update for ${limit}.
+          summary: '${host}: no successful homelab update for ${limit}.'
           description: >-
             Read `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
             ${host}. No homelab-updater run there has succeeded in ${limit}, or its exporter is up

@@ -26,7 +26,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: checkout-sync, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's primary checkout sync has stopped reporting.
+              summary: 'daniel-box: the primary checkout sync has stopped reporting.'
               description: >-
                 No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
                 so nothing confirms the primary checkout follows master. A fetch that keeps
@@ -41,7 +41,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's generated-docs refresh has stopped reporting.
+              summary: 'daniel-box: the generated-docs refresh has stopped reporting.'
               description: >-
                 No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
@@ -55,7 +55,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's weekly eval sweep has stopped reporting.
+              summary: 'daniel-box: the weekly eval sweep has stopped reporting.'
               description: >-
                 No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
@@ -69,7 +69,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's secret-rotation audit has stopped reporting.
+              summary: 'daniel-box: the secret-rotation audit has stopped reporting.'
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box, so nothing confirms secret rotation is being audited. Read
@@ -86,7 +86,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's Loki read-route witness has stopped reporting.
+              summary: 'daniel-box: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box, so nothing confirms the Loki read route is being witnessed. Read
@@ -94,7 +94,7 @@ tests:
                 /var/lib/node-exporter-textfile/loki-read-route-health.prom.
           - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
-              summary: daniel-server's Loki read-route witness has stopped reporting.
+              summary: 'daniel-server: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server, so nothing confirms the Loki read route is being witnessed. Read
@@ -119,7 +119,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's generated-docs refresh reported a failure.
+              summary: 'daniel-box: the generated-docs refresh reported a failure.'
               description: >-
                 docs-refresh.sh on daniel-box ended with status=down: a generator, the
                 shard-weight measurement or the site build failed, a previous run is unlanded or
@@ -138,7 +138,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's weekly eval sweep reported a failure.
+              summary: 'daniel-box: the weekly eval sweep reported a failure.'
               description: >-
                 eval-run.sh on daniel-box ended with status=down: an eval case regressed, or an
                 earlier PR is unlanded for a reason that needs a human. A missing
@@ -157,7 +157,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's secret-rotation audit reported a failure.
+              summary: 'daniel-box: the secret-rotation audit reported a failure.'
               description: >-
                 secret-rotation-audit.sh on daniel-box exited non-zero: a secret is past its
                 rotation window, a secret in secrets.yml is missing from the registry, a
@@ -178,7 +178,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: recovery-kit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: The off-site recovery kit is overdue for a refresh.
+              summary: 'daniel-box: the off-site recovery kit is overdue for a refresh.'
               description: >-
                 `recovery_kit.py check` on daniel-box found secrets/recovery_kit.yml missing,
                 unreadable, future-dated or older than MAX_AGE_DAYS; rerun it to read which.
@@ -207,7 +207,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box cannot read Loki through the loki-homelab route.
+              summary: 'daniel-box: cannot read Loki through the loki-homelab route.'
               description: >-
                 `probe.py loki-labels` through the loki-homelab IngressRoute failed on
                 daniel-box with a 404 or an error, usually because the ClientIP guard rejects
@@ -232,7 +232,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
-              summary: daniel-server cannot read Loki through the loki-homelab route.
+              summary: 'daniel-server: cannot read Loki through the loki-homelab route.'
               description: >-
                 `probe.py loki-labels` through the loki-homelab IngressRoute failed on
                 daniel-server with a 404 or an error, usually because the ClientIP guard rejects
@@ -256,7 +256,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's generated-docs refresh has stopped reporting.
+              summary: 'daniel-box: the generated-docs refresh has stopped reporting.'
               description: >-
                 No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
@@ -277,7 +277,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's weekly eval sweep has stopped reporting.
+              summary: 'daniel-box: the weekly eval sweep has stopped reporting.'
               description: >-
                 No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
@@ -298,7 +298,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's secret-rotation audit has stopped reporting.
+              summary: 'daniel-box: the secret-rotation audit has stopped reporting.'
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box, so nothing confirms secret rotation is being audited. Read
@@ -325,7 +325,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's Loki read-route witness has stopped reporting.
+              summary: 'daniel-box: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box, so nothing confirms the Loki read route is being witnessed. Read
@@ -352,7 +352,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
-              summary: daniel-server's Loki read-route witness has stopped reporting.
+              summary: 'daniel-server: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server, so nothing confirms the Loki read route is being witnessed. Read
@@ -377,7 +377,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's generated-docs refresh has stopped reporting.
+              summary: 'daniel-box: the generated-docs refresh has stopped reporting.'
               description: >-
                 No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the generated docs are refreshing. Read
@@ -398,7 +398,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's weekly eval sweep has stopped reporting.
+              summary: 'daniel-box: the weekly eval sweep has stopped reporting.'
               description: >-
                 No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's
                 textfile collector, so nothing confirms the eval sweep is running. Read the
@@ -419,7 +419,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's secret-rotation audit has stopped reporting.
+              summary: 'daniel-box: the secret-rotation audit has stopped reporting.'
               description: >-
                 No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
                 daniel-box, so nothing confirms secret rotation is being audited. Read
@@ -446,7 +446,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's Loki read-route witness has stopped reporting.
+              summary: 'daniel-box: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-box, so nothing confirms the Loki read route is being witnessed. Read
@@ -473,7 +473,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
-              summary: daniel-server's Loki read-route witness has stopped reporting.
+              summary: 'daniel-server: the Loki read-route witness has stopped reporting.'
               description: >-
                 No loki-read-route-health verdict newer than 2 hours reached Prometheus from
                 daniel-server, so nothing confirms the Loki read route is being witnessed. Read
@@ -560,7 +560,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: checkout-sync, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's primary checkout sync is refusing to fast-forward.
+              summary: 'daniel-box: the primary checkout sync is refusing to fast-forward.'
               description: >-
                 homelab-checkout-sync on daniel-box refused its last run, so the primary
                 checkout is not following master. The homelab_checkout_sync_refused metric names
@@ -582,7 +582,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: checkout-sync, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
-              summary: daniel-box's primary checkout sync has stopped reporting.
+              summary: 'daniel-box: the primary checkout sync has stopped reporting.'
               description: >-
                 No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
                 so nothing confirms the primary checkout follows master. A fetch that keeps

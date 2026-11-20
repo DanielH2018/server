@@ -27,7 +27,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
+          summary: 'registry: the ghcr-mirror Deployment has wanted zero replicas for 2 hours.'
           description: >-
             homelab/ghcr-mirror has been scaled to zero for 2 hours, or kube-state-metrics is
             unscraped. A registry-gc.sh run probably died before its restore.
@@ -47,7 +47,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
+          summary: 'registry: the dockerhub-mirror Deployment has wanted zero replicas for 2 hours.'
           description: >-
             homelab/dockerhub-mirror has been scaled to zero for 2 hours, or kube-state-metrics is
             unscraped. A registry-gc.sh run probably died before its restore.
@@ -68,7 +68,8 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: "{{ $labels.origin }} cannot pull nut's manifest through its ghcr.io mirror endpoint."
+          summary: >-
+            {{ $labels.origin }}: cannot pull nut's manifest through its ghcr.io mirror endpoint.
           description: >-
             The ghcr-mirror-pull check on {{ $labels.origin }} has failed for 45 minutes: nut's
             manifest GET via the node's ghcr.io mirror failed, or the probe ConfigMap has
@@ -91,7 +92,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
+          summary: 'daniel-box: the ghcr.io mirror pull check has stopped reporting.'
           description: >-
             No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's
             textfile collector, so nothing is watching whether the node's ghcr.io mirror
@@ -109,7 +110,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
+          summary: 'daniel-server: the ghcr.io mirror pull check has stopped reporting.'
           description: >-
             No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's
             textfile collector, so nothing is watching whether the node's ghcr.io mirror
@@ -126,7 +127,8 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: "{{ $labels.origin }} cannot pull a manifest through its docker.io mirror endpoint."
+          summary: >-
+            {{ $labels.origin }}: cannot pull a manifest through its docker.io mirror endpoint.
           description: >-
             The dockerhub-mirror-pull check on {{ $labels.origin }} has failed for 45 minutes:
             a manifest GET via the node's docker.io mirror failed. Read the
@@ -148,7 +150,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: daniel-box's docker.io mirror pull check has stopped reporting.
+          summary: 'daniel-box: the docker.io mirror pull check has stopped reporting.'
           description: >-
             No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from
             daniel-box's textfile collector, so nothing is watching whether the node's docker.io
@@ -166,7 +168,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: daniel-server's docker.io mirror pull check has stopped reporting.
+          summary: 'daniel-server: the docker.io mirror pull check has stopped reporting.'
           description: >-
             No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from
             daniel-server's textfile collector, so nothing is watching whether the node's docker.io
@@ -182,7 +184,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: The weekly registry garbage collection did not complete.
+          summary: 'registry: the weekly garbage collection did not complete.'
           description: >-
             registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a
             mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another
@@ -200,7 +202,7 @@ groups:
           severity: warning
           service: registry
         annotations:
-          summary: The weekly registry garbage collection has stopped reporting.
+          summary: 'registry: the weekly garbage collection has stopped reporting.'
           description: >-
             No registry-gc verdict newer than 612000s reached Prometheus from daniel-box's
             textfile collector, so nothing confirms the mirrors' weekly GC still runs. Read

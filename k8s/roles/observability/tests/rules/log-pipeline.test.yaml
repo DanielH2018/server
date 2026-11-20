@@ -25,7 +25,8 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: Prometheus has lost the log shipper's dropped-entries counter.
+              summary: >-
+                loki-homelab: Prometheus has lost the log shipper's dropped-entries counter.
               description: >-
                 No loki_write_dropped_entries_total series exists for the alloy job, so the job
                 is gone from prometheus.yml or Alloy renamed the counter.
@@ -47,8 +48,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: >-
-                The log shippers dropped 12000 entries in the last hour.
+              summary: 'loki-homelab: the log shippers dropped 12000 entries in the last hour.'
               description: >-
                 Alloy gave up on more than 3000 log entries in an hour, so those lines never
                 reached Loki. Read loki_write_dropped_entries_total by reason and instance, then
@@ -99,8 +99,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: >-
-                The homelab Loki discarded 12000 entries as rate_limited in the last hour.
+              summary: 'loki-homelab: discarded 12000 entries as rate_limited in the last hour.'
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason rate_limited.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
@@ -124,7 +123,8 @@ tests:
               service: observability
             exp_annotations:
               summary: >-
-                The telemetry Loki discarded 12000 entries as line_too_long in the last hour.
+                observability: the telemetry Loki discarded 12000 entries as line_too_long in the
+                last hour.
               description: >-
                 The telemetry Loki discarded more than 3000 entries in an hour for the reason
                 line_too_long, so Claude Code's logs are being lost. Read
@@ -149,8 +149,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: >-
-                The homelab Loki discarded 12000 entries as rate_limited in the last hour.
+              summary: 'loki-homelab: discarded 12000 entries as rate_limited in the last hour.'
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason rate_limited.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
@@ -174,8 +173,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: >-
-                The homelab Loki discarded 12000 entries as too_far_behind in the last hour.
+              summary: 'loki-homelab: discarded 12000 entries as too_far_behind in the last hour.'
               description: >-
                 Loki discarded more than 3000 entries in an hour for the reason too_far_behind.
                 too_far_behind means entries arrived outside Loki's accept window, a clock or
@@ -198,8 +196,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: >-
-                The OTel collector failed to export through loki.
+              summary: 'observability: the OTel collector failed to export through loki.'
               description: >-
                 The collector gave up on exporting telemetry in the last 15 minutes, so the data
                 reaches neither Loki, Prometheus nor Tempo and no other counter records the
@@ -219,7 +216,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Tempo's blocklist poll failed.
+              summary: "observability: Tempo's blocklist poll failed."
               description: >-
                 Tempo's blocklist poll failed in the last 15 minutes, so stored traces are
                 unsearchable and retention deletes nothing. Read the Tempo pod's log for the

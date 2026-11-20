@@ -10,7 +10,7 @@
       "status": "firing",
       "labels": {"alertname": "RkhunterScanFailed", "check": "rkhunter-check", "escalate": "false", "origin": "daniel-box", "service": "daniel-box", "severity": "warning"},
       "annotations": {
-        "summary": "daniel-box's weekly rkhunter scan warned or did not complete.",
+        "summary": "daniel-box: the weekly rkhunter scan warned or did not complete.",
         "description": "rkhunter-check.sh on daniel-box ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box."
       },
       "startsAt": "2026-11-15T03:30:00Z",
@@ -20,7 +20,7 @@
       "status": "firing",
       "labels": {"alertname": "RkhunterScanFailed", "check": "rkhunter-check", "escalate": "false", "origin": "daniel-pi", "service": "daniel-pi", "severity": "warning"},
       "annotations": {
-        "summary": "daniel-pi's weekly rkhunter scan warned or did not complete.",
+        "summary": "daniel-pi: the weekly rkhunter scan warned or did not complete.",
         "description": "rkhunter-check.sh on daniel-pi ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-pi."
       },
       "startsAt": "2026-11-15T03:30:00Z",
@@ -30,7 +30,7 @@
       "status": "firing",
       "labels": {"alertname": "RkhunterScanFailed", "check": "rkhunter-check", "escalate": "false", "origin": "daniel-server", "service": "daniel-server", "severity": "warning"},
       "annotations": {
-        "summary": "daniel-server's weekly rkhunter scan warned or did not complete.",
+        "summary": "daniel-server: the weekly rkhunter scan warned or did not complete.",
         "description": "rkhunter-check.sh on daniel-server ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-server."
       },
       "startsAt": "2026-11-15T03:30:00Z",

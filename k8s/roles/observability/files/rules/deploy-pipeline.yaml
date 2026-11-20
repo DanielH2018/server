@@ -22,7 +22,8 @@ groups:
           service: deploy-pipeline
           escalate: "false"
         annotations:
-          summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
+          summary: >-
+            deploy-pipeline: the repository variable DEPLOY_HOLD has held promotion for 15 minutes.
           description: >-
             DEPLOY_HOLD reads something other than none, so promote moves prod nowhere. Read it with
             `gh variable get DEPLOY_HOLD` and run `probe.py landing`; docs/flux-deploy-plane.md says
@@ -50,7 +51,8 @@ groups:
           service: deploy-pipeline
         annotations:
           summary: >-
-            A green master commit has waited {{ $value | humanizeDuration }} for promotion.
+            deploy-pipeline: a green master commit has waited {{ $value | humanizeDuration }} for
+            promotion.
           description: >-
             The oldest green master commit that prod lacks went green
             {{ $value | humanizeDuration }} ago, and no hold stands. Read `gh run list --workflow
@@ -67,7 +69,8 @@ groups:
           severity: critical
           service: deploy-pipeline
         annotations:
-          summary: The prod tag's digest has differed from PROD_DIGEST for 15 minutes.
+          summary: >-
+            deploy-pipeline: the prod tag's digest has differed from PROD_DIGEST for 15 minutes.
           description: >-
             prod in GHCR names a digest that promote did not record, so something other than
             promote moved it, or promote moved it and failed to write PROD_DIGEST. Compare
@@ -99,7 +102,7 @@ groups:
           severity: warning
           service: deploy-pipeline
         annotations:
-          summary: Prometheus has lost the deploy-pipeline job or one of its five gauges.
+          summary: 'deploy-pipeline: Prometheus has lost the job or one of its five gauges.'
           description: >-
             Either no up{job="deploy-pipeline"} series exists (the job left prometheus.yml) or
             monitor-bridge is scraped without one of the five homelab_deploy_* gauges. Its

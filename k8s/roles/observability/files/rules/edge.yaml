@@ -23,7 +23,7 @@ groups:
           severity: critical
           service: traefik
         annotations:
-          summary: The certificate {{ $labels.cn }} expires within 14 days.
+          summary: 'traefik: the certificate {{ $labels.cn }} expires within 14 days.'
           description: >-
             Traefik serves a certificate for {{ $labels.cn }} that expires in
             {{ $value | humanize }} days. Read Traefik's ACME log for a failed renewal, and
@@ -49,7 +49,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Traefik backend {{ $labels.backend }} answers over 5% of requests with a 5xx.
+          summary: 'traefik: backend {{ $labels.backend }} answers over 5% of requests with a 5xx.'
           description: >-
             {{ $value | humanizePercentage }} of the requests Traefik sent to
             {{ $labels.backend }} in the last 5 minutes got a 5xx. Loki
@@ -108,7 +108,8 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Over 5% of Traefik backend {{ $labels.backend }}'s requests take longer than 5s.
+          summary: >-
+            traefik: over 5% of backend {{ $labels.backend }}'s requests take longer than 5s.
           description: >-
             In {{ $value | printf "%.0f" }} of the last 10 minutes, over 5% of the requests to
             {{ $labels.backend }} in the trailing 5 minutes finished after the 5.0s histogram
@@ -128,7 +129,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Traefik emits no 5.0s latency bucket for {{ $labels.backend }}.
+          summary: 'traefik: no 5.0s latency bucket is emitted for {{ $labels.backend }}.'
           description: >-
             {{ $labels.backend }} serves requests but has no
             traefik_service_request_duration_seconds_bucket series with le="5.0", so
@@ -149,8 +150,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: >-
-            {{ $value | humanizePercentage }} of the requests Traefik receives get a 404.
+          summary: 'traefik: {{ $value | humanizePercentage }} of received requests get a 404.'
           description: >-
             {{ $value | humanizePercentage }} of the entrypoint traffic in the last 5 minutes
             was 404, the shape of an edge that lost its routers (#1322). Read Traefik's startup
@@ -169,7 +169,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Traefik router {{ $labels.router }} keeps answering 421.
+          summary: 'traefik: router {{ $labels.router }} keeps answering 421.'
           description: >-
             {{ $labels.router }} answered 421 at {{ printf "%.2f" $value }} requests per second
             for 10 minutes. A client is wedged on a connection SNICheck pinned wrong. Restart the
@@ -196,7 +196,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Prometheus has lost Traefik's scrape job or its edge series.
+          summary: 'traefik: Prometheus has lost the scrape job or its edge series.'
           description: >-
             Either no up{job="traefik-k8s"} series exists, so the job is gone from
             prometheus.yml, or the scrape works and the certificate or entrypoint counters are

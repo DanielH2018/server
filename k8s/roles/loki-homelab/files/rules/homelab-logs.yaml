@@ -27,7 +27,8 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: The cluster hosts' syslog and authlog have shipped nothing to loki-homelab in 3 hours.
+          summary: >-
+            loki-homelab: the cluster hosts' syslog and authlog have shipped nothing in 3 hours.
           description: >-
             No authlog or syslog line from daniel-box or daniel-server reached loki-homelab in
             3 hours, so the Alloy file-tail pipeline is down. Read the alloy DaemonSet's pods
@@ -40,7 +41,7 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: No pod log has reached loki-homelab in 30 minutes.
+          summary: 'loki-homelab: no pod log has arrived in 30 minutes.'
           description: >-
             No line from any cluster pod reached loki-homelab in 30 minutes, so the Alloy
             pod-log pipeline is down. Read the alloy DaemonSet's pods and their log in the
@@ -51,7 +52,7 @@ groups:
           severity: warning
           service: daniel-pi
         annotations:
-          summary: daniel-pi's containers have shipped nothing to loki-homelab in 3 hours.
+          summary: 'daniel-pi: the containers have shipped nothing to loki-homelab in 3 hours.'
           description: >-
             No container log line from daniel-pi reached loki-homelab in 3 hours. Read the
             alloy container on daniel-pi with `probe.py pi containers`.
@@ -77,7 +78,7 @@ groups:
           severity: warning
           service: k3s
         annotations:
-          summary: '{{ $labels.container }} logged more than 20 fatal-pattern lines in an hour.'
+          summary: '{{ $labels.container }}: logged more than 20 fatal-pattern lines in an hour.'
           description: >-
             {{ $labels.container }} logged {{ $value }} lines matching panic, fatal, traceback
             or out of memory in the last hour, so it may be failing at its job while its pod
@@ -106,7 +107,9 @@ groups:
           severity: warning
           service: host-syslog
         annotations:
-          summary: '{{ $labels.program }} on {{ $labels.machine }} logged more than 3 fatal-pattern lines in 6 hours.'
+          summary: >-
+            {{ $labels.machine }}: {{ $labels.program }} logged more than 3 fatal-pattern lines in 6
+            hours.
           description: >-
             {{ $labels.program }} on {{ $labels.machine }} logged {{ $value }} syslog lines
             matching panic, fatal, traceback or out of memory in the last 6 hours. Read
@@ -123,7 +126,7 @@ groups:
           severity: warning
           service: host-syslog
         annotations:
-          summary: The kernel on {{ $labels.machine }} OOM-killed a process in the last hour.
+          summary: '{{ $labels.machine }}: the kernel OOM-killed a process in the last hour.'
           description: >-
             The kernel on {{ $labels.machine }} logged {{ $value }} "Out of memory: Killed
             process" lines in the last hour, so the node ran out of memory rather than a
@@ -144,7 +147,8 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The kernel on {{ $labels.machine }} remounted a filesystem read-only in the last hour.
+          summary: >-
+            {{ $labels.machine }}: the kernel remounted a filesystem read-only in the last hour.
           description: >-
             Scale the workload on the remounted device to 0, wait for its Longhorn volume to detach,
             and scale back. The kernel on {{ $labels.machine }} logged {{ $value }} "Remounting
@@ -162,7 +166,9 @@ groups:
           severity: warning
           service: home-assistant
         annotations:
-          summary: Home Assistant's Cast connection to the bedroom display reset more than 30 times in an hour.
+          summary: >-
+            home-assistant: the Cast connection to the bedroom display reset more than 30 times in
+            an hour.
           description: >-
             home-assistant logged {{ $value }} pychromecast "Heartbeat timeout" lines in the last
             hour, so the Cast connect-back loop is running and dashboard casts to the Nest Hub
@@ -188,7 +194,8 @@ groups:
           severity: warning
           service: cloudflare-ddns
         annotations:
-          summary: cloudflare-ddns-direct has logged no successful update in 15 minutes.
+          summary: >-
+            cloudflare-ddns: cloudflare-ddns-direct has logged no successful update in 15 minutes.
           description: >-
             The cloudflare-ddns-direct pod logged neither "already up to date" nor a record
             change for 15 minutes, so the unproxied terraria and valheim records are not being
@@ -199,7 +206,8 @@ groups:
           severity: warning
           service: cloudflare-ddns
         annotations:
-          summary: cloudflare-ddns-proxied has logged no successful update in 15 minutes.
+          summary: >-
+            cloudflare-ddns: cloudflare-ddns-proxied has logged no successful update in 15 minutes.
           description: >-
             The cloudflare-ddns-proxied pod logged neither "already up to date" nor a record
             change for 15 minutes, so the proxied apex record is not being kept current. Read the

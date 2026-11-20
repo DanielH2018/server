@@ -18,7 +18,9 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+              summary: >-
+                observability: Prometheus has lost Alertmanager's scrape job or its delivery
+                counter.
               description: >-
                 Either no up{job="alertmanager"} series exists, so the alertmanager job is gone
                 from prometheus.yml, or the scrape works and
@@ -41,7 +43,9 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+              summary: >-
+                observability: Prometheus has lost Alertmanager's scrape job or its delivery
+                counter.
               description: >-
                 Either no up{job="alertmanager"} series exists, so the alertmanager job is gone
                 from prometheus.yml, or the scrape works and
@@ -92,7 +96,7 @@ tests:
               severity: info
               service: observability
             exp_annotations:
-              summary: The alert pipeline is alive. This alert always fires.
+              summary: 'observability: the alert pipeline is alive. This alert always fires.'
 
   # One failed Discord send. The alert fires per integration, and clears once the failure
   # leaves the 30-minute window.
@@ -111,7 +115,7 @@ tests:
               severity: critical
               service: observability
             exp_annotations:
-              summary: Alertmanager failed to deliver through discord.
+              summary: 'observability: Alertmanager failed to deliver through discord.'
               description: >-
                 Alertmanager's discord integration failed at least one send in the last 30
                 minutes, for a reason other than a rate limit. Read
@@ -137,7 +141,7 @@ tests:
         exp_alerts:
           - exp_labels: {integration: discord, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager failed to deliver through discord.
+              summary: 'observability: Alertmanager failed to deliver through discord.'
               description: >-
                 Alertmanager's discord integration failed at least one send in the last 30
                 minutes, for a reason other than a rate limit. Read
@@ -146,7 +150,7 @@ tests:
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
           - exp_labels: {integration: email, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager failed to deliver through email.
+              summary: 'observability: Alertmanager failed to deliver through email.'
               description: >-
                 Alertmanager's email integration failed at least one send in the last 30
                 minutes, for a reason other than a rate limit. Read
@@ -155,7 +159,7 @@ tests:
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#alertmanagernotificationsfailing
           - exp_labels: {integration: webhook, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager failed to deliver through webhook.
+              summary: 'observability: Alertmanager failed to deliver through webhook.'
               description: >-
                 Alertmanager's webhook integration failed at least one send in the last 30
                 minutes, for a reason other than a rate limit. Read
@@ -215,7 +219,8 @@ tests:
         exp_alerts:
           - exp_labels: {integration: discord, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager's discord sends have been rate limited for 15 minutes.
+              summary: >-
+                observability: Alertmanager's discord sends have been rate limited for 15 minutes.
               description: >-
                 The discord integration refused Alertmanager's sends as rate limited in every
                 7-minute window for 15 minutes, so its resends are not getting through. Read
@@ -227,7 +232,8 @@ tests:
         exp_alerts:
           - exp_labels: {integration: discord, severity: critical, service: observability}
             exp_annotations:
-              summary: Alertmanager's discord sends have been rate limited for 15 minutes.
+              summary: >-
+                observability: Alertmanager's discord sends have been rate limited for 15 minutes.
               description: >-
                 The discord integration refused Alertmanager's sends as rate limited in every
                 7-minute window for 15 minutes, so its resends are not getting through. Read
@@ -256,7 +262,7 @@ tests:
               severity: warning
               service: observability
             exp_annotations:
-              summary: Prometheus failed to reload its config or rule files.
+              summary: 'observability: Prometheus failed to reload its config or rule files.'
               description: >-
                 localhost:9090 has reported a failed reload for 10 minutes, so it still
                 evaluates the last rule set it loaded. Its log names the file it refused.
@@ -279,7 +285,7 @@ tests:
               service: observability
             exp_annotations:
               summary: >-
-                Prometheus failed to evaluate a rule in
+                observability: Prometheus failed to evaluate a rule in
                 /etc/prometheus-rules/workload-service.yaml;workload-service.
               description: >-
                 At least one rule in /etc/prometheus-rules/workload-service.yaml;workload-service

@@ -25,7 +25,7 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Prometheus has lost Traefik's scrape job or its edge series.
+              summary: 'traefik: Prometheus has lost the scrape job or its edge series.'
               description: >-
                 Either no up{job="traefik-k8s"} series exists, so the job is gone from
                 prometheus.yml, or the scrape works and the certificate or entrypoint counters
@@ -45,7 +45,7 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Prometheus has lost Traefik's scrape job or its edge series.
+              summary: 'traefik: Prometheus has lost the scrape job or its edge series.'
               description: >-
                 Either no up{job="traefik-k8s"} series exists, so the job is gone from
                 prometheus.yml, or the scrape works and the certificate or entrypoint counters
@@ -90,7 +90,7 @@ tests:
               severity: critical
               service: traefik
             exp_annotations:
-              summary: The certificate soon.example.com expires within 14 days.
+              summary: 'traefik: the certificate soon.example.com expires within 14 days.'
               description: >-
                 Traefik serves a certificate for soon.example.com that expires in 9.992 days.
                 Read Traefik's ACME log for a failed renewal, and `probe.py cert <host>` for the
@@ -127,7 +127,9 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Traefik backend homelab-checkout-80@kubernetescrd answers over 5% of requests with a 5xx.
+              summary: >-
+                traefik: backend homelab-checkout-80@kubernetescrd answers over 5% of requests with
+                a 5xx.
               description: >-
                 50% of the requests Traefik sent to homelab-checkout-80@kubernetescrd in the
                 last 5 minutes got a 5xx. Loki `{container="traefik"}` has the status codes,
@@ -162,7 +164,9 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Over 5% of Traefik backend homelab-slow-app-80@kubernetescrd's requests take longer than 5s.
+              summary: >-
+                traefik: over 5% of backend homelab-slow-app-80@kubernetescrd's requests take longer
+                than 5s.
               description: >-
                 In 10 of the last 10 minutes, over 5% of the requests to
                 homelab-slow-app-80@kubernetescrd in the trailing 5 minutes finished after the
@@ -193,7 +197,9 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Over 5% of Traefik backend homelab-bursty-app-80@kubernetescrd's requests take longer than 5s.
+              summary: >-
+                traefik: over 5% of backend homelab-bursty-app-80@kubernetescrd's requests take
+                longer than 5s.
               description: >-
                 In 7 of the last 10 minutes, over 5% of the requests to
                 homelab-bursty-app-80@kubernetescrd in the trailing 5 minutes finished after the
@@ -241,7 +247,8 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Traefik emits no 5.0s latency bucket for homelab-odd-app-80@kubernetescrd.
+              summary: >-
+                traefik: no 5.0s latency bucket is emitted for homelab-odd-app-80@kubernetescrd.
               description: >-
                 homelab-odd-app-80@kubernetescrd serves requests but has no
                 traefik_service_request_duration_seconds_bucket series with le="5.0", so
@@ -267,8 +274,7 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: >-
-                95.24% of the requests Traefik receives get a 404.
+              summary: 'traefik: 95.24% of received requests get a 404.'
               description: >-
                 95.24% of the entrypoint traffic in the last 5 minutes was 404, the shape of an
                 edge that lost its routers (#1322). Read Traefik's startup log for a router or
@@ -309,7 +315,7 @@ tests:
               severity: warning
               service: traefik
             exp_annotations:
-              summary: Traefik router homelab-authelia-secure@kubernetescrd keeps answering 421.
+              summary: 'traefik: router homelab-authelia-secure@kubernetescrd keeps answering 421.'
               description: >-
                 homelab-authelia-secure@kubernetescrd answered 421 at 0.05 requests per second
                 for 10 minutes. A client is wedged on a connection SNICheck pinned wrong.
