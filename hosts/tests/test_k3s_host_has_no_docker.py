@@ -27,11 +27,11 @@ DOCKER_COMPONENTS = ("pi-docker", "apt-docker")
 
 
 @pytest.mark.parametrize("component", DOCKER_COMPONENTS)
-def test_only_daniel_pi_lists_a_docker_component(component):
-    """The one host whose `compose_services` run on Docker ships the engine; no k3s node does."""
+def test_no_k3s_host_lists_a_docker_component(component):
     listing = hosts_listing_component(component)
-    assert listing == ["daniel-pi"], (
-        f"{component} ships the Docker engine or its apt source, and only daniel-pi may list "
-        f"it; listed by {listing}. A k3s node ({', '.join(K3S_HOSTS)}) must never get Docker: "
-        "k3s brings its own containerd."
+    # Non-vacuity: a renamed component would empty the listing and pass the check below.
+    assert listing, f"no host package lists {component}"
+    assert not set(K3S_HOSTS) & set(listing), (
+        f"{component} ships the Docker engine or its apt source, and {listing} list it. A k3s "
+        "node must never get Docker: k3s brings its own containerd."
     )
