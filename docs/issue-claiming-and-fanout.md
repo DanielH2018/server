@@ -181,6 +181,14 @@ evidence would stop `reap` releasing any claim. The main worktree is never held 
 every session tree sits under it, sessions also run in it, and its branch is `master`, which
 no claim may name.
 
+A claim names a branch, in either session form: `worktree-<name>` from `EnterWorktree` or
+`claude/<name>` from the desktop app (`scripts/lib/worktree_owner.py:SESSION_BRANCH_PREFIXES`).
+The pruner's branch sweep deletes an orphan branch of either form once its work is on
+`origin/master`. It keeps a branch that any open claim names, or that an open PR has as its
+head, and it keeps every landed branch when it cannot read the claims or the open PRs
+(`scripts/dev/prune_worktrees.py:judge_branches`). A stale claim therefore holds its branch
+until `reap` releases the claim.
+
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
 killed 14 agents mid-work, and every worktree kept its uncommitted edits so each session was
