@@ -1,7 +1,7 @@
 """The app-facing half of monitor-bridge's configuration.
 
 n8n, the *arr stack, the etcd restore drill, the
-staging-gate backfill, Home Assistant and the deploy-pipeline exporter — every threshold read by a check in
+staging-gate backfill, Home Assistant, Airflow and the deploy-pipeline exporter — every threshold read by a check in
 `checks/service.py`.
 
 Field justifications sit beside the declarations, env var names beside the reads, and the values
@@ -46,6 +46,7 @@ class ServiceConfig:
     HA_CONSECUTIVE: int
     HA_BAN_WINDOW: str
     HA_BAN_SELECTOR: str
+    AIRFLOW_SCHEDULER_URL: str
     DEPLOY_PIPELINE_GITHUB_TOKEN: str = field(repr=False)
     DEPLOY_PIPELINE_PORT: int
     CHECK_EXPORTER_PORT: int
@@ -206,6 +207,9 @@ def service_config(
         # CLAUDE.md — a fail-open arm cannot tell "nothing to report" from "I asked the wrong
         # question".
         HA_BAN_SELECTOR='{namespace="homelab",container="home-assistant"} |~ "Banned IP"',
+        # The Airflow scheduler's own health server. It takes no credential, and its threshold is
+        # Airflow's scheduler_health_check_threshold.
+        AIRFLOW_SCHEDULER_URL=_env("AIRFLOW_SCHEDULER_URL").rstrip("/"),
         # The deploy-pipeline exporter (`deploy_pipeline.py`). The token is read-only, Actions
         # read and Variables read on this repository, so the env-secret carries it rather than a
         # file mount. Empty disables the family's reads: the listener still serves, with no
