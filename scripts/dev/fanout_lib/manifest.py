@@ -6,6 +6,7 @@ import os
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -27,6 +28,21 @@ SWEEP_KEPT = "sweep_kept"
 # How many cleans in a row may read the same `kept:` line before the worktree sweep stops
 # running that batch's leg. At the lander's six-hour `CLEAN_INTERVAL_S`, four is one day.
 SWEEP_KEPT_LIMIT = 4
+
+
+class KeptStreak(NamedTuple):
+    """A batch's run of cleans that read the same `kept:` line.
+
+    Attributes:
+        line: the `kept:` line, or "" when no clean kept the batch.
+        passes: how many cleans in a row read `line`.
+        merged_pr: the URL of the branch's newest merged PR when the sweep stopped on the
+            batch, "" for none, or None while it is not recorded.
+    """
+
+    line: str = ""
+    passes: int = 0
+    merged_pr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -107,22 +123,39 @@ class Batch:
         return dataclasses.replace(self, extra=counted)
 
     @property
-    def sweep_kept(self) -> tuple[str, int]:
-        """The `kept:` line a clean last read for the batch, and how many cleans in a row read it."""
+    def sweep_kept(self) -> KeptStreak:
+        """The batch's streak of identical `kept:` lines, empty when none is recorded."""
         rec = self.extra.get(SWEEP_KEPT) or {}
-        return str(rec.get("line") or ""), int(rec.get("passes") or 0)
+        merged = rec.get("merged_pr")
+        return KeptStreak(
+            line=str(rec.get("line") or ""),
+            passes=int(rec.get("passes") or 0),
+            merged_pr=None if merged is None else str(merged),
+        )
 
     @property
     def sweep_stopped(self) -> bool:
         """Whether `SWEEP_KEPT_LIMIT` cleans in a row kept the batch with the same line."""
-        return self.sweep_kept[1] >= SWEEP_KEPT_LIMIT
+        return self.sweep_kept.passes >= SWEEP_KEPT_LIMIT
 
     def kept_by_clean(self, line: str) -> Batch:
         """This batch with a clean's `kept:` line counted: one more pass if it repeats, else one."""
-        last, passes = self.sweep_kept
-        passes = passes + 1 if line == last else 1
+        streak = self.sweep_kept
+        repeated = line == streak.line
+        counted = KeptStreak(
+            line,
+            streak.passes + 1 if repeated else 1,
+            streak.merged_pr if repeated else None,
+        )
+        return self._with_streak(counted)
+
+    def stopped_at_merge(self, merged_pr: str) -> Batch:
+        """This batch with the branch's newest merged PR recorded as it stood at the stop."""
+        return self._with_streak(self.sweep_kept._replace(merged_pr=merged_pr))
+
+    def _with_streak(self, streak: KeptStreak) -> Batch:
         return dataclasses.replace(
-            self, extra={**self.extra, SWEEP_KEPT: {"line": line, "passes": passes}}
+            self, extra={**self.extra, SWEEP_KEPT: streak._asdict()}
         )
 
     def kept_streak_cleared(self) -> Batch:

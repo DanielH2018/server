@@ -103,7 +103,7 @@ def runs_lines(
             if not b.removed_at and (b.host, b.batch) in held:
                 when = one_line(held[(b.host, b.batch)][1])
             elif not b.removed_at and b.sweep_stopped:
-                when = f"sweep-stopped: {b.sweep_kept[0]}"
+                when = f"sweep-stopped: {b.sweep_kept.line}"
             issues = ",".join(f"#{n}" for n in b.issues)
             lines.append(f"  {b.batch} on {b.host}: {b.branch} {issues} {when}")
     if hidden:

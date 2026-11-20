@@ -12,6 +12,7 @@ import subprocess
 
 from dev.fanout_lib.clean import (
     SWEEP_BUDGET_S,
+    UNIT_ACTIVE,
     read_clean_result,
     remote_clean_command,
     sweep_runs,
@@ -248,7 +249,7 @@ def test_a_changed_kept_line_restarts_the_count(tmp_path):
     tools, calls = fake_tools(answers={"daniel-server": ok(UNMERGED)})
     for _ in range(SWEEP_KEPT_LIMIT - 1):
         _sweep(tools, (), tmp_path)
-    calls.answers["daniel-server"] = ok("kept: /w2 — unit fanout-2 still active")
+    calls.answers["daniel-server"] = ok("kept: /w2 — tree has uncommitted changes")
     for _ in range(SWEEP_KEPT_LIMIT + 1):
         _sweep(tools, (), tmp_path)
     assert len(calls.calls) == (SWEEP_KEPT_LIMIT - 1) + SWEEP_KEPT_LIMIT
@@ -265,3 +266,28 @@ def test_an_open_pr_restarts_a_stopped_batch_so_its_merge_is_cleaned(tmp_path):
     _sweep(tools, (), tmp_path)
     assert len(calls.calls) == SWEEP_KEPT_LIMIT + 1
     assert not manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_a_pr_that_opens_and_merges_between_sweeps_restarts_a_stopped_batch(tmp_path):
+    manifest = _manifest(tmp_path, [B2])
+    merged = {B2.branch: "https://github.com/o/r/pull/1"}
+    tools, calls = fake_tools(
+        answers={"daniel-server": ok(UNMERGED)}, merged_prs=merged
+    )
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT
+    merged[B2.branch] = "https://github.com/o/r/pull/2"
+    calls.answers["daniel-server"] = ok("removed: /w2")
+    _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT + 1
+    assert not manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_a_unit_still_active_never_stops_the_sweep(tmp_path):
+    _manifest(tmp_path, [B2])
+    active = ok(f"kept: /w2 — unit fanout-2 {UNIT_ACTIVE}")
+    tools, calls = fake_tools(answers={"daniel-server": active})
+    for _ in range(SWEEP_KEPT_LIMIT + 2):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT + 2
