@@ -24,7 +24,7 @@ manifests cover one user on one host.
 
 ## Root
 
-The root runs in the primary checkout and stays thin. It does six things:
+The root runs in the primary checkout and stays thin. It does seven things:
 
 - **Start a sub-coordinator per project.** The brief is this skill's name and the project's
   milestone title, with the issue numbers when the operator named them. The app starts a
@@ -49,6 +49,16 @@ The root runs in the primary checkout and stays thin. It does six things:
   landing` and the hold's `deploy-failed` line (`docs/landing.md`, *Reading a
   `deploy-failed`*). Tell the operator which PR the evidence points at. Clearing
   `DEPLOY_HOLD` is the operator's decision.
+- **Archive a session you started once you have verified its result**, without asking, in
+  the turn that verifies it. A result is verified when you read its landing verdict with
+  `uv run python scripts/diagnostics/probe.py landing-verdicts <pr>`, saw its issue closed,
+  or ended its project (*Ending a project*). A recap that says the work is done verifies
+  nothing. Three cases stay open:
+    - **Another live session uses its worktree.** Archiving cleans the worktree, so a
+      stood-down sub-coordinator stays until its replacement's project ends.
+    - **A landing or a background wait still runs in it.** Archive it after that ends.
+    - **The app refuses the archive.** Report the session to the operator once, and do not
+      retry.
 
 To add an issue to a running project, message its sub-coordinator with the number. A
 sub-coordinator's milestone wait also ends once `milestone add` files the issue.
@@ -68,8 +78,8 @@ that names the restart, and start the replacement on it.
 
 **A sub-coordinator that is alive is stood down by message before its replacement
 starts.** Message it to stop its background wait and do nothing further. Stopping the
-session only interrupts its turn, so the next recap wakes it again. Never archive it before
-the project ends: archiving cleans the worktree its replacement uses.
+session only interrupts its turn, so the next recap wakes it again. It is the first of
+the archive duty's open cases: it stays until its replacement's project ends.
 
 Only when the operator
 ends the project does the root take over its runs: list them with `fanout.py place runs
@@ -78,7 +88,8 @@ naming that branch and that worktree's path. Never clean a run whose sub-coordin
 alive.
 
 Done when: every project has one live sub-coordinator, every quote in a brief is text the
-operator typed to you, and every `asks:` line has reached the operator.
+operator typed to you, every `asks:` line has reached the operator, and every session
+whose result you verified is archived or named with the case that keeps it open.
 
 ## Sub-coordinator
 

@@ -1090,6 +1090,13 @@ The run changed the tooling six times, and each change edited the section it tou
   from outside the project's milestone are never covered. The `coordinate` skill's
   *Approval* section holds the rule and the standing grouping rules
   ([#9551](https://github.com/DanielH2018/server/issues/9551)).
+- **2026-11-20: the root archives a session once it has verified the session's result.**
+  The operator's words, as the root relayed them, were "I'd like it if completed sessions
+  under the coordinator were auto-archived" and nothing more. The root archives without
+  asking, in the turn that reads the landing verdict, sees the issue closed or ends the
+  project. A session stays open while another live session uses its worktree, while a
+  landing or a background wait runs in it, or when the app refuses the archive. A
+  sub-coordinator starts no sessions, so the duty is the root's alone.
 
 ### Who lands a daniel-server batch's PR
 
