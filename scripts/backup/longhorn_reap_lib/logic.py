@@ -1,7 +1,8 @@
 """Pure decision core shared by the two Longhorn reapers behind `longhorn_reap.py`.
 
-Both entry points read Longhorn objects with `kubectl get ... -o json` and hand the parsed
-`.items` lists to the classifiers below, which are plain functions over dicts/lists/sets — no
+Both entry points read Longhorn objects with `kubectl get ... -o json`, parse the volume list
+into `lib.k8s_objects.LonghornVolume` records, and hand them and the other parsed `.items`
+lists to the classifiers below, which are plain functions over records, lists and sets — no
 subprocess, no kubectl, no jsonpath. That is what makes FLOOR 1 (and every other floor here)
 provable with a fixture instead of read off a dry-run line. A jsonpath read cannot replace the
 parsed one: kubectl jsonpath does not iterate a MAP-valued field, so `{range}` over the labels
