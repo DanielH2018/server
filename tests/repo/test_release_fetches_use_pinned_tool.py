@@ -4,6 +4,7 @@ The action restores the asset from an actions/cache keyed on the tool, version a
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
 problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
+a download from any other host, which reads as that host, and so is
 a third-party installer action. Every exempt fetch is held to the action's own cache, retry and
 digest shape. A script a step runs is out of scope: the `a-downloading-script-runs-after-its-cache`
 row of the workflow-row table holds its downloads to a cache.
@@ -32,6 +33,11 @@ FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re
 GH_RELEASE = re.compile(r"\bgh release download\b[^\n]*")
 # A literal repo after -R or --repo; an invocation without one reads as UNRESOLVED.
 GH_REPO = re.compile(r"(?:-R|--repo)[ =][\"']?([\w.-]+/[\w.-]+)[\"']?(?=[\s;&|)]|$)")
+# A line that starts a curl writing a file, or a wget; a piped `| curl` is an API call.
+DOWNLOAD = re.compile(
+    r"^\s*(?:wget\s|curl\s(?:.*\s)?(?:-[a-zA-Z]*[oO]|--output|--remote-name)\b)", re.M
+)
+HOST = re.compile(r"https?://([^/\s\"']+)")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 INSTALLER = re.compile(r"setup-|install|/action@|-action@")
 
@@ -114,7 +120,8 @@ def _action_steps() -> list[dict]:
 def _fetched_repos(step: dict, context: str) -> set[str]:
     """The release repos a step's curl, wget or `gh release download` fetches from.
 
-    A step naming no release URL itself reads the URL its job or workflow env holds.
+    A step naming no release URL itself reads the URL its job or workflow env holds. A
+    download from anywhere else reads as the host it names.
     """
     run = str(step.get("run", ""))
     if not FETCH.search(run):
@@ -125,6 +132,8 @@ def _fetched_repos(step: dict, context: str) -> set[str]:
         for c in GH_RELEASE.findall(run)
     }
     repos = own | gh or set(RELEASE.findall(context))
+    if not repos and DOWNLOAD.search(run.replace("\\\n", " ")):
+        repos = set(HOST.findall(run)) or {UNRESOLVED}
     return {UNRESOLVED if "$" in r or "{" in r else r for r in repos}
 
 
@@ -326,6 +335,51 @@ def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
     assert release_fetches(sources) - set(EXEMPT) == {
         ("ci.yml", "host_packages_build", repo)
     }
+
+
+@pytest.mark.parametrize(
+    ("run", "host"),
+    [
+        (
+            "curl -fsSLo /tmp/helm.tgz https://get.helm.sh/helm-v3.16.0.tgz",
+            "get.helm.sh",
+        ),
+        ("curl -fsSL -O https://dl.k8s.io/release/v1.31.0/bin/kubectl", "dl.k8s.io"),
+        (
+            "curl -fsSL --output a.zip https://github.com/o/r/archive/refs/tags/v1.zip",
+            "github.com",
+        ),
+        (
+            "curl -fsSL \\\n  -o f https://objects.githubusercontent.com/x",
+            "objects.githubusercontent.com",
+        ),
+        ("wget -q https://get.helm.sh/helm.tgz", "get.helm.sh"),
+        ('curl -fsSLo f "$URL"', UNRESOLVED),
+    ],
+)
+def test_a_download_from_another_host_is_flagged(run, host):
+    sources = copy.deepcopy(_sources())
+    sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
+        {"run": run + "\n"}
+    )
+    assert release_fetches(sources) - set(EXEMPT) == {
+        ("ci.yml", "host_packages_build", host)
+    }
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        'printf \'%s\' "$auth" | curl -fsS -K - -o "$body" https://ghcr.io/v2/x',
+        "curl -fsS http://127.0.0.1:5010/v2/ > /dev/null 2>&1 && break",
+    ],
+)
+def test_a_curl_that_downloads_nothing_is_not_a_fetch(run):
+    sources = copy.deepcopy(_sources())
+    sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
+        {"run": run + "\n"}
+    )
+    assert release_fetches(sources) - set(EXEMPT) == set()
 
 
 def test_an_installer_action_is_flagged():
