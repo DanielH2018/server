@@ -168,6 +168,9 @@ def judge(state: Path, status: Path, path: str, file: Path, edits: list[dict]) -
 
 def main(argv: list[str]) -> int:
     match argv:
+        case ["-h" | "--help"]:
+            print(__doc__)
+            return 0
         case ["seed", state, status]:
             fetched, failed = seed(Path(state), Path(status), sys.stdin.read().split())
             if fetched or failed:
