@@ -131,9 +131,9 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
             "secrets/secrets.yml",
             "k8s/roles/authelia/templates/config-secret.yaml.j2",
         ],
-        ["secrets/secrets.yml", "ansible/deploy.yml"],
+        ["secrets/secrets.yml", "hosts/components/checkout-sync/component.yml"],
     ],
-    ids=["secrets-only", "beside-a-k8s-role", "beside-the-deploy-plane"],
+    ids=["secrets-only", "beside-a-k8s-role", "beside-a-host-package"],
 )
 def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
     """Whatever else the range carries, every k8s reader gets the value through cluster-vars."""

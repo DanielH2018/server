@@ -3,8 +3,8 @@
 A service's tier is declared once, on its `containers_list` entry, and every set that ranks
 services is derived from it. Four consumers read it:
 
-- `tier_backup_claims`: the k3s role's `k3s_longhorn_r2_volumes`, the volumes backed up daily
-  to R2, is every `backup_claims` volume of a `home-critical` entry.
+- `tier_entries`: `longhorn_groups.longhorn_r2_claims` takes the volumes backed up daily to
+  R2 from the `backup_claims` of the `home-critical` entries it returns.
 - `tier_priority_class`: a tiered role's templates pass `containers_list |
   tier_priority_class('<role>')` to `pod_shell(...)` instead of a literal PriorityClass.
 - `in_service_tier`: observability's `blackbox-ingress` and `blackbox-extra` probe jobs give a
@@ -75,19 +75,6 @@ def shed_entries(containers_list, never_shed=NEVER_SHED):
         entry
         for entry in containers_list or []
         if entry.get("tier") not in SERVICE_TIERS and entry["name"] not in never_shed
-    ]
-
-
-def tier_backup_claims(containers_list, tier, namespace):
-    """`namespace/claim` for every `backup_claims` volume of the entries in `tier`.
-
-    `namespace` is the default for an entry that declares none of its own; pass
-    `k8s_namespace`. The order is `containers_list` order, then each entry's own.
-    """
-    return [
-        f"{entry.get('namespace') or namespace}/{claim}"
-        for entry in tier_entries(containers_list, tier)
-        for claim in entry.get("backup_claims") or []
     ]
 
 

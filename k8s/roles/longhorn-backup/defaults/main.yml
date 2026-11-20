@@ -95,7 +95,7 @@ k3s_longhorn_backup_armed: true
 # `longhorn_b2_*` SOPS key names are Longhorn's credentials.) 14 retained backups per volume is
 # two weeks of recovery — Longhorn backups are incremental at the block level, so the marginal
 # cost of depth here is small compared to the first full. In steady state this group is only
-# the four R2-routed volumes plus any newly provisioned PVC awaiting reconcile — every
+# the R2-routed volumes plus any newly provisioned PVC awaiting reconcile — every
 # B2-destined volume lives in a weekday shard below.
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
@@ -111,7 +111,7 @@ k3s_longhorn_trim_cron: "10 6 * * *"
 # 07:30 Sunday-reboot resync, blows both 2,500/day caps. Every B2-destined volume therefore
 # backs up WEEKLY, sharded across the seven weekdays (declared shard = cron day-of-week,
 # 0=Sunday) so no single cap-day carries more than 3 volumes' worth of transactions. The B2 set
-# accepts a week-old worst-case restore; the four R2-routed volumes keep the daily cadence,
+# accepts a week-old worst-case restore; the R2-routed volumes keep the daily cadence,
 # R2's caps being monthly and vast.
 #
 # retain 2 ≈ a fortnight of weeklies. Retention is what costs: a prune walks the volume's whole

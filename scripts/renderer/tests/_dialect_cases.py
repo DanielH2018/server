@@ -23,6 +23,7 @@ ENTRIES = {
             "backup_claims": ["app-data"],
             "weekly_backup_claims": {"app-weekly": 3},
             "no_backup_claims": ["app-cache"],
+            "r2_backup_claims": ["app-r2"],
         }
     ]
 }
@@ -199,6 +200,13 @@ CASES = (
     ),
     Case(
         "filter",
+        "longhorn_r2_claims",
+        "{{ services | longhorn_r2_claims('homelab') | to_json }}",
+        ENTRIES,
+        '["homelab/app-r2"]',
+    ),
+    Case(
+        "filter",
         "longhorn_weekly_claims",
         "{{ services | longhorn_weekly_claims('homelab') | to_json }}",
         ENTRIES,
@@ -279,13 +287,6 @@ CASES = (
         '[1, 2, 3] [{"k": 1}, {"k": 2}]',
     ),
     Case("filter", "string", "{{ 1 | string }}{{ true | string }}", {}, "1True"),
-    Case(
-        "filter",
-        "tier_backup_claims",
-        "{{ services | tier_backup_claims('platform', 'homelab') | to_json }}",
-        ENTRIES,
-        '["homelab/app-data"]',
-    ),
     Case(
         "filter",
         "tier_priority_class",

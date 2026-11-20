@@ -325,10 +325,7 @@ def test_an_unmerged_batch_is_kept_by_masters_clean_one(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert code == 0, out
-    assert (
-        f"b on daniel-server: kept: {worktree} {B.branch} not merged into origin/master"
-        in out
-    )
+    assert f"b on daniel-server: kept: {worktree} {B.branch} not merged" in out
     assert (worktree / "feature.txt").exists()
     assert B.branch in git(primary, "branch", "--list").stdout
     assert manifest_path(manifest.run_id, tmp_path / "runs").exists()
@@ -467,9 +464,7 @@ def test_clean_keeps_the_manifest_when_one_batch_is_not_removed(tmp_path, capsys
     tools, _run = fake_tools(
         answers={
             "daniel-box": ok("removed: /w1"),
-            "daniel-server": ok(
-                "kept: /w2 worktree-fanout-2 not merged into origin/master"
-            ),
+            "daniel-server": ok("kept: /w2 worktree-fanout-2 not merged"),
         }
     )
     code = main(["clean", manifest.run_id, "--manifest-root", str(tmp_path)], tools)

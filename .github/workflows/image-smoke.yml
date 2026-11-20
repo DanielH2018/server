@@ -100,13 +100,10 @@ jobs:
           # before the image deploys.
           # smoke_extract.py selects a ref the diff adds only when no removed line carries it, so
           # a moved or reformatted defaults file with unchanged pins selects no image, whether or
-          # not --find-renames pairs the move. The ansible/ paths exist only on a base that
-          # predates the rename; naming them puts that side's removed refs in the diff.
+          # not --find-renames pairs the move.
           diff="$(git diff --find-renames "origin/$BASE_REF"...HEAD -- \
             'k8s/roles/*/defaults/main.yml' \
-            'inventory/group_vars/all.yml' \
-            'ansible/roles/k8s/*/defaults/main.yml' \
-            'ansible/inventory/group_vars/all.yml')"
+            'inventory/group_vars/all.yml')"
           images="$(printf '%s' "$diff" | python scripts/dev/smoke_extract.py)"
           {
             echo "list<<EOF"

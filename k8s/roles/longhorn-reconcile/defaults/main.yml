@@ -61,9 +61,9 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # the keys of k3s_longhorn_weekly_volumes below.
 #
 # Derived, not listed: every `backup_claims` volume of every `home-critical` services
-# entry (tier `home-edge` or `home-automation`; template_filters/service_tier.py). To
-# change the set, edit the entry.
-k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
+# entry (tier `home-edge` or `home-automation`), then every entry's `r2_backup_claims`
+# (template_filters/longhorn_groups.py). To change the set, edit the entry.
+k3s_longhorn_r2_volumes: "{{ services | longhorn_r2_claims(k8s_namespace) }}"
 
 # The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
 # (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.

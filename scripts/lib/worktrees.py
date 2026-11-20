@@ -1,107 +1,95 @@
-"""What a Claude session worktree is, and whether it is done with: the worktree library.
+"""This repo's view of a Claude session worktree, over the dotfiles `claude_worktree` library.
 
-`scripts/dev/prune_worktrees.py` is the CLI that reports and removes worktrees. Everything
-that READS a worktree, or decides about one, lives here, so the other consumers import it
-without importing a CLI: `findings_lib` judges a claim stale by `classify`, `fanout_lib`
-removes a finished batch with `remove`, and the SessionStart banner names the other live
-sessions with `session_is_alive`.
+The worktree pruner is the dotfiles repo's: `~/.claude/hooks/prune-worktrees.py`, which reads
+this repo's policy from `.claude/prune-worktrees.json`. The library that judges ONE tree is the
+dotfiles `claude_worktree` module, and this module re-exports it, so the consumers here import
+`lib.worktrees` and never the deployed path: `findings_lib` judges a claim stale by `classify`,
+`fanout_lib` removes a finished batch with `remove`, and the SessionStart banner names the other
+live sessions with `lock_is_live`. `lib._claude_worktree` is the bootstrap onto the deployed
+copy and says why a missing or stale deploy raises.
 
-Two layers. The readers -- the `Worktree` record, the porcelain parser, the lock-liveness
-check, the cherry and merge-tree verdicts, the forge lookup, `default_ref` -- are shared with
-the dotfiles `prune-worktrees.py` hook through the deployed `claude_worktree` package, and are
-re-exported here. `lib._claude_worktree` is the bootstrap onto it and says why a missing
-deploy raises rather than falls back.
-
-The policy on top of them is this repo's own and stays here rather than in that package:
-`is_merged` runs its four layers against `lib.git`, which strips every inherited `GIT_*`
-variable, and `classify` encodes which condition keeps a tree. The dotfiles hook makes its
-own call on both. `remove` adds one refusal `classify` cannot make in advance: a live
-process using the tree at the moment of removal (`processes_using`).
+What is defined here is only what this repo adds: the fan-out lock pattern bound into
+`lock_is_live`, origin/master as the base a branch lands on, and the claim-liveness readers
+`findings.py` needs (`held_by_readable_process`, `worktree_facts`).
 """
 
 import functools
-import json
-import os
-import pwd
-import socket
-import subprocess
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 
 from lib import _claude_worktree  # noqa: F401
 from lib import fanout_lock
-from lib.cli_help import warn
-from lib.git import git, git_dirty, git_stdout, merge_tree
+from lib.git import git, git_dirty
 from lib.repo_paths import REPO
+import claude_worktree
 from claude_worktree import (
     FOREIGN_UID,
+    IN_USE,
+    KEEP,
+    REMOVABLE,
+    UNIT_LOCK_GRACE_S,
+    WORKTREE_HOLDER_ROOTS,
+    WORKTREE_HOLDERS_SOCKET,
     Worktree,
-    cherry_says_landed,
     default_ref,
-    forge_says_merged,
+    escape_holder,
+    holder_root,
     holds_tree,
-    merge_tree_says_contained,
     parse_worktree_list,
+    primary_checkout,
+    privileged_holders,
     process_holds,
+    processes_using,
+    read_answer,
+    remove,
     session_is_alive,
     tree_roots,
+    unit_state,
 )
 
 __all__ = [
+    "IN_USE",
     "KEEP",
     "REMOVABLE",
-    "VERDICT_CACHE",
+    "UNIT_LOCK_GRACE_S",
+    "WORKTREE_HOLDERS_SOCKET",
+    "WORKTREE_HOLDER_ROOTS",
     "Worktree",
-    "cherry_says_landed",
     "classify",
-    "contained_in_merged_pr",
     "coordinator_project",
     "default_ref",
-    "forge_says_landed",
-    "forge_says_merged",
+    "escape_holder",
     "has_live_session",
     "held_by_readable_process",
+    "holder_root",
     "is_dirty",
     "is_merged",
     "lock_is_live",
     "memoised_merged",
-    "merge_tree_says_contained",
-    "merged_layer",
-    "open_pr_heads",
     "parse_worktree_list",
     "primary_checkout",
+    "privileged_holders",
     "processes_using",
-    "read_verdicts",
-    "record_verdict",
+    "read_answer",
     "remove",
     "session_is_alive",
-    "verdict_cache_path",
-    "verdict_key",
     "worktree_facts",
 ]
-
-REMOVABLE = "removable"
-KEEP = "keep"
 
 
 def lock_is_live(
     tree: Worktree,
-    state: Callable[[str], str | None] = fanout_lock.unit_state,
+    state: Callable[[str], str | None] = unit_state,
     now: float | None = None,
     foreign: Callable[[str], str | None] | None = None,
 ) -> bool:
     """Whether `tree`'s lock owner may still be using it: a Claude session or a fan-out unit.
 
-    `state` and `now` are `fanout_lock.batch_is_live`'s test seams. `foreign` judges a
-    fan-out tree another user owns, as `fanout_lock.batch_is_live` describes.
+    `claude_worktree.lock_is_live` with this repo's fan-out lock pattern. `state` and `now`
+    are its test seams, and `foreign` judges a fan-out tree another user owns.
     """
-    if fanout_lock.is_fanout_reason(tree.lock_reason):
-        return fanout_lock.batch_is_live(
-            tree.path, tree.lock_reason, state, now, foreign
-        )
-    return session_is_alive(tree.lock_reason)
+    return claude_worktree.lock_is_live(tree, fanout_lock.REASON, state, now, foreign)
 
 
 # The lock reason a sub-coordinator writes, before its project's title
@@ -146,560 +134,38 @@ def classify(
     dirty: bool,
     lock_live: Callable[[Worktree], bool] = lock_is_live,
 ) -> tuple[str, str]:
-    """Return (verdict, reason) for one worktree.
+    """Return (verdict, reason) for one worktree, by `claude_worktree.classify`.
 
-    Reasons are reported in priority order so the output names the blocking condition a
-    person would act on first, rather than listing every condition that happens to fail.
-    `lock_live` is a test seam.
+    `merged` is `is_merged`'s answer, which counts every layer of the landed ladder, so a
+    merged tree is REMOVABLE here whichever layer found it. `lock_live` is a test seam.
     """
-    if tree.locked and lock_live(tree):
-        return KEEP, f"in use — {tree.lock_reason or 'locked'}"
-    if dirty:
-        return KEEP, "uncommitted changes"
-    if tree.branch is None:
-        return KEEP, "detached HEAD — no branch to check"
-    if not merged:
-        return KEEP, f"{tree.branch} not merged into origin/master"
-    if tree.locked:
-        return REMOVABLE, f"{tree.branch} merged, clean, lock owner is dead"
-    return REMOVABLE, f"{tree.branch} merged, clean, unlocked"
+    return claude_worktree.classify(
+        tree, "ancestry" if merged else None, dirty, lock_live=lock_live
+    )
+
+
+def is_dirty(path: str) -> bool:
+    """Whether the tree at `path` has uncommitted changes, untracked files counted.
+
+    `lib.git.git_dirty`, which raises when git cannot read the tree. `fanout_lib.clean`
+    reports that error by name and treats a directory that is gone as its own case, so this
+    is not the pruner's `claude_worktree.is_dirty`, which answers True for both.
+    """
+    return git_dirty(path, include_untracked=True)
 
 
 def is_merged(
     repo: str, head: str, branch: str = "", base: str = "origin/master"
 ) -> bool:
-    """True when `head`'s work is already on `base`, by ancestry or by patch.
+    """True when `head`'s work is already on `base`, by any layer of the landed ladder.
+
+    `claude_worktree.merged_layer` owns the ladder: ancestry, then patch-id, then content,
+    then the forge. Every failure there is closed, so an unknown reads as NOT merged.
 
     `base` is origin/master for this repo. `findings.py --repo` passes another repo's default
-    branch (the dotfiles repo's is origin/main), which is the only caller that changes it.
-
-    Ancestry alone misses how PRs actually land here. `gh pr merge --rebase` replays the
-    commits onto master as new objects, so the branch tip is never an ancestor of
-    origin/master and a merge-base check calls every landed worktree unmerged — which is why
-    the pruner reported "nothing to remove" indefinitely while merged trees piled up. The
-    ancestry check is kept because it is cheap and settles the fast-forward and merge-commit
-    cases; `git cherry` compares by patch-id and settles the rebase case.
-
-    Squash merges defeat both: several commits collapse into one, so the tip is not an
-    ancestor and no patch-id matches either. `git merge-tree` settles that case by asking a
-    different question — not "are these commits upstream" but "does this branch still have
-    anything to give master". See merge_tree_says_contained.
-
-    `git merge-tree` in turn fails on a squash-merged branch once master has DRIFTED into a
-    conflict on a file the branch also touched: it exits non-zero, which is the right local
-    answer (no verdict) and the wrong final one, so the tree sits there forever. The fourth
-    layer asks the forge which head SHA it actually merged. It runs last because it is the only
-    one needing a network round-trip and credentials.
-
-    All four failures are closed: an unknown reads as NOT merged, because this decides what
-    to DELETE. `merged_layer` is the same ladder naming the layer that decided.
+    branch, which is the only caller that changes it.
     """
-    return merged_layer(repo, head, branch, base=base) is not None
-
-
-# What GitHub's compare calls a base that is an ancestor of its head, or the same commit.
-CONTAINED = frozenset({"ahead", "identical"})
-
-
-def _forge_gh(*args: str, check: bool, cwd: str) -> subprocess.CompletedProcess[str]:
-    """`lib.gh.gh` on `forge_says_merged`'s executable: `GH_BIN` when set, which tests stub."""
-    env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
-    return subprocess.run(
-        [os.environ.get("GH_BIN", "gh"), *args],
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=check,
-        timeout=10,
-    )
-
-
-def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=_forge_gh) -> bool:
-    """True when a merged PR for `branch` has a head containing `head`: no local commit is unlanded.
-
-    `forge_says_merged` matches the forge's merged head to the local tip exactly (Ruling 38).
-    That misses the batch `land.sh` landed after merging master into it on the remote: the
-    merged head is the local tip plus that merge commit, so the SHAs differ. GitHub's
-    compare answers `ahead` (or `identical`) when `head` is an ancestor of the merged head,
-    which proves every local commit was in the merged PR. A tip that was never pushed, or has
-    commits the merged head lacks, compares `diverged`, `behind` or 404, and a `gh` that fails
-    reads as not contained.
-
-    Still keyed on the SHA relation and never on "a merged PR exists under this name", so a
-    reused branch name cannot delete work that never landed.
-    """
-    if not head or not branch:
-        return False
-    try:
-        heads = run_gh(
-            "pr", "list", "--state", "merged", "--head", branch,
-            "--json", "headRefOid", "--jq", ".[].headRefOid",
-            check=False, cwd=repo,
-        )  # fmt: skip
-        if heads.returncode != 0:
-            return False
-        for merged_head in heads.stdout.split():
-            compared = run_gh(
-                "api", f"repos/{{owner}}/{{repo}}/compare/{head}...{merged_head}",
-                "--jq", ".status", check=False, cwd=repo,
-            )  # fmt: skip
-            if compared.returncode == 0 and compared.stdout.strip() in CONTAINED:
-                return True
-    except OSError, subprocess.TimeoutExpired:
-        return False
-    return False
-
-
-OPEN_PR_LIMIT = 1000
-
-
-def open_pr_heads(repo: str) -> set[str] | None:
-    """The head branch of every open PR, or None when the forge gave no whole answer.
-
-    None covers a `gh` that failed and a list cut off at OPEN_PR_LIMIT: a caller that deletes
-    by this must not read either as "no open PR".
-    """
-    try:
-        listed = _forge_gh(
-            "pr", "list", "--state", "open", "--limit", str(OPEN_PR_LIMIT),
-            "--json", "headRefName", "--jq", ".[].headRefName",
-            check=False, cwd=repo,
-        )  # fmt: skip
-    except OSError, subprocess.TimeoutExpired:
-        return None
-    heads = listed.stdout.split()
-    if listed.returncode != 0 or len(heads) >= OPEN_PR_LIMIT:
-        return None
-    return set(heads)
-
-
-def forge_says_landed(repo: str, branch: str, head: str) -> bool:
-    """The ladder's forge layer: GitHub merged `head` itself, or a merged PR's head holds it."""
-    return forge_says_merged(repo, branch, head) or contained_in_merged_pr(
-        repo, head, branch
-    )
-
-
-def merged_layer(
-    repo: str,
-    head: str,
-    branch: str = "",
-    base: str = "origin/master",
-    forge: Callable[[str, str, str], bool] = forge_says_landed,
-) -> str | None:
-    """The layer of is_merged's ladder that settled `head` as landed, or None when none did.
-
-    One of `ancestry`, `patch-id`, `content` or `forge`. `prune_worktrees.py --check` prints
-    it, so a reader can tell a squash-landed branch the forge vouched for from one whose
-    content git matched locally.
-
-    Every verdict goes through the on-disk cache described at VERDICT_CACHE. `forge` is the
-    fourth layer's read, injectable so a test can answer it without a network.
-    """
-    key = verdict_key(repo, head, base)
-    layer = _local_layer(repo, head, base, key)
-    if layer is not None:
-        return layer
-    no_key = None
-    if key is not None:
-        no_key = f"forge-no:{key.split(':')[0]}:{branch}"
-        verdicts = read_verdicts(repo)
-        if verdicts.get(key) == "forge":
-            return "forge"
-        asked_at = verdicts.get(no_key, "")
-        if asked_at.isdigit() and time.time() - int(asked_at) < FORGE_NO_TTL_S:
-            return None
-    # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
-    # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
-    # ("no verdict") and the wrong final one.
-    #
-    # Ask the forge, which knows what it merged. This runs LAST because it is the only check
-    # needing a network round-trip and credentials; every branch the local checks settle never
-    # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    if not forge(repo, branch, head):
-        if no_key is not None:
-            record_verdict(repo, no_key, str(int(time.time())))
-        return None
-    if key is not None:
-        record_verdict(repo, key, "forge")
-    return "forge"
-
-
-# The merged verdict, kept on disk across processes. A report then `--prune`, and the
-# `findings.py reap` that `--prune` starts, each asked every layer again for the same trees,
-# and the forge layer is a `gh pr list` per unsettled branch.
-#
-# Keyed by "<head sha>:<base sha>". The three local layers are pure functions of those two
-# commits, so a recorded answer cannot go stale: a moved base or a new commit is a new key. The
-# forge layer asks which head SHA the forge merged, so its "merged" holds for that key forever.
-# A value is the layer that said landed, or "" when the local layers settled "no"; "forge" is
-# only ever written over "".
-#
-# The forge's "not merged" can change, so it is kept under its own "forge-no:<head>:<branch>"
-# key with the epoch second it was asked, and trusted for FORGE_NO_TTL_S only. The forge layer
-# costs about 0.3s per unsettled worktree, so without this a `--prune` straight after the
-# report would pay it all again.
-# A stale "no" can only keep a tree a little longer, the safe direction for a pruner.
-#
-# It lives in the git common dir, never in a working tree: one untracked file in the primary
-# checkout parks `homelab-checkout-sync`. Every reader treats a missing or unreadable file as empty.
-VERDICT_CACHE = "claude-merged-verdicts.json"
-# Newest kept. A key a moved base has orphaned is never asked again, so age is the right drop.
-VERDICT_CACHE_CAP = 4000
-LOCAL_LAYERS = ("ancestry", "patch-id", "content")
-# Long enough to span reading a report and running `--prune`; short enough that a PR merged
-# since is seen by the next banner rather than the next day.
-FORGE_NO_TTL_S = 15 * 60
-
-
-@functools.cache
-def verdict_cache_path(repo: str) -> Path | None:
-    """The cache file in `repo`'s git common dir, or None when git cannot name that dir."""
-    common = git_stdout(
-        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo, check=False
-    )
-    return Path(common) / VERDICT_CACHE if common else None
-
-
-def verdict_key(repo: str, head: str, base: str) -> str | None:
-    """`<head sha>:<base sha>`, or None when either does not resolve, which skips the cache."""
-    if not head or not base:
-        return None
-    result = git(
-        "rev-parse", f"{head}^{{commit}}", f"{base}^{{commit}}", cwd=repo, check=False
-    )
-    shas = result.stdout.split()
-    if result.returncode != 0 or len(shas) != 2:
-        return None
-    return f"{shas[0]}:{shas[1]}"
-
-
-def read_verdicts(repo: str) -> dict[str, str]:
-    """The recorded verdicts, or an empty dict when the file is missing or unreadable."""
-    path = verdict_cache_path(repo)
-    if path is None:
-        return {}
-    try:
-        data = json.loads(path.read_text())
-    except OSError, ValueError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
-
-
-def record_verdict(repo: str, key: str, layer: str) -> None:
-    """Add one verdict to the cache file, best-effort.
-
-    Re-reads before writing and replaces the file by rename, so a concurrent session sees the
-    old file or the new one and never a partial write. Two writers racing can drop one entry,
-    which costs only a recomputation. A failed write is ignored for the same reason.
-    """
-    path = verdict_cache_path(repo)
-    if path is None:
-        return
-    verdicts = read_verdicts(repo)
-    verdicts.pop(key, None)
-    verdicts[key] = layer
-    kept = dict(list(verdicts.items())[-VERDICT_CACHE_CAP:])
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp.write_text(json.dumps(kept))
-        os.replace(tmp, path)
-    except OSError:
-        tmp.unlink(missing_ok=True)
-
-
-def _local_layer(repo: str, head: str, base: str, key: str | None) -> str | None:
-    """The local layer that settled `head` as landed: `ancestry`, `patch-id` or `content`.
-
-    The first three layers of is_merged, the ones that cost no network round-trip. None when
-    no local layer did. A settled answer is read from and written to the cache under `key`.
-    """
-    if key is not None:
-        cached = read_verdicts(repo).get(key)
-        if cached is not None:
-            # "forge" means the local layers said "" before the forge was asked.
-            return cached if cached in LOCAL_LAYERS else None
-    layer, settled = _compute_local_layer(repo, head, base)
-    if settled and key is not None:
-        record_verdict(repo, key, layer or "")
-    return layer
-
-
-def _compute_local_layer(repo: str, head: str, base: str) -> tuple[str | None, bool]:
-    """(layer, settled). `settled` is False when a git call failed rather than answered.
-
-    Only a settled answer is cached: a failed call reads as not merged, the KEEP direction, and
-    recording it would keep that tree from ever being pruned.
-    """
-    ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
-    if ancestor.returncode == 0:
-        return "ancestry", True
-    cherry = git("cherry", base, head, cwd=repo, check=False)
-    # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
-    # the return code has to gate this, or an unknown ref would read as safe to delete.
-    if cherry.returncode != 0:
-        return None, False
-    if cherry_says_landed(cherry.stdout, empty_means=True):
-        return "patch-id", True
-    master_tree = git("rev-parse", f"{base}^{{tree}}", cwd=repo, check=False)
-    if master_tree.returncode != 0:
-        return None, False
-    # Exit 1 is a conflict, a settled "no verdict" that must read as not merged. Any other
-    # non-zero exit is a failure, such as a git too old for --write-tree (added in 2.38).
-    merged_tree = merge_tree(base, head, cwd=repo)
-    if merged_tree.returncode == 0 and merge_tree_says_contained(
-        merged_tree.stdout, master_tree.stdout
-    ):
-        return "content", True
-    return None, merged_tree.returncode in (0, 1)
-
-
-def is_dirty(path: str) -> bool:
-    # Untracked counted: an unlanded scratch file in a worktree is exactly the thing that must
-    # stop it being pruned. lib.git.git_dirty makes that scope explicit at the call site.
-    return git_dirty(path, include_untracked=True)
-
-
-def _inside(held: str, tree: Path) -> bool:
-    """Whether the path `held` is `tree` or somewhere below it."""
-    path = Path(held).resolve()
-    return path == tree or tree in path.parents
-
-
-# The root-run scan the worktree-holders component ships, and the socket systemd answers it on,
-# one service instance per connection. Its group decides who may connect. The source is
-# hosts/components/worktree-holders/files/worktree_holders.py. It reports only
-# under the root WORKTREE_HOLDER_ROOTS maps the caller's uid to, which `holder_root` reads too.
-WORKTREE_HOLDERS_SOCKET = "/run/worktree-holders.sock"
-WORKTREE_HOLDER_ROOTS = "/etc/worktree-holders.json"
-_HELPER_KINDS = ("cwd", "CLAUDE_PROJECT_DIR", "unreadable")
-
-
-def holder_root(roots: str = WORKTREE_HOLDER_ROOTS) -> Path:
-    """The directory the root helper reports under for this uid.
-
-    It is this user's entry in `roots`, the map the helper itself reads, so the caller never
-    asks about a tree the helper does not scan. With no map or no entry, it is
-    `~/server/.claude/worktrees`. In that case the helper is not installed for this user, so
-    it never runs.
-    """
-    me = pwd.getpwuid(os.getuid())
-    try:
-        mapping = json.loads(Path(roots).read_text())
-    except OSError, ValueError:
-        mapping = {}
-    held = mapping.get(me.pw_name) if isinstance(mapping, dict) else None
-    if isinstance(held, str) and held.startswith("/"):
-        return Path(held)
-    return Path(me.pw_dir) / "server" / ".claude" / "worktrees"
-
-
-def processes_using(
-    path: str,
-    proc: Path = Path("/proc"),
-    privileged: Callable[[Path], list[tuple[int, str]] | None] | None = None,
-) -> list[tuple[int, str]]:
-    """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
-
-    A Claude session whose project dir is deleted loses every repo hook, and its
-    worktree lock is no proof it is gone: the session can run from a tree it never locked,
-    and a lock's owner pid says nothing about a shell or hook that `cd`'d in. So the removal
-    asks the kernel which processes still use the directory.
-
-    `CLAUDE_PROJECT_DIR` is read from every process, not only from `claude` ones: the
-    binary's command name is its version string (`2.1.295`), so a name match finds nothing,
-    and a hook or tool shell a session spawned carries the variable too.
-
-    `/proc/<pid>/cwd` and `environ` refuse another user's process, so the root helper at
-    `WORKTREE_HOLDERS` answers first when this caller may run it; see
-    `privileged_holders`. Without it, the scan is `claude_worktree.process_holds`, the one
-    the dotfiles worktree hooks run too. It skips an unreadable process,
-    with one exception: a non-root process of another uid inside this uid's own login slice
-    counts as a holder, because it inherited a cwd this uid handed it.
-
-    Args:
-        path: the worktree directory.
-        proc: the procfs root to scan when the helper does not answer.
-        privileged: the helper's reader, `privileged_holders` when None. It returns None when
-            the helper does not apply to this caller.
-    """
-    tree = Path(path).resolve()
-    answer = (privileged or privileged_holders)(tree)
-    if answer is not None:
-        return answer
-    # DECIDED: count an unreadable process only when another non-root uid runs it inside
-    # `user-<this uid>.slice`; every wider rule refuses every removal on daniel-box.
-    # The rule and its reasoning live in `claude_worktree._foreign_in_my_slice`, the one copy
-    # this repo and the dotfiles worktree hooks share.
-    roots = tree_roots(path)
-    found = []
-    seen = set()
-    # A process can hold the tree twice, by cwd and by CLAUDE_PROJECT_DIR; the refusal
-    # names it once, by the first hold the scan reports.
-    for pid, held, how in process_holds(str(proc)):
-        if pid in seen or not holds_tree(held, roots):
-            continue
-        seen.add(pid)
-        if how == FOREIGN_UID:
-            found.append(
-                (pid, "another uid's process in this uid's login slice, unreadable")
-            )
-        elif how == "cwd":
-            found.append((pid, f"cwd {held}"))
-        else:
-            found.append((pid, f"{how}={held}"))
-    return found
-
-
-def ask_holders(sock: str = WORKTREE_HOLDERS_SOCKET, timeout: float = 120) -> bytes:
-    """Everything the root helper sends back on one connection to `sock`, until it closes.
-
-    The caller sends nothing: the service names the caller by the uid the kernel recorded
-    for this connection (`SO_PEERCRED`), so there is no request to forge.
-
-    Raises:
-        OSError: when the connection fails or `timeout` passes first.
-    """
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
-        conn.settimeout(timeout)
-        conn.connect(sock)
-        chunks = []
-        while chunk := conn.recv(65536):
-            chunks.append(chunk)
-    return b"".join(chunks)
-
-
-def privileged_holders(
-    tree: Path,
-    sock: str = WORKTREE_HOLDERS_SOCKET,
-    root: Path | None = None,
-    ask: Callable[[str], bytes] = ask_holders,
-) -> list[tuple[int, str]] | None:
-    """(pid, how) for every process the root helper reports inside `tree`, or None.
-
-    None means the helper does not apply, and the caller scans `/proc` itself. That is the
-    case for a tree outside `root`, which the helper never reports on, for a host with no
-    socket, and for a caller the socket's group shuts out. A session started before its user
-    joined that group is one of those until it restarts.
-
-    The socket needs no setuid, so a caller with `NoNewPrivs` set asks it too. That includes
-    every claude-rc.service session, which sudo never could serve.
-
-    Once the socket accepts the connection, every failure refuses the removal: a refusal, a
-    timeout, a refused connection, an answer that does not parse, and any process the helper
-    reports root could not read.
-
-    Args:
-        tree: the resolved worktree directory.
-        sock: the helper's socket.
-        root: the directory the helper reports under; `holder_root()` when None.
-        ask: reads the helper's whole answer from `sock`.
-    """
-    # DECIDED: the socket fails closed once it accepts, and an absent socket or a connect
-    # refused for permission falls back to the slice rule. The helper reads every uid's
-    # cwd and environ, so a gap in its answer is a process that could hold this tree, and a
-    # refused removal is retried next week. Neither fallback can fail closed the same way:
-    # without root, claude-rc.service and the claude user's own sessions are always
-    # unreadable, so that rule would refuse every removal on a host where the hand apply has
-    # not run, and in every session older than its user's group grant. The fallback says so
-    # on stderr, which the cron journals.
-    if root is None:
-        root = holder_root()
-    if not _inside(str(tree), root.resolve()):
-        return None
-    try:
-        raw = ask(sock)
-    except (FileNotFoundError, PermissionError) as e:
-        _warn_scan_unreachable(sock, e.strerror or str(e))
-        return None
-    except OSError as e:
-        return [(0, f"{sock} did not answer: {e}")]
-    return read_answer(raw, tree, sock)
-
-
-def read_answer(raw: bytes, tree: Path, sock: str) -> list[tuple[int, str]]:
-    """(pid, how) for each holder of `tree` in the helper's answer `raw`, or a refusal.
-
-    A refusal is one `(0, reason)` entry, which the caller reads as a holder it cannot name.
-    The answer must open with the `ok` header and close with the `end` terminator, because a
-    socket carries no exit status: an instance that died mid-scan sends a prefix of a good
-    answer, or nothing at all, and neither may read as "no holders".
-
-    Each value arrives escaped with `unicode_escape`, so a path holding a line break
-    or a tab is still one line. It is decoded before `_inside` compares it, and the escaped
-    form names it in the refusal, where it stays one printable line.
-    """
-    try:
-        text = raw.decode("ascii")
-    except UnicodeDecodeError:
-        return [(0, f"{sock} answered bytes that are not ASCII: {raw[:200]!r}")]
-    lines = text.split("\n")
-    head = lines[0]
-    if head.startswith("refused\t") and lines[1:] == [""]:
-        return [(0, f"{sock} refused: {head.partition(chr(9))[2]}")]
-    if head != "ok" or lines[-2:] != ["end", ""]:
-        return [(0, f"{sock} answered without its framing: {text[:200]!r}")]
-    found = []
-    for line in lines[1:-2]:
-        pid, _, rest = line.partition("\t")
-        kind, _, value = rest.partition("\t")
-        held = _unescape(value)
-        if not pid.isdigit() or not held or kind not in _HELPER_KINDS:
-            return [(0, f"{sock} answered an unparseable line: {line!r}")]
-        if kind == "unreadable":
-            found.append((int(pid), f"unreadable even to root ({value})"))
-        elif _inside(held, tree):
-            how = f"cwd {value}" if kind == "cwd" else f"{kind}={value}"
-            found.append((int(pid), how))
-    return found
-
-
-def escape_holder(value: str) -> str:
-    """`value` escaped the way the root helper escapes a path it reports.
-
-    `unicode_escape` encodes each character on its own, so the escaped form of a path inside
-    a tree starts with the escaped tree and a `/`. `fanout_lib.clean.live_process_scan`
-    compares the two escaped forms in awk for that reason, and never decodes.
-    """
-    return value.encode("unicode_escape").decode("ascii")
-
-
-def _unescape(value: str) -> str:
-    """The path `escape_holder` made `value` from, or "" when `value` is not one it makes."""
-    try:
-        held = value.encode("ascii").decode("unicode_escape")
-    except UnicodeError:
-        return ""
-    # A path holds no NUL, and Path.resolve raises on one.
-    return "" if "\0" in held else held
-
-
-@functools.cache
-def _warn_scan_unreachable(sock: str, why: str) -> None:
-    warn(
-        f"cannot connect to {sock} ({why}), so a process of another uid outside "
-        "this login slice is invisible to the in-use check (#4170). The "
-        "worktree-holders component of each Claude host's package ships the socket, and a "
-        "session started before its user joined the socket's group must restart first."
-    )
-
-
-IN_USE = "in use by a live process"
-
-
-def in_use_reason(path: str) -> str:
-    """Why `path` must not be removed: `IN_USE` and each pid using it, or "" when none does.
-
-    A removal refused with this reason is a skip, not a failure: the weekly sweep removes the
-    directory once its holder exits, so the caller must not exit non-zero for it.
-    """
-    users = processes_using(path)
-    if not users:
-        return ""
-    return f"{IN_USE}: " + "; ".join(f"pid {pid} ({how})" for pid, how in users)
+    return claude_worktree.merged_layer(repo, head, branch, base) is not None
 
 
 @functools.cache
@@ -731,56 +197,6 @@ def held_by_readable_process(
     )
 
 
-def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
-    """Refuse while a process uses the tree; otherwise unlock if needed, then remove.
-
-    The process check runs first, before the unlock, so a refusal leaves the lock exactly
-    as it was. It is skipped when the directory is already gone: deregistering a deleted
-    tree cannot break the session still pointing at it, which the hook deny covers.
-    The refusal names each pid, so the operator can find the session.
-
-    Never --force: git's own refusal on a tree with uncommitted or untracked files is the backstop
-    that makes auto-unlock safe here — classify() only marks a locked tree REMOVABLE once
-    lock_is_live() has confirmed the owner is dead, so this never releases a lock a live owner
-    still holds. Without the unlock, `git worktree remove` fails outright on a locked tree ("cannot
-    remove a locked working tree") and the caller would report success while removing nothing.
-    """
-    if Path(tree.path).exists():
-        held = in_use_reason(tree.path)
-        if held:
-            return False, held
-    if tree.locked:
-        git("worktree", "unlock", tree.path, cwd=repo, check=False)
-    result = git("worktree", "remove", tree.path, cwd=repo, check=False)
-    return result.returncode == 0, result.stderr.strip()
-
-
-def primary_checkout(start: str | None = None) -> str | None:
-    """The checkout the worktrees hang off, or None when there is no checkout to name.
-
-    Not the current one: worktrees live under the primary's .claude/worktrees/, and
-    --show-toplevel run from inside a worktree returns the worktree itself, which made the
-    orphan scan look in a directory that doesn't exist.
-
-    The primary is the parent of the common git dir only when that dir is named `.git`. A
-    separated git dir or a bare repo has no checkout beside it, so either answers None, the
-    same rule as the hooks' `_hook_common.primary_checkout`.
-
-    Args:
-        start: the directory to ask from; the process cwd when None.
-    """
-    common_dir = git_stdout(
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-        cwd=start,
-        check=False,
-    )
-    if not common_dir or Path(common_dir).name != ".git":
-        return None
-    return str(Path(common_dir).parent)
-
-
 def memoised_merged(
     repo: str, ask: Callable[[str, str, str], bool] = is_merged
 ) -> Callable[[Worktree], bool]:
@@ -793,11 +209,11 @@ def memoised_merged(
     `agent-polling-starves-the-deployers-ci-gate` records what that class of traffic costs.
 
     The memo is keyed on the worktree PATH, whose answer is stable for the duration of one
-    command. It spares even the cache read; the on-disk cache at VERDICT_CACHE is what carries
-    a verdict from one command to the next. It deliberately does NOT touch `classify`: guarding on `not tree.locked` would
-    re-derive `classify`'s branch structure outside `classify` and get it wrong — `classify`
-    skips the merged read only on `locked AND lock_is_live`. `classify` still receives an
-    eagerly-computed bool.
+    command. It spares even the cache read; `claude_worktree`'s on-disk verdict cache is what
+    carries a verdict from one command to the next. It deliberately does NOT touch `classify`:
+    guarding on `not tree.locked` would re-derive `classify`'s branch structure outside
+    `classify` and get it wrong — `classify` skips the merged read only on `locked AND
+    lock_is_live`. `classify` still receives an eagerly-computed bool.
 
     ``ask`` is the read itself, defaulted to `is_merged`. A test counts its calls through
     this parameter rather than by patching the module attribute, which is the direction the

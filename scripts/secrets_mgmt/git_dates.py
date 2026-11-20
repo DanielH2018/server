@@ -27,7 +27,8 @@ from secrets_mgmt.secrets_lib.registry_model import Registry
 SECRETS_GIT_PATH = "secrets/secrets.yml"
 # The directory every SOPS file sat under before ADR 0030 renamed it to `secrets/`. The walks
 # read a file's history across the rename, so its older revisions are read at this path.
-PRE_RENAME_DIR, RENAMED_DIR = "ansible/vars/", "secrets/"
+PRE_RENAME_DIR = "ansible/vars/"  # DECIDED: kept, the walks cross the rename (ADR-0030)
+RENAMED_DIR = "secrets/"
 
 # new name -> the name the same secret was stored under before it was renamed.
 #
@@ -329,7 +330,7 @@ def _revisions(
 ) -> list[tuple[str, str, str]]:
     """Every commit that touched `path`, newest first, as (sha, "YYYY-MM-DD", path at sha).
 
-    A commit from before ADR 0030's rename touched the file at its `ansible/vars/` path.
+    A commit from before ADR 0030's rename touched the file under `PRE_RENAME_DIR`.
     """
     paths = [path]
     if path.startswith(RENAMED_DIR):

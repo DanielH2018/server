@@ -1,7 +1,7 @@
 """`--repo` on the register subcommands: every gh call and the worktree read aim at that repo.
 
 `open --repo` is covered beside the rest of `open`, in test_findings_open.py. This module
-covers the subcommands that take the flag, and the prune_worktrees read they
+covers the subcommands that take the flag, and the worktree read they
 reach through it: a checkout whose default branch is not origin/master.
 """
 

@@ -15,7 +15,11 @@ Every alert's summary reads `<service or host>: <what is wrong>`. The notificati
 summary per alert, so a reader scanning a list finds the thing that broke in the same place on
 every line. The subject is the rule's own `service` label, an inventory host, or the firing
 series' labels (`{{ $labels.namespace }}/{{ $labels.pod }}`) where one of them names the thing
-more exactly than the rule's `service` does.
+more exactly than the rule's `service` does. Every summary also fits SUMMARY_CAP once
+rendered. The cap measures the text a promtool test's `exp_annotations` expects the alert to
+render, because a `{{ with query ... }}` template runs to hundreds of characters of source and
+renders one short line. A summary with no template, or one no test renders, is measured as
+its source.
 
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
 template expands. The rule files are plain YAML that Jinja never renders, so the domain is a
@@ -33,15 +37,16 @@ from lib import yaml_fast
 from lib.inventory_lists import host_names
 from lib.repo_paths import ALL_VARS, REPO
 
-ROLE = K8S_ROLES / "observability"
-# The shipped rules of every role, Prometheus' and loki-homelab's ruler alike, and the fixture
-# rule host-checks.test.yaml fires beside them.
-RULE_FILES = sorted(K8S_ROLES.glob("*/files/rules/*.yaml")) + sorted(
-    (ROLE / "tests" / "rules" / "fixtures").glob("*.yaml")
-)
+# The shipped rules of every role, Prometheus' and loki-homelab's ruler alike.
+RULE_FILES = sorted(K8S_ROLES.glob("*/files/rules/*.yaml"))
+RULE_TESTS = sorted(K8S_ROLES.glob("*/tests/rules/*.test.yaml"))
 # The longest description an alert rule's source may carry, in characters. Past it the
 # notification turns into an essay on a phone, and the edge cases belong in the runbook.
 DESCRIPTION_CAP = 300
+# The longest rendered summary, in characters: one line of a notification listing many alerts.
+SUMMARY_CAP = 120
+# Non-vacuity: alerts whose summary source is a query template over SUMMARY_CAP.
+TEMPLATED = frozenset({"K3sNodeVersionSkew", "FluxNotReady"})
 # Non-vacuity: critical rules the census must find, one of them loki-homelab's.
 CRITICAL = frozenset({"WANUnreachable", "HostFilesystemRemountedReadOnly"})
 DOCS = REPO / "docs"
@@ -80,6 +85,43 @@ def _alerts() -> list[tuple[str, dict]]:
         for rule in group["rules"]
         if "alert" in rule
     ]
+
+
+def _rendered_summaries() -> dict[str, list[str]]:
+    """Each summary a promtool test expects an alert to render, by alert name."""
+    rendered: dict[str, list[str]] = {}
+    for path in RULE_TESTS:
+        for case in yaml_fast.safe_load(path.read_text())["tests"]:
+            for check in case.get("alert_rule_test") or []:
+                for alert in check.get("exp_alerts") or []:
+                    summary = (alert.get("exp_annotations") or {}).get("summary")
+                    if summary is not None:
+                        rendered.setdefault(check["alertname"], []).append(summary)
+    return rendered
+
+
+def summary_length_problems(
+    alerts: list[tuple[str, dict]], rendered: dict[str, list[str]]
+) -> list[str]:
+    """Why an alert's summary runs past SUMMARY_CAP, or nothing.
+
+    Args:
+        alerts: (file name, rule) for each alert rule.
+        rendered: The rendered summaries of each alert a test renders, by alert name. A
+            rule shares them with every rule of its name, so they stand in only for a
+            templated summary; a plain one is its own render and is measured as written.
+    """
+    problems = []
+    for name, rule in alerts:
+        source = (rule.get("annotations") or {}).get("summary", "")
+        templated = "{{" in source
+        for summary in rendered.get(rule["alert"], [source]) if templated else [source]:
+            if len(summary) > SUMMARY_CAP:
+                problems.append(
+                    f"{name}/{rule['alert']}: the summary {summary!r} is {len(summary)} "
+                    f"characters, over the {SUMMARY_CAP} cap"
+                )
+    return problems
 
 
 def runbook_problems(alerts: list[tuple[str, dict]], base: str) -> list[str]:
@@ -232,6 +274,51 @@ def test_every_alert_summary_opens_with_its_service_or_host_is_clean():
     alerts = _alerts()
     assert CRITICAL <= {rule["alert"] for _name, rule in alerts}
     assert summary_problems(alerts, host_names()) == []
+
+
+def test_every_alert_summary_fits_the_cap_once_rendered_is_clean():
+    # fact: k8s/roles/observability/CLAUDE.md#Alert plane
+    alerts = _alerts()
+    rendered = _rendered_summaries()
+    sources = {
+        rule["alert"]: (rule.get("annotations") or {}).get("summary", "")
+        for _name, rule in alerts
+    }
+    assert all(len(sources[alert]) > SUMMARY_CAP for alert in TEMPLATED)
+    assert TEMPLATED <= rendered.keys(), sorted(TEMPLATED - rendered.keys())
+    assert summary_length_problems(alerts, rendered) == []
+
+
+def test_a_rendered_summary_over_the_cap_is_flagged():
+    summary = "longhorn: " + "a" * SUMMARY_CAP
+    rendered = {"X": ["longhorn: short.", summary]}
+    assert summary_length_problems(_summarised("{{ x }}"), rendered) == [
+        f"x.yaml/X: the summary {summary!r} is {len(summary)} characters, over the "
+        f"{SUMMARY_CAP} cap"
+    ]
+
+
+def test_a_long_template_that_renders_short_is_clean():
+    template = "longhorn: {{ with query " + "a" * SUMMARY_CAP + " }}{{ end }}"
+    rendered = {"X": ["longhorn: the volume is degraded."]}
+    assert summary_length_problems(_summarised(template), rendered) == []
+
+
+def test_a_plain_summary_over_the_cap_is_flagged_beside_a_short_render():
+    summary = "longhorn: " + "a" * SUMMARY_CAP
+    rendered = {"X": ["longhorn: short."]}
+    assert summary_length_problems(_summarised(summary), rendered) == [
+        f"x.yaml/X: the summary {summary!r} is {len(summary)} characters, over the "
+        f"{SUMMARY_CAP} cap"
+    ]
+
+
+def test_a_summary_no_test_renders_is_measured_as_its_source():
+    summary = "longhorn: " + "a" * SUMMARY_CAP
+    assert summary_length_problems(_summarised(summary), {}) == [
+        f"x.yaml/X: the summary {summary!r} is {len(summary)} characters, over the "
+        f"{SUMMARY_CAP} cap"
+    ]
 
 
 def test_a_summary_that_opens_with_the_symptom_is_flagged():

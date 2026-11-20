@@ -25,6 +25,9 @@ from pathlib import Path as _Path
 from lib import _claude_worktree  # noqa: F401
 import claude_worktree
 
+# The dotfiles package this process imported: deployed on a host, a pinned checkout in CI.
+PACKAGE = _Path(claude_worktree.__file__ or "").resolve().parent
+
 
 def ignore_foreign_slice_holds(monkeypatch) -> None:
     """Switch the slice rule off for one test; a cwd or `CLAUDE_PROJECT_DIR` hold still counts.

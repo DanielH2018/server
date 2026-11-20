@@ -40,7 +40,7 @@ KNOWN_TEST_FILES = frozenset(
         "tests/repo/test_pytest_shards_partition_the_suite.py",
         "tests/repo/test_every_ci_job_is_gated.py",
         "scripts/validate/tests/test_render_k8s.py",
-        "scripts/dev/tests/test_prune_worktrees.py",
+        "scripts/dev/tests/test_held_branches.py",
         ".claude/hooks/tests/test_block_protected_bash.py",
     }
 )

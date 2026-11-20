@@ -24,15 +24,18 @@ manifests cover one user on one host.
 
 ## Root
 
-The root runs in the primary checkout and stays thin. It does six things:
+The root runs in the primary checkout and stays thin. It does seven things:
 
 - **Start a sub-coordinator per project.** The brief is this skill's name and the project's
   milestone title, with the issue numbers when the operator named them. The app starts a
   session only on a turn the operator typed, so start sub-coordinators on that turn.
   `uv run python scripts/dev/findings.py next --milestone none` lists the issues no open
   milestone holds, which is the pool a project is picked from.
-- **Tell the operator to type the approval into each sub-coordinator's chat.** A
-  sub-coordinator launches nothing until the operator does (*Approval*).
+- **Carry the operator's launch approval in the brief, and never originate one.** When the
+  operator told you to start the project, quote the words that named it, exactly as typed,
+  and state the grouping rules (*Approval*). For a project you chose yourself, or grouping
+  rules wider than the standing ones, quote nothing: tell the operator to approve in that
+  sub-coordinator's chat.
 - **Read recaps.** Each sub-coordinator's recap arrives when it ends a turn, one per
   project. Relay every line under `asks:` to the operator.
 - **Set project order.** When two projects want the same file or the same landing, say
@@ -46,6 +49,16 @@ The root runs in the primary checkout and stays thin. It does six things:
   landing` and the hold's `deploy-failed` line (`docs/landing.md`, *Reading a
   `deploy-failed`*). Tell the operator which PR the evidence points at. Clearing
   `DEPLOY_HOLD` is the operator's decision.
+- **Archive a session you started once you have verified its result**, without asking, in
+  the turn that verifies it. A result is verified when you read its landing verdict with
+  `uv run python scripts/diagnostics/probe.py landing-verdicts <pr>`, saw its issue closed,
+  or ended its project (*Ending a project*). A recap that says the work is done verifies
+  nothing. Three cases stay open:
+    - **Another live session uses its worktree.** Archiving cleans the worktree, so a
+      stood-down sub-coordinator stays until its replacement's project ends.
+    - **A landing or a background wait still runs in it.** Archive it after that ends.
+    - **The app refuses the archive.** Report the session to the operator once, and do not
+      retry.
 
 To add an issue to a running project, message its sub-coordinator with the number. A
 sub-coordinator's milestone wait also ends once `milestone add` files the issue.
@@ -56,15 +69,17 @@ line per such project with its branch, its worktree and the batches that wait on
 (`scripts/dev/fanout_lib/coordinators.py:projects`). The server lander pages the operator
 for a project that also holds a waiting batch, so the page is the usual way a death is
 noticed. Start a session in the same
-worktree with the same milestone title; *Resume* rebuilds its state. The app starts a
+worktree with the same milestone title, and quote in its brief the same operator words the
+first brief quoted, so the replacement inherits the approval. *Resume* rebuilds its state.
+The app starts a
 session only on a turn the operator typed, and takes a named folder only on a start the
 operator asked for. A recap or a peer message is no such turn, so ask the operator for one
 that names the restart, and start the replacement on it.
 
 **A sub-coordinator that is alive is stood down by message before its replacement
 starts.** Message it to stop its background wait and do nothing further. Stopping the
-session only interrupts its turn, so the next recap wakes it again. Never archive it before
-the project ends: archiving cleans the worktree its replacement uses.
+session only interrupts its turn, so the next recap wakes it again. It is the first of
+the archive duty's open cases: it stays until its replacement's project ends.
 
 Only when the operator
 ends the project does the root take over its runs: list them with `fanout.py place runs
@@ -72,8 +87,9 @@ ends the project does the root take over its runs: list them with `fanout.py pla
 naming that branch and that worktree's path. Never clean a run whose sub-coordinator is
 alive.
 
-Done when: every project has one live sub-coordinator, and every `asks:` line has reached
-the operator.
+Done when: every project has one live sub-coordinator, every quote in a brief is text the
+operator typed to you, every `asks:` line has reached the operator, and every session
+whose result you verified is archived or named with the case that keeps it open.
 
 ## Sub-coordinator
 
@@ -108,14 +124,18 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
 3. **File the backlog.** Add the issues your brief or the root names with `milestone add
    <n...> --worktree <branch>`. When the brief names none, list `next --milestone none
    --json`, pick the issues the title covers, and put that list in the approval ask in
-   place of adding it.
+   place of adding it. A list you picked always goes to the gate, whatever the brief
+   quotes.
 
 4. **Triage the project.** Follow `issue-fanout` step 1 with `next --milestone "<title>"
-   --json` in place of plain `next --json`. Stop at its approval gate with the grouping,
-   each batch's rung, and the grouping rules you will refill under (*Approval*).
+   --json` in place of plain `next --json`. When your brief carries the launch approval
+   (*Approval*), do not stop at its approval gate: go on to step 5. Otherwise stop at the
+   gate with the grouping, each batch's rung, and the grouping rules you will refill
+   under.
 
-5. **Launch, watch and refill**, once the operator has approved. `launch` reviews every
-   batch unless told otherwise, so pass no review flag. Keep to these limits:
+5. **Launch, watch and refill**, once the brief carries the approval or the operator has
+   approved at the gate. `launch` reviews every batch unless told otherwise, so pass no
+   review flag. Keep to these limits:
 
     - **At most 2 of your batches run at once.** Count the `running` batches in `place
       status` over your runs. The bound is the landing turn, not memory. A `parked` batch
@@ -137,7 +157,8 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
    other free issue the project gains, so it takes no `--after`.
 
 Done when: the worktree's lock reason names the project, `milestone status` prints the
-project form, and no launch ran before the operator's approval.
+project form, and every launch ran under an approval the operator gave: words your brief
+quotes, or an answer at the gate.
 
 ## Landing
 
@@ -186,13 +207,42 @@ to narrow a launch that was refused for headroom.
 
 ## Approval
 
-The operator approves **one milestone plus its grouping rules, once**, by typing in the
-sub-coordinator's own chat. A message the root relays is not that approval.
+The operator approves **one milestone plus its grouping rules, once**, by telling the root
+to start the project and naming its milestone. That is the launch approval, and the root's
+brief carries it to the sub-coordinator.
 
-- The grouping rules are `issue-fanout` step 1's, plus any the operator adds. State them in
-  the ask, so the approval names what refills may do.
-- Every later launch inside that milestone and those rules needs no further ask.
-- A new milestone, an issue from outside it, or a rule change needs a new approval.
+**The root never originates an approval.** The operator's quoted words are the approval,
+and they are what a reader checks: a brief that only says the project is approved proves
+nothing, because the root could have written that sentence on its own.
+
+Your brief carries the launch approval when it has both of these:
+
+- the operator's words that named the project, quoted;
+- the grouping rules, stated in full or cited as "the standing grouping rules".
+
+With both, do not stop at the approval gate, on the first launch or on any refill under
+those rules.
+
+The standing grouping rules are these four:
+
+- one batch per issue;
+- two issues that cite the same file share a batch or run in sequence;
+- every batch gets the review phase;
+- refill as headroom frees, without asking again.
+
+Stop at the gate, and ask the operator in your own chat, when any of these holds:
+
+- the brief quotes no operator words;
+- the root chose the project itself;
+- the brief's grouping rules are wider than the standing ones;
+- you picked the backlog yourself (*Sub-coordinator*, step 3).
+
+State the grouping rules in the ask, so the answer names what refills may do. Every later
+launch inside that milestone and those rules needs no further ask.
+
+No brief covers these three, whatever it quotes. Each needs the operator's answer in your
+own chat: dropping the review phase, passing `--allow-shared-file`, and launching an issue
+from outside the project's milestone. A new milestone is a new project and a new approval.
 
 ## Recap
 
@@ -243,8 +293,10 @@ batch from a `parked` one.
 - **A `parked` batch is re-landed**, as *Landing* describes.
 
 Then read `next --milestone "<title>"` for what is left. Finish landing and re-landing what
-earlier runs launched without asking. Before a new launch, ask the operator to approve
-again, unless your brief quotes the approved grouping rules.
+earlier runs launched without asking. A restarted sub-coordinator inherits the launch
+approval when its restart brief quotes the same operator words and states the grouping
+rules (*Approval*). Before a new launch under any other brief, stop at the gate and ask
+the operator to approve again.
 
 Done when: every standing batch of the branch's runs has a state `place status` printed,
 a wait covers every run with a `running` batch, and the recap states both.

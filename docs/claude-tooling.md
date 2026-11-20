@@ -936,7 +936,7 @@ Name the worktree the branch slug you want. `containers-role-cleanup` gets a rea
 `cleanup` doesn't. `EnterWorktree` names the branch `worktree-<name>`, and the desktop app
 names the branch of a worktree it makes `claude/<name>`. Accept either name: renaming the
 branch afterwards only detaches it from the worktree git has registered. `findings.py claim`,
-`land.sh` and `prune_worktrees.py --check` take both.
+`land.sh` and `~/.claude/hooks/prune-worktrees.py --check` take both.
 
 The Claude Code binary refused 412 Bash commands as "too complex to verify" in the 7 days to
 2026-10-31, at a cost of one turn each (#6732). Literal commands joined by `;`, `&&` or a pipe
