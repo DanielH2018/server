@@ -12,8 +12,8 @@ LIVE_ARGS is daniel-server's `k3s.io/node-args` annotation, read on 2026-11-03 w
 writes it from the command line it started with, and it equals `k3s_agent_args` at the merge
 base, 425dcdfd98, rendered with daniel-server's inventory. K3S_URL and K3S_TOKEN come from the installer's
 env file, not the command line, so neither appears. A later deliberate flag change edits this
-fixture in the same PR: the image-gc pair is #8307's and the memory reserve #8644's, each live from the agent's
-next start.
+fixture in the same PR: the image-gc pair is #8307's, the memory reserve #8644's and
+`seccomp-default` the last entry's, each live from the agent's next start.
 """
 
 import functools
@@ -43,6 +43,8 @@ LIVE_ARGS = [
     "image-gc-low-threshold=55",
     "--kubelet-arg",
     "system-reserved=memory=4Gi",
+    "--kubelet-arg",
+    "seccomp-default=true",
 ]
 
 
@@ -86,3 +88,7 @@ def test_a_low_threshold_not_below_the_high_one_is_flagged():
 
 def test_the_agent_kubelet_reserves_memory():
     assert reserved_memory_problems(rendered_config()) == []
+
+
+def test_the_agent_kubelet_defaults_every_container_to_the_runtime_seccomp_profile():
+    assert "seccomp-default=true" in rendered_config()["kubelet-arg"]

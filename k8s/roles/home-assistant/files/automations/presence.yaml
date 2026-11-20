@@ -46,12 +46,9 @@
                 title: "🏠 Left on"
                 message: "Turned off bedroom {{ on_label }} (you're away)"
                 tag: bedroom_away
-                # Deliver NOW, don't hold for the arrival digest: bedroom_away only ever fires while
-                # away, so without this the message + its "Turn back on" button are parked as a held
-                # persistent_notification (flushed phone-only on arrival, actions stripped) and the
-                # button can never be tapped — defeating the false-away undo it exists for.
-                # critical_away pushes while away without piercing DND at home.
-                critical_away: true
+                # bedroom_away fires only while away, and the arrival digest drops action buttons,
+                # so a held "Left on" could never offer its "Turn back on" undo.
+                alert_class: away_only
                 # One-tap undo for a false-away (GPS jitter while you're actually home).
                 actions:
                   - action: BEDROOM_AWAY_TURN_ON
@@ -73,13 +70,13 @@
   action:
     # Clear the away "Left on" note if it's still up — arriving home makes its false-away undo moot
     # (created by bedroom_away with notification_id: bedroom_away; only the BEDROOM_AWAY_TURN_ON tap
-    # dismissed it before, and the hold_-prefixed arrival flush doesn't match it). A stray dismiss
+    # dismissed it before, and the arrival flush reads only the held store). A stray dismiss
     # of an absent id no-ops, so this is safe when nothing was left on.
     - service: persistent_notification.dismiss
       data:
         notification_id: bedroom_away
     # ...and clear the DELIVERED phone push too. bedroom_away pushes via notify.mobile_app_pixel_9_pro
-    # with tag: bedroom_away, and critical_away bypasses the away-hold so it lands as a real Android
+    # with tag: bedroom_away, and its away_only class is never held, so it lands as a real Android
     # push that the dismiss above can't touch. On a genuine away you (correctly) never tap "Turn back
     # on", so this arrival clear is the tag's own recovery path — closing the "the bedroom_away tag has
     # no recovery path of its own" gap noted at the BEDROOM_AWAY_TURN_ON handler. clear_notification is
