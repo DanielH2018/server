@@ -103,12 +103,6 @@ READY_POLL_S = 10
 # GitHub reports `UNKNOWN` for a PR's `mergeable` while it computes it, so a read of `UNKNOWN`
 # is repeated once after this pause.
 MERGEABLE_RECHECK_S = 5
-# The conclusions cc-wait's `gh-ci` source fails on (`cc_wait/github.py:FAILED_CONCLUSIONS`),
-# and `error`, which a commit status reports. `cancelled` is deliberately absent: it is no
-# verdict.
-FAILED_CONCLUSIONS = frozenset(
-    {"failure", "timed_out", "action_required", "startup_failure", "error"}
-)
 PASSED = "passed"
 FAILED = "failed"
 NO_VERDICT = "no-verdict"
@@ -150,22 +144,22 @@ def _tail(text: str) -> str:
 
 def failing_checks(run: Runner, pr: str, repo: str) -> list[Failure]:
     """The PR head's failed checks with each job's log tail; empty when the read fails."""
+    # Imported here because `clean-one` imports this module from a snapshot of `scripts/`
+    # alone, which holds no `hosts/lib`.
+    from lib import host_modules  # noqa: F401
+    from ci_verdict import RunState, parse_rollup
+
     out = run(["gh", "pr", "view", pr, "-R", repo, "--json", "statusCheckRollup"], None)
     try:
-        rollup = json.loads(out.stdout)["statusCheckRollup"]
+        checks = parse_rollup(json.loads(out.stdout)["statusCheckRollup"])
     except ValueError, KeyError, TypeError:
         return []
     failures = []
-    for check in rollup if isinstance(rollup, list) else []:
-        if not isinstance(check, dict):
+    for check in checks:
+        if check.state is not RunState.FAIL:
             continue
-        # A check run reports `conclusion`; a commit status reports `state`.
-        verdict = str(check.get("conclusion") or check.get("state") or "").lower()
-        if verdict not in FAILED_CONCLUSIONS:
-            continue
-        name = str(check.get("name") or check.get("context") or "unnamed")
-        url = str(check.get("detailsUrl") or check.get("targetUrl") or "")
-        job = JOB_ID.search(url)
+        name = check.name or "unnamed"
+        job = JOB_ID.search(check.url)
         tail = ""
         if job:
             log = run(

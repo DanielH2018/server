@@ -12,6 +12,7 @@ files:
   - {src: files/deploy_ui_lib/deploy_ui_games.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_games.py, activate: "try-restart:deploy-ui.service"}
   - {src: files/deploy_ui_lib/deploy_ui_game_control.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_game_control.py, activate: "try-restart:deploy-ui.service"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/deploy-ui/host_lib.py, activate: "try-restart:deploy-ui.service"}
+  - {lib: ci_verdict.py, dst: /usr/lib/homelab/deploy-ui/ci_verdict.py, activate: "try-restart:deploy-ui.service"}
   - {src: templates/deploy-ui.service.j2, dst: /usr/lib/systemd/system/deploy-ui.service}
   - {src: templates/games.json.j2, dst: /usr/lib/homelab/deploy-ui/games.json, activate: "try-restart:deploy-ui.service"}
 # The homelab-games ServiceAccount's token, which the Games panel scales the game servers with

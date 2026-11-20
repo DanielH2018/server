@@ -1,6 +1,7 @@
 """What the posted message looks like: the digest's tail survives the cap, and no emojis."""
 
 import notify_logic as nl
+from ci_verdict import CIVerdict
 import pending_logic as pl
 import renovate_notify as rn
 
@@ -9,7 +10,7 @@ def _pr(
     number=1,
     url="u",
     automerge=True,
-    ci="success",
+    ci=CIVerdict.PASS,
     conflicting=False,
     dead_paths=None,
     title="t",
@@ -77,10 +78,10 @@ def test_a_prefix_that_fits_is_not_cut():
 
 def test_rendered_messages_carry_no_emoji():
     items = [
-        (_pr(number=1, ci="failure"), "stuck"),
+        (_pr(number=1, ci=CIVerdict.FAIL), "stuck"),
         (_pr(number=2, conflicting=True), "stuck"),
         (_pr(number=3, conflicting=True, dead_paths=("gone/x",)), "stuck"),
-        (_pr(number=4, ci="pending", automerge=False), "manual"),
+        (_pr(number=4, ci=CIVerdict.PENDING, automerge=False), "manual"),
         (_pr(number=5, automerge=False), "manual"),
     ]
     text = "\n".join(

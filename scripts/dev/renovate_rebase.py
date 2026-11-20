@@ -57,6 +57,9 @@ from lib.exit_codes import (
     USAGE_ERROR,
 )
 from lib.gh import gh as _gh
+from lib import host_modules  # noqa: F401
+
+from ci_verdict import CheckRun, RunState, parse_rollup
 
 UNTICKED = "- [ ] <!-- rebase-check -->"
 TICKED = "- [x] <!-- rebase-check -->"
@@ -81,31 +84,22 @@ def tick_rebase_box(body: str) -> tuple[str | None, str]:
     return None, "no-box"
 
 
-def soaking(rollup: list[dict]) -> bool:
+def soaking(checks: list[CheckRun]) -> bool:
     """Is this PR's `renovate/stability-days` status pending?
 
     A PR with no such status is not soaking — Renovate posts it only where a
-    `minimumReleaseAge` rule matched the dependency. `state` arrives uppercase from
-    `gh pr view --json statusCheckRollup` and lowercase from the commit-status API.
+    `minimumReleaseAge` rule matched the dependency.
     """
-    return any(
-        entry.get("context") == SOAK_CONTEXT
-        and (entry.get("state") or "").upper() == "PENDING"
-        for entry in rollup
-    )
+    return any(c.name == SOAK_CONTEXT and c.state is RunState.PENDING for c in checks)
 
 
-def soak_cleared(rollup: list[dict]) -> bool:
+def soak_cleared(checks: list[CheckRun]) -> bool:
     """Does this PR's `renovate/stability-days` status read SUCCESS?
 
     Not the negation of `soaking`: an absent status is neither, and `--retick` wants positive
     proof the soak is over.
     """
-    return any(
-        entry.get("context") == SOAK_CONTEXT
-        and (entry.get("state") or "").upper() == "SUCCESS"
-        for entry in rollup
-    )
+    return any(c.name == SOAK_CONTEXT and c.state is RunState.PASS for c in checks)
 
 
 def _edit_body(gh: Gh, number: str, body: str) -> str | None:
@@ -148,8 +142,8 @@ def main(
         print(f"gh pr view {number} failed: {exc.stderr.strip()}", file=stderr)
         return RENOVATE_REBASE_GH_FAILED
     body = view.get("body") or ""
-    rollup = view.get("statusCheckRollup") or []
-    soak = soaking(rollup)
+    checks = parse_rollup(view.get("statusCheckRollup"))
+    soak = soaking(checks)
     new_body, outcome = tick_rebase_box(body)
     if outcome == "no-box":
         print(
@@ -176,7 +170,7 @@ def main(
         )
         return RENOVATE_REBASE_SOAKING
     if retick and outcome == "already-ticked":
-        if not soak_cleared(rollup):
+        if not soak_cleared(checks):
             print(
                 f"PR #{number}: `{SOAK_CONTEXT}` does not read SUCCESS, so --retick wrote "
                 "nothing — it retries a tick only once the soak is shown to be over. The "
