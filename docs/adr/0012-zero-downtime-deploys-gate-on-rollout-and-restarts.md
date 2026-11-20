@@ -28,8 +28,8 @@ history. They stay as written:
   gates survive as the soak Job's floor and as `probe.py health`, which `land.sh` runs after
   a promotion.
 - *Context*, "An Ansible deploy applies manifests and returns": no Ansible deploy runs.
-- *Consequences*, "`--detach` returning is not a verified deploy", and the ADR-0020
-  amendment's "`deploy.sh` refuses a k8s tag with exit 5": H7.53 deleted `deploy.sh`, its
+- The ADR-0020 amendment's "`deploy.sh` refuses a k8s tag with exit 5" and *Consequences*'
+  "`--detach` returning is not a verified deploy": H7.53 deleted `deploy.sh`, its
   `--detach` flag and the `refuse_k8s_tags` check. A host change ships in the host's package
   (ADR-0029), and no setup-plane deploy is left to detach.
 - *Governs*, "the shared rollout tasks" and `k8s/roles/manifests/files/flux_soak.py`:

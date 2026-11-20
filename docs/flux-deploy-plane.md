@@ -641,8 +641,9 @@ to fetch the commit that fixes it. In this order:
 - **Why the manager `kubectl`.** The apply names that manager explicitly, so the Apply entry
   it creates matches the cleanup's `kubectl` (Apply) entry by construction rather than by
   kubectl's default. Upstream's comment on that entry reads "to undo changes made with
-  'kubectl apply --server-side --force-conflicts'". So Flux's cleanup takes those fields back
-  at `flux-deferred`'s first reconcile after the resume. Under `homelab-operator`, an Apply
+  'kubectl apply --server-side --force-conflicts'" and matches this apply, so Flux's cleanup
+  takes those fields back at `flux-deferred`'s first reconcile after the resume. Under
+  `homelab-operator`, an Apply
   owner would stay on every field, and a later commit that removed one would never take
   effect.
 

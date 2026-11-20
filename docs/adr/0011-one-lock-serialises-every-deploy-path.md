@@ -30,8 +30,8 @@ ADR-0029 also supersedes ADR-0017, so the ADR-0017 note above is history: nothin
 tree lock for a snapshot, and nothing takes a per-service lock. Slices H7.53 to H7.57 make
 these statements below history too. They stay as written:
 
-- *Context*, "the GitOps timer on its tick interval"; "an operator running
-  `./scripts/deploy.sh`", and "the GitOps deployer rewrites the tree mid-run": H7.52 retired
+- *Context*, "the GitOps timer on its tick interval"; "the GitOps deployer rewrites the tree
+  mid-run"; and "an operator running `./scripts/deploy.sh`": H7.52 retired
   the timer, and H7.53 deleted `deploy.sh` and the deployer's code. `homelab-checkout-sync`
   fast-forwards the primary checkout, and no deploy renders from it.
 - *Decision*, the holders `scripts/deploy.sh` and `gitops-deploy.service`, and "a deploy
