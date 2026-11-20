@@ -162,8 +162,8 @@ class Fakes:
         ]
     )
     # What the PR head's check-runs and check-suites listings answer on every call, as
-    # `stuck_checks.find` reads them: `{name, suite}` per pending run, and the completed suite
-    # ids. An exception is raised in place of an answer.
+    # `stuck_checks.find` reads them: the entries of each REST listing. An exception is raised
+    # in place of an answer.
     pending_checks: Any = field(default_factory=list)
     completed_suites: Any = field(default_factory=list)
     # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps

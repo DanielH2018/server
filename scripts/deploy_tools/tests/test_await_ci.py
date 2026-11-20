@@ -10,7 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 
 from deploy_tools import await_ci
 import pytest
-from ci_verdict import CheckRun
+from ci_verdict import CheckRun, CheckSuite
 
 from deploy_tools.land_lib import options
 
@@ -100,7 +100,9 @@ def test_a_real_failure_is_not_read_as_no_verdict():
 
 
 def _suite(status, conclusion, runs):
-    return {"status": status, "conclusion": conclusion, "latest_check_runs_count": runs}
+    return CheckSuite.parse(
+        {"status": status, "conclusion": conclusion, "latest_check_runs_count": runs}
+    )
 
 
 def test_a_workflow_cancelled_before_any_run_registered_is_no_verdict():
@@ -121,6 +123,11 @@ def test_a_suite_still_queued_keeps_waiting():
     """A queued suite is a run that may yet register; chasing the tip here would report
     somebody else's result as this commit's."""
     suites = [_suite("queued", None, 0)]
+    assert not await_ci._cancelled_before_any_run_registered([], suites, REQUIRED)
+
+
+def test_a_cancelled_suite_that_registered_runs_keeps_waiting():
+    suites = [_suite("completed", "cancelled", 2)]
     assert not await_ci._cancelled_before_any_run_registered([], suites, REQUIRED)
 
 
@@ -180,13 +187,15 @@ def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
 
 
 def _actions_suite(status):
-    return {"app": {"slug": "github-actions"}, "status": status}
+    return CheckSuite.parse({"app": {"slug": "github-actions"}, "status": status})
 
 
 def test_a_sha_with_no_actions_suite_reads_as_a_dropped_push():
     """GitHub delivered no push event, so no app registered anything at all."""
     assert await_ci._push_was_dropped([], [], REQUIRED)
-    other_apps = [{"app": {"slug": "gitguardian"}, "status": "queued"}]
+    other_apps = [
+        CheckSuite.parse({"app": {"slug": "gitguardian"}, "status": "queued"})
+    ]
     assert await_ci._push_was_dropped([], other_apps, REQUIRED)
 
 

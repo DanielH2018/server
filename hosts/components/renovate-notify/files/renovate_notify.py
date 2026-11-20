@@ -33,7 +33,6 @@ from notify_logic import (
     PR,
     actionable,
     autoclosed_fingerprint,
-    ci_rollup,
     dashboard_body,
     dashboard_headers_unrecognized,
     dashboard_stale,
@@ -52,6 +51,7 @@ from notify_logic import (
     DASHBOARD_UNPARSEABLE_MSG,
 )
 import renovate_identity
+from ci_verdict import checks_verdict, parse_check_runs, parse_rollup
 from renovate_identity import RenovatePR
 from pending_logic import (
     churn_fingerprint,
@@ -117,21 +117,26 @@ def build_pr(repo: str, pr: dict) -> PR:
         detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
     )
     sha = pr["head"]["sha"]
-    runs = read_check_pages(
-        lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
-        "check_runs",
+    # A PR's CI is two disjoint sources: the Checks API and the legacy Commit Status API.
+    runs = parse_check_runs(
+        read_check_pages(
+            lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
+            "check_runs",
+        )
     )
     # The combined status pages its `statuses` the same way, at a default of 30 contexts.
-    statuses = read_check_pages(
-        lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
-        "statuses",
+    statuses = parse_rollup(
+        read_check_pages(
+            lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
+            "statuses",
+        )
     )
     return PR(
         number=n,
         title=pr.get("title", "").strip(),
         url=pr.get("html_url", ""),
         automerge=parse_automerge(pr.get("body") or ""),
-        ci=ci_rollup(runs, statuses),
+        ci=checks_verdict([*runs, *statuses]),
         conflicting=conflicting,
         created_at=pr.get("created_at", ""),
         dead_paths=dead_paths(repo, n, pr) if conflicting else None,

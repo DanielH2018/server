@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from ci_verdict import parse_rollup
 from dev.renovate_rebase import (
     SOAK_CONTEXT,
     TICKED,
@@ -125,27 +126,32 @@ def test_a_bad_argument_is_a_usage_error(argv):
 
 
 def test_a_pending_soak_status_is_detected():
-    assert soaking([CI_RUN, SOAK_PENDING]) is True
+    assert soaking(parse_rollup([CI_RUN, SOAK_PENDING])) is True
 
 
 def test_a_finished_soak_is_not_pending():
-    assert soaking([CI_RUN, SOAK_DONE]) is False
+    assert soaking(parse_rollup([CI_RUN, SOAK_DONE])) is False
 
 
 def test_a_pr_with_no_soak_status_is_not_soaking():
     """Renovate posts the status only where a `minimumReleaseAge` rule matched; absent is
     not pending, or every PR without one would be refused."""
-    assert soaking([CI_RUN]) is False
-    assert soaking([]) is False
+    assert soaking(parse_rollup([CI_RUN])) is False
+    assert soaking(parse_rollup([])) is False
 
 
 def test_a_lowercase_state_still_counts_as_pending():
     """The commit-status API answers `pending`; the rollup answers `PENDING`."""
-    assert soaking([{"context": SOAK_CONTEXT, "state": "pending"}]) is True
+    assert (
+        soaking(parse_rollup([{"context": SOAK_CONTEXT, "state": "pending"}])) is True
+    )
 
 
 def test_another_pending_status_is_not_the_soak():
-    assert soaking([{"context": "renovate/artifacts", "state": "PENDING"}]) is False
+    assert (
+        soaking(parse_rollup([{"context": "renovate/artifacts", "state": "PENDING"}]))
+        is False
+    )
 
 
 def test_main_refuses_to_tick_a_soaking_pr():
@@ -184,13 +190,13 @@ def test_a_soaking_pr_with_no_box_is_still_a_no_box_error():
 
 
 def test_a_success_soak_status_is_cleared():
-    assert soak_cleared([CI_RUN, SOAK_DONE]) is True
+    assert soak_cleared(parse_rollup([CI_RUN, SOAK_DONE])) is True
 
 
 def test_a_pending_or_absent_soak_status_is_not_cleared():
     """Absent is not cleared: a renamed context reads as absent, and must not open a retick."""
-    assert soak_cleared([CI_RUN, SOAK_PENDING]) is False
-    assert soak_cleared([CI_RUN]) is False
+    assert soak_cleared(parse_rollup([CI_RUN, SOAK_PENDING])) is False
+    assert soak_cleared(parse_rollup([CI_RUN])) is False
 
 
 def test_retick_unticks_then_reticks_a_spent_box_after_the_soak():
