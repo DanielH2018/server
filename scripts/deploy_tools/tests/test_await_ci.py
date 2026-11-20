@@ -74,10 +74,8 @@ def test_no_verdict_sha_does_not_resolve_to_an_unrelated_tip():
 
 
 def test_empty_required_set_refuses_rather_than_disarming():
-    """ci_verdict returns 'pass' on an empty required set -- that is its
-    deliberate disarm switch, reachable only by an operator
-    emptying CI_CONTEXTS. Inheriting it here would turn a wait-for-green into an
-    unconditional green."""
+    """An operator empties CI_CONTEXTS to disarm the gate, and await_ci names that
+    as a disarmed gate before it reads GitHub, rather than reporting a verdict."""
     try:
         await_ci.verdict_for("abc", lambda _s: [], frozenset())
     except await_ci.DisarmedGateError:
