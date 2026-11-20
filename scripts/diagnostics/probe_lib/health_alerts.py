@@ -39,6 +39,7 @@ from typing import Callable
 
 from diagnostics.probe_lib import alertmanager_api, core
 from diagnostics.probe_lib.obs_api import prom_query_url
+from lib.k8s_objects import ConditionStatus, parse_conditions
 
 
 # C7 *Health gate*: `shadow!="true"`, `alertname!="Watchdog"`, and `severity="critical"` or
@@ -412,12 +413,15 @@ def epoch(stamp):
 
 def pods_ready_at(pods_docs):
     """The newest Ready transition across the pods in `pods_docs`, in epoch seconds, or None."""
-    times = [
-        epoch(cond.get("lastTransitionTime"))
+    ready = [
+        parse_conditions(pod).get("Ready")
         for doc in pods_docs
         for pod in (doc or {}).get("items") or []
-        for cond in (pod.get("status") or {}).get("conditions") or []
-        if cond.get("type") == "Ready" and cond.get("status") == "True"
+    ]
+    times = [
+        epoch(cond.last_transition)
+        for cond in ready
+        if cond is not None and cond.status is ConditionStatus.TRUE
     ]
     times = [t for t in times if t is not None]
     return max(times) if times else None

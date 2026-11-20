@@ -19,6 +19,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from _helpers import REPO
+from _condition_status_row import CONDITION_STATUS_IS_PARSED
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _row_table import (
     Census,
@@ -482,6 +483,7 @@ ROWS = (
             }
         ),
     ),
+    CONDITION_STATUS_IS_PARSED,
 )
 _IDS = [row.name for row in ROWS]
 
