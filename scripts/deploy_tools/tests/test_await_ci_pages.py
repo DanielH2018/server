@@ -69,6 +69,5 @@ def test_a_read_short_of_total_count_is_pending(monkeypatch):
 
 
 def test_a_check_suite_on_the_second_page_is_read(monkeypatch):
-    suite = {"app": {"slug": "github-actions"}}
-    _stub_two_pages(monkeypatch, "check_suites", [suite])
-    assert suite in await_ci.fetch_check_suites("a" * 40)
+    _stub_two_pages(monkeypatch, "check_suites", [{"app": {"slug": "github-actions"}}])
+    assert any(s.from_actions for s in await_ci.fetch_check_suites("a" * 40))

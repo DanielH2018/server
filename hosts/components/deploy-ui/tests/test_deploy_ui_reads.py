@@ -136,12 +136,14 @@ PRS = """[{"number": 1550, "title": "T", "headRefName": "b", "isDraft": false,
  "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"conclusion": "SUCCESS"}]},
  {"number": 1551, "title": "U", "headRefName": "c", "isDraft": true,
  "statusCheckRollup": [{"conclusion": "FAILURE"}, {"status": "IN_PROGRESS"}]},
- {"number": 1552, "title": "V", "headRefName": "d", "isDraft": false, "statusCheckRollup": []}]"""
+ {"number": 1552, "title": "V", "headRefName": "d", "isDraft": false, "statusCheckRollup": []},
+ {"number": 1553, "title": "W", "headRefName": "e", "isDraft": false,
+ "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"conclusion": "ACTION_REQUIRED"}]}]"""
 
 
 def test_parse_prs_rollup_is_clean():
     got = {p["number"]: p["ci"] for p in reads.parse_prs(PRS)}
-    assert got == {1550: "pass", 1551: "fail", 1552: "none"}
+    assert got == {1550: "pass", 1551: "fail", 1552: "none", 1553: "fail"}
 
 
 def test_parse_prs_pending_without_failure_is_flagged():
