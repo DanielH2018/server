@@ -312,8 +312,8 @@ no drift for them. The files are:
 - copies under `/usr/local/bin` that sit ahead of the packaged binaries on PATH, such as
   `sops`, `uv` and `vale`.
 
-The entries that once removed these paths were deleted in #9037, and git history at that
-PR's parent lists them.
+The entries that once removed these paths were deleted in [PR #9495](https://github.com/DanielH2018/server/pull/9495),
+and `git show 3221ba11d^` lists them at that commit's parent.
 
 ## What to do first, by scenario
 
