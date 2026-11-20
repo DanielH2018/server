@@ -11,7 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_ci_contexts.py
 
 import pytest
 
-import promote
+from deploy_tools import promote
 from lib.repo_paths import REPO
 
 # The one context the list holds.

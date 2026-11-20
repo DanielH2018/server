@@ -1,7 +1,8 @@
 """land.sh is an exec shim over land.py, and stays the name everything invokes.
 
-These run the shim as a process: the suite cannot see a broken sys.path bootstrap, and a
-directly-invoked script gets only its own directory on sys.path.
+These run the shim as a process: pytest's `pythonpath` would hide an import the installed
+`scripts/` root cannot resolve, and a directly-invoked script gets only that root and its own
+directory on sys.path.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_shim.py
 """

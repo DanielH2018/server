@@ -76,10 +76,6 @@ def weekly_backup_shard(pvc: str, weekly_volumes: dict) -> int:
     return weekly_volumes[pvc]
 
 
-def _entries(containers_list):
-    return [e for e in containers_list or [] if isinstance(e, dict)]
-
-
 def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
     """`{namespace/claim: shard}` for every entry's `weekly_backup_claims`, in list order.
 
@@ -91,7 +87,7 @@ def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
     `ValueError` on a shard outside 0 to 6 or a claim two entries declare.
     """
     found: dict[str, int] = {}
-    for entry in _entries(containers_list):
+    for entry in containers_list or []:
         for claim, shard in (entry.get("weekly_backup_claims") or {}).items():
             pvc = f"{entry.get('namespace') or namespace}/{claim}"
             # YAML's `true` is a bool, and a bool is an int. Not `type(shard) is int`: Ansible
@@ -118,7 +114,7 @@ def longhorn_nobackup_claims(containers_list, namespace: str) -> list:
     """
     return [
         f"{entry.get('namespace') or namespace}/{claim}"
-        for entry in _entries(containers_list)
+        for entry in containers_list or []
         for claim in entry.get("no_backup_claims") or []
     ]
 

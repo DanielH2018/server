@@ -423,6 +423,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # ci_images.py runs on the runner's python3, with no venv `.pth` to supply the import root.
+    env:
+      PYTHONPATH: scripts
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -441,14 +444,11 @@ jobs:
       # by image-builder's own rule, or nothing is pushed.
       - name: Check each image context against its content tag
         id: plan
-        env:
-          PYTHONPATH: scripts
         run: python3 scripts/deploy_tools/ci_images.py plan out
 
       - name: Push each image whose content tag GHCR does not serve
         id: push
         env:
-          PYTHONPATH: scripts
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |

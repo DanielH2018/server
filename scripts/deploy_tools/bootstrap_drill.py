@@ -20,14 +20,11 @@ Run (the workflow's form): uv run python scripts/deploy_tools/bootstrap_drill.py
 import json
 import subprocess
 import sys
-import sys as _sys
 from collections.abc import Callable
 from pathlib import Path
-from pathlib import Path as _Path
 
 import yaml
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK

@@ -6,6 +6,8 @@ plane's rows, are pinned by
 `k8s/roles/netpol-baseline/tests/test_netpol_baseline_verify.py`.
 """
 
+from collections.abc import Sequence
+
 from lib import yaml_fast
 from _helpers import ALL_VARS, K8S_ROLES
 from lib.render_guard import k8s_services
@@ -67,7 +69,7 @@ def test_every_refused_row_names_its_policy() -> None:
 
 
 def _portless_rows_without_a_port_to_read(
-    rows: list[dict], entries: list[dict]
+    rows: list[dict], entries: Sequence[dict]
 ) -> set[str]:
     """Rows that dial a port they name nowhere, so `entry_port(service)` raises on `entries`."""
     ports = {e["name"]: e.get("port") for e in entries}

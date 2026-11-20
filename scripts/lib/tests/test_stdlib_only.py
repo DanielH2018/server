@@ -7,9 +7,8 @@ green suite whose venv has the package.
 The contract these tests pin, in `scripts/lib/stdlib_only.py`:
 
 - `stdlib_only_set() -> dict[Path, list[Path]]` maps each module a no-venv caller reaches
-  (absolute, resolved) to the directories that caller puts on `sys.path`: an in-checkout
-  entry's own directory, the `scripts/` its launcher supplies, and the inserts it reaches. A
-  staged copy on a host gets its install directory and its inserts, never `scripts/`.
+  (absolute, resolved) to the directories that caller puts on `sys.path`, derived from the
+  caller's own inserts rather than assumed to be `scripts/`.
 - `walk(path, dirs) -> list[str]` returns the imports of `path` that are none of: the stdlib, a
   first-party module under `dirs`, a role module the `repo_paths` map lists for a constant in
   `dirs`, or the out-of-tree `claude_guard`/`claude_worktree`. An import of a basename two role
@@ -131,16 +130,17 @@ def test_a_module_reached_only_through_a_callers_insert_gets_that_callers_dirs()
     assert SCRIPTS in dirs
 
 
-def test_an_entry_in_the_checkout_with_no_insert_gets_the_launchers_scripts_root():
-    _, dirs = _checker()._reach(SCRIPTS / "lib" / "git.py", ())
-    assert SCRIPTS in dirs
+def test_a_launched_entry_reaches_the_scripts_root_its_launcher_sets(tmp_path):
+    entry = tmp_path / "entry.py"
+    entry.write_text("from lib import git\n", encoding="utf-8")
+    reached, dirs = _checker()._reach(entry, (), rooted=True)
+    assert SCRIPTS in dirs and SCRIPTS / "lib" / "git.py" in reached
 
 
-def test_a_staged_copy_outside_the_checkout_gets_no_scripts_root(tmp_path):
-    entry = tmp_path / "staged.py"
-    entry.write_text("import json\n", encoding="utf-8")
-    _, dirs = _checker()._reach(entry, ())
-    assert dirs == [tmp_path.resolve()]
+def test_a_workflow_step_on_the_runners_python_is_an_entry_and_a_uv_run_step_is_not():
+    found = {(path, argv) for path, argv, _ in _checker()._workflow_entries()}
+    assert (SCRIPTS / "deploy_tools" / "ci_images.py", ("plan",)) in found
+    assert not any(path == SCRIPTS / "dev" / "fact_status.py" for path, _ in found)
 
 
 def test_yaml_added_to_the_fanout_review_path_turns_the_walk_red(tmp_path):

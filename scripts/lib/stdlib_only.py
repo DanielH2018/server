@@ -7,22 +7,25 @@ died on `yaml`. A one-path test per break misses the next one; this module deriv
 set instead.
 
 - `stdlib_only_set()` maps each reached module to the directories its caller puts on
-  `sys.path`: the entry's own directory (a by-path run) plus every `sys.path.insert` the
-  reached modules make, evaluated statically. `scripts/lib/git.py` has no insert of its own
-  and is reached through session-health's insert of `REPO/scripts`.
+  `sys.path`: the entry's own directory (a by-path run), the `scripts/` root a repo launcher
+  sets on `PYTHONPATH` (a role's command gets none), plus every `sys.path.insert` the reached
+  modules make, evaluated statically. `scripts/lib/git.py` has no insert of its own and is
+  reached through session-health's insert of `REPO/scripts`.
 - `walk(path, dirs)` is the static layer: the imports of `path` that are none of the stdlib, a
   first-party module under `dirs`, a role module `repo_paths.ROLE_MODULES` lists for a
   directory in `dirs`, or `OUT_OF_TREE`.
 - `runtime_import(path, dirs)` is the runtime layer: it imports `path` in a fresh interpreter
   with no site-packages and `PYTHONPATH` set to `dirs`.
 
-The callers come from four places. `.claude/settings.json` names each `run-hook.sh` entry, and
+The callers come from five places. `.claude/settings.json` names each `run-hook.sh` entry, and
 one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names the file and
 subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
 Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
 the role scripts a host runs `--no-project`, which `lib.role_installs` reads from each
-role's templates and each host component's files.
+role's templates and each host component's files. The fifth is each workflow step that runs a
+script with the runner's own `python` rather than `uv run`. Such a step is rooted only when its
+env sets `PYTHONPATH`.
 
 A role script runs from the path a host component's `files` entry installs it to, so its
 `sys.path` is the install directory, not its tree path. `lib.role_installs` copies every installed file to
@@ -45,10 +48,11 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-from lib import repo_paths, role_installs
-from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES, SCRIPTS
+from lib import repo_paths, role_installs, yaml_fast
+from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
 
 HOOKS = REPO / ".claude" / "hooks"
+WORKFLOWS = REPO / ".github" / "workflows"
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
 # Modules a hook imports from outside the tree: `_claude_guard.py` inserts the dotfiles
 # directory that holds them.
@@ -70,6 +74,10 @@ RUNBOOK_UNITS = (
 )
 # A `run-hook.sh` entry with a flag runs `--project`, in the venv.
 _HOOK_ENTRY = re.compile(r"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)")
+# A script a workflow step runs with the runner's interpreter, and its subcommand if any.
+_WORKFLOW_ENTRY = re.compile(
+    r"(?<![\w/-])python3?\s+(scripts/[\w/.-]+\.py)((?:\s+(?!-)[\w-]+)?)"
+)
 _WAIT_ENTRY = re.compile(r'--no-project\b.*\bpython "\$root/([^"]+)"((?: [\w-]+)*)')
 
 
@@ -95,16 +103,36 @@ def _wait_entries() -> list[tuple[Path, tuple[str, ...]]]:
     return found
 
 
-def entries() -> list[tuple[Path, tuple[str, ...]]]:
-    """Every no-venv entry file, with the subcommand argv its caller passes."""
+def _workflow_entries() -> list[tuple[Path, tuple[str, ...], bool]]:
+    found = []
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        doc = yaml_fast.safe_load(workflow.read_text(encoding="utf-8"))
+        for job in (doc.get("jobs") or {}).values():
+            for step in job.get("steps") or []:
+                env = {**(doc.get("env") or {}), **(job.get("env") or {})}
+                env |= step.get("env") or {}
+                rooted = "scripts" in str(env.get("PYTHONPATH", ""))
+                run = str(step.get("run", "")).replace("\\\n", " ")
+                for line in run.splitlines():
+                    for match in _WORKFLOW_ENTRY.finditer(line):
+                        if not re.search(r"\buv\b", line[: match.start()]):
+                            argv = tuple(match.group(2).split())
+                            found.append((REPO / match.group(1), argv, rooted))
+    return found
+
+
+def entries() -> list[tuple[Path, tuple[str, ...], bool]]:
+    """Every no-venv entry file, the subcommand argv its caller passes, and whether it is rooted.
+
+    A rooted entry's launcher puts its checkout's `scripts/` on `PYTHONPATH`, which
+    `test_every_no_venv_launcher_sets_the_scripts_root` holds each launcher to. A role or
+    component command runs from its install directory, which has no such root.
+    """
+    launched = _hook_entries() + _wait_entries() + [*FANOUT_UNITS, *RUNBOOK_UNITS]
     return sorted(
-        set(
-            _hook_entries()
-            + _wait_entries()
-            + list(FANOUT_UNITS)
-            + list(RUNBOOK_UNITS)
-            + role_installs.role_entries()
-        )
+        {(entry, argv, True) for entry, argv in launched}
+        | {(entry, argv, False) for entry, argv in role_installs.role_entries()}
+        | set(_workflow_entries())
     )
 
 
@@ -362,15 +390,11 @@ def _scope(path: Path, argv: tuple[str, ...] | None) -> tuple[list[ast.AST], lis
     return nodes, modules
 
 
-def _reach(entry: Path, argv: tuple[str, ...]) -> tuple[set[Path], list[Path]]:
-    """Every file `entry` reaches when run with `argv`, and the `sys.path` its run builds.
-
-    An entry in this checkout starts with `scripts/` after its own directory, because its
-    launcher sets `PYTHONPATH` to it (ADR-0039). A staged copy on a host gets no such root.
-    """
-    dirs = [entry.parent.resolve()]
-    if entry.resolve().is_relative_to(REPO):
-        dirs.append(SCRIPTS)
+def _reach(
+    entry: Path, argv: tuple[str, ...], rooted: bool
+) -> tuple[set[Path], list[Path]]:
+    """Every file `entry` reaches when run with `argv`, and the `sys.path` its run builds."""
+    dirs = [entry.parent.resolve(), *([repo_paths.SCRIPTS] if rooted else [])]
     while True:
         seen: set[Path] = set()
         todo: list[tuple[Path, tuple[str, ...] | None]] = [(entry.resolve(), argv)]
@@ -405,8 +429,8 @@ def members() -> list[tuple[Path, list[Path]]]:
     A role script appears as its staged copy, once per install directory it ships to.
     """
     found: dict[Path, list[Path]] = {}
-    for entry, argv in entries():
-        reached, dirs = _reach(entry, argv)
+    for entry, argv, rooted in entries():
+        reached, dirs = _reach(entry, argv, rooted)
         for member in reached:
             have = found.setdefault(member, [])
             have += [d for d in dirs if d not in have]

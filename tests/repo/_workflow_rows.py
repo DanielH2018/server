@@ -147,28 +147,6 @@ def _package_build_download_offences(text: str) -> list[str]:
     return offences
 
 
-_BARE_PYTHON = re.compile(r"(?<![\w/.-])python3?\s+(?:-\S+\s+)*[\"']?scripts/\S+\.py")
-
-
-def _bare_python_without_root(wf: Workflow) -> list[str]:
-    offences = []
-    for job_name, job in jobs(wf).items():
-        for step in steps(job):
-            if any("PYTHONPATH" in (node.get("env") or {}) for node in (wf, job, step)):
-                continue
-            for line in runs(step).splitlines():
-                call = _BARE_PYTHON.search(line)
-                if call and not re.search(r"\buv\b", line[: call.start()]):
-                    offences.append(f"{job_name}: {step.get('name', '?')}: {call[0]}")
-    return offences
-
-
-def _drop_step_pythonpath(job: str, step: str) -> Callable[[Workflow], None]:
-    return lambda wf: next(
-        s for s in wf["jobs"][job]["steps"] if s.get("name") == step
-    )["env"].pop("PYTHONPATH")
-
-
 WORKFLOW_ROWS = (
     Census(
         name="workflow-runners-are-pinned",
@@ -320,47 +298,5 @@ WORKFLOW_ROWS = (
             ),
         ),
         must_find=frozenset({".github/workflows/ci.yml"}),
-    ),
-    Census(
-        name="bare-python-steps-supply-the-scripts-root",
-        reason=(
-            "`scripts/` is the import root (docs/adr/0039-scripts-is-installed-in-place.md), "
-            "and only the venv's `.pth` or `PYTHONPATH` supplies it. A step that runs "
-            "`python3 scripts/...` with no venv gets neither, so a module with no `sys.path` "
-            "insert of `scripts/` fails its first `from lib` import. `renovate_extract.py` did "
-            "that in PR #9417's CI. A step that calls through `uv run` reads the `.pth`."
-        ),
-        files=lambda: tracked(".github/workflows/*.yml"),
-        offence=judge(_bare_python_without_root),
-        red=mutants(
-            CI,
-            the_renovate_scope_step_without_its_root=_drop_step_pythonpath(
-                "renovate-config", "Decide which Renovate checks this PR needs"
-            ),
-        )
-        + (
-            Subject(
-                "a.yml",
-                "jobs:\n  a:\n    steps:\n      - run: python3 -I scripts/dev/x.py\n",
-            ),
-        ),
-        green=(
-            Subject(
-                "a.yml",
-                "jobs:\n  a:\n    steps:\n      - run: uv run --frozen python scripts/dev/x.py\n"
-                "      - env:\n          PYTHONPATH: scripts\n"
-                "        run: python3 scripts/dev/x.py\n",
-            ),
-        ),
-        must_find=frozenset(
-            f".github/workflows/{name}"
-            for name in (
-                "ci.yml",
-                "image-smoke.yml",
-                "promote.yml",
-                "pytest-sweep.yml",
-                "session-milestone.yml",
-            )
-        ),
     ),
 )

@@ -8,8 +8,8 @@ cases run the CLI over the fake forge in `_promote_fakes.py`. The hold's post
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_decide_suspended.py
 """
 
-import forge
-import promote
+from deploy_tools import forge
+from deploy_tools import promote
 import pytest
 from _promote_fakes import World, bundle_files
 

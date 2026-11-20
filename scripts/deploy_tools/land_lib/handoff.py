@@ -23,13 +23,11 @@ prints, because `detach.verdict_in` reads the first `VERDICT:` and `detach.error
 import contextlib
 import re
 import subprocess
-import sys as _sys
 import threading
 import time
 from collections.abc import Callable, Generator, Iterable
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import Outcome, Verdict
 from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP

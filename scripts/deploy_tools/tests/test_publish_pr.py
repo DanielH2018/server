@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import publish_pr
+from deploy_tools import publish_pr
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
 
