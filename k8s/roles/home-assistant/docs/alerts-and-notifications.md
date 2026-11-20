@@ -40,6 +40,12 @@ that reports rather than actuates.
   critical" channel as a DND exception in Android (after the first critical alert creates it) — high
   importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
   air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
+- **The away-hold is switched off (2026-11-20, issue
+  [9598](https://github.com/DanielH2018/server/issues/9598)).** `bedroom_notify` pushes every
+  alert while `person.daniel` is away, recoveries included. The arrival flush counts
+  `states.persistent_notification`, and Home Assistant has kept persistent notifications out of
+  the state machine since release 2023.6, so the flush never ran and a parked alert never
+  reached the phone. The rest of this bullet describes the hold as designed.
 - **Away-aware notification hold (since 2026-06-19).** `script.bedroom_notify` parks non-critical
   alerts while you're outside the home geofence. `away = person.daniel not in [home, unknown,
   unavailable]` (fails OPEN — a tracker glitch over-notifies, the opposite safe default to the
