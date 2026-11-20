@@ -63,7 +63,6 @@ __all__ = [
     "held_by_readable_process",
     "is_dirty",
     "is_merged",
-    "local_landed_layer",
     "lock_is_live",
     "memoised_merged",
     "merge_tree_says_contained",
@@ -261,7 +260,7 @@ def merged_layer(
     fourth layer's read, injectable so a test can answer it without a network.
     """
     key = verdict_key(repo, head, base)
-    layer = _local_layer(repo, head, False, base, key)
+    layer = _local_layer(repo, head, base, key)
     if layer is not None:
         return layer
     no_key = None
@@ -374,48 +373,32 @@ def record_verdict(repo: str, key: str, layer: str) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def local_landed_layer(
-    repo: str, head: str, ancestry_known: bool = False, base: str = "origin/master"
-) -> str | None:
+def _local_layer(repo: str, head: str, base: str, key: str | None) -> str | None:
     """The local layer that settled `head` as landed: `ancestry`, `patch-id` or `content`.
 
     The first three layers of is_merged, the ones that cost no network round-trip. None when
-    no local layer did. A settled answer is read from and written to the cache described at
-    VERDICT_CACHE.
-
-    `ancestry_known` says the caller has already settled the ancestry layer in bulk, so this
-    skips the per-branch `merge-base` call.
+    no local layer did. A settled answer is read from and written to the cache under `key`.
     """
-    return _local_layer(repo, head, ancestry_known, base, verdict_key(repo, head, base))
-
-
-def _local_layer(
-    repo: str, head: str, ancestry_known: bool, base: str, key: str | None
-) -> str | None:
-    """local_landed_layer with its cache key already resolved, so merged_layer resolves once."""
     if key is not None:
         cached = read_verdicts(repo).get(key)
         if cached is not None:
             # "forge" means the local layers said "" before the forge was asked.
             return cached if cached in LOCAL_LAYERS else None
-    layer, settled = _compute_local_layer(repo, head, ancestry_known, base)
+    layer, settled = _compute_local_layer(repo, head, base)
     if settled and key is not None:
         record_verdict(repo, key, layer or "")
     return layer
 
 
-def _compute_local_layer(
-    repo: str, head: str, ancestry_known: bool, base: str
-) -> tuple[str | None, bool]:
+def _compute_local_layer(repo: str, head: str, base: str) -> tuple[str | None, bool]:
     """(layer, settled). `settled` is False when a git call failed rather than answered.
 
     Only a settled answer is cached: a failed call reads as not merged, the KEEP direction, and
     recording it would keep that tree from ever being pruned.
     """
-    if not ancestry_known:
-        ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
-        if ancestor.returncode == 0:
-            return "ancestry", True
+    ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
+    if ancestor.returncode == 0:
+        return "ancestry", True
     cherry = git("cherry", base, head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
