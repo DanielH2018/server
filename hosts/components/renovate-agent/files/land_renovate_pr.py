@@ -58,12 +58,11 @@ from renovate_floor import (
     read_floor,
     soak_problem,
 )
-from renovate_identity import GH_AUTHOR, is_renovate
+from renovate_identity import BRANCH_PREFIX, GH_AUTHOR, RenovatePR
 
 # The login whose approval of the head lets land.sh land a PR the floor check flags.
 APPROVER = "DanielH2018"
 BASE = "master"
-BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
 # `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks
 # `homelab-checkout-sync`.
@@ -83,7 +82,9 @@ FILE_CAP = 100
 # timeout before systemd kills it mid-deploy.
 # LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add.
 LAND_TIMEOUT_S = 63660
-PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
+PR_FIELDS = (
+    "number,author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
+)
 INVENTORY = "inventory/"
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import.
 USAGE_ERROR = 64
@@ -117,7 +118,8 @@ def denied_roles(output: str) -> frozenset[str] | None:
 def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
     """Every reason `pr` may not be landed unattended. An empty list means land it."""
     reasons = []
-    if not is_renovate(pr.get("author")):
+    renovate = RenovatePR.from_gh(pr)
+    if not renovate.is_renovate:
         reasons.append(f"its author is not {GH_AUTHOR}")
     if pr.get("isCrossRepository") is not False:
         reasons.append("its head branch is not in this repository")
@@ -125,10 +127,9 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
         reasons.append(f"its base is not {BASE}")
     if pr.get("state") != "OPEN":
         reasons.append("it is not open")
-    branch = pr.get("headRefName") or ""
-    if not branch.startswith(BRANCH_PREFIX):
+    if not renovate.on_renovate_branch:
         reasons.append(f"its head branch is not {BRANCH_PREFIX}...")
-    if DENIED_SLUG in branch:
+    if DENIED_SLUG in renovate.head_ref:
         reasons.append(f"its head branch carries {DENIED_SLUG}")
     if not _SHA.fullmatch(pr.get("headRefOid") or ""):
         reasons.append("GitHub returned no head SHA to pin the landing to")

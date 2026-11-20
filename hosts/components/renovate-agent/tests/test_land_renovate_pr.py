@@ -17,6 +17,7 @@ import pytest
 ROLE = pathlib.Path(__file__).resolve().parents[1]
 DENIED = frozenset({"authelia", "traefik"})
 GOOD = {
+    "number": 42,
     "author": {"login": "app/renovate", "is_bot": True},
     "isCrossRepository": False,
     "baseRefName": "master",

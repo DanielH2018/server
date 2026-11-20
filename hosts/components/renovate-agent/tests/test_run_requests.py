@@ -265,6 +265,7 @@ class _Tick:
                         "title": "Update x",
                         "url": "u/71",
                         "author": {"login": "app/renovate"},
+                        "headRefName": "renovate/dep",
                     }
                 ]
             )
