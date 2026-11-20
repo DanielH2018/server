@@ -58,6 +58,17 @@ jobs:
           set -euo pipefail
           uv run python -m pytest --github-report | tee "$RUNNER_TEMP/sweep.log"
 
+      # The one writer of ci.yml's rewrite cache: this run collects every module, so its entry
+      # holds whatever a leg's shard runs. It restores nothing first, so an entry never carries
+      # a deleted module's file or one named for an older pytest. A red sweep still rewrote
+      # every module it collected, and pytest checks each file against its source's hash.
+      - name: Save pytest's rewritten test modules
+        if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: "**/__pycache__/*-pytest-*.pyc"
+          key: pytest-rewrite-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       # pytest's short summary names each failure as `FAILED <module>::<test>` and each
       # collection error as `ERROR <module>`. The list is capped so a suite-wide break
       # cannot outgrow an issue body.
