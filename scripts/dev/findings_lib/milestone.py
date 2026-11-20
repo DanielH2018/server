@@ -26,8 +26,17 @@ answer to who may take an issue, which `next`, `list`, `new-issues` and `claim` 
 Everything else above holds for both forms. `held_issues` is the `--milestone` filter of
 `next`, `list` and `new-issues`.
 
-The tools own only a milestone whose description `branch_of` can parse. An operator's own
-milestone is never reopened, closed or emptied.
+A GROUP is a milestone no branch owns. `milestone group "<title>" <n...>` makes one and files
+issues in it, so a backlog can be prepared before any session runs it. A group reserves
+nothing, and neither the workflow nor `reap` closes it. `start --project` under a group's
+title adopts it: the group becomes that branch's project, backlog included. The same command
+adopts a project whose owner branch nothing holds any more, and refuses one whose owner is
+live. `milestone disown` is the way back: it returns a branch's open project to a group.
+
+The tools own a milestone whose description `branch_of` can parse, and a group. `is_group`
+reads a group as `GROUP_DESCRIPTION` or a blank description, so a milestone made by hand
+with no description can be adopted. A milestone with a description of its own is never
+adopted, reopened, closed or emptied.
 
 Every call is a `gh api` REST call on `repos/<repo>/milestones`, because gh has no milestone
 subcommand. The repo is in the path, since `gh api` takes no `--repo`.
@@ -54,6 +63,8 @@ from lib.json_types import JsonValue, as_list, as_object, as_object_list
 _DESCRIPTION_RE = re.compile(
     r"^Claude (session|project) milestone \(findings\.py\) for branch `([^`]+)`\.$"
 )
+
+GROUP_DESCRIPTION = "Claude grouping milestone (findings.py), owned by no branch."
 
 # `--milestone none`: the issues no open milestone holds.
 NO_MILESTONE = "none"
@@ -90,6 +101,11 @@ def is_project(milestone: object) -> bool:
     return match is not None and match.group(1) == "project"
 
 
+def is_group(milestone: Mapping[str, object]) -> bool:
+    """Whether ``milestone`` is a group: no branch owns it, and `start --project` adopts it."""
+    return str(milestone.get("description") or "") in ("", GROUP_DESCRIPTION)
+
+
 def _milestones(repo: str, state: str, gh_json: GhJson) -> list[dict]:
     pages = gh_json(
         "api",
@@ -104,14 +120,30 @@ def _milestones(repo: str, state: str, gh_json: GhJson) -> list[dict]:
     ]
 
 
+def _patch(repo: str, number: object, dry_run: bool, gh: Gh, **fields: str) -> None:
+    argv = ["api", "-X", "PATCH", f"repos/{repo}/milestones/{number}"]
+    for name, value in fields.items():
+        argv += ["-f", f"{name}={value}"]
+    if dry_run:
+        print("gh " + " ".join(argv))
+    else:
+        gh(*argv)
+
+
 def _set_state(repo: str, number: object, state: str, dry_run: bool, gh: Gh) -> None:
+    _patch(repo, number, dry_run, gh, state=state)
+
+
+def _create(repo: str, title: str, description: str, dry_run: bool, gh: Gh) -> None:
     argv = [
         "api",
         "-X",
-        "PATCH",
-        f"repos/{repo}/milestones/{number}",
+        "POST",
+        f"repos/{repo}/milestones",
         "-f",
-        f"state={state}",
+        f"title={title}",
+        "-f",
+        f"description={description}",
     ]
     if dry_run:
         print("gh " + " ".join(argv))
@@ -161,27 +193,46 @@ def start(
     *,
     dry_run: bool,
     project: bool = False,
+    held: Callable[[str], bool] = lambda _branch: True,
     gh_json: GhJson = real_gh_json,
     gh: Gh = real_gh,
-) -> None:
+) -> str | None:
     """Opens ``branch``'s milestone titled ``title``, as a project when ``project``.
 
     Starting the title the branch already has open does nothing. A closed milestone of
-    this branch and title is reopened.
+    this branch and title is reopened. With ``project``, a group of this title is adopted,
+    and so is another branch's project when ``held`` says nothing holds that branch.
+
+    Args:
+        title: the milestone's title. GitHub titles are unique per repo.
+        branch: the branch that owns the milestone afterwards.
+        repo: OWNER/NAME.
+        dry_run: print the writes instead of making them.
+        project: open a project, which holds a backlog.
+        held: takes a branch, returns whether a worktree on either host still holds it, or
+            whether that cannot be known. Called only for another branch's project.
+        gh_json: the read boundary, for tests.
+        gh: the write boundary, for tests.
+
+    Returns:
+        Whose milestone was adopted, as a phrase for the caller to print, or None when
+        nothing was adopted.
 
     Raises:
-        ValueError: the branch already has an open milestone of another title, another
-            branch or the operator has a milestone of this title, or the branch's
-            milestone of this title has the other form. GitHub titles are unique per repo.
+        ValueError: the branch already has an open milestone of another title, the
+            branch's milestone of this title has the other form, or a milestone of this
+            title exists and cannot be adopted: a live branch's project, any session
+            milestone, or a milestone with a description of its own.
         subprocess.CalledProcessError: a gh call failed.
     """
-    # DECIDED: only `start` makes a milestone, so a session without focused work gets none;
-    # claim and PR attach to an existing one and never create (operator, 2026-11-15).
+    # DECIDED: only `start` and `group` make a milestone, so a session without focused work
+    # gets none; claim and PR attach to an existing one and never create (operator,
+    # 2026-11-15; `group` added 2026-11-20).
     current = for_branch(branch, repo, gh_json=gh_json)
     if current and current["state"] == "open":
         if current["title"] == title:
             _refuse_other_form(current, project)
-            return
+            return None
         raise ValueError(
             f"`{branch}` already has the open milestone `{current['title']}`; "
             "`milestone close` it first"
@@ -190,35 +241,130 @@ def start(
         for m in _milestones(repo, state, gh_json):
             if m["title"] != title:
                 continue
-            owner = branch_of(m)
-            if owner == branch:
+            if branch_of(m) == branch:
                 _refuse_other_form(m, project)
                 _set_state(repo, m["number"], "open", dry_run, gh)
-                return
-            raise ValueError(
-                f"milestone `{title}` already exists, "
-                + (f"for `{owner}`" if owner else "and is not a session milestone")
+                return None
+            former = _adoptable(m, project, held)
+            _patch(
+                repo,
+                m["number"],
+                dry_run,
+                gh,
+                description=description_for(branch, project=True),
+                state="open",
             )
-    argv = [
-        "api",
-        "-X",
-        "POST",
-        f"repos/{repo}/milestones",
-        "-f",
-        f"title={title}",
-        "-f",
-        f"description={description_for(branch, project=project)}",
-    ]
-    if dry_run:
-        print("gh " + " ".join(argv))
-    else:
-        gh(*argv)
+            return former
+    _create(repo, title, description_for(branch, project=project), dry_run, gh)
+    return None
+
+
+def _adoptable(milestone: dict, project: bool, held: Callable[[str], bool]) -> str:
+    """Whose milestone `start` is about to adopt, or a ValueError saying why it cannot."""
+    title, owner = milestone["title"], branch_of(milestone)
+    exists = f"milestone `{title}` already exists"
+    if owner and not is_project(milestone):
+        raise ValueError(f"{exists}, for `{owner}`")
+    if not owner and not is_group(milestone):
+        raise ValueError(f"{exists} with a description of its own, so it is no group")
+    kind = f"the project of `{owner}`" if owner else "a group"
+    if not project:
+        raise ValueError(f"{exists} as {kind}; `start --project` adopts it")
+    # DECIDED: a project changes hands only when nothing holds its owner branch, or the
+    # owner runs `milestone disown`; a live owner is never overridden (operator, 2026-11-20).
+    if owner and held(owner):
+        raise ValueError(
+            f"{exists} as {kind}, which is live; "
+            f"`milestone disown --worktree {owner}` hands it on"
+        )
+    return kind
+
+
+def group(
+    title: str,
+    repo: str,
+    *,
+    dry_run: bool,
+    gh_json: GhJson = real_gh_json,
+    gh: Gh = real_gh,
+) -> None:
+    """Makes the group titled ``title``, or reopens it when it exists closed.
+
+    Raises:
+        ValueError: a milestone of this title exists and is no group.
+    """
+    try:
+        existing = group_titled(title, repo, gh_json=gh_json)
+    except UnknownMilestone:
+        _create(repo, title, GROUP_DESCRIPTION, dry_run, gh)
+        return
+    if existing["state"] == "closed":
+        _set_state(repo, existing["number"], "open", dry_run, gh)
+
+
+def group_titled(title: str, repo: str, *, gh_json: GhJson = real_gh_json) -> dict:
+    """The group titled ``title``.
+
+    Raises:
+        UnknownMilestone: no milestone has this title.
+        ValueError: the milestone of this title is no group. The message names the
+            owner's `--worktree` when a branch owns it.
+    """
+    found = titled(title, repo, gh_json=gh_json)
+    if is_group(found):
+        return found
+    owner = branch_of(found)
+    raise ValueError(
+        f"`{title}` is no group: "
+        + (
+            f"`{owner}` owns it, so pass `--worktree {owner}`"
+            if owner
+            else "it has a description of its own"
+        )
+    )
+
+
+def disown(
+    branch: str,
+    repo: str,
+    *,
+    dry_run: bool,
+    gh_json: GhJson = real_gh_json,
+    gh: Gh = real_gh,
+) -> str | None:
+    """Returns ``branch``'s open project to a group, leaving it open with its backlog.
+
+    Returns the title, or None when the branch has no open project.
+    """
+    mine = for_branch(branch, repo, gh_json=gh_json)
+    if mine is None or mine["state"] != "open" or not is_project(mine):
+        return None
+    _patch(repo, mine["number"], dry_run, gh, description=GROUP_DESCRIPTION)
+    return mine["title"]
+
+
+def close_group(
+    title: str,
+    repo: str,
+    *,
+    dry_run: bool,
+    gh_json: GhJson = real_gh_json,
+    gh: Gh = real_gh,
+) -> None:
+    """Closes the group titled ``title``. `group` under the same title reopens it.
+
+    Raises:
+        ValueError: as `group_titled`.
+    """
+    found = group_titled(title, repo, gh_json=gh_json)
+    _set_state(repo, found["number"], "closed", dry_run, gh)
 
 
 def _refuse_other_form(milestone: dict, project: bool) -> None:
-    # DECIDED: no command converts a milestone between the two forms. A session milestone
-    # made a project would hold claims its owner expects `release` to take out, and a
-    # project made a session milestone would keep a backlog nothing lists (2026-11-19).
+    # DECIDED: no command converts a milestone between the session and project forms. A
+    # session milestone made a project would hold claims its owner expects `release` to take
+    # out, and a project made a session milestone would keep a backlog nothing lists
+    # (2026-11-19).
     if is_project(milestone) != project:
         form = "project" if is_project(milestone) else "session"
         raise ValueError(

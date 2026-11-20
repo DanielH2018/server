@@ -92,8 +92,13 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
     uv run python scripts/dev/findings.py milestone start --project "<title>" --worktree <branch>
     ```
 
-    A title the branch already holds is reopened. When `milestone status` shows the project
-    exists with work in it, go to *Resume*.
+    A title the branch already holds is reopened. A group of that title, which `milestone
+    group` prepared with no owner, is adopted with its backlog. So is another branch's
+    project when nothing holds that branch. The command refuses a project whose owner is
+    live and names the owner: report that to the session above you
+    (`scripts/dev/tests/test_findings_milestone.py::test_start_refuses_a_title_another_branch_owns`).
+    To hand a project on without closing it, run `milestone disown --worktree <branch>`.
+    When `milestone status` shows the project exists with work in it, go to *Resume*.
 
 3. **File the backlog.** Add the issues your brief or the root names with `milestone add
    <n...> --worktree <branch>`. When the brief names none, list `next --milestone none
