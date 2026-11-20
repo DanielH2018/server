@@ -7,15 +7,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_health_gate.py
 """
 
 import subprocess
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.repo_paths import HOST_VARS, REPO
 from lib.inventory_lists import PI_HOST, host_vars_file, pi_entries_in

@@ -20,14 +20,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 
 import re
 import subprocess
-import sys
 from enum import StrEnum
-from pathlib import Path
 from typing import NamedTuple
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.git import git, git_stdout
 from lib.render_guard import (  # noqa: F401  (`service_tags_at` is read through this module)

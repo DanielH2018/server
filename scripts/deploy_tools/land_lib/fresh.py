@@ -27,7 +27,6 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.options import Options
 from lib.git import git as _git
 
