@@ -35,7 +35,7 @@ Deployment write here.
   the ServiceAccount and its grants.
 - **`tiers.json` is the role's three tier lists.** `k8s/roles/longhorn-reconcile/defaults/main.yml`
   derives `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
-  `k3s_longhorn_nobackup_volumes` from `containers_list` with `tier_backup_claims`,
+  `k3s_longhorn_nobackup_volumes` from `containers_list` with `longhorn_r2_claims`,
   `longhorn_weekly_claims` and `longhorn_nobackup_claims`. The ConfigMap renders the three keys,
   and the docs generators, the catalogue and the tier tests resolve the same expressions through
   `scripts/lib/service_tiers.py:resolved_tier_lists`.

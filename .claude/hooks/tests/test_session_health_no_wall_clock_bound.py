@@ -2,7 +2,7 @@
 
 A timed run of the file over a serial inner pytest goes red on a loaded fan-out host with no
 code change. Host independence is guarded instead by the subprocess test's fence: it asserts
-the `prune_worktrees.py` call reached the `uv` stand-in that `_fence_worktree_survey` installs.
+the `prune-worktrees.py` call reached the stand-in that `_fence_worktree_survey` installs.
 
 Run: uv run pytest .claude/hooks/tests/test_session_health_no_wall_clock_bound.py
 """
@@ -19,7 +19,7 @@ _TARGET = "test_session_health.py"
 _FENCE_TEST = "test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess"
 _FENCE_FIXTURE = "_fence_worktree_survey"
 
-_PRUNE_CALL = "prune_worktrees.py"
+_PRUNE_CALL = "prune-worktrees.py"
 
 
 def _asserts_prune_call_recorded(fence: ast.FunctionDef) -> bool:
@@ -57,7 +57,7 @@ def _fence_def(source: str) -> ast.FunctionDef:
 
 
 def test_the_fence_asserts_the_prune_call_reached_the_stand_in():
-    """The fence test asserts `prune_worktrees.py` is among the calls the stand-in recorded."""
+    """The fence test asserts `prune-worktrees.py` is among the calls the stand-in recorded."""
     fence = _fence_def((_REPO / _TESTS_DIR / _TARGET).read_text(encoding="utf-8"))
     assert _asserts_prune_call_recorded(fence), (
         f"{_FENCE_TEST} no longer asserts that the {_PRUNE_CALL} call reached the "
@@ -74,7 +74,7 @@ def _fence_head() -> str:
     ("body", "expected"),
     [
         (
-            "    for b in ('curl', 'uv run x/prune_worktrees.py'):\n"
+            "    for b in ('curl', 'prune-worktrees.py --require'):\n"
             "        assert b in rec\n",
             True,
         ),

@@ -11,7 +11,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `<k8s_ghcr_pull_host>/airflow` (`airflow_k8s_task_image`), `postgres`
   (`airflow_k8s_postgres_image`)
 - **Route:** `airflow.<domain>` · `airflow.local.<domain>`, Authelia two_factor
-- **Claim:** `airflow-postgres-data` (weekly -> B2 (default target))
+- **Claim:** `airflow-postgres-data` (daily -> R2)
 <!-- /generated_from -->
 
 - **Four Deployments.** `airflow` is the api-server: the UI behind Authelia two_factor, and
@@ -50,9 +50,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   own whenever this role's PR also changes its `containers_list` entry's edges: the
   render-diff gate refuses one PR that both adds a `dependsOn` edge onto a tag and changes
   that tag's render.
-- **Backed up weekly to B2, on Tuesday's shard.** A lost week re-derives by backfill from
-  sources that keep at least seven days. Home Assistant's recorder keeps exactly seven, so
-  its slice depends on that week holding.
+- **Backed up daily to R2.** The entry's `r2_backup_claims` puts the claim on the daily tier
+  beside the home-critical volumes. The warehouse holds daily history its sources discard:
+  Scrutiny keeps about six days and Home Assistant's recorder seven, so a week-old restore
+  would lose days no backfill can re-derive. ADR 0007 records the exception.
 
 ## Every DAG follows these rules
 

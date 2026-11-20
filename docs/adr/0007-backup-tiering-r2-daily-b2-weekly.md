@@ -23,6 +23,13 @@ targets, so the arm flags, the schedules and the retain counts moved to that rol
 *Consequences* gains the break-glass case: a target held by the reconcile-disabled annotation
 reads red until the break-glass ends. The decision is unchanged.
 
+Amended on 2026-11-20. The Airflow warehouse volume, `airflow-postgres-data`, joins the
+daily R2 tier as the one volume outside the home-critical set. Its daily rollups outlive
+their sources: Scrutiny keeps daily SMART readings for about six days, and Home Assistant's
+recorder keeps seven. A week-old restore would therefore lose days that no backfill can
+re-derive, which is the trade *Decision* accepts for the B2 set. A `containers_list` entry
+declares such a volume in `r2_backup_claims`, and *Decision* names it.
+
 ## Context
 
 Backblaze B2 charges per API transaction, and the account has caps. The homelab hit them
@@ -47,8 +54,10 @@ a budget that is adequate on average still breaks.
 Two backup targets, split by what the data is worth and what it costs.
 
 Four volumes go to Cloudflare R2 daily: the TLS material, the SSO store and the two
-home-automation stores. They are the whole daily tier, and R2 exists so that these survive a
-B2 account-level failure — a cap, a billing problem or a lockout.
+home-automation stores. R2 exists so that these survive a B2 account-level failure — a cap,
+a billing problem or a lockout. Since 2026-11-20 the Airflow warehouse joins them, because a
+week-old restore of it loses history its sources no longer hold. The five are the whole
+daily tier.
 
 Every other backed-up volume goes to B2 weekly, sharded across the seven weekdays by list
 index modulo the day of week, roughly three volumes a day, so no single cap-day carries a

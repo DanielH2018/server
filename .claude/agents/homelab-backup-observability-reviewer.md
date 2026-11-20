@@ -17,7 +17,7 @@ gaps are already closed, so **verify before flagging** (a finding that's already
 operator's time).
 
 ## The mental model
-- **Backups: Longhorn volume backups go to two offsite targets.** Four volumes go to
+- **Backups: Longhorn volume backups go to two offsite targets.** Five volumes go to
   Cloudflare R2 daily, and every other backed-up volume goes to Backblaze B2 weekly.
   `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` owns which volume goes where. Read a
   volume's `spec.backupTargetName` to learn its target; never infer its tier.

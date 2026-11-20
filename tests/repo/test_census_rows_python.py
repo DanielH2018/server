@@ -435,7 +435,6 @@ ROWS = (
         must_find=frozenset(
             f"scripts/{rel}"
             for rel in (
-                "dev/prune_worktrees.py",
                 "dev/fanout_lib/place.py",
                 "dev/pytest_shard.py",
                 "dev/fanout_lib/clean.py",

@@ -90,7 +90,7 @@ def _invoked_in(text: str) -> set[str]:
     Three exclusions carry the precision. A comment line is a mention. A line carrying a
     backtick is prose citing a command, which is how every CLAUDE.md and half the role
     defaults name these scripts. A line starting with `echo` is a message about a command —
-    a shell wrapper printing "or another Claude session (uv run python scripts/dev/prune_worktrees.py)"
+    a shell wrapper printing "or another Claude session (uv run python scripts/dev/fanout.py)"
     on lock contention, and reading that as an invocation would make an interactive tool
     look like part of the deploy path.
     """

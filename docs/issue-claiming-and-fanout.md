@@ -17,14 +17,17 @@ It is split four ways: the CLI, `findings_lib/issue_model.py` (vocabulary and pu
 command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 
 `scripts/lib/worktrees.py` decides whether a session worktree is done with: `is_merged`,
-`classify` and `worktree_facts`. `scripts/dev/prune_worktrees.py` is only the CLI over it, and
-nothing else imports the CLI. `.claude/hooks/session-health.py` imports `parse_worktree_list`
+`classify` and `worktree_facts`. It binds this repo's two facts, the base `origin/master` and
+the fan-out lock pattern, onto the `claude_worktree` library the dotfiles repo deploys to
+`~/.local/share/claude-worktree`. That library holds the landed ladder, the holds, `classify`
+and `remove`, and the same repo's `~/.claude/hooks/prune-worktrees.py` is the one worktree
+pruner (#9033). The pruner reads this repo's policy from `.claude/prune-worktrees.json`.
+`.claude/hooks/session-health.py` imports `parse_worktree_list`
 and `lock_is_live` from `lib.worktrees` to print the other-live-sessions banner, so a
-`fanout-<batch>` lock counts only while its batch unit is active (#8576). Since #2133
-`parse_worktree_list`, `session_is_alive`, `Worktree` and the cherry and merge-tree readers come from the
-`claude_worktree` module the dotfiles repo deploys to `~/.local/share/claude-worktree`, and
-`lib.worktrees` re-exports them. `scripts/lib/_claude_worktree.py` is the bootstrap, and it
-raises rather than falls back, so a host without the deploy prunes and reaps nothing.
+`fanout-<batch>` lock counts only while its batch unit is active (#8576).
+`scripts/lib/_claude_worktree.py` is the bootstrap, and it raises rather than falls back, so
+a host without the deploy, or with one older than
+`scripts/lib/_claude_worktree.py:REQUIRED_INTERFACE`, prunes and reaps nothing.
 
 Every open issue except #3 carries the `claude` label. #3 is Renovate's Dependency Dashboard,
 created 2026-06-06 with no labels. Scoping claims to `claude`-labelled issues therefore costs
@@ -185,8 +188,9 @@ A claim names a branch, in either session form: `worktree-<name>` from `EnterWor
 `claude/<name>` from the desktop app (`scripts/lib/worktree_owner.py:SESSION_BRANCH_PREFIXES`).
 The pruner's branch sweep deletes an orphan branch of either form once its work is on
 `origin/master`. It keeps a branch that any open claim names, or that an open PR has as its
-head, and it keeps every landed branch when it cannot read the claims or the open PRs
-(`scripts/dev/prune_worktrees.py:judge_branches`). A stale claim therefore holds its branch
+head, and it keeps every landed branch when it cannot read the claims or the open PRs.
+`scripts/dev/held_branches.py` prints both lists, and the policy file names it as the
+pruner's `branch_holds` command. A stale claim therefore holds its branch
 until `reap` releases the claim.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
@@ -200,7 +204,7 @@ process was gone while the work was not.
 
 Reusing `lib.worktrees` is what makes this self-healing without either. The staleness
 question — is this worktree done with — is a question that module already answers for
-`prune_worktrees.py`, and `session-health.py` already imports it from outside `scripts/`.
+the worktree pruner, and `session-health.py` already imports it from outside `scripts/`.
 
 A claim on another repo's register is judged against that repo's worktrees. With
 `--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout
@@ -419,7 +423,7 @@ What this buys:
 - The `session-health.py` banner prints `worktree-issue-1132` where it prints
   `worktree-agent-a1f5b5e3cdf2f9684` today, so the other-live-sessions list becomes readable
   at a glance.
-- `prune_worktrees.py` reports the same way.
+- The worktree pruner reports the same way.
 - The PR body carries `Closes #1132`, so the merge closes the issue and the `land.sh` verdict
   attaches to it.
 
@@ -466,7 +470,8 @@ one untracked file in the primary checkout parks `homelab-checkout-sync`. Three 
 beside the name, with no network call:
 
 - `session-health.py`'s other-live-sessions list.
-- `prune_worktrees.py`, in both `--brief` and the long report.
+- The worktree pruner, in both `--brief` and the long report, through the policy's
+  `label_file`.
 - `session-health.py`'s own-tree prompt. A session that starts in an unlabelled `agent-` or
   `bridge-` tree is told to label it once it knows its task, which is how a Remote Control
   session learns to do it.
@@ -476,7 +481,7 @@ The local fan-out brief makes the label the agent's first act, beside the `Worke
 `DECIDED:` the names stay generated, and a label sits beside them. A `WorktreeCreate` hook can
 choose the directory, but it replaces worktree creation for every session in every repo. It
 would have to redo what `worktree.baseRef: fresh` does, keep the `worktree-<name>` branch shape
-that `lib/worktree_owner.py` and `prune_worktrees.py` parse, and delete its own branches,
+that `lib/worktree_owner.py` and the worktree pruner parse, and delete its own branches,
 which Claude Code never does for a hook-created worktree. Its input carries only `name`,
 `session_id`, `transcript_path` and `cwd` (Claude Code 2.1.296), so it cannot tell which of
 several parallel `Agent` calls a given `agent-<id>` belongs to.

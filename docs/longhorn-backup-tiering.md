@@ -25,7 +25,7 @@ express a path exclude, so each rule translates one of three ways:
    transactions. Divert those; leave static weight alone.
 3. **Everything else → cadence**: the daily/weekly split (see `k3s_longhorn_weekly_volumes`)
    bounds what a rule-less volume can cost. Since 2026-08-16 (the sixth cap event) the split
-   follows the target: the four R2-routed volumes are the whole daily tier, and **every
+   follows the target: the R2-routed volumes are the whole daily tier, and **every
    B2-destined volume backs up weekly**, sharded across the seven weekdays (~3 volumes per
    day) so no single B2 cap-day carries a batch. Each claim's day-of-week is the shard its
    `containers_list` entry declares in `weekly_backup_claims`, 0 for Sunday (#4207). Week-old
@@ -39,7 +39,9 @@ backed-up PVC checked against the kopia rules).
 **Target** is which backupstore the volume's backups land in (`spec.backupTargetName`).
 Four volumes moved to Cloudflare R2 on 2026-08-15 (`5ef0dc8e`) so the TLS material, the SSO
 store and the two home-automation stores survive a B2 account-level failure — cap, billing,
-or key revocation — that would take the whole B2 target with it. Restoring them means
+or key revocation — that would take the whole B2 target with it. The Airflow warehouse
+(`airflow-postgres-data`) joined them on 2026-11-20 through its entry's `r2_backup_claims`:
+it holds daily history its sources discard within a week (ADR 0007). Restoring them means
 selecting the `r2` target, not `default`; see
 [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
 

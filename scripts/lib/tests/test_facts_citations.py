@@ -183,8 +183,8 @@ _EXTENSIONS = frozenset({"md", "py", "sh", "yml"})
             ["k8s/roles/sonarr/tasks/main.yml"],
         ),
         (
-            "spans `scripts/dev/prune_worktrees.py:10-40`.",
-            ["scripts/dev/prune_worktrees.py"],
+            "spans `scripts/dev/label_worktree.py:10-40`.",
+            ["scripts/dev/label_worktree.py"],
         ),
         (
             "both `scripts/a.py:1` and `.claude/hooks/b.sh:22`",
