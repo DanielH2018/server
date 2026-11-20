@@ -1471,6 +1471,55 @@
       ],
       "title": "Actions run time per day",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "The day's Claude Code spend divided by the PRs merged that day, Renovate's excluded. Telemetry names no branch per session, so this is a daily ratio, not a cost per PR.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 121
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH c AS (SELECT day, sum(value) AS usd FROM claude.usage_daily WHERE metric = 'cost_usd' GROUP BY day), p AS (SELECT day, sum(n) AS prs FROM github.counts_daily WHERE metric = 'prs_merged' AND key NOT LIKE '%[bot]' GROUP BY day) SELECT c.day::timestamptz AS time, 'USD per merged PR' AS metric, c.usd / p.prs AS value FROM c JOIN p USING (day) WHERE p.prs > 0 AND $__timeFilter(c.day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code spend per merged PR",
+      "type": "timeseries"
     }
   ],
   "refresh": "",

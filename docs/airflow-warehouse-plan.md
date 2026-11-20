@@ -48,7 +48,7 @@ role as built.
   allow for `app: airflow-task`, after a caller census (ADR 0009).
 - Transforms are stdlib-only and tested against recorded source responses in the role's
   `tests/`.
-- Each load DAG emits an asset, and derived DAGs (slice 6) schedule on assets.
+- Each load DAG emits an asset, so a later derived DAG can schedule on it.
 
 ## Slices
 
@@ -90,8 +90,11 @@ role as built.
   runs one day at a time at 02:00 and waits for the next window below 2,000 calls left. A day
   costs about 30 calls, most of them the hourly windows that keep each Actions query under
   the API's 1,000-result cap.
-- **Slice 6, cost per merged PR (idea 6).** Joins slices 2 and 5 on assets. The join key is
-  open: check whether the telemetry carries a branch or worktree name per session.
+- **Slice 6, cost per merged PR (idea 6).** A "Homelab history" panel that divides each
+  day's Claude Code spend by that day's merged PRs, Renovate's excluded. The telemetry names
+  no branch or worktree per session, only `fanout_batch` for fan-out runs, so spend cannot be
+  tied to one PR, and a DAG that only divides two tables the warehouse holds would add
+  nothing.
 - **Slice 7a, network edge history (idea 7).** Traefik's requests per entrypoint and route by
   status code, and CrowdSec's overflows, AppSec requests and blocks, bouncer requests and
   active decisions, as `edge_daily_rollup` into `edge.counts_daily`. The source is
