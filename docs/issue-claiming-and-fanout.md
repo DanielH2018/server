@@ -334,7 +334,9 @@ Each way in has a way out:
   To take a claimed issue out, `release` it first. `milestone add` is also what reserves an
   issue, so `milestone remove` is what frees it for other branches.
 - `milestone start` is reversed by `milestone close`, and `start` with the same title
-  reopens the closed milestone. `milestone status` prints the form and the counts.
+  reopens the closed milestone. `milestone status` prints the form, then
+  the milestone's open and closed issues, then its open and closed PRs as a separate pair
+  (`scripts/dev/findings_lib/milestone.py:counts`).
 - No command converts a milestone between the two forms. `start` refuses a title the branch
   already holds in the other form. To change form, close the milestone and start the other
   form under another title.

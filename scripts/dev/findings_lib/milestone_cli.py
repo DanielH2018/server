@@ -3,7 +3,7 @@
 `start "<title>"` opens the milestone and files the work the branch already holds under it:
 its open claims and its open PR. A session that opts in after claiming then gets a milestone
 that holds its own work. `start --project` opens a project milestone instead. `status` prints
-the milestone and its counts. `close` abandons it early; the workflow and `reap` close a
+the milestone, its issue counts and, apart from them, its PR counts. `close` abandons it early; the workflow and `reap` close a
 finished one on their own. `add <n...>` files unclaimed issues in the branch's project
 milestone, and `remove <n...>` takes them out. `findings_lib/milestone.py` owns the scheme.
 """
@@ -107,9 +107,11 @@ def cmd_milestone(args: argparse.Namespace, tools: FindingsTools) -> int:
         if m is None:
             print(f'`{branch}` has no milestone; `milestone start "<title>"` opens one')
             return 0
+        held = milestone.counts(m["number"], repo, gh_json=tools.gh_json)
         print(
             f"`{m['title']}` {m['state']}{' project' if milestone.is_project(m) else ''}: "
-            f"{m['open_issues']} open, {m['closed_issues']} closed  {m['html_url']}"
+            f"issues {held.issues_open} open, {held.issues_closed} closed; "
+            f"PRs {held.prs_open} open, {held.prs_closed} closed  {m['html_url']}"
         )
         return 0
     if args.action == "close":

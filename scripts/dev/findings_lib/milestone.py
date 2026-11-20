@@ -39,7 +39,9 @@ Typical usage example:
 
 import re
 import subprocess
+from collections import Counter
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -266,6 +268,40 @@ def titled(title: str, repo: str, *, gh_json: GhJson = real_gh_json) -> dict:
             if m["title"] == title:
                 return m
     raise UnknownMilestone(f"no milestone is titled `{title}`")
+
+
+@dataclass(frozen=True)
+class Counts:
+    """How many issues and pull requests a milestone holds, by state.
+
+    GitHub's own `open_issues` and `closed_issues` add the pull requests to the issues.
+    """
+
+    issues_open: int
+    issues_closed: int
+    prs_open: int
+    prs_closed: int
+
+
+def counts(number: object, repo: str, *, gh_json: GhJson = real_gh_json) -> Counts:
+    """Counts what milestone ``number`` holds, its issues apart from its pull requests."""
+    pages = gh_json(
+        "api",
+        f"repos/{repo}/issues?milestone={number}&state=all&per_page=100",
+        "--paginate",
+        "--slurp",
+    )
+    tally = Counter(
+        ("prs" if "pull_request" in item else "issues", item["state"])
+        for page in ([] if pages is None else as_list(pages, "milestone item pages"))
+        for item in as_object_list(page, "milestone items")
+    )
+    return Counts(
+        issues_open=tally["issues", "open"],
+        issues_closed=tally["issues", "closed"],
+        prs_open=tally["prs", "open"],
+        prs_closed=tally["prs", "closed"],
+    )
 
 
 def reservations(
