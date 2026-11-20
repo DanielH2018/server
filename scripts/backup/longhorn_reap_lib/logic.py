@@ -17,14 +17,15 @@ import os
 import sys
 from pathlib import Path as _Path
 from dataclasses import dataclass, field
+from typing import Protocol
 
 
 from lib import host_modules  # noqa: F401
 import host_lib
 
+from lib.k8s_objects import LonghornVolume, VolumeState
 from lib.longhorn_lib import longhorn_backups
 
-RECURRING_JOB_GROUP_PREFIX = longhorn_backups.GROUP_LABEL_PREFIX
 
 # The one file an operator runs; both reapers name it in their `--apply` re-run hint.
 ENTRY_POINT = _Path(__file__).resolve().parents[1] / "longhorn_reap.py"
@@ -310,9 +311,18 @@ def parse_rfc3339_epoch(stamp: str) -> float | None:
     return None if epoch == 0 else epoch
 
 
-def newest_first(
-    records: list[dict], vol_key: str, created_key: str, name_key: str = "name"
-) -> list[dict]:
+class Dated(Protocol):
+    """A Backup or Snapshot record: what `newest_first` orders by."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def volume(self) -> str: ...
+    @property
+    def created(self) -> str: ...
+
+
+def newest_first[R: Dated](records: list[R]) -> list[R]:
     """Sort by volume ascending, then creation time descending, then name ascending.
 
     Time is `longhorn_backups.stamp_order`, the instant a stamp names rather than its text,
@@ -326,41 +336,31 @@ def newest_first(
     Sorting by name first, then time descending, then volume last (each stable) reproduces
     that priority order without a composite key.
     """
-    by_name = sorted(records, key=lambda r: r[name_key])
+    by_name = sorted(records, key=lambda r: r.name)
     by_time = sorted(
         by_name,
-        key=lambda r: longhorn_backups.stamp_order(r[created_key]),
+        key=lambda r: longhorn_backups.stamp_order(r.created),
         reverse=True,
     )
-    return sorted(by_time, key=lambda r: r[vol_key])
+    return sorted(by_time, key=lambda r: r.volume)
 
 
 # ── backups reaper ───────────────────────────────────────────────────────────────────────
 
 
-def backup_owner_map(volumes: list[dict]) -> dict[str, str]:
+def backup_owner_map(volumes: list[LonghornVolume]) -> dict[str, str]:
     """Volume name -> the recurring-job GROUP its label names.
 
     For the backups reaper the group name IS what a Backup's own RecurringJob label carries
     (daily-backup, weekly-backup-d3, ...), so no RecurringJob-CR indirection is needed here —
-    unlike the snapshots reaper below, whose labels are truncated. Read from `.metadata.labels`
-    as a parsed dict, never from a jsonpath `{range}` over that map — see the module docstring.
+    unlike the snapshots reaper below, whose labels are truncated. The group comes from the
+    parsed label map, never from a jsonpath `{range}` over it — see the module docstring.
     """
-    owner: dict[str, str] = {}
-    for v in volumes:
-        name = (v.get("metadata") or {}).get("name")
-        if not name:
-            continue
-        for key in (v.get("metadata") or {}).get("labels") or {}:
-            if key.startswith(RECURRING_JOB_GROUP_PREFIX):
-                owner[name] = key[len(RECURRING_JOB_GROUP_PREFIX) :]
-    return owner
+    return {v.name: v.group for v in volumes if v.name and v.group is not None}
 
 
-def existing_volume_set(volumes: list[dict]) -> set[str]:
-    return {
-        v["metadata"]["name"] for v in volumes if (v.get("metadata") or {}).get("name")
-    }
+def existing_volume_set(volumes: list[LonghornVolume]) -> set[str]:
+    return {v.name for v in volumes if v.name}
 
 
 @dataclass
@@ -412,12 +412,8 @@ def classify_backups(
 
     result = BackupClassification()
     seen_floor: set[str] = set()
-    records = [
-        {"name": b.name, "vol": b.volume, "created": b.created, "job": b.job}
-        for b in labelled
-    ]
-    for b in newest_first(records, "vol", "created"):
-        name, vol, created, job = b["name"], b["vol"], b["created"], b["job"]
+    for b in newest_first(labelled):
+        name, vol, created, job = b.name, b.volume, b.created, b.job
 
         if vol not in existing_volumes:
             result.orphaned.append((name, vol, created, job))
@@ -465,7 +461,7 @@ def recurringjob_group_to_job(recurringjobs: list[dict]) -> dict[str, str]:
 
 
 def snapshot_owner_map(
-    volumes: list[dict], group_job: dict[str, str]
+    volumes: list[LonghornVolume], group_job: dict[str, str]
 ) -> dict[str, str]:
     """Volume name -> the job that owns it now, via its group label and the RecurringJob CR.
 
@@ -481,14 +477,10 @@ def snapshot_owner_map(
     """
     owner: dict[str, str] = {}
     for v in volumes:
-        name = (v.get("metadata") or {}).get("name")
-        if not name:
+        if not v.name or v.group is None:
             continue
-        for key in (v.get("metadata") or {}).get("labels") or {}:
-            if key.startswith(RECURRING_JOB_GROUP_PREFIX):
-                group = key[len(RECURRING_JOB_GROUP_PREFIX) :]
-                opt_out = OWNER_NO_JOB_BY_DESIGN if group in OPT_OUT_GROUPS else ""
-                owner[name] = group_job.get(group) or opt_out
+        opt_out = OWNER_NO_JOB_BY_DESIGN if v.group in OPT_OUT_GROUPS else ""
+        owner[v.name] = group_job.get(v.group) or opt_out
     return owner
 
 
@@ -502,7 +494,7 @@ def unresolved_owner_count(owner: dict[str, str]) -> int:
     return sum(1 for job in owner.values() if not job)
 
 
-def volumes_with_group_label(volumes: list[dict]) -> int:
+def volumes_with_group_label(volumes: list[LonghornVolume]) -> int:
     """How many volumes carry a recurring-job group label at all.
 
     Feeds `abort_reason`'s RecurringJob-list check (rule 3): `snapshot_owner_map` records an
@@ -510,20 +502,11 @@ def volumes_with_group_label(volumes: list[dict]) -> int:
     `""`), so `owner_count` alone can't tell "the RecurringJob list came back empty" from
     "every group resolved fine".
     """
-    count = 0
-    for v in volumes:
-        labels = (v.get("metadata") or {}).get("labels") or {}
-        if any(key.startswith(RECURRING_JOB_GROUP_PREFIX) for key in labels):
-            count += 1
-    return count
+    return sum(1 for v in volumes if v.group is not None)
 
 
-def attached_volume_set(volumes: list[dict]) -> set[str]:
-    return {
-        (v.get("metadata") or {}).get("name", "")
-        for v in volumes
-        if (v.get("status") or {}).get("state") == "attached"
-    }
+def attached_volume_set(volumes: list[LonghornVolume]) -> set[str]:
+    return {v.name for v in volumes if v.state is VolumeState.ATTACHED}
 
 
 @dataclass
@@ -536,16 +519,28 @@ class SnapshotClassification:
     )  # (name, vol, created, job)
 
 
-def _snapshot_fields(s: dict) -> tuple[str, str, str, str, bool]:
-    name = (s.get("metadata") or {}).get("name", "")
-    vol = (s.get("spec") or {}).get("volume", "")
-    status = s.get("status") or {}
-    created = status.get("creationTime", "")
-    job = (status.get("labels") or {}).get("RecurringJob", "")
-    # An unpopulated markRemoved (a snapshot read moments after creation) is absent from the
-    # dict, not `false` -- treat it as not-removed the same as an explicit `false`. R14.
-    removed = bool(status.get("markRemoved", False))
-    return name, vol, created, job, removed
+@dataclass(frozen=True)
+class Snapshot:
+    """One `snapshots.longhorn.io` object, the fields `classify_snapshots` reads."""
+
+    name: str
+    volume: str
+    created: str
+    job: str
+    removed: bool
+
+    @classmethod
+    def from_item(cls, s: dict) -> Snapshot:
+        status = s.get("status") or {}
+        return cls(
+            name=(s.get("metadata") or {}).get("name", ""),
+            volume=(s.get("spec") or {}).get("volume", ""),
+            created=status.get("creationTime", ""),
+            job=(status.get("labels") or {}).get("RecurringJob", ""),
+            # An unpopulated markRemoved (a snapshot read moments after creation) is absent,
+            # not `false`; it reads as not-removed. R14.
+            removed=bool(status.get("markRemoved", False)),
+        )
 
 
 def classify_snapshots(
@@ -582,23 +577,12 @@ def classify_snapshots(
         raise ReapAbort(abort)
 
     cutoff = now_epoch - min_age_days * 86400
-    raw_records = [
-        {"name": n, "vol": v, "created": c, "job": j, "removed": r}
-        for n, v, c, j, r in (_snapshot_fields(s) for s in snapshots)
-        if n and v
-    ]
-    records = newest_first(raw_records, "vol", "created")
+    parsed = [Snapshot.from_item(s) for s in snapshots]
 
     result = SnapshotClassification()
     newest_seen: set[str] = set()
-    for r in records:
-        name, vol, created, job, removed = (
-            r["name"],
-            r["vol"],
-            r["created"],
-            r["job"],
-            r["removed"],
-        )
+    for r in newest_first([s for s in parsed if s.name and s.volume]):
+        name, vol, created, job, removed = r.name, r.volume, r.created, r.job, r.removed
 
         if removed:
             continue  # already marked removed; the engine coalesces it on the next purge

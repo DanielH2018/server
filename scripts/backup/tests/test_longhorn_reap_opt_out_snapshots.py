@@ -20,8 +20,10 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_opt_out_snapshots.py
 import pytest
 
 from backup.longhorn_reap_lib import logic
+from lib.k8s_objects import LonghornVolume
+from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
 
-from test_longhorn_reap_logic import _NOW, _recurringjob, _snapshot, _volume
+from test_longhorn_reap_logic import _NOW, _lh_volume, _recurringjob, _snapshot
 
 
 def test_snapshot_owner_map_is_clean_for_an_opt_out_group_with_no_recurringjob():
@@ -32,7 +34,10 @@ def test_snapshot_owner_map_is_clean_for_an_opt_out_group_with_no_recurringjob()
         [_recurringjob("daily-backup", ["default"])]
     )
     owner = logic.snapshot_owner_map(
-        [_volume("otel-loki", group="no-backup"), _volume("vol-b", group="default")],
+        [
+            _lh_volume("otel-loki", group="no-backup"),
+            _lh_volume("vol-b", group="default"),
+        ],
         group_job,
     )
     assert owner == {
@@ -57,8 +62,8 @@ def test_classify_snapshots_is_flagged_for_a_missing_job_even_beside_an_opt_out_
     )
     owner = logic.snapshot_owner_map(
         [
-            _volume("otel-loki", group="no-backup"),
-            _volume("vol-a", group="weekly-backup-d3"),
+            _lh_volume("otel-loki", group="no-backup"),
+            _lh_volume("vol-a", group="weekly-backup-d3"),
         ],
         group_job,
     )
@@ -85,7 +90,7 @@ def test_a_recurring_job_snapshot_on_an_opt_out_volume_is_reaped_but_its_newest_
         [_recurringjob("daily-backup", ["default"])]
     )
     owner = logic.snapshot_owner_map(
-        [_volume("otel-loki", group="no-backup")], group_job
+        [_lh_volume("otel-loki", group="no-backup")], group_job
     )
     snaps = [
         _snapshot("newest", "otel-loki", "2026-08-19T00:00:00Z", job="daily-backup"),
@@ -102,13 +107,12 @@ TRIM_JOB_LABEL = "recurring-job.longhorn.io/trim"
 
 
 def _trim_volume(name, group_keys):
-    # Sorted key order, as kubectl's JSON emits it: `snapshot_owner_map` keeps the last group key
-    # it meets, so a red half's `trim` sorts after `no-backup` and wins.
+    # Sorted key order, as kubectl's JSON emits it: `LonghornVolume.group` keeps the last group
+    # key it meets, so a red half's `trim` sorts after `no-backup` and wins.
     labels = dict.fromkeys(sorted(group_keys), "enabled")
-    return {
-        "metadata": {"name": name, "labels": labels},
-        "status": {"state": "attached"},
-    }
+    return LonghornVolume.from_item(
+        {"metadata": {"name": name, "labels": labels}, "status": {"state": "attached"}}
+    )
 
 
 def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
@@ -118,7 +122,7 @@ def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
         [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
     )
     volume = _trim_volume(
-        "otel-loki", [logic.RECURRING_JOB_GROUP_PREFIX + "no-backup", TRIM_JOB_LABEL]
+        "otel-loki", [GROUP_LABEL_PREFIX + "no-backup", TRIM_JOB_LABEL]
     )
     owner = logic.snapshot_owner_map([volume], group_job)
     assert owner == {"otel-loki": logic.OWNER_NO_JOB_BY_DESIGN}
@@ -133,7 +137,7 @@ def test_a_trim_group_label_costs_an_opt_out_volume_its_sentinel():
     )
     volume = _trim_volume(
         "otel-loki",
-        [logic.RECURRING_JOB_GROUP_PREFIX + g for g in ("no-backup", "trim")],
+        [GROUP_LABEL_PREFIX + g for g in ("no-backup", "trim")],
     )
     owner = logic.snapshot_owner_map([volume], group_job)
     assert owner == {"otel-loki": ""}

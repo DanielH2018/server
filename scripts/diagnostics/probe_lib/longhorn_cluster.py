@@ -22,6 +22,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.core import Unreadable
+from lib.k8s_objects import BackupTarget
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 # The Backup CR reader and the backup group and target names, shared with the backup-health
@@ -192,6 +193,9 @@ def backup_target_url(name=B2_BACKUP_TARGET_NAME, cluster=DEFAULT_CLUSTER, _run=
     if out.returncode != 0:
         return ""
     try:
-        return json.loads(out.stdout).get("spec", {}).get("backupTargetURL", "") or ""
+        doc = json.loads(out.stdout)
     except json.JSONDecodeError:
         return ""
+    if not isinstance(doc, dict):
+        return ""
+    return BackupTarget.from_item(doc).url or ""

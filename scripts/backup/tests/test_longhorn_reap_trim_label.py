@@ -9,7 +9,7 @@ writes the group form, would make `trim` the owner, and `classify_backups` would
 current-tier backup and keep every stray under FLOOR 1.
 
 Each fixture writes its labels in sorted key order, the order kubectl's JSON emits, because
-`backup_owner_map` keeps the last group key it meets. The red half's `trim` therefore sorts
+`LonghornVolume.group` keeps the last group key it meets. The red half's `trim` therefore sorts
 after `default` and wins, which is what lets it fail.
 
 The cases sit beside `test_longhorn_reap_logic.py` rather than in it, because that module is
@@ -20,19 +20,26 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_trim_label.py
 """
 
 from backup.longhorn_reap_lib import logic
+from lib.k8s_objects import LonghornVolume
+from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
 
 from _reap_entrypoint_harness import _backup
 
-GROUP = logic.RECURRING_JOB_GROUP_PREFIX
+GROUP = GROUP_LABEL_PREFIX
 TRIM_JOB_LABEL = "recurring-job.longhorn.io/trim"
 
 
-def _labelled_volume(name: str, labels: list[str]) -> dict:
+def _labelled_volume(name: str, labels: list[str]) -> LonghornVolume:
     """A Volume CR whose labels are `labels`, written in sorted key order as kubectl emits them."""
-    return {
-        "metadata": {"name": name, "labels": dict.fromkeys(sorted(labels), "enabled")},
-        "status": {"state": "attached"},
-    }
+    return LonghornVolume.from_item(
+        {
+            "metadata": {
+                "name": name,
+                "labels": dict.fromkeys(sorted(labels), "enabled"),
+            },
+            "status": {"state": "attached"},
+        }
+    )
 
 
 def _backups() -> list[dict]:

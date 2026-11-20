@@ -55,6 +55,7 @@ from renderer.template_filters.longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from backup.longhorn_reap_lib import logic
+from lib.k8s_objects import LonghornVolume
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
@@ -207,11 +208,12 @@ def main(argv: list[str], now: float | None = None) -> int:
     if err:
         print("ABORT: %s" % err, file=sys.stderr)
         return 1
-    volumes, err = logic.parse_kubectl_json_items(vol_out, "volume list")
+    volume_items, err = logic.parse_kubectl_json_items(vol_out, "volume list")
     if err:
         print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
+    volumes = [LonghornVolume.from_item(item) for item in volume_items]
     group_job = logic.recurringjob_group_to_job(recurringjobs)
     owner = logic.snapshot_owner_map(volumes, group_job)
     attached = logic.attached_volume_set(volumes)

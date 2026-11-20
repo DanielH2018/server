@@ -28,6 +28,7 @@ import pathlib
 import subprocess
 import sys
 
+from lib.k8s_objects import LonghornVolume
 from lib.proc_testing import fake_bin, path_with
 
 BACKUP_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -89,6 +90,11 @@ def _volume(name, group=None, state="attached"):
     if group is not None:
         labels["recurring-job-group.longhorn.io/%s" % group] = "enabled"
     return {"metadata": {"name": name, "labels": labels}, "status": {"state": state}}
+
+
+def _lh_volume(name, group=None, state="attached"):
+    """`_volume` parsed, as each reaper parses its volume list before classifying."""
+    return LonghornVolume.from_item(_volume(name, group, state))
 
 
 def _backup(name, vol, created, job, state="Completed", pvc=None):

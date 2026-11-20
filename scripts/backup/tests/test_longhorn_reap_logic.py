@@ -12,7 +12,7 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_logic.py
 import pytest
 
 from backup.longhorn_reap_lib import logic
-from _reap_entrypoint_harness import _backup, _snapshot, _volume
+from _reap_entrypoint_harness import _backup, _lh_volume, _snapshot
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────────────────
@@ -26,16 +26,16 @@ def _recurringjob(name, groups):
 
 
 def test_backup_owner_map_reads_the_group_from_the_label_keys():
-    owner = logic.backup_owner_map([_volume("pihole-etc", group="weekly-backup-d3")])
+    owner = logic.backup_owner_map([_lh_volume("pihole-etc", group="weekly-backup-d3")])
     assert owner == {"pihole-etc": "weekly-backup-d3"}
 
 
 def test_backup_owner_map_is_empty_for_a_volume_with_no_group_label():
-    assert logic.backup_owner_map([_volume("orphan-vol", group=None)]) == {}
+    assert logic.backup_owner_map([_lh_volume("orphan-vol", group=None)]) == {}
 
 
 def test_existing_volume_set_lists_every_volume_by_name():
-    assert logic.existing_volume_set([_volume("a"), _volume("b")]) == {"a", "b"}
+    assert logic.existing_volume_set([_lh_volume("a"), _lh_volume("b")]) == {"a", "b"}
 
 
 # ── abort_reason ─────────────────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ def test_abort_reason_skips_the_recurringjob_check_for_the_backups_reaper():
 
 
 def test_volumes_with_group_label_counts_only_labelled_volumes():
-    volumes = [_volume("a", group="weekly-backup-d3"), _volume("b", group=None)]
+    volumes = [_lh_volume("a", group="weekly-backup-d3"), _lh_volume("b", group=None)]
     assert logic.volumes_with_group_label(volumes) == 1
 
 
@@ -526,7 +526,7 @@ def test_the_truncated_job_name_prefix_match_keeps_a_weekly_shards_current_snaps
         [_recurringjob("weekly-backup", ["weekly-backup-d3"])]
     )
     owner = logic.snapshot_owner_map(
-        [_volume("vol-a", group="weekly-backup-d3")], group_job
+        [_lh_volume("vol-a", group="weekly-backup-d3")], group_job
     )
     assert owner == {"vol-a": "weekly-backup"}
     snaps = [
@@ -573,8 +573,8 @@ def test_classify_snapshots_is_clean_when_every_group_label_resolved_to_a_job():
     )
     owner = logic.snapshot_owner_map(
         [
-            _volume("vol-a", group="weekly-backup-d3"),
-            _volume("vol-b", group="daily-backup"),
+            _lh_volume("vol-a", group="weekly-backup-d3"),
+            _lh_volume("vol-b", group="daily-backup"),
         ],
         group_job,
     )
@@ -598,8 +598,8 @@ def test_classify_snapshots_is_flagged_when_one_recurringjob_cr_is_missing():
     )
     owner = logic.snapshot_owner_map(
         [
-            _volume("vol-a", group="weekly-backup-d3"),
-            _volume("vol-b", group="daily-backup"),
+            _lh_volume("vol-a", group="weekly-backup-d3"),
+            _lh_volume("vol-b", group="daily-backup"),
         ],
         group_job,
     )

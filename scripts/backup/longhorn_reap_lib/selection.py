@@ -34,10 +34,10 @@ Stdlib only. Imported by backups.py beside it, the `longhorn_reap.py backups` su
 does the kubectl reads/writes and the printing.
 """
 
-import json
 from dataclasses import dataclass, field
 
 from backup.longhorn_reap_lib import logic
+from lib.longhorn_lib.longhorn_backups import Backup
 
 
 SEED_NAME_PREFIX = "seed-"
@@ -46,31 +46,8 @@ SEED_NAME_PREFIX = "seed-"
 SEED_FLOOR_DEFAULT = 2
 
 
-def backup_claim(backup: dict) -> str:
-    """The PVC name Longhorn recorded on a Backup CR, or "" when it recorded none.
-
-    Longhorn writes the PVC into `status.labels.KubernetesStatus` as a JSON STRING, not as a
-    struct. The Jinja this replaced matched the quoted key/value pair inside that string with a
-    `search` filter, so selecting `n8n-data` depended on the quotes to stop it also selecting
-    `n8n-data-something`. Parsing the label and comparing the field makes that structural: there
-    is no substring to get wrong. A label that is absent, not JSON, or not an object reads as
-    "no claim recorded" and selects nothing.
-    """
-    raw = ((backup.get("status") or {}).get("labels") or {}).get("KubernetesStatus", "")
-    if not isinstance(raw, str) or not raw:
-        return ""
-    try:
-        doc = json.loads(raw)
-    except ValueError:
-        return ""
-    if not isinstance(doc, dict):
-        return ""
-    name = doc.get("pvcName", "")
-    return name if isinstance(name, str) else ""
-
-
-def completed_backup_records(backups: list[dict]) -> list[dict]:
-    """Every Completed Backup CR as a record, labelled or not.
+def completed_backup_records(backups: list[dict]) -> list[Backup]:
+    """Every Completed Backup CR, labelled or not.
 
     A backup with no name or no `.status.volumeName` is dropped for the same reason
     `classify_backups` drops it: an empty volume name is never in `existing_volumes`, so it
@@ -78,21 +55,16 @@ def completed_backup_records(backups: list[dict]) -> list[dict]:
     matters too — Longhorn's `retain` never prunes an Error backup, so those are the strays
     reaper's own path, not a mode's.
     """
-    records = []
-    for item in backups:
-        backup = logic.longhorn_backups.from_item(item)
-        if not backup.name or not backup.volume or not backup.is_completed:
-            continue
-        records.append(
-            {
-                "name": backup.name,
-                "vol": backup.volume,
-                "created": backup.created,
-                "job": backup.job,
-                "claim": backup_claim(item),
-            }
-        )
-    return records
+    return [
+        b
+        for b in logic.longhorn_backups.from_items(backups)
+        if b.name and b.volume and b.is_completed
+    ]
+
+
+def _row(backup: Backup) -> tuple[str, str, str, str]:
+    """The (name, volume, created, job) row `logic.print_bucket` prints."""
+    return backup.name, backup.volume, backup.created, backup.job
 
 
 def claim_volume(pvcs: list[dict], claim: str, namespace: str) -> tuple[str, str]:
@@ -156,24 +128,12 @@ def select_migrated_chain(
        data. Deleting it then leaves the service with no recovery point at all.
     """
     records = completed_backup_records(backups)
+    stranded = [
+        b for b in records if b.claim == claim and b.volume not in existing_volumes
+    ]
     result = ChainSelection(
-        stranded=[
-            (r["name"], r["vol"], r["created"], r["job"])
-            for r in logic.newest_first(
-                [
-                    r
-                    for r in records
-                    if r["claim"] == claim and r["vol"] not in existing_volumes
-                ],
-                "vol",
-                "created",
-            )
-        ],
-        current=[
-            (r["name"], r["vol"], r["created"], r["job"])
-            for r in records
-            if r["vol"] == current_volume
-        ],
+        stranded=[_row(b) for b in logic.newest_first(stranded)],
+        current=[_row(b) for b in records if b.volume == current_volume],
     )
     if current_volume not in existing_volumes:
         result.refusal = (
@@ -240,7 +200,7 @@ def select_seeds(
             "deleted."
         )
         return result
-    if claim and not any(r["claim"] == claim for r in records):
+    if claim and not any(b.claim == claim for b in records):
         result.refusal = (
             "ABORT: no Completed backup records the PVC %s, so narrowing to it selects nothing "
             "and an empty plan would read as 'already retired'. Check the claim name — the mode "
@@ -250,19 +210,19 @@ def select_seeds(
         return result
 
     rotation_count: dict[str, int] = {}
-    for r in records:
-        if r["job"]:
-            rotation_count[r["vol"]] = rotation_count.get(r["vol"], 0) + 1
+    for b in records:
+        if b.job:
+            rotation_count[b.volume] = rotation_count.get(b.volume, 0) + 1
 
     seeds = [
-        r
-        for r in records
-        if r["name"].startswith(SEED_NAME_PREFIX)
-        and not r["job"]
-        and (not claim or r["claim"] == claim)
+        b
+        for b in records
+        if b.name.startswith(SEED_NAME_PREFIX)
+        and not b.job
+        and (not claim or b.claim == claim)
     ]
-    for r in logic.newest_first(seeds, "vol", "created"):
-        name, vol = r["name"], r["vol"]
+    for b in logic.newest_first(seeds):
+        name, vol = b.name, b.volume
         if vol not in existing_volumes:
             result.kept.append(
                 (name, vol, "volume no longer exists — the migrated-chain mode owns it")
@@ -279,5 +239,5 @@ def select_seeds(
                 )
             )
             continue
-        result.superseded.append((name, vol, r["created"], r["job"]))
+        result.superseded.append(_row(b))
     return result
