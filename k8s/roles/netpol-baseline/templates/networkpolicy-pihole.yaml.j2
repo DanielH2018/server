@@ -40,7 +40,7 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # The admin UI, fenced to Traefik, the homepage widget and the metrics exporter.
+    # The admin UI and API, fenced to the callers below.
     #
     # pihole-exporter polls the v6 admin API on this same port — Pi-hole serves no separate
     # metrics endpoint — and it polls BOTH instances, which is why this policy's `app: pihole`
@@ -48,7 +48,13 @@ spec:
     #
     # pihole-gravity is pihole's gravity reconcile Job, which writes the declared blocklists
     # through the same API on both instances (pihole/templates/verify-inert/gravity.yaml.j2).
+    #
+    # airflow-task is the warehouse's dns_daily_rollup, which reads both instances' query
+    # databases through the same API (airflow/files/dags/homelab_warehouse/dns_history.py).
     - from:
+        - podSelector:
+            matchLabels:
+              app: airflow-task
         - podSelector:
             matchLabels:
               app: traefik

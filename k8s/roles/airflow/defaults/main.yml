@@ -99,6 +99,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/backup_spend.py') }}": backup_spend.py
       "{{ role_file('files/dags/smart_daily_rollup.py') }}": smart_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/smart_history.py') }}": smart_history.py
+      "{{ role_file('files/dags/dns_daily_rollup.py') }}": dns_daily_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/dns_history.py') }}": dns_history.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 

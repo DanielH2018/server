@@ -55,6 +55,9 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
   `pihole-env`, or moving the password to another key, needs the same edit in that
   declaration; `k8s/roles/pihole-exporter/CLAUDE.md` names the test that refuses a
   drift.
+- **Airflow's `dns_daily_rollup` reads the same key by name**
+  (`k8s/roles/airflow/files/dags/dns_daily_rollup.py:PIHOLE_PASSWORD`). Its task pods start
+  fresh each night, so a rotation needs no restart there, but a rename needs that edit too.
 - **`pihole_k8s_dns_cluster_ip` is a pinned ClusterIP**, immutable once bound — cluster DNS
   forwards there rather than to the LAN VIP, since the VIP is subject to
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.

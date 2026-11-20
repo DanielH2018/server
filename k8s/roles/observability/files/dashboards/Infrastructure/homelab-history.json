@@ -1251,6 +1251,116 @@
       ],
       "title": "Disk data written per day",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Queries both Pi-hole instances answered, split into permitted and blocked.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 105
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, 'permitted' AS metric, sum(n) FILTER (WHERE key = 'queries') - sum(n) FILTER (WHERE key = 'blocked') AS value FROM dns.counts_daily WHERE kind = 'total' AND $__timeFilter(day) GROUP BY 1 UNION ALL SELECT day::timestamptz, 'blocked', sum(n) FROM dns.counts_daily WHERE kind = 'total' AND key = 'blocked' AND $__timeFilter(day) GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "DNS queries per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Queries each client sent to both instances, for the ten busiest clients over the time range. A client is named by its hostname where Pi-hole knows one.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 105
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH c AS (SELECT day, CASE label WHEN '' THEN key ELSE label END AS client, sum(n) AS n FROM dns.counts_daily WHERE kind = 'client' AND $__timeFilter(day) GROUP BY 1, 2), top AS (SELECT client FROM c GROUP BY client ORDER BY sum(n) DESC LIMIT 10) SELECT day::timestamptz AS time, client AS metric, n AS value FROM c WHERE client IN (SELECT client FROM top) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "DNS queries per client per day",
+      "type": "barchart"
     }
   ],
   "refresh": "",
