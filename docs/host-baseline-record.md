@@ -326,7 +326,7 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
   `evals/trend.py:classify` decides what counts: a miss after a stable run, or a second miss in
   a row. A single miss after a mixed window is FLAKY, lands in the PR body, and keeps the verdict UP,
   because at k=3 one unlucky trial misses a 2/3 threshold (#5796).
-- **Before widening scope** (grading `run-live.mjs`, changing cadence, adding a case directory
+- **Before widening scope** (grading the engine's live-smoke path, changing cadence, adding a case directory
   the loop should skip), read the last few PRs this cron opened (`evals-history/*`,
   squash-merged) for what actually regressed or flaked.
 
