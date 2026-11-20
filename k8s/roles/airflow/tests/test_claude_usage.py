@@ -27,7 +27,7 @@ def recorded(name: str) -> list[dict]:
 
 def cost_rows(baselines=None) -> dict[tuple, float]:
     if baselines is None:
-        baselines = cu.baselines_by_series(recorded("cost-baseline"))
+        baselines = pr.baselines_by_series(recorded("cost-baseline"))
     rows = cu.usage_rows(COST, WINDOW, recorded("cost"), baselines)
     return {row[2:5]: row[6] for row in rows}
 
@@ -68,7 +68,7 @@ def test_a_session_with_no_baseline_would_count_its_earlier_days_again():
 
 
 def test_a_counter_that_drops_counts_up_again_from_zero():
-    assert cu.series_increase(series(5, 7, 1, 3), baseline=5) == 2 + 1 + 2
+    assert pr.series_increase(series(5, 7, 1, 3), baseline=5) == 2 + 1 + 2
 
 
 def test_the_queries_merge_a_restarted_collectors_series_into_one_per_session():
