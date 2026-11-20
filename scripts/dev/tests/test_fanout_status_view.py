@@ -16,13 +16,19 @@ PR = "https://github.com/o/r/pull/9"
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 
-def _row(batch, state, pr_url="", text=""):
+def _row(batch, state, pr_url="", text="", unconfirmed=False):
     line = f"{batch} on daniel-box: {state}"
     if pr_url:
         line += f" {pr_url}"
     if text:
         line += f" {text}"
-    return {"batch": batch, "state": state, "pr_url": pr_url, "line": line}
+    return {
+        "batch": batch,
+        "state": state,
+        "pr_url": pr_url,
+        "line": line,
+        "pr_unconfirmed": unconfirmed,
+    }
 
 
 ROWS = [
@@ -66,6 +72,43 @@ def test_status_json_still_returns_every_row(tmp_path, capsys):
     argv = ["status", "20260101T000010Z", "--json", "--manifest-root", str(tmp_path)]
     assert main(argv, tools) == 0
     assert [r["state"] for r in json.loads(capsys.readouterr().out)] == ["cleaned"]
+
+
+# A batch on the landing host that opened its PR and whose land log holds a verdict.
+DONE = (
+    "=== 1\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    + json.dumps({"type": "result", "result": f"Opened {PR}."})
+    + "\n--- verdict\nVERDICT: settled\n"
+)
+
+
+def test_status_keeps_a_done_batch_and_its_url_when_github_cannot_be_asked(
+    tmp_path, capsys
+):
+    done = Batch("1", "daniel-box", "/w1", "b1", "u1", [1], "t")
+    save(Manifest("20260101T000011Z", "o", [done]), root=tmp_path)
+    tools, _ = fake_tools(answers={"daniel-box": ok(DONE)}, branch_prs={"b1": None})
+    argv = ["status", "20260101T000011Z", "--json", "--manifest-root", str(tmp_path)]
+    assert main(argv, tools) == 0
+    [row] = json.loads(capsys.readouterr().out)
+    assert (row["state"], row["pr_url"], row["pr_unconfirmed"]) == ("done", PR, True)
+
+
+def test_status_names_the_batches_github_could_not_be_asked_about_once():
+    rows = [
+        _row("3", "running"),
+        _row("4", "done", PR, unconfirmed=True),
+        _row("6", "done", PR, unconfirmed=True),
+    ]
+    count, *batches = status_lines(rows, show_all=False)
+    counts, _, note = count.partition("; ")
+    assert counts == "1 running, 2 done"
+    assert "4, 6" in note
+    assert batches == [
+        "3 on daniel-box: running",
+        f"4 on daniel-box: done {PR}",
+        f"6 on daniel-box: done {PR}",
+    ]
 
 
 def _runs():

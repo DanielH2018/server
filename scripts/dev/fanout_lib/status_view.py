@@ -40,10 +40,16 @@ def status_lines(rows: Iterable[dict], show_all: bool) -> list[str]:
     Returns:
         The lines to print. A `done` batch shows as its PR URL without the agent's final
         text. Every other unsettled state keeps its full line, which the orchestrator
-        acts on.
+        acts on. The count line names each batch GitHub could not be asked about.
     """
     rows = list(rows)
     lines = [count_line(r["state"] for r in rows)]
+    unconfirmed = [r["batch"] for r in rows if r["pr_unconfirmed"]]
+    if unconfirmed:
+        lines[0] += (
+            f"; GitHub could not be asked for the PR of {', '.join(unconfirmed)}, "
+            "read from the final text instead"
+        )
     for r in rows:
         if show_all:
             lines.append(r["line"])
