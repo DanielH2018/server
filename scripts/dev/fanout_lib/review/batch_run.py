@@ -6,7 +6,6 @@ module defines, so none of them imports the pipeline that calls it.
 """
 
 import json
-import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -27,7 +26,7 @@ from dev.fanout_lib.review.held_hooks import (
     with_batch_env,
     write_hooks,
 )
-from dev.fanout_lib.review.processes import otel_attributes, run_process
+from dev.fanout_lib.review.processes import Runner, otel_attributes, run_process
 from dev.fanout_lib.review.review_prompts import (
     FINDINGS_SCHEMA,
     anti_patterns,
@@ -48,7 +47,6 @@ OWN_COPY = Path(".fanout") / "stop-hook"
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 
 # One process boundary for claude, git and gh: argv and stdin in, the finished process out.
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 class BatchRun:

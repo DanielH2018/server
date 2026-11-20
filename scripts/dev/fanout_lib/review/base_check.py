@@ -24,7 +24,6 @@ from pathlib import Path, PurePosixPath
 
 from dev.fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
-    Runner,
     bare_git,
     clone_at,
     collect,
@@ -32,6 +31,7 @@ from dev.fanout_lib.review.hardened_runs import (
     pytest_argv,
     worktree_git,
 )
+from dev.fanout_lib.review.processes import Runner
 
 
 @dataclass
