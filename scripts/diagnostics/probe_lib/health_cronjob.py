@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 
 from diagnostics.probe_lib.health_rollout import seconds_since
+from lib.k8s_objects import ConditionStatus, parse_conditions
 
 # RBAC decides which of two paths this gate can take: trigger a fresh run itself, or fall back
 # to reading the most recent existing run.
@@ -177,17 +178,19 @@ def _flux_revision_failure(name, job_name, revision):
 def _job_outcome(job):
     """'succeeded', 'failed' or 'running' for a Job, read from its status.
 
-    `status.conditions` is the documented source (`Complete`/`Failed`, both `status: "True"`
-    once set), but `status.succeeded`/`status.failed` are populated first and conditions can
+    `status.conditions` is the documented source (`Complete`/`Failed`, each true once
+    set), but `status.succeeded`/`status.failed` are populated first and conditions can
     lag a beat behind them — so both are checked and either is enough.
     """
     status = (job or {}).get("status") or {}
-    conditions = {
-        c.get("type"): c.get("status") for c in status.get("conditions") or []
+    true = {
+        kind
+        for kind, cond in parse_conditions(job or {}).items()
+        if cond.status is ConditionStatus.TRUE
     }
-    if conditions.get("Complete") == "True" or status.get("succeeded", 0) >= 1:
+    if "Complete" in true or status.get("succeeded", 0) >= 1:
         return "succeeded"
-    if conditions.get("Failed") == "True" or status.get("failed", 0) >= 1:
+    if "Failed" in true or status.get("failed", 0) >= 1:
         return "failed"
     return "running"
 

@@ -15,6 +15,7 @@ from infra_map.constants import HOST_PLANE, LOCAL_TIMEOUT, SSH_TIMEOUT
 # KUBECONFIG, so k3s falls back to the root-owned kubeconfig and returns nothing. The same
 # `find_tool` covers docker and ssh below.
 from lib import kubectl as kubectl_lib
+from lib.k8s_objects import ConditionStatus, parse_conditions
 from lib.kubectl import MissingKubectl, WrongCluster, cluster_for_host, find_tool
 
 
@@ -202,10 +203,6 @@ def parse_kubectl_nodes(payload: str) -> dict[str, dict]:
         name = meta.get("name")
         if not name:
             continue
-        conditions = {
-            c.get("type"): c.get("status")
-            for c in item.get("status", {}).get("conditions", [])
-        }
         # A label key is `<group>/<name>`, so compare the group exactly rather than testing
         # the key for a `<group>/` prefix. Identical for well-formed keys, and CodeQL reads a
         # prefix test against a dotted string as URL-host sanitization (py/incomplete-url-
@@ -222,8 +219,9 @@ def parse_kubectl_nodes(payload: str) -> dict[str, dict]:
             for a in item.get("status", {}).get("addresses", [])
         }
         node_info = item.get("status", {}).get("nodeInfo", {})
+        ready = parse_conditions(item).get("Ready")
         nodes[name] = {
-            "ready": conditions.get("Ready") == "True",
+            "ready": ready is not None and ready.status is ConditionStatus.TRUE,
             "roles": roles,
             "ip": addresses.get("InternalIP", ""),
             "version": node_info.get("kubeletVersion", ""),

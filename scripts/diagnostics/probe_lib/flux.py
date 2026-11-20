@@ -39,12 +39,12 @@ from dataclasses import dataclass
 
 from deploy_tools.kustomizations import (
     REVISION,
-    is_ready,
     kustomization_name,
     origin_commit,
 )
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.git import git
+from lib.k8s_objects import Condition, ConditionStatus, parse_conditions
 from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, kubectl_argv, kubectl_json
 
 FLUX_NAMESPACE = "flux-system"
@@ -99,7 +99,7 @@ class Row:
 
     Attributes:
         name: `metadata.name`.
-        ready: the Ready condition's status, `True`, `False` or `Unknown` (also when absent).
+        ready: the Ready condition's status; `UNKNOWN` also when the condition is absent.
         reason: the Ready condition's reason, or '' when absent.
         message: the Ready condition's message, or ''.
         applied: the commit `lastAppliedOriginRevision` names, or None.
@@ -113,7 +113,7 @@ class Row:
     """
 
     name: str
-    ready: str
+    ready: ConditionStatus
     reason: str
     message: str
     applied: str | None
@@ -128,20 +128,14 @@ class Row:
     def settled(self) -> bool:
         """Ready, not suspended, and applied the commit its source serves."""
         return (
-            self.ready == "True"
+            self.ready is ConditionStatus.TRUE
             and not self.suspended
             and self.applied is not None
             and self.applied == self.served
         )
 
 
-def _ready_condition(item: dict) -> dict:
-    status = item.get("status")
-    conditions = status.get("conditions") if isinstance(status, dict) else None
-    for condition in conditions if isinstance(conditions, list) else []:
-        if isinstance(condition, dict) and condition.get("type") == "Ready":
-            return condition
-    return {}
+NO_CONDITION = Condition(ConditionStatus.UNKNOWN, "", "", "")
 
 
 def served(ocirepository: dict | None) -> tuple[str | None, str]:
@@ -165,7 +159,7 @@ def _dict(value) -> dict:
 
 def row(item: dict, sources: dict[str, dict]) -> Row:
     """The `Row` of Kustomization `item`, judged against the sources by name."""
-    condition = _ready_condition(item)
+    condition = parse_conditions(item).get("Ready", NO_CONDITION)
     spec = _dict(item.get("spec"))
     status = _dict(item.get("status"))
     metadata = _dict(item.get("metadata"))
@@ -181,9 +175,9 @@ def row(item: dict, sources: dict[str, dict]) -> Row:
     )
     return Row(
         name=kustomization_name(item),
-        ready="True" if is_ready(item) else str(condition.get("status") or "Unknown"),
-        reason=str(condition.get("reason") or ""),
-        message=str(condition.get("message") or ""),
+        ready=condition.status,
+        reason=condition.reason,
+        message=condition.message,
         applied=origin_commit(item),
         source=source,
         served=commit,
@@ -266,7 +260,7 @@ def failed_dependency(rows: dict[str, Row], name: str, seen=frozenset()) -> str 
     """
     for dep in rows[name].depends_on:
         d = rows.get(dep)
-        if d is None or dep in seen or d.ready == "True":
+        if d is None or dep in seen or d.ready is ConditionStatus.TRUE:
             continue
         if d.reason not in NOT_YET_REASONS:
             return dep
@@ -339,9 +333,9 @@ def format_flux(
             problems.append(
                 f"{name}: Ready={r.ready} {r.reason}: dependency {dep} failed"
             )
-        elif r.ready != "True" and r.reason in NOT_YET_REASONS:
+        elif r.ready is not ConditionStatus.TRUE and r.reason in NOT_YET_REASONS:
             pending.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
-        elif r.ready != "True":
+        elif r.ready is not ConditionStatus.TRUE:
             problems.append(f"{name}: Ready={r.ready} {r.reason}: {r.message[:200]}")
         else:
             problems.append(
@@ -442,7 +436,7 @@ def wait_state(
         at_want = r.applied is not None and (
             r.applied.startswith(want) or contains(r.applied, want)
         )
-    if r.observed and r.ready == "True" and at_want:
+    if r.observed and r.ready is ConditionStatus.TRUE and at_want:
         return {
             "state": "ready",
             "detail": f"{name} is Ready at {_short(r.applied)}, which holds {_short(want)}",
@@ -450,7 +444,7 @@ def wait_state(
     source_at_want = r.served is not None and r.served.startswith(want)
     if (
         r.observed
-        and r.ready == "False"
+        and r.ready is ConditionStatus.FALSE
         and r.reason not in NOT_YET_REASONS
         and source_at_want
         and r.attempted_served
@@ -462,7 +456,7 @@ def wait_state(
     dep = (
         failed_dependency(rows, name)
         if r.observed
-        and r.ready == "False"
+        and r.ready is ConditionStatus.FALSE
         and r.reason == "DependencyNotReady"
         and source_at_want
         else None

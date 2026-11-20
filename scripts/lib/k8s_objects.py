@@ -38,11 +38,19 @@ class ConditionStatus(StrEnum):
 
 @dataclass(frozen=True)
 class Condition:
-    """One entry of `.status.conditions`, without its `type`, which keys it."""
+    """One entry of `.status.conditions`, without its `type`, which keys it.
+
+    Attributes:
+        status: `status`.
+        reason: `reason`, or "".
+        message: `message`, or "".
+        last_transition: `lastTransitionTime`, unparsed RFC3339, or "".
+    """
 
     status: ConditionStatus
     reason: str
     message: str
+    last_transition: str
 
 
 def parse_conditions(item: Mapping) -> dict[str, Condition]:
@@ -61,6 +69,7 @@ def parse_conditions(item: Mapping) -> dict[str, Condition]:
                 status=ConditionStatus(raw.get("status")),
                 reason=str(raw.get("reason") or ""),
                 message=str(raw.get("message") or ""),
+                last_transition=str(raw.get("lastTransitionTime") or ""),
             ),
         )
     return conditions
