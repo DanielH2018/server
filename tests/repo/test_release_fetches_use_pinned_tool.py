@@ -4,9 +4,11 @@ The action restores the asset from an actions/cache keyed on the tool, version a
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
 problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
-a third-party installer action. An exempt fetch in a job that checks out nothing is held to the
-action's own cache, retry and digest shape. A script a step runs is out of scope: its downloads are held to a
-cache by tests/repo/test_ci_release_downloads_are_cached.py.
+a download from any other host, which reads as that host
+(`_release_fetch_census.py` says which invocations count), and so is
+a third-party installer action. Every exempt fetch is held to the action's own cache, retry and
+digest shape. A script a step runs is out of scope: the `a-downloading-script-runs-after-its-cache`
+row of the workflow-row table holds its downloads to a cache.
 
 Run: uv run pytest tests/repo/test_release_fetches_use_pinned_tool.py
 """
@@ -16,22 +18,13 @@ import re
 
 import pytest
 from _helpers import REPO
+from _release_fetch_census import UNRESOLVED, release_fetches
 from homelab_tool_fetch import TOOL_RETRY_WINDOW_S
 from lib import yaml_fast
 
 ACTION = ".github/actions/pinned-tool/action.yml"
 USES = "$/.github/actions/pinned-tool"
-# A path segment; a `${{ … }}` expression counts as one, spaces and all.
-SEGMENT = r"(?:\$\{\{[^}]*\}\}|[^\s\"'/])+"
-RELEASE = re.compile(
-    rf"github\.com/({SEGMENT}(?:/{SEGMENT})?)/releases/(?:latest/)?download\b"
-)
-# The repo a fetch whose text names no literal repo reads as; no EXEMPT row can name it.
-UNRESOLVED = "<no literal repo>"
 FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re.M)
-GH_RELEASE = re.compile(r"\bgh release download\b[^\n]*")
-# A literal repo after -R or --repo; an invocation without one reads as UNRESOLVED.
-GH_REPO = re.compile(r"(?:-R|--repo)[ =][\"']?([\w.-]+/[\w.-]+)[\"']?(?=[\s;&|)]|$)")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 INSTALLER = re.compile(r"setup-|install|/action@|-action@")
 
@@ -44,6 +37,7 @@ GITLEAKS = (
 )
 FLUX = "fluxcd/flux2"
 COSIGN = "sigstore/cosign"
+GITLEAKS_REPO = "gitleaks/gitleaks"
 # (file, job, release repo) -> why that inline fetch stays. `test_every_exemption_still_fetches`
 # fails on a row whose job no longer fetches that repo.
 EXEMPT = {
@@ -53,12 +47,17 @@ EXEMPT = {
     ("promote.yml", "settle", FLUX): NO_CHECKOUT,
     ("promote.yml", "reconcile", FLUX): NO_CHECKOUT,
     ("promote.yml", "reset-move", FLUX): NO_CHECKOUT,
-    ("ci.yml", "host_packages_build", "gitleaks/gitleaks"): GITLEAKS,
-    ("promote.yml", "render", "gitleaks/gitleaks"): GITLEAKS,
+    ("ci.yml", "host_packages_build", GITLEAKS_REPO): GITLEAKS,
+    ("promote.yml", "render", GITLEAKS_REPO): GITLEAKS,
 }
 # release repo -> the tool name an inline fetch's `pinned/<tool>` path and `<TOOL>_*` pins use.
-INLINE_TOOLS = {FLUX: "flux", COSIGN: "cosign"}
-NO_CHECKOUT_FETCHES = sorted(k for k, why in EXEMPT.items() if why == NO_CHECKOUT)
+INLINE_TOOLS = {FLUX: "flux", COSIGN: "cosign", GITLEAKS_REPO: "gitleaks"}
+# file -> the pin the gitleaks cache key reads: prek.toml's rev in ci.yml, the URL in promote.yml.
+GITLEAKS_PINS = {
+    "ci.yml": "steps.gitleaks.outputs.version",
+    "promote.yml": "env.GITLEAKS_URL",
+}
+GITLEAKS_DIGEST = r"sha256sum -c --ignore-missing --strict checksums\.txt"
 # installer action -> why it stays.
 INSTALLERS = {
     "astral-sh/setup-uv": "fetches uv into its own cache keyed on uv.lock",
@@ -105,36 +104,6 @@ def _action_steps() -> list[dict]:
     ]
 
 
-def _fetched_repos(step: dict, context: str) -> set[str]:
-    """The release repos a step's curl, wget or `gh release download` fetches from.
-
-    A step naming no release URL itself reads the URL its job or workflow env holds.
-    """
-    run = str(step.get("run", ""))
-    if not FETCH.search(run):
-        return set()
-    own = set(RELEASE.findall(run + str(step.get("env") or "")))
-    gh = {
-        m[1] if (m := GH_REPO.search(c)) else UNRESOLVED
-        for c in GH_RELEASE.findall(run)
-    }
-    repos = own | gh or set(RELEASE.findall(context))
-    return {UNRESOLVED if "$" in r or "{" in r else r for r in repos}
-
-
-def release_fetches(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
-    """Every (file, job, release repo) a step outside pinned-tool fetches inline."""
-    return {
-        (name, job_name, repo)
-        for name, workflow in sources.items()
-        for job_name, job in (workflow.get("jobs") or {}).items()
-        for step in job.get("steps") or []
-        for repo in _fetched_repos(
-            step, str(workflow.get("env") or "") + str(job.get("env") or "")
-        )
-    }
-
-
 def installer_uses(sources: dict[str, dict]) -> set[str]:
     """Every third-party installer action a step runs, by name without its ref."""
     return {
@@ -161,14 +130,14 @@ def callers(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
 def fetch_problems(
     steps: list[dict],
     pins: tuple[str, ...] = ("inputs.tool", "inputs.version", "inputs.sha256"),
-    digest: str = "SHA256",
+    digest: str = r"\$SHA256 .*\| sha256sum -c --strict",
 ) -> list[str]:
     """What a cache step and the fetch step after it lack of a cached, retried, checked fetch.
 
     Args:
         steps: The steps of one tool's fetch, the action's by default.
         pins: The expressions the cache key must read.
-        digest: The shell variable holding the sha256 the fetch checks the download against.
+        digest: The pattern of the line that checks the download's sha256.
     """
     found = []
     cache = next(
@@ -199,22 +168,26 @@ def fetch_problems(
                 found.append(f"curl retries only some errors: {text}")
             elif int(m[1]) * int(m[2]) < TOOL_RETRY_WINDOW_S:
                 found.append(f"curl retries for under {TOOL_RETRY_WINDOW_S}s: {text}")
-    if not re.search(rf"\${digest} .*\| sha256sum -c --strict", run):
-        found.append(f"the fetch does not check the download against ${digest}")
+    if not re.search(digest, run):
+        found.append("the fetch does not check the download's sha256")
     return found
 
 
-def inline_problems(workflow: dict, job: str, repo: str) -> list[str]:
+def inline_problems(workflow: dict, file: str, job: str, repo: str) -> list[str]:
     """What a job's inline fetch from `repo` lacks of the action's cache, retry and digest check."""
     tool = INLINE_TOOLS[repo]
-    pin = tool.upper()
     steps = [
         s
         for s in workflow["jobs"][job]["steps"]
         if f"pinned/{tool}" in str(s.get("run", "")) + str(s.get("with", ""))
     ]
+    if repo == GITLEAKS_REPO:
+        return fetch_problems(steps, (GITLEAKS_PINS[file],), GITLEAKS_DIGEST)
+    pin = tool.upper()
     return fetch_problems(
-        steps, (f"env.{pin}_VERSION", f"env.{pin}_SHA256"), f"{pin}_SHA256"
+        steps,
+        (f"env.{pin}_VERSION", f"env.{pin}_SHA256"),
+        rf"\${pin}_SHA256 .*\| sha256sum -c --strict",
     )
 
 
@@ -227,9 +200,9 @@ def test_the_action_fetches_from_a_pinned_cache_with_a_retried_digest_checked_cu
     assert fetch_problems(_action_steps()) == []
 
 
-@pytest.mark.parametrize(("file", "job", "repo"), NO_CHECKOUT_FETCHES)
-def test_an_inline_fetch_without_a_checkout_has_the_actions_shape(file, job, repo):
-    assert inline_problems(_sources()[file], job, repo) == []
+@pytest.mark.parametrize(("file", "job", "repo"), sorted(EXEMPT))
+def test_an_exempt_inline_fetch_has_the_actions_shape(file, job, repo):
+    assert inline_problems(_sources()[file], file, job, repo) == []
 
 
 def test_the_census_finds_the_known_callers():
@@ -306,6 +279,7 @@ NFPM = "goreleaser/nfpm"
         ('gh release download v1 --repo "${{ env.REPO }}" -p x', UNRESOLVED),
         ('gh release download v1 -R "$REPO" -p x', UNRESOLVED),
         ("gh release download v1 -p x", UNRESOLVED),
+        (f"curl -fsSL {NFPM_URL} -o tool 2>/dev/null", NFPM),
     ],
 )
 def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
@@ -315,6 +289,95 @@ def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
     )
     assert release_fetches(sources) - set(EXEMPT) == {
         ("ci.yml", "host_packages_build", repo)
+    }
+
+
+@pytest.mark.parametrize(
+    ("run", "host"),
+    [
+        (
+            "curl -fsSLo /tmp/helm.tgz https://get.helm.sh/helm-v3.16.0.tgz",
+            "get.helm.sh",
+        ),
+        ("curl -fsSL -O https://dl.k8s.io/release/v1.31.0/bin/kubectl", "dl.k8s.io"),
+        (
+            "curl -fsSL --output a.zip https://github.com/o/r/archive/refs/tags/v1.zip",
+            "github.com",
+        ),
+        (
+            "curl -fsSL \\\n  -o f https://objects.githubusercontent.com/x",
+            "objects.githubusercontent.com",
+        ),
+        ("wget -q https://get.helm.sh/helm.tgz", "get.helm.sh"),
+        ('curl -fsSLo f "$URL"', UNRESOLVED),
+        (
+            "curl -fsSL https://get.helm.sh/h.tgz | tar -xz -C /usr/local/bin",
+            "get.helm.sh",
+        ),
+        ("curl -fsSL https://get.helm.sh/h.tgz > /tmp/h.tgz", "get.helm.sh"),
+        ("timeout 60 curl -fsSLo /tmp/k https://dl.k8s.io/k", "dl.k8s.io"),
+        ("if curl -fsSLo /tmp/k https://dl.k8s.io/k; then true; fi", "dl.k8s.io"),
+        ('u=https://dl.k8s.io/k\ncurl -fsSLo f "$u"', "dl.k8s.io"),
+        ("curl -fsSL -o f https://get.helm.sh/h.tgz 2> /dev/null", "get.helm.sh"),
+        ("curl -fsSLo f https://get.helm.sh/h.tgz > /dev/null", "get.helm.sh"),
+        (
+            "curl -fsSL https://get.helm.sh/h.tgz | tar -xz > /dev/null",
+            "get.helm.sh",
+        ),
+        (
+            "curl -fsSLo f https://get.helm.sh/h.tgz; tar -xz f > /dev/null",
+            "get.helm.sh",
+        ),
+    ],
+)
+def test_a_download_from_another_host_is_flagged(run, host):
+    sources = copy.deepcopy(_sources())
+    sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
+        {"run": run + "\n"}
+    )
+    assert release_fetches(sources) - set(EXEMPT) == {
+        ("ci.yml", "host_packages_build", host)
+    }
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        'printf \'%s\' "$auth" | curl -fsS -K - -o "$body" https://ghcr.io/v2/x',
+        "curl -fsS http://127.0.0.1:5010/v2/ > /dev/null 2>&1 && break",
+        "curl -fsS -o /dev/null http://127.0.0.1:5010/v2/",
+        "curl -fsS --output /dev/null https://get.helm.sh/h.tgz 2>&1",
+        "wget -q -O /dev/null https://get.helm.sh/h.tgz",
+        "curl -fsS http://127.0.0.1:5010/v2/ 1>/dev/null",
+        "curl -fsS http://127.0.0.1:5010/v2/ &>/dev/null",
+    ],
+)
+def test_a_curl_that_downloads_nothing_is_not_a_fetch(run):
+    sources = copy.deepcopy(_sources())
+    sources["ci.yml"]["jobs"]["host_packages_build"]["steps"].append(
+        {"run": run + "\n"}
+    )
+    assert release_fetches(sources) - set(EXEMPT) == set()
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [{"run": "curl -fsSLo /tmp/k https://dl.k8s.io/k\n"}],
+        [
+            {
+                "run": 'curl -fsSLo a "${GITLEAKS_URL}checksums.txt"\n'
+                "curl -fsSLo /tmp/k https://dl.k8s.io/k\n"
+            }
+        ],
+    ],
+    ids=["own step", "beside the gitleaks curl"],
+)
+def test_a_download_in_a_job_whose_env_names_a_release_is_flagged(steps):
+    sources = copy.deepcopy(_sources())
+    sources["promote.yml"]["jobs"]["render"]["steps"].extend(steps)
+    assert release_fetches(sources) - set(EXEMPT) == {
+        ("promote.yml", "render", "dl.k8s.io")
     }
 
 
@@ -362,6 +425,36 @@ def test_a_weakened_inline_fetch_is_flagged(old, new, problem):
     text = (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
     assert old in text, old
     found = inline_problems(
-        yaml_fast.safe_load(text.replace(old, new)), "publish", COSIGN
+        yaml_fast.safe_load(text.replace(old, new)), "promote.yml", "publish", COSIGN
+    )
+    assert any(problem in p for p in found), found
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "problem"),
+    [
+        (
+            "-${{ steps.gitleaks.outputs.version }}",
+            "",
+            "the cache key does not read steps.gitleaks.outputs.version",
+        ),
+        ("}}/pinned/gitleaks\n", "}}/elsewhere\n", "no actions/cache step runs before"),
+        (
+            'if [[ -f "$dl/$archive" && -f "$dl/checksums.txt" ]]; then',
+            "if true; then",
+            "outside the cache-miss",
+        ),
+        ("--retry 12", "--retry 3", "curl retries for under"),
+        ("--ignore-missing --strict checksums.txt", "--version", "does not check"),
+    ],
+)
+def test_a_weakened_gitleaks_fetch_is_flagged(old, new, problem):
+    text = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert old in text, old
+    found = inline_problems(
+        yaml_fast.safe_load(text.replace(old, new)),
+        "ci.yml",
+        "host_packages_build",
+        GITLEAKS_REPO,
     )
     assert any(problem in p for p in found), found
