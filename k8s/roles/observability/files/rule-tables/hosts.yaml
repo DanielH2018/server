@@ -73,7 +73,8 @@ groups:
           severity: critical
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} {{ $labels.mountpoint }} is {{ $value | printf \"%.0f\" }}% full."
+          summary: >-
+            {{ $labels.origin }}: {{ $labels.mountpoint }} is {{ $value | printf "%.0f" }}% full.
           description: >-
             {{ $labels.origin }} has its {{ $labels.mountpoint }} filesystem over 90% full. Longhorn
             stops scheduling replicas on a node at 75%. Read `df -h` on the host.
@@ -95,7 +96,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} memory is {{ $value | printf \"%.0f\" }}% used."
+          summary: '{{ $labels.origin }}: memory is {{ $value | printf "%.0f" }}% used.'
           description: >-
             {{ $labels.origin }} has less than 10% of its memory available. Per-container OOM kills
             are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host.
@@ -114,7 +115,8 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: A Claude Code cgroup on {{ $labels.origin }} logged a {{ $labels.event }} memory event.
+          summary: >-
+            {{ $labels.origin }}: a Claude Code cgroup logged a {{ $labels.event }} memory event.
           description: >-
             {{ $labels.origin }}/{{ $labels.cgroup }} had {{ $value | printf "%.0f" }} `{{
             $labels.event }}` memory events in the last 10 minutes. The kernel killed something in
@@ -133,7 +135,9 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }}/{{ $labels.cgroup }} is memory-stalled {{ $value | printf \"%.0f\" }}% of the time."
+          summary: >-
+            {{ $labels.origin }}: {{ $labels.cgroup }} is memory-stalled {{ $value | printf "%.0f"
+            }}% of the time.
           description: >-
             The PSI `full` stall rate of {{ $labels.origin }}/{{ $labels.cgroup }} is over 10% of
             the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which
@@ -174,7 +178,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} reports no {{ $labels.cgroup }} cgroup metrics."
+          summary: '{{ $labels.origin }}: no {{ $labels.cgroup }} cgroup metrics reported.'
           description: >-
             {{ $labels.origin }} is scraped but publishes no claude_cgroup_* series for {{
             $labels.cgroup }}, so that cgroup is not being checked. Read /var/lib/node-exporter-
@@ -240,7 +244,9 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf \"%.1f\" }}C."
+          summary: >-
+            {{ $labels.origin }}: {{ $labels.chip }}/{{ $labels.sensor }} is at {{ $value | printf
+            "%.1f" }}C.
           description: >-
             {{ $labels.origin }} sensor {{ $labels.chip }}/{{ $labels.sensor }} has been at or over
             its limit for an hour. The limit is 90% of the sensor's declared max, else its declared
@@ -261,7 +267,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} publishes no hwmon temperature sensors."
+          summary: '{{ $labels.origin }}: no hwmon temperature sensors published.'
           description: >-
             {{ $labels.origin }} is scraped but its node-exporter publishes no
             node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its
@@ -280,7 +286,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: The kernel is thermally throttling {{ $labels.origin }}'s CPU.
+          summary: '{{ $labels.origin }}: the kernel is thermally throttling the CPU.'
           description: >-
             A Processor cooling device on {{ $labels.origin }} has held a non-zero cur_state for 15
             minutes, so the kernel is throttling the CPU for heat. CFS throttling is
@@ -331,7 +337,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }} publishes no {{ $labels.arm }} series."
+          summary: '{{ $labels.origin }}: no {{ $labels.arm }} series published.'
           description: >-
             {{ $labels.origin }} is scraped but its node-exporter publishes no series for the {{
             $labels.arm }} check, so that check is not looking at the host. Read the matching
@@ -372,7 +378,9 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Only {{ $value | printf "%.0f" }} hosts report series for the {{ $labels.arm }} check, under the floor of ${count_node}.
+          summary: >-
+            observability: only {{ $value | printf "%.0f" }} hosts report series for the {{
+            $labels.arm }} check, under the floor of ${count_node}.
           description: >-
             The {{ $labels.arm }} check reads one series family from every node-exporter and needs
             ${count_node} hosts answering, and {{ $value | printf "%.0f" }} do. The rest are unmonitored, not
@@ -391,7 +399,9 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Only {{ $value | printf "%.0f" }} hosts report temperature sensors, under the floor of ${host_count}.
+          summary: >-
+            observability: only {{ $value | printf "%.0f" }} hosts report temperature sensors, under
+            the floor of ${host_count}.
           description: >-
             The host temperature check needs a non-NVMe hwmon sensor from each of the ${host_count}
             hosts, and {{ $value | printf "%.0f" }} answer. The rest are unmonitored, not cool. Read the
@@ -425,7 +435,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: "{{ $labels.origin }}'s clock is not in sync ({{ $labels.arm }})."
+          summary: '{{ $labels.origin }}: the clock is not in sync ({{ $labels.arm }}).'
           description: >-
             The kernel on {{ $labels.origin }} reports its clock unsynchronised or more than 0.5s
             off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read
@@ -440,7 +450,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s firmware reports undervoltage.
+          summary: '${host}: the firmware reports undervoltage.'
           description: >-
             The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell
             below its critical threshold, which corrupts SD cards and stalls USB devices. Check the
@@ -458,7 +468,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s 5-minute load is {{ $value | printf "%.2f" }} per core.
+          summary: '${host}: the 5-minute load is {{ $value | printf "%.2f" }} per core.'
           description: >-
             ${host} has a 5-minute load average of {{ $value | printf "%.2f" }} per core, over
             1.5. Read `top` on the host for the process behind it.
@@ -472,7 +482,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host} has {{ $value | humanize1024 }}B of memory available.
+          summary: '${host}: {{ $value | humanize1024 }}B of memory available.'
           description: >-
             ${host} can reclaim under 50 MB of memory, and the 456 MB box thrashes
             when that runs out. Read `free -m` and `docker stats` on the host.
@@ -495,7 +505,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s {{ $labels.device }} is {{ $value | printf "%.0f" }}% full.
+          summary: '${host}: {{ $labels.device }} is {{ $value | printf "%.0f" }}% full.'
           description: >-
             The filesystem on {{ $labels.device }} of ${host} is over 90% full.
             A filling SD card is the slow Pi death. Read `df -h` on the host.
@@ -509,7 +519,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host}'s {{ $labels.mountpoint }} is mounted read-only.
+          summary: '${host}: {{ $labels.mountpoint }} is mounted read-only.'
           description: >-
             {{ $labels.mountpoint }} on ${host} is read-only, which is an SD card remounting
             itself after an I/O error. Every other arm stays green through it. A reboot does not
@@ -555,7 +565,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host} publishes no {{ $labels.arm }} series.
+          summary: '${host}: no {{ $labels.arm }} series published.'
           description: >-
             ${host} is scraped but its node-exporter publishes no series for the {{ $labels.arm }}
             arm of the Pi checks, so nothing is watching it. Read the exporter on the host.
@@ -576,7 +586,7 @@ groups:
           severity: warning
           service: ${host}
         annotations:
-          summary: ${host} publishes no undervoltage series.
+          summary: '${host}: no undervoltage series published.'
           description: >-
             ${host} is scraped but its node-exporter publishes no node_hwmon_in_lcrit_alarm_volts
             series, so PiUndervoltage has nothing to read and a latched undervoltage alarm goes
@@ -600,7 +610,10 @@ groups:
           service: nut-exporter
         annotations:
           summary: >-
-            The UPS is on battery{{ with query "max(network_ups_tools_battery_charge)" }}, {{ . | first | value | printf "%.0f" }}% charged{{ end }}{{ with query "max(network_ups_tools_battery_runtime)" }}, about {{ . | first | value | humanizeDuration }} of runtime left{{ end }}.
+            nut-exporter: the UPS is on battery{{ with query "max(network_ups_tools_battery_charge)"
+            }}, {{ . | first | value | printf "%.0f" }}% charged{{ end }}{{ with query
+            "max(network_ups_tools_battery_runtime)" }}, about {{ . | first | value |
+            humanizeDuration }} of runtime left{{ end }}.
           description: >-
             NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying
             the load. Read the UPS on the NUT host.
@@ -618,7 +631,7 @@ groups:
           severity: critical
           service: nut-exporter
         annotations:
-          summary: The UPS battery is at {{ $value | printf "%.0f" }}%.
+          summary: 'nut-exporter: the UPS battery is at {{ $value | printf "%.0f" }}%.'
           description: >-
             The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10
             minutes. Read the UPS on the NUT host.
@@ -636,7 +649,7 @@ groups:
           severity: critical
           service: nut-exporter
         annotations:
-          summary: The UPS has {{ $value | humanizeDuration }} of runtime.
+          summary: 'nut-exporter: the UPS has {{ $value | humanizeDuration }} of runtime.'
           description: >-
             The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for
             10 minutes. The battery has aged. Read the UPS on the NUT host.
@@ -653,7 +666,7 @@ groups:
           severity: critical
           service: nut-exporter
         annotations:
-          summary: The UPS asks for a battery replacement.
+          summary: 'nut-exporter: the UPS asks for a battery replacement.'
           description: >-
             NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs
             replacing. This trips before charge or runtime read low.
@@ -691,7 +704,7 @@ groups:
           severity: critical
           service: nut-exporter
         annotations:
-          summary: The UPS {{ $labels.arm }} series is absent.
+          summary: 'nut-exporter: the UPS {{ $labels.arm }} series is absent.'
           description: >-
             The NUT exporter answers its scrape but publishes no {{ $labels.arm }} series for 10
             minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual

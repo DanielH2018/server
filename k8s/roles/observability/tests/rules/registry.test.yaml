@@ -20,7 +20,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations: &annotations
-              summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
+              summary: 'registry: the ghcr-mirror Deployment has wanted zero replicas for 2 hours.'
               description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1`."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorscaledtozero
 
@@ -90,7 +90,8 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-server cannot pull nut's manifest through its ghcr.io mirror endpoint.
+              summary: >-
+                daniel-server: cannot pull nut's manifest through its ghcr.io mirror endpoint.
               description: "The ghcr-mirror-pull check on daniel-server has failed for 45 minutes: nut's manifest GET via the node's ghcr.io mirror failed, or the probe ConfigMap has no tag. Read the `ghcr-mirror-pull` log of the node-exporter pod on daniel-server, then the ghcr-mirror pod and registries.yaml."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorpullfailed
       - eval_time: 46m
@@ -139,7 +140,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-box's ghcr.io mirror pull check has stopped reporting.
+              summary: 'daniel-box: the ghcr.io mirror pull check has stopped reporting.'
               description: "No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-box."
 
   # No check file on daniel-server at all: the absent arm fires once 3000s pass with no series.
@@ -159,7 +160,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-server's ghcr.io mirror pull check has stopped reporting.
+              summary: 'daniel-server: the ghcr.io mirror pull check has stopped reporting.'
               description: "No ghcr-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's ghcr.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `ghcr-mirror-pull` container on daniel-server."
 
   # daniel-box's docker.io mirror pull fails from minute 0 while daniel-server's passes. It fires
@@ -193,7 +194,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-box cannot pull a manifest through its docker.io mirror endpoint.
+              summary: 'daniel-box: cannot pull a manifest through its docker.io mirror endpoint.'
               description: "The dockerhub-mirror-pull check on daniel-box has failed for 45 minutes: a manifest GET via the node's docker.io mirror failed. Read the `dockerhub-mirror-pull` log of the node-exporter pod on daniel-box, then the dockerhub-mirror pod and registries.yaml."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorpullfailed
       - eval_time: 46m
@@ -230,7 +231,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-server's docker.io mirror pull check has stopped reporting.
+              summary: 'daniel-server: the docker.io mirror pull check has stopped reporting.'
               description: "No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-server's textfile collector, so nothing is watching whether the node's docker.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `dockerhub-mirror-pull` container on daniel-server."
 
   # No docker.io check file on daniel-box at all: the absent arm fires once 3000s pass.
@@ -250,7 +251,7 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: daniel-box's docker.io mirror pull check has stopped reporting.
+              summary: 'daniel-box: the docker.io mirror pull check has stopped reporting.'
               description: "No dockerhub-mirror-pull verdict newer than 50 minutes reached Prometheus from daniel-box's textfile collector, so nothing is watching whether the node's docker.io mirror endpoint serves pulls. Read the log of the node-exporter pod's `dockerhub-mirror-pull` container on daniel-box."
 
   # A run killed during the dockerhub-mirror's phase leaves it at zero; the ghcr-mirror serves.
@@ -281,7 +282,8 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
+              summary: >-
+                registry: the dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
               description: "homelab/dockerhub-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/dockerhub-mirror --replicas=1`."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorscaledtozero
 
@@ -317,5 +319,5 @@ tests:
               service: registry
               severity: warning
             exp_annotations:
-              summary: The weekly registry garbage collection did not complete.
+              summary: 'registry: the weekly garbage collection did not complete.'
               description: "registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another run held the lock. Run `journalctl -t registry-gc` on daniel-box, then read the registry-gc-* Job logs and the two mirror Deployments."

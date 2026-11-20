@@ -1,12 +1,12 @@
-**WARNING** daniel-box's weekly rkhunter scan warned or did not complete.
+**WARNING** daniel-box: the weekly rkhunter scan warned or did not complete.
 rkhunter-check.sh on daniel-box ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-box.
 Started <t:1794713400:R>
 
-**WARNING** daniel-pi's weekly rkhunter scan warned or did not complete.
+**WARNING** daniel-pi: the weekly rkhunter scan warned or did not complete.
 rkhunter-check.sh on daniel-pi ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-pi.
 Started <t:1794713400:R>
 
-**WARNING** daniel-server's weekly rkhunter scan warned or did not complete.
+**WARNING** daniel-server: the weekly rkhunter scan warned or did not complete.
 rkhunter-check.sh on daniel-server ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-server.
 Started <t:1794713400:R>
 

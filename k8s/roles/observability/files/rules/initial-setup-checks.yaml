@@ -27,7 +27,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's generated-docs refresh reported a failure.
+          summary: 'daniel-box: the generated-docs refresh reported a failure.'
           description: >-
             docs-refresh.sh on daniel-box ended with status=down: a generator, the shard-weight
             measurement or the site build failed, a previous run is unlanded or left the tree
@@ -45,7 +45,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's generated-docs refresh has stopped reporting.
+          summary: 'daniel-box: the generated-docs refresh has stopped reporting.'
           description: >-
             No docs-refresh verdict newer than 13 hours reached Prometheus from daniel-box's
             textfile collector, so nothing confirms the generated docs are refreshing. Read the
@@ -57,7 +57,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's weekly eval sweep reported a failure.
+          summary: 'daniel-box: the weekly eval sweep reported a failure.'
           description: >-
             eval-run.sh on daniel-box ended with status=down: an eval case regressed, or an
             earlier PR is unlanded for a reason that needs a human. A missing anthropic_api_key
@@ -74,7 +74,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's weekly eval sweep has stopped reporting.
+          summary: 'daniel-box: the weekly eval sweep has stopped reporting.'
           description: >-
             No eval-run verdict newer than 7 days 6 hours reached Prometheus from daniel-box's textfile
             collector, so nothing confirms the eval sweep is running. Read the `Homelab eval
@@ -86,7 +86,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's secret-rotation audit reported a failure.
+          summary: 'daniel-box: the secret-rotation audit reported a failure.'
           description: >-
             secret-rotation-audit.sh on daniel-box exited non-zero: a secret is past its rotation
             window, a secret in secrets.yml is missing from the registry, a registry tier has no
@@ -104,7 +104,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's secret-rotation audit has stopped reporting.
+          summary: 'daniel-box: the secret-rotation audit has stopped reporting.'
           description: >-
             No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
             daniel-box, so nothing confirms secret rotation is being audited. Read `systemctl
@@ -116,7 +116,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The off-site recovery kit is overdue for a refresh.
+          summary: 'daniel-box: the off-site recovery kit is overdue for a refresh.'
           description: >-
             `recovery_kit.py check` on daniel-box found secrets/recovery_kit.yml missing,
             unreadable, future-dated or older than MAX_AGE_DAYS; rerun it to read which. Refresh the kit (docs/longhorn-disaster-recovery.md, The off-site recovery kit), then
@@ -128,7 +128,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box cannot read Loki through the loki-homelab route.
+          summary: 'daniel-box: cannot read Loki through the loki-homelab route.'
           description: >-
             `probe.py loki-labels` through the loki-homelab IngressRoute failed on daniel-box with
             a 404 or an error, usually because the ClientIP guard rejects this host's source
@@ -146,7 +146,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's Loki read-route witness has stopped reporting.
+          summary: 'daniel-box: the Loki read-route witness has stopped reporting.'
           description: >-
             No loki-read-route-health verdict newer than 2 hours reached Prometheus from
             daniel-box, so nothing confirms the Loki read route is being witnessed. Read
@@ -158,7 +158,7 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: daniel-server cannot read Loki through the loki-homelab route.
+          summary: 'daniel-server: cannot read Loki through the loki-homelab route.'
           description: >-
             `probe.py loki-labels` through the loki-homelab IngressRoute failed on daniel-server
             with a 404 or an error, usually because the ClientIP guard rejects this host's source
@@ -176,7 +176,7 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: daniel-server's Loki read-route witness has stopped reporting.
+          summary: 'daniel-server: the Loki read-route witness has stopped reporting.'
           description: >-
             No loki-read-route-health verdict newer than 2 hours reached Prometheus from
             daniel-server, so nothing confirms the Loki read route is being witnessed. Read
@@ -188,7 +188,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's primary checkout sync is refusing to fast-forward.
+          summary: 'daniel-box: the primary checkout sync is refusing to fast-forward.'
           description: >-
             homelab-checkout-sync on daniel-box refused its last run, so the primary checkout is
             not following master. The homelab_checkout_sync_refused metric names the reason; a
@@ -207,7 +207,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: daniel-box's primary checkout sync has stopped reporting.
+          summary: 'daniel-box: the primary checkout sync has stopped reporting.'
           description: >-
             No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box, so
             nothing confirms the primary checkout follows master. A fetch that keeps failing or a

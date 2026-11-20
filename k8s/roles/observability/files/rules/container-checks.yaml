@@ -52,7 +52,9 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} restarted a container more than 3 times in 15 minutes.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.pod }}: restarted a container more than 3 times in 15
+            minutes.
           description: >-
             {{ $labels.pod }} had {{ $value | printf "%.0f" }} container starts in the last 15
             minutes. Read `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}` for the last state.
@@ -83,7 +85,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: A container in {{ $labels.namespace }}/{{ $labels.pod }} was OOM-killed in the last hour.
+          summary: >-
+            {{ $labels.namespace }}/{{ $labels.pod }}: a container was OOM-killed in the last hour.
           description: >-
             {{ $labels.pod }} had an OOM kill within the last hour. Raise the container's memory
             limit in its role, or find the leak.
@@ -135,7 +138,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} is pinned at its CPU limit.
+          summary: '{{ $labels.namespace }}/{{ $labels.pod }}: pinned at its CPU limit.'
           description: >-
             {{ $labels.pod }} had {{ $value | humanizePercentage }} of its CFS periods throttled
             over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it;
@@ -179,7 +182,9 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: cAdvisor covers {{ $value | printf "%.0f" }} pods for the {{ $labels.arm }} check, under the floor of 20.
+          summary: >-
+            observability: cAdvisor covers {{ $value | printf "%.0f" }} pods for the {{ $labels.arm
+            }} check, under the floor of 20.
           description: >-
             The {{ $labels.arm }} check reads a per-pod cAdvisor vector that holds
             {{ $value | printf "%.0f" }} pods where the estate holds about 70 to 100. The

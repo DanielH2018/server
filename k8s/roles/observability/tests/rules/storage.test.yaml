@@ -25,7 +25,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Prometheus has lost Longhorn's scrape job or its volume series.
+              summary: 'longhorn: Prometheus has lost the scrape job or its volume series.'
               description: >-
                 Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
                 the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
@@ -39,8 +39,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: >-
-                Claims reporting kubelet volume stats: 0, below the floor of 32.
+              summary: 'longhorn: 0 claims report kubelet volume stats, below the floor of 32.'
               description: >-
                 Only 0 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -62,7 +61,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Prometheus has lost Longhorn's scrape job or its volume series.
+              summary: 'longhorn: Prometheus has lost the scrape job or its volume series.'
               description: >-
                 Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
                 the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
@@ -114,7 +113,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Longhorn volume degraded-vol is degraded.
+              summary: 'longhorn: volume degraded-vol is degraded.'
               description: >-
                 pvc-aaa (claim degraded-vol) has reported the robustness
                 degraded for 15 minutes. With two replicas, degraded is one copy from data
@@ -128,7 +127,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Longhorn volume odd-vol is rebalancing.
+              summary: 'longhorn: volume odd-vol is rebalancing.'
               description: >-
                 pvc-ddd (claim odd-vol) has reported the robustness
                 rebalancing for 15 minutes. With two replicas, degraded is one copy from data
@@ -177,7 +176,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The claim homelab/full is over 85% full.
+              summary: 'longhorn: the claim homelab/full is over 85% full.'
               description: >-
                 full is 90% full. A claim
                 cannot borrow space, so expand the volume in its role.
@@ -188,7 +187,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The claim homelab/valheim-server is over 85% full.
+              summary: 'longhorn: the claim homelab/valheim-server is over 85% full.'
               description: >-
                 valheim-server is 95% full. A claim
                 cannot borrow space, so expand the volume in its role.
@@ -202,7 +201,9 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The claim homelab/valheim-server has less free space than its largest transient.
+              summary: >-
+                longhorn: the claim homelab/valheim-server has less free space than its largest
+                transient.
               description: >-
                 valheim-server has 1GiB free, under the
                 3 GiB its updater stages before swapping the install in. Expand the volume in its role.
@@ -217,8 +218,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: >-
-                Claims reporting kubelet volume stats: 4, below the floor of 32.
+              summary: 'longhorn: 4 claims report kubelet volume stats, below the floor of 32.'
               description: >-
                 Only 4 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -242,7 +242,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The kubelet reports no free bytes for the claim valheim-server.
+              summary: 'longhorn: the kubelet reports no free bytes for the claim valheim-server.'
               description: >-
                 PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
                 finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
@@ -279,8 +279,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: >-
-                Claims reporting kubelet volume stats: 1, below the floor of 32.
+              summary: 'longhorn: 1 claims report kubelet volume stats, below the floor of 32.'
               description: >-
                 Only 1 claims report kubelet_volume_stats, below the floor
                 of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -316,7 +315,7 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Snapshot space of jellyfin-config is at 90% of its cap.
+              summary: 'longhorn: snapshot space of jellyfin-config is at 90% of its cap.'
               description: >-
                 jellyfin-config holds 15GiB of snapshots against a cap of
                 16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
@@ -356,7 +355,8 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: Longhorn reports no snapshot series for the capped claim jellyfin-config.
+              summary: >-
+                longhorn: no snapshot series is reported for the capped claim jellyfin-config.
               description: >-
                 jellyfin-config declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
                 series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
@@ -386,7 +386,10 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The CSI mount /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount is read-only.
+              summary: >-
+                longhorn: the CSI mount
+                /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount is
+                read-only.
               description: >-
                 /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/abc/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
@@ -410,7 +413,10 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The CSI mount /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount is read-only.
+              summary: >-
+                longhorn: the CSI mount
+                /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount is
+                read-only.
               description: >-
                 /var/lib/kubelet/plugins/kubernetes.io/csi/driver.longhorn.io/ghi/globalmount remounted read-only after an iSCSI stall, behind a Longhorn
                 volume that still reads healthy. Scale the workload to 0, wait for the volume to
@@ -440,8 +446,7 @@ tests:
               severity: critical
               service: etcd
             exp_annotations:
-              summary: >-
-                The etcd database is at 90% of its 2 GiB quota.
+              summary: 'etcd: the database is at 90% of its 2 GiB quota.'
               description: >-
                 The etcd database is 90% of its 2 GiB quota. At the quota
                 etcd rejects every write and the control plane stops. Compact and defragment, or raise
@@ -486,7 +491,8 @@ tests:
               severity: critical
               service: longhorn
             exp_annotations:
-              summary: The Longhorn disk on daniel-server is past the 75% replica scheduling floor.
+              summary: >-
+                longhorn: the disk on daniel-server is past the 75% replica scheduling floor.
               description: >-
                 Run `sudo k3s crictl rmi --prune` on daniel-server, then read what else holds the
                 space. Longhorn's disk default-disk-1 there is 80% used, and above 75% Longhorn

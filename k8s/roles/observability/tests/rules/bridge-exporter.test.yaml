@@ -40,7 +40,7 @@ tests:
               severity: critical
               service: wan
             exp_annotations:
-              summary: monitor-bridge cannot reach the public internet.
+              summary: 'wan: monitor-bridge cannot reach the public internet.'
               description: >-
                 Check the router and the modem. Both WAN probe providers failed from monitor-bridge,
                 so the house has no working link or no DNS, and the rows that need the internet are
@@ -58,7 +58,8 @@ tests:
               service: discord
               requires: wan
             exp_annotations:
-              summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+              summary: >-
+                discord: a Discord webhook no longer resolves, or the SMTP backstop login failed.
               description: >-
                 Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
                 SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
@@ -75,7 +76,7 @@ tests:
               service: r2
               requires: wan
             exp_annotations:
-              summary: R2 usage is past 80% of the free tier on at least one arm.
+              summary: 'r2: usage is past 80% of the free tier on at least one arm.'
               description: >-
                 Month-to-date R2 storage, Class A operations, Class B operations or incomplete
                 multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so
@@ -92,7 +93,9 @@ tests:
               service: cloudflare
               requires: wan
             exp_annotations:
-              summary: Cloudflare's published IP ranges differ from the repo's cloudflare_ips list, or fetching them failed.
+              summary: >-
+                cloudflare: the published IP ranges differ from the repo's cloudflare_ips list, or
+                fetching them failed.
               description: >-
                 cloudflare_ips in group_vars/all.yml sets Traefik's trustedIPs and the netpol
                 allow-list. Update it and redeploy traefik, netpol-baseline and monitor-bridge.
@@ -108,7 +111,7 @@ tests:
               service: healthchecks
               requires: wan
             exp_annotations:
-              summary: A Healthchecks.io dead-man check differs from the documented schedule.
+              summary: 'healthchecks: a dead-man check differs from the documented schedule.'
               description: >-
                 The monitor-bridge log names each differing or missing slug. Fix the
                 console, or change docs/healthchecks-io-deadman.md and
@@ -127,7 +130,7 @@ tests:
               service: domain
               requires: wan
             exp_annotations:
-              summary: monitor-bridge cannot read the domain's registration expiry over RDAP.
+              summary: 'domain: monitor-bridge cannot read the registration expiry over RDAP.'
               description: >-
                 The registry's RDAP record did not answer or carries no expiration
                 event, so the days-left gauge holds its last read, or is absent
@@ -157,8 +160,7 @@ tests:
               severity: warning
               service: domain
             exp_annotations:
-              summary: >-
-                The domain registration expires in 30 days.
+              summary: 'domain: the registration expires in 30 days.'
               description: >-
                 The registry's RDAP record dates the domain's expiry 30 days out. Renew it at
                 the registrar, and turn on auto-renew if it is off.
@@ -174,8 +176,7 @@ tests:
               severity: critical
               service: domain
             exp_annotations:
-              summary: >-
-                The domain registration expires in 10 days.
+              summary: 'domain: the registration expires in 10 days.'
               description: >-
                 The registry's RDAP record dates the domain's expiry 10 days out. A lapse takes
                 down ACME renewal, every public route, the WireGuard endpoint name and the
@@ -220,7 +221,8 @@ tests:
               service: discord
               requires: wan
             exp_annotations:
-              summary: A Discord webhook no longer resolves, or the SMTP backstop login failed.
+              summary: >-
+                discord: a Discord webhook no longer resolves, or the SMTP backstop login failed.
               description: >-
                 Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
                 SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
@@ -265,7 +267,7 @@ tests:
               severity: critical
               service: monitor-bridge
             exp_annotations: &down
-              summary: Prometheus cannot scrape monitor-bridge's check exporter.
+              summary: 'monitor-bridge: Prometheus cannot scrape the check exporter.'
               description: >-
                 up{job="monitor-bridge"} has been 0 or missing for 10 minutes, so either the
                 monitor-bridge pod is down or the monitor-bridge scrape job is gone from
@@ -339,8 +341,7 @@ tests:
               severity: critical
               service: monitor-bridge
             exp_annotations:
-              summary: >-
-                monitor-bridge's verdicts have gone stale for a.
+              summary: 'monitor-bridge: verdicts have gone stale for a.'
               description: >-
                 Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but
                 for 10 minutes a row has aged past its deadline or fewer rows export
@@ -381,7 +382,7 @@ tests:
               service: monitor-bridge
             exp_annotations:
               summary: >-
-                monitor-bridge exports fewer check rows than homelab_check_rows counts.
+                monitor-bridge: the exporter has fewer check rows than homelab_check_rows counts.
               description: >-
                 Read the monitor-bridge pod's log in the homelab namespace. The scrape works, but
                 for 10 minutes a row has aged past its deadline or fewer rows export
@@ -455,7 +456,8 @@ tests:
               severity: critical
               service: b2
             exp_annotations:
-              summary: Backblaze B2 refuses monitor-bridge's key, or the transaction cap is exceeded.
+              summary: >-
+                b2: Backblaze refuses monitor-bridge's key, or the transaction cap is exceeded.
               description: >-
                 monitor-bridge authenticates against B2 at most every 30 minutes. A
                 cap denial looks the same as data loss, so read the monitor-bridge
@@ -473,7 +475,7 @@ tests:
               service: b2
               requires: b2
             exp_annotations:
-              summary: B2 bucket usage is past the free-tier threshold.
+              summary: 'b2: bucket usage is past the free-tier threshold.'
               description: >-
                 A drain is nearly free, but a prune pays per deleted backup, so read
                 longhorn-backup-tiering before deleting anything.
@@ -546,7 +548,7 @@ tests:
               service: b2
               requires: b2
             exp_annotations:
-              summary: B2 bucket usage is past the free-tier threshold.
+              summary: 'b2: bucket usage is past the free-tier threshold.'
               description: >-
                 A drain is nearly free, but a prune pays per deleted backup, so read
                 longhorn-backup-tiering before deleting anything.
@@ -585,7 +587,8 @@ tests:
               severity: warning
               service: arr
             exp_annotations:
-              summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
+              summary: >-
+                arr: a Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
               description: >-
                 A queue item is in warning, importBlocked, or importPending with a status message.
                 An arr API that stays
@@ -601,7 +604,7 @@ tests:
               severity: warning
               service: etcd
             exp_annotations:
-              summary: The weekly etcd restore drill has not passed within 8 days.
+              summary: 'etcd: the weekly restore drill has not passed within 8 days.'
               description: >-
                 No list-only drill has ever passed, the last-success-list-only stamp on daniel-box
                 is older than 8 days, or the pod cannot read the stamp. Run `journalctl -t
@@ -617,7 +620,7 @@ tests:
               severity: warning
               service: home-assistant
             exp_annotations:
-              summary: Home Assistant's scheduler heartbeat is stale, or HA banned an IP.
+              summary: 'home-assistant: the scheduler heartbeat is stale, or HA banned an IP.'
               description: >-
                 Either HA is up with its automations not running, or HA banned an IP in the last
                 hour. A ban of a cluster gateway locks out everything behind it, so read
@@ -646,7 +649,8 @@ tests:
               severity: warning
               service: arr
             exp_annotations:
-              summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
+              summary: >-
+                arr: a Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
               description: >-
                 A queue item is in warning, importBlocked, or importPending with a status message.
                 An arr API that stays
@@ -721,7 +725,8 @@ tests:
               severity: warning
               service: n8n
             exp_annotations:
-              summary: "An active n8n workflow failed repeatedly, or several workflows are failing."
+              summary: >-
+                n8n: an active workflow failed repeatedly, or several workflows are failing.
               description: >-
                 An active workflow failed 3 times in a row, or 2 or more workflows
                 are each failing repeatedly. The monitor-bridge log names the
@@ -737,7 +742,7 @@ tests:
               severity: warning
               service: bazarr
             exp_annotations:
-              summary: "Bazarr rejects its sonarr or radarr API key, or reports a health issue."
+              summary: 'bazarr: rejects its sonarr or radarr API key, or reports a health issue.'
               description: >-
                 Bazarr's own copy of the sonarr or radarr API key is rejected, or
                 Bazarr reports a health issue. Bazarr
@@ -754,7 +759,7 @@ tests:
               severity: warning
               service: prowlarr
             exp_annotations:
-              summary: "A Prowlarr indexer has been failing for a week or more."
+              summary: 'prowlarr: an indexer has been failing for a week or more.'
               description: >-
                 Prowlarr's own initialFailure puts an indexer at a week or more of
                 failures. The Pirate Bay and 1337x are ignored as chronic flappers.
@@ -770,7 +775,7 @@ tests:
               severity: critical
               service: scrutiny
             exp_annotations:
-              summary: "Scrutiny reports a failing drive, stale collector data or high NVMe wear."
+              summary: 'scrutiny: reports a failing drive, stale collector data or high NVMe wear.'
               description: >-
                 A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear
                 passed 80%, or its collector data is older than 26h. This is the only drive-failure
@@ -787,7 +792,7 @@ tests:
               severity: warning
               service: speedtest
             exp_annotations:
-              summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
+              summary: 'speedtest: the newest result is stale, incomplete or under 100 Mbps.'
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
       - eval_time: 10m
         alertname: AirflowSchedulerDown
@@ -799,7 +804,7 @@ tests:
               severity: warning
               service: airflow
             exp_annotations:
-              summary: "Airflow's scheduler is not running, so no warehouse rollup starts."
+              summary: 'airflow: the scheduler is not running, so no warehouse rollup starts.'
               description: >-
                 The scheduler's own health server answers 503, or does not answer at
                 all. Read the airflow-scheduler pod's state and log in the homelab
@@ -848,7 +853,7 @@ tests:
               service: discord
               requires: wan
             exp_annotations:
-              summary: Alert delivery is failing on Alertmanager.
+              summary: 'discord: alert delivery is failing on Alertmanager.'
               description: >-
                 Rotate the named Discord webhook in SOPS and redeploy its consumer, or fix the Gmail
                 SMTP backstop login. The monitor-bridge log names which: `kubectl -n homelab logs
@@ -865,7 +870,7 @@ tests:
               service: r2
               requires: wan
             exp_annotations:
-              summary: R2 usage is past 80% of the free tier on Class B.
+              summary: 'r2: usage is past 80% of the free tier on Class B.'
               description: >-
                 Month-to-date R2 storage, Class A operations, Class B operations or incomplete
                 multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so
@@ -881,7 +886,7 @@ tests:
               severity: warning
               service: n8n
             exp_annotations:
-              summary: "n8n workflows failing repeatedly: Backup Digest."
+              summary: 'n8n: workflows failing repeatedly: Backup Digest.'
               description: >-
                 An active workflow failed 3 times in a row, or 2 or more workflows
                 are each failing repeatedly. The monitor-bridge log names the
@@ -897,7 +902,7 @@ tests:
               severity: warning
               service: prowlarr
             exp_annotations:
-              summary: "Prowlarr indexers failing for a week or more: EZTV, YTS."
+              summary: 'prowlarr: indexers failing for a week or more: EZTV, YTS.'
               description: >-
                 Prowlarr's own initialFailure puts an indexer at a week or more of
                 failures. The Pirate Bay and 1337x are ignored as chronic flappers.
@@ -913,7 +918,7 @@ tests:
               severity: critical
               service: scrutiny
             exp_annotations:
-              summary: Scrutiny reports nvme0 (SHPP41-500GM) worn.
+              summary: 'scrutiny: reports nvme0 (SHPP41-500GM) worn.'
               description: >-
                 A drive failed its SMART self-assessment or an attribute threshold, its NVMe wear
                 passed 80%, or its collector data is older than 26h. This is the only drive-failure
@@ -999,7 +1004,8 @@ tests:
               severity: warning
               service: host-packages
             exp_annotations:
-              summary: "The host-package builder has stopped fetching master or has left a commit unbuilt."
+              summary: >-
+                host-packages: the builder has stopped fetching master or has left a commit unbuilt.
               description: >-
                 The builder fetched master over 30 minutes ago, or a commit has
                 waited over 7200 seconds to be built. The monitor-bridge log names

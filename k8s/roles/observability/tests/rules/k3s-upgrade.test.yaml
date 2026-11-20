@@ -30,7 +30,7 @@ tests:
               service: system-upgrade
             exp_annotations:
               summary: >-
-                kube_node_info is absent, so no kubelet version skew can be judged.
+                system-upgrade: kube_node_info is absent, so no kubelet version skew can be judged.
               description: >-
                 For 2 hours kube_node_info has carried more than one kubelet_version, so an upgrade
                 left one node behind, or has been absent, so the skew cannot be judged. Read
@@ -60,8 +60,8 @@ tests:
               service: system-upgrade
             exp_annotations:
               summary: >-
-                The nodes run mixed kubelet versions: daniel-box v1.37.2+k3s1, daniel-server
-                v1.37.1+k3s1.
+                system-upgrade: the nodes run mixed kubelet versions: daniel-box v1.37.2+k3s1,
+                daniel-server v1.37.1+k3s1.
               description: >-
                 For 2 hours kube_node_info has carried more than one kubelet_version, so an upgrade
                 left one node behind, or has been absent, so the skew cannot be judged. Read
@@ -99,7 +99,9 @@ tests:
               severity: critical
               service: system-upgrade
             exp_annotations:
-              summary: The k3s upgrade Job apply-k3s-server-on-daniel-box-with-abc has failed.
+              summary: >-
+                system-upgrade: the k3s upgrade Job apply-k3s-server-on-daniel-box-with-abc has
+                failed.
               description: >-
                 Job apply-k3s-server-on-daniel-box-with-abc carries a Failed condition. Read the
                 Plan's conditions with `kubectl -n system-upgrade get plans`, then the Job's pods. A
@@ -166,7 +168,7 @@ tests:
               service: daniel-box
               host: daniel-box
             exp_annotations:
-              summary: homelab-k3s-restart failed to restart k3s on daniel-box.
+              summary: 'daniel-box: homelab-k3s-restart failed to restart k3s.'
               description: >-
                 Read `journalctl -u homelab-k3s-restart -p notice` on daniel-box and recover the
                 node by hand if it is down. The last windowed restart of k3s.service did not end
@@ -192,7 +194,7 @@ tests:
               service: daniel-box
               host: daniel-box
             exp_annotations:
-              summary: A k3s config change on daniel-box has waited 72 hours for a restart.
+              summary: 'daniel-box: a k3s config change has waited 72 hours for a restart.'
               description: >-
                 homelab-k3s-restart has refused to restart k3s.service on daniel-box at every
                 window for 72 hours. Read `journalctl -u homelab-k3s-restart -p notice` for the
@@ -228,7 +230,7 @@ tests:
               service: daniel-box
               host: daniel-box
             exp_annotations:
-              summary: homelab-k3s-restart has written no metrics for daniel-box in an hour.
+              summary: 'daniel-box: homelab-k3s-restart has written no metrics in an hour.'
               description: >-
                 No homelab_k3s_restart_failed series carries host="daniel-box", so either the
                 unit's textfile never reached Prometheus or the timer stopped. Read `systemctl

@@ -34,7 +34,7 @@ tests:
               service: loopy
               severity: warning
             exp_annotations:
-              summary: Pod homelab/loopy-abc restarted a container more than 3 times in 15 minutes.
+              summary: 'homelab/loopy-abc: restarted a container more than 3 times in 15 minutes.'
               description: "loopy-abc had 4 container starts in the last 15 minutes. Read `kubectl -n homelab describe pod loopy-abc` for the last state."
           - exp_labels:
               namespace: homelab
@@ -42,7 +42,7 @@ tests:
               service: unmapped
               severity: warning
             exp_annotations:
-              summary: Pod homelab/stray-abc restarted a container more than 3 times in 15 minutes.
+              summary: 'homelab/stray-abc: restarted a container more than 3 times in 15 minutes.'
               description: "stray-abc had 4 container starts in the last 15 minutes. Read `kubectl -n homelab describe pod stray-abc` for the last state."
       # Once the starts leave the 15m window the loop clears.
       - alertname: ContainerRestartLoop
@@ -65,7 +65,7 @@ tests:
               service: hungry
               severity: warning
             exp_annotations:
-              summary: A container in homelab/hungry-abc was OOM-killed in the last hour.
+              summary: 'homelab/hungry-abc: a container was OOM-killed in the last hour.'
               description: "hungry-abc had an OOM kill within the last hour. Raise the container's memory limit in its role, or find the leak."
       - alertname: ContainerOOMKilled
         eval_time: 130m
@@ -112,7 +112,7 @@ tests:
               service: pinned
               severity: warning
             exp_annotations:
-              summary: Pod homelab/pinned-abc is pinned at its CPU limit.
+              summary: 'homelab/pinned-abc: pinned at its CPU limit.'
               description: "pinned-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
   # ContainerCPUThrottled, bursty: the kustomize-controller shape the A2 soak missed. bursty
   # loses 20s of CPU in one step every 5 minutes, so its 15m window holds three steps (0.071
@@ -148,7 +148,7 @@ tests:
               service: flux
               severity: warning
             exp_annotations:
-              summary: Pod flux-system/bursty-abc is pinned at its CPU limit.
+              summary: 'flux-system/bursty-abc: pinned at its CPU limit.'
               description: "bursty-abc had 50% of its CFS periods throttled over 15 minutes, for 15 minutes running. Raise the limit in its role or accept it; short bursts never reach this alert."
   # CAdvisorCoverageShortfall, zero-series case: no cAdvisor series at all. All three arms fire,
   # each with its `arm` label, because `or vector(0)` turns an empty count into 0 < 20.
@@ -163,17 +163,20 @@ tests:
         exp_alerts:
           - exp_labels: {arm: restarts, service: observability, severity: warning}
             exp_annotations:
-              summary: cAdvisor covers 0 pods for the restarts check, under the floor of 20.
+              summary: >-
+                observability: cAdvisor covers 0 pods for the restarts check, under the floor of 20.
               description: "The restarts check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
           - exp_labels: {arm: oom, service: observability, severity: warning}
             exp_annotations:
-              summary: cAdvisor covers 0 pods for the oom check, under the floor of 20.
+              summary: >-
+                observability: cAdvisor covers 0 pods for the oom check, under the floor of 20.
               description: "The oom check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
           - exp_labels: {arm: cpu, service: observability, severity: warning}
             exp_annotations:
-              summary: cAdvisor covers 0 pods for the cpu check, under the floor of 20.
+              summary: >-
+                observability: cAdvisor covers 0 pods for the cpu check, under the floor of 20.
               description: "The cpu check reads a per-pod cAdvisor vector that holds 0 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall
   # CAdvisorCoverageShortfall, the boundary: 20 pods for the restart and OOM vectors is the
@@ -342,6 +345,7 @@ tests:
         exp_alerts:
           - exp_labels: {arm: cpu, service: observability, severity: warning}
             exp_annotations:
-              summary: cAdvisor covers 19 pods for the cpu check, under the floor of 20.
+              summary: >-
+                observability: cAdvisor covers 19 pods for the cpu check, under the floor of 20.
               description: "The cpu check reads a per-pod cAdvisor vector that holds 19 pods where the estate holds about 70 to 100. The kubernetes-cadvisor job or a selector is broken, so the restart, OOM and CPU rules read green. Read the kubernetes-cadvisor targets on Prometheus."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#cadvisorcoverageshortfall

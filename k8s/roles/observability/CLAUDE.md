@@ -132,6 +132,11 @@ expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
 are in `docs/archive/monitoring/m1-alertmanager.md`.
 
+**A summary reads `<service or host>: <what is wrong>`.** The subject is the rule's own
+`service` label, an inventory host, or labels of the firing series, and
+`tests/services/test_alert_runbook_urls.py::test_every_alert_summary_opens_with_its_service_or_host_is_clean`
+fails any other shape. A summary holds a `: `, so its YAML scalar is quoted or folded.
+
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `k8s/roles/observability/tests/alertmanager/` holds
 six alert groups with the text each body must render for them.

@@ -46,7 +46,7 @@ tests:
               service: daniel-box
               severity: critical
             exp_annotations:
-              summary: "daniel-box / is 95% full."
+              summary: 'daniel-box: / is 95% full.'
               description: "daniel-box has its / filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
           - exp_labels:
@@ -57,7 +57,7 @@ tests:
               service: daniel-server
               severity: critical
             exp_annotations:
-              summary: "daniel-server /boot/efi is 92% full."
+              summary: 'daniel-server: /boot/efi is 92% full.'
               description: "daniel-server has its /boot/efi filesystem over 90% full. Longhorn stops scheduling replicas on a node at 75%. Read `df -h` on the host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostdiskfull
   # HostMemoryHigh. box is 95% used and fires; server at 85% does not.
@@ -82,7 +82,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box memory is 95% used."
+              summary: 'daniel-box: memory is 95% used.'
               description: "daniel-box has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host."
   # HostMetricsMissing. box is scraped and publishes / and memory but not /boot, /boot/efi, the
   # Processor cooling devices or the timex series, so those four arms fire after 15m. server's exporter is
@@ -112,7 +112,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box publishes no disk /boot series."
+              summary: 'daniel-box: no disk /boot series published.'
               description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot check, so that check is not looking at the host. Read the matching collector on the host."
           - exp_labels:
               arm: 'disk /boot/efi'
@@ -122,7 +122,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box publishes no disk /boot/efi series."
+              summary: 'daniel-box: no disk /boot/efi series published.'
               description: "daniel-box is scraped but its node-exporter publishes no series for the disk /boot/efi check, so that check is not looking at the host. Read the matching collector on the host."
           - exp_labels:
               arm: thermal-throttle
@@ -132,7 +132,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box publishes no thermal-throttle series."
+              summary: 'daniel-box: no thermal-throttle series published.'
               description: "daniel-box is scraped but its node-exporter publishes no series for the thermal-throttle check, so that check is not looking at the host. Read the matching collector on the host."
           - exp_labels:
               arm: clock
@@ -142,7 +142,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box publishes no clock series."
+              summary: 'daniel-box: no clock series published.'
               description: "daniel-box is scraped but its node-exporter publishes no series for the clock check, so that check is not looking at the host. Read the matching collector on the host."
   # ClaudeCgroupMemoryEvent. One oom_kill on box's fleet cgroup at minute 5 fires after 5m and
   # clears when it leaves the 10m window. A `high` event is not watched, and server logs none.
@@ -170,7 +170,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "A Claude Code cgroup on daniel-box logged a oom_kill memory event."
+              summary: 'daniel-box: a Claude Code cgroup logged a oom_kill memory event.'
               description: "daniel-box/fleet had 1 `oom_kill` memory events in the last 10 minutes. The kernel killed something in that cgroup or a hard cap was hit."
       - alertname: ClaudeCgroupMemoryEvent
         eval_time: 30m
@@ -201,7 +201,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box/fleet is memory-stalled 20% of the time."
+              summary: 'daniel-box: fleet is memory-stalled 20% of the time.'
               description: "The PSI `full` stall rate of daniel-box/fleet is over 10% of the last 5 minutes, for 10 minutes running. No task in the cgroup made progress, which is the 2026-09-05 shape (#1243) while it is still only a stall."
   # ClaudeCgroupNotReporting. box is scraped and reports claude-rc but not fleet, so fleet
   # fires after 10m. server reports its one expected cgroup, fleet, and stays silent.
@@ -230,7 +230,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box reports no fleet cgroup metrics."
+              summary: 'daniel-box: no fleet cgroup metrics reported.'
               description: "daniel-box is scraped but publishes no claude_cgroup_* series for fleet, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
   # ClaudeCgroupNotReporting on a crash-looping claude-rc.service: its cgroup, and so its
   # series, is back every other minute. No 10m run is ever unbroken, and the alert still fires.
@@ -254,7 +254,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box reports no claude-rc cgroup metrics."
+              summary: 'daniel-box: no claude-rc cgroup metrics reported.'
               description: "daniel-box is scraped but publishes no claude_cgroup_* series for claude-rc, so that cgroup is not being checked. Read /var/lib/node-exporter- textfile/claude_cgroup.prom and the claude-cgroup-metrics timer on the host."
   # ClaudeCgroupNotReporting stays quiet through one 3-minute gap, a unit restart.
   - interval: 1m
@@ -331,7 +331,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box pci0000:00_0000:00:18_3/temp1 is at 91.0C."
+              summary: 'daniel-box: pci0000:00_0000:00:18_3/temp1 is at 91.0C.'
               description: "daniel-box sensor pci0000:00_0000:00:18_3/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
           - exp_labels:
               chip: platform_coretemp_0
@@ -342,7 +342,7 @@ tests:
               service: daniel-server
               severity: warning
             exp_annotations:
-              summary: "daniel-server platform_coretemp_0/temp1 is at 95.0C."
+              summary: 'daniel-server: platform_coretemp_0/temp1 is at 95.0C.'
               description: "daniel-server sensor platform_coretemp_0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
           - exp_labels:
               chip: pci_ctrl
@@ -353,7 +353,7 @@ tests:
               service: daniel-server
               severity: warning
             exp_annotations:
-              summary: "daniel-server pci_ctrl/temp1 is at 80.0C."
+              summary: 'daniel-server: pci_ctrl/temp1 is at 80.0C.'
               description: "daniel-server sensor pci_ctrl/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
           - exp_labels:
               chip: acpi
@@ -364,7 +364,7 @@ tests:
               service: daniel-server
               severity: warning
             exp_annotations:
-              summary: "daniel-server acpi/temp1 is at 86.0C."
+              summary: 'daniel-server: acpi/temp1 is at 86.0C.'
               description: "daniel-server sensor acpi/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
           - exp_labels:
               chip: thermal_thermal_zone0
@@ -375,7 +375,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi thermal_thermal_zone0/temp1 is at 86.0C."
+              summary: 'daniel-pi: thermal_thermal_zone0/temp1 is at 86.0C.'
               description: "daniel-pi sensor thermal_thermal_zone0/temp1 has been at or over its limit for an hour. The limit is 90% of the sensor's declared max, else its declared crit, else its rated maximum, else a flat 85C. Read the sensor's chip on Infrastructure/hardware-thermal."
   # HostTemperatureNotReporting. box is scraped and publishes only NVMe sensors, which the
   # check excludes, and daniel-pi is scraped and publishes none: both fire after 25m. server
@@ -406,7 +406,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box publishes no hwmon temperature sensors."
+              summary: 'daniel-box: no hwmon temperature sensors published.'
               description: "daniel-box is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
           - exp_labels:
               instance: daniel-pi
@@ -415,7 +415,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no hwmon temperature sensors."
+              summary: 'daniel-pi: no hwmon temperature sensors published.'
               description: "daniel-pi is scraped but its node-exporter publishes no node_hwmon_temp_celsius series outside the NVMe drives, so nothing is checking its temperature. Read the hwmon collector on the host."
   # CPUThermalThrottled. box has one Processor cooling device at state 2 beside one at 0, and
   # fires once after 15m. server's non-Processor device at state 5 is not CPU throttling.
@@ -443,7 +443,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "The kernel is thermally throttling daniel-box's CPU."
+              summary: 'daniel-box: the kernel is thermally throttling the CPU.'
               description: "A Processor cooling device on daniel-box has held a non-zero cur_state for 15 minutes, so the kernel is throttling the CPU for heat. CFS throttling is ContainerCPUThrottled's. Read the cooling devices under /sys/class/thermal."
   # PiUndervoltage. The firmware alarm latches at minute 3 and the alert fires at once.
   - interval: 1m
@@ -466,7 +466,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's firmware reports undervoltage."
+              summary: 'daniel-pi: the firmware reports undervoltage.'
               description: "The Raspberry Pi firmware latched its low-critical voltage alarm: the 5V supply fell below its critical threshold, which corrupts SD cards and stalls USB devices. Check the power supply and cable. A clean reading later does not undo the damage."
   # PiLoadHigh. Load 1.0 on two cores is 0.5 per core and silent; load 3.2 is 1.6 per core.
   - interval: 1m
@@ -493,7 +493,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's 5-minute load is 1.60 per core."
+              summary: 'daniel-pi: the 5-minute load is 1.60 per core.'
               description: "daniel-pi has a 5-minute load average of 1.60 per core, over 1.5. Read `top` on the host for the process behind it."
   # PiMemoryLow. 100 MiB available is silent; 40 MiB is under the 50 MiB floor.
   - interval: 1m
@@ -514,7 +514,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi has 40MiB of memory available."
+              summary: 'daniel-pi: 40MiB of memory available.'
               description: "daniel-pi can reclaim under 50 MB of memory, and the 456 MB box thrashes when that runs out. Read `free -m` and `docker stats` on the host."
   # PiDiskFull. The SD card's root device is 95% full and fires once, though it is mounted at
   # / and /var/hdd.log. The vfat firmware partition at 40% is silent, and log2ram's tmpfs at
@@ -549,7 +549,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's /dev/mmcblk0p2 is 95% full."
+              summary: 'daniel-pi: /dev/mmcblk0p2 is 95% full.'
               description: "The filesystem on /dev/mmcblk0p2 of daniel-pi is over 90% full. A filling SD card is the slow Pi death. Read `df -h` on the host."
   # PiFilesystemReadOnly. The root remounted read-only fires at once. A read-only
   # /var/hdd.log is not one of the watched mounts, and /boot/firmware reads writable.
@@ -575,7 +575,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's / is mounted read-only."
+              summary: 'daniel-pi: / is mounted read-only.'
               description: "/ on daniel-pi is read-only, which is an SD card remounting itself after an I/O error. Every other arm stays green through it. A reboot does not come back from it."
   # PiMetricsMissing. The Pi is scraped and publishes load only, so the memory, filesystem,
   # read-only and clock arms fire after 10m. The undervoltage arm is PiUndervoltageMissing's, below.
@@ -600,7 +600,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no memory series."
+              summary: 'daniel-pi: no memory series published.'
               description: "daniel-pi is scraped but its node-exporter publishes no series for the memory arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
           - exp_labels:
               arm: filesystem
@@ -610,7 +610,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no filesystem series."
+              summary: 'daniel-pi: no filesystem series published.'
               description: "daniel-pi is scraped but its node-exporter publishes no series for the filesystem arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
           - exp_labels:
               arm: read-only
@@ -620,7 +620,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no read-only series."
+              summary: 'daniel-pi: no read-only series published.'
               description: "daniel-pi is scraped but its node-exporter publishes no series for the read-only arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
           - exp_labels:
               arm: clock
@@ -630,7 +630,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no clock series."
+              summary: 'daniel-pi: no clock series published.'
               description: "daniel-pi is scraped but its node-exporter publishes no series for the clock arm of the Pi checks, so nothing is watching it. Read the exporter on the host."
   # PiUndervoltageMissing. The Pi is scraped and publishes load only, so the undervoltage arm
   # fires once, unshadowed, after 10m. A second Pi whose scrape is dead (up 0) stays quiet:
@@ -658,7 +658,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi publishes no undervoltage series."
+              summary: 'daniel-pi: no undervoltage series published.'
               description: "daniel-pi is scraped but its node-exporter publishes no node_hwmon_in_lcrit_alarm_volts series, so PiUndervoltage has nothing to read and a latched undervoltage alarm goes unseen. A renamed sensor or a blind hwmon collector is the usual cause. Read the Pi's hwmon collector on the host."
   # HostCoverageShortfall and HostTemperatureCoverageShortfall, zero-series case: no series at
   # all, so every arm counts 0 hosts and fires with `or vector(0)`.
@@ -676,35 +676,45 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk / check, under the floor of
+                2.
               description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk /boot check, under the floor
+                of 2.
               description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk /boot/efi check, under the
+                floor of 2.
               description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the memory check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the memory check, under the floor of
+                2.
               description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the thermal-throttle check, under the
+                floor of 2.
               description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
       - alertname: HostTemperatureCoverageShortfall
         eval_time: 24m
@@ -717,7 +727,8 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report temperature sensors, under the floor of 3."
+              summary: >-
+                observability: only 0 hosts report temperature sensors, under the floor of 3.
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # HostClockUnsynchronised. box's kernel reports sync_status 0 with no offset, so the
   # unsynchronised arm fires. server is synchronised but 0.6s slow, so the offset arm fires, which
@@ -752,7 +763,7 @@ tests:
               service: daniel-box
               severity: warning
             exp_annotations:
-              summary: "daniel-box's clock is not in sync (unsynchronised)."
+              summary: 'daniel-box: the clock is not in sync (unsynchronised).'
               description: "The kernel on daniel-box reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read `timedatectl timesync-status` on the host."
           - exp_labels:
               arm: offset
@@ -762,7 +773,7 @@ tests:
               service: daniel-server
               severity: warning
             exp_annotations:
-              summary: "daniel-server's clock is not in sync (offset)."
+              summary: 'daniel-server: the clock is not in sync (offset).'
               description: "The kernel on daniel-server reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. Read `timedatectl timesync-status` on the host."
   # HostClockUnsynchronised on the Pi. It booted without network on a stale time, so it is
   # unsynchronised and 0.7s fast, and both arms fire.
@@ -784,7 +795,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's clock is not in sync (unsynchronised)."
+              summary: 'daniel-pi: the clock is not in sync (unsynchronised).'
               description: "The kernel on daniel-pi reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi has no RTC, so a boot without network starts it at a stale time. Read `timedatectl timesync-status` on the host."
           - exp_labels:
               arm: offset
@@ -794,7 +805,7 @@ tests:
               service: daniel-pi
               severity: warning
             exp_annotations:
-              summary: "daniel-pi's clock is not in sync (offset)."
+              summary: 'daniel-pi: the clock is not in sync (offset).'
               description: "The kernel on daniel-pi reports its clock unsynchronised or more than 0.5s off, which breaks TOTP logins, ACME renewals, etcd and Loki ingestion. The Pi has no RTC, so a boot without network starts it at a stale time. Read `timedatectl timesync-status` on the host."
   # A dead exporter. Both node scrapes read up 0 and every other series is absent, so the
   # exporter is ScrapeTargetDown's: no per-host rule fires beside it, which is why A1 has no
@@ -884,35 +895,45 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk / check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk / check, under the floor of
+                2.
               description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk /boot check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk /boot check, under the floor
+                of 2.
               description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the disk /boot/efi check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the disk /boot/efi check, under the
+                floor of 2.
               description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the memory check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the memory check, under the floor of
+                2.
               description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report series for the thermal-throttle check, under the floor of 2."
+              summary: >-
+                observability: only 0 hosts report series for the thermal-throttle check, under the
+                floor of 2.
               description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 0 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
       - alertname: HostTemperatureCoverageShortfall
         eval_time: 30m
@@ -922,7 +943,8 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 0 hosts report temperature sensors, under the floor of 3."
+              summary: >-
+                observability: only 0 hosts report temperature sensors, under the floor of 3.
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 0 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # Both x86 hosts report every family, so HostCoverageShortfall stays silent at the floor of
   # 2. daniel-pi's root disk is excluded from the count. Only two hosts report a temperature
@@ -967,7 +989,8 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 2 hosts report temperature sensors, under the floor of 3."
+              summary: >-
+                observability: only 2 hosts report temperature sensors, under the floor of 3.
               description: "The host temperature check needs a non-NVMe hwmon sensor from each of the 3 hosts, and 2 answer. The rest are unmonitored, not cool. Read the node scrape targets on Prometheus."
   # Only box reports disk and memory: one host is under the floor of 2 for the three disk arms
   # and memory, and fires with 1. The cooling device arm has box's one device and fires too.
@@ -992,35 +1015,45 @@ tests:
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 1 hosts report series for the disk / check, under the floor of 2."
+              summary: >-
+                observability: only 1 hosts report series for the disk / check, under the floor of
+                2.
               description: "The disk / check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 1 hosts report series for the disk /boot check, under the floor of 2."
+              summary: >-
+                observability: only 1 hosts report series for the disk /boot check, under the floor
+                of 2.
               description: "The disk /boot check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: 'disk /boot/efi'
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 1 hosts report series for the disk /boot/efi check, under the floor of 2."
+              summary: >-
+                observability: only 1 hosts report series for the disk /boot/efi check, under the
+                floor of 2.
               description: "The disk /boot/efi check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: memory
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 1 hosts report series for the memory check, under the floor of 2."
+              summary: >-
+                observability: only 1 hosts report series for the memory check, under the floor of
+                2.
               description: "The memory check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
           - exp_labels:
               arm: thermal-throttle
               service: observability
               severity: warning
             exp_annotations:
-              summary: "Only 1 hosts report series for the thermal-throttle check, under the floor of 2."
+              summary: >-
+                observability: only 1 hosts report series for the thermal-throttle check, under the
+                floor of 2.
               description: "The thermal-throttle check reads one series family from every node-exporter and needs 2 hosts answering, and 1 do. The rest are unmonitored, not idle. Read the node scrape targets on Prometheus."
   # UPSOnBattery. NUT asserts OB at minute 5; the alert fires once it has held for 10m.
   - interval: 1m
@@ -1040,7 +1073,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS is on battery."
+              summary: 'nut-exporter: the UPS is on battery.'
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
   # During an outage only UPSOnBattery speaks. Charge 30%, runtime 100s and the RB flag would
@@ -1065,7 +1098,8 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS is on battery, 30% charged, about 1m 40s of runtime left."
+              summary: >-
+                nut-exporter: the UPS is on battery, 30% charged, about 1m 40s of runtime left.
               description: "NUT reports ups.status OB for 10 minutes: mains power is gone and the UPS is carrying the load. Read the UPS on the NUT host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsonbattery
       - alertname: UPSBatteryLow
@@ -1102,7 +1136,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS battery is at 40%."
+              summary: 'nut-exporter: the UPS battery is at 40%.'
               description: "The UPS battery charge is under 50% (UPS_CHARGE_MIN_PCT) while mains power is on, for 10 minutes. Read the UPS on the NUT host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsbatterylow
       - alertname: UPSRuntimeLow
@@ -1114,7 +1148,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS has 2m 0s of runtime."
+              summary: 'nut-exporter: the UPS has 2m 0s of runtime.'
               description: "The UPS estimates under 5 minutes of runtime (UPS_RUNTIME_MIN_S) on a full charge, for 10 minutes. The battery has aged. Read the UPS on the NUT host."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsruntimelow
       - alertname: UPSReplaceBattery
@@ -1126,7 +1160,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS asks for a battery replacement."
+              summary: 'nut-exporter: the UPS asks for a battery replacement.'
               description: "NUT reports ups.status RB for 10 minutes: the UPS's own self-test says the battery needs replacing. This trips before charge or runtime read low."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upsreplacebattery
   # UPSBatteryLow at exactly 50% and UPSRuntimeLow at exactly 300s are not under the floor.
@@ -1167,7 +1201,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS runtime series is absent."
+              summary: 'nut-exporter: the UPS runtime series is absent.'
               description: "The NUT exporter answers its scrape but publishes no runtime series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
           - exp_labels:
@@ -1177,7 +1211,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS replace-battery series is absent."
+              summary: 'nut-exporter: the UPS replace-battery series is absent.'
               description: "The NUT exporter answers its scrape but publishes no replace-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
           - exp_labels:
@@ -1187,7 +1221,7 @@ tests:
               service: nut-exporter
               severity: critical
             exp_annotations:
-              summary: "The UPS on-battery series is absent."
+              summary: 'nut-exporter: the UPS on-battery series is absent.'
               description: "The NUT exporter answers its scrape but publishes no on-battery series for 10 minutes, so the UPS is unmonitored on that arm. A renamed or removed series is the usual cause. Read nut-exporter's /ups_metrics."
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#upssensorabsent
   # UPSSensorAbsent with the nut scrape down (up 0) publishes nothing and stays silent:

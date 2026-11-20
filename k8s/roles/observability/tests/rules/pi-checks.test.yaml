@@ -25,7 +25,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              summary: 'daniel-pi: the SD-card health heartbeat has stopped reporting.'
               description: >-
                 No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
                 textfile collector, so nothing confirms the SD card is being watched. Read
@@ -40,7 +40,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-recovery-health, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's container-recovery heartbeat has stopped reporting.
+              summary: 'daniel-pi: the container-recovery heartbeat has stopped reporting.'
               description: >-
                 No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi,
                 so nothing confirms its containers are watched. Read
@@ -68,7 +68,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's SD-card health heartbeat reported a failure.
+              summary: 'daniel-pi: the SD-card health heartbeat reported a failure.'
               description: >-
                 Read the `pi-sd-health` line in /var/log/pi-health/health.log on daniel-pi for the
                 failing leg: a nonzero ext4 errors_count, a bad rotated-log verdict, or a /var/log
@@ -83,7 +83,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's container-recovery heartbeat found a container not running.
+              summary: 'daniel-pi: the container-recovery heartbeat found a container not running.'
               description: >-
                 pi-recovery-health on daniel-pi ended with status=down: a watched container was
                 not running, whether or not its restart took. The `pi-recovery-health` line in
@@ -109,7 +109,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              summary: 'daniel-pi: the SD-card health heartbeat has stopped reporting.'
               description: >-
                 No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
                 textfile collector, so nothing confirms the SD card is being watched. Read
@@ -124,7 +124,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's container-recovery heartbeat has stopped reporting.
+              summary: 'daniel-pi: the container-recovery heartbeat has stopped reporting.'
               description: >-
                 No pi-recovery-health verdict newer than 15 minutes reached Prometheus from daniel-pi,
                 so nothing confirms its containers are watched. Read
@@ -167,7 +167,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's SD-card health heartbeat has stopped reporting.
+              summary: 'daniel-pi: the SD-card health heartbeat has stopped reporting.'
               description: >-
                 No pi-sd-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
                 textfile collector, so nothing confirms the SD card is being watched. Read
@@ -237,7 +237,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-watchdog-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's watchdog.service is not active.
+              summary: 'daniel-pi: watchdog.service is not active.'
               description: >-
                 watchdog.service on daniel-pi has not been active for 30 minutes, so the
                 `max-load-1 = 24` load test is off. wd_keepalive still holds the hardware watchdog.
@@ -277,7 +277,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-watchdog-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's watchdog daemon heartbeat has stopped reporting.
+              summary: 'daniel-pi: the watchdog daemon heartbeat has stopped reporting.'
               description: >-
                 No pi-watchdog-health verdict newer than 15 minutes reached Prometheus from
                 daniel-pi's textfile collector, so nothing confirms the watchdog daemon is being
@@ -321,7 +321,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-watchdog-health, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's watchdog daemon heartbeat has stopped reporting.
+              summary: 'daniel-pi: the watchdog daemon heartbeat has stopped reporting.'
               description: >-
                 No pi-watchdog-health verdict newer than 15 minutes reached Prometheus from
                 daniel-pi's textfile collector, so nothing confirms the watchdog daemon is being
@@ -343,7 +343,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-audit-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's auditd is not writing its log.
+              summary: 'daniel-pi: auditd is not writing its log.'
               description: >-
                 pi-audit-health on daniel-pi has read status=down for 30 minutes: auditd.service is not
                 active, or /var/log/audit/audit.log has had no write for an hour. Read
@@ -384,7 +384,7 @@ tests:
         exp_alerts:
           - exp_labels: {check: pi-audit-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
-              summary: daniel-pi's audit-log heartbeat has stopped reporting.
+              summary: 'daniel-pi: the audit-log heartbeat has stopped reporting.'
               description: >-
                 No pi-audit-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
                 textfile collector, so nothing confirms auditd is being watched. Read

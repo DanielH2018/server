@@ -45,7 +45,7 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: Longhorn volume {{ $labels.pvc }} is {{ $labels.state }}.
+          summary: 'longhorn: volume {{ $labels.pvc }} is {{ $labels.state }}.'
           description: >-
             {{ $labels.volume }} (claim {{ $labels.pvc }}) has reported the robustness
             {{ $labels.state }} for 15 minutes. With two replicas, degraded is one copy from data
@@ -71,7 +71,7 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: Prometheus has lost Longhorn's scrape job or its volume series.
+          summary: 'longhorn: Prometheus has lost the scrape job or its volume series.'
           description: >-
             Either no up{job="longhorn"} series exists, so the job is gone from prometheus.yml, or
             the scrape works and longhorn_volume_robustness is missing. Replica redundancy is
@@ -92,7 +92,9 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over 85% full.
+          summary: >-
+            longhorn: the claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over
+            85% full.
           description: >-
             {{ $labels.persistentvolumeclaim }} is {{ $value | printf "%.0f" }}% full. A claim
             cannot borrow space, so expand the volume in its role.
@@ -114,7 +116,9 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less free space than its largest transient.
+          summary: >-
+            longhorn: the claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has less
+            free space than its largest transient.
           description: >-
             {{ $labels.persistentvolumeclaim }} has {{ $value | humanize1024 }}B free, under the
             3 GiB its updater stages before swapping the install in. Expand the volume in its role.
@@ -133,7 +137,7 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The kubelet reports no free bytes for the claim valheim-server.
+          summary: 'longhorn: the kubelet reports no free bytes for the claim valheim-server.'
           description: >-
             PVCBelowFreeFloor reads kubelet_volume_stats_available_bytes for valheim-server and
             finds no series, so its free-space floor is UNMONITORED. The claim was renamed or
@@ -156,7 +160,8 @@ groups:
           service: longhorn
         annotations:
           summary: >-
-            Claims reporting kubelet volume stats: {{ $value | printf "%.0f" }}, below the floor of 32.
+            longhorn: {{ $value | printf "%.0f" }} claims report kubelet volume stats, below the
+            floor of 32.
           description: >-
             Only {{ $value | printf "%.0f" }} claims report kubelet_volume_stats, below the floor
             of 32. PVC fullness is UNKNOWN, not OK. Read the kubernetes-kubelet targets, one
@@ -184,7 +189,7 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: Snapshot space of {{ $labels.pvc }} is at 90% of its cap.
+          summary: 'longhorn: snapshot space of {{ $labels.pvc }} is at 90% of its cap.'
           description: >-
             {{ $labels.pvc }} holds {{ $value | humanize1024 }}B of snapshots against a cap of
             16 GiB. Longhorn refuses new snapshots at the cap rather than pruning, so the next
@@ -208,7 +213,8 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: Longhorn reports no snapshot series for the capped claim {{ $labels.pvc }}.
+          summary: >-
+            longhorn: no snapshot series is reported for the capped claim {{ $labels.pvc }}.
           description: >-
             {{ $labels.pvc }} declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
             series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
@@ -230,7 +236,8 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The Longhorn disk on {{ $labels.node }} is past the 75% replica scheduling floor.
+          summary: >-
+            longhorn: the disk on {{ $labels.node }} is past the 75% replica scheduling floor.
           description: >-
             Run `sudo k3s crictl rmi --prune` on {{ $labels.node }}, then read what else holds the
             space. Longhorn's disk {{ $labels.disk }} there is {{ $value | humanizePercentage }}
@@ -254,7 +261,7 @@ groups:
           severity: critical
           service: longhorn
         annotations:
-          summary: The CSI mount {{ $labels.mountpoint }} is read-only.
+          summary: 'longhorn: the CSI mount {{ $labels.mountpoint }} is read-only.'
           description: >-
             {{ $labels.mountpoint }} remounted read-only after an iSCSI stall, behind a Longhorn
             volume that still reads healthy. Scale the workload to 0, wait for the volume to
@@ -274,8 +281,7 @@ groups:
           severity: critical
           service: etcd
         annotations:
-          summary: >-
-            The etcd database is at {{ $value | printf "%.0f" }}% of its 2 GiB quota.
+          summary: 'etcd: the database is at {{ $value | printf "%.0f" }}% of its 2 GiB quota.'
           description: >-
             The etcd database is {{ $value | printf "%.0f" }}% of its 2 GiB quota. At the quota
             etcd rejects every write and the control plane stops. Compact and defragment, or raise

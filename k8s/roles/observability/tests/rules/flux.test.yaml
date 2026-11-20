@@ -29,7 +29,7 @@ tests:
               severity: critical
               service: flux
             exp_annotations: &absent_source
-              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              summary: 'flux: a controller has no pod, or Prometheus lost its metrics.'
               description: >-
                 For 5 minutes source-controller has either had no scrape target, so its pod
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
@@ -42,7 +42,7 @@ tests:
               severity: critical
               service: flux
             exp_annotations: &absent_kustomize
-              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              summary: 'flux: a controller has no pod, or Prometheus lost its metrics.'
               description: >-
                 For 5 minutes kustomize-controller has either had no scrape target, so its pod
                 is gone or the flux scrape job is missing from prometheus.yml, or it has been
@@ -55,7 +55,7 @@ tests:
               severity: critical
               service: flux
             exp_annotations: &absent_notification
-              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              summary: 'flux: a controller has no pod, or Prometheus lost its metrics.'
               description: >-
                 For 5 minutes notification-controller has either had no scrape target, so its
                 pod is gone or the flux scrape job is missing from prometheus.yml, or it has
@@ -105,7 +105,7 @@ tests:
               severity: critical
               service: flux
             exp_annotations:
-              summary: Prometheus cannot scrape the Flux controller source-controller.
+              summary: 'flux: Prometheus cannot scrape the controller source-controller.'
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -122,7 +122,7 @@ tests:
               severity: critical
               service: flux
             exp_annotations:
-              summary: Prometheus cannot scrape the Flux controller source-controller.
+              summary: 'flux: Prometheus cannot scrape the controller source-controller.'
               description: >-
                 source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
                 source-controller is down or unreachable from Prometheus. Read its pod's
@@ -184,7 +184,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations: &not_ready_kustomization
-              summary: The Kustomization homelab has not been Ready for 15 minutes.
+              summary: 'flux: the Kustomization homelab has not been Ready for 15 minutes.'
               description: >-
                 The Kustomization homelab in flux-system is not Ready after 15 minutes; read its
                 conditions.
@@ -264,7 +264,7 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: The OCIRepository homelab has not been Ready for 15 minutes.
+              summary: 'flux: the OCIRepository homelab has not been Ready for 15 minutes.'
               description: >-
                 The OCIRepository homelab in flux-system is not Ready after 15 minutes; read its
                 conditions.
@@ -292,7 +292,7 @@ tests:
               service: flux
             exp_annotations:
               summary: >-
-                kube-state-metrics has exported no gotk_resource_info for the root
+                flux: kube-state-metrics has exported no gotk_resource_info for the root
                 Kustomization for 15 minutes.
               description: >-
                 kube-state-metrics exports no gotk_resource_info for homelab; read its log.
@@ -336,7 +336,7 @@ tests:
               service: flux
               escalate: "false"
             exp_annotations:
-              summary: The Kustomization homelab has been suspended for more than 24 hours.
+              summary: 'flux: the Kustomization homelab has been suspended for more than 24 hours.'
               description: >-
                 The Kustomization homelab in flux-system has been suspended for 24 hours, so
                 Flux applies nothing it owns. If its role sets flux_suspend, land the PR that
@@ -428,7 +428,8 @@ tests:
               severity: warning
               service: flux
             exp_annotations:
-              summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+              summary: >-
+                flux: every kustomize-controller reconcile worker has been busy for 30 minutes.
               description: >-
                 All 4 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been busy
                 for 30 minutes with Kustomizations still queued, usually because unhealthy ones
@@ -491,7 +492,8 @@ tests:
         exp_alerts:
           - exp_labels: *saturated_labels
             exp_annotations:
-              summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+              summary: >-
+                flux: every kustomize-controller reconcile worker has been busy for 30 minutes.
               description: >-
                 All 5 of kustomize-controller-5d94ff85cc-bfhww's reconcile workers have been busy
                 for 30 minutes with Kustomizations still queued, usually because unhealthy ones

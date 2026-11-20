@@ -45,7 +45,7 @@ groups:
           severity: critical
           service: daniel-box
         annotations:
-          summary: daniel-box's UPS secondary watchdog reported a failure.
+          summary: 'daniel-box: the UPS secondary watchdog reported a failure.'
           description: >-
             Run `systemctl is-active nut-monitor` and `upsc <endpoint> ups.status` on daniel-box.
             Its UPS secondary watchdog ended with status=down, so daniel-box would not power off on
@@ -63,7 +63,7 @@ groups:
           severity: critical
           service: daniel-box
         annotations:
-          summary: daniel-box's UPS secondary watchdog has stopped reporting.
+          summary: 'daniel-box: the UPS secondary watchdog has stopped reporting.'
           description: >-
             Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
             homelab-ups-watchdog.service` on daniel-box. No ups-secondary-health verdict newer than
@@ -75,7 +75,7 @@ groups:
           severity: critical
           service: daniel-server
         annotations:
-          summary: daniel-server's UPS secondary watchdog reported a failure.
+          summary: 'daniel-server: the UPS secondary watchdog reported a failure.'
           description: >-
             Run `systemctl is-active nut-monitor` and `upsc <endpoint> ups.status` on daniel-server.
             Its UPS secondary watchdog ended with status=down, so daniel-server would not power off
@@ -93,7 +93,7 @@ groups:
           severity: critical
           service: daniel-server
         annotations:
-          summary: daniel-server's UPS secondary watchdog has stopped reporting.
+          summary: 'daniel-server: the UPS secondary watchdog has stopped reporting.'
           description: >-
             Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
             homelab-ups-watchdog.service` on daniel-server. No ups-secondary-health verdict newer
@@ -106,7 +106,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The fake-remux scan on daniel-box reported a failure.
+          summary: 'daniel-box: the fake-remux scan reported a failure.'
           description: >-
             fake-remux-health read the daily scan's state file and found a failure or a run
             older than 26 hours. Read the `fake-remux scan` cron and state.json in
@@ -123,7 +123,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
+          summary: 'daniel-box: the fake-remux heartbeat has stopped reporting the scan.'
           description: >-
             No fake-remux-scan verdict newer than 25 minutes reached Prometheus from daniel-box,
             so nothing confirms the scan's state file is being read. Read the `fake-remux health`
@@ -135,7 +135,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The fake-remux reconciler on daniel-box reported a failure.
+          summary: 'daniel-box: the fake-remux reconciler reported a failure.'
           description: >-
             fake-remux-health read the reconciler's state file and found a failure or a run
             older than 1.2 hours. Read the `fake-remux reconcile` cron and replace_state.json in
@@ -152,7 +152,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
+          summary: 'daniel-box: the fake-remux heartbeat has stopped reporting the reconciler.'
           description: >-
             No fake-remux-replace verdict newer than 25 minutes reached Prometheus from
             daniel-box, so nothing confirms the reconciler's state file is being read. Read the
@@ -164,7 +164,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The mkv attachment repair on daniel-box reported a failure.
+          summary: 'daniel-box: the mkv attachment repair reported a failure.'
           description: >-
             fake-remux-health read the repair sweep's state file and found a failure or a run
             older than 1.2 hours. Read the `mkv attachment repair` cron and
@@ -182,7 +182,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
+          summary: 'daniel-box: the fake-remux heartbeat has stopped reporting the mkv repair.'
           description: >-
             No mkv-attachment-repair verdict newer than 25 minutes reached Prometheus from
             daniel-box, so nothing confirms the repair sweep's state file is being read. Read the
@@ -194,7 +194,7 @@ groups:
           severity: critical
           service: daniel-server
         annotations:
-          summary: The monthly etcd restore drill on daniel-server failed.
+          summary: 'daniel-server: the monthly etcd restore drill failed.'
           description: >-
             etcd-restore-drill-vm on daniel-server ended with status=down: a preflight failed,
             the egress fence leaked, or the restore in the throwaway guest did not pass. Read the
@@ -213,7 +213,7 @@ groups:
           severity: critical
           service: daniel-server
         annotations:
-          summary: The monthly etcd restore drill on daniel-server has stopped reporting.
+          summary: 'daniel-server: the monthly etcd restore drill has stopped reporting.'
           description: >-
             Read homelab-etcd-restore-drill.timer and the journal of
             homelab-etcd-restore-drill.service on daniel-server. No etcd-restore-drill-vm verdict
@@ -226,7 +226,7 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: The etcd drill's egress fence leg on daniel-server reported a failure.
+          summary: "daniel-server: the etcd drill's egress fence leg reported a failure."
           description: >-
             The fence leg of etcd-restore-drill-vm dialled every fenced range from inside the
             throwaway guest and either found a leak or could not measure a range, so the fence is
@@ -244,7 +244,7 @@ groups:
           severity: warning
           service: daniel-server
         annotations:
-          summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
+          summary: "daniel-server: the etcd drill's egress fence leg has stopped reporting."
           description: >-
             No etcd-restore-drill-egress-fence verdict newer than 35 days reached Prometheus from
             daniel-server, so the fence went unmeasured this month. A run that dies before the
@@ -264,7 +264,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
+          summary: 'daniel-box: the renovate notifier has not completed a run in 36 hours.'
           description: >-
             No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box:
             the daily 13:00 timer did not fire or the run failed. Read
@@ -285,7 +285,7 @@ groups:
           severity: warning
           service: daniel-box
         annotations:
-          summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
+          summary: 'daniel-box: the renovate agent has not completed a clean run in 28 hours.'
           description: >-
             No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box's
             textfile collector: the daily 06:00 timer did not fire, the run crashed, or a

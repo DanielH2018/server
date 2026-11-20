@@ -28,7 +28,7 @@ groups:
           severity: warning
           service: github
         annotations:
-          summary: The live GitHub rulesets no longer match the values the repo declares.
+          summary: 'github: the live rulesets no longer match the values the repo declares.'
           description: >-
             github-ruleset-drift.sh on daniel-box ended with status=down: the repo is not public,
             a ruleset differs from the github-checks defaults, or GitHub could not be read. The
@@ -47,7 +47,7 @@ groups:
           severity: warning
           service: github
         annotations:
-          summary: daniel-box's GitHub ruleset drift check has stopped reporting.
+          summary: "github: daniel-box's ruleset drift check has stopped reporting."
           description: >-
             No github-ruleset-drift verdict newer than 25 hours reached Prometheus from daniel-box,
             so nothing confirms the merge gate matches the repo. Read
@@ -59,7 +59,7 @@ groups:
           severity: warning
           service: github
         annotations:
-          summary: The repo's GitHub interaction limit was not re-armed.
+          summary: "github: the repo's interaction limit was not re-armed."
           description: >-
             github-interaction-limit.sh on daniel-box ended with status=down: gh is not logged in
             for the deploy user, the PUT failed, or the readback did not match the declared
@@ -78,7 +78,7 @@ groups:
           severity: warning
           service: github
         annotations:
-          summary: daniel-box's GitHub interaction-limit re-arm has stopped reporting.
+          summary: "github: daniel-box's interaction-limit re-arm has stopped reporting."
           description: >-
             No github-interaction-limit verdict newer than 25 hours reached Prometheus from
             daniel-box, so nothing confirms the limit is re-armed before it lapses. Read

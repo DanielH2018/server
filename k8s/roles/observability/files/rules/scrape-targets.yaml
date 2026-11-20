@@ -29,7 +29,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -42,7 +42,7 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -55,7 +55,7 @@ groups:
           severity: warning
           service: alloy
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -68,7 +68,7 @@ groups:
           severity: warning
           service: daniel-pi
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -81,7 +81,7 @@ groups:
           severity: warning
           service: node-exporter
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -94,7 +94,7 @@ groups:
           severity: warning
           service: gpu-exporter
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -107,7 +107,7 @@ groups:
           severity: warning
           service: monitor-bridge
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -123,7 +123,7 @@ groups:
           severity: warning
           service: autofix-bridge
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -136,7 +136,7 @@ groups:
           severity: warning
           service: flux
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -149,7 +149,7 @@ groups:
           severity: warning
           service: crowdsec
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -162,7 +162,7 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -175,7 +175,7 @@ groups:
           severity: warning
           service: speedtest
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -188,7 +188,7 @@ groups:
           severity: warning
           service: navidrome
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -201,7 +201,7 @@ groups:
           severity: warning
           service: pihole
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -214,7 +214,7 @@ groups:
           severity: warning
           service: home-assistant
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -227,7 +227,7 @@ groups:
           severity: warning
           service: nut-exporter
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -245,7 +245,7 @@ groups:
           severity: warning
           service: game-stats
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -258,7 +258,7 @@ groups:
           severity: warning
           service: longhorn
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -271,7 +271,7 @@ groups:
           severity: warning
           service: coredns
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -284,7 +284,7 @@ groups:
           severity: warning
           service: exportarr
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -297,7 +297,7 @@ groups:
           severity: warning
           service: k3s
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -310,7 +310,7 @@ groups:
           severity: warning
           service: blackbox-exporter
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -323,7 +323,7 @@ groups:
           severity: warning
           service: unmapped
         annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
+          summary: '{{ $labels.job }}: Prometheus cannot scrape the target {{ $labels.instance }}.'
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
             minutes, so its exporter is down or unreachable from Prometheus and its series have
@@ -349,7 +349,9 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -362,7 +364,9 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -375,7 +379,9 @@ groups:
           severity: warning
           service: alloy
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -388,7 +394,9 @@ groups:
           severity: warning
           service: daniel-pi
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -401,7 +409,9 @@ groups:
           severity: warning
           service: node-exporter
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -414,7 +424,9 @@ groups:
           severity: warning
           service: gpu-exporter
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -427,7 +439,9 @@ groups:
           severity: warning
           service: monitor-bridge
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -440,7 +454,9 @@ groups:
           severity: warning
           service: autofix-bridge
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -453,7 +469,9 @@ groups:
           severity: warning
           service: flux
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -466,7 +484,9 @@ groups:
           severity: warning
           service: crowdsec
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -479,7 +499,9 @@ groups:
           severity: warning
           service: traefik
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -492,7 +514,9 @@ groups:
           severity: warning
           service: speedtest
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -505,7 +529,9 @@ groups:
           severity: warning
           service: navidrome
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -518,7 +544,9 @@ groups:
           severity: warning
           service: pihole
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -531,7 +559,9 @@ groups:
           severity: warning
           service: home-assistant
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -544,7 +574,9 @@ groups:
           severity: warning
           service: nut-exporter
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -559,7 +591,9 @@ groups:
           severity: warning
           service: game-stats
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -572,7 +606,9 @@ groups:
           severity: warning
           service: longhorn
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -585,7 +621,9 @@ groups:
           severity: warning
           service: coredns
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -598,7 +636,9 @@ groups:
           severity: warning
           service: exportarr
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -611,7 +651,9 @@ groups:
           severity: warning
           service: k3s
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -624,7 +666,9 @@ groups:
           severity: warning
           service: blackbox-exporter
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -637,7 +681,9 @@ groups:
           severity: warning
           service: unmapped
         annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
+          summary: >-
+            {{ $labels.job }}: Prometheus's scrapes of the target {{ $labels.instance }} keep
+            failing.
           description: >-
             {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
             over 30 minutes, failing at least twice and answering in between, so it flaps
@@ -658,7 +704,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Prometheus sees too few scrape targets.
+          summary: 'observability: Prometheus sees too few scrape targets.'
           description: >-
             Fewer than 3 scrape targets outside daniel-server, or none on it, have reported for
             10 minutes. The metrics estate is missing, so target health is unknown rather than
