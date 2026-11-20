@@ -87,6 +87,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/prom_rollup.py') }}": prom_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/prom_series.py') }}": prom_series.py
       "{{ role_file('files/dags/prom_series_rollup.py') }}": prom_series_rollup.py
+      "{{ role_file('files/dags/ha_daily_rollup.py') }}": ha_daily_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/ha_rollup.py') }}": ha_rollup.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 
@@ -117,3 +119,6 @@ render_secrets:
       # Signs the execution-API tokens the scheduler hands each task pod. Every component must
       # share one value, or every task fails its first API call with a 403.
       AIRFLOW__API_AUTH__JWT_SECRET: airflow_api_jwt_secret
+      # A Home Assistant long-lived access token, made in HA's UI under the operator's
+      # profile. Task pods read history with it (ha_daily_rollup).
+      HA_TOKEN: airflow_ha_token
