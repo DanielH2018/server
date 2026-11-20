@@ -219,6 +219,7 @@ files:
   # runner runs it before each episode instead.
   - {src: templates/claude-triage-setup.sh.j2, dst: /usr/lib/homelab/claude-triage-setup, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {lib: prom_envelope.py, dst: /opt/claude-triage/prom_envelope.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: claude_config_lock.py, dst: /opt/claude-triage/claude_config_lock.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}

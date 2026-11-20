@@ -54,12 +54,15 @@ class Prom:
         self.reconcile: dict[str, float] = {}
         self.refuse: set[str] = set()
         self.asked: list[str] = []
+        self.body: dict | None = None
 
     def __call__(self, url: str, timeout: float) -> bytes:
         base = url.split("/api/")[0]
         self.asked.append(base)
         if base in self.refuse:
             raise ConnectionRefusedError(base)
+        if self.body is not None:
+            return json.dumps(self.body).encode()
         match = re.search(r"query=(\w+)%7Bhost%3D%22([\w-]+)%22%7D", url)
         assert match, url
         name, host = match.groups()
@@ -235,6 +238,34 @@ def test_no_answer_on_either_address_keeps_the_gate_open(opened):
     assert debs(state) == []
     assert metric(state)[0] == "canary"
     assert set(prom.asked) == set(URLS.split()), "both addresses were tried"
+
+
+@pytest.mark.parametrize(
+    "body, named",
+    [
+        ({"status": "success", "data": None}, "the answer's data is not an object"),
+        (
+            {"status": "success", "data": {"result": None}},
+            "the answer's result is not a list",
+        ),
+        (
+            {
+                "status": "success",
+                "data": {"result": [{"metric": {}, "value": [0, "x"]}]},
+            },
+            "a sample's value 'x' is not a number",
+        ),
+    ],
+)
+def test_a_malformed_answer_keeps_the_gate_open_and_names_the_fault(
+    opened, capsys, body, named
+):
+    lab, prom, _v, state, _ = opened
+    prom.body = body
+    capsys.readouterr()
+    run(lab, prom)
+    assert debs(state) == []
+    assert f"PromAnswerError: {named}" in capsys.readouterr().out
 
 
 def test_a_refused_loopback_falls_back_to_the_cluster_ip(opened):
