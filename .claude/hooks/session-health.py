@@ -387,8 +387,9 @@ def other_live_sessions(
     # One `systemctl --user show` per fan-out tree: 1.5s in turn over 177 trees on
     # daniel-server. A tree another user owns, as `ubuntu` fan-out trees are to a `claude`
     # session, is judged from /proc, because that user's manager answers only its owner.
-    # A coordinator project's lock outlives its session, so that tree is judged by the
-    # processes inside it; `dead_project_lines` names the ones this drops.
+    # A lock naming no session pid and no batch, such as a coordinator project's, outlives
+    # its holder, so that tree is judged by the processes inside it; `dead_project_lines`
+    # names the coordinator projects this drops.
     live = keep_where(
         locked,
         functools.partial(has_live_session, foreign=process_unit_state()),

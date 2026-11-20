@@ -54,6 +54,7 @@ __all__ = [
     "DEFAULT_TIMEOUT",
     "SHEBANG",
     "fake_bin",
+    "live_session_lock",
     "path_with",
     "run",
     "write_exec",
@@ -89,6 +90,12 @@ def write_exec(path: Path, text: str) -> Path:
     path.write_text(text if text.startswith("#!") else SHEBANG + text)
     path.chmod(0o755)
     return path
+
+
+def live_session_lock() -> str:
+    """A worktree lock reason naming this process, which `session_is_alive` reads as live."""
+    start = Path("/proc/self/stat").read_text().rpartition(")")[2].split()[19]
+    return f"claude session test (pid {os.getpid()} start {start})"
 
 
 def fake_bin(directory: Path, **scripts: str) -> Path:
