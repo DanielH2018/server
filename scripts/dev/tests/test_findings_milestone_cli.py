@@ -130,6 +130,12 @@ def test_close_shuts_a_group_by_its_title():
     assert calls.gh == [["api", "-X", "PATCH", f"{MILESTONES}/9", "-f", "state=closed"]]
 
 
+def test_group_reopens_the_closed_group_of_that_title():
+    tools, calls = _backlog(milestones=[{**GROUP, "state": "closed"}])
+    assert main(["milestone", "group", "Backups"], tools) == 0
+    assert calls.gh == [["api", "-X", "PATCH", f"{MILESTONES}/9", "-f", "state=open"]]
+
+
 def test_start_project_adopts_a_project_whose_branch_has_no_worktree(capsys):
     theirs = {**PROJECT, "description": description_for("worktree-b", project=True)}
     tools, calls = build_tools(
@@ -141,10 +147,15 @@ def test_start_project_adopts_a_project_whose_branch_has_no_worktree(capsys):
     assert capsys.readouterr().out.endswith("adopted the project of `worktree-b`\n")
 
 
-def test_start_project_refuses_a_project_whose_branch_a_live_worktree_holds(capsys):
+@pytest.mark.parametrize(
+    "worktrees",
+    [live_worktree("worktree-b"), facts(ok=False)],
+    ids=["a-live-worktree-holds-it", "the-worktrees-cannot-be-read"],
+)
+def test_start_project_refuses_a_project_whose_branch_may_be_live(capsys, worktrees):
     theirs = {**PROJECT, "description": description_for("worktree-b", project=True)}
     tools, calls = build_tools(
-        Fakes(api={MILESTONES: [[theirs]]}, worktree_facts=live_worktree("worktree-b"))
+        Fakes(api={MILESTONES: [[theirs]]}, worktree_facts=worktrees)
     )
     argv = ["milestone", "start", "--project", "Backups", "--worktree", WT]
     assert main(argv, tools) == 3
@@ -156,12 +167,10 @@ def test_start_project_refuses_a_project_whose_branch_a_live_worktree_holds(caps
     "argv",
     [
         ["status"],
-        ["status", "--worktree", WT, "--group", "Backups"],
         ["start", "Backups", "--group", "Backups"],
         ["group", "Backups", "--worktree", WT],
-        ["disown", "--group", "Backups"],
     ],
-    ids=["neither", "both", "start-by-group", "group-by-worktree", "disown-by-group"],
+    ids=["neither", "start-by-group", "group-by-worktree"],
 )
 def test_an_action_refuses_the_naming_flag_it_does_not_take(argv):
     tools, calls = build_tools(Fakes())
