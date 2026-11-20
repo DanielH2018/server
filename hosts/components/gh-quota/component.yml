@@ -2,8 +2,8 @@
 # `gh_quota.record` for each `gh` call they make, and `gh-quota status` reports the spend per
 # session beside GitHub's own count.
 #
-# /usr/lib/homelab/gh_quota.py is the module the wrappers import. /usr/bin/gh-quota runs
-# /usr/lib/homelab/gh_quota_cli.py, which imports that module from beside it.
+# /usr/lib/homelab/gh_quota.py is the module the wrappers import. /usr/bin/gh-quota is
+# gh_quota_cli.py, which imports that module from /usr/lib/homelab.
 #
 # /etc/gh-quota.conf carries the mode. To stop recording on one host, set `gh_quota_mode: "off"`
 # in its host_vars: the module returns at once from that host's next package version on, and
@@ -19,7 +19,6 @@ defaults:
   gh_quota_mode: record
 files:
   - {src: files/gh_quota.py, dst: /usr/lib/homelab/gh_quota.py}
-  - {src: files/gh_quota_cli.py, dst: /usr/lib/homelab/gh_quota_cli.py}
-  - {src: files/gh-quota.sh, dst: /usr/bin/gh-quota, mode: "0755"}
+  - {src: files/gh_quota_cli.py, dst: /usr/bin/gh-quota, mode: "0755"}
   - {src: templates/gh-quota.conf.j2, dst: /etc/gh-quota.conf}
   - {src: tmpfiles.d/homelab-gh-quota.conf, dst: /usr/lib/tmpfiles.d/homelab-gh-quota.conf}

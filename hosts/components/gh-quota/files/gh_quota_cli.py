@@ -2,8 +2,7 @@
 """The `gh-quota` command: GitHub API spend per session on this host, beside GitHub's own count.
 
 `status` reads the ledgers gh_quota.py keeps under /var/lib/gh-quota, and `mode` prints whether
-this host records. Installed as /usr/lib/homelab/gh_quota_cli.py beside gh_quota.py, which
-/usr/bin/gh-quota runs. docs/github-quota.md holds the design.
+this host records. Installed as /usr/bin/gh-quota. docs/github-quota.md holds the design.
 """
 
 import argparse
@@ -13,6 +12,9 @@ import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+# The package ships gh_quota.py to /usr/lib/homelab. Appended, so a checkout's copy found
+# earlier on the path wins in a test run.
+sys.path.append("/usr/lib/homelab")
 from gh_quota import (
     ATTENTION_SHARE,
     CONF,

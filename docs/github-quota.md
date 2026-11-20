@@ -456,8 +456,7 @@ every session at once.
 +    component.yml          ships the files below on each host that lists it;
 +                           its default is gh_quota_mode: record
 +    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module
-+    files/gh_quota_cli.py  -> /usr/lib/homelab/gh_quota_cli.py, `status` and `mode`
-+    files/gh-quota.sh      -> /usr/bin/gh-quota, which runs gh_quota_cli.py
++    files/gh_quota_cli.py  -> /usr/bin/gh-quota, the `status` and `mode` command
 +    templates/gh-quota.conf.j2
 +    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
 +    tests/test_gh_quota.py           classifying, sampling and windows
