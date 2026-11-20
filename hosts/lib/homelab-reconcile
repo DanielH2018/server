@@ -107,7 +107,8 @@ import re
 import shutil
 import sys
 import time
-from pathlib import Path
+from dataclasses import asdict, dataclass
+from pathlib import Path, PurePosixPath
 
 from reconcile_lib import activate, libvirt, lines, textfile, udev, ufw, users
 from reconcile_lib.common import ERR, ROOT, run, log, systemctl, timed, under_root
@@ -182,7 +183,92 @@ def load_json(path: Path) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def parse_manifest(text: str) -> dict:
+# The legacy entry kinds. Each field is named for its manifest key, which `legacy_key` reads.
+@dataclass(frozen=True)
+class LegacyPath:
+    path: str  # as written: `Path()` drops a trailing `/`, and legacy_key reads it
+
+
+@dataclass(frozen=True)
+class LegacyCron:
+    cron: str
+    user: str
+
+
+@dataclass(frozen=True)
+class LegacyCronFile:
+    cron_file: str
+
+
+@dataclass(frozen=True)
+class LegacyUnit:
+    unit: str
+
+
+Legacy = LegacyPath | LegacyCron | LegacyCronFile | LegacyUnit
+
+
+@dataclass(frozen=True)
+class Handoff:
+    units: tuple[str, ...]
+    legacy: tuple[Legacy, ...]
+
+
+@dataclass(frozen=True)
+class Manifest:
+    """The manifest, parsed: `units` maps each unit to its policy, None for a unit with none."""
+
+    units: dict[str, str | None]
+    enable_links: frozenset[str]
+    legacy: tuple[Legacy, ...]
+    handoffs: tuple[Handoff, ...]
+    unknown_arms: tuple[str, ...]  # listed in `reconcilers`, but not in ARMS
+    activations: dict[str, str]
+    arms: dict[str, object]
+    secrets_digest: str | None
+
+
+@dataclass(frozen=True)
+class AppliedState:
+    """The previous run's applied.json. A value of the wrong type reads as absent."""
+
+    units: dict[str, object]
+    enable_links: frozenset[str]
+    retired: frozenset[str]
+    started: dict[str, int]
+    files: dict[str, str]
+    pending: dict[str, str]
+    secrets_digest: str | None
+    records: dict[str, dict | None]  # each arm's record, and udev's, by name
+    last_ok: dict | None
+
+
+def parse_applied(raw: dict) -> AppliedState:
+    def record(key: str) -> dict | None:
+        return raw[key] if isinstance(raw.get(key), dict) else None
+
+    def table(key: str) -> dict:
+        return record(key) or {}
+
+    def names(key: str) -> frozenset[str]:
+        listed = raw[key] if isinstance(raw.get(key), list) else []
+        return frozenset(name for name in listed if isinstance(name, str))
+
+    digest = raw.get("secrets_inputs_sha256")
+    return AppliedState(
+        units=table("units"),
+        enable_links=names("enable_links"),
+        retired=names("retired"),
+        started={u: when for u, when in table("started").items() if type(when) is int},
+        files=table("files"),
+        pending=table("pending"),
+        secrets_digest=digest if isinstance(digest, str) else None,
+        records={name: record(name) for name in (*ARMS, "udev")},
+        last_ok=record("last_ok"),
+    )
+
+
+def parse_manifest(text: str) -> Manifest:
     try:
         manifest = json.loads(text)
     except ValueError as exc:
@@ -202,12 +288,16 @@ def parse_manifest(text: str) -> dict:
         raise ManifestError(f"{MANIFEST}: units {units!r} is not a map of unit names")
     if not isinstance(links, list) or not all(link in units for link in links):
         raise ManifestError(f"{MANIFEST}: every enable link must name a listed unit")
-    if not isinstance(legacy, list) or not all(map(valid_legacy, legacy)):
+    entries = tuple(map(parse_legacy, legacy)) if isinstance(legacy, list) else (None,)
+    if None in entries:
         raise ManifestError(
             f"{MANIFEST}: legacy {legacy!r} holds an entry of no known kind"
         )
     handoffs = manifest.get("handoffs", [])
-    if not isinstance(handoffs, list) or not all(map(valid_handoff, handoffs)):
+    groups = (
+        tuple(map(parse_handoff, handoffs)) if isinstance(handoffs, list) else (None,)
+    )
+    if None in groups:
         raise ManifestError(f"{MANIFEST}: handoffs {handoffs!r} is malformed")
     if not isinstance(reconcilers, list):
         raise ManifestError(f"{MANIFEST}: reconcilers is not a list")
@@ -222,56 +312,46 @@ def parse_manifest(text: str) -> dict:
             raise ManifestError(
                 f"{MANIFEST}: the {name} section is malformed or unlisted"
             )
-    parsed = {
-        "units": units,
-        "enable_links": links,
-        "legacy": legacy,
-        "handoffs": handoffs,
-        "reconcilers": [name for name in reconcilers if name not in ARMS],
-        "activations": activations,
-        "arms": {name: manifest.get(name) for name in ARMS},
-    }
     digest = manifest.get("secrets_inputs_sha256")
-    if digest is not None:
-        if not isinstance(digest, str) or not SHA256.fullmatch(digest):
-            raise ManifestError(f"{MANIFEST}: secrets_inputs_sha256 is not a sha256")
-        parsed["secrets_inputs_sha256"] = digest
-    return parsed
-
-
-def valid_legacy(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    if set(entry) == {"path"}:
-        path = entry["path"]
-        return (
-            isinstance(path, str)
-            and path.startswith("/")
-            and ".." not in path.split("/")
-        )
-    if set(entry) == {"cron", "user"}:
-        return all(isinstance(v, str) and v and "\n" not in v for v in entry.values())
-    if set(entry) == {"cron_file"}:
-        return isinstance(entry["cron_file"], str) and bool(
-            PLAIN_NAME.fullmatch(entry["cron_file"])
-        )
-    if set(entry) == {"unit"}:
-        return isinstance(entry["unit"], str) and bool(
-            UNIT_NAME.fullmatch(entry["unit"])
-        )
-    return False
-
-
-def valid_handoff(group: object) -> bool:
-    if not isinstance(group, dict) or set(group) != {"units", "legacy"}:
-        return False
-    units, legacy = group["units"], group["legacy"]
-    return (
-        isinstance(units, list)
-        and all(isinstance(unit, str) and UNIT_NAME.fullmatch(unit) for unit in units)
-        and isinstance(legacy, list)
-        and all(map(valid_legacy, legacy))
+    if digest is not None and not (
+        isinstance(digest, str) and SHA256.fullmatch(digest)
+    ):
+        raise ManifestError(f"{MANIFEST}: secrets_inputs_sha256 is not a sha256")
+    return Manifest(
+        units={name: spec.get("policy") for name, spec in units.items()},
+        enable_links=frozenset(links),
+        legacy=entries,
+        handoffs=groups,
+        unknown_arms=tuple(name for name in reconcilers if name not in ARMS),
+        activations=activations,
+        arms={name: manifest.get(name) for name in ARMS},
+        secrets_digest=digest,
     )
+
+
+def parse_legacy(entry: object) -> Legacy | None:
+    """The legacy entry as the record of its kind; None for an entry of no known kind."""
+    match entry:
+        case {"path": str(path)} if len(entry) == 1 and path.startswith("/"):
+            return None if ".." in path.split("/") else LegacyPath(path)
+        case {"cron": str(cron), "user": str(user)} if len(entry) == 2:
+            valid = all(value and "\n" not in value for value in (cron, user))
+            return LegacyCron(cron, user) if valid else None
+        case {"cron_file": str(name)} if len(entry) == 1 and PLAIN_NAME.fullmatch(name):
+            return LegacyCronFile(name)
+        case {"unit": str(unit)} if len(entry) == 1 and UNIT_NAME.fullmatch(unit):
+            return LegacyUnit(unit)
+    return None
+
+
+def parse_handoff(group: object) -> Handoff | None:
+    match group:
+        case {"units": list(units), "legacy": list(legacy)} if len(group) == 2 and all(
+            isinstance(unit, str) and UNIT_NAME.fullmatch(unit) for unit in units
+        ):
+            entries = tuple(map(parse_legacy, legacy))
+            return None if None in entries else Handoff(tuple(units), entries)
+    return None
 
 
 def wait_for_apt() -> int:
@@ -422,7 +502,7 @@ def retire_path(path: Path) -> bool:
     return True
 
 
-def shadow_path(entry: dict, units: dict) -> Path | None:
+def shadow_path(entry: Legacy, units: dict) -> Path | None:
     """The /etc/systemd/system path a legacy entry names, when it can shadow a packaged unit.
 
     A `{path:}` entry under that directory can, except a `<unit>.d/` directory and a drop-in
@@ -431,10 +511,10 @@ def shadow_path(entry: dict, units: dict) -> Path | None:
     the packaged drop-in of the same name (#6605). A `{unit:}` entry can when the package
     ships that unit, because an Ansible-era copy of it shadows the packaged one.
     """
-    if entry.get("unit") in units:
-        return ETC_UNIT_DIR / entry["unit"]
-    path = Path(entry.get("path", ""))
-    if ETC_UNIT_DIR not in path.parents or ".." in path.parts:
+    if isinstance(entry, LegacyUnit) and entry.unit in units:
+        return ETC_UNIT_DIR / entry.unit
+    path = Path(entry.path if isinstance(entry, LegacyPath) else "")
+    if ETC_UNIT_DIR not in path.parents:
         return None
     if path.parent == ETC_UNIT_DIR and path.suffix == ".d":
         return None
@@ -448,9 +528,9 @@ def shadow_path(entry: dict, units: dict) -> Path | None:
     return path
 
 
-def unit_dir_file(entry: dict) -> bool:
+def unit_dir_file(entry: Legacy) -> bool:
     """True for a `{path:}` entry that names a file present under /etc/systemd/system."""
-    path = Path(entry.get("path", ""))
+    path = Path(entry.path if isinstance(entry, LegacyPath) else "")
     return ETC_UNIT_DIR in path.parents and os.path.lexists(under_root(path))
 
 
@@ -569,35 +649,42 @@ def retire_unit(unit: str) -> bool:
     return template or not stop([unit])
 
 
-def legacy_path(entry: dict) -> Path:
+def legacy_path(entry: LegacyPath | LegacyCronFile | LegacyUnit) -> Path:
     """The file a legacy entry other than a cron retires."""
-    if "path" in entry:
-        return Path(entry["path"])
-    if "cron_file" in entry:
-        return CRON_D / entry["cron_file"]
-    return ETC_UNIT_DIR / entry["unit"]
+    match entry:
+        case LegacyPath(path):
+            return Path(path)
+        case LegacyCronFile(name):
+            return CRON_D / name
+        case LegacyUnit(unit):
+            return ETC_UNIT_DIR / unit
 
 
-def retire(entry: dict) -> bool:
-    if "cron" in entry:
-        return retire_cron(entry["cron"], entry["user"])
-    if "unit" in entry:
-        return retire_unit(entry["unit"])
-    return retire_path(legacy_path(entry))
+def retire(entry: Legacy) -> bool:
+    match entry:
+        case LegacyCron(cron, user):
+            return retire_cron(cron, user)
+        case LegacyUnit(unit):
+            return retire_unit(unit)
+        case LegacyPath() | LegacyCronFile():
+            return retire_path(legacy_path(entry))
 
 
-def legacy_key(entry: dict) -> str:
-    return json.dumps(entry, sort_keys=True)
+def legacy_key(entry: Legacy) -> str:
+    """The entry as canonical JSON, the form `retired` records it in."""
+    return json.dumps(asdict(entry), sort_keys=True)
 
 
-def replacement_failed(handoffs: list[dict], not_started: set[str]) -> dict[str, str]:
+def replacement_failed(
+    handoffs: tuple[Handoff, ...], not_started: set
+) -> dict[str, str]:
     """Each legacy key mapped to a unit of its spec that did not start in this run."""
     return {
         legacy_key(entry): unit
         for group in handoffs
-        for unit in group["units"]
+        for unit in group.units
         if unit in not_started
-        for entry in group["legacy"]
+        for entry in group.legacy
     }
 
 
@@ -653,22 +740,38 @@ def update_pending(add: set[str], remove: set[str]) -> bool:
         os.close(fd)
 
 
-def read_secrets_manifest() -> tuple[list[str], list[dict]] | None:
-    """The credential keys and output rows of secrets.json; None when it is unusable."""
+@dataclass(frozen=True)
+class SecretOutput:
+    destination: PurePosixPath  # relative, with no empty, `.` or `..` part
+    persist: bool
+    dependents: frozenset[str]
+
+    def exists(self) -> bool:
+        return ((PERSIST_DIR if self.persist else RUN_DIR) / self.destination).is_file()
+
+
+def parse_output(out: object) -> SecretOutput | None:
+    match out:
+        case {
+            "destination": str(dest),
+            "persist": bool(keep),
+            "dependents": list(deps),
+        }:
+            if all(part not in ("", ".", "..") for part in dest.split("/")):
+                return SecretOutput(PurePosixPath(dest), keep, frozenset(deps))
+    return None
+
+
+def read_secrets_manifest() -> tuple[list[str], list[SecretOutput]] | None:
+    """The credential keys and outputs of secrets.json; None when it is unusable."""
     try:
         manifest = json.loads(SECRETS_JSON.read_text())
-        credentials, outputs = manifest["credentials"], manifest["outputs"]
+        credentials = manifest["credentials"]
+        outputs = list(map(parse_output, manifest["outputs"]))
         valid = (
             isinstance(credentials, list)
             and all(isinstance(key, str) for key in credentials)
-            and isinstance(outputs, list)
-            and all(
-                isinstance(out, dict)
-                and isinstance(out.get("destination"), str)
-                and isinstance(out.get("persist"), bool)
-                and isinstance(out.get("dependents"), list)
-                for out in outputs
-            )
+            and None not in outputs
         )
     except (OSError, ValueError, KeyError, TypeError):
         valid = False
@@ -678,30 +781,26 @@ def read_secrets_manifest() -> tuple[list[str], list[dict]] | None:
     return credentials, outputs
 
 
-def output_exists(out: dict) -> bool:
-    return ((PERSIST_DIR if out["persist"] else RUN_DIR) / out["destination"]).is_file()
-
-
-def missing_outputs(unit: str, outputs: list[dict]) -> list[str]:
+def missing_outputs(unit: str, outputs: list[SecretOutput]) -> list[str]:
     """The destinations of the outputs that list `unit` as a dependent and do not exist."""
     return [
-        out["destination"]
+        str(out.destination)
         for out in outputs
-        if unit in out["dependents"] and not output_exists(out)
+        if unit in out.dependents and not out.exists()
     ]
 
 
-def secrets_ready(credentials: list[str], outputs: list[dict]) -> bool:
+def secrets_ready(credentials: list[str], outputs: list[SecretOutput]) -> bool:
     """True when homelab-secrets is active and every credential and output exists."""
     return (
         is_active(SECRETS_UNIT)
         and all((CREDSTORE / key).is_file() for key in credentials)
-        and all(map(output_exists, outputs))
+        and all(out.exists() for out in outputs)
     )
 
 
 def bring_up(
-    unit: str, verb: str, outputs: list[dict], queued: set[str], started: dict
+    unit: str, verb: str, outputs: list[SecretOutput], queued: set[str], started: dict
 ) -> bool:
     """One `reset-failed` and one blocking `start` or `restart` of `unit`, behind the existence gate.
 
@@ -731,23 +830,14 @@ def bring_up(
 # The run.
 
 
-def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
+def act(manifest: Manifest, prev: AppliedState) -> tuple[bool, dict]:
     """Steps 1 to 5. Return whether every step succeeded, and the advanced per-entry state."""
     ok = True
-    raw_units = prev.get("units")
-    prev_units: dict = raw_units if isinstance(raw_units, dict) else {}
-    prev_links = set(prev.get("enable_links") or [])
-    units: dict = manifest["units"]
-    links = set(manifest["enable_links"])
+    units, links = manifest.units, set(manifest.enable_links)
     units_state: dict = {}
     links_state = set(links)
-    raw_started = prev.get("started")
-    started = {
-        unit: when
-        for unit, when in (raw_started if isinstance(raw_started, dict) else {}).items()
-        if unit in units and isinstance(when, int)
-    }
-    digest = manifest.get("secrets_inputs_sha256")
+    started = {unit: when for unit, when in prev.started.items() if unit in units}
+    digest = manifest.secrets_digest
     manual = ALWAYS_MANUAL | ({SECRETS_UNIT} if digest else set())
     secrets = read_secrets_manifest() if digest else None
     credentials, outputs = secrets or ([], [])
@@ -756,36 +846,50 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     try:
         if not RUN_DIR.is_dir():
             RUN_DIR.mkdir(parents=True, exist_ok=True)
-            RUN_DIR.chmod(
-                0o755
-            )  # whatever the umask; homelab-secrets corrects an older one
+            # Whatever the umask; homelab-secrets corrects an older one.
+            RUN_DIR.chmod(0o755)
     except OSError as exc:
         log(f"cannot create {RUN_DIR}: {exc}", ERR)
 
     # Step 1: stop what the manifest dropped, and every homelab unit whose file has gone.
-    dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
-    unlinked = {u for u in prev_links - links if is_homelab(u) and u.endswith(".timer")}
+    dropped = {u for u in set(prev.units) - set(units) if is_homelab(u)}
+    unlinked = {
+        u for u in prev.enable_links - links if is_homelab(u) and u.endswith(".timer")
+    }
     stopping = dropped | unlinked | not_found_homelab_units()
     for unit in stop(sorted(stopping)):
         ok = False
-        if unit in prev_units and unit not in units:
-            units_state[unit] = prev_units[unit]
+        if unit in prev.units and unit not in units:
+            units_state[unit] = prev.units[unit]
         if unit in unlinked:
             links_state.add(unit)
 
     # Step 1a: the users arm, so an output step 1b writes can name a user this version adds.
     drift, arms = {"legacy": 0}, {}
-    ok = run_arms(["users"], manifest, prev, arms, drift) and ok
+
+    def run_arms(names: list[str]) -> bool:
+        """Run the named arms. Each record goes in `arms`, and each drift count in `drift`."""
+        ok = True
+        for name in names:
+            arm_ok, record, count = ARMS[name].reconcile(
+                manifest.arms[name], prev.records[name]
+            )
+            ok = ok and arm_ok
+            if record is not None:
+                arms[name], drift[name] = record, count
+        return ok
+
+    ok = run_arms(["users"]) and ok
 
     # Step 1b: in a package that ships `secrets-unit`, run homelab-secrets when its inputs, its
     # unit file or its activity says the outputs may be stale. A failed run does not stop the rest.
     secrets_state, secrets_ran = None, True
     if digest:
         stale = (
-            digest != prev.get("secrets_inputs_sha256")
+            digest != prev.secrets_digest
             or (
                 SECRETS_UNIT in units
-                and unit_hash(SECRETS_UNIT) != prev_units.get(SECRETS_UNIT)
+                and unit_hash(SECRETS_UNIT) != prev.units.get(SECRETS_UNIT)
             )
             or not is_active(SECRETS_UNIT)
         )
@@ -797,21 +901,21 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             secrets_ran = ok = False
         elif stale:
             log(f"restart {SECRETS_UNIT}")
-        secrets_state = digest if secrets_ran else prev.get("secrets_inputs_sha256")
+        secrets_state = digest if secrets_ran else prev.secrets_digest
 
     # Step 1c: the lines arm, so step 3b activates the files it edited.
-    ok = run_arms(["lines"], manifest, prev, arms, drift) and ok
+    ok = run_arms(["lines"]) and ok
 
     # The restart set, built before step 2: the units whose file or drop-in changed, and the
     # units in pending.json, each only when it is enabled or active. A foreign unit the manifest
     # dropped is walked once more, because its drop-in has gone.
-    foreign_dropped = {u for u in prev_units if u not in units and not is_homelab(u)}
+    foreign_dropped = {u for u in prev.units if u not in units and not is_homelab(u)}
     queued = read_pending()
     states = unit_states(set(units) | foreign_dropped | queued | links)
     hashes = {}
     changed = set()
     for unit in sorted((set(units) | foreign_dropped) - dropped):
-        hashes[unit] = unit_hash(unit), prev_units.get(unit)
+        hashes[unit] = unit_hash(unit), prev.units.get(unit)
         if hashes[unit][0] != hashes[unit][1] and not left_alone(
             unit, units, links, manual, states
         ):
@@ -826,7 +930,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # windowed one. After the first start, a unit is asked again: that start may have pulled it in.
     start_failed, starting = set(), False
     for unit in sorted(links - set(restart_set)):
-        if units.get(unit, {}).get("policy") == "windowed":
+        if units.get(unit) == "windowed":
             continue
         state = states.get(unit, {})
         if state.get("LoadState") == "masked" or state.get("ActiveState") == "active":
@@ -846,17 +950,10 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
 
     # Step 3b: the `activate:` action of each packaged file whose hash changed. A unit step 3
     # called already gets no second call.
-    raw_files, raw_pending = prev.get("files"), prev.get("pending")
-    pending = activate.refresh_pending(
-        raw_pending if isinstance(raw_pending, dict) else {}, manifest["activations"]
-    )
+    pending = activate.refresh_pending(prev.pending, manifest.activations)
     called = {unit: unit not in failed for unit in restart_set}
     activated, files_state = activate.activate(
-        manifest["activations"],
-        raw_files if isinstance(raw_files, dict) else {},
-        units,
-        called,
-        pending,
+        manifest.activations, prev.files, units, called, pending
     )
     ok = ok and activated
     activation_failed = {unit for unit, result in called.items() if not result} - failed
@@ -871,23 +968,22 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
 
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
     # retires none until every credential and output exists and homelab-secrets is active.
-    prev_retired = set(prev.get("retired") or [])
-    files = [e for e in manifest["legacy"] if "cron" not in e]
-    paths = {str(legacy_path(e)) for e in files if legacy_key(e) not in prev_retired}
+    files = [e for e in manifest.legacy if not isinstance(e, LegacyCron)]
+    paths = {str(legacy_path(e)) for e in files if legacy_key(e) not in prev.retired}
     OWNERS.update(lines.owners(sorted(paths)))
     retired = []
     waiting = None
     removed, handed, plain = False, set(), []
-    for entry in manifest["legacy"]:
+    for entry in manifest.legacy:
         key = legacy_key(entry)
-        if key not in prev_retired and digest and waiting is None:
+        if key not in prev.retired and digest and waiting is None:
             waiting = not (secrets and secrets_ready(credentials, outputs))
         shadow = shadow_path(entry, units)
         # An Ansible-era copy under /etc shadows the packaged unit of the same name, or that
         # unit's packaged drop-in: remove it (one daemon-reload and the restarts follow the
         # loop), whatever the unit's start did, because the copy may be why it failed. With no
         # packaged unit of that name, the file is the only copy, so it stays and counts as drift.
-        if shadow and key not in prev_retired and not waiting:
+        if shadow and key not in prev.retired and not waiting:
             unit = shadowed(shadow)[0]
             if unit not in units:
                 drift["legacy"] += 1
@@ -918,18 +1014,22 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run,
     # step 3b's activation restart included.
     kept_for = replacement_failed(
-        manifest["handoffs"], start_failed | failed | activation_failed
+        manifest.handoffs, start_failed | failed | activation_failed
     )
     removed = False
-    asked = {e.get("unit", "") for e in plain if legacy_key(e) not in prev_retired}
+    asked = {
+        e.unit
+        for e in plain
+        if isinstance(e, LegacyUnit) and legacy_key(e) not in prev.retired
+    }
     live = {} if waiting else unit_states(asked)
     for entry in plain:
         key = legacy_key(entry)
         # A running service is never stopped to retire it: the entry stays and counts as drift.
-        if key not in prev_retired and not waiting and running_service(entry, live):
+        if key not in prev.retired and not waiting and running_service(entry, live):
             drift["legacy"] += 1
             log(f"keeping {key}: the service is running, so it retires once it is not")
-        elif key in prev_retired:
+        elif key in prev.retired:
             retired.append(key)
         elif waiting:
             log(f"keeping {key}: the secrets do not all exist yet")
@@ -950,19 +1050,14 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         ok = False
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
-    for name in manifest["reconcilers"]:
+    for name in manifest.unknown_arms:
         log(
             f"the manifest lists reconciler {name!r}, which this version does not have",
             ERR,
         )
         ok = False
-    ok = (
-        run_arms(
-            [name for name in ARMS if name not in EARLY], manifest, prev, arms, drift
-        )
-        and ok
-    )
-    udev_ok, udev_state = udev.reconcile(prev.get("udev"))
+    ok = run_arms([name for name in ARMS if name not in EARLY]) and ok
+    udev_ok, udev_state = udev.reconcile(prev.records["udev"])
     ok = ok and udev_ok
     if udev_state:
         arms["udev"] = udev_state
@@ -982,28 +1077,14 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     return ok, state
 
 
-def run_arms(names: list, manifest: dict, prev: dict, arms: dict, drift: dict) -> bool:
-    """Run the named arms. Each record goes in `arms`, and each drift count in `drift`."""
-    ok = True
-    for name in names:
-        before = prev.get(name)
-        arm_ok, record, count = ARMS[name].reconcile(
-            manifest["arms"][name], before if isinstance(before, dict) else None
-        )
-        ok = ok and arm_ok
-        if record is not None:
-            arms[name], drift[name] = record, count
-    return ok
-
-
-def running_service(entry: dict, states: dict) -> bool:
+def running_service(entry: Legacy, states: dict) -> bool:
     """True for a legacy entry that names a service systemd is running or starting.
 
     For a template service, true while any of its instances is. Any other service is looked up
     in `states`, read after step 4b's restarts, and one systemctl would not answer for counts as
     running, so it stays.
     """
-    unit = entry.get("unit", "")
+    unit = entry.unit if isinstance(entry, LegacyUnit) else ""
     if not unit.endswith(".service"):
         return False
     if template_unit(unit):
@@ -1019,9 +1100,8 @@ def running_service(entry: dict, states: dict) -> bool:
 
 def left_alone(unit: str, units: dict, links: set, manual: set, states: dict) -> bool:
     """True when reconcile takes the unit's new file, or its queue entry, without acting."""
-    policy = units.get(unit, {}).get("policy")
     state = states.get(unit, {})
-    if unit in manual or policy in POLICIES:
+    if unit in manual or units.get(unit) in POLICIES:
         return True
     # A masked unit may still have an enable link, so this comes before the next test.
     if state.get("LoadState") == "masked":
@@ -1045,11 +1125,12 @@ def metrics(host: str) -> int:
     """`--metrics`: rewrite the metrics file from the record, with the flag as it stands now."""
     state = load_json(APPLIED)
     try:
-        activations = parse_manifest(MANIFEST.read_text())["activations"]
+        activations = parse_manifest(MANIFEST.read_text()).activations
     except (OSError, ManifestError):
         activations = None
-    if activations is not None and isinstance(state.get("pending"), dict):
-        state["pending"] = activate.refresh_pending(state["pending"], activations)
+    if activations is not None:
+        pending = parse_applied(state).pending
+        state["pending"] = activate.refresh_pending(pending, activations)
     textfile.write(host, state)
     return 0
 
@@ -1062,6 +1143,7 @@ def main() -> int:
         return metrics(host)
     packages = ["homelab-updater", f"homelab-{host}"]
     text, prev, installed = read_under_lock(packages)
+    applied = parse_applied(prev)
     versions = {name: version for name, (_, version) in installed.items()}
 
     kept = (
@@ -1092,12 +1174,12 @@ def main() -> int:
             log(f"{exc}; acting on nothing", ERR)
             ok = False
         else:
-            ok, state = act(manifest, prev)
+            ok, state = act(manifest, applied)
 
     result = {"versions": versions, "ok": ok, "finished": int(time.time())}
     state["result"] = result
-    last_ok = result if ok else prev.get("last_ok")
-    if isinstance(last_ok, dict):
+    last_ok = result if ok else applied.last_ok
+    if last_ok is not None:
         state["last_ok"] = last_ok
     write_applied(state)
     textfile.write(host, state)
