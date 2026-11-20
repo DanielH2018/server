@@ -109,6 +109,8 @@ class BatchStatus:
         merged: whether GitHub holds `pr_url` as merged.
         awaiting_lander: whether the batch is `done` only until the server lander lands its PR.
         ended_at: the epoch second its report was last written, or None when unread.
+        pr_unconfirmed: GitHub could not be asked for the branch's PR, so `pr_url` is the
+            first url the final text names and `merged` is unknown.
     """
 
     batch: str
@@ -125,6 +127,7 @@ class BatchStatus:
     merged: bool = False
     awaiting_lander: bool = False
     ended_at: float | None = None
+    pr_unconfirmed: bool = False
 
 
 def _one(b: Batch) -> str:
@@ -324,6 +327,8 @@ def with_own_pr(
     text names a PR the branch does not have becomes `needs-input` naming both, never `done`;
     a `needs-input` or `failed` one loses the foreign url. Such a batch whose text names only
     PRs from `earlier_prs`, which merged before this launch, opened nothing and becomes `no-pr`.
+    A batch GitHub could not be asked about keeps its state and its url, marked
+    `pr_unconfirmed`: a failed read says nothing about the batch.
     Only a batch with a url asks the forge, and a `landed` one holds the forge's own
     merged url already.
     """
@@ -338,6 +343,8 @@ def with_own_pr(
     if found.url:
         merged = held is not None and found.url in held.merged
         return dataclasses.replace(s, pr_url=found.url, merged=merged)
+    if found.unanswered:
+        return dataclasses.replace(s, pr_unconfirmed=True)
     if s.state in ("done", NO_VERDICT):
         if not found.problem:
             return dataclasses.replace(s, state=NO_PR, pr_url="")
@@ -554,6 +561,7 @@ def _awaiting(s: BatchStatus, log: str, ruling: str, now: float | None) -> Batch
     reason = operator_waits.reason_of(ruling)
     overdue = (
         not log.strip()
+        and not s.pr_unconfirmed
         and now is not None
         and s.ended_at is not None
         and now - s.ended_at > AWAIT_LANDER_S
@@ -590,7 +598,8 @@ def with_lander_verdict(
         GitHub holds as merged is `landed`: someone landed it by hand. A ruling the lander
         does not clear itself (`operator_waits.reason_of`) is `needs-input` naming the next
         step. So is a batch that ended more than `AWAIT_LANDER_S` before `now` with no
-        landing started. Any other stays `done`, noted as awaiting the lander with the
+        landing started, unless it is `pr_unconfirmed`: GitHub did not say whether its PR
+        merged. Any other stays `done`, noted as awaiting the lander with the
         ruling, and `awaiting_lander` is set.
     """
     result = result_fields(log)
@@ -692,8 +701,9 @@ def collect(
     batch elsewhere reports 1 or 5.
 
     Each row carries `batch`, `host`, `branch`, `state`, `pr_url`, `line`, the text line
-    `status` prints, and `awaiting_lander`, true for a `done` batch whose PR the server lander
-    has yet to land. `status --json` prints the rows themselves, so `fanout.py probe` reads
+    `status` prints, `awaiting_lander`, true for a `done` batch whose PR the server lander
+    has yet to land, and `pr_unconfirmed`, true when GitHub could not be asked for the
+    batch's PR. `status --json` prints the rows themselves, so `fanout.py probe` reads
     those fields instead of a regex over the line. Two states come from here rather
     than from a host: `cleaned` for a batch `clean` removed, and `unread` for a host whose
     read timed out, which still counts as running.
@@ -705,23 +715,22 @@ def collect(
     """
     rows, tiers = [], []
 
-    def row(
-        b: Batch, host: str, state: str, pr_url: str, line: str, awaiting: bool = False
-    ) -> dict:
+    def row(b: Batch, state: str, line: str, st: BatchStatus | None = None) -> dict:
         return {
             "batch": b.batch,
-            "host": host,
+            "host": b.host,
             "branch": b.branch,
             "state": state,
-            "pr_url": pr_url,
+            "pr_url": st.pr_url if st else "",
             "line": line,
-            "awaiting_lander": awaiting,
+            "awaiting_lander": bool(st and st.awaiting_lander),
+            "pr_unconfirmed": bool(st and st.pr_unconfirmed),
         }
 
     for b in run.batches:
         if b.removed_at:
             line = f"{b.batch} on {b.host}: cleaned ({b.removed_at})"
-            rows.append(row(b, b.host, "cleaned", "", line))
+            rows.append(row(b, "cleaned", line))
     live = [b for b in run.batches if not b.removed_at]
     read: list[tuple[Batch, BatchStatus | None]] = []
     for b, st in host_statuses(live, tools):
@@ -734,11 +743,11 @@ def collect(
     for b, st in with_lander_verdicts(read, tools, clock()):
         if st is None:
             line = f"{b.batch} on {b.host}: status read timed out"
-            rows.append(row(b, b.host, UNREAD, "", line))
+            rows.append(row(b, UNREAD, line))
             tiers.append(FANOUT_PLACE_UNREAD)
             continue
         # Already reconciled, so `status_line` must not ask the forge a second time.
         line, tier = status_line(st, b.host, b.branch, lambda *_: "", one_line, b.repo)
         tiers.append(tier)
-        rows.append(row(b, b.host, st.state, st.pr_url, line, st.awaiting_lander))
+        rows.append(row(b, st.state, line, st))
     return rows, exit_tier(tiers)
