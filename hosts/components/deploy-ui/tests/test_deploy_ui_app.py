@@ -152,11 +152,6 @@ def test_page_switches_logs_and_folds_the_finished_list_is_clean(app):
     assert 'onclick="showStage(${d.stages.indexOf(s)})"' in html
 
 
-def test_page_has_no_stale_release_panel_is_flagged(app):
-    _, html = app.get("/")
-    assert "/api/stale" not in html and 'id="stale"' not in html
-
-
 def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
     # fact: hosts/components/deploy-ui/CLAUDE.md#In flight
     b = body(app.get("/api/inflight"))

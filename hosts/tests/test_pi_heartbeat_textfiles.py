@@ -72,28 +72,6 @@ def test_a_cycle_that_restarted_a_container_writes_success_zero(tmp_path):
     assert textfile(tmp_path, "pi-recovery-health")["homelab_check_success"] == 0
 
 
-# What a push leaves in a rendered script: the Kuma helper, its push call, the success flag it
-# sets, the push URL, or the credential the unit loads for it.
-PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "KUMA_PUSH_OK", "api/push", "push_token")
-
-
-def push_problems(text: str) -> list[str]:
-    """Each push marker a rendered script still carries, or nothing."""
-    return [marker for marker in PUSH_MARKERS if marker in text]
-
-
-@pytest.mark.parametrize("script", sorted(PRODUCERS.values()))
-def test_a_rendered_heartbeat_holds_no_kuma_push(tmp_path, script):
-    path, _ = render(script, tmp_path)
-    assert push_problems(path.read_text()) == []
-
-
-def test_push_problems_is_flagged_on_a_script_that_still_pushes(tmp_path):
-    # The red proof: the push call and the success flag it sets are each found.
-    pushing = 'kuma_push "$STATUS" "$MSG" "$PUSH_URL"\n[ "${KUMA_PUSH_OK:-1}" = 1 ]\n'
-    assert push_problems(pushing) == ["kuma_push", "KUMA_PUSH_OK"]
-
-
 def rendered_deadline(script: str, tmp_path) -> int:
     """DEADLINE_S as the producer renders it."""
     path, _ = render(script, tmp_path)

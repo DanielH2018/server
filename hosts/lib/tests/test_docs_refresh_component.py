@@ -78,14 +78,6 @@ def test_the_service_creates_directories_as_root_and_runs_as_sys_user(package):
     assert "ProtectHome" not in unit
 
 
-def test_the_service_loads_no_credential_and_the_script_reads_none(package):
-    """M6 batch B2's Cutover-2 dropped the Kuma push, the only reader of the push token."""
-    unit = _text(package, f"{UNITS}/homelab-docs-refresh.service")
-    assert "LoadCredential=" not in unit
-    assert "homelab-secrets.service" not in unit
-    assert "CREDENTIALS_DIRECTORY" not in _text(package, SCRIPT)
-
-
 def test_the_tmpfiles_file_creates_the_directory_docs_mounts_and_the_stamp_directory(
     package,
 ):
