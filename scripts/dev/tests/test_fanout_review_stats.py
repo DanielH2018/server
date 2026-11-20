@@ -80,3 +80,12 @@ def test_since_drops_older_records_and_json_prints_the_measures(tmp_path, capsys
 def test_no_record_prints_one_line(tmp_path, capsys):
     assert main(["--dir", str(tmp_path)]) == 0
     assert capsys.readouterr().out == "no review records\n"
+
+
+def test_a_resumed_units_record_adds_its_cost_and_no_batch():
+    first = asdict(Record("1", outcome="needs-input", costs={"implement": 3.0}))
+    again = asdict(Record("1", outcome="pr", costs={"conflict": 1.0}, resumed=True))
+    measures = summarize([first, again])
+    assert measures["batches"] == 1
+    assert measures["outcomes"] == {"needs-input": 1}
+    assert measures["mean_cost"] == 4.0

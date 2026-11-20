@@ -22,6 +22,11 @@ TURN_DIR_ENV = "LAND_TURN_DIR"
 SERIAL_NAME = "homelab-land-serial.lock"
 
 
+def lock_name(pr: str) -> str:
+    """The file name of the lock one landing of PR number `pr` holds (`pr_lock.py`)."""
+    return f"homelab-land-pr-{pr}.lock"
+
+
 def is_turn_host(hostname: str) -> bool:
     """Whether `hostname`, qualified or not, names the host that keeps the turn."""
     return hostname.split(".")[0] == TURN_HOST
@@ -56,6 +61,11 @@ print("held" if lock_held(sys.argv[1]) else "free")
 """
 
 
+def probe_command(path: str) -> str:
+    """The shell command that prints `held` or `free` for the lock file `path` on its host."""
+    return shlex.join(["python3", "-c", _PROBE, path])
+
+
 def serial_landing_live(hostname: str) -> bool:
     """Whether a landing of a serial PR holds the serial lock, read from `hostname`.
 
@@ -79,7 +89,7 @@ def serial_landing_live(hostname: str) -> bool:
                 "-o",
                 "ConnectTimeout=10",
                 TURN_HOST,
-                shlex.join(["python3", "-c", _PROBE, path]),
+                probe_command(path),
             ],  # fmt: skip
             capture_output=True,
             text=True,

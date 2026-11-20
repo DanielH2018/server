@@ -11,7 +11,12 @@ imports any other module here.
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 from dev.fanout_lib.review.review import STATE_DIR, Pipeline
-from dev.fanout_lib.review.review_land import LAND_SH, VERDICT_LINE, login
+from dev.fanout_lib.review.review_land import (
+    LAND_SH,
+    MERGE_CONFLICT,
+    VERDICT_LINE,
+    login,
+)
 from dev.fanout_lib.review.review_record import (
     CONFIDENCE_FLOOR,
     RECORD_NAME,
@@ -21,6 +26,7 @@ from dev.fanout_lib.review.review_record import (
 __all__ = [
     "CONFIDENCE_FLOOR",
     "LAND_SH",
+    "MERGE_CONFLICT",
     "RECORD_NAME",
     "SAVED_FORMAT",
     "STATE_DIR",

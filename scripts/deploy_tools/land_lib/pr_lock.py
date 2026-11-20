@@ -44,14 +44,11 @@ from deploy_tools.land_lib.serial_lock import (
     TURN_DIR_ENV,
     TURN_HOST,
     is_turn_host,
+    lock_name,
 )
 
 # The PR whose lock an ancestor landing of this process holds.
 HELD_ENV = "LAND_PR_LOCK_HELD"
-
-
-def lock_name(pr: str) -> str:
-    return f"homelab-land-pr-{pr}.lock"
 
 
 def _lock(path: str) -> tuple[int | None, str]:
