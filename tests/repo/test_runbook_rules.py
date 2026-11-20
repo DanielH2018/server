@@ -123,11 +123,6 @@ def _offline_order(text: str) -> list[str]:
     return [item.replace(_OFFLINE_ORDER, _PINNED) for item in ITEMS(text)]
 
 
-def _reorder(sentence: str) -> Red:
-    """The section with the pinned offline-order sentence written as `sentence`."""
-    return edit_words(_OFFLINE_ORDER, sentence)
-
-
 def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
     return RunbookRule(
         name=f"cold-start-links-the-bootstrap:{doc}",
@@ -316,39 +311,28 @@ ROWS = (
             rf"|{re.escape(_PINNED)}.*{re.escape(_PINNED)}",
             re.IGNORECASE,
         ),
-        red=(
-            _reorder(
+        red=tuple(
+            edit_words(_OFFLINE_ORDER, sentence)
+            for sentence in (
                 "Once the WAN returns, before step 4 resume each suspended tag, then run "
-                "this step's `gh variable set DEPLOY_HOLD`."
-            ),
-            _reorder(
+                "this step's `gh variable set DEPLOY_HOLD`.",
                 "Once the WAN returns, resume each suspended tag, then after that run "
-                "`gh variable set DEPLOY_HOLD`, before step 4."
-            ),
-            _reorder(
+                "`gh variable set DEPLOY_HOLD`, before step 4.",
                 "Once the WAN returns, run this step's `gh variable set DEPLOY_HOLD`. "
-                "Before that, resume each suspended tag."
-            ),
-            _reorder(
+                "Before that, resume each suspended tag.",
                 "Once the WAN returns, resume each suspended tag first, then run this "
                 "step's `gh variable set DEPLOY_HOLD`, before step 4, because a queued "
-                "`promote` run can start as soon as GitHub answers."
-            ),
-            _reorder(_OFFLINE_ORDER.replace("DEPLOY_HOLD", "SOMETHING_ELSE")),
-            _reorder(_OFFLINE_ORDER.replace("DEPLOY_HOLD", "DEPLOY_HOLD --body none")),
-            _reorder(
+                "`promote` run can start as soon as GitHub answers.",
+                _OFFLINE_ORDER.replace("DEPLOY_HOLD", "SOMETHING_ELSE"),
+                _OFFLINE_ORDER.replace("DEPLOY_HOLD", "DEPLOY_HOLD --body none"),
                 f"{_OFFLINE_ORDER} Before step 4 and before that set, resume each "
-                "suspended tag."
-            ),
-            _reorder(f"Resume each suspended tag. {_OFFLINE_ORDER}"),
-            _reorder(
-                f"{_OFFLINE_ORDER} Then run `gh variable set DEPLOY_HOLD --body none`."
-            ),
-            _reorder(
-                f"{_OFFLINE_ORDER} Then run `gh variable set SOMETHING_ELSE --body x`."
-            ),
-            _reorder(f"{_OFFLINE_ORDER} Then go to step 4."),
-            _reorder(f"{_OFFLINE_ORDER} {_OFFLINE_ORDER}"),
+                "suspended tag.",
+                f"Resume each suspended tag. {_OFFLINE_ORDER}",
+                f"{_OFFLINE_ORDER} Then run `gh variable set DEPLOY_HOLD --body none`.",
+                f"{_OFFLINE_ORDER} Then run `gh variable set SOMETHING_ELSE --body x`.",
+                f"{_OFFLINE_ORDER} Then go to step 4.",
+                f"{_OFFLINE_ORDER} {_OFFLINE_ORDER}",
+            )
         ),
     ),
     RunbookRule(
