@@ -18,7 +18,8 @@ series' labels (`{{ $labels.namespace }}/{{ $labels.pod }}`) where one of them n
 more exactly than the rule's `service` does. Every summary also fits SUMMARY_CAP once
 rendered. The cap measures the text a promtool test's `exp_annotations` expects the alert to
 render, because a `{{ with query ... }}` template runs to hundreds of characters of source and
-renders one short line. A summary no test renders is measured as its source.
+renders one short line. A summary with no template, or one no test renders, is measured as
+its source.
 
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
 template expands. The rule files are plain YAML that Jinja never renders, so the domain is a
@@ -106,13 +107,15 @@ def summary_length_problems(
 
     Args:
         alerts: (file name, rule) for each alert rule.
-        rendered: The rendered summaries of each alert a test renders, by alert name. An
-            alert with none is measured by its summary's source.
+        rendered: The rendered summaries of each alert a test renders, by alert name. A
+            rule shares them with every rule of its name, so they stand in only for a
+            templated summary; a plain one is its own render and is measured as written.
     """
     problems = []
     for name, rule in alerts:
         source = (rule.get("annotations") or {}).get("summary", "")
-        for summary in rendered.get(rule["alert"], [source]):
+        templated = "{{" in source
+        for summary in rendered.get(rule["alert"], [source]) if templated else [source]:
             if len(summary) > SUMMARY_CAP:
                 problems.append(
                     f"{name}/{rule['alert']}: the summary {summary!r} is {len(summary)} "
@@ -299,6 +302,15 @@ def test_a_long_template_that_renders_short_is_clean():
     template = "longhorn: {{ with query " + "a" * SUMMARY_CAP + " }}{{ end }}"
     rendered = {"X": ["longhorn: the volume is degraded."]}
     assert summary_length_problems(_summarised(template), rendered) == []
+
+
+def test_a_plain_summary_over_the_cap_is_flagged_beside_a_short_render():
+    summary = "longhorn: " + "a" * SUMMARY_CAP
+    rendered = {"X": ["longhorn: short."]}
+    assert summary_length_problems(_summarised(summary), rendered) == [
+        f"x.yaml/X: the summary {summary!r} is {len(summary)} characters, over the "
+        f"{SUMMARY_CAP} cap"
+    ]
 
 
 def test_a_summary_no_test_renders_is_measured_as_its_source():

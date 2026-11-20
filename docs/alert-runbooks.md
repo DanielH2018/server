@@ -14,8 +14,8 @@ Every summary reads `<service or host>: <what is wrong>`, so each line of a noti
 with the thing that broke. The subject is the rule's own `service` label, an inventory host,
 or labels of the firing series such as `{{ $labels.namespace }}/{{ $labels.pod }}`. The same
 test fails a summary in any other shape. It also fails a summary over its length cap as
-rendered: the text a `promtool` test expects the alert to render, or the source when no test
-renders it.
+rendered. A templated summary is measured as the text a `promtool` test expects it to render,
+and a plain summary, or one no test renders, as its source.
 
 ## The alert plane
 
