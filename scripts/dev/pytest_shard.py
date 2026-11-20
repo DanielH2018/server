@@ -64,10 +64,17 @@ shard's `prebuild_seconds` beside its test seconds, and `--summary` prints both.
 
 A PULL REQUEST RUNS ONLY THE MODULES ITS DIFF CAN AFFECT. `--changed-since REF` asks
 `affected_lib/table.py` which modules the diff from REF selects and packs those alone, into as
-few legs as keep each no heavier than a full sweep's leg. The legs past that count get an
-empty list and CI skips their remaining steps. A push to master passes the newest ancestor
-whose CI passed as REF. A dispatch passes no REF and runs the whole census, as does a push
-with no such ancestor in reach. `affected_lib/table.py` has the rule and what it can miss.
+few legs as keep each no heavier than a full sweep's leg. A push to master passes the newest
+ancestor whose CI passed as REF. A dispatch passes no REF and runs the whole census, as does a
+push with no such ancestor in reach. `affected_lib/table.py` has the rule and what it can miss.
+
+A RUN STARTS ONLY THE LEGS ITS SELECTION NEEDS. GitHub fixes a matrix before any of its legs
+runs, so CI's `pytest_plan` job runs `--plan --changed-since REF` with the legs' own REF, and
+the `pytest` matrix is the JSON list of leg numbers it prints. The plan always holds leg 1,
+because GitHub fails a job whose matrix is empty, so a selection of no modules runs one leg
+with an empty list, on which CI skips every later step. A run with no plan starts all
+`CI_LEGS` legs. `--plan` packs nothing, so it runs on the runner's own `python3` with no setup
+step.
 
 THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
 zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
@@ -80,15 +87,17 @@ the same code. Each narrowing of a failing version answered a run it failed
 for no fault of the PR in front of it.
 
 Usage:
-    uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
-    uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
-    uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --changed-since HEAD^1
+    uv run python scripts/dev/pytest_shard.py --shard 1               # this shard's files
+    uv run python scripts/dev/pytest_shard.py --shard 1 --out list.txt
+    uv run python scripts/dev/pytest_shard.py --shard 1 --changed-since HEAD^1
+    uv run python scripts/dev/pytest_shard.py --plan --changed-since HEAD^1  # the legs to start
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # the table, from CI's logs
     uv run python scripts/dev/pytest_shard.py --leg-spread 42541064791  # one run's leg walls
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
+import json
 import math
 import os
 import posixpath
@@ -124,6 +133,11 @@ from dev.shard_weight_gate import (
     refresh_runner_weights,
     write_runner_weights,
 )
+
+# How many legs CI's `pytest` matrix splits a full census across. ci.yml's matrix falls back
+# to every one of them when `pytest_plan` published no plan.
+# DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
+CI_LEGS = 6
 
 # pytest's default `python_files`, both forms — the same pair
 # `tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
@@ -291,6 +305,17 @@ def leg_files(
     return shard_files(shard, legs, selection.modules, weights) if shard <= legs else []
 
 
+def planned_legs(shards: int, selection: affected_table.Selection) -> list[int]:
+    """The 1-based legs of `shards` that `leg_files` gives a file, and leg 1 when it gives none.
+
+    A matrix of no legs fails its job, so a selection of no modules still starts leg 1.
+    """
+    if selection.full:
+        return list(range(1, shards + 1))
+    legs = legs_for(selection.modules, census(), shards, load_runner_weights())
+    return list(range(1, max(legs, 1) + 1))
+
+
 def _summary(shards: int) -> str:
     files, weights = census(), load_runner_weights()
     placed = assign(files, shards, weights)
@@ -310,8 +335,18 @@ def _summary(shards: int) -> str:
 
 def main(argv=None, select=affected) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--of", type=int, default=4, help="how many shards in total")
+    parser.add_argument(
+        "--of", type=int, default=CI_LEGS, help="how many shards in total"
+    )
     parser.add_argument("--shard", type=int, help="which 1-based shard to print")
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help=(
+            "with --changed-since, print the JSON list of legs the selection needs and write "
+            "it to $GITHUB_OUTPUT as `legs`"
+        ),
+    )
     parser.add_argument(
         "--out", type=Path, help="write the file list here instead of stdout"
     )
@@ -319,8 +354,8 @@ def main(argv=None, select=affected) -> int:
         "--changed-since",
         metavar="REF",
         help=(
-            "with --shard, pack only the modules the diff from REF to HEAD can affect; a leg "
-            "the selection does not need gets an empty list"
+            "with --shard or --plan, pack only the modules the diff from REF to HEAD can "
+            "affect; a leg the selection does not need gets an empty list"
         ),
     )
     parser.add_argument(
@@ -396,10 +431,20 @@ def main(argv=None, select=affected) -> int:
     if args.summary:
         print(_summary(args.of))
         return 0
+    if args.plan:
+        if not args.changed_since:
+            parser.error("--plan needs --changed-since")
+        selection = select(args.changed_since)
+        legs = json.dumps(planned_legs(args.of, selection), separators=(",", ":"))
+        print(f"legs {legs} of {args.of}: {selection.reason}")
+        if output := os.environ.get("GITHUB_OUTPUT"):
+            with open(output, "a") as handle:
+                handle.write(f"legs={legs}\n")
+        return 0
     if args.shard is None:
         parser.error(
-            "one of --shard, --summary, --record-runner, --refresh-runner, --leg-spread or "
-            "--check-durations is required"
+            "one of --shard, --plan, --summary, --record-runner, --refresh-runner, "
+            "--leg-spread or --check-durations is required"
         )
 
     selection = select(args.changed_since) if args.changed_since else None

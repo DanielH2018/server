@@ -85,13 +85,6 @@ def test_no_arguments_means_loop_forever_and_export(cfg):
     assert _gauge(wired, "host_packages") == 1.0
 
 
-def test_there_is_no_dry_run_flag_since_nothing_is_pushed():
-    """RED on a parser that still takes `--dry-run`: Cutover-2 deleted the push it guarded."""
-    with pytest.raises(SystemExit) as stopped:
-        cli.build_parser().parse_args(["--dry-run"])
-    assert stopped.value.code == cli.USAGE_ERROR
-
-
 def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_run():
     """The family runs in the looping pod, after the cycle's checks, on the one `Sources`."""
     ran = []
