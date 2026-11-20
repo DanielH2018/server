@@ -249,18 +249,17 @@ def test_a_changed_kept_line_restarts_the_count(tmp_path):
     for _ in range(SWEEP_KEPT_LIMIT - 1):
         _sweep(tools, (), tmp_path)
     calls.answers["daniel-server"] = ok("kept: /w2 — unit fanout-2 still active")
-    for _ in range(SWEEP_KEPT_LIMIT - 1):
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
         _sweep(tools, (), tmp_path)
-    assert len(calls.calls) == 2 * (SWEEP_KEPT_LIMIT - 1)
-    _sweep(tools, (), tmp_path)
-    assert len(calls.calls) == 2 * SWEEP_KEPT_LIMIT - 1
+    assert len(calls.calls) == (SWEEP_KEPT_LIMIT - 1) + SWEEP_KEPT_LIMIT
 
 
 def test_an_open_pr_restarts_a_stopped_batch_so_its_merge_is_cleaned(tmp_path):
     manifest = _manifest(tmp_path, [B2])
     tools, calls = fake_tools(answers={"daniel-server": ok(UNMERGED)})
-    for _ in range(SWEEP_KEPT_LIMIT):
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
         _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT
     _sweep(tools, {B2.branch}, tmp_path)
     calls.answers["daniel-server"] = ok("removed: /w2")
     _sweep(tools, (), tmp_path)
