@@ -1,0 +1,38 @@
+# The *arr apps' own health checks, as their exportarr sidecars serve them on the `exportarr`
+# scrape job. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
+#
+# exportarr's system collector exports each entry of an app's /api/v1/health as one
+# `<app>_system_health_issues` series of value 1, labelled with the check's `source`, `type`
+# and `message`. An app with no issues serves one series of value 0 with no `source`.
+groups:
+  - name: arr-apps
+    rules:
+      # Prowlarr pushes its indexers to Sonarr, Radarr and Lidarr with each app's API key, which
+      # it stores in its own database. A stale key fails every push with a 401 while RSS still
+      # works, so nothing else turns red. ApplicationLongTermStatusCheck reports an app whose
+      # pushes have failed for 6 hours; the short-term check is not read, because every app
+      # rollout trips it.
+      # `max by (source)` drops `instance`, which moves with each Prowlarr pod, and `message`,
+      # which lists the failing apps and changes as one recovers. Either would resolve the alert
+      # and fire it again under a new label set.
+      # The absent() arm fires when exportarr serves no Prowlarr health at all, so the check
+      # above cannot be read. A failed scrape pages through ScrapeTargetDown instead; this arm
+      # covers a pod with no exportarr sidecar or a collector that stops exporting the family.
+      - alert: ProwlarrAppSyncFailing
+        expr: >-
+          max by (source) (prowlarr_system_health_issues{job="exportarr", source="ApplicationLongTermStatusCheck"}) > 0
+          or
+          absent(prowlarr_system_health_issues{job="exportarr"})
+        for: 30m
+        labels:
+          severity: warning
+          service: prowlarr
+        annotations:
+          summary: >-
+            prowlarr: {{ with query "prowlarr_system_health_issues{job='exportarr',source='ApplicationLongTermStatusCheck'} > 0"
+            }}indexer sync has failed for 6 hours to {{ reReplaceAll ".*: " "" (index . 0).Labels.message
+            }}.{{ else }}exportarr serves no Prowlarr health, so a failing app sync is unseen.{{ end }}
+          description: >-
+            Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr serves no
+            Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the app's API key
+            into Prowlarr's Settings, Apps, then click Sync App Indexers.

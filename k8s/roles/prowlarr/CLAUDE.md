@@ -36,6 +36,13 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   `prowlarr-verify` Job runs the flaresolverr isolation probe.
 
 ## Notable
+- **Prowlarr keeps its own copy of each app's API key.** Settings → Apps stores the Sonarr,
+  Radarr and Lidarr keys in Prowlarr's database, and nothing in the repo writes them. A stale
+  copy fails every indexer push with a 401 while RSS through Prowlarr keeps working.
+  `ProwlarrAppSyncFailing` in `k8s/roles/observability/files/rules/arr-apps.yaml` pages once
+  Prowlarr's `ApplicationLongTermStatusCheck` has reported an app for 6 hours, read from the
+  exportarr sidecar's `prowlarr_system_health_issues` series. To repair it, paste the app's
+  key from its Settings → General into Prowlarr's entry for it, then click Sync App Indexers.
 - **A revert desyncs indexer IDs.** Unlike sonarr/radarr/bazarr/jellyfin, which self-heal a
   volume revert (rescan, re-download, existence check), Prowlarr pushes indexer config to the
   other *arr apps and they store Prowlarr-assigned IDs back. A rollback needs a manual re-sync.
