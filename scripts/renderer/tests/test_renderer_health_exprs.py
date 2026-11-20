@@ -9,7 +9,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_health_exprs.py
 """
 
 from lib import yaml_fast
-from lib.k8s_roles import role_fields
+from lib.k8s_roles import role_defaults
 from renderer.renderer_lib.bundle import bundle_files
 from renderer.renderer_lib.ordering import NO_ORDERING
 
@@ -72,8 +72,8 @@ def test_a_flux_timeout_wins_over_the_rollout_timeout(tmp_path):
     roles = _roles(
         tmp_path, **{"with": "manifests_rollout_timeout: 5m\nflux_timeout: 9m\n"}
     )
-    fields, problems = role_fields(["with"], roles)
-    assert problems == [] and fields["with"]["timeout"] == "9m"
+    found, problems = role_defaults(["with"], roles)
+    assert problems == [] and found["with"].timeout == "9m"
 
 
 def test_a_malformed_key_is_a_problem_and_the_tag_is_left_out(tmp_path):
@@ -84,8 +84,8 @@ def test_a_malformed_key_is_a_problem_and_the_tag_is_left_out(tmp_path):
         bad_item="flux_health_check_exprs:\n  - {apiVersion: a/v1, kind: K, current: x, extra: y}\n",
         bad_name="flux_health_check_exprs:\n  - {apiVersion: a/v1, current: '{{ nope }}'}\n",
     )
-    fields, problems = role_fields(
+    found, problems = role_defaults(
         ["bad_timeout", "bad_list", "bad_item", "bad_name"], roles
     )
-    assert fields == {}
+    assert found == {}
     assert len(problems) == 4

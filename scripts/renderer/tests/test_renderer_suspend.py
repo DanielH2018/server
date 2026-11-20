@@ -9,7 +9,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_suspend.py
 import pytest
 
 from lib import yaml_fast
-from lib.k8s_roles import role_fields
+from lib.k8s_roles import role_defaults
 from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.bundle import bundle_files
 from renderer.renderer_lib.suspension import suspend_false
@@ -152,7 +152,7 @@ def test_a_cronjob_with_suspend_false_is_clean():
 
 def test_a_flux_suspend_that_is_not_a_literal_bool_is_a_problem(tmp_path):
     _roles(tmp_path, sonarr='flux_suspend: "{{ sonarr_paused }}"\n')
-    found, problems = role_fields(["sonarr"], tmp_path)
+    found, problems = role_defaults(["sonarr"], tmp_path)
     assert found == {}
     assert problems == [
         "sonarr's flux_suspend is '{{ sonarr_paused }}', not a literal bool"

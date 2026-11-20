@@ -10,7 +10,7 @@ A placeholder render with `--role` writes, for each tag it names:
   (C3 *Per-role fields*, D3.3c). A tag that renders a per-tag kind's directory, such as
   `<tag>-snapshot`, gets that Kustomization as a further document of the file, in
   `TAG_KIND_SUFFIXES` order (D4.2, D5.1a1). `<tag>` takes `prune` from the role's defaults,
-  and `<tag>` and `<tag>-deferred` take `timeout`, where `role_fields` finds them (C3
+  and `<tag>` and `<tag>-deferred` take `timeout`, where `role_defaults` finds them (C3
   *Per-role fields*). `<tag>-deferred` always renders `prune: true`.
   A role that sets `flux_suspend: true` renders `suspend: true` on every one of its tag's
   Kustomizations (C3 *Suspension*, D5.1b);
@@ -55,7 +55,7 @@ from pathlib import Path
 
 import yaml
 
-from lib.k8s_roles import role_fields, snapshot_claims
+from lib.k8s_roles import RoleDefaults, role_defaults
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle_readme import BUNDLE_README, README
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE, namespace_documents
@@ -74,7 +74,6 @@ from renderer.renderer_lib.ordering import (
     Ordering,
     dependency_cycle,
     kustomization_edges,
-    prepull_timeouts,
     split_kind,
     substitution,
     verify_timeout,
@@ -214,13 +213,13 @@ def tag_kustomization(
             decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
             makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
         timeout: The role's `manifests_rollout_timeout`, or `manifests_rollout_timeout_default`,
-            the manifests role's rollout timeout (`role_fields`).
+            the manifests role's rollout timeout (`RoleDefaults.timeout`).
         decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
             `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
         edges: The generated edges (D4.2). `dependsOn` lists `edges.kept` and the
             `cluster-vars` edge in sorted order, and `SUSPENDED_DEPS` lists
             `edges.suspended`; each is left out when empty.
-        prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
+        prune: False for a role whose defaults set `flux_prune: false` (`RoleDefaults.prune`).
         suspend: True for a role whose defaults set `flux_suspend: true`, the one value written.
         content: The tag's `own` digest, written as `CONTENT_DIGEST` unless None.
         health_check_exprs: The role's `flux_health_check_exprs`, written as
@@ -326,7 +325,8 @@ def flux_files(
     shared: Mapping[str, str] | None = None,
     decrypting: Iterable[str] = (),
     edges: Mapping[str, Edges] | None = None,
-    fields: Mapping[str, Mapping] | None = None,
+    defaults: Mapping[str, RoleDefaults] | None = None,
+    waits: Mapping[str, str] | None = None,
     contents: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Each `flux/` file of a bundle publishing the tags in `substitutes`, by bundle path.
@@ -336,36 +336,38 @@ def flux_files(
             substitutes: `<tag>` for each tag, and `<tag><suffix>` for each per-tag kind
             whose directory the tag renders. Those follow `<tag>` in `flux/<tag>.yaml`, in
             `TAG_KIND_SUFFIXES` order.
-        timeout: The `timeout` every tag's Kustomization sets unless `fields` names its own.
+        timeout: The `timeout` every Kustomization sets unless `defaults` or `waits` names
+            its own.
         shared: The shared kinds' `flux/` files by bundle path, which the root lists beside
             the tags' files.
         decrypting: The published tags whose role lists `render_sops_manifests`.
         edges: Each Kustomization's generated edges; a name it does not map has none.
-        fields: Each tag's per-role fields: `prune` (`role_fields`) for `<tag>` alone,
-            `timeout` for `<tag>` and `<tag>-deferred`, `prepull_timeout` for `<tag>-prepull`,
-            `verify_timeout` for `<tag>-verify` and `precheck_timeout` for `<tag>-precheck`
-            (`verify_timeout`), `suspend` for all, `health_check_exprs` for `<tag>` alone.
+        defaults: Each tag's `RoleDefaults`: `prune` and `health_check_exprs` for `<tag>`
+            alone, `timeout` for `<tag>` and `<tag>-deferred`, `suspend` for all. A tag it
+            does not map takes the class defaults.
+        waits: The `timeout` of each `<tag>-prepull`, `<tag>-verify` and `<tag>-precheck`
+            Kustomization that sets its own, by Kustomization name
+            (`RoleDefaults.prepull_timeout`, `verify_timeout`).
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
     edges = edges or {}
-    fields = fields or {}
+    defaults = defaults or {}
+    waits = waits or {}
     files = {}
     for tag in sorted(n for n in substitutes if not split_kind(n)[1]):
         names = [tag] + [
             tag + suffix for suffix in TAG_KIND_SUFFIXES if tag + suffix in substitutes
         ]
-        own = fields.get(tag, {})
+        own = defaults.get(tag, RoleDefaults())
         role_own = {tag, tag + DEFERRED_SUFFIX}
-        timeouts = {name: own.get("timeout", timeout) for name in role_own}
-        timeouts[tag + PREPULL_SUFFIX] = own.get("prepull_timeout", timeout)
-        timeouts[tag + VERIFY_SUFFIX] = own.get("verify_timeout", timeout)
-        timeouts[tag + PRECHECK_SUFFIX] = own.get("precheck_timeout", timeout)
         docs = [
             tag_kustomization(
                 name,
                 substitutes[name],
-                timeouts.get(name, timeout),
+                (own.timeout or timeout)
+                if name in role_own
+                else waits.get(name, timeout),
                 name in decrypting,
                 edges.get(name, NO_EDGES),
                 # DECIDED: `flux_prune` reaches `<tag>` alone, and `<tag>-deferred` keeps
@@ -375,10 +377,10 @@ def flux_files(
                 # `verify-drill` once the drill is off. The consequence: a plumbing role that
                 # adds deferred files later gets prunable deferred objects, so a deferred
                 # object that must never be pruned belongs in the role's own directory.
-                own.get("prune", True) if name == tag else True,
-                own.get("suspend", False),
+                own.prune if name == tag else True,
+                own.suspend,
                 (contents or {}).get(name) if name == tag else None,
-                own.get("health_check_exprs") if name == tag else None,
+                list(own.health_check_exprs) if name == tag else None,
                 orphan=tag == FLUX_TAG
                 or name.removeprefix(tag) not in DELETING_SUFFIXES,
             )
@@ -454,7 +456,7 @@ def digests(
         kinds: The shared kinds; each gets an entry beside the tags.
         rules: Each shared kind's footprint rule. A kind without one counts for no tag, and
             its files land under `_unclassified` as well as in its own entry.
-        claims: Each tag's snapshot claims (`snapshot_claims`); a tag it does not map
+        claims: Each tag's snapshot claims (`RoleDefaults.snapshot_pvcs`); a tag it does not map
             declares none.
 
     Returns:
@@ -530,41 +532,38 @@ def bundle_files(
             whether it substitutes (C1).
         tags: The published tags, one Kustomization each.
         timeout: The `timeout` every Kustomization sets, unless its role's defaults set
-            `manifests_rollout_timeout` (`role_fields`).
+            `manifests_rollout_timeout` (`role_defaults`).
         cluster_vars: The cluster file's text, which the `cluster-vars` kind copies.
         decrypting: The published tags whose role lists `render_sops_manifests`, each of
             which gets `decryption` (C3 *Per-role fields*).
         ordering: What `dependsOn` is generated from (D4.2). The default generates no edge
             but `cluster-vars`.
         roles: The role tree whose defaults declare each tag's snapshot claims, which
-            `digests.json` records (`snapshot_claims`), and its per-role fields
-            (`role_fields`).
+            `digests.json` records, and its per-role fields (`role_defaults`).
         revision: R's commit SHA, which the soak Job judges. None renders the soak at
             `soak.NORMALISED_REVISION`, for a bundle nobody publishes.
 
     Raises:
         ValueError: The edges form a cycle, a tag's `k8s_autodeploy_snapshot_pvcs` is not a
-            literal list or a `role_fields` field not a literal, or a Flux object in the
+            literal list or another `role_defaults` field not a literal, or a Flux object in the
             bundle sets `suspend: false` (`suspension.py`).
     """
     tags = sorted(set(tags))
-    fields, problems = role_fields(tags, roles)
-    pulls, unread = prepull_timeouts(tags, roles)
-    problems += unread
-    fields |= {t: {**fields.get(t, {}), "prepull_timeout": v} for t, v in pulls.items()}
+    defaults, problems = role_defaults(tags, roles)
+    waits = {
+        tag + PREPULL_SUFFIX: own.prepull_timeout
+        for tag, own in defaults.items()
+        if own.prepull_timeout
+    }
     for tag in tags:
-        for suffix, key in (
-            (VERIFY_SUFFIX, "verify_timeout"),
-            (PRECHECK_SUFFIX, "precheck_timeout"),
-        ):
+        for suffix in (VERIFY_SUFFIX, PRECHECK_SUFFIX):
             if tag + suffix in directories:
-                waits = verify_timeout(directories[tag + suffix], timeout)
-                fields[tag] = {**fields.get(tag, {}), key: waits}
+                waits[tag + suffix] = verify_timeout(directories[tag + suffix], timeout)
     if problems:
         raise ValueError("; ".join(problems))
     per_directory, substituting = substitution(tags, directories, key_sets)
     # A published tag's own defaults decide its suspend, whatever the ordering was read from.
-    suspended = {tag for tag, own in fields.items() if own.get("suspend")}
+    suspended = {tag for tag, own in defaults.items() if own.suspend}
     ordering = replace(ordering, suspended=ordering.suspended | suspended)
     edges = kustomization_edges(tags, directories, ordering)
     graph = {
@@ -595,7 +594,8 @@ def bundle_files(
         flux,
         set(decrypting) & set(tags),
         edges,
-        fields,
+        defaults,
+        waits,
         own_digests(cluster, tags),
     )
     # The soak sizes its wait from the other Kustomizations, so it renders after them.
@@ -606,9 +606,7 @@ def bundle_files(
     # `soak` is digested at the normalised SHA, so R's own SHA never moves its footprint (C1).
     digested = {**cluster, **files, **soak}
     everything = {path: text.encode() for path, text in digested.items()}
-    claims, problems = snapshot_claims(tags, roles)
-    if problems:
-        raise ValueError("; ".join(problems))
+    claims = {tag: own.snapshot_pvcs for tag, own in defaults.items()}
     files[DIGESTS] = digests_text(
         digests(everything, tags, substituting, claims=claims)
     )
