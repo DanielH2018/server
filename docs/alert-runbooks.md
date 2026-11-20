@@ -384,6 +384,9 @@ on its WiFi fallback. The node stays Ready and keeps serving Longhorn replicas o
 Longhorn engine on the other node times out on those replicas after 16 seconds and returns
 I/O errors, so ext4 aborts its journal and remounts the volume read-only.
 
+- Restore the wire before anything else. Do not start with the Longhorn faults, the rebuild
+  failures or the `critical medium error` lines: they are symptoms, and they stop once the
+  link has carrier. `ip route get 1.1.1.1` on the node names the link it routes over.
 - A cable in the wrong port reads the same as a pulled one. `ip -br link` on the node shows
   which port has carrier, and the rule reads only the link `k3s_node_static_link` names.
 - After both nodes lose power, Longhorn salvages each volume to one replica, so the WiFi link
