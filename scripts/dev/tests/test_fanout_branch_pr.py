@@ -74,7 +74,8 @@ def test_own_pr_prefers_the_branch_pr_the_text_names_and_reads_a_failed_lookup_a
     both = [OWN, FOREIGN]
     assert own_pr(f"{OWN} then {FOREIGN}", "b", both).url == OWN
     assert own_pr(TEXT, "b", [OWN]).url == OWN
-    assert "could not be asked" in own_pr(TEXT, "b", None).problem
+    unknown = own_pr(TEXT, "b", None)
+    assert unknown.problem and unknown.unanswered
     assert own_pr("nothing", "b", []).problem == ""
 
 
@@ -165,8 +166,6 @@ def test_status_reads_a_foreign_only_text_as_needs_input_never_done():
         FOREIGN in held.final_text
         and "no open or merged PR on GitHub" in held.final_text
     )
-    unread = with_own_pr(parsed, B.branch, lambda *_: None, "o/r")
-    assert unread.state == "needs-input"
 
 
 def test_status_reads_a_citation_of_a_pr_merged_before_the_launch_as_no_pr():

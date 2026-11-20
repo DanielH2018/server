@@ -113,15 +113,18 @@ HELD = (
 ENDED_AT = 1_000_000
 
 
-def _collect(*lander: str, held=None, age: float = 0) -> tuple[dict, int]:
+def _collect(
+    *lander: str, held=None, age: float = 0, answered: bool = True
+) -> tuple[dict, int]:
     """The batch's row and tier, read `age` seconds after it stopped at its PR.
 
     Args:
         *lander: the lander's reply on daniel-box, joined.
         held: the PRs GitHub holds for the branch; the open PR by default.
         age: how long ago the batch's report was written.
+        answered: False for a read of the branch's PRs that failed.
     """
-    tools, run = fake_tools(branch_prs={B.branch: held or [PR]})
+    tools, run = fake_tools(branch_prs={B.branch: (held or [PR]) if answered else None})
     batch = f"{STOPPED_AT_ITS_PR}--- ended\n{ENDED_AT}\n"
     run.answers_by_call = [ok(batch), ok("".join(lander))]
     (row,), tier = collect(
@@ -188,6 +191,13 @@ def test_a_batch_awaits_the_lander_only_until_the_bound(age, lander, state):
     assert (row["state"], row["awaiting_lander"]) == (state, state == "done")
     if state == NEEDS_INPUT:
         assert "the server lander has not taken #1500 in 30 minutes" in row["line"]
+
+
+def test_a_wait_past_the_bound_stays_open_while_github_cannot_be_asked():
+    """An unanswered read cannot tell an old wait from a hand landing."""
+    row, tier = _collect("=== 1500\n", age=AWAIT_LANDER_S + 1, answered=False)
+    assert (row["state"], row["pr_url"], tier) == ("done", PR, FANOUT_PLACE_OK)
+    assert (row["awaiting_lander"], row["pr_unconfirmed"]) == (True, True)
 
 
 def test_a_landing_log_outranks_the_ruling(tmp_path):
