@@ -52,6 +52,7 @@ from notify_logic import (
     DASHBOARD_UNPARSEABLE_MSG,
 )
 import renovate_identity
+from renovate_identity import RenovatePR
 from pending_logic import (
     churn_fingerprint,
     churning_pending,
@@ -97,12 +98,6 @@ def cfg() -> dict[str, str]:
 def get(path: str):
     """GET one REST path with the token `main` looked up once; see host_lib.github_get."""
     return github_get(path, _token, user_agent=USER_AGENT)
-
-
-def is_renovate(pr: dict) -> bool:
-    return renovate_identity.is_renovate(pr.get("user")) or (pr.get("head") or {}).get(
-        "ref", ""
-    ).startswith("renovate/")
 
 
 def build_pr(repo: str, pr: dict) -> PR:
@@ -322,7 +317,12 @@ def main() -> int:
     state_file = os.path.join(state_dir, "last_notified")
 
     pulls = get_open(repo, "pulls")
-    prs = [build_pr(repo, p) for p in pulls if is_renovate(p)]
+    heads = [(RenovatePR.from_rest(p), p) for p in pulls]
+    prs = [
+        build_pr(repo, p)
+        for head, p in heads
+        if head.is_renovate or head.on_renovate_branch
+    ]
     items = actionable(prs)
 
     # Fail-loud backstop: Renovate rewrites its Dependency Dashboard issue every run, so a
@@ -361,8 +361,8 @@ def main() -> int:
     # dashboard as an ordinary awaiting row.
     now_dt = datetime.fromtimestamp(now, timezone.utc)
     autoclosed = find_autoclosed(
-        [p for p in autoclosed_candidates(repo, now_dt) if is_renovate(p)],
-        {(p.get("head") or {}).get("ref", "") for p in pulls},
+        autoclosed_candidates(repo, now_dt),
+        {head.head_ref for head, _ in heads},
         body or "",
         now=now_dt,
     )

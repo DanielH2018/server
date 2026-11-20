@@ -104,12 +104,13 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     assert pinned == renovate_identity.GH_AUTHOR
     lookalike = "renovate-fan"
     for login, admitted in ((pinned, True), (lookalike, False)):
-        reasons = land_renovate_pr.refusals({"author": {"login": login}}, frozenset())
+        pr = {"number": 1, "author": {"login": login}, "headRefName": "renovate/x"}
+        reasons = land_renovate_pr.refusals(pr, frozenset())
         assert any("author" in r for r in reasons) is not admitted, login
     listing = json.dumps(
         [
-            {"number": 1, "author": {"login": pinned}},
-            {"number": 2, "author": {"login": lookalike}},
+            {"number": 1, "author": {"login": pinned}, "headRefName": "renovate/a"},
+            {"number": 2, "author": {"login": lookalike}, "headRefName": "renovate/b"},
         ]
     )
     assert [pr.number for pr in renovate_agent._renovate_prs(listing)] == [1]
