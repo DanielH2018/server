@@ -93,7 +93,8 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   pauses for it, and every open branch that touches `ansible/` rebases afterwards.
 - The rotation register holds no secret. Under `secrets/`, the generic `.sops.yaml`
   creation rule and any check that expects every YAML file there to be encrypted would also
-  match it. Step 2 checks the `sops-creation-rules-*` rows and the protected-edits hook before it
+  match it. Step 2 checks the `sops-creation-rules-*` rows, the
+  `sops-cluster-rules-resolve-as-adr-0022-decides` row and the protected-edits hook before it
   places the register.
 - Copies of `ansible/` paths outside the repository do not move with it. The dotfiles
   repo's auto-mode classifier text names the secrets, inventory and cluster-base paths, and it

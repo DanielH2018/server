@@ -313,7 +313,7 @@
     },
     {
       "customType": "regex",
-      "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml, in the ani-sync manager's shape, with THREE matchStrings. Upstream keeps a 10.11 line and a 12.0 line in one repository, so extractVersionTemplate is anchored to `^10\\.11/v`, because the 10.11 server rejects a 12.0 plugin silently. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor.",
+      "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml, in the ani-sync manager's shape, with THREE matchStrings. Upstream keeps a 10.11 line and a 12.0 line in one repository, so extractVersionTemplate is anchored to `^10\\.11/v`, because the 10.11 server rejects a 12.0 plugin silently. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor. The fourth version group is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
@@ -344,7 +344,7 @@
     },
     {
       "customType": "regex",
-      "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616), with TWO matchStrings. extractVersionTemplate is the release-line ANCHOR and admits only the 10.11 line, because 12.0.0 declares targetAbi 12.0. RAISE IT when jellyfin_k8s_image moves to a new Jellyfin minor.",
+      "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616), with TWO matchStrings. extractVersionTemplate is the release-line ANCHOR and admits only the 10.11 line, because 12.0.0 declares targetAbi 12.0. RAISE IT when jellyfin_k8s_image moves to a new Jellyfin minor. The fourth version group is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
@@ -523,7 +523,7 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "CI toolchain and docs-lint pins get one group per `{{depName}}`, because the catch-all container-images rule matches every custom.regex dep and PR #939 titled prek carried only a Vale diff (#980). The Ansible task file that installs Vale is named too, because it shares ci.yml's depName.",
+      "description": "CI toolchain and docs-lint pins get one group per `{{depName}}`, because the catch-all container-images rule matches every custom.regex dep and PR #939 titled prek carried only a Vale diff (#980).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -972,7 +972,7 @@
       "automerge": false
     },
     {
-      "description": "Longhorn (`k3s_longhorn_version`). NEVER automerged, because merging this pin is the upgrade (H1 Open question 6): Longhorn rewrites the storage layer under every PVC and supports no downgrade. Merge only through `land.sh --arm-merge --await-merge` on daniel-box, whose pin gate runs `runbook_gates.py longhorn-upgrade` (docs/longhorn-upgrade.md) and posts `homelab/upgrade-gates`, which promote requires. A UI merge skips the gate, and `land.sh --regate <pr>` re-runs it.",
+      "description": "Longhorn (`k3s_longhorn_version`). NEVER automerged, because merging this pin is the upgrade (H1 Open question 6): Longhorn rewrites the storage layer under every PVC and supports no downgrade. Merge only through `land.sh --arm-merge --await-merge` on daniel-box, whose pin gate runs `runbook_gates.py longhorn-upgrade` (docs/longhorn-upgrade.md) and posts `homelab/upgrade-gates`, which promote requires. A UI merge skips the gate, and `land.sh --regate <pr>` re-runs it. A PR that jumps more than one minor is red by design: take the next minor by hand.",
       "matchDatasources": [
         "github-releases"
       ],

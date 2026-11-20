@@ -12,6 +12,7 @@ from dataclasses import replace
 
 import pytest
 from _runbook_rule import (
+    BLOCKS,
     COMMANDS,
     ITEMS,
     LINES,
@@ -116,11 +117,13 @@ _OFFLINE_ORDER = (
     "answers."
 )
 _PINNED = "<the pinned offline order>"
+# The last line of the bullet in the document, which the nested-item and continuation reds extend.
+_OFFLINE_ORDER_LINE = "      before step 4, because a queued `promote` run can start as soon as GitHub answers."
 
 
 def _offline_order(text: str) -> list[str]:
-    """Each list item, with the pinned offline-order sentence folded to one token."""
-    return [item.replace(_OFFLINE_ORDER, _PINNED) for item in ITEMS(text)]
+    """Each list item and what hangs from it, the pinned offline-order sentence folded to a token."""
+    return [item.replace(_OFFLINE_ORDER, _PINNED) for item in BLOCKS(text)]
 
 
 def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
@@ -333,6 +336,16 @@ ROWS = (
                 f"{_OFFLINE_ORDER} Then go to step 4.",
                 f"{_OFFLINE_ORDER} {_OFFLINE_ORDER}",
             )
+        )
+        + (
+            edit(
+                _OFFLINE_ORDER_LINE,
+                f"{_OFFLINE_ORDER_LINE}\n        - Resume each suspended tag before the hold.",
+            ),
+            edit(
+                _OFFLINE_ORDER_LINE,
+                f"{_OFFLINE_ORDER_LINE}\n\n      Resume each suspended tag first.",
+            ),
         ),
     ),
     RunbookRule(

@@ -316,8 +316,8 @@ SWEEP_ROWS = (
                 "A group with no dispatch arm falls through to the `github.sha` arm and joins "
                 "the push group of the SHA the dispatch ran on. GitHub keeps one pending run "
                 "per group, so the dispatch can evict that SHA's queued push run and leave it "
-                "with no verdict. `test_ci_master_runs_are_not_evictable.py` owns the push arm "
-                "of the same group."
+                "with no verdict. The `ci-master-push-groups-by-commit` row of "
+                "`_ci_job_rows.py` owns the push arm of the same group."
             ),
             offence=judge(_dispatch_group_problems),
             red=mutants(

@@ -9,10 +9,13 @@ mostly render-based guards, which are not textual censuses. So the checks stay a
 Run: uv run pytest tests/repo/test_census_rows_suite.py
 """
 
+import ast
+import functools
 import re
 
 import pytest
 from _row_table import (
+    REPO,
     Census,
     Subject,
     check,
@@ -101,11 +104,68 @@ RUNS_CODE = re.compile(
     r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
     r"|\btmp_path\b|\bmonkeypatch\b|\burlopen\("
 )
+# A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
+# to `git ls-files`, which a row may do.
+RENDERS = re.compile(r"\brender\w*\(")
 TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
 # A module with this many test functions or fewer reads like a selector and a few
 # predicates with their red proofs: the shape of one row or of a handful of rows.
 ROW_SIZED = 8
+
+
+@functools.cache
+def _helper_function_renders(module: str, name: str) -> bool:
+    """Whether tracked module `module` defines function `name`, and it renders.
+
+    The function renders when its own source does, or when it calls a function of the same
+    module that does, at any depth.
+    """
+    for rel in tracked(f"*/{module.rpartition('.')[2]}.py"):
+        text = (REPO / rel).read_text(errors="replace")
+        defs = {
+            node.name: node
+            for node in ast.walk(ast.parse(text))
+            if isinstance(node, ast.FunctionDef)
+        }
+        pending, seen = [name], set()
+        while pending:
+            current = pending.pop()
+            if current in seen or current not in defs:
+                continue
+            seen.add(current)
+            if RENDERS.search(ast.get_source_segment(text, defs[current]) or ""):
+                return True
+            pending += [
+                call.func.id
+                for call in ast.walk(defs[current])
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+            ]
+    return False
+
+
+def _calls_a_rendering_helper(text: str) -> bool:
+    """Whether the module calls a function it imports, and that function renders.
+
+    A test that renders through `route_tree()` has no `render(` of its own to match.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    imported = {
+        (alias.asname or alias.name): (node.module, alias.name)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+        for alias in node.names
+    }
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in imported
+        and _helper_function_renders(*imported[node.func.id])
+        for node in ast.walk(tree)
+    )
 
 
 def _standalone_check_offence(subject: Subject) -> list[str]:
@@ -116,6 +176,7 @@ def _standalone_check_offence(subject: Subject) -> list[str]:
         or BUILDS_A_ROW.search(text)
         or not READS_THE_TREE.search(text)
         or RUNS_CODE.search(text)
+        or _calls_a_rendering_helper(text)
     ):
         return []
     return [
@@ -227,6 +288,13 @@ ROWS = (
                 "    for p in DOCS.glob('*.md'):\n"
                 "        assert len(p.read_text()) < 9000\n",
             ),
+            Subject(
+                "tests/repo/test_x.py",
+                "from lib.git_testing import git_out\n"
+                "def test_every_doc_is_short():\n"
+                "    for p in git_out(REPO, 'ls-files', 'docs').splitlines():\n"
+                "        assert len((REPO / p).read_text()) < 9000\n",
+            ),
         ),
         green=(
             Subject(
@@ -241,6 +309,13 @@ ROWS = (
                 "tests/repo/test_x.py",
                 "def test_the_render_names_a_port():\n"
                 "    assert 'port' in render_role_template('a', 'b.j2')\n",
+            ),
+            Subject(
+                "tests/repo/test_x.py",
+                "from test_alertmanager_routing import route_tree\n"
+                "def test_the_tree_names_a_receiver():\n"
+                "    assert 'blackhole' in route_tree()['receiver']\n"
+                "    assert (REPO / 'a.yml').read_text()\n",
             ),
         ),
         min_matches=100,
@@ -280,47 +355,12 @@ ROWS = (
                 "a join of the Vale version and sha256 CI installs against the "
                 "homelab-tools package pin"
             ),
-            "tests/services/test_alertmanager_autofix_inhibit.py": (
-                "a render of the Alertmanager config, run against the labels of the pods "
-                "and scrape-target rule files"
-            ),
-            "tests/services/test_alertmanager_blackbox_inhibit.py": (
-                "a render of the Alertmanager config, run against the labels of the "
-                "blackbox-ingress rules"
-            ),
-            "tests/services/test_alertmanager_flux_inhibit.py": (
-                "a render of the Alertmanager config, run against the labels of the flux "
-                "and scrape-target rule files"
-            ),
-            "tests/services/test_alertmanager_grouping.py": (
-                "a render of the Alertmanager routing tree, joined against the rule files "
-                "and the inventory's hosts"
-            ),
-            "tests/services/test_alertmanager_pi_inhibit.py": (
-                "a render of the Alertmanager config, run against the labels of the Pi "
-                "rules in extra-probes.yaml"
-            ),
-            "tests/services/test_alertmanager_scan_unit_inhibit.py": (
-                "a render of the Alertmanager config, run against the labels of the "
-                "host-check rule file"
-            ),
-            "tests/services/test_anisync_pin_matches_server.py": (
-                "a render of the jellyfin Deployment, joined against the role's defaults"
-            ),
             "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
                 "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
                 "Cloudflare ranges in the group vars"
             ),
-            "tests/services/test_homepage_tool_tile_favicons.py": (
-                "a join of each homepage tile's icon colour against the favicon of the UI "
-                "it opens and mkdocs.yml's favicon"
-            ),
             "tests/services/test_scrape_target_flap_rule.py": (
                 "a join of the flap rules against the promtool cases that exercise them"
-            ),
-            "tests/services/test_warning_escalation_exemptions.py": (
-                "a render of the Alertmanager config, joined against every warning rule "
-                "and the rendered notification bodies"
             ),
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
