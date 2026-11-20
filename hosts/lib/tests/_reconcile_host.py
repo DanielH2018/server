@@ -37,7 +37,7 @@ COMMANDS = (
     "udevadm",
 )
 # The verbs that change a unit, as opposed to the reads reconcile asks before acting.
-ACTIONS = frozenset({"start", "stop", "restart", "try-restart", "disable"})
+ACTIONS = frozenset({"start", "stop", "restart", "try-restart"})
 
 # Every systemctl verb that changes a unit or its failed state, `reset-failed` included.
 WRITES = ACTIONS | {"reset-failed"}

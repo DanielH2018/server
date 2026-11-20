@@ -148,20 +148,3 @@ def test_the_ups_deadline_follows_its_cron():
         {**OVERRIDES, "nut_host_watchdog_interval_minutes": 30},
     )
     assert re.findall(r"^DEADLINE_S=(\d+)$", moved, re.M) == ["3900"]
-
-
-def test_no_b4_rule_is_shadow():
-    """M6 batch B4's Cutover-1b made every rule in the group page, the drill pair included.
-
-    The drills had no `CheckWithoutPager` term, so the batch's five `[2h]` terms bounded their
-    window, and those terms left with the same PR. A rule that regains `shadow` pages nobody
-    while nothing else pages in its place.
-    """
-    [group] = yaml_fast.safe_load(RULES.read_text())["groups"]
-    assert {r["alert"] for r in group["rules"]} >= {
-        "EtcdRestoreDrillFailed",
-        "EtcdRestoreDrillNotReporting",
-        "EtcdRestoreDrillEgressFenceFailed",
-        "EtcdRestoreDrillEgressFenceNotReporting",
-    }
-    assert [r["alert"] for r in group["rules"] if "shadow" in r["labels"]] == []

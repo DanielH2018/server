@@ -1,12 +1,13 @@
-"""What kind of PR a landing carries, and the quota floor, with the GitHub reads both need.
+"""What kind of PR a landing carries, and the quota floor with the GitHub read it needs.
 
 `slots.py` reads both: the kind decides which of its rules bar a merge, and the floor lowers
-the count of landing slots. `batch.py` reads the kind to keep a serial PR out of a batch.
+the count of landing slots. `batch.py` reads the kind to keep a serial PR out of a batch. The
+kind is a function of the PR's file list, which `Landing.changed_paths` reads.
 Every landing polls GitHub on one shared token, whose core quota is 5000 calls an hour, and
 on 2026-11-11 thirteen live landings spent it.
 
 THE READS FAIL OPEN. A read that fails lowers nothing and bars nothing. `gh api rate_limit`
-costs no core quota, and the PR's own file list is one GraphQL read.
+costs no core quota.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_live_limit.py
 """
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 
-from lib.json_types import JsonValue, as_list, as_object
+from lib.json_types import JsonValue, as_object
 from lib.role_paths import CLUSTER_VARS_PREFIX, is_test_path, role_for
 from validate.cluster_pins import PINS
 
@@ -56,12 +57,10 @@ class Reads:
     """The boundaries, one field each, so a test replaces one.
 
     Attributes:
-        pr_paths: the paths a PR changes.
         core_quota: the core quota's `(remaining, reset epoch)`.
         now: the time the quota floor reads.
     """
 
-    pr_paths: Callable[[str], list[str]]
     core_quota: Callable[[], tuple[int, int]]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
 
@@ -69,19 +68,13 @@ class Reads:
 def github_reads(gh_json: Callable[..., JsonValue]) -> Reads:
     """`Reads` over `gh_json`, the landing's own `gh` boundary."""
 
-    def pr_paths(pr: str) -> list[str]:
-        got = as_object(gh_json("pr", "view", pr, "--json", "files"), "gh pr view")
-        return [
-            str(as_object(f, "a file")["path"]) for f in as_list(got["files"], "files")
-        ]
-
     def core_quota() -> tuple[int, int]:
         core = as_object(
             gh_json("api", "rate_limit", "--jq", ".resources.core"), "core"
         )
         return int(str(core["remaining"])), int(str(core["reset"]))
 
-    return Reads(pr_paths=pr_paths, core_quota=core_quota)
+    return Reads(core_quota=core_quota)
 
 
 def fail_open[T](read: Callable[[], T]) -> T | None:
@@ -103,9 +96,3 @@ def low_quota(reads: Reads) -> str | None:
     if remaining < QUOTA_FLOOR and resets_in > QUOTA_RESET_FAR_S:
         return f"the core quota has {remaining} calls left and resets in {resets_in // 60}m"
     return None
-
-
-def pr_kind(pr: str, reads: Reads) -> str:
-    """`kind` of `pr`'s file list; "" when the list cannot be read."""
-    paths = fail_open(lambda: reads.pr_paths(pr))
-    return kind(paths) if paths else ""

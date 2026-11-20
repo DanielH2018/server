@@ -1,36 +1,10 @@
 from lib.k8s_objects import (
     BackupTarget,
-    Condition,
-    ConditionStatus,
     K8sObject,
     LonghornVolume,
     VolumeState,
-    parse_conditions,
 )
 from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
-
-
-def test_conditions_are_keyed_by_type_and_the_first_of_a_type_wins():
-    item = {
-        "status": {
-            "conditions": [
-                {
-                    "type": "Ready",
-                    "status": "True",
-                    "reason": "Done",
-                    "message": "ok",
-                    "lastTransitionTime": "2026-11-20T10:00:00Z",
-                },
-                {"type": "Ready", "status": "False", "message": "later"},
-                None,
-                {"type": "Stalled", "status": "maybe"},
-            ]
-        }
-    }
-    assert parse_conditions(item) == {
-        "Ready": Condition(ConditionStatus.TRUE, "Done", "ok", "2026-11-20T10:00:00Z"),
-        "Stalled": Condition(ConditionStatus.UNKNOWN, "", "", ""),
-    }
 
 
 def test_an_object_reads_its_metadata_and_a_missing_field_as_empty():

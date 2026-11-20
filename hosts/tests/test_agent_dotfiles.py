@@ -141,7 +141,7 @@ def test_the_unit_runs_the_script_as_the_agent_with_its_seed() -> None:
         "ExecStart=/usr/local/bin/claude-dotfiles-sync.sh /var/lib/claude/.local/bin/chezmoi "
         "/var/lib/claude/.config/chezmoi/seed.toml\n"
     ) in unit
-    assert "OnFailure=claude-dotfiles-sync-alert.service\n" in unit
+    assert "OnFailure=homelab-alert@%n.service\n" in unit
 
 
 def test_the_seed_answers_agent_true() -> None:

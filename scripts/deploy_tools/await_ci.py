@@ -41,12 +41,13 @@ from lib import host_modules  # noqa: F401
 
 from builder_ci_grade import read_check_pages
 from ci_verdict import (
-    _CI_NO_VERDICT_CONCLUSIONS,
     CheckRun,
+    CheckSuite,
     CIVerdict,
     RunState,
     ci_verdict,
     parse_check_runs,
+    parse_check_suites,
 )
 from host_lib import github_get, github_token
 
@@ -97,9 +98,8 @@ DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
 
-    `ci_verdict` returns `pass` for an empty set for the disarmed gate. That is a deliberate
-    disarm switch, reachable only by an operator emptying the required contexts. Inheriting it here would turn a wait-for-green into an unconditional
-    green, so this refuses instead of returning a verdict it did not check.
+    An operator empties the required contexts to disarm the gate. The landing names that
+    state from this error, which `verdict_for` raises before it reads GitHub.
     """
 
 
@@ -107,11 +107,16 @@ class RateLimitedError(Exception):
     """GitHub refused a read for the caller's request rate, which says nothing about the SHA.
 
     It is not a `URLError`, so it passes every catch that reads an unreachable API as pending,
-    and `wait` sleeps `wait_s` before the next poll.
+    and `wait` sleeps up to `wait_s` before the next poll.
+
+    Attributes:
+        wait_s: the seconds until the quota frees, as the refusal reported them.
+        quota: the spent quota's name for `gh_rate_limit.sleep_until_reset`, which ends the
+            sleep at its reset; "" for a secondary limit.
     """
 
-    def __init__(self, wait_s: int) -> None:
-        self.wait_s = wait_s
+    def __init__(self, wait_s: int, quota: str = "") -> None:
+        self.wait_s, self.quota = wait_s, quota
         super().__init__(f"GitHub rate limit; the quota frees in {wait_s}s")
 
 
@@ -122,10 +127,10 @@ def _unless_rate_limited(read):
         try:
             return read(sha)
         except urllib.error.HTTPError as exc:
-            pause = gh_rate_limit.http_wait_s(exc)
+            pause = gh_rate_limit.http_wait(exc)
             if pause is None:
                 raise
-            raise RateLimitedError(pause) from exc
+            raise RateLimitedError(*pause) from exc
 
     return checked
 
@@ -148,19 +153,31 @@ def fetch_check_runs(sha: str) -> list[CheckRun]:
     return parse_check_runs(_github_pages(f"commits/{sha}/check-runs", "check_runs"))
 
 
-def fetch_check_suites(sha: str) -> list[dict]:
+def fetch_check_suites(sha: str) -> list[CheckSuite]:
     """Check-suites for one SHA.
 
     One per workflow run, present even when the run was cancelled before any job
     registered a check-run. Fetched only when no required run exists, so it costs
     nothing on the ordinary path.
     """
-    return _github_pages(f"commits/{sha}/check-suites", "check_suites")
+    return parse_check_suites(
+        _github_pages(f"commits/{sha}/check-suites", "check_suites")
+    )
 
 
 def lookup_token() -> str | None:
     """The GitHub token this tool reads with, or None when it reads anonymously."""
     return github_token(os.environ, subprocess.run)
+
+
+def _read_quota(name: str) -> object:
+    """One quota's `.resources.<name>` object from GitHub, read as `fetch_check_runs` reads.
+
+    An anonymous read gets the quota of this host's address, which an anonymous wait spends.
+    GitHub counts no `rate_limit` read against a quota.
+    """
+    got = github_get("rate_limit", lookup_token(), user_agent="await-ci")
+    return got["resources"][name]
 
 
 def poll_interval(requested: int, authenticated: bool, timeout_s: int) -> int:
@@ -280,7 +297,7 @@ def draft_skipped(runs: list[CheckRun], required) -> bool:
 
 
 def _cancelled_before_any_run_registered(
-    runs: list[CheckRun], suites: list[dict], required
+    runs: list[CheckRun], suites: list[CheckSuite], required
 ) -> bool:
     """True when no required run exists and CI already finished with no verdict.
 
@@ -295,12 +312,7 @@ def _cancelled_before_any_run_registered(
     """
     if any(r.name in required for r in runs):
         return False
-    return any(
-        s.get("status") == "completed"
-        and s.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
-        and not s.get("latest_check_runs_count")
-        for s in suites
-    )
+    return any(s.ended_without_a_run for s in suites)
 
 
 def _no_verdict_will_ever_arrive(
@@ -332,7 +344,7 @@ def _descendants(sha: str) -> list[str]:
     return out.split()
 
 
-def _push_was_dropped(runs: list[CheckRun], suites: list[dict], required) -> bool:
+def _push_was_dropped(runs: list[CheckRun], suites: list[CheckSuite], required) -> bool:
     """True when GitHub Actions has registered nothing at all for the SHA.
 
     Only an Actions suite counts. Another app's suite (gitguardian, renovate) says nothing
@@ -341,7 +353,7 @@ def _push_was_dropped(runs: list[CheckRun], suites: list[dict], required) -> boo
     """
     if any(r.name in required for r in runs):
         return False
-    return not any((s.get("app") or {}).get("slug") == "github-actions" for s in suites)
+    return not any(s.from_actions for s in suites)
 
 
 def descendant_verdict(
@@ -513,6 +525,7 @@ def wait(
     descendants=_descendants,
     fetch_tip=_fetch_tip,
     walk_descendants: bool = True,
+    read_quota=_read_quota,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses.
 
@@ -528,7 +541,8 @@ def wait(
     registered for any commit from the SHA to the tip.
 
     A rate-limit refusal waits for the quota to free, within the budget, rather than polling
-    again after `interval_s`.
+    again after `interval_s`. The wait reads the quota through `read_quota` as it goes, so it
+    ends at the reset (`gh_rate_limit.sleep_until_reset`).
 
     Raises:
         RateLimitedError: GitHub refused a read for its rate under a zero budget, which has
@@ -685,8 +699,8 @@ def wait(
             if left <= 0:
                 return 75, f"{target[:8]}: no verdict after {timeout_s}s -- {exc}"
             pause = max(1, min(exc.wait_s, int(left)))
-            print(f"{target[:8]}: {exc}; polling again in {pause}s")
-            sleep(pause)
+            print(f"{target[:8]}: {exc}; polling again within {pause}s")
+            gh_rate_limit.sleep_until_reset(exc.quota, pause, sleep, read_quota)
 
 
 def main(argv: list[str] | None = None, wait=wait, token=lookup_token) -> int:

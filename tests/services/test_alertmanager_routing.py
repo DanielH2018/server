@@ -20,7 +20,7 @@ and reads each route the walk ends on. Each label set carries one expected outco
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
-  Each node's `WiredLinkDown` warning pages Discord from the start too.
+  Each node's `WiredLinkDown` is critical, so it pages Discord and email.
   M5's four log rules and four ruler-watching alerts page from its PR 4b.
   M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
   the blackhole ahead of both critical routes.
@@ -92,6 +92,7 @@ ROUTED = [
             "HostUpdateStale",
             "LonghornBackupHealthFailed",
             "LonghornBackupHealthNotReporting",
+            "WiredLinkDown",
         },
     ),
     (

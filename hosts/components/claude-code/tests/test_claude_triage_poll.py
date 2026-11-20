@@ -222,7 +222,8 @@ def _config(tmp_path, mode: str, extra: str = "") -> str:
     path.write_text(
         f"STATE_DIR={state}\nPOLL_MODE={mode}\n"
         "PROM_URLS=http://loopback http://cluster-ip\nPOLL_STREAK=1\n"
-        f"POLL_ROUTES={json.dumps(dict.fromkeys(ROUTED, 'triage'))}\n" + extra
+        f"POLL_ROUTES={json.dumps(dict.fromkeys(ROUTED, 'triage'))}\n"
+        "RESTART_SERVICES=[]\n" + extra
     )
     return str(path)
 

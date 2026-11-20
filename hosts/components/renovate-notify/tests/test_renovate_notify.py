@@ -6,6 +6,7 @@ import notify_logic
 import pytest
 import renovate_notify as rn
 import builder_ci_grade
+from ci_verdict import CIVerdict
 
 
 class _FakeResp:
@@ -185,7 +186,7 @@ def test_a_failing_31st_check_run_makes_the_pr_ci_read_failing(monkeypatch):
 
     pr = rn.build_pr("o/r", _OPEN_PR)
 
-    assert pr.ci == "failure"
+    assert pr.ci is CIVerdict.FAIL
 
 
 def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch):
@@ -197,7 +198,7 @@ def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch
         pr = rn.build_pr("o/r", _OPEN_PR)
     except ValueError:
         return  # a refused read, the way builder_ci_grade.read_check_pages refuses one
-    assert pr.ci != "success"
+    assert pr.ci is not CIVerdict.PASS
 
 
 # The notifier cannot import the builder's module, so notify_logic carries a copy of the page
@@ -284,4 +285,4 @@ def test_a_failing_31st_commit_status_makes_the_pr_ci_read_failing(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    assert rn.build_pr("o/r", _OPEN_PR).ci == "failure"
+    assert rn.build_pr("o/r", _OPEN_PR).ci is CIVerdict.FAIL

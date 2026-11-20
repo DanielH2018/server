@@ -139,12 +139,6 @@ def test_alertmanager_inhibits_host_check_overdue_on_check_and_origin():
     assert _selects(rule, "source", PAIRS["AideCheckNotReporting/daniel-box"])
 
 
-def test_host_check_overdue_carries_no_shadow_label():
-    assert [
-        r["labels"]["service"] for r in overdue_rules() if "shadow" in r["labels"]
-    ] == []
-
-
 @pytest.mark.parametrize("name", sorted(PAIRS))
 def test_a_paired_not_reporting_alert_inhibits_the_duplicate_overdue(name):
     # Non-vacuity for `PAIRS`: the cases run on every host's HostCheckOverdue.

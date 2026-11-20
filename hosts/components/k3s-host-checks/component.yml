@@ -11,10 +11,11 @@ files:
   - {src: templates/etcd-token-drift.sh.j2, dst: /usr/lib/homelab/etcd-token-drift.sh, mode: "0755"}
   # The reader and its libraries. No cron window here: dpkg unpacks the whole set before the next
   # timer can fire, and the timer's unit waits for no file of its own. The libraries sit under
-  # `lib/` as they do under `scripts/`, so `lib.k8s_objects` and `lib.longhorn_lib` import by the
-  # same dotted names on the host and in the checkout.
+  # `lib/` as they do under `scripts/`, so `lib.k8s_objects`, `lib.k8s_conditions` and
+  # `lib.longhorn_lib` import by the same dotted names on the host and in the checkout.
   - {src: files/longhorn_backup_health.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_backup_health.py, mode: "0755"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/longhorn-backup-health/host_lib.py, mode: "0755"}
+  - {shared: k8s_conditions.py, dst: /usr/lib/homelab/longhorn-backup-health/lib/k8s_conditions.py, mode: "0755"}
   - {shared: k8s_objects.py, dst: /usr/lib/homelab/longhorn-backup-health/lib/k8s_objects.py, mode: "0755"}
   - {shared: longhorn_backup_health_logic.py, dst: /usr/lib/homelab/longhorn-backup-health/lib/longhorn_lib/longhorn_backup_health_logic.py, mode: "0755"}
   - {shared: longhorn_backups.py, dst: /usr/lib/homelab/longhorn-backup-health/lib/longhorn_lib/longhorn_backups.py, mode: "0755"}

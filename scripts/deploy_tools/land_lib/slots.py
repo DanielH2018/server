@@ -249,21 +249,23 @@ def _drain(ln: Landing, kind: str, lock: Locker, why: str) -> str:
     return f"{why}, after {waited}s of waiting in the landing turn"
 
 
-def _kind(ln: Landing) -> str:
-    return live_limit.pr_kind(ln.opts.pr, live_limit.github_reads(ln.tools.gh_json))
+def _kind(ln: Landing, head: str) -> str:
+    """`live_limit.kind` of the PR's files at `head`; "" when they cannot be read."""
+    paths = live_limit.fail_open(lambda: ln.changed_paths(head))
+    return live_limit.kind(paths) if paths else ""
 
 
 def _lock_of(ln: Landing) -> Locker:
     return ln.tools.try_slot or _locker(ln.tools.hostname())
 
 
-def bar_member(member: Landing) -> str:
+def bar_member(member: Landing, head: str) -> str:
     """Why the PR `member` lands may not join a batch now; "" when nothing bars it.
 
     The holder merges its members before any of them holds a slot, so inside the weekly
     reboot's no-promotion window a k8s PR joins no batch: it waits out the window alone.
     """
-    kind = _kind(member)
+    kind = _kind(member, head)
     if kind and live_limit.fail_open(member.tools.in_reboot_window):
         return "it changes a k8s role inside the weekly reboot's no-promotion window"
     return _bar(member, kind, _lock_of(member))[0]
@@ -277,20 +279,20 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
     )
 
 
-def refuse_before_run(ln: Landing) -> None:
+def refuse_before_run(ln: Landing, head: str) -> None:
     """End the landing of a draft that takes the turn while a rule bars it, before its run.
 
     A bar that the landings past their merge clear (`_bar`) lets the run start: the turn
     keeps other merges out during the run, and `refuse_before_merge` waits out the rest.
     """
-    why, drains = _bar(ln, _kind(ln), _lock_of(ln))
+    why, drains = _bar(ln, _kind(ln, head), _lock_of(ln))
     if why and not drains:
         _refuse(ln, why)
     if why:
         say(f"{why}; starting its run, and it waits in the turn for that to clear")
 
 
-def refuse_before_merge(ln: Landing, in_turn: bool) -> None:
+def refuse_before_merge(ln: Landing, head: str, in_turn: bool) -> None:
     """End the landing with exit 75, merging nothing, while a rule bars its PR from merging.
 
     It runs just before the merge, and `refuse_before_run` runs the same rules when a draft
@@ -306,7 +308,7 @@ def refuse_before_merge(ln: Landing, in_turn: bool) -> None:
 
     Every read fails open: a rule whose read fails bars nothing.
     """
-    kind, lock = _kind(ln), _lock_of(ln)
+    kind, lock = _kind(ln, head), _lock_of(ln)
     why, drains = _bar(ln, kind, lock)
     if why and drains and in_turn:
         why = _drain(ln, kind, lock, why)

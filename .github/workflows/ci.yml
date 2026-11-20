@@ -625,6 +625,15 @@ jobs:
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
+      # The count stayed at six on the reading of 2026-11-20, taken after the `named_files`
+      # plugin landed. The pool is pull-request runs, because a master push run skips pytest
+      # when a pull-request run tested its tree: 5 of the newest 200 green master runs ran it.
+      # `--recent 20 --pull-requests` read the pytest family at 704 slot-seconds per run, a
+      # median 29.0s per leg outside `Run the test suite` over 83 legs, and a p90 queue wait of
+      # 89s. The one full-census master run among the five, 44658813772, held 843 slot-seconds
+      # of pytest, against about 1,020 before the plugin. Fewer legs would save about 29s of
+      # setup each and lengthen every landing's pole.
+      #
       # A shard can never finish faster than its largest `--dist loadscope` group, a module or
       # a class within one, so the floor rises as the matrix grows. Each leg's `phase timing`
       # section prints every worker's finish time, which shows when one group sets the leg's
@@ -1208,7 +1217,6 @@ jobs:
             scripts/validate/validate_lib/repos_case.py
             scripts/validate/validate_lib/scratch_clones.py
             scripts/validate/validate_lib/secrets_case.py
-            scripts/validate/validate_lib/shadow_case.py
             scripts/validate/validate_lib/pi_host_seed.py
         run: |
           set -euo pipefail

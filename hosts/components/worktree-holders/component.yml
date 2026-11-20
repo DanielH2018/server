@@ -13,9 +13,6 @@
 #
 # A host whose package stops listing this component loses the root service with its next package
 # version.
-#
-# Reconcile's shadow handoff removes any same-name unit copies under /etc, reloads once and restarts
-# the socket. /run/worktree-holders.sock does not change.
 depends:
   - netcat-openbsd
 defaults:

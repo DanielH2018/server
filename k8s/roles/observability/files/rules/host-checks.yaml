@@ -1239,14 +1239,15 @@ groups:
       node_network_up{device="eno1",origin="daniel-box"} == 0
     for: 5m
     labels:
-      severity: warning
+      severity: critical
       service: daniel-box
     annotations:
       summary: 'daniel-box: the wired link eno1 is down, so the node runs on WiFi.'
       description: >-
-        eno1 on daniel-box has had no carrier, or has been down, for 5 minutes, so the node routes over
-        its slower WiFi fallback, which carries Longhorn replication. Check the cable and the switch port,
-        then run `ip link show eno1` and `ip route get 1.1.1.1` on daniel-box.
+        eno1 on daniel-box has had no carrier, or has been down, for 5 minutes. daniel-box serves Longhorn
+        replicas over WiFi, and volumes on the other node get I/O errors. Restore the wire first: check
+        the cable and the switch port, then run `ip -br link` on daniel-box.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
   - alert: WiredLinkDown
     expr: |
       node_network_carrier{device="enp88s0",origin="daniel-server"} == 0
@@ -1254,14 +1255,15 @@ groups:
       node_network_up{device="enp88s0",origin="daniel-server"} == 0
     for: 5m
     labels:
-      severity: warning
+      severity: critical
       service: daniel-server
     annotations:
       summary: 'daniel-server: the wired link enp88s0 is down, so the node runs on WiFi.'
       description: >-
-        enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes, so the node routes
-        over its slower WiFi fallback, which carries Longhorn replication. Check the cable and the switch
-        port, then run `ip link show enp88s0` and `ip route get 1.1.1.1` on daniel-server.
+        enp88s0 on daniel-server has had no carrier, or has been down, for 5 minutes. daniel-server serves
+        Longhorn replicas over WiFi, and volumes on the other node get I/O errors. Restore the wire first:
+        check the cable and the switch port, then run `ip -br link` on daniel-server.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
   - alert: HostReconcileFailed
     expr: homelab_host_reconcile_ok{origin="daniel-box"} == 0
     for: 15m

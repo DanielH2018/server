@@ -1,7 +1,8 @@
 """Readers behind the three panels of the deploy UI. Pure parsers, stdlib only.
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
-so nothing here imports from `scripts/`. `ps`, `fuser` and `gh` are reached as subprocesses
+so nothing here imports from `scripts/`. `ci_verdict` is a `hosts/lib/` module the component
+installs beside the daemon. `ps`, `fuser` and `gh` are reached as subprocesses
 by `deploy_ui.App`; this module turns their text into rows.
 """
 
@@ -12,6 +13,8 @@ import stat
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+
+from ci_verdict import checks_verdict, parse_rollup
 
 
 class Unavailable(Exception):
@@ -206,34 +209,27 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
-def _ci_of(rollup: list[dict]) -> str:
-    if not rollup:
-        return "none"
-    concl = {(c.get("conclusion") or "").upper() for c in rollup}
-    if concl & {"FAILURE", "ERROR", "TIMED_OUT"}:
-        return "fail"
-    if any(
-        (c.get("status") or "").upper() in ("IN_PROGRESS", "QUEUED", "PENDING")
-        for c in rollup
-    ):
-        return "pending"
-    if concl and concl <= {"SUCCESS", "SKIPPED", "NEUTRAL"}:
-        return "pass"
-    return "pending"
-
-
 def parse_prs(raw: str) -> list[dict]:
-    """`gh pr list --json number,title,headRefName,isDraft,statusCheckRollup` to rows."""
-    return [
-        {
-            "number": p["number"],
-            "title": p.get("title", ""),
-            "branch": p.get("headRefName", ""),
-            "draft": bool(p.get("isDraft")),
-            "ci": _ci_of(p.get("statusCheckRollup") or []),
-        }
-        for p in json.loads(raw)
-    ]
+    """`gh pr list --json number,title,headRefName,isDraft,statusCheckRollup` to rows.
+
+    A row's `ci` is `none` for a PR with no check, and otherwise the `CIVerdict` word.
+
+    Raises:
+        ValueError: the text is not JSON, or a rollup or one of its nodes is malformed.
+    """
+    rows = []
+    for p in json.loads(raw):
+        checks = parse_rollup(p.get("statusCheckRollup"))
+        rows.append(
+            {
+                "number": p["number"],
+                "title": p.get("title", ""),
+                "branch": p.get("headRefName", ""),
+                "draft": bool(p.get("isDraft")),
+                "ci": str(checks_verdict(checks)) if checks else "none",
+            }
+        )
+    return rows
 
 
 # A landing's log: `land<pr>-<YYYYmmdd-HHMMSS>.log` from `land.sh --detach`, or

@@ -68,6 +68,7 @@ PODS = FILES / "soak_pods.py"
 HELPER = FILES / "flux_job_connect.py"
 PARSE = FILES / "flux_job_parse.py"
 CHANGED_SET = SCRIPTS / "deploy_tools" / "changed_set.py"
+CONDITIONS = SCRIPTS / "lib" / "k8s_conditions.py"
 SERVICES = "services.json"
 RULES = K8S_ROLES / "observability" / "files" / "rules"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
@@ -340,6 +341,7 @@ def soak_files(
             HELPER.name: HELPER.read_text(),
             PARSE.name: PARSE.read_text(),
             CHANGED_SET.name: CHANGED_SET.read_text(),
+            CONDITIONS.name: CONDITIONS.read_text(),
             SERVICES: json.dumps(services, sort_keys=True, indent=1) + "\n",
         },
     }

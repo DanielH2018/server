@@ -4,6 +4,22 @@
 # Ansible's templater) and included via `template: !include templates.yaml` in configuration.yaml.
 # HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.
 #
+# The away-hold store: the alerts bedroom_notify parked while nobody was home, as the `held`
+# attribute, a mapping of tag -> {title, message}; the state is how many are held. Every write is a
+# `bedroom_held_alert` event (hold / cancel / flushed), and held_after in
+# custom_templates/notify.jinja computes the mapping after it. A trigger-based sensor restores its
+# state and attributes, so the held alerts survive a Home Assistant restart.
+- trigger:
+    - platform: event
+      event_type: bedroom_held_alert
+  sensor:
+    - name: "Bedroom held alerts"
+      unique_id: bedroom_held_alerts
+      icon: mdi:email-lock-outline
+      state: "{% from 'notify.jinja' import held_after %}{{ held_after(state_attr('sensor.bedroom_held_alerts', 'held'), trigger.event.data) | from_json | count }}"
+      attributes:
+        held: "{% from 'notify.jinja' import held_after %}{{ held_after(state_attr('sensor.bedroom_held_alerts', 'held'), trigger.event.data) | from_json }}"
+
 # Dynamic morning wake: the wake ramp starts 15 min before the real alarm and continues 30 min AFTER
 # it — a 45-min window (the alarm sits 1/3 in, not centered). Source is the WATCH alarm
 # (sensor.pixel_watch_3_next_alarm) — the phone's next_alarm is unreliable. This timestamp sensor

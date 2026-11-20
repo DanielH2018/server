@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 
 from diagnostics.probe_lib.health_rollout import seconds_since
-from lib.k8s_objects import ConditionStatus, parse_conditions
+from lib.k8s_conditions import ConditionStatus, parse_conditions
 
 # RBAC decides which of two paths this gate can take: trigger a fresh run itself, or fall back
 # to reading the most recent existing run.

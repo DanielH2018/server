@@ -874,10 +874,12 @@ the manifest.
 - `units:` maps a unit to `{policy: manual}` or `{policy: windowed}`. Reconcile does not
   restart a unit with a policy when its file changes. The unit must be one the host package
   or `homelab-updater` installs, or one the host package drops in on.
-- `legacy:` lists the Ansible-era entries reconcile retires: `{path: ...}`, `{cron: NAME,
-  user: USER}`, `{cron_file: NAME}` or `{unit: NAME}`. Each value renders with the
-  package's context, so `user: "{{ sys_user }}"` becomes the user's name. A shared package
-  refuses a legacy entry, because reconcile reads only the host package's manifest.
+- `legacy:` lists the Ansible-era entries reconcile retires: `{path: ...}` or `{cron: NAME,
+  user: USER}`. Each value renders with the package's context, so
+  `user: "{{ sys_user }}"` becomes the user's name. The render refuses any other kind, and a
+  path under `/etc/systemd/system`: reconcile removes a path without the daemon-reload and the
+  restart a unit copy there would need. A shared package refuses a legacy entry, because
+  reconcile reads only the host package's manifest.
 - `enable:` maps a unit to the target that wants it, such as
   `{homelab-updater.timer: timers.target}`. The render ships the link `systemctl enable`
   writes: a symlink at `/usr/lib/systemd/system/<target>.wants/<unit>` pointing at

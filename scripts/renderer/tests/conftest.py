@@ -14,9 +14,11 @@ import pytest
 import yaml
 from _render_audit import log_digest_lines
 
-# The soak Job mounts changed_set.py beside flux_soak.py, which imports it by bare name. One
-# module object under both names reproduces that layout without a second copy.
+# The soak Job mounts changed_set.py and k8s_conditions.py beside flux_soak.py, which imports
+# them by bare name. One module object under both names reproduces that layout without a
+# second copy.
 sys.modules["changed_set"] = importlib.import_module("deploy_tools.changed_set")
+sys.modules["k8s_conditions"] = importlib.import_module("lib.k8s_conditions")
 
 
 def pytest_terminal_summary(terminalreporter):
