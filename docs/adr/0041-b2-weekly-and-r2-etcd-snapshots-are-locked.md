@@ -85,11 +85,14 @@ once a day. It pages a warning when the bucket departs from this record: the loc
 default retention, compliance mode, a retention as long as the weekly prune age, or a writer
 key that holds `bypassGovernance`.
 
-The R2 rule has no standing reader. The operator verifies it once, with
-`wrangler r2 bucket lock list`, after setting it. No credential the cluster holds can change
-an R2 lock rule: R2's S3 API implements no lock operation, so only a Cloudflare account token
-can. A daily reader would therefore watch only the operator's own edits, and it would need a
-Cloudflare token in a pod that holds none today.
+The R2 rule needs a standing reader too, and this record does not yet have one. Until it
+lands, the operator verifies the rule by hand with `wrangler r2 bucket lock list` after
+setting it. R2's S3 API implements no lock operation, so the cluster's R2 key can neither
+read nor change a rule. Reading one takes a Cloudflare account API token, and Cloudflare
+scopes the permission that reads lock rules only to a whole account, never to one bucket. No
+such token exists in the tree, and only the operator can mint one, so the reader cannot ship
+with this record. [#9702](https://github.com/DanielH2018/server/issues/9702) holds it and the
+operator's choice of where it runs.
 
 ## Consequences
 
@@ -115,9 +118,10 @@ prefix younger than the retention cannot be drained until its lock expires.
 **Object Lock on a B2 bucket cannot be turned off.** The default retention can be changed
 or removed later, but the bucket stays lock-enabled.
 
-**An edit to the R2 rule goes unnoticed** until someone lists the rules again.
-[#9702](https://github.com/DanielH2018/server/issues/9702) holds a standing R2 check that
-needs no new standing credential.
+**Until #9702 lands, nothing pages on an edit to the R2 rule.** A deleted or disabled rule
+removes the etcd snapshots' lock silently. A rule widened over `longhorn/` makes every daily
+Longhorn prune retry against a 409. The `r2_usage` row would notice that only once the
+retries had spent most of the month's operations.
 
 **The B2 row reads red from deploy until the operator acts**, and fires a warning. A
 warning that holds for 48 hours escalates to a page through `WarningUnresolved`.

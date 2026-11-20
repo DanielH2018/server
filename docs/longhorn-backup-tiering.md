@@ -275,8 +275,9 @@ the drain's `b2_list_file_versions` above, one level up.
 [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) locks the B2 weekly bucket
 with Object Lock and the R2 etcd snapshots with a bucket lock rule. It leaves the R2 daily
 tier unlocked. monitor-bridge's `b2_object_lock` row reads the B2 setting once a day and fires
-`B2ObjectLockOff`, a warning, until step 2 is done. The R2 rule has no standing reader, so
-step 3 verifies it by hand.
+`B2ObjectLockOff`, a warning, until step 2 is done. The R2 rule has no standing reader
+until [#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 3 verifies it
+by hand.
 
 Every step is **operator-only**. A session holds no credential that can change a bucket, a
 key or a cluster object.
