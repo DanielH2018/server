@@ -5,6 +5,11 @@ WHY. A review batch resumes its own implementer when the landing it ran ends
 hand after the unit has stopped, so a conflict there finds no unit. `place resume` starts one
 that runs the same resume, review and landing, and this module is what it checks first.
 
+A CONFLICT NO LANDING MET. A PR that conflicts with master when the batch marks it ready gets
+no CI run, so the batch ends before any landing (`review_ci.ready_for_ci`). With no landing
+log for the PR, the conflict `git merge-tree` names in the batch's worktree is the reason to
+resume.
+
 WHAT IT READS. One call on the batch's host for the unit's state, the worktree, the batch's
 own landing log and the files that conflict; the forge for the PR; one call on the landing
 locks' host for a live landing of the PR.
@@ -102,17 +107,18 @@ class Resumable:
     Attributes:
         batch: the batch's manifest entry.
         pr: its open PR's URL.
-        landing: the landing that ended `merge-conflict`.
+        line: the `VERDICT:` line of the landing that ended `merge-conflict`, or the one
+            `unlanded_conflict` builds for a PR that conflicts before any landing.
     """
 
     batch: Batch
     pr: str
-    landing: LandingLog
+    line: str
 
     @property
     def request(self) -> str:
         """The text `launch.resume_batch` writes for the unit: the PR and the verdict line."""
-        return json.dumps({"pr": self.pr, "line": self.landing.line})
+        return json.dumps({"pr": self.pr, "line": self.line})
 
 
 def read_command(b: Batch) -> str:
@@ -142,6 +148,14 @@ def conflicting(section: str) -> list[str]:
     if not lines or lines[-1] != "exit=1":
         return []
     return [line for line in lines[1:-1] if line]
+
+
+def unlanded_conflict(pr: str, files: Sequence[str]) -> str:
+    """The verdict line for PR number `pr`, which conflicts in `files` and was never landed."""
+    return (
+        f"VERDICT: {MERGE_CONFLICT} (PR #{pr} conflicts with {SERVER_TARGET.base} in "
+        f"{len(files)} file(s), read with git merge-tree; no landing has run on it)"
+    )
 
 
 def local_logs(pr: str, dirs: Sequence[Path]) -> list[LandingLog]:
@@ -278,35 +292,41 @@ def resumable(
         if own:
             path, _, text = own.partition("\n")
             logs.append(LandingLog(f"{b.host}:{path}", text))
-    if not logs:
+    files = conflicting(sections.get("conflicts", ""))
+    if logs:
+        last = max(logs, key=lambda entry: entry.stamp)
+        if last.verdict != MERGE_CONFLICT:
+            return (
+                f"{name}: the newest landing of #{pr} ({last.where}) ended "
+                f"`{last.verdict or 'with no verdict yet'}`, not `{MERGE_CONFLICT}`; "
+                f"{_next_step(run_id, last.verdict)}"
+            )
+        line = last.line
+    elif files:
+        line = unlanded_conflict(pr, files)
+    else:
         return (
             f"{name}: found no landing log for #{pr}, in {b.host}:{b.worktree}/.fanout "
-            f"or under {', '.join(str(d) for d in dirs)}; "
-            f"name it with --log <path>, or land the PR with `{reland_command(pr)}`"
-        )
-    last = max(logs, key=lambda entry: entry.stamp)
-    if last.verdict != MERGE_CONFLICT:
-        return (
-            f"{name}: the newest landing of #{pr} ({last.where}) ended "
-            f"`{last.verdict or 'with no verdict yet'}`, not `{MERGE_CONFLICT}`; "
-            f"{_next_step(run_id, last.verdict)}"
+            f"or under {', '.join(str(d) for d in dirs)}, and its branch merges cleanly "
+            f"with {SERVER_TARGET.base}; "
+            f"name the log with --log <path>, or land the PR with `{reland_command(pr)}`"
         )
     if b.conflict_resumes >= MAX_RESUMES:
-        files = conflicting(sections.get("conflicts", ""))
         return (
             f"{name} was resumed {b.conflict_resumes} times for a conflict, which is the "
             f"limit; #{pr} still conflicts with {SERVER_TARGET.base} in: "
             f"{', '.join(files) or 'git merge-tree named none'}. Resolve it by hand, or "
             f"discard the batch with `fanout.py place abandon {run_id} {b.batch}`"
         )
-    return Resumable(b, url, last)
+    return Resumable(b, url, line)
 
 
 def add_resume_arguments(parser: argparse.ArgumentParser) -> None:
     """Add what `place resume` takes after its run id."""
     parser.description = (
         "Restart a finished batch's implementer to bring its PR's branch up to master "
-        "after a landing ended merge-conflict, review the resolution, and land again. "
+        "after a landing ended merge-conflict, or after the PR conflicted before any "
+        "landing ran, review the resolution, and land again. "
         "The pipeline lands the PR as it would have at first; a PR it does not land ends "
         "reviewed, with the land.sh command in its report."
     )
@@ -325,7 +345,7 @@ def add_resume_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def cmd_resume(args, tools: Tools, readings: Callable, placement: Callable) -> int:
-    """Restart one finished batch for the merge conflict its PR's newest landing ended on.
+    """Restart one finished batch for its PR's merge conflict with master.
 
     `readings` and `placement` are `place.candidate_readings` and `place.placement`, the
     gates a launch passes, handed in because `place` imports this module.
