@@ -107,11 +107,7 @@ RUNS_CODE = re.compile(
 # A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
 # to `git ls-files`, which a row may do.
 RENDERS = re.compile(r"\brender\w*\(")
-TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-# A module with this many test functions or fewer reads like a selector and a few
-# predicates with their red proofs: the shape of one row or of a handful of rows.
-ROW_SIZED = 8
 
 
 @functools.cache
@@ -170,18 +166,14 @@ def _calls_a_rendering_helper(text: str) -> bool:
 
 def _standalone_check_offence(subject: Subject) -> list[str]:
     text = subject.text
-    tests = len(TEST_FUNCTION.findall(text))
     if (
-        tests > ROW_SIZED
-        or BUILDS_A_ROW.search(text)
+        BUILDS_A_ROW.search(text)
         or not READS_THE_TREE.search(text)
         or RUNS_CODE.search(text)
         or _calls_a_rendering_helper(text)
     ):
         return []
-    return [
-        f"a standalone check of {tests} test function(s) over tracked text; make it a row"
-    ]
+    return ["a standalone check over tracked text; make it a row"]
 
 
 ROWS = (
@@ -295,6 +287,14 @@ ROWS = (
                 "    for p in git_out(REPO, 'ls-files', 'docs').splitlines():\n"
                 "        assert len((REPO / p).read_text()) < 9000\n",
             ),
+            Subject(
+                "tests/repo/test_x.py",
+                "".join(
+                    f"def test_doc_{i}_is_short():\n"
+                    f"    assert len((REPO / 'docs/{i}.md').read_text()) < 9000\n"
+                    for i in range(12)
+                ),
+            ),
         ),
         green=(
             Subject(
@@ -364,6 +364,41 @@ ROWS = (
             "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
                 "a join of the writer script's metrics against the alert rules and the "
                 "Grafana board that read them"
+            ),
+            "tests/repo/test_every_ci_job_is_gated.py": (
+                "a join of ci.yml's jobs and the gate step's reads against the ruleset "
+                "contexts in the github-checks defaults"
+            ),
+            "tests/repo/test_pytest_shards_partition_the_suite.py": (
+                "a join of ci.yml's pytest matrix against pytest_shard.py's assignment of "
+                "the tracked suite and its runner-seconds table"
+            ),
+            "tests/repo/test_release_fetches_use_pinned_tool.py": (
+                "a join of every workflow's release fetches against the pinned-tool action "
+                "and the tools it fetches"
+            ),
+            "tests/repo/test_static_ratchet_hook.py": (
+                "a join of the prek hooks' entries and `files` gates against the modules "
+                "they name, their import closure and ci.yml's prek steps"
+            ),
+            "tests/repo/test_testpaths_covers_every_test_file.py": (
+                "a join of pyproject.toml's testpaths against every tracked test file"
+            ),
+            "tests/repo/test_ty_config_covers_the_repo.py": (
+                "a join of ty's include and extra-paths against pytest's pythonpath and "
+                "testpaths and every tracked Python file"
+            ),
+            "tests/services/test_alert_runbook_urls.py": (
+                "a join of the alert rules against the docs pages and headings they link, "
+                "the inventory hosts, the group vars' domain and the promtool cases"
+            ),
+            "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
+                "a join of the rules files and rule tables against the rule-literal tests "
+                "and the Alertmanager routing table"
+            ),
+            "tests/services/test_storage_rule_literals.py": (
+                "a join of storage.yaml against the Longhorn robustness allow-list, the "
+                "roles' snapshot caps and transients, and the host checks' disk floor"
             ),
             "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
                 "a join of pi-peer-backup's schedule against two other roles' Longhorn "
