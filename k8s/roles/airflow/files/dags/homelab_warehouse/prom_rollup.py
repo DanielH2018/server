@@ -135,31 +135,46 @@ def fetch_instant(
     return get_json(f"{base_url}/api/v1/query?{params}", opener, sleep)["result"]
 
 
-def get_json(
-    url: str,
+def read_json(
+    request: str | urllib.request.Request,
     opener: Callable = urllib.request.urlopen,
     sleep: Callable[[float], None] = time.sleep,
-) -> dict:
-    """GET a Prometheus or Loki API URL and return its `data`.
+    timeout: float = 60,
+):
+    """GET a URL or request from a source by ClusterIP and return its parsed JSON body.
 
-    Both APIs answer `{"status": "success", "data": ...}`. Retries a refused or unreachable
-    connection `CONNECT_ATTEMPTS` times; an HTTP error or a non-success body is not retried.
+    Retries a refused or unreachable connection `CONNECT_ATTEMPTS` times, because kube-router
+    admits a new pod a few seconds late. An HTTP error is not retried: the request, not the
+    network, is wrong.
 
     Raises:
-      RuntimeError: The API answered with a non-success status.
       urllib.error.URLError: The connection failed on every attempt.
     """
     for attempt in range(CONNECT_ATTEMPTS):
         try:
-            with opener(url, timeout=60) as response:
-                body = json.load(response)
-            break
+            with opener(request, timeout=timeout) as response:
+                return json.load(response)
         except urllib.error.HTTPError:
             raise
         except urllib.error.URLError:
             if attempt == CONNECT_ATTEMPTS - 1:
                 raise
             sleep(CONNECT_BACKOFF_S * (attempt + 1))
+    raise AssertionError("unreachable")
+
+
+def get_json(
+    url: str,
+    opener: Callable = urllib.request.urlopen,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict:
+    """GET a Prometheus or Loki API URL through `read_json` and return its `data`.
+
+    Raises:
+      RuntimeError: The API answered with a status other than `success`.
+      urllib.error.URLError: The connection failed on every attempt.
+    """
+    body = read_json(url, opener, sleep)
     if body.get("status") != "success":
         raise RuntimeError(f"refused {url}: {body.get('error', body)}")
     return body["data"]
