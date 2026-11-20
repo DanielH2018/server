@@ -39,11 +39,6 @@ test agree on what a pod names. The plan is docs/archive/deploy/d3-secrets.md,
 *Restart triggers (D3.3c)*.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import ast
 import fnmatch
 import hashlib

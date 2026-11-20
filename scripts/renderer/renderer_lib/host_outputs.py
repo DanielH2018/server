@@ -45,11 +45,6 @@ the package marks `windowed`. `scripts/secrets_mgmt/host_secrets.py:tree_keys` r
 and each output's `keys` from the same specs, so the two agree on the names.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import hashlib
 import json
 import re

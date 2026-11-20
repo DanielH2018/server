@@ -20,11 +20,6 @@ manifest `cluster_vars.py write` keeps for those entries (D3.3c).
 `docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path

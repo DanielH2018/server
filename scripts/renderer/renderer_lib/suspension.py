@@ -12,11 +12,6 @@ The flux role's `flux_sync_suspend` is refused outright from D5 step 29 on
 there would stop the OCIRepository that would have to fetch the commit clearing it.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from collections.abc import Mapping
 
 import yaml

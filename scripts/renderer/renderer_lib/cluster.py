@@ -34,11 +34,6 @@ A value a role task computes, such as a content tag or a script checksum, comes 
 `task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path

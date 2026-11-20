@@ -26,11 +26,6 @@ inventory, so no template sees an alias it did not bind itself.
 `docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path

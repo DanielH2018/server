@@ -22,11 +22,6 @@ name. A snapshot claim the tag renders no PVC for fails the render, as does a sn
 that could pass Longhorn's 63-byte delete limit.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import json
 import re
 from collections.abc import Iterable, Mapping
