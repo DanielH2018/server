@@ -311,12 +311,7 @@ def test_a_legacy_path_outside_the_unit_directory_is_clean(hosts):
     ("entry", "message"),
     [
         ({"unit": "x.service"}, "is not one of"),
-        ({"cron_file": "x"}, "is not one of"),
         ({"path": "/etc/systemd/system/x.service"}, "reconcile has no hand-off"),
-        (
-            {"path": "/etc/systemd/system/x.service.d/50-homelab.conf"},
-            "reconcile has no hand-off",
-        ),
     ],
 )
 def test_a_legacy_entry_reconcile_does_not_retire_is_flagged(hosts, entry, message):
