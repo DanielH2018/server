@@ -307,7 +307,12 @@ def snapshot(
         cmd += [arg for r in roles for arg in ("--role", r)]
         # The all-zero SHA is soak.NORMALISED_REVISION: R never moves the footprint. It goes in
         # the environment, not a flag, so an older renderer ignores it rather than refusing it.
-        env = {**git_env(), "HOMELAB_RENDER_REVISION": "0" * 40}
+        # `tree`'s scripts/ goes ahead of this venv's .pth, which names this checkout's.
+        env = {
+            **git_env(),
+            "HOMELAB_RENDER_REVISION": "0" * 40,
+            "PYTHONPATH": str(tree / "scripts"),
+        }
         proc = subprocess.run(
             cmd, cwd=tree, capture_output=True, text=True, env=env, timeout=900
         )

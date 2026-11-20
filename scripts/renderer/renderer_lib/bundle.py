@@ -47,11 +47,6 @@ This module imports neither Ansible nor Jinja, so `promote.py check-bundle` read
 docs/archive/deploy/d2-first-leaf.md, *Publication and verification*.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import hashlib
 import json
 from collections.abc import Callable, Iterable, Mapping

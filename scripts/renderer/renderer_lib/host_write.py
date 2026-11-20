@@ -5,11 +5,6 @@ tests read it through `host_mode`. A package's tree holds `root/`, the files it 
 `scripts/`, its maintainer scripts, `nfpm.yaml`, and the tool pins of a package with tools.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import json
 from pathlib import Path
 

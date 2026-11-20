@@ -12,7 +12,7 @@ import re
 import pytest
 import yaml
 
-from changed_set import changed_set
+from deploy_tools.changed_set import changed_set
 from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import K8S_ROLES, REPO

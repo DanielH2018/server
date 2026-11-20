@@ -8,6 +8,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile.py
 """
 
 import fcntl
+import json
 import os
 import time
 from pathlib import Path
@@ -383,6 +384,21 @@ def test_a_legacy_directory_that_still_holds_a_file_is_kept_and_fails_the_run(no
     assert node.applied()["retired"] == []
 
 
+def test_a_retired_path_with_a_trailing_slash_keeps_its_recorded_key(node):
+    olddir = node.root / "usr/local/bin/olddir"
+    olddir.mkdir(parents=True)
+    key = '{"path": "/usr/local/bin/olddir/"}'
+    node.manifest["legacy"].append({"path": "/usr/local/bin/olddir/"})
+    node.applied_path.parent.mkdir(parents=True)
+    node.applied_path.write_text(json.dumps({"retired": [key]}))
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["retired"] == [key]
+    assert olddir.exists(), "an entry already retired is not retired again"
+
+
 def test_an_ansible_era_unit_is_disabled_stopped_and_removed_unless_a_package_owns_it(
     node,
 ):
@@ -535,3 +551,14 @@ def test_a_failed_restart_keeps_its_old_hash_and_the_next_run_retries_only_it(no
     assert retried.returncode == 0, retried.stderr
     assert node.actions() == [["restart", "homelab-pi-sd.service"]]
     assert node.applied()["result"]["ok"] is True
+
+
+def test_a_record_entry_of_the_wrong_type_reads_as_absent(node):
+    node.manifest["legacy"].append({"path": "/usr/local/bin/old"})
+    node.applied_path.parent.mkdir(parents=True)
+    node.applied_path.write_text(json.dumps({"retired": [{"path": "/old"}]}))
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["retired"] == ['{"path": "/usr/local/bin/old"}']

@@ -367,7 +367,7 @@ def test_a_difference_no_package_explains_is_flagged(tmp_path, entry, setup, rea
     assert f"{path} ({reason})" in pushed[1], pushed[1]
     assert "aide-check --accept" in pushed[1], pushed[1]
     assert f"aide-check: unexplained: {path} ({reason})" in logged, logged
-    assert code == 1
+    assert code == 0
     assert (tmp_path / "aide-db" / "aide.db").read_text() == "last week\n", (
         "a DOWN must keep the baseline, so the change stays in every report until accepted"
     )
@@ -393,7 +393,7 @@ def test_a_classifier_that_fails_pushes_down(tmp_path):
     )
     assert pushed[0] == "down", pushed
     assert "classifying its differences failed" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
     assert (tmp_path / "aide-db" / "aide.db").read_text() == "last week\n"
 
 

@@ -11,11 +11,6 @@ No value a template reads comes from live state, so the renderer pins no fact. T
 R3 removed the last live reads, and `dialect.py` refuses every lookup that could add one.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import copy
 import functools
 from dataclasses import dataclass

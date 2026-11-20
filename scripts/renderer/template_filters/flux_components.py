@@ -29,11 +29,6 @@ reads that form too since #4733. Dropping the dumper would change the flux rende
 and nothing else.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import copy
 
 import yaml

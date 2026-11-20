@@ -22,11 +22,6 @@ the stricter gate (any non-zero exit fails the Kustomization) are each flip PR's
 so a hung run fails on its own deadline.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import copy
 from collections.abc import Iterable, Mapping
 from dataclasses import replace

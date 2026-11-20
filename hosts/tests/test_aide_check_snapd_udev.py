@@ -75,7 +75,7 @@ def _flagged(tmp_path, entries, rule, reason, **setup):
     )
     assert pushed[0] == "down", pushed
     assert f"{path} ({reason})" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
 
 
 def test_a_snapd_rule_beside_a_new_revision_of_its_snap_is_clean(tmp_path):

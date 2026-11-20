@@ -22,11 +22,6 @@ registry and its `Always`. `pull_policy_offences` refuses a GHCR content-tag ref
 by CI (D5.4)*.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import json
 import posixpath
 import re
