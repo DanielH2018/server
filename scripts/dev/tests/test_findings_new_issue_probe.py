@@ -209,8 +209,21 @@ def test_a_project_wait_ends_on_an_older_issue_milestone_add_files(tmp_path):
     tools, _ = _tools([_held(8), _held(3)], **{f"{REG}/milestones": [[BACKUPS]]})
     second = new_issue_probe.read_project(tools, "Backups", baseline, TODAY)
     assert second["state"] == "new"
-    assert json.loads(second["detail"])["before"] == [8]
     assert [i["number"] for i in json.loads(second["detail"])["issues"]] == [3]
+
+
+def test_a_resumed_project_wait_ends_on_an_issue_added_before_the_resume(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    argv = ["new-issues", "--milestone", "Backups"]
+    tools, _ = _tools([_held(8)], **{f"{REG}/milestones": [[BACKUPS]]})
+    assert main(argv, tools) == 0
+    tools, _ = _tools([_held(8), _held(3)], **{f"{REG}/milestones": [[BACKUPS]]})
+    assert main([*argv, "--describe"], tools) == 0
+    assert main(argv, tools) == 0
+    readings = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert readings[-1]["state"] == "new"
 
 
 def test_a_project_wait_stays_open_on_the_free_issues_it_started_with(tmp_path):

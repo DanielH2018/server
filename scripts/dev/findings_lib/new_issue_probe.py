@@ -38,10 +38,11 @@ express that, so `--after` with a title is refused with exit 64.
 
 WHERE A BASELINE IS KEPT. cc-wait keeps no state between reads, so a file under
 `$XDG_CACHE_HOME/findings-wait/`, keyed on the register, the working directory and the
-milestone, holds a baseline the wait recorded itself: `--describe`, which cc-wait runs once
-per wait, deletes it, and the first read that reaches GitHub records it. A resumed wait
-with no `--after` therefore re-baselines, and an issue filed or added between the two runs
-is missed.
+milestone, holds a baseline the wait recorded itself; the first read that reaches GitHub
+with no file records it. A number wait's `--describe`, which cc-wait runs once per wait,
+deletes the file, so a resumed number wait with no `--after` re-baselines, and an issue
+filed between the two runs is missed. A project wait keeps its file across a resume, and
+deletes it when it reports `new`, so the next wait starts from the project as it is then.
 
 ANY OTHER FAILED READ EXITS 1, through `findings.main`'s gh-failure handler, and prints
 nothing on stdout, so cc-wait retries it. It is never read as "nothing new".
@@ -129,6 +130,16 @@ def _recorded(baseline: Path, key: str) -> object:
         return None
 
 
+def _recorded_free(baseline: Path) -> frozenset[int] | None:
+    recorded = _recorded(baseline, "free")
+    if not isinstance(recorded, list):
+        return None
+    try:
+        return frozenset(int(n) for n in recorded)
+    except TypeError, ValueError:
+        return None
+
+
 def _record(baseline: Path, key: str, value: object) -> None:
     baseline.parent.mkdir(parents=True, exist_ok=True)
     baseline.write_text(json.dumps({key: value}))
@@ -196,7 +207,8 @@ def read_project(tools: FindingsTools, title: str, baseline: Path, today: date) 
     """The state of a wait on the milestone titled ``title``, as cc-wait's state and detail.
 
     The first read records the milestone's free issues at ``baseline`` and reports `none`.
-    Each later read reports `new` for a free issue the milestone holds outside that set.
+    Each later read reports `new` for a free issue the milestone holds outside that set, and
+    deletes ``baseline`` so the next wait records its own.
 
     Raises:
         subprocess.SubprocessError, OSError: a gh read failed; there is no verdict.
@@ -205,8 +217,7 @@ def read_project(tools: FindingsTools, title: str, baseline: Path, today: date) 
     """
     number = titled(title, tools.owner_name, gh_json=tools.gh_json)["number"]
     raw = newest_open_issues(tools, milestone=number)
-    recorded = _recorded(baseline, "free")
-    known = frozenset(int(n) for n in recorded) if isinstance(recorded, list) else None
+    known = _recorded_free(baseline)
     # Cut before threading: each kept issue costs a read for its comments and blockers.
     outside = [d for d in raw if int(str(d["number"])) not in (known or ())]
     newer = threaded_issues(outside, tools)
@@ -220,7 +231,8 @@ def read_project(tools: FindingsTools, title: str, baseline: Path, today: date) 
     if not rows:
         held = f"; {len(newer)} outside the baseline withheld" if newer else ""
         return {"state": "none", "detail": f"no new free issue in `{title}`{held}"}
-    return _new(rows, before=sorted(known))
+    baseline.unlink(missing_ok=True)
+    return _new(rows)
 
 
 def cmd_new_issues(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -235,7 +247,11 @@ def cmd_new_issues(args: argparse.Namespace, tools: FindingsTools) -> int:
         return FINDINGS_BAD_ARGS
     baseline = baseline_file(tools.repo, Path.cwd(), args.milestone)
     if args.describe:
-        print(json.dumps(describe(None if args.after is not None else baseline)))
+        # DECIDED: a project wait keeps its baseline across cc-wait's exit-75 resume, so an
+        # issue added in the gap still ends it. A wait killed before `new` leaves its set, and
+        # the next wait on that title may end at once on an issue the coordinator saw.
+        kept = args.after is not None or project
+        print(json.dumps(describe(None if kept else baseline)))
         return 0
     try:
         if project:
