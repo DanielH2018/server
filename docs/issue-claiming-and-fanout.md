@@ -247,13 +247,13 @@ Four design rules hold across the subcommands, and no docstring states them:
 ## Session milestones and project milestones
 
 A session milestone is a GitHub milestone that groups one branch's focused work.
-`findings.py milestone start "<title>" --worktree <branch>` opens it, and nothing else makes
-one. `claim` files the branch's issues under it. The `session-milestone` workflow files the
+`findings.py milestone start "<title>" --worktree <branch>` opens it, and no other command
+makes a branch one. `claim` files the branch's issues under it. The `session-milestone` workflow files the
 branch's PR, and files a fan-out batch's PR under the milestone of the issue that PR closes.
 The workflow closes the milestone once nothing in it is open, and a later claim or PR
-reopens it. The milestone's description names its branch, and the tools touch only a
-milestone whose description they can parse. `scripts/dev/findings_lib/milestone.py` owns the
-scheme.
+reopens it. The milestone's description names its branch. The tools touch a milestone whose
+description they can parse, and a group, which *A group is a backlog no branch owns*
+describes. `scripts/dev/findings_lib/milestone.py` owns the scheme.
 
 A session milestone holds only claimed issues: `release`, `reap` and `manual` take an issue
 back out. So it cannot hold work nobody has started.
@@ -334,17 +334,59 @@ Each way in has a way out:
   To take a claimed issue out, `release` it first. `milestone add` is also what reserves an
   issue, so `milestone remove` is what frees it for other branches.
 - `milestone start` is reversed by `milestone close`, and `start` with the same title
-  reopens the closed milestone. `milestone status` prints the form and the counts.
-- No command converts a milestone between the two forms. `start` refuses a title the branch
-  already holds in the other form. To change form, close the milestone and start the other
-  form under another title.
+  reopens the closed milestone. `milestone status` prints the form, then
+  the milestone's open and closed issues, then its open and closed PRs as a separate pair
+  (`scripts/dev/findings_lib/milestone.py:counts`).
+- No command converts a milestone between the session and project forms. `start` refuses a
+  title the branch already holds in the other form. To change form, close the milestone and
+  start the other form under another title.
+- `milestone group` is reversed by `milestone close --group "<title>"`, and `group` with
+  the same title reopens it. `milestone status --group "<title>"` shows it.
+- `milestone start --project` adopting a group or a project is reversed by `milestone
+  disown --worktree <branch>`. `milestone status --worktree <branch>` shows the result.
 
 The operator decided on 2026-11-19 that a project is the sub-coordinator's session
-milestone, not a second kind of milestone. The rejected alternative was a milestone the
-operator makes by hand, with no owning branch. The tools never touch a milestone whose
-description names no branch, so they could not file a claim under one, close it when its
-work finished, or reopen it. A project with an owning branch gets all of that from the code
-that serves a session milestone.
+milestone, not a second kind of milestone. A milestone with no owning branch cannot take a
+claim, close when its work finishes, or reopen, and a project gets all of that from the code
+that serves a session milestone. That still holds for running a project. On 2026-11-20 the
+operator ruled that preparing one is separate: a backlog is grouped ahead of time, and a
+sub-coordinator takes it up later (#9535).
+
+### A group is a backlog no branch owns
+
+`findings.py milestone group "<title>" <n...>` makes a group and files the issues in it. It
+takes no `--worktree`. A group differs from a project in three ways:
+
+- It reserves nothing. `reservations` reads only a project, so a plain `next` offers a
+  group's issues and any branch claims them.
+- Nothing closes it on its own. The workflow and `reap` close only a milestone a branch
+  owns, so a group stays open while it is empty.
+- `status`, `close`, `add` and `remove` name it with `--group "<title>"` in place of
+  `--worktree <branch>`. `milestone add` and `milestone remove` apply the same refusals as
+  they do for a project.
+
+`scripts/dev/findings_lib/milestone.py:is_group` reads a group by its description, which is
+`GROUP_DESCRIPTION` or blank. A milestone made by hand with no description is therefore a
+group. A milestone with a description of its own is not, and no command adopts or changes
+it.
+
+`milestone start --project "<title>" --worktree <branch>` adopts a milestone of that title
+in two cases, and `scripts/dev/findings_lib/milestone.py:start` owns both:
+
+- The milestone is a group. `start` writes the branch's project description and opens the
+  milestone. The backlog stays in it and is reserved from then on.
+- The milestone is another branch's project, and nothing holds that branch. The test is the
+  one `reap` applies before it closes an idle milestone,
+  `scripts/dev/findings_lib/claim.py:branch_is_held`: a worktree on either host holds the
+  branch, or the other host cannot be read.
+
+`start` refuses a project whose owner is live, and names the owner and the command that
+hands the project on. It refuses a session milestone of another branch outright. A plain
+`start` without `--project` adopts nothing and names the flag.
+
+`milestone disown --worktree <branch>` returns the branch's open project to a group without
+closing it. The backlog stays, the reservation ends, and another branch's `start --project`
+adopts it. Issues the branch still claims stay claimed.
 
 ## What a fan-out agent may not do
 
@@ -608,8 +650,11 @@ conflict resolution of <PR> passed its review at head <sha>`, with the hold and 
 
 A PR the pipeline did not land is landed after the batch's unit has stopped: by the server
 lander, or by a sub-coordinator's own `land.sh` for a PR that lander holds. A
-`merge-conflict` there has no unit left to resume. `fanout.py place resume <run-id> <batch>`
-starts one:
+`merge-conflict` there has no unit left to resume. Neither has a conflict that no landing
+met: GitHub starts no CI run on a PR that conflicts with master, so a batch whose PR
+conflicts when it is marked ready ends `needs input: PR #N conflicts with master`
+(`scripts/dev/fanout_lib/review/review_ci.py:ready_for_ci`). `fanout.py place resume <run-id>
+<batch>` starts a unit for either:
 
 ```bash
 uv run python scripts/dev/fanout.py place resume <run-id> <batch>
@@ -621,10 +666,14 @@ pipeline's own resume both call `scripts/dev/fanout_lib/review/conflict_resume.p
 so the two share one prompt and one review.
 
 - **What it resumes.** A batch of this repo whose unit has stopped, whose worktree still
-  stands, whose PR is open, and whose newest landing ended `merge-conflict`. It refuses
-  anything else with the reason and the command that fits: a running batch, a cleaned
-  batch, a missing worktree, a merged or closed PR, a PR whose landing lock is held
-  (`scripts/deploy_tools/land_lib/pr_lock.py`), and a newest verdict that is not a conflict.
+  stands, whose PR is open, and whose newest landing ended `merge-conflict`. A PR with no
+  landing log is resumed when its branch conflicts with master, which the command reads
+  with `git merge-tree` in the batch's worktree
+  (`scripts/dev/fanout_lib/resume.py:unlanded_conflict`). It refuses anything else with the
+  reason and the command that fits: a running batch, a cleaned batch, a missing worktree, a
+  merged or closed PR, a PR whose landing lock is held
+  (`scripts/deploy_tools/land_lib/pr_lock.py`), a newest verdict that is not a conflict,
+  and a PR with no landing log whose branch merges cleanly.
 - **Where it reads the verdict.** `land.sh --detach` writes `land<pr>-<stamp>.log`, and
   the newest stamp is the PR's last landing. The command reads the batch's own log in its
   worktree's `.fanout/`, the directory this session's `land.sh --detach` writes to (the

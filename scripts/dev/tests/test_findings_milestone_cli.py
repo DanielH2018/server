@@ -1,10 +1,11 @@
 """The `milestone` subcommand, driven through main()."""
 
-from _findings_fakes import Fakes, build_tools, make_issue
+import pytest
+from _findings_fakes import Fakes, build_tools, facts, live_worktree, make_issue
 
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
-from dev.findings_lib.milestone import description_for, is_project
+from dev.findings_lib.milestone import GROUP_DESCRIPTION, description_for, is_project
 
 WT = "worktree-a"
 MILESTONES = "repos/DanielH2018/server/milestones"
@@ -58,6 +59,123 @@ def test_start_project_posts_the_description_is_project_reads(capsys):
     assert is_project({"description": post[-1].removeprefix("description=")})
     assert not is_project({"description": description_for(WT)})
     assert capsys.readouterr().out.startswith("project milestone `Backups` open")
+
+
+def test_status_counts_the_project_issues_apart_from_its_pull_requests(capsys):
+    # fact: .claude/skills/coordinate/SKILL.md#Resume
+    project = {**PROJECT, "open_issues": 3, "closed_issues": 4, "html_url": "URL"}
+    pr = {"pull_request": {"url": "pulls/1"}}
+    items = [
+        {"state": "open"},
+        {"state": "open"},
+        {"state": "open", **pr},
+        {"state": "closed"},
+        {"state": "closed"},
+        {"state": "closed", **pr},
+        {"state": "closed", **pr},
+    ]
+    tools, _ = build_tools(
+        Fakes(api={MILESTONES: [[project]], "repos/DanielH2018/server/issues": [items]})
+    )
+    assert main(["milestone", "status", "--worktree", WT], tools) == 0
+    assert capsys.readouterr().out == (
+        "`Backups` open project: issues 2 open, 2 closed; PRs 1 open, 2 closed  URL\n"
+    )
+
+
+GROUP = {**PROJECT, "description": GROUP_DESCRIPTION, "html_url": "URL"}
+
+
+def test_group_makes_a_milestone_no_branch_owns_and_files_the_issues(capsys):
+    tools, calls = build_tools(
+        Fakes(view={1132: make_issue(1132)}, api={MILESTONES: [[]]})
+    )
+    assert main(["milestone", "group", "Backups", "1132"], tools) == 0
+    post, edit = calls.gh
+    assert post[:3] == ["api", "-X", "POST"]
+    assert post[-1] == f"description={GROUP_DESCRIPTION}"
+    assert edit == ["issue", "edit", "1132", "--milestone", "Backups"]
+    assert capsys.readouterr().out == "1 added to `Backups`\n"
+
+
+def test_group_refuses_a_title_a_branch_owns_and_names_its_worktree(capsys):
+    tools, calls = _backlog(make_issue(1132))
+    assert main(["milestone", "group", "Backups", "1132"], tools) == 3
+    assert calls.gh == []
+    assert f"pass `--worktree {WT}`" in capsys.readouterr().err
+
+
+def test_add_and_remove_change_the_group_that_group_names():
+    filed = {**make_issue(1140), "milestone": {"title": "Backups", "number": 9}}
+    tools, calls = _backlog(make_issue(1132), filed, milestones=[GROUP])
+    assert main(["milestone", "add", "1132", "--group", "Backups"], tools) == 0
+    assert main(["milestone", "remove", "1140", "--group", "Backups"], tools) == 0
+    assert calls.gh == [
+        ["issue", "edit", "1132", "--milestone", "Backups"],
+        ["issue", "edit", "1140", "--remove-milestone"],
+    ]
+
+
+def test_status_shows_a_group_by_its_title(capsys):
+    tools, _ = build_tools(
+        Fakes(api={MILESTONES: [[GROUP]], "repos/DanielH2018/server/issues": [[]]})
+    )
+    assert main(["milestone", "status", "--group", "Backups"], tools) == 0
+    assert capsys.readouterr().out.startswith("`Backups` open group: issues 0 open")
+
+
+def test_close_shuts_a_group_by_its_title():
+    tools, calls = _backlog(milestones=[GROUP])
+    assert main(["milestone", "close", "--group", "Backups"], tools) == 0
+    assert calls.gh == [["api", "-X", "PATCH", f"{MILESTONES}/9", "-f", "state=closed"]]
+
+
+def test_group_reopens_the_closed_group_of_that_title():
+    tools, calls = _backlog(milestones=[{**GROUP, "state": "closed"}])
+    assert main(["milestone", "group", "Backups"], tools) == 0
+    assert calls.gh == [["api", "-X", "PATCH", f"{MILESTONES}/9", "-f", "state=open"]]
+
+
+def test_start_project_adopts_a_project_whose_branch_has_no_worktree(capsys):
+    theirs = {**PROJECT, "description": description_for("worktree-b", project=True)}
+    tools, calls = build_tools(
+        Fakes(api={MILESTONES: [[theirs]]}, worktree_facts=facts())
+    )
+    argv = ["milestone", "start", "--project", "Backups", "--worktree", WT]
+    assert main(argv, tools) == 0
+    assert calls.gh[0][:4] == ["api", "-X", "PATCH", f"{MILESTONES}/9"]
+    assert capsys.readouterr().out.endswith("adopted the project of `worktree-b`\n")
+
+
+@pytest.mark.parametrize(
+    "worktrees",
+    [live_worktree("worktree-b"), facts(ok=False)],
+    ids=["a-live-worktree-holds-it", "the-worktrees-cannot-be-read"],
+)
+def test_start_project_refuses_a_project_whose_branch_may_be_live(capsys, worktrees):
+    theirs = {**PROJECT, "description": description_for("worktree-b", project=True)}
+    tools, calls = build_tools(
+        Fakes(api={MILESTONES: [[theirs]]}, worktree_facts=worktrees)
+    )
+    argv = ["milestone", "start", "--project", "Backups", "--worktree", WT]
+    assert main(argv, tools) == 3
+    assert calls.gh == []
+    assert "`worktree-b`, which is live" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["status"],
+        ["start", "Backups", "--group", "Backups"],
+        ["group", "Backups", "--worktree", WT],
+    ],
+    ids=["neither", "start-by-group", "group-by-worktree"],
+)
+def test_an_action_refuses_the_naming_flag_it_does_not_take(argv):
+    tools, calls = build_tools(Fakes())
+    assert main(["milestone", *argv], tools) == 64
+    assert calls.gh == calls.gh_json == []
 
 
 def _backlog(*issues, milestones=(PROJECT,)):

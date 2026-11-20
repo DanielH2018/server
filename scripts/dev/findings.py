@@ -99,7 +99,7 @@ same failure, and `claim` leaves a stale claim standing rather than reaping on a
 the good claims in the same batch.
 
 SESSION MILESTONES. `milestone start "<title>" --worktree <branch>` opens a GitHub milestone
-for one piece of focused work, and nothing else makes one. While it is open, `claim` files
+for one piece of focused work, and no other command makes a branch one. While it is open, `claim` files
 the branch's issues under it and `release`, `reap` and `manual` take them back out. `close`
 leaves a fixed issue in. The `session-milestone` workflow files the branch's PR and closes
 the milestone once nothing in it is open. A later claim or PR reopens it. `milestone status`
@@ -115,6 +115,16 @@ project RESERVES its backlog for its branch: `next` offers a backlog issue only 
 each `[project:<title>]`, and `claim` refuses another branch, naming the project.
 `milestone remove <n> --worktree <its branch>` takes an issue out of the backlog. A closed
 project and a session milestone reserve nothing.
+
+GROUPS. `milestone group "<title>" <n...>` makes a milestone no branch owns and files the
+issues in it, so a backlog can be prepared before a session runs it. A group reserves
+nothing and nothing closes it on its own. `status`, `close`, `add` and `remove` name it with
+`--group "<title>"` in place of `--worktree`. `milestone start --project "<title>"
+--worktree <branch>` ADOPTS a group of that title: it becomes the branch's project, backlog
+included. The same command adopts a project whose owner branch no worktree on either host
+holds, and refuses one whose owner is live, naming the owner. `milestone disown --worktree
+<branch>` is the way back: it returns the branch's open project to a group without closing
+it. A milestone with a description of its own is never adopted.
 
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
 withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already

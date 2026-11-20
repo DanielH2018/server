@@ -92,8 +92,13 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
     uv run python scripts/dev/findings.py milestone start --project "<title>" --worktree <branch>
     ```
 
-    A title the branch already holds is reopened. When `milestone status` shows the project
-    exists with work in it, go to *Resume*.
+    A title the branch already holds is reopened. A group of that title, which `milestone
+    group` prepared with no owner, is adopted with its backlog. So is another branch's
+    project when nothing holds that branch. The command refuses a project whose owner is
+    live and names the owner: report that to the session above you
+    (`scripts/dev/tests/test_findings_milestone.py::test_start_refuses_a_title_another_branch_owns`).
+    To hand a project on without closing it, run `milestone disown --worktree <branch>`.
+    When `milestone status` shows the project exists with work in it, go to *Resume*.
 
 3. **File the backlog.** Add the issues your brief or the root names with `milestone add
    <n...> --worktree <branch>`. When the brief names none, list `next --milestone none
@@ -148,10 +153,12 @@ from you. `place status` names the ones that do.
   park line names. A park line that opens `another landing has it` is the exception: run
   the `cc-wait land` command it quotes and read that landing's verdict. A park line ending
   `unattributed` also goes under `asks:` for the root.
-- **A landing that ends `merge-conflict` is `place resume`'s to resolve. Spawn no agent
-  for it.** Run `uv run python scripts/dev/fanout.py place resume <run-id> <batch>` from
+- **A PR that conflicts with master is `place resume`'s to resolve. Spawn no agent for
+  it.** That covers a landing that ends `merge-conflict` and a batch that ends
+  `needs-input: PR #N conflicts with master`, whose PR conflicted before CI ran and has no
+  landing. Run `uv run python scripts/dev/fanout.py place resume <run-id> <batch>` from
   this session, then `cc-wait fanout <run-id>`. It restarts the batch's implementer to
-  rebase, has a fresh reviewer read the resolution, and lands the PR again. A PR the
+  rebase, has a fresh reviewer read the resolution, and lands the PR. A PR the
   lander's rule holds ends `needs-input: the conflict resolution of <PR> passed its
   review`: land it with the `land.sh` command that line names. A refusal
   names its reason and the command that fits. Past
@@ -218,7 +225,9 @@ uv run python scripts/dev/findings.py claims --worktree <branch>
 ```
 
 The first shows whether the lock still carries the project's reason; lock again when it
-does not. `place runs` gives the run ids, and no batch's state: a batch that is running,
+does not. `milestone status` prints `issues N open, M closed; PRs N open, M closed`: compare
+the issue pair with `claims` and `next --milestone`, never the PR pair
+(`scripts/dev/tests/test_findings_milestone_cli.py::test_status_counts_the_project_issues_apart_from_its_pull_requests`). `place runs` gives the run ids, and no batch's state: a batch that is running,
 done or landed reads `standing` there alike (`scripts/dev/fanout_lib/status_view.py:runs_lines`).
 Run `place status <run-id>` once for each run id it lists. That read tells a `running`
 batch from a `parked` one.
