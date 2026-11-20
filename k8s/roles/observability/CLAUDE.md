@@ -202,7 +202,14 @@ pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it
 `*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
 pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
 verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
-on each host every 5 minutes (#8219). It fires once per failed unit. A check that writes a
+on each host every 5 minutes (#8219). It fires once per failed unit. A unit whose
+`OnFailure=homelab-alert@` hook had delivered its Discord page when the check first found it
+failed carries `paged_by="homelab-alert"` until it recovers. The label never changes
+mid-failure, because a changed label set would resolve the firing alert. A blackhole route in `templates/alertmanager-secret.yaml.j2`
+takes that label, so the unit pages once, and `WarningUnresolved` drops the label so its
+escalation still pages
+(`tests/services/test_alertmanager_routing.py::test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole`).
+A check that writes a
 verdict exits 0 on a DOWN, as the weekly scans and `systemd-units` itself do, so its unit fails
 only when no verdict was written and the verdict never pages twice. The per-check literals and their pin tests stay, for the
 reason `docs/archive/monitoring/m3-textfile-timer.md` gives under the deadline
