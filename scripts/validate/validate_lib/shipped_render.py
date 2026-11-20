@@ -10,11 +10,6 @@ The setup, shell, unit and compose guards render here. Each passes its own undef
 because a guard has no SOPS secrets and must not abort on the first one.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from pathlib import Path
 
 from jinja2 import Undefined

@@ -67,11 +67,6 @@ The image's own homelab.sources is removed first, so no homelab repository is co
 path that installs from the repository has its own case, `bootstrap_repo_case.py`.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import functools
 import hashlib
 import os
@@ -85,7 +80,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
-from validate.host_packages import fetch_tools, tool_fetch_module
+from validate.host_packages import fetch_tools
 from validate.validate_lib.bootstrap_plan import (
     INSTALL_REFUSED as INSTALL_REFUSED,
     K3S_VERIFIED as K3S_VERIFIED,
@@ -101,6 +96,7 @@ from validate.validate_lib.bootstrap_plan import (
     shard,
     submission_order,
 )
+from lib import host_modules  # noqa: F401
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from validate.validate_lib.host_container import SYSUSERS, CaseFailed, Container, expect
@@ -108,6 +104,8 @@ from validate.validate_lib.host_container import uid_problems
 from validate.validate_lib.host_fixtures import run_logged
 from validate.validate_lib.scratch_clones import ANCHOR_ACCEPTS, red_clone
 from validate.validate_lib.scratch_clones import fixture_clone, scratch_clone
+
+import homelab_tool_fetch
 
 APT_CALLS = "/var/log/bootstrap-case-apt.calls"
 APT_SHIM = f"""#!/bin/sh
@@ -197,11 +195,10 @@ def _download(
     Raises:
         CaseFailed: The download stayed unavailable, or its digest differs from `sha256`.
     """
-    tool_fetch = tool_fetch_module()
     pin = {"url": url, "sha256": sha256}
     try:
-        path = tool_fetch.download_tool(pin, cache, opener, sleep)
-    except tool_fetch.Failure as exc:
+        path = homelab_tool_fetch.download_tool(pin, cache, opener, sleep)
+    except homelab_tool_fetch.Failure as exc:
         raise CaseFailed(str(exc)) from exc
     shutil.copyfile(path, dest)
 

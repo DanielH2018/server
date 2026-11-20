@@ -10,6 +10,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboard_uids.p
 """
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -152,8 +153,7 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
     """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares.
 
     The script finds its repo from its own location, so a copy of `scripts/lib` and
-    `scripts/validate` runs
-    unpatched against a scratch tree holding one board with an unprovisioned uid.
+    `scripts/validate`, on `PYTHONPATH` as a launcher puts it, runs unpatched against a scratch tree holding one board with an unprovisioned uid.
     """
     scripts = Path(vgd.__file__).resolve().parents[1]
     for package in ("lib", "validate"):
@@ -179,7 +179,8 @@ def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
     (role / "files/dashboards/board.json").write_text(json.dumps(board))
 
     run = proc_testing.run(
-        [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboard_uids.py")]
+        [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboard_uids.py")],
+        env={**os.environ, "PYTHONPATH": str(tmp_path / "scripts")},
     )
     assert run.returncode == 1, run.stdout + run.stderr
     path = "k8s/roles/observability/files/dashboards/board.json"

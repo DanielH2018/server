@@ -1,5 +1,6 @@
 """Each test builds a scratch git repository whose `.gitignore` opens with `/*`, like the real one."""
 
+import os
 import re
 import shutil
 import sys
@@ -55,8 +56,7 @@ def test_main_prints_each_hidden_entry_as_a_fail_line_on_stderr(tmp_path):
     """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares (#4480).
 
     The script finds its repo from its own location, so a copy of `scripts/lib` and
-    `scripts/validate` runs
-    unpatched in a scratch repository holding one hidden root file.
+    `scripts/validate`, on `PYTHONPATH` as a launcher puts it, runs unpatched in a scratch repository holding one hidden root file.
     """
     repo = _repo(tmp_path, "stray.txt")
     (repo / ".gitignore").write_text(GITIGNORE + "!/scripts/\n", encoding="utf-8")
@@ -69,7 +69,10 @@ def test_main_prints_each_hidden_entry_as_a_fail_line_on_stderr(tmp_path):
         )
     script = repo / "scripts/validate/root_ignored_files.py"
 
-    run = proc_testing.run([sys.executable, str(script)])
+    run = proc_testing.run(
+        [sys.executable, str(script)],
+        env={**os.environ, "PYTHONPATH": str(repo / "scripts")},
+    )
     assert run.returncode == 1, run.stdout + run.stderr
     assert re.search(r"^\s*\[FAIL\] stray\.txt: \S", run.stderr, re.M), (
         run.stdout + run.stderr

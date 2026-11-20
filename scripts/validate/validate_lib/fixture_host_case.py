@@ -11,11 +11,6 @@ Steps 3 to 5 name the host in sets that nothing reads while a host builds.
 `hosts/lib/tests/test_host_census.py` holds those.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import re
 import shutil
 import textwrap
