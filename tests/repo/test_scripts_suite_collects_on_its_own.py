@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Guard that `uv run pytest scripts` collects without help from another testpath.
 
-CLAUDE.md's Python & Tests section documents scoping to one suite.
-`scripts/diagnostics/tests/test_grafana_panel_report.py` imports `grafana_panel_report`
-by bare name, and only `scripts/conftest.py` resolves it. A whole-suite run can pass without
-that load when collecting another testpath's module puts `scripts/diagnostics` on `sys.path`
-first; reorder collection and the importers stop importing.
+A whole-suite run can pass while one suite alone fails to collect, when another testpath's
+conftest supplies a name the first one imports. `scripts/renderer/job_files/flux_soak.py`
+imports `changed_set` by bare name, the way the soak Job's flat mount lays it out, and only
+`scripts/renderer/tests/conftest.py` binds that name.
 
-The red proof: drop the `grafana_panel_report` load from `scripts/conftest.py` and this fails.
+The red proof: drop the `changed_set` binding from that conftest and this fails.
 """
 
 from _helpers import REPO
@@ -28,6 +27,6 @@ def test_scripts_testpath_collects_in_a_fresh_interpreter():
         f"name only another testpath puts on sys.path:\n{result.stdout}\n{result.stderr}"
     )
     # Non-vacuity: a collection that found nothing also exits 0.
-    assert "test_grafana_panel_report.py" in result.stdout, (
+    assert "test_flux_soak.py" in result.stdout, (
         f"collection did not reach the module this guard exists for:\n{result.stdout}"
     )

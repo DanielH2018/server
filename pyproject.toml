@@ -201,34 +201,12 @@ pythonpath = [
   # gh_quota.py is the ledger scripts/lib/gh.py records each call into, so every test that
   # imports lib.gh needs it, as does the component's own test.
   "hosts/components/gh-quota/files",
-  # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
-  # namespace package — the subdirectories deliberately have no __init__.py, which would change
-  # how pytest names the test modules under them). Each remaining subdirectory is listed as well
-  # because the modules under it still import their siblings by bare name, which resolves only
-  # when that directory is itself on sys.path.
-  #
-  # `scripts/validate` and `scripts/diagnostics` are deliberately ABSENT. Their modules are
-  # packages (`validate.render_lib.k8s`, `diagnostics.probe_lib.core`) reached through `scripts`
-  # alone, and leaving the directory listed would let a bare sibling import resolve here while
-  # failing for the directly-invoked script that is how both actually run in production.
+  # `scripts` is the one import root (docs/adr/0039-scripts-is-installed-in-place.md): every
+  # module under it imports dotted, `from lib.git import git`. No subdirectory is listed, because
+  # a listed one would let a bare sibling import pass here and fail in the cron or hook that runs
+  # it. A test reaches a fixture beside it (`_land_fakes.py`) through pytest's own prepend of
+  # the test's directory.
   "scripts",
-  "scripts/backup",
-  # its tests' `_reap_entrypoint_harness.py` holds the Longhorn CR builders that
-  # tests/longhorn/test_longhorn_reap_guard.py imports too
-  "scripts/backup/tests",
-  "scripts/deploy_tools",
-  # its tests share _land_fakes.py the way tests share _helpers.py
-  "scripts/deploy_tools/tests",
-  "scripts/dev",
-  "scripts/docs",
-  # its tests share _catalog_fixtures.py, as scripts/deploy_tools/tests share _land_fakes.py
-  "scripts/docs/tests",
-  "scripts/freshrss",
-  "scripts/grafana",
-  "scripts/home_assistant",
-  "scripts/infra_map",
-  "scripts/lib",
-  "scripts/secrets_mgmt",
 ]
 
 [tool.ruff]
@@ -438,8 +416,6 @@ ignore_names = [
   "excused_paths",
   # Read by test_host_census.py and named in docs/host-packages.md.
   "NEVER_CANARY",
-  # Bound in scripts/conftest.py so a bare `import grafana_panel_report` resolves.
-  "grafana_panel_report",
   # Validated with the other reboot keys; reboot_window.py says why the window ignores it.
   "lead_min",
   # Collected by pytest: the `test` prefix matches without an underscore.
@@ -500,12 +476,11 @@ ignore_names = [
 
 [tool.ty.environment]
 python-version = "3.15"
-# This repo has no `__init__.py` files. `scripts/` is installed in place, but a script still reaches
-# a sibling directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
-# test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
-# it reports import-not-found for first-party modules that resolve fine at
-# runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
-# sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
+# This repo has no `__init__.py` files. `scripts/` is installed in place and imports dotted from
+# that one root, but a test still reaches its role's `files/`, or a host component's, by bare
+# name. ty resolves imports from search paths alone, so without this list it reports
+# import-not-found for first-party modules that resolve fine at runtime. The list is the union of
+# pytest's `pythonpath` above, `.claude/hooks`, and the `files/` sibling of every `testpaths` entry.
 # ENFORCED: tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
 # is added here without a matching search path.
 extra-paths = [
@@ -520,17 +495,6 @@ extra-paths = [
   "k8s/roles/karakeep/files",
   "k8s/roles/longhorn-reconcile/files",
   "scripts",
-  "scripts/backup",
-  "scripts/deploy_tools",
-  "scripts/dev",
-  "scripts/docs",
-  "scripts/freshrss",
-  "scripts/grafana",
-  "scripts/home_assistant",
-  "scripts/infra_map",
-  "scripts/lib",
-  "scripts/diagnostics",
-  "scripts/secrets_mgmt",
   ".claude/hooks",
   "k8s/roles/autofix-bridge/files",
   "k8s/roles/configarr/files",
@@ -655,6 +619,19 @@ include = [
   "k8s/roles/homelab-mcp/files/app.py",
   "k8s/roles/karakeep/files/karakeep-time-tagger.py",
   "k8s/roles/home-assistant/files/cast_quit_app.py",
+]
+[tool.ty.overrides.rules]
+import-not-found = "ignore"
+
+[[tool.ty.overrides]]
+# Two files run from a staged copy whose layout no search path reproduces: the host package
+# copies longhorn_backup_health.py beside the `longhorn_lib` modules, and the soak Job mounts
+# flux_soak.py beside `changed_set.py`. Each imports its staged sibling by bare name, while the
+# checkout keeps that sibling under `scripts/lib/` or `scripts/deploy_tools/`. The same
+# per-file collateral as the block above applies; their own tests cover those imports.
+include = [
+  "hosts/components/k3s-host-checks/files/longhorn_backup_health.py",
+  "scripts/renderer/job_files/flux_soak.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

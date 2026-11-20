@@ -12,11 +12,12 @@ under a role's `files/`.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_policy_import_shapes.py
 """
 
+import subprocess
 import sys
 
 import pytest
 
-from deploy_tools import land  # noqa: F401  # inserts the lander's sys.path roots, which the rules read
+from deploy_tools import land  # noqa: F401  # loads the modules `gate_hits` reads
 from _land_fakes import Fakes
 from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.outcome import Outcome
@@ -30,6 +31,7 @@ POLICY_FIELDS = "headRefOid,headRefName,baseRefName,isCrossRepository"
 F = "100644"
 V = "src/homelab/validate"
 BASE_TREE = {f"{V}/validate_lib.py": F, f"{V}/k8s_schema.py": F}
+LAND_DIR = policy.CHECKOUT / "scripts" / "deploy_tools"
 
 
 def _arm(landing, tmp_path, files, tree, reviews=(), **opts):
@@ -281,8 +283,26 @@ def test_an_unreadable_head_tree_refuses_even_for_the_approver(
     assert "could not read the tree at the PR head" in exc.value.error
 
 
+_LAUNCH = """
+import sys
+sys.path[0] = sys.argv[1]
+import land
+from deploy_tools.land_lib import policy
+print(" ".join(policy.import_roots(policy.CHECKOUT, sys.path)))
+"""
+
+
 def test_the_import_roots_are_the_landers_own_inserts():
-    roots = policy.import_roots(policy.CHECKOUT, sys.path)
+    """The roots as land.py sees them when land.sh launches it, not as this session does."""
+    out = subprocess.run(
+        [sys.executable, "-c", _LAUNCH, str(LAND_DIR)],
+        cwd=policy.CHECKOUT,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    ).stdout
+    roots = out.split()
     assert {
         "scripts",
         "scripts/deploy_tools",
@@ -291,5 +311,8 @@ def test_the_import_roots_are_the_landers_own_inserts():
     assert "" not in roots
 
 
-def test_scripts_is_an_import_root_with_no_insert_naming_it():
-    assert policy.import_roots(policy.CHECKOUT, []) == ["scripts"]
+def test_scripts_and_land_s_own_directory_are_roots_with_no_insert_naming_them():
+    assert policy.import_roots(policy.CHECKOUT, []) == [
+        "scripts",
+        "scripts/deploy_tools",
+    ]
