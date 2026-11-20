@@ -143,7 +143,6 @@ def test_a_static_file_is_copied_without_rendering(hosts):
         ({"enable": {"homelab-u.timer": "../x"}}, "is not a unit name"),
         ({"legacy": [{"cron": "x"}]}, "is not one of"),
         ({"legacy": [{"path": "/etc/../x"}]}, "is malformed"),
-        ({"legacy": [{"cron_file": "../x"}]}, "is malformed"),
         (
             {"files": [{"src": "a", "dst": MANIFEST}]},
             "is the rendered manifest",

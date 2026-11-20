@@ -1217,7 +1217,6 @@ jobs:
             scripts/validate/validate_lib/repos_case.py
             scripts/validate/validate_lib/scratch_clones.py
             scripts/validate/validate_lib/secrets_case.py
-            scripts/validate/validate_lib/shadow_case.py
             scripts/validate/validate_lib/pi_host_seed.py
         run: |
           set -euo pipefail

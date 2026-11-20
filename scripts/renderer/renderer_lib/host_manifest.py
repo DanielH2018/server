@@ -28,8 +28,6 @@ entries reconcile retires (H3, *The host handoff rule*)::
     legacy:
       - {path: /usr/local/bin/x.sh}
       - {cron: "X heartbeat", user: "{{ sys_user }}"}
-      - {cron_file: x}
-      - {unit: x.service}
       - {path: /var/lib/node-exporter-textfile/y.prom, when: "not y_enabled"}
 
 Each legacy value renders with the host's context. A legacy entry's `when:` is evaluated as a
@@ -64,15 +62,10 @@ MANIFEST = "/usr/lib/homelab/manifest.json"
 UPDATER = "homelab-updater"
 POLICIES = frozenset({"manual", "windowed"})
 # Each legacy entry kind, by its key set, as `homelab-reconcile:parse_legacy` reads it.
-LEGACY_KINDS = (
-    frozenset({"path"}),
-    frozenset({"cron", "user"}),
-    frozenset({"cron_file"}),
-    frozenset({"unit"}),
-)
+LEGACY_KINDS = (frozenset({"path"}), frozenset({"cron", "user"}))
+ETC_UNIT_DIR = PurePosixPath("/etc/systemd/system")
 UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
 _TARGET_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.target")
-_CRON_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 
 class Package(Protocol):
@@ -260,8 +253,8 @@ def legacy_entry(
     """One legacy entry, with each value passed through `render`.
 
     Raises:
-        RenderRefused: The entry is of no kind reconcile knows, or reconcile would refuse a
-            rendered value.
+        RenderRefused: The entry is of no kind reconcile knows, names a path under
+            /etc/systemd/system, or reconcile would refuse a rendered value.
     """
     if not isinstance(entry, dict) or frozenset(entry) not in LEGACY_KINDS:
         raise RenderRefused(
@@ -269,6 +262,11 @@ def legacy_entry(
             f"{[sorted(kind) for kind in LEGACY_KINDS]}"
         )
     rendered = {key: render(str(value)) for key, value in entry.items()}
+    if ETC_UNIT_DIR in PurePosixPath(rendered.get("path", "")).parents:
+        raise RenderRefused(
+            f"{directory}: legacy entry {rendered!r} is under {ETC_UNIT_DIR}: reconcile has no "
+            "hand-off that reloads systemd and restarts the packaged unit a copy there shadows"
+        )
     if not _valid_legacy(rendered):
         raise RenderRefused(f"{directory}: legacy entry {rendered!r} is malformed")
     return rendered
@@ -279,8 +277,4 @@ def _valid_legacy(entry: dict[str, str]) -> bool:
     if "path" in entry:
         path = entry["path"]
         return path.startswith("/") and ".." not in path.split("/")
-    if "cron" in entry:
-        return all(value and "\n" not in value for value in entry.values())
-    if "cron_file" in entry:
-        return bool(_CRON_FILE.fullmatch(entry["cron_file"]))
-    return bool(UNIT_NAME.fullmatch(entry["unit"]))
+    return all(value and "\n" not in value for value in entry.values())
