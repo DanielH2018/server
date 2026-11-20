@@ -6,6 +6,7 @@ import json
 import pytest
 from backup import volume_revert
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
+from lib.k8s_objects import VolumeState
 from lib.operator_kubectl import KubectlFailed
 
 NODE = "daniel-box"
@@ -217,7 +218,7 @@ def test_a_state_that_never_arrives_fails_the_wait():
         cluster.kubectl, sleep=lambda _: None, clock=lambda: next(ticks)
     )
     with pytest.raises(volume_revert.RevertError, match="reads 'attached'"):
-        revert.wait_for_state("pvc-1", "detached")
+        revert.wait_for_state("pvc-1", VolumeState.DETACHED)
 
 
 @pytest.mark.parametrize("sha", ["4a3ada1", "4A3ADA11", "4a3ada1z"])

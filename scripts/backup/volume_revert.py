@@ -36,6 +36,7 @@ from collections.abc import Callable
 
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
+from lib.k8s_objects import LonghornVolume, VolumeState
 from lib.kubectl import MissingKubectl
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
 from renderer.renderer_lib.snapshot import snapshot_name
@@ -217,7 +218,7 @@ class Revert:
             )
         return volume, snapshot
 
-    def wait_for_state(self, volume: str, state: str) -> dict:
+    def wait_for_state(self, volume: str, state: VolumeState) -> dict:
         """Poll until `volume` reads `state`, and return the volume.
 
         A failed read polls again, because stopping here for an API-server blip strands the
@@ -233,8 +234,8 @@ class Revert:
             except KubectlFailed as err:
                 seen = f"could not be read ({err})"
             else:
-                current = (found.get("status") or {}).get("state")
-                if current == state:
+                current = LonghornVolume.from_item(found).state
+                if current is state:
                     return found
                 seen = f"reads '{current}'"
             if self.clock() >= deadline:
@@ -253,9 +254,9 @@ class Revert:
         Raises:
             RevertError: a call failed, or a state or the frontend flag came back wrong.
         """
-        self.wait_for_state(volume, "detached")
+        self.wait_for_state(volume, VolumeState.DETACHED)
         self.post(base, volume, "attach", {"hostId": node, "disableFrontend": True})
-        attached = self.wait_for_state(volume, "attached")
+        attached = self.wait_for_state(volume, VolumeState.ATTACHED)
         if (attached.get("spec") or {}).get("disableFrontend") is not True:
             raise RevertError(
                 f"volume {volume} attached with its frontend enabled, so a revert would "
@@ -264,7 +265,7 @@ class Revert:
         self.post(base, volume, "snapshotRevert", {"name": snapshot})
         self.post(base, volume, "detach", {})
         # A 200 detach proves only that the request was accepted.
-        self.wait_for_state(volume, "detached")
+        self.wait_for_state(volume, VolumeState.DETACHED)
 
     def run(
         self,

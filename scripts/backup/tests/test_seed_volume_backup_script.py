@@ -109,7 +109,17 @@ def test_a_dry_run_creates_nothing_and_says_what_it_would_seed(capsys):
             {"labels": {"recurring-job-group.longhorn.io/no-backup": "enabled"}},
             "no-backup",
         ),
+        (
+            {
+                "labels": {
+                    "recurring-job-group.longhorn.io/no-backup": "enabled",
+                    "recurring-job-group.longhorn.io/trim": "enabled",
+                }
+            },
+            "ambiguous",
+        ),
         ({"url": ""}, "disarmed"),
+        ({"url": "  "}, "disarmed"),
         ({"available": False}, "unavailable"),
         ({"backups": [{"status": {"volumeName": "pvc-1234"}}]}, "already has 1 backup"),
         ({"jobs": []}, "no RecurringJob"),
@@ -118,7 +128,9 @@ def test_a_dry_run_creates_nothing_and_says_what_it_would_seed(capsys):
         "unbound",
         "no-tier",
         "no-backup",
+        "two-groups",
         "disarmed",
+        "blank-url",
         "unavailable",
         "existing",
         "no-job",

@@ -30,6 +30,7 @@ Typical usage example:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 import sys as _sys
@@ -94,6 +95,8 @@ class Backup:
         state: `.status.state`, such as `Completed`, `InProgress` or `Error`.
         job: `.status.labels.RecurringJob`, the job that produced it; empty for a manual one.
         size: `.status.size`, a decimal byte count as a string.
+        claim: the PVC name inside `.status.labels.KubernetesStatus`; see `_recorded_claim`.
+        error: `.status.error`, Longhorn's reason for an `Error` state.
     """
 
     name: str
@@ -102,6 +105,8 @@ class Backup:
     state: str
     job: str
     size: str
+    claim: str
+    error: str
 
     @property
     def is_completed(self) -> bool:
@@ -109,16 +114,40 @@ class Backup:
         return self.state == COMPLETED
 
 
+def _recorded_claim(labels: dict) -> str:
+    """The PVC name Longhorn recorded in a Backup's labels, or "" when it recorded none.
+
+    Longhorn writes the PVC into `KubernetesStatus` as a JSON STRING, not as a struct. Parsing
+    it and comparing the field keeps `n8n-data` from also matching `n8n-data-something`, which
+    a substring search over the string would. A label that is absent, not JSON, or not an
+    object reads as "no claim recorded".
+    """
+    raw = labels.get("KubernetesStatus", "")
+    if not isinstance(raw, str) or not raw:
+        return ""
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return ""
+    if not isinstance(doc, dict):
+        return ""
+    name = doc.get("pvcName", "")
+    return name if isinstance(name, str) else ""
+
+
 def from_item(item: dict) -> Backup:
-    """One `.items` entry of `kubectl get backups.longhorn.io -o json` as a `Backup`."""
+    """One Backup object as a `Backup`, from a list's `.items` or a single read."""
     status = item.get("status") or {}
+    labels = status.get("labels") or {}
     return Backup(
         name=str((item.get("metadata") or {}).get("name") or ""),
         volume=str(status.get("volumeName") or ""),
         created=str(status.get("snapshotCreatedAt") or ""),
         state=str(status.get("state") or ""),
-        job=str((status.get("labels") or {}).get("RecurringJob") or ""),
+        job=str(labels.get("RecurringJob") or ""),
         size=str(status.get("size") or ""),
+        claim=_recorded_claim(labels),
+        error=str(status.get("error") or ""),
     )
 
 

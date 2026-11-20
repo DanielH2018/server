@@ -411,7 +411,10 @@ ignore_decorators = [
 ]
 ignore_names = [
   # Hooks and handlers a framework calls by name.
-  "do_*", "on_config", "on_files", "on_page_content", "pytest_*",
+  "do_*", "on_config", "on_files", "on_page_content", "pytest_*", "_missing_",
+  # Enum members of a Kubernetes field's legal values in lib/k8s_objects.py, reached by value
+  # through the enum's constructor, so a known state never reads as UNKNOWN.
+  "FALSE", "CREATING", "ATTACHING", "DETACHING", "DELETING",
   # Class attributes a stdlib base class or jinja2.Environment reads.
   "server_version", "protocol_version", "daemon_threads", "keep_trailing_newline",
   # A BaseHTTPRequestHandler override and the attribute its log methods read.

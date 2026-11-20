@@ -337,6 +337,9 @@ def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
     )
     assert longhorn_cluster.backup_target_url(_run=_target_run(1, "")) == ""
     assert longhorn_cluster.backup_target_url(_run=_target_run(0, "not json")) == ""
+    assert longhorn_cluster.backup_target_url(_run=_target_run(0, "null")) == ""
+    blank = json.dumps({"spec": {"backupTargetURL": "  "}})
+    assert longhorn_cluster.backup_target_url(_run=_target_run(0, blank)) == ""
 
 
 # ── b2-budget reads the live weekly retain (H1.7a) ──────────────────────────────────────────
