@@ -66,8 +66,10 @@ role as built.
   Longhorn logs them, so they live in `loki-homelab`, not Prometheus.
 - **Slice 2, Claude Code telemetry history (idea 2).** Daily spend, tokens, cache hit rate,
   tool errors and permission decisions, with the four counting traps as tested code.
-- **Slice 3, Home Assistant history (idea 3).** State history for a declared entity list. The
-  source keeps seven days, so a longer DAG outage loses data.
+- **Slice 3, Home Assistant history (idea 3).** Daily min, time-weighted mean, max and
+  unavailable time for a declared sensor list, and each energy counter's daily increase, as
+  `ha_daily_rollup` into `ha.sensor_daily`. The source keeps seven days, so a longer DAG
+  outage loses data. Built before slice 2 for that reason: Claude telemetry keeps about 30.
 - **Slice 4, SMART history (idea 4).** Scrutiny's stored history, by ClusterIP.
 - **Slice 5, repo engineering metrics (idea 5).** PRs, CI runs and findings issues,
   incremental by `updated_at`. All of one user's tokens share one GitHub quota, so each run is
