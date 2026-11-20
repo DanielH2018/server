@@ -8,11 +8,13 @@ holds, whichever tool wrote it. It passes the `.items` here. Everything below is
 returns data, so the decisions are unit-testable without a cluster, like the checks in
 longhorn_backup_health_logic.py.
 
-Must stay importable on the host Python floor, with no import beyond the standard library and
-the sibling `longhorn_lib` package (see longhorn_backups.py).
+Must stay importable on the host Python floor, with no import beyond the standard library,
+`lib.k8s_objects` and the sibling `longhorn_lib` package (see longhorn_backups.py).
 """
 
 from __future__ import annotations
+
+from lib.k8s_objects import BackupTarget, K8sObject
 
 from . import longhorn_backups as backups
 
@@ -26,32 +28,28 @@ RECONCILE_DISABLED = "disabled"
 def target_state(item: dict) -> dict:
     """One BackupTarget item as the availability check reads it: {"armed", "held", "raw", "reason"}.
 
-    A target is armed while `spec.backupTargetURL` holds anything but whitespace. `raw` is
-    `status.available` as the string `check_target_availability` compares ("true" or "false", or
-    "unreported" when the status has no `available`), and `reason` is the first condition's
-    message, which that check shows only for a target that is not available. `held` is true while
-    the target carries the reconcile-disabled annotation, which means a break-glass is in force.
+    `armed`, `raw` and `reason` follow `lib.k8s_objects.BackupTarget`: a target is armed while it
+    has a URL, `raw` is its `available` as the string `check_target_availability` compares ("true"
+    or "false", or "unreported" when the status has no `available`), and `reason` is its message,
+    which that check shows only for a target that is not available. `held` is true while the
+    target carries the reconcile-disabled annotation, which means a break-glass is in force.
     """
-    spec, status = item.get("spec") or {}, item.get("status") or {}
-    available = status.get("available")
-    raw = "unreported" if available is None else str(bool(available)).lower()
-    conditions = status.get("conditions") or []
-    message = (conditions[0] or {}).get("message", "") if conditions else ""
-    annotations = (item.get("metadata") or {}).get("annotations") or {}
+    obj, target = K8sObject.from_item(item), BackupTarget.from_item(item)
+    if obj.status.get("available") is None:
+        raw = "unreported"
+    else:
+        raw = "true" if target.available else "false"
     return {
-        "armed": bool(str(spec.get("backupTargetURL") or "").strip()),
-        "held": annotations.get(RECONCILE_ANNOTATION) == RECONCILE_DISABLED,
+        "armed": target.url is not None,
+        "held": obj.annotations.get(RECONCILE_ANNOTATION) == RECONCILE_DISABLED,
         "raw": raw,
-        "reason": str(message)[:160],
+        "reason": target.message[:160],
     }
 
 
 def targets_by_name(items: list[dict]) -> dict[str, dict]:
     """Every BackupTarget's `target_state`, keyed by `metadata.name`."""
-    return {
-        (item.get("metadata") or {}).get("name", ""): target_state(item)
-        for item in items
-    }
+    return {BackupTarget.from_item(item).name: target_state(item) for item in items}
 
 
 def watch_plan(

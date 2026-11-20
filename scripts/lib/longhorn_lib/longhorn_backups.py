@@ -15,10 +15,10 @@ The Ansible tasks, the restore drill and `seed_volume_backup.yml` take them from
 through `scripts/renderer/template_filters/longhorn_groups.py`. The static StorageClass file cannot
 call a filter and still spells `no-backup` out.
 
-WHERE IT RUNS. The health timer imports it as `longhorn_lib.longhorn_backups`, shipped in
-/usr/lib/homelab/longhorn-backup-health/longhorn_lib/ with `host_lib.py` beside the package
-(hosts/components/k3s-host-checks). The reapers and probe.py run from the repo checkout and put the
-directory holding the package on `sys.path` (`lib.repo_paths.K3S_FILES`). It
+WHERE IT RUNS. The health timer imports it as `lib.longhorn_lib.longhorn_backups`, shipped in
+/usr/lib/homelab/longhorn-backup-health/lib/longhorn_lib/ with `host_lib.py` in the directory
+above `lib/` (hosts/components/k3s-host-checks). The reapers and probe.py import it under the same
+name from the checkout. It
 must stay importable on the host Python floor, with no import beyond the standard library and
 `host_lib`.
 
@@ -37,7 +37,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 # In the checkout, `hosts/lib` holds host_lib.py and `scripts/lib` holds this package. On a
-# host both sit beside the reader, whose directory is already on sys.path, so these inserts
+# host both sit under the reader's directory, which is already on sys.path, so these inserts
 # name directories that do not exist there and change nothing.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
 

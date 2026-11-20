@@ -35,9 +35,20 @@ def test_availability_is_the_string_the_check_compares_and_a_missing_one_is_not_
     assert state.target_state({"spec": {"backupTargetURL": "u"}})["raw"] == "unreported"
 
 
+@pytest.mark.parametrize("available", ["true", "false", 1])
+def test_an_available_that_is_not_the_boolean_true_reads_false(available):
+    assert state.target_state(_target("d", "u", available))["raw"] == "false"
+
+
 def test_the_reason_is_the_first_condition_cut_to_160_characters():
     long = _target("d", "u", False, "x" * 400)
     assert state.target_state(long)["reason"] == "x" * 160
+
+
+def test_a_condition_that_is_not_an_object_is_skipped_for_the_reason():
+    item = _target("d", "u", False)
+    item["status"]["conditions"] = ["garbage", {"message": "s3 unreachable"}]
+    assert state.target_state(item)["reason"] == "s3 unreachable"
 
 
 def _both(default_url, r2_url):
