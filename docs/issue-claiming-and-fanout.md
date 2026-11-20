@@ -815,7 +815,8 @@ table names its own.
 - The run manifests are in `~/.claude/fanout/retired/` on daniel-box. Each names its
   orchestrator branch, its batches and each batch's host.
 - The verdict log is `~/.local/state/homelab/landing-verdicts.jsonl`, one per host.
-  `probe.py landing-verdicts <pr>` reads the log of the host it runs on. A batch that
+  On the day of the run, `probe.py landing-verdicts <pr>` read only the log of the host it
+  ran on. A batch that
   lands its own draft on daniel-server writes there, so daniel-box's log holds no row for
   [#9450], [#9461] or [#9475].
 - The review records are in `~/.local/state/fanout-review/` on the batch's host. Each

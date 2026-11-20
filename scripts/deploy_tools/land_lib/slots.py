@@ -36,7 +36,7 @@ from typing import NoReturn
 from deploy_tools.land_lib import live_limit, pin_gate, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
-from deploy_tools.land_lib.serial_lock import SERIAL_NAME
+from deploy_tools.land_lib.serial_lock import SERIAL_NAME, record_holder
 from lib.progress import OnChange
 
 # DECIDED: 6. The operator set it on 2026-11-15 (D10 in docs/ci-throughput.md): on 2026-11-14,
@@ -178,6 +178,10 @@ def _keep_serial(ln: Landing, lock: Locker) -> bool:
         ln.serial_lock = lock([SERIAL_NAME], 1)
     except OSError:
         return False
+    if ln.serial_lock:
+        # Only `probe.py landing` and `cc-wait landing-clear` read the name.
+        with contextlib.suppress(OSError):
+            record_holder(ln.tools.hostname(), ln.opts.pr)
     return ln.serial_lock is None
 
 

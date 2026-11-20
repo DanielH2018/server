@@ -32,8 +32,13 @@ Every fact comes from a reader that already exists; this module only joins them:
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
   issues are claimed under the orchestrator's branch, not the batch's.
 
-`blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none`, or a red
-master CI. It is computed here rather than in the mod so that the band, the model's
+- **The serial landing.** `land_lib.serial_lock.serial_landing`, the read `cc-wait
+  landing-clear` makes: whether a landing holds the serial lock on daniel-box, and which PR's.
+  On daniel-box it reads `/proc/locks`; on daniel-server it is one ssh call.
+
+`blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none`, a red
+master CI, or a live serial landing, which makes `land.sh` refuse every other PR
+(`land_lib/slots.py:_bar`). It is computed here rather than in the mod so that the band, the model's
 system-prompt section and this command's text view cannot disagree. A blocker line carries no
 age or other value that moves each minute: the mod puts the list in the system prompt, and a
 line that changed every read would rewrite the prompt on every turn. Because that prompt is
@@ -63,6 +68,7 @@ from deploy_tools.land_lib.detach import (
     error_in,
     verdict_in,
 )
+from deploy_tools.land_lib.serial_lock import serial_landing
 from lib.inventory_lists import LANDING_HOST, host_vars_file
 from lib.repo_paths import REPO
 
@@ -145,6 +151,7 @@ _RUN_URL = re.compile(
     r"(/attempts/\d{1,5})?",
     re.ASCII,
 )
+_PR_NUMBER = re.compile(r"\d{1,9}", re.ASCII)
 UNSAFE_TOKEN = "<entry not shown>"
 
 
@@ -173,7 +180,20 @@ def blockers(snap: dict) -> list[str]:
                 ": "
             )
         )
+    serial = snap.get("serial")
+    if serial and serial.get("live"):
+        pr = serial.get("pr") or ""
+        who = f"PR #{pr}'s" if _PR_NUMBER.fullmatch(pr) else "a"
+        out.append(
+            f"{who} serial landing is live; `land.sh` refuses every other PR until it "
+            "ends, and `cc-wait landing-clear` waits for it"
+        )
     return out
+
+
+def serial_state(pr: str | None) -> dict:
+    """`serial_lock.serial_landing`'s answer as the snapshot's `serial` field."""
+    return {"live": pr is not None, "pr": pr or ""}
 
 
 @functools.cache
@@ -232,6 +252,7 @@ def collect(
     run: Callable[[list[str]], str] = _run,
     get_text: Callable[[str], str] = _get_text,
     promote: PromoteReads | None = None,
+    serial: Callable[[], str | None] | None = None,
 ) -> dict:
     """Read every source once. A source that fails is named in `errors`, its field `null`.
 
@@ -240,6 +261,9 @@ def collect(
         run: runs an argv in the repo and answers its stdout.
         get_text: GETs one deploy-ui API path as text, for `/api/log`.
         promote: the promotion reads. None reads none of them and leaves each field `null`.
+        serial: reads the PR whose landing holds the serial lock, as
+            `serial_lock.serial_landing` answers. None reads nothing and leaves `serial`
+            `null`.
     """
     snap: dict = {
         "host": socket.gethostname(),
@@ -247,6 +271,7 @@ def collect(
         "ci": None,
         "runs": None,
         "last_verdict": None,
+        "serial": None,
         "worktrees": None,
         "claims": None,
         "promote": {
@@ -356,6 +381,12 @@ def collect(
                 snap["promote"]["reconcile_disabled"] = read_annotated()
 
             attempt("reconcile_disabled", read_reconcile_disabled)
+    if serial is not None:
+
+        def read_serial():
+            snap["serial"] = serial_state(serial())
+
+        attempt("serial", read_serial)
     attempt("ci", read_ci)
     attempt("runs", read_runs)
     attempt("last_verdict", read_last_verdict)
@@ -411,8 +442,11 @@ def format_text(snap: dict) -> str:
     sections.append(state)
     if snap["runs"]:
         in_flight = ["In flight:"]
+        serial_pr = (snap.get("serial") or {}).get("pr")
         for r in snap["runs"]:
             what = f"PR {r['pr']}" if r["pr"] else r["tag"][:60]
+            if r["pr"] and str(r["pr"]) == serial_pr:
+                what += " (serial)"
             in_flight.append(
                 f"  {r['kind']} {what} {r['elapsed_s']}s  {r['verdict'] or ''}".rstrip()
             )
@@ -433,7 +467,10 @@ def format_text(snap: dict) -> str:
     return "\n\n".join("\n".join(section) for section in sections if section)
 
 
-def run_landing(ns) -> int:
-    snap = collect(promote=LIVE_PROMOTE_READS)
+def run_landing(ns, collect=collect) -> int:
+    snap = collect(
+        promote=LIVE_PROMOTE_READS,
+        serial=lambda: serial_landing(socket.gethostname()),
+    )
     print(json.dumps(snap) if ns.json else format_text(snap))
     return 1 if snap["blockers"] else 0

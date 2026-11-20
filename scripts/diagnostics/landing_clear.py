@@ -7,19 +7,20 @@ neither holds. Clearing the hold stays the operator's decision; this only waits 
     landing_clear.py --describe   # terminal states, as JSON
     landing_clear.py              # the state now, one JSON line
 
-ONE DEFINITION OF A BLOCKER. The verdict is `landing_blockers.blockers` over the two facts it
+ONE DEFINITION OF A BLOCKER. The verdict is `landing_blockers.blockers` over the three facts it
 reads, and the CI state is `landing_blockers.ci_state`, so this wait and `probe.py landing` cannot
 disagree on what blocks. The other reads `collect` makes (the cluster,
 GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
 
-A third blocker is a live landing of a forward-only pin, flux or cluster-vars change, which
-holds the serial lock and makes `land.sh` refuse every other landing. `probe.py landing` does
-not count it.
+The third fact is a live landing of a serial PR (`live_limit.SERIAL_WHAT`), which holds the
+serial lock and makes `land.sh` refuse every other landing. Both tools read it through
+`serial_lock.serial_landing`.
 
 THE STATE.
 
     blocked             (open)  a blocker holds; the detail names each one
-    clear               0       DEPLOY_HOLD reads `none` or is absent, and master CI is not red
+    clear               0       DEPLOY_HOLD reads `none` or is absent, master CI is not red,
+                                and no serial landing is live
     gh-unauthenticated  1       `gh` has no login configured, so no read can succeed
 
 A pending or cancelled master run is not red (`docs/landing.md`), so it reads `clear`:
@@ -48,8 +49,8 @@ from collections.abc import Callable
 from subprocess import CompletedProcess
 
 from deploy_tools import forge
-from deploy_tools.land_lib.serial_lock import serial_landing_live
-from diagnostics.probe_lib.landing_blockers import blockers, ci_state
+from deploy_tools.land_lib.serial_lock import serial_landing
+from diagnostics.probe_lib.landing_blockers import blockers, ci_state, serial_state
 from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
 from lib.exit_codes import FAILED, OK
@@ -93,15 +94,15 @@ def _master_ci_run(run_gh: Callable[..., CompletedProcess[str]] = gh) -> dict | 
 def read(
     deploy_hold: Callable[[], str | None] = LIVE_PROMOTE_READS.deploy_hold,
     master_ci_run: Callable[[], dict | None] = _master_ci_run,
-    serial_live: Callable[[], bool] = lambda: serial_landing_live(socket.gethostname()),
+    serial: Callable[[], str | None] = lambda: serial_landing(socket.gethostname()),
 ) -> dict:
     """The landing's state now, as cc-wait's state and detail.
 
     Args:
         deploy_hold: reads DEPLOY_HOLD; None means the variable is absent. Raises on failure.
         master_ci_run: reads the newest master `ci.yml` run in REST's shape. Raises on failure.
-        serial_live: whether a landing of a forward-only pin, flux or cluster-vars change
-            holds the serial lock; `land.sh` refuses every other landing meanwhile.
+        serial: reads the PR whose landing holds the serial lock, None while none does;
+            `land.sh` refuses every other landing meanwhile. Raises on failure.
     """
     try:
         run = master_ci_run()
@@ -116,11 +117,13 @@ def read(
         "sha": (run or {}).get("head_sha", "")[:8],
         "url": (run or {}).get("html_url", ""),
     }
-    found = blockers({"promote": {"deploy_hold": hold}, "ci": ci})
-    if serial_live():
-        found.append(
-            "a landing of a serial PR is live; `land.sh` refuses until it ends"
-        )
+    found = blockers(
+        {
+            "promote": {"deploy_hold": hold},
+            "ci": ci,
+            "serial": serial_state(serial()),
+        }
+    )
     if found:
         return {"state": "blocked", "detail": " | ".join(found)[:DETAIL_MAX]}
     detail = f"DEPLOY_HOLD {hold or 'none'}; master CI {ci['state']} {ci['sha']}"
