@@ -20,11 +20,6 @@ renderer runs. `lib.guard_jinja_env` registers each so a `ValueError` reaches th
 `FilterError` prefixed with the filter's name.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from lib.container_entry import SERVICE_TIERS
 
 # Names that select several tiers at once. `home-critical` is what the house and SSO stop

@@ -503,11 +503,18 @@ tracked file that ends with it. A filename with no directory counts only when it
 alone in an inline code span and exactly one tracked file has that name: `` `ci.yml` ``
 holds `.github/workflows/ci.yml`.
 
-The rule has three known limits:
+The rule has four known limits:
 
 - **A batch's diff can exceed its cited paths.** The gate compares what each batch was
   briefed on, not what its agent edits. Two batches that cite different files can still
-  edit one.
+  edit one. In the run of 2026-11-19, one fix changed 11 files and its issue cited one of
+  them (*The first two-project run*).
+  [#9479](https://github.com/DanielH2018/server/issues/9479) holds the proposal to compare
+  edited files.
+- **A change that lands on master is not a live batch.** The gate compares batches, so a
+  file master changes under a running batch is held by nothing. That batch finds out at
+  its landing, as a red CI run or a `merge-conflict` verdict, and the conflict resume
+  below covers the second.
 - **A filename that several tracked files share holds nothing.** `` `main.yml` `` and
   `` `CLAUDE.md` `` name dozens of files, so `cited_paths` drops them, and so it drops a
   filename written outside a code span. An issue that means one of those files must spell
@@ -665,8 +672,9 @@ its own checkout carries, and deleted the fast-forward. H7.53 deleted the GitOps
 A coordinator tree runs several projects at once. One root session sets the order across
 projects, and one sub-coordinator session per project runs `issue-fanout` over that
 project's milestone. `.claude/skills/coordinate/SKILL.md` holds what each role does. This
-section is the record of the design: the shape, what the pilot measured, what the operator
-decided, who lands which PR, and what the design does not cover. It was written from the
+section is the record of the design: the shape, what the pilot measured, what the first
+two-project run measured, what the operator decided, who lands which PR, and what the
+design does not cover. It was written from the
 coordinator tree plan of 2026-11-15, revision 8 of 2026-11-19.
 
 ### Target shape
@@ -723,6 +731,156 @@ sub-coordinator started one worker. It answered three questions:
   characters, which is why the skill fixes the recap's format.
 - **The root lists only the sessions on its own SSH connection.** So the whole tree runs
   from one connection to daniel-box.
+
+### The first two-project run
+
+The tree ran two projects from 2026-11-19 21:26 UTC to 2026-11-20 06:52 UTC. Each
+sub-coordinator launched from daniel-box under its own branch, and both projects closed
+every issue in their backlogs.
+
+**Validate and CI cleanup** was milestone 22, under `claude/coord-ci-cleanup-2151e1`. Five
+batches closed seven issues:
+
+- [#9373] closed [#9251], [#9294] and [#9347], and ended `nothing-to-deploy`.
+- [#9391] closed [#9342], and ended `nothing-to-deploy`.
+- [#9402] closed [#9246], and ended `nothing-to-deploy`.
+- [#9382] closed [#9119], and ended `settled`.
+- [#9436] closed [#9145], and ended `nothing-to-deploy`.
+
+The project filed two more issues, [#9314] and [#9224]. A batch of an orchestrator outside the
+tree closed both in [#9430], which ended `settled`. That loss is why an open project
+reserves its backlog (*Decisions, with their dates*).
+
+**Alert noise** was milestone 21, under `claude/coord-alert-noise-d7b708`. Four batches
+closed five issues, and every PR ended `settled`:
+
+- [#9386] closed [#9201] and [#9338]. It changes `cluster/services.yml`, so it landed as a
+  serial PR.
+- [#9450] closed [#9054].
+- [#9461] closed [#9045].
+- [#9475] closed [#9118].
+
+The root coordinator recorded that the operator's drill of the `AirflowSchedulerDown` alert
+passed. No log read for this section confirms it.
+
+**How the run was read.** Three sources hold what this section states, and each row of the
+table names its own.
+
+- The run manifests are in `~/.claude/fanout/retired/` on daniel-box. Each names its
+  orchestrator branch, its batches and each batch's host.
+- The verdict log is `~/.local/state/homelab/landing-verdicts.jsonl`, one per host.
+  `probe.py landing-verdicts <pr>` reads the log of the host it runs on. A batch that
+  lands its own draft on daniel-server writes there, so daniel-box's log holds no row for
+  [#9450], [#9461] or [#9475].
+- The review records are in `~/.local/state/fanout-review/` on the batch's host. Each
+  lists the phases the batch ran, under `durations`.
+
+A row marked *recap* comes from the coordinators' recaps, as the root coordinator wrote
+them into the plan on 2026-11-20. Nothing on either host was read to confirm it.
+
+| Measure | Result | Read from |
+|---|---|---|
+| Launches that waited for the launch lock | 1 | recap |
+| Launches that timed out on the launch lock | 0 | recap |
+| Launches the cross-run file gate refused | 0 | recap |
+| Collisions that reached the gate in a form it does not read | 3 | recap; the second is also read from the issue and the PR |
+| Batches of the two projects that parked | 0 | review records |
+| PRs of other orchestrators that parked behind a serial landing | 2, [#9424] and [#9423] | verdict log, daniel-server |
+| Time from a park to a verified re-land | 76 minutes for [#9423], 115 minutes for [#9424] | verdict logs, both hosts |
+| Time two serial landings in a row kept other k8s landings out | between 55 and 84 minutes | verdict logs, both hosts |
+| Landings of [#9386] before `settled` | 3: `merge-conflict`, `refused`, `pr-ci-red` | verdict logs, both hosts |
+| Batches placed on daniel-server | 8 of 9 | manifests |
+| Batches of the two projects that ran the conflict resume | 0 | review records |
+| Operator steps per project | one approval, plus the drill for Alert noise | recap |
+
+**The launch lock and the serial turnstile held when contended.** One launch waited for
+the lock and none timed out. [#9386] landed alone, and [#9418] from another session landed
+alone after it.
+
+**The cross-run file gate refused nothing, and three real collisions reached it.** Each
+arrived in a form the gate does not read:
+
+- Issue [#9224] named its file by a bare filename. [#9370] made a filename alone in a code
+  span count when one tracked file has that name.
+- A fix edits files its issue does not cite. Issue [#9054] cites three paths that resolve to
+  tracked files. Its fix, [#9450], changed 11 files, and one of the three is among them.
+- Master changed a test file under a running batch, and [#9386]'s CI went red on 2026-11-19
+  at 23:37 UTC. A landing on master is not a live batch, so the gate compares nothing for
+  it.
+
+A clean launch therefore means that no live batch cites a file this launch cites. It does
+not mean that no live batch edits one. The collision the run planned, between [#9118] and
+[#9119] in different projects, never reached the gate: [#9382] merged [#9119]'s fix on
+2026-11-19 at 23:15 UTC, and [#9118] launched on 2026-11-20 at 04:41 UTC.
+[#9479](https://github.com/DanielH2018/server/issues/9479) holds the proposal to compare
+the files a live batch has edited. Until it lands, a sub-coordinator checks an open PR's
+file list against the next batch's issues by hand when two batches work one role.
+
+**The serial rule's cost was two landings in a row.** [#9386] and [#9418] both change
+`cluster/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.
+
+**The conflict resume ran once, outside the two projects.**
+[#9421](https://github.com/DanielH2018/server/pull/9421) merged on 2026-11-19 at 23:50
+UTC. The batch for [#9377], launched by `worktree-simplification-audit-wave3` on 2026-11-20
+at 02:02 UTC, ran the `conflict` and `review-conflict` phases, and its PR [#9454] ended
+`settled`. No batch of the two projects ran either phase. [#9436] ended `merge-conflict`
+twice after #9421 merged, and both landings ran on daniel-box, outside the batch's unit,
+where the resume does not apply.
+
+**Three paths were not exercised:**
+
+- A stop-and-resume of a sub-coordinator. Neither sub-coordinator restarted.
+- A gate refusal between two projects.
+- A park caused by `DEPLOY_HOLD`. No promotion failed, so both parks were refusals behind
+  a serial landing.
+
+**Five planned measures were not read.** The plan asked how long a landing waits for the
+landing turn, how often a serial PR reaches `slots.DRAIN_S`, how long a unit's land phase
+runs, each session's GitHub quota, and whether the root's view goes stale. The run
+recorded none of them.
+
+The run changed the tooling six times, and each change edited the section it touched:
+*One landing of a PR at a time* in `docs/landing.md`, the bare-filename rule and
+*A batch whose landing conflicts with master* on this page, the lander rulings under
+*A parked batch*, *An open project reserves its backlog*, and the last two entries of
+*Decisions, with their dates*. It also filed six findings:
+[#9367](https://github.com/DanielH2018/server/issues/9367),
+[#9384](https://github.com/DanielH2018/server/issues/9384),
+[#9400](https://github.com/DanielH2018/server/issues/9400),
+[#9401](https://github.com/DanielH2018/server/issues/9401),
+[#9431](https://github.com/DanielH2018/server/issues/9431) and
+[#9434](https://github.com/DanielH2018/server/issues/9434).
+
+[#9045]: https://github.com/DanielH2018/server/issues/9045
+[#9054]: https://github.com/DanielH2018/server/issues/9054
+[#9118]: https://github.com/DanielH2018/server/issues/9118
+[#9119]: https://github.com/DanielH2018/server/issues/9119
+[#9145]: https://github.com/DanielH2018/server/issues/9145
+[#9201]: https://github.com/DanielH2018/server/issues/9201
+[#9224]: https://github.com/DanielH2018/server/issues/9224
+[#9246]: https://github.com/DanielH2018/server/issues/9246
+[#9251]: https://github.com/DanielH2018/server/issues/9251
+[#9294]: https://github.com/DanielH2018/server/issues/9294
+[#9314]: https://github.com/DanielH2018/server/issues/9314
+[#9338]: https://github.com/DanielH2018/server/issues/9338
+[#9342]: https://github.com/DanielH2018/server/issues/9342
+[#9347]: https://github.com/DanielH2018/server/issues/9347
+[#9370]: https://github.com/DanielH2018/server/pull/9370
+[#9373]: https://github.com/DanielH2018/server/pull/9373
+[#9377]: https://github.com/DanielH2018/server/issues/9377
+[#9382]: https://github.com/DanielH2018/server/pull/9382
+[#9386]: https://github.com/DanielH2018/server/pull/9386
+[#9391]: https://github.com/DanielH2018/server/pull/9391
+[#9402]: https://github.com/DanielH2018/server/pull/9402
+[#9418]: https://github.com/DanielH2018/server/pull/9418
+[#9423]: https://github.com/DanielH2018/server/pull/9423
+[#9424]: https://github.com/DanielH2018/server/pull/9424
+[#9430]: https://github.com/DanielH2018/server/pull/9430
+[#9436]: https://github.com/DanielH2018/server/pull/9436
+[#9450]: https://github.com/DanielH2018/server/pull/9450
+[#9454]: https://github.com/DanielH2018/server/pull/9454
+[#9461]: https://github.com/DanielH2018/server/pull/9461
+[#9475]: https://github.com/DanielH2018/server/pull/9475
 
 ### Decisions, with their dates
 
@@ -819,11 +977,13 @@ git reports the tree as already locked.
 
 ### Known limits of the coordinator tree
 
-- **No two real launches have raced, and no landing has parked on a real hold.** Tests
-  cover both. The first two-project run exercises them, with one planned collision: two
-  issues that cite one file, placed in different projects.
+- **The cross-run file gate has refused no real launch, and no landing has parked on a
+  real `DEPLOY_HOLD`.** Tests cover both. In the first two-project run one launch waited
+  for the launch lock, and two PRs parked behind a serial landing and re-landed (*The
+  first two-project run*).
 - **A stop-and-resume of a sub-coordinator has not been run.** The skill's resume reads
-  were each run once against a branch with no project.
+  were each run once against a branch with no project, and neither sub-coordinator of the
+  first two-project run restarted.
 - **A milestone wait does not end when `milestone add` files an older issue**
   ([#9218](https://github.com/DanielH2018/server/issues/9218)). The root messages the
   sub-coordinator when it has an issue added to a project.
@@ -841,10 +1001,14 @@ git reports the tree as already locked.
 - **Only daniel-box's primary checkout follows master.** daniel-server's is never synced,
   and its code reads only that host's own manifest directory, so a coordinator started
   there would share no lock and no gate with the tree.
-- **The cross-run file gate has the two limits its own section lists**, and an issue that
-  adds a secret without citing `secrets/secrets.yml` passes the SOPS gate.
+- **The cross-run file gate has the limits its own section lists** (*One launch at a time,
+  and files held across runs*), and an issue that adds a secret without citing
+  `secrets/secrets.yml` passes the SOPS gate.
 - **The root's view can go stale.** The app holds recaps after many wake-ups in a row with
-  no operator message. The first real run measures whether that happens.
+  no operator message. The first two-project run did not record whether that happened.
+- **The cap of 2 running batches has no measurement behind a change.** The first
+  two-project run did not record how long a landing waited for the landing turn, which is
+  the reading the cap's decision waits on.
 
 ## The `/issue-fanout` skill
 

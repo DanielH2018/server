@@ -12,7 +12,8 @@ The guards here are offline by construction — the operator rejected a CI job t
 Docker's index on every run. They assert the config's own internal agreement instead: the
 depName is the apt package its var renders into, the registryUrl is Docker's index with the
 three query parameters the `deb` datasource requires, extractVersion reads the apt version
-shapes that index actually serves, and the group stays out of the automerging catch-all.
+shapes that index actually serves. The `docker-engine-` rows of
+_renovate_rule_rows.py keep the group out of the automerging catch-all.
 
 Run: uv run pytest scripts/tests/test_renovate_docker_engine_pins.py
 """
@@ -22,7 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from _renovate import _CONFIG_MANAGERS, _PACKAGE_RULES, _REPO, _resolve_group_name
+from _renovate import _CONFIG_MANAGERS, _REPO
 from lib.renovate_annotations import (
     annotations_in,
     is_annotation_manager,
@@ -38,8 +39,6 @@ PI_DOCKER_DEB_PACKAGES = frozenset(
 
 PI_DOCKER_COMPONENT = "hosts/components/pi-docker/component.yml"
 PINS_TEMPLATE = "hosts/components/pi-docker/templates/docker-engine.pins.j2"
-
-_PI_DOCKER_GROUP_PREFIX = "docker engine on the Pi"
 
 # The apt version strings the index serves
 # (https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages):
@@ -137,43 +136,3 @@ def test_extract_version_rejects_a_bare_upstream_tag(not_an_apt_version: str) ->
             f"{pin['depName']}'s extractVersion accepts {not_an_apt_version!r}, a tag with "
             "no Debian revision — the unbuildable version space #2341 closed."
         )
-
-
-@pytest.mark.parametrize("dep_name", sorted(PI_DOCKER_DEB_PACKAGES))
-def test_pins_resolve_to_the_manual_group(dep_name: str) -> None:
-    """A minor bump must land in the Pi's own manual group, never the automerging catch-all.
-
-    `container images (non-major)` has no matchFileNames and automerges minor and patch. The
-    override that keeps these four out of it selects on datasource AND package name, so it
-    must follow the datasource — a rule left on github-releases/moby-moby would match
-    nothing and start automerging engine bumps onto a Pi that cannot apply them without
-    homelab-docker-engine.service.
-    """
-    group = _resolve_group_name(dep_name, PI_DOCKER_COMPONENT, "minor", "deb")
-    assert group is not None and group.startswith(_PI_DOCKER_GROUP_PREFIX), (
-        f"{dep_name} resolves to {group!r}"
-    )
-
-    rule = next(
-        r
-        for r in _PACKAGE_RULES
-        if r.get("groupName", "").startswith(_PI_DOCKER_GROUP_PREFIX)
-    )
-    assert rule["automerge"] is False
-
-
-def test_group_resolution_catches_the_catch_all() -> None:
-    """The red proof for the guard above: without the override, the catch-all wins."""
-    fake_rules = [
-        {
-            "matchManagers": ["custom.regex"],
-            "matchUpdateTypes": ["minor", "patch"],
-            "groupName": "container images (non-major)",
-        }
-    ]
-    assert (
-        _resolve_group_name(
-            "containerd.io", PI_DOCKER_COMPONENT, "minor", "deb", fake_rules
-        )
-        == "container images (non-major)"
-    )
