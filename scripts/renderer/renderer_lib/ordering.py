@@ -143,7 +143,7 @@ def verify_files(
     A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
     `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
     (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
-    writes and the Kustomization the census allows cannot disagree. `cronjob_gates` is the
+    writes and the Kustomization the census allows cannot disagree. `RoleDefaults.cronjob_gates` is the
     other input that calls for `<tag>-verify`. `directory` names another role-owned
     directory of `templates/` read the same way (`precheck_files`).
     """
