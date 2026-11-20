@@ -21,4 +21,4 @@
 | `sync-board` | make each open issue's Project board item match its state and labels |
 | `verify` | print each finding's stored instructions for how to verify it; runs nothing |
 | `next` | issues a session may pick up, best first |
-| `new-issues` | the `findings` source for cc-wait: a free issue filed above a baseline |
+| `new-issues` | the `findings` source for cc-wait: a free issue past a baseline |

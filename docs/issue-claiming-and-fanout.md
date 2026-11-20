@@ -277,8 +277,9 @@ over the project's backlog. A project differs from a session milestone in five w
   take the same flag. `--milestone none` selects the issues that no open milestone holds,
   which is the pool a root session assigns from. A title that no milestone has exits 64
   rather than printing an empty list. `cc-wait findings --milestone "<title>"` waits on one
-  project, and ends only on an issue filed after the wait began: an older issue that
-  `milestone add` files later does not end it.
+  project. It records the project's free issues when the wait starts, and ends on a free
+  issue outside that set, including an older issue that `milestone add` files later. It
+  takes no `--after`.
 
 Claim filing, PR joining, the close at zero open items and `reap` treat both forms alike. A
 project with issues in its backlog has open items, so it stays open while its backlog lasts.
@@ -1092,9 +1093,6 @@ git reports the tree as already locked.
   skill's restart path left out
   ([#9521](https://github.com/DanielH2018/server/issues/9521)). A crash, a parked batch and
   a landing in flight were not covered.
-- **A milestone wait does not end when `milestone add` files an older issue**
-  ([#9218](https://github.com/DanielH2018/server/issues/9218)). The root messages the
-  sub-coordinator when it has an issue added to a project.
 - **A project lives as long as its sub-coordinator's branch.** `reap` closes only a
   milestone with nothing open, so a dead sub-coordinator's backlog stays filed, and
   reserved, until the sub-coordinator restarts or the root ends the project with

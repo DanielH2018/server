@@ -248,17 +248,24 @@ def held_issues(
     """
     if title is None:
         return issues
-    open_now = _milestones(repo, "open", gh_json)
     if title == NO_MILESTONE:
-        numbers = {m["number"] for m in open_now}
+        numbers = {m["number"] for m in _milestones(repo, "open", gh_json)}
         return [i for i in issues if (i.milestone or {}).get("number") not in numbers]
-    if not any(
-        m["title"] == title
-        for known in (open_now, _milestones(repo, "closed", gh_json))
-        for m in known
-    ):
-        raise UnknownMilestone(f"no milestone is titled `{title}`")
+    titled(title, repo, gh_json=gh_json)
     return [i for i in issues if i.milestone_title == title]
+
+
+def titled(title: str, repo: str, *, gh_json: GhJson = real_gh_json) -> dict:
+    """The milestone titled ``title``, open before closed.
+
+    Raises:
+        UnknownMilestone: no milestone, open or closed, has this title.
+    """
+    for state in ("open", "closed"):
+        for m in _milestones(repo, state, gh_json):
+            if m["title"] == title:
+                return m
+    raise UnknownMilestone(f"no milestone is titled `{title}`")
 
 
 def reservations(

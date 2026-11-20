@@ -468,15 +468,21 @@ def _rest_list(tools: FindingsTools, path: str) -> list[JsonObject]:
     return as_object_list(tools.gh_json("api", url, timeout=REST_TIMEOUT), url)
 
 
-def newest_open_issues(tools: FindingsTools) -> list[JsonObject]:
+def newest_open_issues(
+    tools: FindingsTools, milestone: int | None = None
+) -> list[JsonObject]:
     """The 100 newest open `claude` issues, newest first, in REST's own shape.
 
     One request. Issue numbers rise with creation time, so the first entry is the highest
     open number. REST's issue list includes pull requests, which are dropped here.
+
+    Args:
+        milestone: a milestone's number, to read only the issues that milestone holds.
     """
+    held = "" if milestone is None else f"&milestone={milestone}"
     raw = _rest_list(
         tools,
-        "issues?labels=claude&state=open&sort=created&direction=desc&per_page=100",
+        f"issues?labels=claude&state=open{held}&sort=created&direction=desc&per_page=100",
     )
     return [i for i in raw if "pull_request" not in i]
 
