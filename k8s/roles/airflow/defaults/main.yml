@@ -95,6 +95,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/claude_decisions.py') }}": claude_decisions.py
       "{{ role_file('files/dags/edge_daily_rollup.py') }}": edge_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/edge_counts.py') }}": edge_counts.py
+      "{{ role_file('files/dags/backup_spend_rollup.py') }}": backup_spend_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/backup_spend.py') }}": backup_spend.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 

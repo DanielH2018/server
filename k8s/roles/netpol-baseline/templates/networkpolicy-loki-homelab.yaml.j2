@@ -11,7 +11,9 @@
 # The homelab log store, distinct from `loki` in the observability namespace, which
 # networkpolicy-loki.yaml.j2 fences. Both listen on 3100; do not confuse them.
 #
-# Six callers beyond the baseline, each read from the caller's own template:
+# Seven callers beyond the baseline, each read from the caller's own template:
+#   airflow-task    — LOKI_URL (airflow/files/dags/homelab_warehouse/backup_spend.py), the
+#                     warehouse's daily Longhorn backup rollup
 #   alloy           — the DaemonSet that ships every pod's logs here (loki-homelab/templates/
 #                     alloy-daemonset.yaml.j2). Both nodes; a pod peer covers both.
 #   homelab-mcp     — LOKI_URL (homelab-mcp/templates/deployment.yaml.j2)
@@ -40,6 +42,9 @@ spec:
    networkpolicy-traefik.yaml.j2. #}
 {% if netpol_baseline_enforced | bool %}
     - from:
+        - podSelector:
+            matchLabels:
+              app: airflow-task
         - podSelector:
             matchLabels:
               app: alloy

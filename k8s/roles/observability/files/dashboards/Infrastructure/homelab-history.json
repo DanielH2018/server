@@ -1039,6 +1039,116 @@
       ],
       "title": "CrowdSec active decisions",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Blocks each Longhorn backup walked, one HeadObject each, by the volume's backup target. 'default' is B2 and r2 is Cloudflare R2. The target is the volume's at load time.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 89
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, CASE target WHEN 'default' THEN 'B2' WHEN '' THEN 'unknown' ELSE target END AS metric, sum(class_b) AS value FROM longhorn.backup_daily WHERE $__timeFilter(day) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Backup Class B transactions per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "B2's share of the panel beside it, per claim, against B2's daily Class B cap.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 89
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, CASE claim WHEN '' THEN volume ELSE claim END AS metric, sum(class_b) AS value FROM longhorn.backup_daily WHERE target = 'default' AND $__timeFilter(day) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "B2 Class B per claim per day",
+      "type": "barchart"
     }
   ],
   "refresh": "",
