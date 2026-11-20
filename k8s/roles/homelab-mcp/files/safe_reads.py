@@ -60,9 +60,31 @@ def summarize_container_list(items: list[dict]) -> list[dict]:
     return rows
 
 
+# DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
+# import: the image carries only this role's files and obs_api, and obs_api stays a transport.
+def _envelope_list(resp: object, key: str) -> list[dict]:
+    """The list of objects at `resp["data"][key]` in a Prometheus or Loki answer.
+
+    An absent `data` or `key` reads as an empty list.
+
+    Raises:
+        ValueError: `resp` or its `data` is not an object, `data[key]` is not a list, or an
+            entry is not an object. A `"data": null` raises rather than reading as empty.
+    """
+    if not isinstance(resp, dict):
+        raise ValueError(f"the answer is {type(resp).__name__}, not a JSON object")
+    data = resp.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError(f"the answer's data is {type(data).__name__}, not an object")
+    entries = data.get(key, [])
+    if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+        raise ValueError(f"the answer's data.{key} is not a list of objects")
+    return entries
+
+
 def parse_metric(resp: dict) -> list[dict]:
     """Flatten a Prometheus instant-query response to {labels, value} rows."""
-    result = (resp.get("data") or {}).get("result") or []
+    result = _envelope_list(resp, "result")
     rows = []
     for series in result:
         value = series.get("value") or [None, None]
@@ -72,7 +94,7 @@ def parse_metric(resp: dict) -> list[dict]:
 
 def parse_targets(resp: dict) -> list[dict]:
     """Reduce Prometheus /api/v1/targets to health per target."""
-    active = (resp.get("data") or {}).get("activeTargets") or []
+    active = _envelope_list(resp, "activeTargets")
     rows = []
     for t in active:
         labels = t.get("labels") or {}
@@ -107,7 +129,7 @@ def redact_log_secrets(text: str) -> str:
 
 def parse_loki(resp: dict) -> list[dict]:
     """Flatten a Loki query_range response to {stream, ts, line} rows, credentials redacted."""
-    result = (resp.get("data") or {}).get("result") or []
+    result = _envelope_list(resp, "result")
     rows = []
     for stream in result:
         labels = stream.get("stream") or {}

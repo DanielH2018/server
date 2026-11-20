@@ -52,6 +52,7 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 
 from flux_job_connect import Request, open_url
+from flux_job_parse import Series, parse_prom_vector
 
 COUNTER = "loki_process_custom_crowdsec_edge_probe_total"
 CHANNEL_UP = 'up{job="alloy-pi"}'
@@ -185,28 +186,38 @@ class Lapi:
             )
 
 
-def prometheus(http: Http, base: str, query: str) -> list[dict]:
-    """An instant query's result vector."""
+def prometheus(http: Http, base: str, query: str) -> list[Series]:
+    """An instant query's result vector.
+
+    Raises:
+        Failed: Prometheus answered with a status other than 200, or with a body that is not
+            an instant-vector answer, `"data": null` included.
+    """
     url = f"{base.rstrip('/')}/api/v1/query?{urllib.parse.urlencode({'query': query})}"
     status, body = http.call("GET", url)
-    if status != 200 or not isinstance(body, dict):
+    if status != 200:
         raise Failed(
             f"the evidence channel: Prometheus answered HTTP {status} to {query}"
         )
-    return (body.get("data") or {}).get("result") or []
+    try:
+        return parse_prom_vector(body)
+    except ValueError as err:
+        raise Failed(
+            f"the evidence channel: Prometheus's answer to {query} is unreadable: {err}"
+        ) from err
 
 
 def counts(http: Http, base: str) -> dict[str, float]:
     """The probe counter summed per `status` label."""
     found: dict[str, float] = {}
     for series in prometheus(http, base, COUNTER):
-        status = series.get("metric", {}).get("status", "")
-        found[status] = found.get(status, 0.0) + float(series["value"][1])
+        status = series.labels.get("status", "")
+        found[status] = found.get(status, 0.0) + series.value
     return found
 
 
 def channel_up(http: Http, base: str) -> bool:
-    return any(float(s["value"][1]) == 1 for s in prometheus(http, base, CHANNEL_UP))
+    return any(s.value == 1 for s in prometheus(http, base, CHANNEL_UP))
 
 
 def increase(
