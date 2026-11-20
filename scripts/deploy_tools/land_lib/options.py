@@ -221,7 +221,8 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         "--fresh",
         action="store_true",
         help="land from a detached checkout of origin/master this run makes and removes, "
-        "for a checkout whose landing code master has changed",
+        "whatever this checkout holds; a landing whose own code is older than master's "
+        "does so without the flag",
     )
     parser.add_argument(
         "--log-dir",

@@ -6,12 +6,12 @@ delta review leaves a finding of medium severity or worse (`review_record.surviv
 """
 
 from functools import partial
-from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 
+from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.review.delta_confirm import split_confirmed
 from dev.fanout_lib.review.review_prompts import delta_prompt, fix_prompt
 from dev.fanout_lib.review.review_record import (
@@ -22,14 +22,11 @@ from dev.fanout_lib.review.review_record import (
 )
 from dev.fanout_lib.status import PR_URL
 
-if TYPE_CHECKING:
-    from dev.fanout_lib.review.review import Pipeline
-
 MAX_FIX_ROUNDS = 2
 
 
 def fix_rounds(
-    pipe: "Pipeline",
+    pipe: BatchRun,
     issues: str,
     base: str,
     head: str,

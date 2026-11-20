@@ -13,7 +13,7 @@ import pytest
 from _findings_fakes import OPERATOR, Fakes, build_tools, facts, live_worktree
 
 from dev.findings import main
-from dev.findings_lib.boundaries import REGISTER_CHECKOUTS
+from dev.fanout_lib.target import REGISTER_CHECKOUTS
 from dev.findings_lib.issue_model import claim_comment
 from dev.findings_lib import new_issue_probe
 

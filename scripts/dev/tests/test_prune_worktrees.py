@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from lib.git_testing import (
     commit,
     git,
@@ -37,6 +39,12 @@ from dev.prune_worktrees import (
 )
 
 PRUNER = Path(__file__).resolve().parents[1] / "prune_worktrees.py"
+
+
+@pytest.fixture(autouse=True)
+def _a_forge_with_no_prs(monkeypatch):
+    """`GH_BIN=true` answers every forge read with nothing: a scratch repo has no PRs."""
+    monkeypatch.setenv("GH_BIN", "true")
 
 
 def _tree(branch="worktree-x", locked=False):

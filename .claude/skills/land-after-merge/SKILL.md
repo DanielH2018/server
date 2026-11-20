@@ -25,11 +25,12 @@ is the wait: it prints the landing's `VERDICT:` line and exits with the landing'
 `land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
 checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
-**From a checkout that does not follow master, add `--fresh` from the first attempt.** A
-locked coordinator worktree, or any worktree cut before master last changed the landing code,
-ends `refused` without it. With `--fresh`, `land.sh` lands from a detached checkout of
-`origin/master` that it adds under `/tmp` and removes when the landing ends. The cost is one
-fetch and one worktree (`docs/landing.md`, *The refusal before the merge names `--fresh`*).
+**A checkout that does not follow master needs no extra flag.** A landing that finds its
+own landing code older than master's re-runs itself from a detached checkout of
+`origin/master`, which it adds under `/tmp` and removes when the landing ends. Its log says
+so in one `land:` line, and the verdict is that checkout's landing's. `--fresh` forces the
+same checkout from the start and is never required (`docs/landing.md`, *Before the merge, a
+stale checkout re-runs the landing from a fresh one without asking*).
 
 **Do not arm auto-merge.** Ruleset 27167149 lets only the admin role and Renovate update
 master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leaves the PR
@@ -74,8 +75,11 @@ cannot be woken once its turn ends, so it runs the command in the foreground wit
 `timeout: 600000` and does not end its turn on it.
 
 **To read a verdict after the wait, run `probe.py landing-verdicts <n>`**, never a grep of a
-task's output file. Every landing records its `VERDICT:` line there as it exits, and the
-record outlives the session.
+task's output file. Every landing records its `VERDICT:` line as it exits, on the host it ran
+on, and the record outlives the session. The probe reads daniel-box's record and
+daniel-server's in one call, and each row names the host that recorded it. Exit 1 means
+neither host has a record. Exit 75 with a `note:` line means one host did not answer: that is
+no answer, so run it again.
 
 The landing runs outside the caller's process tree, so a Bash call killed at its time limit does
 not kill it. Started from a systemd user unit, such as a
@@ -147,7 +151,7 @@ merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `lan
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
 | `deferred` | The landing gave up waiting. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first, then re-run. With cause `gate-unreadable` or `gate-stale`, the health gate could not read its store or its tree was older than origin/master, so the deploy went ungraded: re-run `land.sh`. |
 | `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command, the host's timer is not armed yet, or its next fire is more than 45 minutes away. Start the updater on that host, then re-run the same `land.sh` command: its first query finds the host settled. |
-| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. When it names landing code older than master's, re-run the same command with `--fresh`. |
+| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. When it names landing code older than master's, the landing already re-ran from a fresh checkout and master moved again: re-run the same command. |
 | `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master`, dispatch `promote` for the tip once CI is green, and re-run. When a red commit sits between the merge commit and a green one, dispatch `promote` for the tip with the `gh workflow run promote.yml` command it prints. `promote` refuses a commit without green CI, so no route skips CI. |
 | `unbuilt` | A host the landing would defer on has no package published at or after the merge, and the builder reports a failing reason, so no updater fire can apply it. Read `uv run python scripts/diagnostics/probe.py builder`, fix the builder, then re-run the same `land.sh` command. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
@@ -156,8 +160,9 @@ merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `lan
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
-operator clears it, or once a red master CI goes green, run `cc-wait landing-clear` in the
-background and re-run the same `land.sh` command when it ends 0. It ends 1 as
+operator clears it, once a red master CI goes green, or once a live serial landing ends, run
+`cc-wait landing-clear` in the background and re-run the same `land.sh` command when it ends
+0. `probe.py landing` names the same blockers and exits 1 while one holds. It ends 1 as
 `gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A

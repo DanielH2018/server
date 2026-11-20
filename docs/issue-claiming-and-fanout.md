@@ -181,6 +181,14 @@ evidence would stop `reap` releasing any claim. The main worktree is never held 
 every session tree sits under it, sessions also run in it, and its branch is `master`, which
 no claim may name.
 
+A claim names a branch, in either session form: `worktree-<name>` from `EnterWorktree` or
+`claude/<name>` from the desktop app (`scripts/lib/worktree_owner.py:SESSION_BRANCH_PREFIXES`).
+The pruner's branch sweep deletes an orphan branch of either form once its work is on
+`origin/master`. It keeps a branch that any open claim names, or that an open PR has as its
+head, and it keeps every landed branch when it cannot read the claims or the open PRs
+(`scripts/dev/prune_worktrees.py:judge_branches`). A stale claim therefore holds its branch
+until `reap` releases the claim.
+
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
 even if its lock owner is dead. That case is the 2026-09-05 incident: the container restarted,
 killed 14 agents mid-work, and every worktree kept its uncommitted edits so each session was
@@ -197,7 +205,7 @@ question — is this worktree done with — is a question that module already an
 A claim on another repo's register is judged against that repo's worktrees. With
 `--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout
 and merges against its `origin/main`, through the checkout table `REGISTER_CHECKOUTS` in
-`scripts/dev/findings_lib/boundaries.py`. A repo missing from that table makes `claim`,
+`scripts/dev/fanout_lib/target.py`. A repo missing from that table makes `claim`,
 `claims`, `reap` and `next` exit 2. Against this repo's worktrees, every claim on it would
 name a branch nothing here has checked out, so each would read as stale.
 
@@ -554,6 +562,15 @@ reading a host whose report file went with the worktree. Once every batch is rem
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
 
+`clean` runs each batch's leg on the batch's host in one ssh call
+(`scripts/dev/fanout_lib/clean.py:remote_clean_command`). The leg fetches master, archives
+`origin/master`'s `scripts/` into a temporary directory, runs `fanout.py place clean-one` from
+that snapshot and removes the directory. So the code that judges a batch is master's on both
+hosts, whatever commit the host's primary checkout stands at. Only daniel-box has
+`homelab-checkout-sync`, and daniel-server's primary checkout lags master by hundreds of
+commits. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
+no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
+
 ### A batch whose landing conflicts with master
 
 A review batch's landing ends `VERDICT: merge-conflict` when master moved under its PR. That
@@ -824,7 +841,8 @@ table names its own.
 - The run manifests are in `~/.claude/fanout/retired/` on daniel-box. Each names its
   orchestrator branch, its batches and each batch's host.
 - The verdict log is `~/.local/state/homelab/landing-verdicts.jsonl`, one per host.
-  `probe.py landing-verdicts <pr>` reads the log of the host it runs on. A batch that
+  On the day of the run, `probe.py landing-verdicts <pr>` read only the log of the host it
+  ran on. A batch that
   lands its own draft on daniel-server writes there, so daniel-box's log holds no row for
   [#9450], [#9461] or [#9475].
 - The review records are in `~/.local/state/fanout-review/` on the batch's host. Each
@@ -964,12 +982,15 @@ The run changed the tooling six times, and each change edited the section it tou
 - **2026-11-19: a batch holds its files while its unit is active or its PR is open.** An
   earlier draft held them until `clean`, which the 21 standing batches of that day would
   have turned into refusals on files nobody was editing.
-- **2026-11-20: a coordinator passes `--fresh` to every `land.sh`.** A coordinator's locked
-  worktree never follows master. In the first two-project run, on 2026-11-19 and
-  2026-11-20, every `land.sh` a sub-coordinator ran from its worktree ended `refused` for
-  landing code older than master's, [#9373](https://github.com/DanielH2018/server/pull/9373)
-  and [#9386](https://github.com/DanielH2018/server/pull/9386) among them, and was run
-  again with `--fresh`.
+- **2026-11-20: a landing from a stale worktree re-runs itself from a fresh checkout.** A
+  coordinator's locked worktree never follows master. In the first two-project run, on
+  2026-11-19 and 2026-11-20, every `land.sh` a sub-coordinator ran from its worktree ended
+  `refused` for landing code older than master's,
+  [#9373](https://github.com/DanielH2018/server/pull/9373) and
+  [#9386](https://github.com/DanielH2018/server/pull/9386) among them, and was run again
+  with `--fresh`. `land.sh` makes that re-run itself, so a coordinator passes no extra flag
+  (`docs/landing.md`, *Before the merge, a stale checkout re-runs the landing from a fresh
+  one without asking*).
 - **2026-11-20: the serial pause runs from the start of the serial PR's landing to its
   verdict.** The rule had the root pause the other projects when a recap named a serial
   PR. #9386 was named at triage, hours before it could land. The root paused the other

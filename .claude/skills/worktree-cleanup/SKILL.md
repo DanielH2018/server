@@ -44,12 +44,27 @@ uv run python scripts/dev/prune_worktrees.py --gc       # the object-store repai
 It applies the same content check (`scripts/lib/worktrees.py:is_merged`), so it collects
 exactly what `ExitWorktree` refused.
 
-**`--prune` also deletes the orphan `worktree-*` branches** — the ones no worktree holds whose
-content is already on `origin/master` (#2430). Removing a worktree leaves its branch, and
-roughly 249 had accumulated by 2026-09-24. Report-only runs count them; the containment check
-is the same ladder, minus the forge lookup (`scripts/dev/prune_worktrees.py:landed_orphan_branches`).
-The sweep lists `worktree-*` only (`scripts/dev/prune_worktrees.py:BRANCH_PREFIX`). A desktop-app
-session's branch is `claude/<name>`, so `--prune` removes its worktree and leaves its branch.
+**`--prune` also deletes the orphan session branches** (#2430). Removing a worktree leaves its
+branch, and roughly 249 had accumulated by 2026-09-24. A session branch is `worktree-<name>`
+from `EnterWorktree` or `claude/<name>` from the desktop app
+(`scripts/lib/worktree_owner.py:SESSION_BRANCH_PREFIXES`), and the sweep touches no other
+branch. It deletes a local branch only when all four hold
+(`scripts/dev/prune_worktrees.py:judge_branches`):
+
+- no worktree holds it;
+- its work is on `origin/master` by the same four-layer ladder, the forge layer included, which
+  is what settles a squash-merged branch master has since drifted from;
+- no open PR has it as its head;
+- no claim in the findings register names it, stale claims included.
+
+A read that fails keeps the branch
+(`scripts/dev/tests/test_prune_worktrees_branches.py::test_a_landed_orphan_a_register_names_or_cannot_be_read_for_is_kept`).
+The sweep never deletes a remote branch. To see what a sweep would delete and why, with a
+count of the branches it keeps under each reason, run `--check` with no branch:
+
+```bash
+uv run python scripts/dev/prune_worktrees.py --check
+```
 
 **A prune also repairs the shared object store.** Removing a worktree makes its branch's objects
 unreachable, and `git gc --auto` only runs once loose objects pass 6700 or packs pass 50 — so the

@@ -100,9 +100,9 @@ in `.claude/rules/python-layout.md`, and "Never print a secret value" in
 - **A landing that merges and then ends `refused` graded nothing.** It happens when a
   landing module changes on master mid-landing. Re-run `land.sh --pr <n> --fresh
   --detach` for the verdict.
-- **A landing refuses a checkout whose landing code is older than master's.** It refuses
-  before it merges, so the PR stays open, and a fix can still go onto its branch. Re-run
-  the same command with `--fresh`.
+- **A landing from a checkout whose landing code is older than master's re-runs itself.**
+  It re-runs from a fresh checkout of `origin/master` before it merges, with no second
+  command.
 - **Check a corrected count against what renders, not what the template holds.** #8817
   first wrote "the three docker-proxy services". The third renders only under
   `has_code_server`, which is `false`. Name the members rather than restating a count,

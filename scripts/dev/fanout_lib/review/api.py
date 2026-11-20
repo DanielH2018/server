@@ -10,7 +10,8 @@ imports any other module here.
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
-from dev.fanout_lib.review.review import STATE_DIR, Pipeline
+from dev.fanout_lib.review.batch_run import STATE_DIR
+from dev.fanout_lib.review.review import Pipeline
 from dev.fanout_lib.review.review_land import (
     LAND_SH,
     MERGE_CONFLICT,
