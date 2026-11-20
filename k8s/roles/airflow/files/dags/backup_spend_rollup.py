@@ -13,7 +13,12 @@ from airflow.sdk import Asset, dag, task
 from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import backup_spend as bs
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 from kubernetes.client import models as k8s
 
 WAREHOUSE_CONN = "warehouse"
@@ -73,8 +78,12 @@ def backup_spend_rollup():
         finally:
             conn.close()
         problems = bs.quality_problems(day, rows)
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "backup_spend_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 

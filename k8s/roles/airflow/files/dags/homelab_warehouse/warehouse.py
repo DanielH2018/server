@@ -10,8 +10,8 @@ Typical usage example:
     replace_partition(conn, "prom.cpu_temp_daily", "day", day, ["day", "host", "max_c"], rows)
 """
 
-from collections.abc import Iterable, Sequence
-from datetime import date
+from collections.abc import Callable, Iterable, Sequence
+from datetime import date, datetime, timezone
 
 # The role Grafana reads as. The Postgres init script creates it with no grant on any schema;
 # `ensure_schema`, run as the schema's owner, grants it each one.
@@ -19,6 +19,14 @@ READER_ROLE = "warehouse_reader"
 # Postgres refuses two concurrent GRANTs on one catalog row with "tuple concurrently
 # updated", and catchup runs several loads at once, so every load's DDL takes this lock.
 DDL_LOCK_KEY = 74_657_201
+
+# One row per DAG and day whose check passed, which the freshness DAG reads.
+CHECK_SCHEMA = "meta"
+CHECK_TABLE = f"{CHECK_SCHEMA}.check_log"
+CHECK_DDL = (
+    f"CREATE TABLE IF NOT EXISTS {CHECK_TABLE} (dag_id text NOT NULL, day date NOT NULL, "
+    "checked_at timestamptz NOT NULL, PRIMARY KEY (dag_id, day))",
+)
 
 
 def ensure_schema(cursor, schema: str, ddl: Iterable[str]) -> None:
@@ -115,3 +123,59 @@ def read_partition(
         return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
     finally:
         cursor.close()
+
+
+def record_check(
+    conn, dag_id: str, day: date, checked_at: datetime, placeholder: str = "%s"
+) -> None:
+    """Record that `dag_id`'s check passed for `day`, replacing any earlier record of it."""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            f"DELETE FROM {CHECK_TABLE} WHERE dag_id = {placeholder} AND day = {placeholder}",
+            (dag_id, day),
+        )
+        cursor.execute(
+            f"INSERT INTO {CHECK_TABLE} (dag_id, day, checked_at) "
+            f"VALUES ({placeholder}, {placeholder}, {placeholder})",
+            (dag_id, day, checked_at),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+
+
+def finish_check(
+    connect: Callable, dag_id: str, day: date, problems: Sequence[str]
+) -> None:
+    """End a check task: fail it on any problem, or record that the day passed.
+
+    The record is what `warehouse_freshness` reads, so a check that passes without calling
+    this reads as a missing day.
+
+    Args:
+      connect: Opens a DB-API connection to the warehouse, such as a Postgres hook's
+        `get_conn`. It is called only when the day passed.
+      dag_id: The checked DAG.
+      day: The checked day.
+      problems: The check's findings; empty when the day is trustworthy.
+
+    Raises:
+      ValueError: `problems` is not empty.
+    """
+    if problems:
+        raise ValueError("quality check failed:\n" + "\n".join(problems))
+    conn = connect()
+    try:
+        cursor = conn.cursor()
+        try:
+            ensure_schema(cursor, CHECK_SCHEMA, CHECK_DDL)
+        finally:
+            cursor.close()
+        conn.commit()
+        record_check(conn, dag_id, day, datetime.now(timezone.utc))
+    finally:
+        conn.close()

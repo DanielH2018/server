@@ -103,6 +103,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/dns_history.py') }}": dns_history.py
       "{{ role_file('files/dags/github_daily_rollup.py') }}": github_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/github_history.py') }}": github_history.py
+      "{{ role_file('files/dags/warehouse_freshness.py') }}": warehouse_freshness.py
+      "{{ role_file('files/dags/homelab_warehouse/freshness.py') }}": freshness.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 
@@ -139,3 +141,6 @@ render_secrets:
       # A fine-grained GitHub token, read-only on this repo's Actions, issues, metadata and
       # pull requests. Only github_daily_rollup's load task reads it, by its executor_config.
       GITHUB_TOKEN: airflow_github_token
+      # The Healthchecks.io project ping key. Only warehouse_freshness's task reads it, by its
+      # executor_config, to ping the airflow-warehouse-fresh slug.
+      HC_PING_KEY: healthchecks_ping_key
