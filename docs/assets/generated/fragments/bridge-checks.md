@@ -16,6 +16,7 @@
 | `cloudflare_ips_drift` | `wan_reachable` |  |  |
 | `healthchecks_drift` | `wan_reachable` |  | `healthchecks-io-deadman` |
 | `domain_registration` | `wan_reachable` |  |  |
+| `uptime_robot_monitors` | `wan_reachable` |  | `uptime-robot-monitors` |
 | `b2_storage` | `b2_reachable` | yes | `longhorn-backup-tiering` |
 | `b2_reachable` | is a gate | yes | `longhorn-backup-tiering` |
 | `wan_reachable` | is a gate | yes | `alert-runbooks` |

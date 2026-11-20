@@ -7,16 +7,17 @@ outside the house, which is the one thing neither of the others can do.
 **Nothing here is managed as code.** There is no provisioning task and no Terraform. Every
 monitor was created in the console by hand, and this file is the only record of what they are
 set to. A monitor reconfigured in the console leaves no trace in git. A monitor deleted or
-paused there is what `probe.py uptime-robot` detects, once its API key exists (see *Checking
-the console against this file*).
+paused there pages `UptimeRobotMonitorMissing` within a day (see *Checking the console against
+this file*).
 
 Changing anything below means opening <https://dashboard.uptimerobot.com> and editing it there.
 
 Two checks read the monitor table below. `tests/repo/test_uptime_robot_keywords.py` asserts,
 against the live public endpoint, that each documented keyword rule holds. It is marked `ui`,
 so it runs on demand (`uv run pytest -m ui -k uptime_robot`) and never in CI. It cannot see
-the console. `probe.py uptime-robot` reads the console through the API, and fails when a
-documented id is missing or paused.
+the console. monitor-bridge's `uptime_robot_monitors` check reads the console through the API
+once a day, and pages when a documented id is missing or paused. `probe.py uptime-robot` asks
+the same question on demand.
 
 ## What is configured
 
@@ -89,7 +90,8 @@ returns Authelia's own `{"status":"OK"}`.
 
 **This is the failure the top of this file describes, arriving.** A monitor was deleted, nothing in
 the repo could notice, and two runbooks kept citing it for an unknown number of months. The id
-column in the table above exists so `probe.py uptime-robot` detects the next occurrence.
+column in the table above exists so the `uptime_robot_monitors` check detects the next
+occurrence.
 
 ## Why two monitors
 
@@ -138,24 +140,54 @@ host returns the same `"status":"OK"` beside the session fields.
 
 ## Checking the console against this file
 
-`uv run python scripts/diagnostics/probe.py uptime-robot` lists the account's monitors through
-Uptime Robot's v2 `getMonitors` API. It exits 1 when a documented id no longer exists or is
-paused, and 75 when it could not read the API or got a partial page. A monitor that is down is
-not a failure here, because Uptime Robot pages on that itself. The table above is the oracle:
-`scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and the keyword test reads the same
-rows.
+Two readers ask Uptime Robot's v2 `getMonitors` API whether each monitor in the table above
+exists and is not paused. A monitor that is down is not a failure to either, because Uptime
+Robot pages on that itself.
 
-The probe reads its key from the SOPS key `uptimerobot_api_key` and feeds it to curl on stdin.
-**That key is not in SOPS, and nothing runs the probe on a schedule.** Until both exist, a
-monitor deleted or paused in the console still goes unnoticed, as `803270234` did: the probe
-exits 75 with the decrypt error, and only when someone runs it. #8593 holds both operator steps,
-the key and the daily schedule.
+- **monitor-bridge's `uptime_robot_monitors` check asks once a day and pages.** The check
+  (`k8s/roles/monitor-bridge/files/checks/uptime_robot.py`) caches a success for
+  `UPTIME_ROBOT_PROBE_INTERVAL_S`, a day. It never caches a failure, so a red row asks again
+  every 300-second cycle and clears one cycle after the console is fixed. That rate is far
+  inside the free plan's 10 requests a minute. A missing or paused monitor, a refused request
+  or a partial page turns the row down, and `UptimeRobotMonitorMissing` pages as a warning that
+  names each monitor. The row sits behind the `wan_reachable` gate, so a WAN outage pages once.
+- **`uv run python scripts/diagnostics/probe.py uptime-robot` asks on demand.** It exits 1 when
+  a documented id no longer exists or is paused, and 75 when it could not read the API or got
+  a partial page. It decrypts the key itself, so only the operator can run it.
 
-- **Use the read-only key.** Uptime Robot issues a read-only API key that serves every `get*`
-  method and changes nothing. The account's main key can edit and delete monitors, which this
-  check never needs.
-- **The probe is not scheduled.** It runs on demand, like the keyword test. A daily run with an
-  alert on failure needs the key somewhere an unattended job can read it.
+To read the scheduled check's last verdict, run
+`uv run python scripts/diagnostics/probe.py monitors --checks uptime_robot_monitors`.
+
+### When `UptimeRobotMonitorMissing` fires
+
+1. Read which monitor the page names. `the monitor list` means the API refused the request or
+   returned a partial page, which points at the key or at Uptime Robot, not at a monitor.
+2. Open <https://dashboard.uptimerobot.com>. Resume a paused monitor, or re-create a deleted
+   one with the target and keyword rule from the table above.
+3. A re-created monitor gets a different id. Change the id in the table above, in
+   `monitor_bridge_uptime_robot_monitors` (`k8s/roles/monitor-bridge/defaults/main.yml`) and in
+   every runbook that cites it, in one PR.
+4. To retire a monitor on purpose, remove its row from the table and from that list in one PR.
+
+### The oracle and its copy
+
+The table above is the oracle. `scripts/diagnostics/probe_lib/uptime_robot.py` parses it, and
+the keyword test reads the same rows. The bridge pod carries no checkout, so it reads the ids
+and names from `monitor_bridge_uptime_robot_monitors`, rendered into its environment.
+`k8s/roles/monitor-bridge/tests/test_check_uptime_robot.py::test_the_rendered_monitor_list_is_the_docs_table`
+fails when that list and the table differ.
+
+### The key
+
+Both readers use the SOPS key `uptimerobot_api_key`. The bridge reads it from a file mounted
+from the `monitor-bridge-credentials` Secret and sends it in the POST body, and the probe feeds
+it to curl on stdin, so it reaches neither a URL nor argv.
+
+**It is the read-only key.** Uptime Robot issues a read-only API key (Dashboard → Integrations
+& API → API → Read-Only API Key) that serves every `get*` method and changes nothing. The
+account's main key can edit and delete monitors, which neither reader needs. To rotate it,
+follow `docs/secret-rotation.md`: `sops set` the value, run `cluster_vars.py write`
+(**operator-only**), and land the PR, which rolls monitor-bridge.
 
 Managing the monitors as code is a further step that nothing here takes. It would mean a
 declared monitor list and a reconcile script that writes to the console, which needs the main
