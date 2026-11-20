@@ -20,13 +20,17 @@ from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.worktree_testing import ignore_foreign_slice_holds
 from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
+    COORDINATOR_LOCK,
     FOREIGN_UID,
     KEEP,
     REMOVABLE,
     VERDICT_CACHE,
     Worktree,
     classify,
+    coordinator_project,
+    has_live_session,
     held_by_readable_process,
+    lock_is_live,
     merged_layer,
     primary_checkout,
     processes_using,
@@ -513,3 +517,37 @@ def test_the_content_check_still_finds_a_squash_merged_branch(tmp_path):
     )
 
     assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "content"
+
+
+def _project_tree(path):
+    reason = f"{COORDINATOR_LOCK}Backups"
+    return Worktree(str(path), "abc", "claude/backups", locked=True, lock_reason=reason)
+
+
+def test_a_coordinator_project_with_no_process_in_its_tree_is_flagged(tmp_path):
+    # `lock_is_live` reads the same lock as live: its reason names no pid.
+    assert lock_is_live(_project_tree(tmp_path))
+
+    assert not has_live_session(_project_tree(tmp_path))
+
+
+def test_a_coordinator_project_an_idle_process_stands_in_is_clean(tmp_path):
+    with _sleeper(cwd=tmp_path):
+        assert has_live_session(_project_tree(tmp_path))
+
+
+def test_any_other_lock_is_judged_by_its_own_reason(tmp_path):
+    held = Worktree(
+        str(tmp_path), "abc", "b", locked=True, lock_reason=_live_lock_reason()
+    )
+    gone = Worktree(
+        str(tmp_path),
+        "abc",
+        "b",
+        locked=True,
+        lock_reason=LIVE_LOCK.format(pid=1, start=0),
+    )
+
+    assert has_live_session(held, in_use=lambda path: [])
+    assert not has_live_session(gone, in_use=lambda path: [(1, "cwd")])
+    assert coordinator_project(held) == ""

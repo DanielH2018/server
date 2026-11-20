@@ -13,7 +13,8 @@ import re
 import pytest
 from _helpers import REPO
 from _setup_render import render_component_text
-from dev.fanout_lib.notify import PAGED_STATES, alert_unit
+from dev.fanout_lib.coordinators import Project, alert_name
+from dev.fanout_lib.notify import ALERT_STATES, NO_COORDINATOR, alert_unit
 from lib import yaml_fast
 
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
@@ -34,12 +35,20 @@ def rule_pattern(rendered: str) -> re.Pattern:
     return re.compile(found.group(1))
 
 
-@pytest.mark.parametrize("state", PAGED_STATES)
+@pytest.mark.parametrize("state", ALERT_STATES)
 @pytest.mark.parametrize(
     "unit", ["fanout-4602", "fanout-1345-1386", "fanout-dotfiles-763"]
 )
 def test_the_rule_admits_every_page_notify_starts(unit, state) -> None:
     assert rule_pattern(rule()).search(alert_unit(unit, state))
+
+
+@pytest.mark.parametrize(
+    "worktree", ["backups-1a2b3c", "claude+fix the--thing", "bridge-cse_01.x", "+"]
+)
+def test_the_rule_admits_the_page_for_a_project_with_no_coordinator(worktree) -> None:
+    project = Project("Backups", "claude/b", f"/w/{worktree}", live=False)
+    assert rule_pattern(rule()).search(alert_unit(alert_name(project), NO_COORDINATOR))
 
 
 @pytest.mark.parametrize(

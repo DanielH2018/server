@@ -1,8 +1,9 @@
 # Shipped by the claude-code component. A fan-out batch that stops without finishing starts an
 # instance named by its unit, through polkit (50-claude-fanout-alert.rules). The fan-out tooling
-# names the unit, so its name is fixed.
+# names the unit, so its name is fixed. The server lander starts a `:no-coordinator` instance,
+# named for a coordinator project's worktree, when that project's session is gone.
 [Unit]
-Description=Page Discord that fan-out batch %i stopped without finishing
+Description=Page Discord that fan-out work %i stopped without finishing
 After=homelab-secrets.service
 Wants=homelab-secrets.service
 
@@ -21,7 +22,7 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
   --variable 'instance=%i' \
   --variable 'host=%H' \
   --variable 'webhook@%d/discord_webhook' \
-  --expand-data '{"content":"{{instance:json}}: a fan-out batch on {{host:json}} stopped without finishing, and no session may be watching it. Read the batch with `fanout.py place status <run-id>`, or its log with `journalctl --user -u <unit>` as the account that launched it. Failed at {{failed_at:trim:json}}."}' \
+  --expand-data '{"content":"{{instance:json}}: fan-out work on {{host:json}} stopped without finishing, and no session may be watching it. The state `no-coordinator` names a coordinator project whose session is gone while a batch waits on it: list it with `uv run python .claude/hooks/session-health.py --sessions`, then ask the root coordinator to restart its sub-coordinator. Any other state names a batch: read it with `fanout.py place status <run-id>`, or its log with `journalctl --user -u <unit>` as the account that launched it. Failed at {{failed_at:trim:json}}."}' \
   --expand-url '{{webhook:trim}}'
 SyslogLevel=notice
 ExecStartPost=/bin/echo fanout failure alert delivered for %i
