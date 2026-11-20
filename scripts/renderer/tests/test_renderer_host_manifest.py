@@ -284,6 +284,27 @@ def test_reconcile_refuses_malformed_handoffs(handoffs):
         reconcile.parse_manifest(json.dumps({"handoffs": handoffs}))
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "/x",
+        {"path": "/etc/../x"},
+        {"path": "rel"},
+        {"path": "/a", "x": 1},
+        {"cron": "a\nb", "user": "u"},
+        {"cron": "", "user": "u"},
+        {"cron_file": "../x"},
+        {"unit": "not a unit"},
+        {"path": "/a", "unit": "a.service"},
+    ],
+)
+def test_reconcile_refuses_a_legacy_entry_of_no_known_kind(entry):
+    reconcile = _reconcile()
+
+    with pytest.raises(reconcile.ManifestError, match="no known kind"):
+        reconcile.parse_manifest(json.dumps({"legacy": [entry]}))
+
+
 def test_a_legacy_when_that_is_no_boolean_is_flagged(hosts):
     root = hosts({"legacy": [{"path": "/x.prom", "when": "'false'"}]})
     with pytest.raises(RenderRefused, match="not a boolean"):
