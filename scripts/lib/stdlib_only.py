@@ -46,7 +46,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from lib import repo_paths, role_installs
-from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES
+from lib.repo_paths import K8S_ROLES, REPO, ROLE_MODULES, SCRIPTS
 
 HOOKS = REPO / ".claude" / "hooks"
 WAIT_SOURCES = REPO / ".claude" / "wait-sources"
@@ -363,8 +363,14 @@ def _scope(path: Path, argv: tuple[str, ...] | None) -> tuple[list[ast.AST], lis
 
 
 def _reach(entry: Path, argv: tuple[str, ...]) -> tuple[set[Path], list[Path]]:
-    """Every file `entry` reaches when run with `argv`, and the `sys.path` its run builds."""
+    """Every file `entry` reaches when run with `argv`, and the `sys.path` its run builds.
+
+    An entry in this checkout starts with `scripts/` after its own directory, because its
+    launcher sets `PYTHONPATH` to it (ADR-0039). A staged copy on a host gets no such root.
+    """
     dirs = [entry.parent.resolve()]
+    if entry.resolve().is_relative_to(REPO):
+        dirs.append(SCRIPTS)
     while True:
         seen: set[Path] = set()
         todo: list[tuple[Path, tuple[str, ...] | None]] = [(entry.resolve(), argv)]
