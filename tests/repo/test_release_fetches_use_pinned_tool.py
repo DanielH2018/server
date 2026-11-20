@@ -4,7 +4,8 @@ The action restores the asset from an actions/cache keyed on the tool, version a
 curls the release only on a cache miss with a retry window that outlasts a release-host outage,
 and checks the digest on every run. Outside it, a step that curls a release download is a
 problem unless `EXEMPT` names its job and the release repo it fetches with the reason, and so is
-a download from any other host, which reads as that host, and so is
+a download from any other host, which reads as that host
+(`_release_fetch_census.py` says which invocations count), and so is
 a third-party installer action. Every exempt fetch is held to the action's own cache, retry and
 digest shape. A script a step runs is out of scope: the `a-downloading-script-runs-after-its-cache`
 row of the workflow-row table holds its downloads to a cache.
@@ -17,27 +18,13 @@ import re
 
 import pytest
 from _helpers import REPO
+from _release_fetch_census import UNRESOLVED, release_fetches
 from homelab_tool_fetch import TOOL_RETRY_WINDOW_S
 from lib import yaml_fast
 
 ACTION = ".github/actions/pinned-tool/action.yml"
 USES = "$/.github/actions/pinned-tool"
-# A path segment; a `${{ … }}` expression counts as one, spaces and all.
-SEGMENT = r"(?:\$\{\{[^}]*\}\}|[^\s\"'/])+"
-RELEASE = re.compile(
-    rf"github\.com/({SEGMENT}(?:/{SEGMENT})?)/releases/(?:latest/)?download\b"
-)
-# The repo a fetch whose text names no literal repo reads as; no EXEMPT row can name it.
-UNRESOLVED = "<no literal repo>"
 FETCH = re.compile(r"(?:^|[\s;&|(`])(?:curl|wget)\s|\bgh release download\b", re.M)
-GH_RELEASE = re.compile(r"\bgh release download\b[^\n]*")
-# A literal repo after -R or --repo; an invocation without one reads as UNRESOLVED.
-GH_REPO = re.compile(r"(?:-R|--repo)[ =][\"']?([\w.-]+/[\w.-]+)[\"']?(?=[\s;&|)]|$)")
-# A line that starts a curl writing a file, or a wget; a piped `| curl` is an API call.
-DOWNLOAD = re.compile(
-    r"^\s*(?:wget\s|curl\s(?:.*\s)?(?:-[a-zA-Z]*[oO]|--output|--remote-name)\b)", re.M
-)
-HOST = re.compile(r"https?://([^/\s\"']+)")
 RETRY = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 INSTALLER = re.compile(r"setup-|install|/action@|-action@")
 
@@ -115,39 +102,6 @@ def _action_steps() -> list[dict]:
     return yaml_fast.safe_load((REPO / ACTION).read_text(encoding="utf-8"))["runs"][
         "steps"
     ]
-
-
-def _fetched_repos(step: dict, context: str) -> set[str]:
-    """The release repos a step's curl, wget or `gh release download` fetches from.
-
-    A step naming no release URL itself reads the URL its job or workflow env holds. A
-    download from anywhere else reads as the host it names.
-    """
-    run = str(step.get("run", ""))
-    if not FETCH.search(run):
-        return set()
-    own = set(RELEASE.findall(run + str(step.get("env") or "")))
-    gh = {
-        m[1] if (m := GH_REPO.search(c)) else UNRESOLVED
-        for c in GH_RELEASE.findall(run)
-    }
-    repos = own | gh or set(RELEASE.findall(context))
-    if not repos and DOWNLOAD.search(run.replace("\\\n", " ")):
-        repos = set(HOST.findall(run)) or {UNRESOLVED}
-    return {UNRESOLVED if "$" in r or "{" in r else r for r in repos}
-
-
-def release_fetches(sources: dict[str, dict]) -> set[tuple[str, str, str]]:
-    """Every (file, job, release repo) a step outside pinned-tool fetches inline."""
-    return {
-        (name, job_name, repo)
-        for name, workflow in sources.items()
-        for job_name, job in (workflow.get("jobs") or {}).items()
-        for step in job.get("steps") or []
-        for repo in _fetched_repos(
-            step, str(workflow.get("env") or "") + str(job.get("env") or "")
-        )
-    }
 
 
 def installer_uses(sources: dict[str, dict]) -> set[str]:
@@ -355,6 +309,14 @@ def test_an_inline_fetch_beside_an_exempt_one_is_flagged(run, repo):
         ),
         ("wget -q https://get.helm.sh/helm.tgz", "get.helm.sh"),
         ('curl -fsSLo f "$URL"', UNRESOLVED),
+        (
+            "curl -fsSL https://get.helm.sh/h.tgz | tar -xz -C /usr/local/bin",
+            "get.helm.sh",
+        ),
+        ("curl -fsSL https://get.helm.sh/h.tgz > /tmp/h.tgz", "get.helm.sh"),
+        ("timeout 60 curl -fsSLo /tmp/k https://dl.k8s.io/k", "dl.k8s.io"),
+        ("if curl -fsSLo /tmp/k https://dl.k8s.io/k; then true; fi", "dl.k8s.io"),
+        ('u=https://dl.k8s.io/k\ncurl -fsSLo f "$u"', "dl.k8s.io"),
     ],
 )
 def test_a_download_from_another_host_is_flagged(run, host):
@@ -380,6 +342,27 @@ def test_a_curl_that_downloads_nothing_is_not_a_fetch(run):
         {"run": run + "\n"}
     )
     assert release_fetches(sources) - set(EXEMPT) == set()
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [{"run": "curl -fsSLo /tmp/k https://dl.k8s.io/k\n"}],
+        [
+            {
+                "run": 'curl -fsSLo a "${GITLEAKS_URL}checksums.txt"\n'
+                "curl -fsSLo /tmp/k https://dl.k8s.io/k\n"
+            }
+        ],
+    ],
+    ids=["own step", "beside the gitleaks curl"],
+)
+def test_a_download_in_a_job_whose_env_names_a_release_is_flagged(steps):
+    sources = copy.deepcopy(_sources())
+    sources["promote.yml"]["jobs"]["render"]["steps"].extend(steps)
+    assert release_fetches(sources) - set(EXEMPT) == {
+        ("promote.yml", "render", "dl.k8s.io")
+    }
 
 
 def test_an_installer_action_is_flagged():
