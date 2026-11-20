@@ -245,25 +245,8 @@ keep_tree_evidence() {
   } >>"$FAILURE_LOG" 2>/dev/null || return 0
 }
 
-# prepare_tree SHA -- leave $TREE checked out at SHA, holding no untracked or ignored file.
-#
-# `clean -ffdx` is the point: -x removes ignored files too, and a role directory that only
-# ignored files keep alive is what a filesystem walker reads as a role git does not have. The
-# double -f also removes a nested repository. The worktree is locked so that no
-# `git worktree prune` drops its registration, and `add -f -f` re-adds one whose directory went
-# missing while its registration stayed locked.
-#
-# A tree git no longer recognises is removed and added again; that is the only path that
-# deletes it.
-prepare_tree() {
-  if ! git -C "$TREE" rev-parse --git-dir >/dev/null 2>&1; then
-    rm -rf -- "$TREE"
-    git -C "$REPO" worktree add -f -f --detach "$TREE" "$1" >/dev/null 2>&1 || return 1
-    git -C "$REPO" worktree lock --reason "docs-refresh's own tree" "$TREE" >/dev/null 2>&1
-  fi
-  git -C "$TREE" checkout --quiet --force --detach "$1" || return 1
-  git -C "$TREE" clean -ffdxq -e /.venv
-}
+{% from 'cron-worktree.j2' import prepare_tree_function with context %}
+{{ prepare_tree_function('docs-refresh') }}
 
 # Every porcelain line but a fully staged one, flattened and capped for the alert: an untracked
 # file, or a tracked one modified and left unstaged.
