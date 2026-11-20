@@ -144,8 +144,8 @@ def _pytest_job() -> dict:
     return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest"]
 
 
-def _prove_job() -> dict:
-    return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["prove"]
+def _plan_job() -> dict:
+    return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest_plan"]
 
 
 def test_a_run_with_no_plan_starts_every_leg_the_split_fills():
@@ -184,8 +184,8 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
 
 def test_every_leg_splits_by_the_count_the_plan_and_the_fallback_use():
     """A literal `--of 4` beside a six-leg matrix silently drops or double-runs part of the
-    suite, and every leg still reports green. The legs and `prove`'s plan take the default."""
-    steps = _pytest_job()["steps"] + _prove_job()["steps"]
+    suite, and every leg still reports green. The legs and the plan take the default."""
+    steps = _pytest_job()["steps"] + _plan_job()["steps"]
     runs = [
         str(s.get("run", "")) for s in steps if "pytest_shard.py" in str(s.get("run"))
     ]

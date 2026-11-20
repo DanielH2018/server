@@ -54,6 +54,7 @@ CI_GATE_NEEDS_JOBS = frozenset(
     {
         "hooks (lint + validate + secrets + docs)",
         "PR gates (cross-plane order + cluster pins)",
+        "plan the pytest legs",
         "pytest (shard 1)",
         "pytest (shard 2)",
         "pytest (shard 3)",
@@ -218,14 +219,14 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     skipped job passes only when `prove` succeeded and every dependent skipped: each dependent
     skips only on `needs.prove.outputs.proven == 'true'` or a cancelled run, so a skip means
     `proven` was true, and a check-run cannot show that output itself. `prove` is skipped on a
-    dispatch and on a draft pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
+    run that is neither a push nor a labelled pull request. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
     build had no work for it. A skipped matrix job arrives as one check-run under its
     `CI_SKIPPED_MATRIX_JOBS` name, and counts as each of its legs skipped.
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
-    conclusion decides it. A pull request's run starts only the `pytest` legs `prove` planned.
+    conclusion decides it. A run starts only the `pytest` legs `pytest_plan` planned.
     The legs share one `if:` and start together, so once one leg has run, a leg with no run
     of its own was not planned and is left out, as the gate's aggregate result leaves it out.
     """

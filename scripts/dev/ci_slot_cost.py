@@ -32,8 +32,8 @@ full block instead of its line. `--pull-requests` reads green `pull_request` run
 AN EMPTY LEG is one whose `Run the test suite` step concluded `skipped`: the selection packed
 nothing into it, so it ran the checkout, the setup and the select step, then ended green. The
 API stamps a skipped step with equal start and end times, so its span counts in no leg's setup.
-A pull request's run starts only the legs `prove` planned, so its one empty leg is the leg a
-selection of no modules still starts. A push run starts every leg, and its spare legs run
+A run starts only the legs `pytest_plan` planned, so its one empty leg is the leg a selection
+of no modules still starts. A run whose plan failed starts every leg, and its spare legs run
 empty.
 """
 

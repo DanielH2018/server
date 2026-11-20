@@ -68,13 +68,13 @@ few legs as keep each no heavier than a full sweep's leg. A push to master passe
 ancestor whose CI passed as REF. A dispatch passes no REF and runs the whole census, as does a
 push with no such ancestor in reach. `affected_lib/table.py` has the rule and what it can miss.
 
-A PULL REQUEST STARTS ONLY THE LEGS ITS SELECTION NEEDS. GitHub fixes a matrix before any of
-its legs runs, so CI's `prove` job runs `--plan --changed-since HEAD^1` and the `pytest` matrix
-is the JSON list of leg numbers that prints. The plan always holds leg 1, because GitHub fails
-a job whose matrix is empty, so a selection of no modules runs one leg with an empty list. A
-push's legs are not planned: each of the `CI_LEGS` legs selects for itself, and a leg past
-the selection's count gets an empty list, on which CI skips every later step. `--plan` packs
-nothing, so it runs on the runner's own `python3` before any setup step.
+A RUN STARTS ONLY THE LEGS ITS SELECTION NEEDS. GitHub fixes a matrix before any of its legs
+runs, so CI's `pytest_plan` job runs `--plan --changed-since REF` with the legs' own REF, and
+the `pytest` matrix is the JSON list of leg numbers it prints. The plan always holds leg 1,
+because GitHub fails a job whose matrix is empty, so a selection of no modules runs one leg
+with an empty list, on which CI skips every later step. A run with no plan starts all
+`CI_LEGS` legs. `--plan` packs nothing, so it runs on the runner's own `python3` with no setup
+step.
 
 THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
 zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
@@ -135,7 +135,7 @@ from dev.shard_weight_gate import (
 )
 
 # How many legs CI's `pytest` matrix splits a full census across. ci.yml's matrix falls back
-# to every one of them when `prove` published no plan.
+# to every one of them when `pytest_plan` published no plan.
 # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
 CI_LEGS = 6
 

@@ -68,13 +68,13 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 24 jobs. A concurrent master sweep therefore delays
+  # jobs at once, and a full sweep runs 25 jobs. A concurrent master sweep therefore delays
   # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: a full sweep runs 24 jobs against a pool of 20.
+  # of the pool, not the group key: a full sweep runs 25 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -102,26 +102,18 @@ jobs:
   # status, a token without access and a failed lookup, is `proven=false`, and the run proceeds
   # in full as it did before. The script exits 0 either way.
   #
-  # The job runs on a push and on a ready pull request. On a dispatch it is skipped, its
-  # output is empty, and every dependent runs. A dispatch, a merge_group run and an unlabelled
-  # PR run are never proven. Nothing here is push-only except this job, so there is no
-  # push-only job to keep running.
+  # The job runs on a push, and on a pull request that carries the `landing-batch` label. On
+  # every other event it is skipped, its output is empty, and every dependent runs: a
+  # dispatch, a merge_group run and an unlabelled PR run are never proven. Nothing here is
+  # push-only except this job, so there is no push-only job to keep running.
   #
   # A landing batch tests up to four PRs stacked on master in one run, and that run records a
   # tested tree on each PR's head (`docs/ci-throughput.md`, slice B3). The landing then labels
   # each PR and marks it ready. The run that starts asks `tested_tree.py prove-head` whether
-  # the head carries a record, and skips as a proven push does. The label decides whether the
-  # proof step runs, and a labelled head with no record runs in full. A fork's PR is never
-  # proven, because its token cannot have written the record.
-  #
-  # On a pull request the job also plans the `pytest` legs. GitHub fixes a matrix before any
-  # leg runs, so the legs a selection does not need can be left unstarted only by a job ahead
-  # of them. `pytest_shard.py --plan` runs the leg's own selection once and publishes the leg
-  # numbers it fills as `legs`. This job is the planner because `pytest` already waits for it.
-  # Every PR run waits for this job then, about 10s plus its queue wait: off the run's
-  # critical path, where `hooks` and the host packages run minutes longer than a selected leg.
-  # On 20 PR runs the legs a selection left empty held 1046 slot-seconds, against about 530
-  # for a planning step on each run.
+  # the head carries a record, and skips as a proven push does. The label only decides
+  # whether this job takes a runner: an unlabelled PR run pays nothing for the proof, and a
+  # labelled head with no record runs in full. A fork's PR is never proven, because its
+  # token cannot have written the record.
   #
   # The `prek` gate stays green on the proven path because a `skipped` dependency counts as a
   # pass only when this job succeeded and said `proven=true`. checkout-sync's CI gate and
@@ -150,7 +142,9 @@ jobs:
     if: >-
       github.event_name == 'push'
       || (github.event_name == 'pull_request'
-      && github.event.pull_request.draft != true)
+      && contains(github.event.pull_request.labels.*.name, 'landing-batch')
+      && github.event.pull_request.draft != true
+      && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-26.04
     timeout-minutes: 2
     # `checks: read` is for the green-base walk, which reads each ancestor's check-runs.
@@ -160,24 +154,16 @@ jobs:
       pull-requests: read
       statuses: read
     # `base` is the newest ancestor whose gate passed, for a push whose tree is not proven:
-    # the `pytest` legs select against it. It is empty on every other answer. `legs` is the
-    # JSON list of `pytest` legs an unproven PR run starts, and empty on every other run.
+    # the `pytest` legs select against it. It is empty on every other answer.
     outputs:
       proven: ${{ steps.prove.outputs.proven }}
       base: ${{ steps.prove.outputs.base }}
-      legs: ${{ steps.plan.outputs.legs }}
     steps:
-      # A pull request's plan diffs the merge commit against its first parent.
       - uses: actions/checkout@v7.0.1
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
           persist-credentials: false
       - name: Compare the pushed tree with the tree a green PR run recorded
         id: prove
-        if: >-
-          github.event_name == 'push'
-          || (contains(github.event.pull_request.labels.*.name, 'landing-batch')
-          && github.event.pull_request.head.repo.full_name == github.repository)
         env:
           PYTHONPATH: scripts
           GITHUB_TOKEN: ${{ github.token }}
@@ -190,12 +176,6 @@ jobs:
           else
             python3 scripts/dev/tested_tree.py prove-head --repo "$GITHUB_REPOSITORY" --head "$PR_HEAD"
           fi
-      - name: Plan the pytest legs this pull request needs
-        id: plan
-        if: github.event_name == 'pull_request' && steps.prove.outputs.proven != 'true'
-        env:
-          PYTHONPATH: scripts
-        run: python3 scripts/dev/pytest_shard.py --plan --changed-since HEAD^1
 
   # The hook sweep is split two ways — `pytest`, and this job for everything else. Neither
   # carries the branch-protection required context; the `prek` gate job at the bottom does,
@@ -540,6 +520,46 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
+  # Plans the `pytest` legs. GitHub fixes a matrix before any of its legs runs, so the legs a
+  # selection does not need can be left unstarted only by a job ahead of them.
+  # `pytest_shard.py --plan` runs the legs' own selection once and publishes the numbers of the
+  # legs it fills as `legs`, and the `pytest` matrix starts those. A pull request diffs its
+  # merge commit against `HEAD^1`, and an unproven push against the green base `prove` names.
+  # A push with no base and a dispatch run no plan step, so `legs` is empty and the matrix
+  # starts every leg, as it does when this job fails.
+  #
+  # Only `pytest` waits for this job. On the 20 pull-request runs measured on 2026-11-20, the
+  # legs a selection left empty held 1046 slot-seconds, about twice what this job costs. The
+  # wait it adds ahead of the legs, about 28s, is off the run's critical path: `hooks` and the
+  # host packages finish minutes after a selected leg. The planner packs nothing, so it runs
+  # on the runner's own `python3` with no setup step.
+  pytest_plan:
+    needs: prove
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: plan the pytest legs
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    outputs:
+      legs: ${{ steps.plan.outputs.legs }}
+    steps:
+      # A pull request diffs against the merge commit's first parent; a push's green base can
+      # be any ancestor.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - name: Plan the legs the selection fills
+        id: plan
+        if: github.event_name == 'pull_request' || needs.prove.outputs.base != ''
+        env:
+          PYTHONPATH: scripts
+          GREEN_BASE: ${{ needs.prove.outputs.base }}
+        run: |
+          set -euo pipefail
+          base=HEAD^1
+          if [ "$GITHUB_EVENT_NAME" = push ]; then base=$GREEN_BASE; fi
+          python3 scripts/dev/pytest_shard.py --plan --changed-since "$base"
+
   # The pytest suite, run as `uv run python -m pytest` with the addopts from pyproject.toml, so a
   # local `uv run pytest` and this job agree about what a test run is. A dispatch runs every module, and so does a push with no green
   # ancestor in reach. A push that has one runs the modules the diff from it can affect, and a
@@ -579,9 +599,9 @@ jobs:
   # This job is the suite's only automated run before a merge, and `land.sh` waits on it
   # through the `prek` gate.
   pytest:
-    needs: prove
+    needs: [prove, pytest_plan]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
-    # No leg count in the name: a pull request's run starts only the legs its plan names.
+    # No leg count in the name: a run starts only the legs its plan names.
     name: pytest (shard ${{ matrix.shard }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -593,15 +613,15 @@ jobs:
       scope: ${{ steps.select.outputs.scope }}
     strategy:
       fail-fast: false
-      # `pytest_shard.CI_LEGS` legs. A pull request's run starts the legs `prove` planned, and
-      # every other run starts all of them through the fallback list, which must name
+      # `pytest_shard.CI_LEGS` legs. A run starts the legs `pytest_plan` published, and a run
+      # with no plan starts all of them through the fallback list, which must name
       # 1..CI_LEGS (`test_pytest_shards_partition_the_suite.py`). The select step passes no
       # `--of`, so each leg splits by `CI_LEGS` too. Changing the count means editing the
       # constant, this list, and `hosts/lib/ci_verdict.py:CI_GATE_NEEDS_JOBS`.
       #
       # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
       # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 24, so every leg's fixed cost also
+      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
@@ -610,7 +630,7 @@ jobs:
       # section prints every worker's finish time, which shows when one group sets the leg's
       # wall.
       matrix:
-        shard: "${{ fromJSON(needs.prove.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}"
+        shard: "${{ fromJSON(needs.pytest_plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}"
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
@@ -627,11 +647,11 @@ jobs:
       # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
       # diff from it is the pull request's own change. `--changed-since` packs only the modules
       # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
-      # (`scripts/dev/affected_lib/table.py` has the rule). `prove`'s plan starts exactly those
+      # (`scripts/dev/affected_lib/table.py` has the rule). `pytest_plan` starts exactly those
       # legs. A leg the selection does not need gets an empty list, writes `count=0`, and every
       # later step skips on it: the leg ends green after the checkout and the setup. That leg
-      # is the one a plan starts for a selection of no modules, or any spare leg of a push run
-      # or of a pull request run whose `prove` failed.
+      # is the one a plan starts for a selection of no modules, or a spare leg of a run whose
+      # plan failed.
       #
       # A push diffs against the base the `prove` job names: the newest ancestor whose gate
       # passed, which is not always the parent (`scripts/dev/tested_tree.py:green_base`). A
@@ -1791,7 +1811,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest_plan, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1831,6 +1851,7 @@ jobs:
           PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
           PR_GATES: ${{ needs.pr_gates.result }}
+          PYTEST_PLAN: ${{ needs.pytest_plan.result }}
           PYTEST: ${{ needs.pytest.result }}
           LOCKFILE: ${{ needs.lockfile.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
@@ -1840,7 +1861,8 @@ jobs:
           HOST_PACKAGES_BOOTSTRAP: ${{ needs.host_packages_bootstrap.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
-          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES" \
+            "pytest-plan=$PYTEST_PLAN pytest=$PYTEST" \
             "lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
@@ -1864,6 +1886,7 @@ jobs:
           need() { local half=$1; shift; "$@" || failed+=("$half=$2"); }
           need hooks ok "$HOOKS"
           need pr-gates ok "$PR_GATES"
+          need pytest-plan ok "$PYTEST_PLAN"
           need pytest ok "$PYTEST"
           need lockfile ok "$LOCKFILE"
           need flux-roundtrip ok "$FLUX_ROUNDTRIP"

@@ -58,15 +58,16 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   changed file is in no row.
 - **The legs.** The selection is packed into as few legs as keep each no heavier than a full
   sweep's leg, out of `pytest_shard.CI_LEGS`. GitHub fixes the leg count before any step
-  runs, so on a pull request the `prove` job plans the legs: `pytest_shard.py --plan` runs
-  the selection once and publishes the leg numbers, and the `pytest` matrix starts only those
+  runs, so the `pytest_plan` job plans the legs first: `pytest_shard.py --plan` runs the
+  selection once and publishes the leg numbers, and the `pytest` matrix starts only those
   (#8944). A selection of no modules starts one leg, because GitHub fails a job whose matrix
-  is empty. That leg gets an empty list and skips every later step. A push run is not
-  planned: it starts every leg, and a leg past the selection's count runs empty.
-  `scripts/dev/ci_slot_cost.py --recent 20 --pull-requests` counts the empty legs.
-  On the 20 pull-request runs measured on 2026-11-20, empty legs held 1046 slot-seconds,
-  about twice what a planning step on every run costs. That step delays every leg by about
-  28s, which does not lengthen the run: `hooks` and the host packages finish minutes after a
+  is empty, and that leg skips every step after its select step. A run with no base, and a
+  run whose plan failed, starts every leg. `scripts/dev/ci_slot_cost.py --recent 20
+  --pull-requests` counts the empty legs.
+- **What the plan costs.** On the 20 pull-request runs measured on 2026-11-20, the empty
+  legs held 1046 slot-seconds, about twice what one planning job on each run costs. Only
+  `pytest` waits for the planning job, which starts its legs about 28s later. That wait does
+  not lengthen the run, because `hooks` and the host packages finish minutes after a
   selected leg.
 - **What a selection gives up.** A module can gain a dependency after its row was recorded.
   A pull request that changes the dependency then leaves the module out, and nothing runs
@@ -328,8 +329,7 @@ B3 lands in four steps, each one exercised before the next:
 1. **A labelled PR run asks the proof (#8703).** `prove` runs on a pull request that
    carries the `landing-batch` label, and `tested_tree.py prove-head` answers whether the
    head carries a tested-tree record. A member's own run then takes two short jobs. The
-   label decides whether `prove` asks. Every ready PR run takes `prove` anyway, to plan its
-   `pytest` legs (#8944).
+   label only decides whether `prove` takes a runner, so an unlabelled PR run pays nothing.
    The question does not compare trees: the tree a pull-request run checks out is the
    merge GitHub built at the PR's last push, and the batch tested a different one. The
    landing merges a head a batch tested only while master is still the commit the batch

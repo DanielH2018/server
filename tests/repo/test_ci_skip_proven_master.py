@@ -50,6 +50,7 @@ BUILD_CONSUMERS = {
 DEPENDENTS = (
     "hooks",
     "pr_gates",
+    "pytest_plan",
     "pytest",
     "lockfile",
     "flux_roundtrip",
@@ -63,6 +64,7 @@ DEPENDENTS = (
 GATE_ENV = (
     "HOOKS",
     "PR_GATES",
+    "PYTEST_PLAN",
     "PYTEST",
     "LOCKFILE",
     "FLUX_ROUNDTRIP",
@@ -113,7 +115,6 @@ def _evaluate(condition: str, event: str, **facts: object) -> bool:
         .replace(QUEUE_BRANCH, str(facts.get("queue", False)))
         .replace("needs.prove.result", repr(facts.get("prove", "skipped")))
         .replace("needs.prove.outputs.proven", repr(facts.get("proven", "")))
-        .replace("steps.prove.outputs.proven", repr(facts.get("step_proven", "")))
         .replace("needs.pytest.outputs.scope", repr(facts.get("scope", "full")))
         .replace("github.event_name", repr(event))
         .replace("!(", "not (")
@@ -129,53 +130,19 @@ def _evaluate(condition: str, event: str, **facts: object) -> bool:
     [
         ("push", {}, True),
         ("pull_request", {"labelled": True}, True),
-        # Every ready PR run plans its pytest legs here.
-        ("pull_request", {}, True),
-        ("pull_request", {"same_repo": False}, True),
-        ("pull_request", {"labelled": True, "draft": True}, False),
-        ("workflow_dispatch", {"labelled": True}, False),
-    ],
-    ids=["push", "labelled", "unlabelled", "fork", "draft", "dispatch"],
-)
-def test_the_prove_job_runs_on_a_push_and_on_a_ready_pr(event, facts, runs):
-    assert _evaluate(_jobs()["prove"]["if"], event, **facts) is runs
-
-
-def _step(step_id: str) -> dict:
-    return next(s for s in _jobs()["prove"]["steps"] if s.get("id") == step_id)
-
-
-@pytest.mark.parametrize(
-    ("event", "facts", "asks"),
-    [
-        ("push", {}, True),
-        ("pull_request", {"labelled": True}, True),
+        # The label keeps an ordinary PR run from waiting on one more runner.
         ("pull_request", {}, False),
+        ("pull_request", {"labelled": True, "draft": True}, False),
         # A fork's token cannot have written the record.
         ("pull_request", {"labelled": True, "same_repo": False}, False),
+        ("workflow_dispatch", {"labelled": True}, False),
     ],
-    ids=["push", "labelled", "unlabelled", "fork"],
+    ids=["push", "labelled", "unlabelled", "draft", "fork", "dispatch"],
 )
-def test_the_proof_asks_on_a_push_and_on_a_labelled_pr_of_this_repository(
-    event, facts, asks
+def test_the_prove_job_runs_on_a_push_and_on_a_labelled_pr_of_this_repository(
+    event, facts, runs
 ):
-    assert _evaluate(_step("prove")["if"], event, **facts) is asks
-
-
-@pytest.mark.parametrize(
-    ("event", "facts", "plans"),
-    [
-        ("pull_request", {}, True),
-        ("pull_request", {"step_proven": "false"}, True),
-        # A proven head starts no leg, so it needs no plan.
-        ("pull_request", {"step_proven": "true"}, False),
-        # A push's legs select for themselves.
-        ("push", {}, False),
-    ],
-    ids=["unasked", "unproven", "proven", "push"],
-)
-def test_an_unproven_pull_request_plans_its_pytest_legs(event, facts, plans):
-    assert _evaluate(_step("plan")["if"], event, **facts) is plans
+    assert _evaluate(_jobs()["prove"]["if"], event, **facts) is runs
 
 
 def _prove_argv(tmp_path, event: str) -> list[str]:
@@ -214,8 +181,7 @@ def test_the_prove_job_reads_statuses_and_publishes_its_answer():
     prove = _jobs()["prove"]
     assert prove["outputs"]["proven"] == "${{ steps.prove.outputs.proven }}"
     assert prove["outputs"]["base"] == "${{ steps.prove.outputs.base }}"
-    assert prove["outputs"]["legs"] == "${{ steps.plan.outputs.legs }}"
-    assert set(prove["outputs"]) == {"proven", "base", "legs"}
+    assert set(prove["outputs"]) == {"proven", "base"}
     assert set(prove["permissions"]) == {
         "checks",
         "contents",
