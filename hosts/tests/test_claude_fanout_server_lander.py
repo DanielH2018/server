@@ -49,7 +49,7 @@ def test_the_unit_runs_the_command_as_the_operator_and_alerts_on_failure():
     unit = _render()
     assert re.search(r"^User=ubuntu$", unit, re.M)
     assert "scripts/dev/fanout.py land-server" in unit
-    assert "OnFailure=claude-fanout-server-lander-alert.service" in unit
+    assert "OnFailure=homelab-alert@%n.service" in unit
 
 
 def test_the_command_runs_in_a_checkout_the_operator_owns_not_the_agents_clone():

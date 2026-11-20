@@ -4,11 +4,7 @@ Documentation=https://github.com/anthropics/claude-code
 # The host opens an outbound connection to claude.ai and does nothing useful without it.
 After=network-online.target
 Wants=network-online.target
-{% if claude_code_rc_alert_unit is defined %}
 OnFailure={{ claude_code_rc_alert_unit }}
-{% else %}
-OnFailure=claude-rc-alert.service
-{% endif %}
 {% if claude_code_user != sys_user %}
 # The runtime directory BindPaths= below exposes is created when the agent's user manager
 # starts. The agent lingers, so logind starts that manager at boot, but nothing orders it
