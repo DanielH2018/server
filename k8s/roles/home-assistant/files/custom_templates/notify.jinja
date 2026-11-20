@@ -1,0 +1,49 @@
+{# Where bedroom_notify sends one alert: `push` (deliver it), `hold` (park it for the arrival
+   digest) or `cancel` (a recovery that removes the parked alert with the same tag).
+
+   The rule: an alert is held only when its caller declares that it can wait for someone to be
+   home. Two classes can wait, `comfort` (how the room feels to a person in it) and `upkeep`
+   (maintenance with no deadline). Every other class pushes while away, and so does an alert with
+   no class or a class this macro does not know, so a new alert reaches the phone until someone
+   decides it can wait. The classes that never wait are `power` (mains, UPS), `safety` (smoke,
+   water, extreme temperature, an open window, intrusion), `alert_chain` (a sensor, bridge or
+   Home Assistant fault that can stop other alerts) and `away_only` (only an absent person can
+   act on it). `pierce` pushes whatever the class.
+
+   Pure (values in, token out); tested in tests/test_notify_macros.py. #}
+{%- macro notify_route(away, alert_class, pierce, recovery) -%}
+{%- set can_wait = (alert_class | string) in ['comfort', 'upkeep'] -%}
+{%- if not (away | bool) or (pierce | bool) or not can_wait -%}
+push
+{%- elif recovery | bool -%}
+cancel
+{%- else -%}
+hold
+{%- endif -%}
+{%- endmacro -%}
+
+{# The held alerts after one `bedroom_held_alert` event, as a JSON object keyed by tag. `held` is
+   the store before the event; anything but a mapping reads as empty. `event` is the event data:
+   `hold` adds or replaces `tag` with its title and message, `cancel` removes `tag`, and `flushed`
+   removes each tag in `tags`. Removing an absent tag changes nothing. Used by
+   sensor.bedroom_held_alerts, which is the store. #}
+{%- macro held_after(held, event) -%}
+{%- set before = held if held is mapping else {} -%}
+{%- set action = event['action'] | default('') -%}
+{%- if action == 'hold' -%}
+{{ dict(before, **{event['tag']: {'title': event['title'], 'message': event['message']}}) | to_json }}
+{%- elif action == 'cancel' -%}
+{{ dict(before.items() | rejectattr('0', 'eq', event['tag'])) | to_json }}
+{%- elif action == 'flushed' -%}
+{{ dict(before.items() | rejectattr('0', 'in', event['tags'])) | to_json }}
+{%- else -%}
+{{ dict(before) | to_json }}
+{%- endif -%}
+{%- endmacro -%}
+
+{# The arrival digest body: one "• <title>: <message>" line per held alert. #}
+{%- macro held_digest(held) -%}
+{%- for alert in (held if held is mapping else {}).values() -%}
+{{ '• ' ~ alert['title'] ~ ': ' ~ alert['message'] }}{{ '\n' if not loop.last }}
+{%- endfor -%}
+{%- endmacro -%}

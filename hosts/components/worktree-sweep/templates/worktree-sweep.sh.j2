@@ -21,8 +21,9 @@
 #
 # A CHECKOUT WITH NO POLICY FILE FAILS THE RUN TOO. Without .claude/prune-worktrees.json the
 # pruner falls back to strict defaults, keeps every fan-out tree and exits 0, which reads as
-# "nothing to remove". The script skips the pruner and exits 66 instead. The usual cause is a
-# primary checkout that nothing fast-forwards: `git pull --ff-only` in it is the repair.
+# "nothing to remove". The script skips the pruner and exits 66 instead. The cause is a
+# primary checkout that homelab-checkout-sync has stopped fast-forwarding: `git pull --ff-only`
+# in it is the repair.
 #
 # THE EXIT CODE REACHES HEALTHCHECKS.IO. The pruner exits 1 when a removal or a
 # branch deletion failed. `$rc` on the ping URL is Healthchecks.io's exit-status

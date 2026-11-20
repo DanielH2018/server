@@ -11,6 +11,7 @@ bedroom_test_scenario:
     - nightlight
     - away
     - arrive
+    - held
     - reset
 # Test-harness speed (script.bedroom_run_scenario): `fast` (~30s, the first option = default) or
 # `real` (production timing). An input_select's first option is its creation default, so this

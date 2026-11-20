@@ -247,7 +247,7 @@ def _referenced_claim_exprs(role_dir: Path, shared_tpl: Path = SHARED_TPL) -> li
     return exprs
 
 
-def _role_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
+def _role_claims(role_dir: Path) -> list[ClaimDecl]:
     """Every claim a role references or declares, de-duplicated by name.
 
     References come first, so the order is the role's own mount order — the order its
@@ -286,14 +286,14 @@ def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:
     return index
 
 
-def claim_names(role_dir: Path, k8s_roles: Path = K8S_ROLES) -> list[str]:
+def claim_names(role_dir: Path) -> list[str]:
     """Every PVC claim a k8s role declares or references, resolved where its defaults allow.
 
     An expression the role's own defaults cannot resolve is returned as written (the catalogue
     reports those as unknown); `gen_role_glance.py` lists the names, and `backup_tier` below
     classifies them.
     """
-    return [claim.name for claim in _role_claims(role_dir, k8s_roles)]
+    return [claim.name for claim in _role_claims(role_dir)]
 
 
 def load_longhorn_tier_lists(
@@ -390,7 +390,7 @@ def claim_tiers(
         claim_classes: `claim_index(k8s_roles)`, built once by the caller; built here if
             not given.
     """
-    claims = _role_claims(role_dir, k8s_roles)
+    claims = _role_claims(role_dir)
     if not claims:
         return []
     if claim_classes is None:

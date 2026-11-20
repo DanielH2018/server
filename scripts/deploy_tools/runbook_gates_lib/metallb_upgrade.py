@@ -42,11 +42,11 @@ from lib.kubectl import DEFAULT_TOOLS, Tools
 RUNBOOK = "docs/archive/host/h1-cluster-config-to-flux.md"
 
 
-def _gate_hold(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_hold(_tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
     return deploy_hold(read_hold)
 
 
-def _gate_nodes(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_nodes(tools: Tools, _read_hold: Callable[[], str | None]) -> list[str]:
     return nodes_not_ready(cluster_doc(CLUSTER, tools, NODES_ARGS))
 
 

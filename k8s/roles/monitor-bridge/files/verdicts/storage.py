@@ -236,3 +236,84 @@ def r2_usage_verdict(
             members,
         )
     return True, msg
+
+
+# How old a weekly backup gets before its prune deletes it, which the B2 lock must stay under
+# (ADR-0041): `k3s_longhorn_weekly_backup_retain` weekly backups. test_check_bucket_locks.py
+# derives it from that default.
+B2_PRUNE_AGE_DAYS = 14
+_PERIOD_DAYS = {"days": 1, "years": 365}
+
+
+def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
+    """(ok, msg) for Object Lock on the B2 bucket Longhorn's weekly tier writes to.
+
+    ADR-0041 records the choice: Object Lock on, a governance-mode default retention shorter than
+    `B2_PRUNE_AGE_DAYS`, and a writer key that cannot bypass governance. Compliance mode is
+    flagged because no key can shorten it.
+
+    Args:
+      bucket: One entry of a `b2_list_buckets` response.
+      capabilities: The capabilities `b2_authorize_account` granted the key, which is the key
+        Longhorn writes with.
+    """
+    name = bucket.get("bucketName") or "the bucket"
+    lock = bucket.get("fileLockConfiguration")
+    if not isinstance(lock, dict):
+        return CheckResult(
+            False,
+            "B2 returned no fileLockConfiguration for %s" % name,
+            ["no lock config"],
+        )
+    if lock.get("isClientAuthorizedToRead") is not True:
+        return CheckResult(
+            False,
+            "the key has no readBucketRetentions, so %s's Object Lock is unreadable"
+            % name,
+            ["lock unreadable"],
+        )
+    value = lock.get("value") or {}
+    if value.get("isFileLockEnabled") is not True:
+        return CheckResult(False, "Object Lock is off on %s" % name, ["lock off"])
+    retention = value.get("defaultRetention") or {}
+    mode = retention.get("mode")
+    period = retention.get("period") or {}
+    duration = period.get("duration")
+    if mode not in ("governance", "compliance") or not duration:
+        return CheckResult(
+            False,
+            "%s has no default retention, so new uploads are not locked" % name,
+            ["no default retention"],
+        )
+    if mode == "compliance":
+        return CheckResult(
+            False,
+            "%s retains in compliance mode, which no key can shorten; ADR-0041 picks governance"
+            % name,
+            ["compliance mode"],
+        )
+    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
+    if (
+        not isinstance(duration, int)
+        or unit_days is None
+        or duration * unit_days >= B2_PRUNE_AGE_DAYS
+    ):
+        return CheckResult(
+            False,
+            "%s retains for %s %s, not less than the %d days the weekly prune waits"
+            % (name, duration, period.get("unit"), B2_PRUNE_AGE_DAYS),
+            ["retention outlasts the prune"],
+        )
+    if "bypassGovernance" in capabilities:
+        return CheckResult(
+            False,
+            "the key Longhorn writes with holds bypassGovernance, so governance mode does "
+            "not bind it",
+            ["key bypasses governance"],
+        )
+    return True, "Object Lock on %s: %s, %s %s" % (
+        name,
+        mode,
+        period.get("duration"),
+        period.get("unit"),
+    )

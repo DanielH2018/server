@@ -56,6 +56,6 @@ def test_a_named_file_and_a_directory_outside_a_cache_are_clean():
         {"path": "/home/ubuntu/.cache/local-sweep/lock"},
         {"path": "/etc/homelab/interim"},
         {"path": "/home/ubuntu/.config/environment.d/90-claude-pytest-cap.conf"},
-        {"unit": "homelab-local-sweep.timer"},
+        {"cron": "local sweep", "user": "ubuntu"},
     ]
     assert cache_directories(legacy) == []

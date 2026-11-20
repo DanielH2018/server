@@ -41,6 +41,8 @@ writes:
     - script.bedroom_run_scenario
   automation.bedroom_away:
     - script.bedroom_run_scenario
+  automation.bedroom_flush_held_notifications:
+    - script.bedroom_run_scenario
   fan.tower_fan:
     - automation.bedroom_fan_startup_reconcile
     - automation.bedroom_tap_dial_control

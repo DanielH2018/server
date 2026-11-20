@@ -207,19 +207,19 @@ def snapshot_not_restorable(name: str, doc) -> list[str]:
 
 
 def _gate_listing(
-    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+    drill_dir: str, _homelab_dir: str, now: float, _snapshot: str, _tools: Tools
 ) -> list[str]:
     return unproven_listing(drill_dir, now)
 
 
 def _gate_token(
-    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+    _drill_dir: str, homelab_dir: str, _now: float, _snapshot: str, _tools: Tools
 ) -> list[str]:
     return missing_token_baseline(homelab_dir)
 
 
 def _gate_snapshot(
-    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+    _drill_dir: str, _homelab_dir: str, _now: float, snapshot: str, tools: Tools
 ) -> list[str]:
     unusable = unusable_snapshot_name(snapshot)
     if unusable:

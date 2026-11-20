@@ -16,11 +16,8 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import (
-    Ordering,
-    prepull_timeouts,
-    prepull_workloads,
-)
+from lib.k8s_roles import role_defaults
+from renderer.renderer_lib.ordering import Ordering
 from renderer.renderer_lib.prepull import SCRIPT, SCRIPT_NAME, prepull_files, targets
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
@@ -283,7 +280,7 @@ def test_a_prepull_timeout_that_is_not_a_literal_duration_is_a_problem(tmp_path,
     defaults = tmp_path / "app" / "defaults"
     defaults.mkdir(parents=True)
     (defaults / "main.yml").write_text(f"flux_prepull_timeout: {value}\n")
-    found, problems = prepull_timeouts(["app"], tmp_path)
+    found, problems = role_defaults(["app"], tmp_path)
     assert found == {}
     assert len(problems) == 1 and problems[0].startswith("app's flux_prepull_timeout")
 
@@ -311,10 +308,10 @@ def test_a_scoped_prepull_naming_a_workload_the_render_lacks_fails():
 
 def test_observability_scopes_its_prepull_to_grafana():
     """The named member: observability names Grafana, and code-server names nothing."""
-    assert prepull_workloads(["code-server", "observability"]) == (
-        {"observability": ("grafana",)},
-        [],
-    )
+    found, problems = role_defaults(["code-server", "observability"])
+    assert problems == []
+    assert found["observability"].prepull_workloads == ("grafana",)
+    assert found["code-server"].prepull_workloads is None
 
 
 @pytest.mark.parametrize(
@@ -332,7 +329,7 @@ def test_a_prepull_scope_that_cannot_apply_is_a_problem(tmp_path, text, problem)
     defaults = tmp_path / "app" / "defaults"
     defaults.mkdir(parents=True)
     (defaults / "main.yml").write_text(text)
-    found, problems = prepull_workloads(["app"], tmp_path)
+    found, problems = role_defaults(["app"], tmp_path)
     assert found == {}
     [line] = problems
     assert problem in line

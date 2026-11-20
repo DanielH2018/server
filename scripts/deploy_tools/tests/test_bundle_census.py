@@ -347,8 +347,7 @@ def test_snapshot_claims_that_are_not_a_literal_list_are_a_problem(tmp_path):
     found, problems = bundle_census.snapshot_tags(["x"], tmp_path)
     assert found == frozenset()
     assert problems == [
-        "could not tell whether x snapshots claims: its k8s_autodeploy_snapshot_pvcs is "
-        "'{{ claims }}', not a literal list"
+        "x's k8s_autodeploy_snapshot_pvcs is '{{ claims }}', not a literal list"
     ]
 
 

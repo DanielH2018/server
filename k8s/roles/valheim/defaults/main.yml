@@ -10,7 +10,7 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.4.1@sha256:f
 
 # The first-boot budget for this server, declared ONCE, as `manifests_rollout_timeout` below.
 # Two readers take it. The renderer sets it as the valheim Kustomization's `timeout`, Flux's
-# health-check wait (C3's per-role fields, `role_fields` in scripts/lib/k8s_roles.py). The
+# health-check wait (C3's per-role fields, `role_defaults` in scripts/lib/k8s_roles.py). The
 # renderer reads only a literal role default, so the value cannot be an include var or a Jinja
 # expression: that would render the 600s default, below the startupProbe's own 60 x 15s.
 # `progressDeadlineSeconds` in

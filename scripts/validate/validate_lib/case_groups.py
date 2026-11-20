@@ -29,7 +29,7 @@ from lib.progress import count_line
 
 from validate.validate_lib import bootstrap_age_case
 from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
-from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
+from validate.validate_lib import conffile_case, repos_case, secrets_case
 
 
 class StderrByThread:
@@ -90,7 +90,6 @@ def groups(cases_class) -> list[tuple[str, Callable]]:
         ("secrets_case", secrets_case.run),
         ("bootstrap_repo_case", bootstrap_repo_case.run),
         ("repos_case", repos_case.run),
-        ("shadow_case", shadow_case.run),
         ("cold_install", cases_class.cold_install),
     ]
 

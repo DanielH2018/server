@@ -1,9 +1,8 @@
 """`homelab-reconcile` asks dpkg and systemd about many items in one command each.
 
-A run reads the owners of every legacy path with one `dpkg -S`, the state of every unit with
-one `systemctl show`, and that of every legacy service with another after the restarts. It
-clears the failed state of every unit step 1 stopped with one `systemctl reset-failed`. These
-tests hold the batching and the cases where one command cannot answer for all of its items.
+A run reads the owners of every legacy path with one `dpkg -S` and the state of every unit with
+one `systemctl show`. It clears the failed state of every unit step 1 stopped with one
+`systemctl reset-failed`. These tests hold the batching and the cases where one command cannot answer for all of its items.
 
 Run: uv run pytest hosts/lib/tests/test_homelab_reconcile_batched_reads.py
 """
@@ -101,7 +100,7 @@ def test_a_run_after_every_legacy_entry_retired_asks_dpkg_nothing(node):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
         node.manifest["legacy"].append({"path": f"/usr/local/bin/{name}"})
-    node.manifest["legacy"] += [{"cron_file": "gc"}, {"unit": "pi-sd-health.timer"}]
+    node.manifest["legacy"].append({"path": "/etc/cron.d/gc"})
     node.state["owned"] = ["/usr/local/bin/owned"]
 
     settled(node)
@@ -116,8 +115,7 @@ def test_a_run_after_every_legacy_entry_retired_asks_dpkg_nothing(node):
 def test_the_first_run_asks_dpkg_once_for_every_legacy_path(node):
     node.manifest["legacy"] += [
         {"path": "/usr/local/bin/stray"},
-        {"cron_file": "gc"},
-        {"unit": "pi-sd-health.timer"},
+        {"path": "/etc/cron.d/gc"},
         {"cron": "pi-sd-health", "user": "ubuntu"},
     ]
 
@@ -129,7 +127,6 @@ def test_the_first_run_asks_dpkg_once_for_every_legacy_path(node):
             "dpkg",
             "-S",
             "/etc/cron.d/gc",
-            "/etc/systemd/system/pi-sd-health.timer",
             "/usr/local/bin/stray",
         ]
     ]
@@ -147,18 +144,6 @@ def test_a_dpkg_that_cannot_answer_leaves_every_legacy_path_in_place(node):
     assert result.returncode == 1
     assert stray.exists()
     assert node.applied()["retired"] == []
-
-
-def legacy_service(node: Node, name: str, active: str) -> None:
-    path = node.root / "etc/systemd/system" / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("[Service]\n")
-    node.state["units"][name] = {
-        "load": "loaded",
-        "active": active,
-        "enabled": "enabled",
-    }
-    node.manifest["legacy"].append({"unit": name})
 
 
 def test_one_reset_failed_clears_every_unit_step_1_stopped_and_none_whose_stop_failed(
@@ -181,37 +166,3 @@ def test_one_reset_failed_clears_every_unit_step_1_stopped_and_none_whose_stop_f
         ["stop", "homelab-c.service"],
         ["reset-failed", "homelab-a.service", "homelab-c.service"],
     ]
-
-
-def test_every_legacy_service_is_read_in_one_show_after_the_restarts(node):
-    node.unit("homelab-a.service", active="active", linked=True)
-    legacy_service(node, "old-a.service", "active")
-    legacy_service(node, "old-b.service", "inactive")
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    argvs = [c["argv"][1:] for c in node.calls("systemctl")]
-    assert [argv for argv in argvs if argv[0] == "is-active"] == []
-    legacy_read = [
-        "show",
-        "-p",
-        "Id,LoadState,ActiveState",
-        "old-a.service",
-        "old-b.service",
-    ]
-    assert argvs.count(legacy_read) == 1
-    assert argvs.index(legacy_read) > argvs.index(["restart", "homelab-a.service"])
-    assert ["stop", "old-b.service"] in node.actions()
-    assert ["stop", "old-a.service"] not in node.actions()
-
-
-def test_a_legacy_service_systemctl_will_not_describe_stays_unretired(node):
-    legacy_service(node, "old-a.service", "inactive")
-    node.state["fail"].append("show old-a.service")
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == []
-    assert node.applied()["retired"] == []

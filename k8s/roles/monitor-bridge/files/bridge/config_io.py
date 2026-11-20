@@ -45,6 +45,7 @@ class IoConfig:
     R2_USAGE_MAX_PCT: float
     R2_UPLOADS_MAX: float
     R2_PROBE_INTERVAL_S: float
+    B2_LOCK_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
     DOMAIN_RDAP_URL: str
@@ -224,6 +225,9 @@ def io_config(
         # Cloudflare's pricing page decides them, not this deployment — so they live in
         # verdicts/storage.py beside r2_classify_operations, their only reader.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
+        # How long checks/b2.py:check_b2_object_lock holds a verdict, either outcome. A lock
+        # setting changes only by hand, and each read costs two Class C calls.
+        B2_LOCK_PROBE_INTERVAL_S=_num("B2_LOCK_PROBE_INTERVAL_S"),
         # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
         # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
         # because Cloudflare moves these ranges on a multi-year cadence; the interval caches

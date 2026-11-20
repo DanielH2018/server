@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Fast-forward daniel-box's primary checkout to the newest green first-parent commit of master.
+"""Fast-forward a host's primary checkout to the newest green first-parent commit of master.
 
-`homelab-checkout-sync.service` runs this as `sys_user` every 10 minutes, inside `flock` on the
+On each host whose package lists the `checkout-sync` component, `homelab-checkout-sync.service`
+runs this as `sys_user` every 10 minutes, inside `flock` on the
 git-tree lock, so it never runs beside another tree job. The design
 is docs/archive/host/h7-delete-ansible.md, *The deployer retires last, and
 checkout-sync replaces its fast-forward*. The run:

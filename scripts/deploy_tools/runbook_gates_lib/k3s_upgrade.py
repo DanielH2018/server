@@ -132,19 +132,19 @@ def _doc(tools: Tools, args: tuple[str, ...]):
     return cluster_doc(CLUSTER, tools, args)
 
 
-def _gate_volumes(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_volumes(tools: Tools, _read_hold: Callable[[], str | None]) -> list[str]:
     return unsafe_volumes(_doc(tools, VOLUMES_ARGS))
 
 
-def _gate_backups(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_backups(tools: Tools, _read_hold: Callable[[], str | None]) -> list[str]:
     return in_flight_backups(_doc(tools, BACKUPS_ARGS))
 
 
-def _gate_hold(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_hold(_tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
     return deploy_hold(read_hold)
 
 
-def _gate_nodes(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+def _gate_nodes(tools: Tools, _read_hold: Callable[[], str | None]) -> list[str]:
     return nodes_not_ready(_doc(tools, NODES_ARGS))
 
 

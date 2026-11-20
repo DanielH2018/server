@@ -246,6 +246,7 @@
                 title: "☀️ Good morning"
                 message: "Wake ramp starting on the 06:00 fallback (no watch alarm detected)."
                 tag: sleep_morning
+                alert_class: comfort
         # RAMP: inside the 45-min window on a stamped fallback morning -> apply ONE frame via the
         # sanctioned single writer. A mid-window HA restart resumes HERE on the next tick, because
         # elapsed is derived from the persisted anchor, not an in-process loop.
@@ -382,6 +383,7 @@
         title: "🌙 Ready for bed?"
         message: "Tap to start the bedtime routine."
         tag: bedtime_prompt
+        alert_class: comfort
         actions:
           - action: BEDROOM_START_BEDTIME
             title: Start now

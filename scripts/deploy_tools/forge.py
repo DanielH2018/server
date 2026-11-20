@@ -148,7 +148,7 @@ class GitHub:
                 return None
             if not gh_rate_limit.is_rate_limited(proc.stderr) or not waits_left:
                 break
-            self._sleep(gh_rate_limit.wait_s(proc.stderr, self._run))
+            gh_rate_limit.wait_out(proc.stderr, self._sleep, run=self._run)
         raise ForgeError(
             f"gh variable get {name} exited {proc.returncode}: {proc.stderr.strip()}"
         )

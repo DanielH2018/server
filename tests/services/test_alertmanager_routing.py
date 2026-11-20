@@ -63,7 +63,7 @@ CRITICAL_RECEIVERS = ["discord", "email"]
 ROUTED = [
     (
         "bridge-exporter.yaml",
-        23,
+        24,
         {
             "WANUnreachable",
             "DiscordDeliveryFailing",
@@ -82,7 +82,7 @@ ROUTED = [
     ("gitops-checks.yaml", 4, set()),
     (
         "host-checks.yaml",
-        85,
+        89,
         {
             "DiskHealthFailed",
             "DiskHealthNotReporting",
@@ -107,7 +107,7 @@ ROUTED = [
             "UPSSensorAbsent",
         },
     ),
-    ("initial-setup-checks.yaml", 13, set()),
+    ("initial-setup-checks.yaml", 11, set()),
     ("log-pipeline.yaml", 6, set()),
     (
         "other-setup-checks.yaml",

@@ -625,9 +625,9 @@ reads the run as cleaned (#4907).
 (`scripts/dev/fanout_lib/clean.py:remote_clean_command`). The leg fetches master, archives
 `origin/master`'s `scripts/` into a temporary directory, runs `fanout.py place clean-one` from
 that snapshot and removes the directory. So the code that judges a batch is master's on both
-hosts, whatever commit the host's primary checkout stands at. Only daniel-box has
-`homelab-checkout-sync`, and daniel-server's primary checkout lags master by hundreds of
-commits. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
+hosts, whatever commit the host's primary checkout stands at. `homelab-checkout-sync` moves
+each host's primary checkout only to a green commit, and a parked sync leaves it further
+behind. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
 no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
 
 ### A batch whose landing conflicts with master

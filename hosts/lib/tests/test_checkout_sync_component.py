@@ -11,7 +11,9 @@ Run: uv run pytest hosts/lib/tests/test_checkout_sync_component.py
 import pytest
 from _checkout_package import render_daniel_box
 
+from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
+from lib.repo_paths import REPO
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 
@@ -62,6 +64,17 @@ def test_the_service_runs_in_the_tree_lock_with_the_shared_ci_gate(package):
         f"Environment=CI_ANCESTOR_WALK_MAX={box['ci_ancestor_walk_max']}\n" in service
     )
     assert "homelab_builder_github_token" in package.credentials
+
+
+def test_each_host_that_lists_the_component_lists_what_its_header_requires():
+    listing = {}
+    for path in sorted((REPO / "hosts").glob("*/package.yml")):
+        components = yaml_fast.safe_load(path.read_text()).get("components") or []
+        if "checkout-sync" in components:
+            listing[path.parent.name] = set(components)
+    assert set(listing) == {"daniel-box", "daniel-server"}
+    for host, components in listing.items():
+        assert {"secrets-unit", "failure-alert", "uv"} <= components, host
 
 
 def test_the_script_ships_beside_the_modules_it_imports(package):

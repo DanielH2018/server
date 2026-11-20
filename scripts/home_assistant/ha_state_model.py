@@ -14,6 +14,7 @@ import tempfile
 from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
+from typing import override
 
 import yaml
 
@@ -272,6 +273,7 @@ class _IndentDumper(yaml.SafeDumper):
     under their key.
     """
 
+    @override
     def increase_indent(self, flow=False, indentless=False):
         return super().increase_indent(flow, indentless=False)
 

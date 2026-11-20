@@ -55,7 +55,7 @@ is out of scope; the deploy still catches schema errors live.
 
 Since 2026-06-23, the bedroom automations can be exercised ON DEMAND instead of waiting for
 the real trigger (night, leaving home). The dashboard "🧪 Test scenarios" card plus
-`input_select.bedroom_test_scenario` (off/bedtime/wake/nightlight/away/arrive/reset) and
+`input_select.bedroom_test_scenario` (off/bedtime/wake/nightlight/away/arrive/held/reset) and
 `input_select.bedroom_test_speed` (fast/real) drive `script.bedroom_run_scenario`. Fast is the
 default because an `input_select`'s first option is its creation default, which an
 `input_boolean` cannot do: it has no `initial:` field, only restores.
@@ -68,9 +68,13 @@ wake→`bedroom_preview_wake` (a test-only compressed frame-sweep reusing the te
 away/arrive→`automation.trigger` (skip_condition), reset→`bedroom_clear_overrides` (a DRY
 extraction shared with the morning reset).
 
-**Away is response-only:** it tests the lights/fan-off and "Left on" notify; the away
-notification-HOLD path needs a real `person.daniel != home`, set in Developer Tools → States,
-because no service sets arbitrary entity state. The harness is inert until you press Run, and
+**Away is response-only:** it tests the lights/fan-off and "Left on" notify. **Held** covers
+the away-hold's store and flush: it fires one `hold` event for a test alert, then runs
+`automation.bedroom_flush_held_notifications` with its condition, so the phone gets one "While
+you were out (1)" digest and `sensor.bedroom_held_alerts` ends at 0. Neither scenario reaches
+`bedroom_notify`'s own away gate, which needs a real `person.daniel != home`, set in Developer
+Tools → States, because no service sets arbitrary entity state. The routing that gate feeds is
+the `notify_route` macro, covered by `tests/test_notify_macros.py`. The harness is inert until you press Run, and
 the test-only direct light writers (`bedroom_preview_wake`, and `bedroom_run_scenario` via the
 nightlight `scene.turn_on`) are declared in `state/sanctioned_writers.yml`. Phase 2 also
 extracted the away/arrive selection into tested macros (`away_items_label`,
