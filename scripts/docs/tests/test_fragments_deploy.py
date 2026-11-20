@@ -56,10 +56,7 @@ def test_land_exit_codes_include_every_code_land_sh_can_exit_with():
 
 
 def _lock_tree(root: Path, *, unit_exec: str) -> Path:
-    """A minimal tree: one unit template and one bystander cron template."""
-    templates = root / fd.HOST_COMPONENTS / "nightly" / "templates"
-    templates.mkdir(parents=True)
-    (templates / "bystander.sh.j2").write_text("echo no lock here\n")
+    """A minimal tree holding one unit template."""
     unit_dir = root / fd.HOST_COMPONENTS / "ticker" / "units"
     unit_dir.mkdir(parents=True)
     (unit_dir / "tick.service.j2").write_text(unit_exec)
@@ -71,7 +68,7 @@ _UNIT_WITH_LOCK = (
 )
 
 
-def test_tree_lock_holders_lists_a_unit_and_skips_a_bystander(tmp_path):
+def test_tree_lock_holders_lists_a_unit_that_wraps_flock(tmp_path):
     root = _lock_tree(tmp_path, unit_exec=_UNIT_WITH_LOCK)
     holders = fd.tree_lock_holders(root)
     assert [h["job"] for h in holders] == ["tick.service"]
