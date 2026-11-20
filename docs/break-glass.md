@@ -25,6 +25,17 @@ otherwise; none of the values below are secrets themselves, only names and locat
    `daniel-box`'s key are the only two that decrypt those files. The recovery key decrypts
    the SOPS-encrypted secrets file; nothing else in this list works without it if
    `daniel-box`'s own key is also gone.
+   The password manager holds this key beside the cluster key (item 10), which never
+   decrypts `secrets.yml`. To tell the two entries apart before you decrypt, print the public
+   half of the key you loaded with `age-keygen -y`. The recovery key's public half is the
+   first recipient of the generic rule in `secrets/.sops.yaml`. The cluster key's public half
+   is the first recipient of the two cluster rules. The recovery key's entry dates from
+   2026-06-11 and the cluster key's from 2026-10-15. The 2026-11-20 drill loaded the cluster
+   key first, and `sops` reported that no identity matched any of the recipients.
+   The password manager holds the only copy of the recovery key. The operator ruled on
+   2026-11-20 against a second offline copy
+   ([#8522](https://github.com/DanielH2018/server/issues/8522)), so losing the password
+   manager together with daniel-box loses every value in `secrets.yml`.
    Source: `secrets/.sops.yaml` (recipient comments above the `age:` line).
 
 2. **The k3s cluster token.** A copy taken out-of-band on 2026-08-23, matching
@@ -647,10 +658,10 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    anything.
 2. If daniel-box itself is unreachable this way, clone the repo fresh (item 8, or straight
    from GitHub) onto any replacement machine, drop the recovery age key (item 1) at
-   `~/.config/sops/age/keys.txt`, and `sops -d secrets/secrets.yml` to confirm decrypt
-   before doing anything else. **Operator-only:** this prints every secret, and the agent
-   guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
-   decrypting it*).
+   `~/.config/sops/age/keys.txt`, and confirm decrypt before doing anything else. Use the
+   one-value decrypt in step 6 of *Annual drill*, because `sops -d secrets/secrets.yml` prints
+   every secret. **Operator-only:** the agent guard denies any decrypt
+   (`docs/claude-shell-permissions.md`, *Inspecting a secret without decrypting it*).
 3. From there, operate normally — `land.sh`, `probe.py`, etc., per the repo-root CLAUDE.md
    command tables. The cluster changes only through Flux's promotion: merge the change, and
    `land.sh` follows it. [Deploying by hand](deploying.md) says which path applies a setup role
@@ -841,23 +852,71 @@ what each source records — not what "should" have happened.
 |---|---|---|
 | k3s etcd restore (full, onto a replacement host) | **Partly, and ongoing.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22. The full restore first passed 2026-09-11 — `offbox-daniel-box-1789094702.zip` restored in a throwaway guest on daniel-server and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets — and runs monthly since. Still not drilled: the restore onto a REPLACEMENT HOST, the agent rejoin and the Longhorn reattach. | `docs/k3s-etcd-restore.md`, *The full drill runs monthly in a throwaway guest* |
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
-| SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
+| SOPS decrypt with the recovery age key alone (no host key) | **Yes, once.** Passed 2026-11-20 on daniel-server, which holds no key for `secrets.yml`. The operator cloned the repo from GitHub, and the decrypt failed with no key loaded. With the recovery key in the shell's environment and no other key present, `sops` decrypted `longhorn_b2_endpoint`. A first attempt loaded the cluster key by mistake and failed, which is why item 1 says how to tell the two apart. Not drilled: the same decrypt from item 8's bundle instead of GitHub. | [#8522](https://github.com/DanielH2018/server/issues/8522); the steps are *Annual drill* below |
 | SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `docs/host-bring-up.md` §5; the `sops_setup` role created the key until H7.24b |
 | daniel-pi rebuild from a blank SD card (*daniel-pi must be rebuilt from a blank SD card*) | **No, and waived.** The operator ruled on 2026-11-08 not to run the rebuild at the Pi's console ([#7505](https://github.com/DanielH2018/server/issues/7505)). CI's bootstrap cases run the script in a container against stub or simulated installs, so they cover neither the console steps nor the WireGuard restore. | `scripts/validate/validate_lib/bootstrap_repo_case.py` |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Its `fresh-cluster` case, added on 2026-11-08 (#7669), is written to run the fresh-cluster steps on a second kind cluster that resolves no name outside the cluster, on the node or in a pod: the controllers and the registry run from image archives, and the registry role's render serves the bundle at `flux_break_glass_url`. Read its `case=fresh-cluster` line in the latest run before you count it as drilled. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), k3s's image import directory, and the way back from the hostPath PV to Longhorn. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass`, `break-glass-red` and `fresh-cluster` |
 | Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/archive/host/h7-delete-ansible.md`, *The proofs* |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
-## Annual drill (recommended — do not run this now)
+## Annual drill
 
-Once a year, on a scratch host with no other access to this repo's live infrastructure:
+Once a year, on a host that holds no key for `secrets/secrets.yml`. daniel-server qualifies:
+it holds no user-home key, and its host key (item 11) decrypts only its own file. The drill
+takes about 10 minutes. Every step is **operator-only**, because the guard denies an agent
+any `sops` decrypt and an agent never handles a private key. Run every step as your own
+user, never under `sudo`. The recovery key stays in one shell's memory and reaches no disk.
 
-1. Place **only** the recovery age key (item 1) at `~/.config/sops/age/keys.txt`.
-2. Clone the repo (or restore item 8's bundle).
-3. Run `sops -d secrets/secrets.yml` and confirm it decrypts cleanly, using the
-   recovery recipient alone — no host key present. **Operator-only:** an agent cannot run
-   this step, because the guard denies any `sops` decrypt.
-4. Record the date and outcome in this doc's *Documented vs drilled* table, in the SOPS
-   decrypt row, the same way `docs/longhorn-disaster-recovery.md`, *Assurance gap (known,
-   narrowing)*, records its own drill date.
-5. Destroy the scratch host's copy of both the key and the decrypted output afterward.
+1. To confirm that the host and the shell hold no key, run both checks. The first must
+    report no such file, and the second must print `0`. On macOS, also check
+    `~/Library/Application Support/sops/age/keys.txt`.
+
+    ```bash
+    ls ~/.config/sops/age/keys.txt
+    env | grep -c '^SOPS_AGE'
+    ```
+
+2. To get the encrypted file, clone the repo into a scratch directory, or restore item 8's
+    bundle there. The repo is public, so the clone needs no credential.
+
+    ```bash
+    git clone --depth 1 https://github.com/DanielH2018/server.git /tmp/sops-drill
+    cd /tmp/sops-drill
+    ```
+
+3. To prove that the host cannot decrypt on its own, run step 6's decrypt before you load
+    the key. It must fail. If it prints a value, the host holds a key and the drill does not
+    count.
+4. To load the recovery key (item 1) into this shell only, run `read`, paste the
+    `AGE-SECRET-KEY-1…` line and press Enter. `-s` keeps the key off the screen, and `read`
+    keeps it out of the shell history.
+
+    ```bash
+    read -rs SOPS_AGE_KEY
+    export SOPS_AGE_KEY
+    ```
+
+5. To check that the shell holds the recovery key and not the cluster key, print its public
+    half. It must equal the first recipient of the generic rule in `secrets/.sops.yaml`.
+
+    ```bash
+    printenv SOPS_AGE_KEY | age-keygen -y
+    ```
+
+6. To decrypt one value that is not a credential, extract the B2 endpoint. The drill passes
+    when `sops` prints a Backblaze hostname in the region that item 4 names.
+
+    ```bash
+    sops -d --extract '["longhorn_b2_endpoint"]' secrets/secrets.yml
+    ```
+
+7. To clean up, drop the key from the shell and delete the clone. Then close the terminal
+    and clear the clipboard.
+
+    ```bash
+    unset SOPS_AGE_KEY
+    cd ~ && rm -rf /tmp/sops-drill
+    ```
+
+8. Record the date, the host and the outcome in this doc's *Documented vs drilled* table,
+    in the SOPS decrypt row.

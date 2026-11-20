@@ -112,10 +112,11 @@ def has_live_session(
 ) -> bool:
     """Whether a session works in the locked `tree` at this moment.
 
-    `lock_is_live` answers for every lock but a coordinator project's. That lock outlives
-    its session on purpose, so the project is live only while a process has its cwd or its
-    `CLAUDE_PROJECT_DIR` inside the tree. A desktop session keeps its process between turns,
-    so an idle sub-coordinator counts. So does any other process left in the tree, and a
+    `lock_is_live` answers for a lock that names a session's pid or a fan-out batch's unit.
+    Any other lock, such as a coordinator project's or the docs-refresh cron's, outlives
+    whatever took it, so the tree is live only while a process has its cwd or its
+    `CLAUDE_PROJECT_DIR` inside it. A desktop session keeps its process between turns, so
+    an idle sub-coordinator counts. So does any other process left in the tree, and a
     scan the root helper could not finish: a doubt reads as live.
 
     Args:
@@ -123,9 +124,11 @@ def has_live_session(
         foreign: `lock_is_live`'s reader for a fan-out tree another user owns.
         in_use: the process read, `processes_using` when None.
     """
-    if coordinator_project(tree):
-        return bool((in_use or processes_using)(tree.path))
-    return lock_is_live(tree, foreign=foreign)
+    names_session = claude_worktree.LOCK_OWNER.search(tree.lock_reason)
+    names_batch = fanout_lock.REASON.fullmatch(tree.lock_reason)
+    if names_session or names_batch:
+        return lock_is_live(tree, foreign=foreign)
+    return bool((in_use or processes_using)(tree.path))
 
 
 def classify(

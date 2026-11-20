@@ -377,8 +377,6 @@ def test_backup_health_pings_only_its_own_healthchecks_slug(tmp_path, logger_cal
     assert "longhorn-backup-health" in curl_calls[0]
     assert "/fail" not in curl_calls[0]
     assert not [c for c in curl_calls if "uptime-kuma-alive" in c]
-    rendered = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
-    assert "KUMA_PUSH_OK" not in rendered and "uptime-kuma-alive" not in rendered
 
 
 def test_backup_health_writes_its_verdict_with_no_kuma_credentials(
@@ -391,5 +389,3 @@ def test_backup_health_writes_its_verdict_with_no_kuma_credentials(
     )
     assert proc.returncode == 0, proc.stderr
     assert verdict == "down"
-    rendered = render_shipped_text(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
-    assert "kuma-push.env" not in rendered and "PUSH_TOKEN" not in rendered

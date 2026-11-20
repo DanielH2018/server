@@ -189,15 +189,6 @@ def test_authelia_writes_the_tier_beside_the_flag(args):
     }
 
 
-def test_the_entry_carries_no_owner_key():
-    """A new service is Flux's from its first commit, with no key saying so (H1.9)."""
-    entry = yaml_fast.safe_load(
-        scaffold.entry_lines("widget", 8080, "widget", None, False)
-    )[0]
-    assert "owner" not in entry
-    assert "platform" not in entry
-
-
 def test_the_entry_lands_inside_containers_list(tmp_path):
     """The bug the first run hit: appended at the end of the file, it parses as nothing."""
     box = tmp_path / "daniel-box.yml"

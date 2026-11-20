@@ -56,7 +56,7 @@ defaults:
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
-  - {name: claude, uid: 900, gid: 985, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  - {name: claude, uid: 900, gid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
   # Triage's controller: owns triage's records and reports, and alone will
   # start its units. Declared here, not in the claude-code component, because triage ships only
   # on daniel-box. Its name and home are pinned in claude-triage-pins.j2.

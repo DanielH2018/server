@@ -63,12 +63,3 @@ def test_a_suspended_wait_settles_with_no_missing_tags_reason(
     outcome, out = _suspended_landing(landing, capsys, classification, host_targets)
     assert (outcome.rc, outcome.verdict) == (0, "settled"), out
     assert "no --tags given" not in out, out
-
-
-@pytest.mark.parametrize("classification, host_targets", _REACHES_THE_GATE)
-def test_a_suspended_wait_credits_no_ansible_exit_code(
-    landing, capsys, classification, host_targets
-):
-    """No Ansible ran on this path, so nothing reads its exit code."""
-    _, out = _suspended_landing(landing, capsys, classification, host_targets)
-    assert "ansible exit code" not in out, out

@@ -264,7 +264,6 @@ def seeded_pi(package: host_mode.Package, tmp_path: Path) -> Node:
                 edit["line"] + "\n" if "line" in edit else lines.with_block("", edit)
             )
     node.state["users"] = {"node_exporter": 904}  # the ids the Pi's package declares
-    node.state["gids"] = {"node_exporter": 986}
     node.state["installed"]["homelab-daniel-pi"] = ["ii ", V1]
     return node
 

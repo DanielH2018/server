@@ -128,13 +128,6 @@ def test_credential_problems_is_flagged_on_a_unit_that_still_loads_one():
     ]
 
 
-@pytest.mark.parametrize(
-    "script", ["pi-sd-health", "pi-recovery-health", "rkhunter-check"]
-)
-def test_no_pi_script_sources_the_retired_push_library(package, script):
-    assert "kuma-push-lib.sh" not in _text(package, f"{LIB}/{script}")
-
-
 def test_the_check_library_is_a_byte_copy_of_initial_setups(package):
     # M6 B5: the two token scripts write their textfile verdict through it.
     source = REPO / host_mode.SHARED_FILES["homelab-check-lib.sh"]

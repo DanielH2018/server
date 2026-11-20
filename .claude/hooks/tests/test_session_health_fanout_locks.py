@@ -13,9 +13,8 @@ import importlib.util
 import os
 import types
 from datetime import UTC, datetime
-from pathlib import Path
 
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, live_session_lock, path_with
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -41,11 +40,6 @@ def _result(stdout):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=0)
 
 
-def _own_session_reason():
-    fields = Path("/proc/self/stat").read_text().rpartition(")")[2].split()
-    return f"claude session other (pid {os.getpid()} start {fields[19]})"
-
-
 def _locked_tree(root, name, reason):
     """A worktree directory whose lock file `git worktree lock` wrote two days ago."""
     tree = root / name
@@ -66,7 +60,7 @@ def _scan(tmp_path, monkeypatch, show_all, more=()):
         [
             _locked_tree(tmp_path, "finished-batch", "fanout-100"),
             _locked_tree(tmp_path, "running-batch", _ACTIVE_UNIT),
-            _locked_tree(tmp_path, "claude-session", _own_session_reason()),
+            _locked_tree(tmp_path, "claude-session", live_session_lock()),
             *(_locked_tree(tmp_path, name, reason) for name, reason in more),
         ]
     )
