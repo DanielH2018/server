@@ -24,8 +24,8 @@ Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansibl
 each host decrypts its own file with its own key. Slices H7.53 to H7.57 make these
 statements below history. They stay as written:
 
-- *Context*, "`community.sops.sops_decrypt` runs on the Ansible controller", and the
-  introduction's "a host that runs Ansible": H7.53 deleted `deploy.sh`, H7.55 deleted the
+- The introduction's "a host that runs Ansible" and *Context*'s
+  "`community.sops.sops_decrypt` runs on the Ansible controller": H7.53 deleted `deploy.sh`, H7.55 deleted the
   playbooks, and H7.56 removed ansible-core and its collections. No deploy-time lookup
   remains, as the ADR-0029 note on [ADR-0003](0003-sops-with-age-for-secrets-at-rest.md)
   records.

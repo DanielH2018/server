@@ -52,8 +52,8 @@ prunes R's soak Job together with its pod, and the first read needs that pod.
       `kubectl -n flux-system get ocirepository homelab -o jsonpath='{.status.artifact.revision}'`
       prints the same `prod@sha256:` value. This read is valid only before any reset.
     - A role that an upstream failure blocked never reads R's value there, so its data is
-      unchanged. It took no snapshot for R, so `volume-revert` would fail on it with "Fail
-      when no snapshot matches this deploy". Leave it out of Branch 1.
+      unchanged. It took no snapshot for R, so `volume-revert` would fail on it ("Fail
+      when no snapshot matches this deploy"). Leave it out of Branch 1.
 
 Then pick the branch:
 
