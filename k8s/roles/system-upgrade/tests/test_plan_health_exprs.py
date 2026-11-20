@@ -17,7 +17,7 @@ import pytest
 from _mini_cel import CelError, evaluate
 
 from lib import yaml_fast
-from lib.k8s_roles import K8S_ROLES, role_fields
+from lib.k8s_roles import K8S_ROLES, role_defaults
 
 PIN = "v1.37.2+k3s1"
 STORED = "v1.37.2-k3s1"
@@ -25,9 +25,9 @@ STALE = "v1.36.9-k3s1"
 
 
 def _exprs(roles=K8S_ROLES) -> dict[str, str]:
-    fields, problems = role_fields(["system-upgrade"], roles)
+    found, problems = role_defaults(["system-upgrade"], roles)
     assert problems == []
-    [check] = fields["system-upgrade"]["health_check_exprs"]
+    [check] = found["system-upgrade"].health_check_exprs
     assert (check["apiVersion"], check["kind"]) == ("upgrade.cattle.io/v1", "Plan")
     return check
 
@@ -181,9 +181,11 @@ def test_the_observed_red_arrived_at_the_drill_deadline_not_at_the_timeout():
     assert found is not None, "the observed message states the elapsed time"
     elapsed = int(found[1]) * 60 + float(found[2])
     deadline = _drill()["spec"]["jobActiveDeadlineSecs"]
-    fields, problems = role_fields(["system-upgrade"], K8S_ROLES)
+    found, problems = role_defaults(["system-upgrade"], K8S_ROLES)
     assert problems == []
-    timeout_minutes = int(fields["system-upgrade"]["timeout"].removesuffix("m"))
+    timeout = found["system-upgrade"].timeout
+    assert timeout is not None
+    timeout_minutes = int(timeout.removesuffix("m"))
     # A red that arrives only at the Kustomization's timeout would prove the timeout (H6 step 4).
     assert deadline <= elapsed < deadline + 120
     assert elapsed < timeout_minutes * 60 / 10

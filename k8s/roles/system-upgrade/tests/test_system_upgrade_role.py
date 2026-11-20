@@ -9,7 +9,7 @@ import pytest
 from _k8s_render import render_role_template
 
 from lib import yaml_fast
-from lib.k8s_roles import role_fields
+from lib.k8s_roles import role_defaults
 from lib.repo_paths import K8S_ROLES
 
 ROLE = K8S_ROLES / "system-upgrade"
@@ -133,21 +133,21 @@ def test_the_agent_deadline_covers_the_server_plus_longhorns_recovery():
         DEFAULTS["system_upgrade_server_deadline_secs"],
         DEFAULTS["system_upgrade_agent_deadline_secs"],
     )
-    fields, problems = role_fields(["system-upgrade"])
+    found, problems = role_defaults(["system-upgrade"])
     assert problems == []
-    timeout = re.fullmatch(r"(\d+)m", fields["system-upgrade"]["timeout"])
+    timeout = re.fullmatch(r"(\d+)m", found["system-upgrade"].timeout or "")
     assert timeout is not None, "the Kustomization timeout is whole minutes"
     assert int(timeout[1]) * 60 > agent
 
 
 def test_the_kustomization_fields_come_from_the_role_and_a_plain_role_has_none():
-    fields, problems = role_fields(["system-upgrade", "metallb"])
+    found, problems = role_defaults(["system-upgrade", "metallb"])
     assert problems == []
-    assert fields["system-upgrade"]["timeout"] == "100m"
-    assert fields["system-upgrade"]["prune"] is False
-    assert "health_check_exprs" in fields["system-upgrade"]
-    assert "health_check_exprs" not in fields["metallb"]
-    assert fields["metallb"]["prune"] is False
+    assert found["system-upgrade"].timeout == "100m"
+    assert found["system-upgrade"].prune is False
+    assert found["system-upgrade"].health_check_exprs
+    assert found["metallb"].health_check_exprs == ()
+    assert found["metallb"].prune is False
 
 
 def test_the_gate_account_reads_what_the_gates_read_and_nothing_more():

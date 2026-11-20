@@ -61,7 +61,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
-from lib.k8s_roles import k8s_tags, snapshot_claims
+from lib.k8s_roles import k8s_tags, role_defaults
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 from deploy_tools import bundle_gates
 from renderer.renderer_lib.bundle import (
@@ -141,10 +141,12 @@ def snapshot_tags(
 
     A tag declares them when its role's `defaults/main.yml` sets a non-empty
     `k8s_autodeploy_snapshot_pvcs`, which alone calls for `<tag>-snapshot` (D5.2a). It reads
-    `snapshot_claims`, the reader `digests.json`'s `claims` comes from too.
+    `role_defaults`, the reader `digests.json`'s `claims` comes from too.
     """
-    claims, problems = snapshot_claims(published, roles)
-    return frozenset(tag for tag, names in claims.items() if names), problems
+    defaults, problems = role_defaults(published, roles)
+    return frozenset(
+        tag for tag, own in defaults.items() if own.snapshot_pvcs
+    ), problems
 
 
 def prepull_tags(

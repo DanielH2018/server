@@ -31,7 +31,7 @@ k8s_autodeploy_unreverted_claims: [media-data]
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
 # is unreachable unless the deadline is rendered from this variable too.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# Kustomization `timeout` only from a literal role default (`role_fields` in
+# Kustomization `timeout` only from a literal role default (`role_defaults` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 660s
 radarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
