@@ -5,12 +5,12 @@ aide, and runs it against a fake dpkg database and filesystem that `_fake_host` 
 """
 
 import fcntl
-import hashlib
-import json
 import os
 import shlex
+import sys
 import time
 
+from _aide_fake_host import ACCOUNT_FILES, DEFS, PACKAGE, TOOL_COPIES, _fake_host
 from _helpers import REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
@@ -30,6 +30,11 @@ REAL_AIDE_DIR = "AIDE_DIR=/var/lib/aide"
 REAL_DPKG_DIR = "DPKG_DIR=/var/lib/dpkg"
 REAL_DPKG_LOG = "DPKG_LOG=/var/log/dpkg.log"
 REAL_FS_ROOT = 'FS_ROOT=""'
+REAL_AIDE_ORIGINALS = "AIDE_ORIGINALS=/usr/lib/homelab/aide-originals"
+REAL_ORIGINALS = "ORIGINALS=/var/lib/homelab-aide-originals"
+AIDE_ORIGINALS = (
+    REPO / "hosts" / "components" / "aide-scan" / "files" / "aide_originals.py"
+)
 
 CLEAN_REPORT = """\
 Start timestamp: 2026-10-19 03:00:01 +0000 (AIDE 0.18.6)
@@ -73,209 +78,6 @@ LINK_CHANGED_MODE = "l =.p.. mc.. .. . "
 # When aide.db was last advanced. The script opens its dpkg.log window there.
 BASELINE_EPOCH = 1_792_000_000
 DAY_S = 86_400
-# One installed package: each path's content, and whether dpkg records its digest in md5sums
-# (relative, under the pre-usrmerge name) or as a conffile in status.
-PACKAGE = {
-    "/usr/bin/tool": ("tool v2\n", "md5sums"),
-    "/usr/lib/x86_64-linux-gnu/libtool.so": ("lib v2\n", "md5sums"),
-    "/etc/tool.conf": ("conf v2\n", "conffile"),
-    "/usr/share/doc/tool/README": ("readme v1\n", "md5sums"),
-    "/usr/lib/systemd/system/tool.service": ("[Unit]\n", "md5sums"),
-    "/usr/lib/python3/dist-packages/toolpkg/mod.py": ("x = 1\n", "md5sums"),
-}
-# Package-owned symlinks, which dpkg lists with no digest, and where each points. The headers
-# link points into a package that is not installed, as the kernel headers' rust link does.
-PACKAGE_LINKS = {
-    "/usr/bin/tool-link": "tool",
-    "/usr/src/tool-headers/rust": "../tool-lib-rust/rust",
-}
-# The host package's links to secrets in the tmpfs its secrets unit fills, which its secrets
-# manifest declares: one under /etc, and one under /usr/lib as the Pi's Compose env file sits.
-SECRET_LINK = "/etc/svc/config.env"
-SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
-SYSTEM_SECRET_LINK = "/usr/lib/homelab/compose/compose.env"
-SYSTEM_SECRET_TARGET = "/run/homelab-secrets/usr/lib/homelab/compose/compose.env"
-# An output whose `destination` is not its path, as the etcd drill's R2 credentials are.
-RENAMED_SECRET_LINK = "/etc/homelab/drill-s3.env"
-RENAMED_SECRET_TARGET = "/run/homelab-secrets/drill/s3.env"
-SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
-# The host package's apt hook and a script root runs, which dpkg lists with no digest here.
-HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
-# The user and group databases as the last accepted run copied them: root, a login user, the
-# declared claude with the gid its group kept from before the 900-949 band, oldsvc, which the users
-# arm no longer declares, and a group the setup script manages.
-ACCOUNT_FILES = {
-    "/etc/passwd": (
-        "root:x:0:0:root:/root:/bin/bash\n"
-        "ubuntu:x:1000:1000:Ubuntu:/home/ubuntu:/bin/bash\n"
-        "claude:x:900:985:Claude agent:/var/lib/claude:/bin/bash\n"
-        "oldsvc:x:907:907:Old svc:/var/lib/oldsvc:/usr/sbin/nologin\n"
-    ),
-    "/etc/group": (
-        "root:x:0:\nubuntu:x:1000:\nclaude:x:985:\noldsvc:x:907:\nssh-users:x:990:ubuntu\n"
-    ),
-    "/etc/shadow": (
-        "root:!*:20000:0:99999:7:::\n"
-        "ubuntu:$6$SECRETHASH:20000:0:99999:7:::\n"
-        "claude:!*:20000::::::\n"
-        "oldsvc:!*:20000::::::\n"
-    ),
-    "/etc/gshadow": "root:*::\nubuntu:!::\nclaude:!::\noldsvc:!::\nssh-users:!::ubuntu\n",
-}
-# The host package's lines arm: a block in the package's conffile, as k3s-server adds one to
-# /etc/zsh/zshenv, and a line edit elsewhere.
-BLOCK_MARKER = "# {mark} MANAGED — tool kubeconfig"
-LINE_EDITS = [
-    {
-        "path": "/etc/tool.conf",
-        "marker": BLOCK_MARKER,
-        "block": "export K=1\nexport L=2\n",
-    },
-    {"path": "/etc/login.defs", "line": "UMASK\t\t027", "regexp": "^UMASK\\s"},
-]
-# The host package's manifest, whose users arm declares claude and a service user svc.
-HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
-# homelab-reconcile's record, whose users arm has expired oldsvc.
-RECONCILE_RECORD = "/var/lib/homelab-reconcile/applied.json"
-EXPIRED_USERS = ["oldsvc"]
-DECLARED_USERS = [
-    {
-        "name": "claude",
-        "uid": 900,
-        "gid": 985,
-        "home": "/var/lib/claude",
-        "shell": "/bin/bash",
-        "comment": "Claude agent",
-    },
-    {
-        "name": "svc",
-        "uid": 906,
-        "gid": 906,
-        "home": "/var/lib/svc",
-        "shell": "/usr/sbin/nologin",
-        "comment": "Svc",
-    },
-]
-
-
-def _dpkg_name(path: str) -> str:
-    """The name dpkg records: a package built before usrmerge lists /usr/lib files as /lib."""
-    return path.removeprefix("/usr") if path.startswith("/usr/lib/") else path
-
-
-def _fake_host(root):
-    """Writes PACKAGE as installed, with dpkg's records of it, under `root`.
-
-    Returns (dpkg dir, filesystem root). dpkg also records one diversion of the package's README,
-    and the filesystem also holds an alternatives link to the package's binary, a unit masked by
-    a maintainer script, the usr-merge links, the boot links and GRUB files, a compiled module,
-    a unit with its enable link, and one file in each tree nothing packages. A `homelab-host`
-    package owns SECRET_LINK, SYSTEM_SECRET_LINK and RENAMED_SECRET_LINK, which SECRETS_MANIFEST
-    declares.
-    """
-    dpkg, fs = root / "dpkg", root / "fs"
-    (dpkg / "info").mkdir(parents=True)
-    md5sums, conffiles = [], []
-    for path, (content, record) in PACKAGE.items():
-        target = fs / path.lstrip("/")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
-        digest = hashlib.md5(content.encode()).hexdigest()
-        if record == "md5sums":
-            md5sums.append(f"{digest}  {_dpkg_name(path).lstrip('/')}")
-        else:
-            conffiles.append(f" {path} {digest}")
-    for link, target in PACKAGE_LINKS.items():
-        (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
-        (fs / link.lstrip("/")).symlink_to(target)
-    secret_links = {
-        SECRET_LINK: SECRET_TARGET,
-        SYSTEM_SECRET_LINK: SYSTEM_SECRET_TARGET,
-        RENAMED_SECRET_LINK: RENAMED_SECRET_TARGET,
-    }
-    for link, target in secret_links.items():
-        (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
-        (fs / link.lstrip("/")).symlink_to(target)
-    outputs = [
-        {
-            "destination": target.removeprefix("/run/homelab-secrets/"),
-            "link": link,
-            "persist": False,
-        }
-        for link, target in secret_links.items()
-    ]
-    (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
-    (fs / HOST_MANIFEST.lstrip("/")).write_text(
-        json.dumps({"users": {"users": DECLARED_USERS}, "lines": {"edits": LINE_EDITS}})
-    )
-    record = fs / RECONCILE_RECORD.lstrip("/")
-    record.parent.mkdir(parents=True)
-    record.write_text(json.dumps({"users": {"expired": EXPIRED_USERS}}))
-    for path, content in ACCOUNT_FILES.items():
-        (fs / path.lstrip("/")).write_text(content)
-    (dpkg / "info" / "homelab-host.list").write_text(
-        "".join(f"{p}\n" for p in (*secret_links, *HOMELAB_FILES))
-    )
-    (dpkg / "info" / "tool.list").write_text(
-        "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
-    )
-    (dpkg / "info" / "tool.md5sums").write_text("\n".join(md5sums) + "\n")
-    # A third-party package, whose md5sums file names each path as ./usr/...
-    (fs / "usr/bin/vendor").write_text("vendor v1\n")
-    (dpkg / "info" / "vendor.list").write_text("/usr/bin/vendor\n")
-    vendor_digest = hashlib.md5(b"vendor v1\n").hexdigest()
-    (dpkg / "info" / "vendor.md5sums").write_text(
-        f"{vendor_digest}  ./usr/bin/vendor\n"
-    )
-    (dpkg / "status").write_text(
-        "Package: tool\nStatus: install ok installed\nConffiles:\n"
-        + "\n".join(conffiles)
-        + "\nDescription: a tool\n"
-    )
-    # dpkg's diversions file: diverted path, its new name, the diverting package. tool's README
-    # now sits at the new name.
-    (dpkg / "diversions").write_text(
-        "/usr/share/doc/tool/README\n/usr/share/doc/tool/README.distrib\ntool-extra\n"
-    )
-    (fs / "usr/share/doc/tool/README").rename(fs / "usr/share/doc/tool/README.distrib")
-    (fs / "etc" / "alternatives").mkdir(parents=True)
-    (fs / "etc" / "alternatives" / "tool").symlink_to(fs / "usr" / "bin" / "tool")
-    units = fs / "usr" / "lib" / "systemd" / "system"
-    units.mkdir(parents=True, exist_ok=True)
-    (units / "tool-cleanup.service").symlink_to("/dev/null")
-    # The usr-merge links, as a merged host has them: relative, to the usr counterpart.
-    for name in ("bin", "sbin", "lib"):
-        (fs / name).symlink_to(f"usr/{name}")
-    boot = fs / "boot"
-    (boot / "grub").mkdir(parents=True)
-    (boot / "initrd.img-7.0.0-42-generic").write_text("initrd\n")
-    (boot / "vmlinuz-7.0.0-42-generic").write_text("kernel\n")
-    (boot / "initrd.img").symlink_to("initrd.img-7.0.0-42-generic")
-    (boot / "vmlinuz").symlink_to("vmlinuz-7.0.0-42-generic")
-    (boot / "grub" / "grub.cfg").write_text("menuentry\n")
-    (boot / "grub" / "grubenv").write_text("saved_entry=0\n")
-    pycache = fs / "usr/lib/python3/dist-packages/toolpkg/__pycache__"
-    pycache.mkdir()
-    (pycache / "mod.cpython-312.pyc").write_bytes(b"pyc")
-    # The k3s installer's unit, and the link `systemctl enable` makes to it and to a package's.
-    system = fs / "etc/systemd/system"
-    (system / "multi-user.target.wants").mkdir(parents=True)
-    (system / "k3s.service").write_text("[Service]\n")
-    (system / "multi-user.target.wants" / "k3s.service").symlink_to("../k3s.service")
-    (system / "multi-user.target.wants" / "tool.service").symlink_to(
-        "../../../../usr/lib/systemd/system/tool.service"
-    )
-    for path in (
-        "/usr/sbin/implant",
-        "/etc/homelab/deployed.env",
-        "/etc/sudoers.d/extra",
-        "/usr/local/bin/aide-check.sh",
-    ):
-        (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
-        (fs / path.lstrip("/")).write_text("unpackaged\n")
-    return dpkg, fs
-
-
 # The line a bare `aide --check` logs, and the exit it comes with.
 ERROR_REPORT = (
     "  ERROR: missing configuration (use '--config' '--before' or '--after' "
@@ -359,6 +161,7 @@ def _run_check(
     snapshot: dict[str, str | None] | None = None,
     pending_snapshot: dict[str, str] | None = None,
     during_scan: dict[str, str] | None = None,
+    originals: dict[str, str] | None = None,
 ):
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
@@ -377,7 +180,9 @@ def _run_check(
     The last accepted copies of the account files hold ACCOUNT_FILES, with `snapshot` replacing
     a file's copy, or removing it for None. `pending_snapshot` leaves an earlier run's copies
     beside its aide.db.new, ACCOUNT_FILES with those files replaced. `during_scan` has the aide
-    stub append the given text to each named path while it runs.
+    stub append the given text to each named path while it runs. `originals` keeps the given
+    content as aide-originals' copy of each named tool conffile, in place of DEFS as shipped. The real aide-originals runs,
+    with an `apt-get` stub that fails, so a copy no test keeps is never fetched.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
     [status, message] pair read from the `status=` line the script logs, or None when it logged
     none, logged lines, whether aide ran).
@@ -395,6 +200,8 @@ def _run_check(
         REAL_DPKG_DIR,
         REAL_DPKG_LOG,
         REAL_FS_ROOT,
+        REAL_AIDE_ORIGINALS,
+        REAL_ORIGINALS,
     ):
         assert needle in body, (
             f"{needle} is no longer in aide-check.sh; this harness repoints it"
@@ -437,6 +244,17 @@ def _run_check(
                 (aide_dir / name / path.rsplit("/", 1)[1]).write_text(content)
 
     lock_file = tmp_path / "aide-check.lock"
+    copies = tmp_path / "originals"
+    for path, content in (
+        {DEFS: PACKAGE[DEFS][0]} if originals is None else originals
+    ).items():
+        copy = copies.joinpath(*TOOL_COPIES, path.lstrip("/"))
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text(content)
+    originals_bin = write_exec(
+        tmp_path / "aide-originals",
+        f'PYTHONPATH={REPO / "hosts" / "lib"} exec {sys.executable} {AIDE_ORIGINALS} "$@"\n',
+    )
     report_file = tmp_path / "report"
     report_file.write_text(report)
     aide = write_exec(
@@ -457,6 +275,8 @@ def _run_check(
         .replace(REAL_DPKG_DIR, f"DPKG_DIR={dpkg}")
         .replace(REAL_DPKG_LOG, f"DPKG_LOG={dpkg_log}")
         .replace(REAL_FS_ROOT, f"FS_ROOT={fs}")
+        .replace(REAL_AIDE_ORIGINALS, f"AIDE_ORIGINALS={originals_bin}")
+        .replace(REAL_ORIGINALS, f"ORIGINALS={copies}")
     )
     script = write_exec(tmp_path / "aide-check.sh", body)
     logged, ran = (tmp_path / n for n in ("logged", "ran"))
@@ -475,7 +295,14 @@ def _run_check(
                 "LOGGER_OUT": str(logged),
                 "AIDE_RAN": str(ran),
             },
-            stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB, **(stubs or {})),
+            stub_bin=fake_bin(
+                tmp_path / "bin",
+                logger=LOGGER_STUB,
+                **{
+                    "apt-get": "echo 'E: no network in the suite' >&2\nexit 100\n",
+                    **(stubs or {}),
+                },
+            ),
         )
     (tmp_path / "stderr").write_text(result.stderr)
     lines = logged.read_text().splitlines() if logged.exists() else []
