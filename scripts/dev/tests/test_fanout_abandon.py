@@ -286,7 +286,9 @@ def test_resume_restarts_a_finished_batch_on_the_verdict_of_a_landing_run_outsid
     )
 
 
-LOCK_RECORD = json.dumps({"host": "daniel-box", "pid": 41, "user": "ubuntu", "log": ""})
+LOCK_RECORD = json.dumps(
+    {"host": "daniel-box", "pid": 41, "user": "ubuntu", "log": "/tmp/land4000.log"}
+)
 
 
 @pytest.mark.parametrize(
@@ -319,8 +321,8 @@ LOCK_RECORD = json.dumps({"host": "daniel-box", "pid": 41, "user": "ubuntu", "lo
         ),
         (
             {"reads": [_host_read(), ok(f"held\n{LOCK_RECORD}\n")]},
-            "another landing of it is live (host daniel-box, pid 41",
-            "Re-run the same command once pid 41 has ended",
+            "a landing of #4000 is live (host daniel-box, pid 41)",
+            "wait with `cc-wait land 4000 --log /tmp/land4000.log`, then run this again",
         ),
         (
             {"landing": "LAND-RESULT: verdict=pr-ci-red\nVERDICT: pr-ci-red (x)\n"},

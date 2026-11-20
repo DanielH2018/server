@@ -31,9 +31,8 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from deploy_tools.land_lib import detach
+from deploy_tools.land_lib import detach, serial_lock
 from dev.fanout_lib import launch as launch_mod
 from dev.fanout_lib import launch_lock, sizing
 from dev.fanout_lib import manifest as manifest_mod
@@ -41,7 +40,7 @@ from dev.fanout_lib.land_result import FINISHED_VERDICTS, last_verdict, reland_c
 from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.review.api import MERGE_CONFLICT
 from dev.fanout_lib.target import SERVER, SERVER_TARGET
-from dev.fanout_lib.transport import Tools, registered_keys, this_host
+from dev.fanout_lib.transport import Tools, registered_keys
 from dev.fanout_lib.unit_state import unit_props_command
 from lib.cli_help import error
 from lib.exit_codes import (
@@ -52,13 +51,13 @@ from lib.exit_codes import (
     FANOUT_PLACE_OK,
 )
 
-if TYPE_CHECKING:
-    from deploy_tools.land_lib.pr_lock import Holder
-
 # How many times one batch is restarted for a conflict. The pipeline's own resume is one per
 # unit, and a PR that conflicts a third time is changing files master keeps changing.
 MAX_RESUMES = 2
 READ_TIMEOUT_S = 60.0
+# `autoland.STATE_DIR / "logs"`, restated because `place clean-one` imports this module
+# with no site-packages, which `autoland`'s imports need.
+LANDER_LOGS = Path.home() / ".local" / "state" / "fanout-server-lander" / "logs"
 LOCK_TIMEOUT_S = 30.0
 _STAMP = re.compile(r"land\d+-(.+)\.log$")
 _ACTIVE = re.compile(r"(?m)^ActiveState=(\S+)")
@@ -159,28 +158,33 @@ def local_logs(pr: str, dirs: Sequence[Path]) -> list[LandingLog]:
 
 def log_dirs() -> list[Path]:
     """Where a landing run outside the batch's unit writes its log on this host."""
-    # Imported here, with `live_landing`'s: `place` imports this module, and `place
-    # clean-one` runs with no site-packages, which these two imports need.
-    from dev.fanout_lib.autoland import STATE_DIR
-
-    return [detach.default_log_dir(), STATE_DIR / "logs"]
+    return [detach.default_log_dir(), LANDER_LOGS]
 
 
-def live_landing(tools: Tools, pr: str) -> "Holder | None":
-    """The landing that holds PR number `pr`'s lock, or None when none does.
+def live_landing(tools: Tools, pr: str) -> str:
+    """Who holds PR number `pr`'s landing lock and how to wait on it, or "" when nobody does.
 
-    None too when the locks' host cannot be read: the lock refuses no landing either then.
+    "" too when the locks' host cannot be read: the lock refuses no landing either then.
+    It reads /proc/locks and never takes the lock, so it cannot fail a landing's own attempt.
     """
-    from deploy_tools.land_lib import pr_lock, serial_lock
-
-    path = serial_lock.LOCK_DIR / pr_lock.lock_name(pr)
+    path = serial_lock.LOCK_DIR / serial_lock.lock_name(pr)
     command = f"{serial_lock.probe_command(str(path))}; cat {path} 2>/dev/null"
     try:
         proc = tools.run(serial_lock.TURN_HOST, command, LOCK_TIMEOUT_S, None)
     except subprocess.TimeoutExpired:
-        return None
+        return ""
     state, _, record = proc.stdout.partition("\n")
-    return pr_lock.Holder.parse(record.strip()) if state.strip() == "held" else None
+    if state.strip() != "held":
+        return ""
+    try:
+        holder = json.loads(record)
+    except ValueError:
+        holder = {}
+    holder = holder if isinstance(holder, dict) else {}
+    log = str(holder.get("log") or "")
+    who = f"host {holder.get('host') or '?'}, pid {holder.get('pid') or '?'}"
+    wait = f"cc-wait land {pr}" + (f" --log {log}" if log else "")
+    return f"a landing of #{pr} is live ({who}); wait with `{wait}`"
 
 
 def _next_step(run_id: str, verdict: str) -> str:
@@ -258,9 +262,9 @@ def resumable(
         )
     url = urls[0]
     pr = url.rstrip("/").rsplit("/", 1)[-1]
-    holder = live_landing(tools, pr)
-    if holder is not None:
-        return f"{name}: {holder.refusal(pr, this_host())}, then run this again"
+    live = live_landing(tools, pr)
+    if live:
+        return f"{name}: {live}, then run this again"
     dirs = log_dirs() if dirs is None else dirs
     if log is not None:
         try:
