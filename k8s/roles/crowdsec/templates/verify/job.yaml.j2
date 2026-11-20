@@ -4,7 +4,8 @@
   This directory is `verify/`, which the renderer emits into `crowdsec-verify` once the
   `crowdsec` and `traefik` Kustomizations read Ready (D5, *`<tag>-verify`*). The `traefik` edge is
   `flux_verify_after` in the role's defaults, so the ban proof reads the rolled Traefik pod. The renderer passes
-  `flux_job_image` and `flux_job_connect`, the helper's text, to every `templates/verify/` file
+  `flux_job_image`, `flux_job_connect`, the helper's text, and `flux_job_parse`, the parser's, to
+  every `templates/verify/` file
   (`render_tag`).
 
   The Job runs `files/crowdsec_verify.py`, the successor of the ban-and-lift gate, with no
@@ -43,6 +44,7 @@
 {% set data = {
   script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
+  'flux_job_parse.py': flux_job_parse,
 } %}
 {% set configmap_name = 'crowdsec-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {#- The pod's roll inputs, as `checksum/restart` hashes them; see the note above. The Secret

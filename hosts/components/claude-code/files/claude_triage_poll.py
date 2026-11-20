@@ -109,17 +109,42 @@ def prom_vector(
             query=query,
         )
         return None
-    if body.get("status") != "success":
+    try:
+        return _query_result(body)
+    except ValueError as exc:
         log(
-            "Prometheus answered without success",
+            f"Prometheus answered without a result: {exc}",
             WARNING,
             tag=TAG,
             url=base_url,
             query=query,
-            status=body.get("status"),
         )
         return None
-    return body.get("data", {}).get("result", [])
+
+
+# DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
+# import: the host package ships this file and host_lib, and no k8s role file.
+def _query_result(body: object) -> list[dict]:
+    """The `data.result` objects of a successful Prometheus answer.
+
+    An absent `data` or `result` reads as an empty list.
+
+    Raises:
+        ValueError: The answer is not an object, its status is not `success`, its `data` is
+            not an object, or `result` is not a list of objects. A `"data": null` raises
+            rather than reading as no alerts.
+    """
+    if not isinstance(body, dict):
+        raise ValueError(f"the answer is {type(body).__name__}, not an object")
+    if body.get("status") != "success":
+        raise ValueError(f"status={body.get('status')}")
+    data = body.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError(f"data is {type(data).__name__}, not an object")
+    result = data.get("result", [])
+    if not isinstance(result, list) or not all(isinstance(s, dict) for s in result):
+        raise ValueError("data.result is not a list of objects")
+    return result
 
 
 def read_all(

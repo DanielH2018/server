@@ -77,7 +77,8 @@ HELPER = REPO / "scripts/renderer/job_files/flux_job_connect.py"
 CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
 SOAK_READS = REPO / "scripts/renderer/job_files/soak_reads.py"
 SOAK_PODS = REPO / "scripts/renderer/job_files/soak_pods.py"
-SIBLINGS = {p.name: p for p in (HELPER, CHANGED_SET, SOAK_READS, SOAK_PODS)}
+PARSE = REPO / "scripts/renderer/job_files/flux_job_parse.py"
+SIBLINGS = {p.name: p for p in (HELPER, CHANGED_SET, SOAK_READS, SOAK_PODS, PARSE)}
 # DECIDED: an allowlist of imports, not a denylist of connecting calls. A denylist missed
 # `urlretrieve`, `asyncio.open_connection`, `ftplib` and `importlib` in review. No module
 # here opens a connection; a script builds its `Request` from `flux_job_connect`, so
@@ -96,6 +97,7 @@ SIBLINGS = {p.name: p for p in (HELPER, CHANGED_SET, SOAK_READS, SOAK_PODS)}
 ALLOWED_IMPORTS = frozenset(
     {
         "flux_job_connect",
+        "flux_job_parse",
         "changed_set",
         "soak_reads",
         "soak_pods",

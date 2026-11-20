@@ -4,6 +4,7 @@ Each test drives `step` or `main` through its seams: no Prometheus, no systemctl
 """
 
 import fcntl
+import io
 import json
 import os
 from datetime import datetime, timezone
@@ -451,6 +452,18 @@ def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(
     assert capsys.readouterr().out == (
         "claude-triage-poll: Prometheus read failed: connection refused "
         "url=http://127.0.0.1:9090 query=up\n"
+    )
+
+
+@pytest.mark.parametrize("data", [None, {"result": None}], ids=["data", "result"])
+def test_a_null_answer_is_a_failed_read(data, capsys, monkeypatch) -> None:
+    def answer(url, timeout):
+        return io.BytesIO(json.dumps({"status": "success", "data": data}).encode())
+
+    monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    assert poll.prom_vector("http://127.0.0.1:9090", "up", urlopen=answer) is None
+    assert capsys.readouterr().out.startswith(
+        "claude-triage-poll: Prometheus answered without a result: "
     )
 
 

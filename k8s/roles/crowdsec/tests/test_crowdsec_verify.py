@@ -181,6 +181,25 @@ def test_a_counter_with_no_sample_in_the_window_fails_naming_the_channel(capsys)
     assert not world.banned
 
 
+class NullData(World):
+    """A Prometheus that answers every query with `"data": null`."""
+
+    def call(self, method, url, body=None, headers=None):
+        if urllib.parse.urlsplit(url).path == "/api/v1/query":
+            return 200, {"status": "success", "data": None}
+        return super().call(method, url, body, headers)
+
+
+def test_a_null_prometheus_answer_fails_naming_the_channel_before_any_ban(capsys):
+    world = NullData([BEFORE])
+    result, message = _run(world, capsys)
+    assert result == "failed"
+    assert message.startswith(
+        f"the evidence channel: Prometheus's answer to {cv.CHANNEL_UP} is unreadable"
+    )
+    assert ("POST", "/v1/alerts") not in world.calls
+
+
 def test_a_ban_that_does_not_read_back_fails_naming_lapi_and_lifts(capsys):
     world = World([BEFORE], ban_reads_back=False)
     assert _run(world, capsys) == (
