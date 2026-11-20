@@ -142,6 +142,16 @@ def test_a_wait_for_a_spent_quota_ends_once_the_quota_has_calls_again():
     assert lines[-1] == "stopped waiting after 120s: the graphql quota has reset"
 
 
+def test_a_secondary_limit_sleeps_its_whole_wait_without_reading_a_quota():
+    slept: list[float] = []
+
+    def read(_name):
+        raise AssertionError("a secondary limit spends no quota to read")
+
+    assert gh_rate_limit.sleep_until_reset("", 300, slept.append, read) == 300
+    assert slept == [300]
+
+
 def _quota(remaining, reset=int(NOW) + 600):
     return lambda _name: {"remaining": remaining, "reset": reset}
 
@@ -197,22 +207,23 @@ def _http_403(body=b"", **headers):
 def test_a_rest_403_with_the_quota_spent_waits_until_its_reset():
     reset = str(int(NOW) + 600)
     with _http_403(X_RateLimit_Remaining="0", X_RateLimit_Reset=reset) as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 602
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (602, "core")
 
 
 def test_a_rest_403_with_retry_after_waits_that_long():
     with _http_403(Retry_After="45") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 45
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (45, "")
 
 
 def test_a_rest_403_with_quota_left_is_not_a_rate_limit():
     with _http_403(X_RateLimit_Remaining="4999") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) is None
+        assert gh_rate_limit.http_wait(error, lambda: NOW) is None
 
 
 def test_a_rest_403_whose_body_names_a_secondary_limit_waits_the_minimum():
     body = b'{"message": "You have exceeded a secondary rate limit."}'
     with _http_403(body, X_RateLimit_Remaining="4999") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == (
-            gh_rate_limit.SECONDARY_WAIT_S
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (
+            gh_rate_limit.SECONDARY_WAIT_S,
+            "",
         )

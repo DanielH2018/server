@@ -193,12 +193,14 @@ class Landing:
             # json.JSONDecodeError is a ValueError subclass.
             self.die(f"could not read PR #{pr}: unparseable gh output: {exc}", 1)
 
-    def changed_paths(self, head: str) -> list[str]:
+    def changed_paths(self, head: str, before_turn: bool = False) -> list[str]:
         """The paths the PR changes, as `gh pr view` lists them with the PR at `head`.
 
         The list is read from GitHub once per head: a call for the head the last read found
         returns that read. The merge wait reads it before it asks for the landing turn
         (`merge.await_merge`), so a rule the turn runs finds it here without a read of its own.
+        Only that read, `before_turn`, waits out a rate limit; a read inside the turn fails
+        at once rather than hold the turn through the wait.
 
         Raises:
             gh_read.GhReadFailed: GitHub did not answer, after `gh_read`'s retries and waits.
@@ -213,7 +215,8 @@ class Landing:
             got = self.tools.gh_json("pr", "view", pr, "--json", "files,headRefOid")
             return parse_view(as_object(got, label))
 
-        view = gh_read.read(call, self.tools.sleep, label)
+        waits = gh_read.RATE_LIMIT_WAITS if before_turn else 0
+        view = gh_read.read(call, self.tools.sleep, label, waits)
         paths = tuple(f["path"] for f in view.get("files", []))
         self._changed = (view.get("headRefOid", ""), paths)
         return list(paths)
@@ -224,11 +227,11 @@ class Landing:
         A rate limit's remedy is to wait and re-run the landing (`gh_rate_limit.remedy`),
         because `otherwise` repeats the call the limit refused.
         """
+        return gh_rate_limit.remedy(why, self.read_quota) or otherwise
 
-        def read(name: str) -> object:
-            return self.tools.gh_json("api", "rate_limit", "--jq", f".resources.{name}")
-
-        return gh_rate_limit.remedy(why, read) or otherwise
+    def read_quota(self, name: str) -> object:
+        """One quota's `.resources.<name>` object from `gh api rate_limit`, which costs none."""
+        return self.tools.gh_json("api", "rate_limit", "--jq", f".resources.{name}")
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""

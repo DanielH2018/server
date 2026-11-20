@@ -65,7 +65,7 @@ from collections.abc import Callable
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object
 from lib.progress import OnChange
-from lib import removes_object
+from lib import gh_rate_limit, removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import (
     closing_refs,
@@ -496,7 +496,8 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it.
 
     A CI read GitHub refuses for its rate sleeps until the quota frees rather than one merge
-    poll, counted as waited and cut short at `merge_timeout`.
+    poll, counted as waited and cut short at `merge_timeout`. The sleep re-reads the quota and
+    ends at its reset (`gh_rate_limit.sleep_until_reset`).
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -525,7 +526,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         asked = True
         # A failed read stores nothing, so the rule inside the turn reads again.
         with contextlib.suppress(gh_read.GhReadFailed, ValueError):
-            ln.changed_paths(head)
+            ln.changed_paths(head, before_turn=True)
         try:
             return take_turn(head if draft else "")
         except Outcome:
@@ -594,12 +595,13 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             wait_ends_at = min(waited + o.merge_timeout, wait_cap)
             continue
         # Seconds until GitHub's quota frees, when it refused this poll's CI read; else 0.
-        pause = 0
+        # `spent` names the quota that refusal spent, "" for a secondary limit.
+        pause, spent = 0, ""
         if head:
             try:
                 rc, line = t.await_ci(head, 0)
             except await_ci.RateLimitedError as exc:
-                pause = exc.wait_s
+                pause, spent = exc.wait_s, exc.quota
                 rate_limited(
                     f"{head[:8]}: {exc}; the merge wait backs off until it does"
                 )
@@ -719,8 +721,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             )
         step = o.merge_poll
         if pause:
-            step = max(step, min(pause, wait_ends_at - waited))
-        t.sleep(step)
+            step = gh_rate_limit.sleep_until_reset(
+                spent,
+                max(step, min(pause, wait_ends_at - waited)),
+                t.sleep,
+                ln.read_quota,
+            )
+        else:
+            t.sleep(step)
         waited += step
     ln.merge_wait_s = waited
     in_line = queued - ln.batched_s

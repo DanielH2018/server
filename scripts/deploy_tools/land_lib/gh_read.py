@@ -43,14 +43,23 @@ def is_transient(why: str) -> bool:
     return bool(_TRANSIENT.search(why))
 
 
-def read(call: Callable[[], T], sleep: Callable[[float], None], label: str) -> T:
+def read(
+    call: Callable[[], T],
+    sleep: Callable[[float], None],
+    label: str,
+    rate_limit_waits: int = RATE_LIMIT_WAITS,
+) -> T:
     """`call()`, retried on a transient gh failure; `GhReadFailed` once it is not worth another.
+
+    A rate limit is waited out up to `rate_limit_waits` times. A read made while the landing
+    holds the landing turn passes 0, so a rate limit fails it at once instead of holding the
+    turn through the wait.
 
     Only gh's own failures are caught. Anything else `call` raises, such as the `ValueError`
     of an unparseable answer, propagates on the first attempt: gh answered, and asking again
     gets the same answer.
     """
-    rate_limit_waits = 0
+    waited_out = 0
     for attempt, wait in enumerate((*BACKOFF_S, None), start=1):
         while True:
             try:
@@ -59,12 +68,9 @@ def read(call: Callable[[], T], sleep: Callable[[float], None], label: str) -> T
                 why = (exc.stderr or "").strip()
             except subprocess.TimeoutExpired:
                 why = "gh timed out"
-            if (
-                not gh_rate_limit.is_rate_limited(why)
-                or rate_limit_waits >= RATE_LIMIT_WAITS
-            ):
+            if not gh_rate_limit.is_rate_limited(why) or waited_out >= rate_limit_waits:
                 break
-            rate_limit_waits += 1
+            waited_out += 1
             gh_rate_limit.wait_out(why, sleep, lambda line: say(f"{label} {line}"))
         if wait is None or not is_transient(why):
             raise GhReadFailed(why, attempt)
