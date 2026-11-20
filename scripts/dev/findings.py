@@ -48,7 +48,8 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--milestone "<title>"|none] [--limit N] [--waiting] [--json]
-    uv run python scripts/dev/findings.py new-issues [--after N] [--milestone "<title>"|none] [--describe]
+    uv run python scripts/dev/findings.py new-issues [--after N] [--milestone none] [--describe]
+    uv run python scripts/dev/findings.py new-issues --milestone "<title>" [--describe]
     uv run python scripts/dev/findings.py sync-board [688 701] [--dry-run]
 
 THE PROJECT BOARD FOLLOWS THE ISSUE. After any subcommand that writes or comments on an

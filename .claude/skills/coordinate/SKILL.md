@@ -48,7 +48,7 @@ The root runs in the primary checkout and stays thin. It does six things:
   `DEPLOY_HOLD` is the operator's decision.
 
 To add an issue to a running project, message its sub-coordinator with the number. A
-milestone wait does not wake for an older issue that `milestone add` files.
+sub-coordinator's milestone wait also ends once `milestone add` files the issue.
 
 **A sub-coordinator that died is restarted, not cleaned up.** Start a session in the same
 worktree with the same milestone title; *Resume* rebuilds its state. The app starts a
@@ -123,7 +123,8 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
       and never clean its run.
 
 6. **Wait for more work** when the backlog is empty, with `cc-wait findings --milestone
-   "<title>" --after N`, as `issue-fanout` describes.
+   "<title>"`. The wait records the project's free issues when it starts and ends on any
+   other free issue the project gains, so it takes no `--after`.
 
 Done when: the worktree's lock reason names the project, `milestone status` prints the
 project form, and no launch ran before the operator's approval.

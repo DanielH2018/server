@@ -340,7 +340,9 @@ is claimed, deferred, blocked, `manual`, named by an open PR or reserved by anot
 branch's open project keeps the wait open, because
 the source shares `scripts/dev/findings_lib/claim.py:free_issues` with `next`. Pass
 `--after` every time. Without it the baseline is the highest open number when the wait
-starts, so each resume re-baselines and misses an issue filed between the two runs. Each
+starts, so each resume re-baselines and misses an issue filed between the two runs. A
+`--milestone "<title>"` wait is the exception: it takes no `--after`, and the `coordinate`
+skill describes it. Each
 read is one REST call every 300s, which leaves the GraphQL quota alone. The source is
 `scripts/dev/findings_lib/new_issue_probe.py`, run as `findings.py new-issues`. It only
 reports; nothing is claimed until the orchestrator runs `claim`.

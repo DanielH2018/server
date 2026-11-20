@@ -497,7 +497,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     ni = sub.add_parser(
         "new-issues",
-        help="the `findings` source for cc-wait: a free issue filed above a baseline",
+        help="the `findings` source for cc-wait: a free issue past a baseline",
     )
     _add_dry_run(ni, suppress=True)
     _add_repo(ni)
@@ -509,7 +509,8 @@ def _parser(description: str) -> argparse.ArgumentParser:
         type=int,
         metavar="N",
         help="end on a free issue numbered above N; the highest open number when the "
-        "wait starts by default",
+        'wait starts by default. Refused with --milestone "<title>", whose baseline is '
+        "the project's free issues",
     )
     _add_milestone(ni)
 
