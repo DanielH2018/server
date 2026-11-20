@@ -5,8 +5,9 @@
 # homelab-systemd-units.timer runs it every 5 minutes on every host. It writes check
 # `systemd-units` with success 1 when no system unit is in the failed state, and 0 otherwise,
 # plus homelab_systemd_failed_units with the count and one homelab_systemd_unit_failed series
-# per failed unit, labelled with the unit's name. A unit whose OnFailure=homelab-alert@ instance
-# has delivered its Discord page since the unit failed also carries paged_by="homelab-alert".
+# per failed unit, labelled with the unit's name. A unit whose OnFailure= Discord hook has paged
+# since the unit failed also carries paged_by="homelab-alert". The hook is a homelab-alert@
+# instance or a unit's own homelab-<name>-alert.service, and a page its rate limit skipped counts.
 # The run that first finds a failure decides the label. It records the decision in
 # $STATE_DIRECTORY/paged-by, keyed by the boot ID and the unit's InactiveEnterTimestampMonotonic,
 # so later runs copy it for that same failure and decide again for a new one.
@@ -63,16 +64,20 @@ SUCCESS=$((COUNT == 0))
 prop() { awk -v key="$1" 'index($0, key "=") == 1 { print substr($0, length(key) + 2); exit }'; }
 
 # Succeeds when the `systemctl show -p OnFailure -p InactiveEnterTimestampMonotonic` output in $1
-# names a homelab-alert@ instance that has delivered since the unit failed: inactive with
-# Result=success, and inactive since a time after the unit's own failure. A hook still retrying,
-# or one that never ran, fails this.
+# names a Discord hook, homelab-alert@ or homelab-<name>-alert.service, that has paged since the
+# unit failed: inactive with Result=success or Result=exec-condition, and inactive since a time
+# after the unit's own failure. A hook still retrying, or one that never ran, fails this.
 hook_delivered() {
   local hook failed_at props delivered_at
-  hook=$(prop OnFailure <<<"$1" | tr ' ' '\n' | grep -m1 '^homelab-alert@') || return 1
+  hook=$(prop OnFailure <<<"$1" | tr ' ' '\n' | grep -m1 -E '^homelab-(alert@|[a-z0-9-]+-alert\.service$)') || return 1
   failed_at=$(prop InactiveEnterTimestampMonotonic <<<"$1")
   props=$(systemctl show -p ActiveState -p Result -p InactiveEnterTimestampMonotonic "$hook") || return 1
   delivered_at=$(prop InactiveEnterTimestampMonotonic <<<"$props")
-  [[ $(prop ActiveState <<<"$props") == inactive && $(prop Result <<<"$props") == success ]] &&
+  # DECIDED: a page the hook's ExecCondition= rate limit skipped mutes SystemdUnitsFailed like a
+  # delivered one. The skip proves a delivery inside the window, and a unit that re-fails each
+  # tick is a new failure every run, so counting a skip as unpaged would flip the label and page
+  # twice. A unit that recovers and fails again inside the window pages only via WarningUnresolved.
+  [[ $(prop ActiveState <<<"$props") == inactive && $(prop Result <<<"$props") =~ ^(success|exec-condition)$ ]] &&
     ((${delivered_at:-0} > ${failed_at:-0}))
 }
 

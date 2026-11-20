@@ -215,8 +215,10 @@ pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it
 pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
 verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
 on each host every 5 minutes (#8219). It fires once per failed unit. A unit whose
-`OnFailure=homelab-alert@` hook had delivered its Discord page when the check first found it
-failed carries `paged_by="homelab-alert"` until it recovers. The label never changes
+`OnFailure=` Discord hook had paged when the check first found it failed carries
+`paged_by="homelab-alert"` until it recovers. The hook is a `homelab-alert@` instance or the
+unit's own `homelab-<name>-alert.service`, and a page that the hook's rate limit skipped
+counts as paged. The label never changes
 mid-failure, because a changed label set would resolve the firing alert. A blackhole route in `templates/alertmanager-secret.yaml.j2`
 takes that label, so the unit pages once, and `WarningUnresolved` drops the label so its
 escalation still pages
