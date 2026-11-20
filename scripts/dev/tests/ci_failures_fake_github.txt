@@ -20,7 +20,7 @@ def run_object(run, number=None):
     attempt = run["attempts"][number - 1]
     return {
         "id": run["id"], "name": run["name"], "display_title": run["name"],
-        "path": ".github/workflows/ci.yml", "event": run["event"],
+        "path": run.get("path", ".github/workflows/ci.yml"), "event": run["event"],
         "head_branch": run["head_branch"], "head_sha": "0" * 40, "status": "completed",
         "conclusion": attempt["conclusion"], "run_attempt": number, "run_number": 1,
         "created_at": run["created_at"], "run_started_at": run["created_at"],
@@ -72,6 +72,8 @@ def in_created(run, spec):
 
 def search(query):
     found = sorted(WORLD, key=lambda r: r["created_at"], reverse=True)
+    if "workflow" in query:
+        found = [r for r in found if Path(run_object(r)["path"]).name == query["workflow"]]
     if "created" in query:
         found = [r for r in found if in_created(r, query["created"])]
     if "branch" in query:
@@ -145,7 +147,9 @@ def api(tool, argv):
         emit(job_log(find_job(int(match[1]))), out)
         return
 
-    if tail == "runs":
+    if match := re.fullmatch(r"(?:workflows/([^/]+)/)?runs", tail):
+        if match[1]:
+            query["workflow"] = match[1]
         total, items = search(query)
         pages = paged("workflow_runs", total, items, query, paginate)
     elif match := re.fullmatch(r"runs/(\d+)(?:/attempts/(\d+))?", tail):

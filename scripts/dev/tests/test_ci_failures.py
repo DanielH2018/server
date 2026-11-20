@@ -70,10 +70,12 @@ def _run(
     branch: str = "master",
     created: str = "2026-11-05T14:02:04Z",
     event: str = "push",
+    workflow: str = "ci.yml",
 ) -> dict:
     return {
         "id": run_id,
         "name": name,
+        "path": f".github/workflows/{workflow}",
         "event": event,
         "head_branch": branch,
         "created_at": created,
@@ -373,3 +375,17 @@ def test_the_last_line_counts_red_and_flaky_attempts(tmp_path):
     still_red = _run(48000000003, _attempt(_pytest_job(98000000003, "test_broken")))
     out = _survey(tmp_path, _rerun_green_on_master(), still_red).stdout
     assert out.splitlines()[-1] == "CI-FAILURES: red=2 flaky=1", out
+
+
+def test_a_workflow_survey_reads_only_that_workflows_runs(tmp_path):
+    ci = _run(48000000004, _attempt(_pytest_job(98000000004, "test_in_ci")))
+    other = _run(
+        48000000005,
+        _attempt(_pytest_job(98000000005, "test_in_render_diff")),
+        name="render-diff",
+        workflow="render-diff.yml",
+    )
+    out = _survey(tmp_path, ci, other, flags=("--workflow", "ci.yml")).stdout
+    assert "test_in_ci" in out, out
+    assert "test_in_render_diff" not in out, f"another workflow's run was read:\n{out}"
+    assert " of 1 runs" in out.splitlines()[0], out
