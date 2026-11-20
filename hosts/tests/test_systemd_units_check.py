@@ -149,6 +149,29 @@ def test_a_unit_whose_hook_delivered_is_labelled_paged_by_the_hook(tmp_path):
     ]
 
 
+OWN_HOOK = "homelab-builder-alert.service"
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param("success", id="delivered"),
+        pytest.param("exec-condition", id="skipped-by-its-rate-limit"),
+    ],
+)
+def test_a_unit_whose_own_alert_unit_paged_is_labelled_paged_by_the_hook(
+    tmp_path, result
+):
+    shown = {
+        HOOKED: _hooked_unit(OWN_HOOK),
+        OWN_HOOK: _hook("inactive", result, FAILED_AT + 1),
+    }
+    _run(tmp_path, f"{HOOKED} loaded failed failed builder\n", shown=shown)
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}",paged_by="homelab-alert"}} 1'
+    ]
+
+
 @pytest.mark.parametrize(
     "shown",
     [
@@ -171,6 +194,20 @@ def test_a_unit_whose_hook_delivered_is_labelled_paged_by_the_hook(tmp_path):
             },
             id="on-failure-names-another-unit",
         ),
+        pytest.param(
+            {
+                HOOKED: _hooked_unit(OWN_HOOK),
+                OWN_HOOK: _hook("activating", "exit-code", 0),
+            },
+            id="own-alert-unit-still-retrying",
+        ),
+        pytest.param(
+            {
+                HOOKED: _hooked_unit(OWN_HOOK),
+                OWN_HOOK: _hook("inactive", "exec-condition", FAILED_AT - 1),
+            },
+            id="own-alert-unit-skipped-before-the-failure",
+        ),
     ],
 )
 def test_a_unit_without_a_delivered_hook_page_carries_no_paged_by(tmp_path, shown):
@@ -178,6 +215,43 @@ def test_a_unit_without_a_delivered_hook_page_carries_no_paged_by(tmp_path, show
     assert _unit_series(tmp_path) == [
         f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"}} 1'
     ]
+
+
+SHIPPED_PAGERS = frozenset(
+    {
+        "homelab-alert@%n.service",
+        "homelab-claude-rc-alert.service",
+        "homelab-claude-triage-poll-alert.service",
+    }
+)
+
+
+def test_every_on_failure_hook_a_host_ships_is_a_page_the_check_reads(tmp_path):
+    hooks = {
+        hook
+        for host in HOSTS
+        for path, (data, *_) in package(host).files.items()
+        if path.startswith("/usr/lib/systemd/system/")
+        for line in re.findall(r"^OnFailure=(.+)$", data.decode(errors="replace"), re.M)
+        for hook in line.split()
+    }
+    assert SHIPPED_PAGERS <= hooks
+    unread = []
+    for n, hook in enumerate(sorted(hooks)):
+        resolved = hook.replace("%n", HOOKED)
+        run_dir = tmp_path / str(n)
+        run_dir.mkdir()
+        shown = {
+            HOOKED: _hooked_unit(resolved),
+            resolved: _hook("inactive", "success", FAILED_AT + 1),
+        }
+        _run(run_dir, f"{HOOKED} loaded failed failed builder\n", shown=shown)
+        if "paged_by" not in "".join(_unit_series(run_dir)):
+            unread.append(hook)
+    assert unread == [], (
+        "SystemdUnitsFailed pages a second time beside these OnFailure= hooks: "
+        "name a homelab-alert@ instance, or the homelab-<name>-alert.service shape"
+    )
 
 
 RETRYING = _hook("activating", "exit-code", 0)
