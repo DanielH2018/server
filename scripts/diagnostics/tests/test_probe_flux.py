@@ -6,13 +6,10 @@ on 2026-10-25 mid-promotion: the OCIRepository's commit under
 `status.lastAppliedOriginRevision`.
 """
 
-import os
 import subprocess
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import flux_wait
+from diagnostics import flux_wait
 import pytest
 from diagnostics.probe_lib import flux
 from lib.exit_codes import PROBE_UNREADABLE

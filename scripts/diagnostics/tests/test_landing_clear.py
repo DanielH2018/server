@@ -4,13 +4,10 @@ Run: uv run pytest scripts/diagnostics/tests/test_landing_clear.py
 """
 
 import json
-import os
 import subprocess
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import landing_clear
+from diagnostics import landing_clear
 import pytest
 from deploy_tools.land_lib import serial_lock, turn
 from lib import proc_testing

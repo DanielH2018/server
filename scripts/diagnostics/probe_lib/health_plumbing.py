@@ -36,14 +36,11 @@ asks of a slow source.
 import shutil
 import socket
 import subprocess
-import sys as _sys
 import time
 from datetime import datetime
-from pathlib import Path as _Path
 
 import yaml
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from lib import yaml_fast

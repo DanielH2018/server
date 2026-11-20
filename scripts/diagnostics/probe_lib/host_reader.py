@@ -31,14 +31,6 @@ outside `adm` and `systemd-journal` exits 0 with no entries and a hint on stderr
 read as "the unit never ran"; `journal_entries` raises `core.Unreadable` on that hint.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import json
 import re
 import shlex
