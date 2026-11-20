@@ -350,16 +350,18 @@ run `findings.py claims` in the same quarter minute cost one call, not 39.
 $ gh-quota status
 tok-2edb9dd14a9a graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012 calls; 2108 beyond the ledger (68%); 1 at or over 20%; --all lists 1 more
   7c1e90aa-0000-4000-8000-000000000001  1000 calls  issue list x960, pr view x40
+tok-2edb9dd14a9a writes: 12/80 in the last minute, 140/500 in the last hour
 ```
 
 Each identity and bucket with an open quota window gets one count line. Under it come only
-the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
+the sessions at or above `ATTENTION_SHARE` of the bucket's limit. Each identity that wrote in
+the last hour then gets one writes line, described below.
 
 | Command | What it does |
 |---|---|
 | `gh-quota status` | A count line per identity and bucket, then only the sessions over the share. |
 | `gh-quota status --all` | Every session, with its calls by class. |
-| `gh-quota status --json` | The same windows as one line of compact JSON. |
+| `gh-quota status --json` | The same windows as one line of compact JSON. Each row also carries its identity's `writes_minute` and `writes_hour`. |
 | `gh-quota mode` | Prints the mode. The mode changes through `gh_quota_mode` and the next package version. |
 | `gh-quota release <session>`, from slice 2 | Lifts that session's ceiling until the window resets. Operator only. |
 
@@ -369,14 +371,22 @@ the sessions at or above `ATTENTION_SHARE` of the bucket's limit.
 
 `gh-quota` is a reporting tool. It runs no `gh` call for a caller, so it is not a second shim.
 
-`gh-quota status` reports only the primary quotas. GitHub publishes no count for the
-secondary limits, so `status` can read healthy while GitHub refuses writes. On 2026-11-18
-about ten landings and agents wrote at once, and GitHub refused `gh pr ready` with `API
-rate limit already exceeded` while the GraphQL quota had 4595 of 5000 calls left. The same
-landing succeeded five minutes later. A secondary limit can therefore arrive in the primary
-quota's words. `scripts/lib/gh_rate_limit.py:remedy` reads the named quota's headroom to
-tell the two apart. A refusal with calls left is the secondary limit, and the landing says
+GitHub publishes no count for the secondary limits, so the primary count lines can read
+healthy while GitHub refuses writes. On 2026-11-18 about ten landings and agents wrote at
+once, and GitHub refused `gh pr ready` with `API rate limit already exceeded` while the
+GraphQL quota had 4595 of 5000 calls left. The same landing succeeded five minutes later. A
+secondary limit can therefore arrive in the primary quota's words.
+`scripts/lib/gh_rate_limit.py:remedy` reads the named quota's headroom to tell the two apart. A refusal with calls left is the secondary limit, and the landing says
 to wait and re-run instead of repeating the refused call.
+
+The writes line is the ledger's own count against the content-creating limits. `record`
+stamps each write with its time, and `status` counts an identity's writes in the last minute
+and the last hour against 80 and 500 (`WRITES_PER_MINUTE`, `WRITES_PER_HOUR`). A write is a
+`gh api` call that sends a body or a non-GET method, a GraphQL mutation, or a porcelain
+subcommand in `_WRITE_SUBCOMMANDS`, such as `pr create` or `pr ready`
+(`hosts/components/gh-quota/files/gh_quota.py:is_write`). The count can err in both
+directions. A bare `gh` in a session's shell never reaches the ledger, so its writes are
+missing. `record` runs before the call, so a write GitHub refused is still counted.
 
 ## What the design leaves out
 
@@ -445,8 +455,8 @@ every session at once.
 +  gh-quota/
 +    component.yml          ships the files below on each host that lists it;
 +                           its default is gh_quota_mode: record
-+    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module, and
-+                           -> /usr/bin/gh-quota, the same file as a command
++    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module
++    files/gh_quota_cli.py  -> /usr/bin/gh-quota, the `status` and `mode` command
 +    templates/gh-quota.conf.j2
 +    tmpfiles.d/homelab-gh-quota.conf   creates /var/lib/gh-quota
 +    tests/test_gh_quota.py           classifying, sampling and windows
