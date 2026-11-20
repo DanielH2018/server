@@ -302,17 +302,17 @@ def _ip(args):
     return f"runs `ip … {sorted(hit)[0]}`" if hit else None
 
 
-def _tee_check(repo_root, is_scratch):
+def _tee_check(is_scratch):
     def check(args):
         for target in _positionals(args):
-            if not is_scratch(target, repo_root):
+            if not is_scratch(target):
                 return f"tees into `{target}`"
         return None
 
     return check
 
 
-def _ghread_check(repo_root, is_scratch):
+def _ghread_check(is_scratch):
     # ghread has no write subcommand; `--out` is its one write, and ghread confines it to /tmp
     # itself, but that rule lives outside this repo, so the hook checks the path too.
     def check(args):
@@ -323,7 +323,7 @@ def _ghread_check(repo_root, is_scratch):
                 target = arg.split("=", 1)[1]
             else:
                 continue
-            if not is_scratch(target, repo_root):
+            if not is_scratch(target):
                 return f"writes `ghread --out` into `{target}`"
         return None
 
@@ -358,7 +358,7 @@ def script_problem(script, args, repo_root, own_checkout):
     return f"runs `{script}`, which is not a known read-only script"
 
 
-def checks(repo_root, is_scratch):
+def checks(is_scratch):
     """Command name -> its check. A command absent from the mapping is not a read."""
     plain = (
         "cat head tail less more grep egrep fgrep wc cut tr paste join comm tac nl fold fmt "
@@ -392,8 +392,8 @@ def checks(repo_root, is_scratch):
             "systemctl": _first_positional_in(_SYSTEMCTL_READS),
             "docker": _docker,
             "ip": _ip,
-            "tee": _tee_check(repo_root, is_scratch),
-            "ghread": _ghread_check(repo_root, is_scratch),
+            "tee": _tee_check(is_scratch),
+            "ghread": _ghread_check(is_scratch),
         }
     )
     # A journal write needs root, but these flags are journalctl's own writes.
