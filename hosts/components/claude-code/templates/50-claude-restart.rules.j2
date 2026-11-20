@@ -1,0 +1,24 @@
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+// Shipped by the claude-code host component.
+//
+// Lets the triage controller START the restart broker, and nothing else. No other user may:
+// neither `claude`, whose interactive sessions read untrusted text and hold no write to a
+// workload, nor the triage session user. The broker is
+// homelab-claude-restart@<name>.service, which runs as root. The instance is the only input the
+// controller gives: files/claude_restart.py accepts it only as a key of its allowlist (NAME),
+// so the most a start can do is one rate-limited restart of a listed Deployment.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if (subject.user !== "{{ pins.ctl_user }}") {
+        return undefined;
+    }
+    if (!/^homelab-claude-restart@[a-z0-9][a-z0-9-]{0,62}\.service$/.test(action.lookup("unit"))) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

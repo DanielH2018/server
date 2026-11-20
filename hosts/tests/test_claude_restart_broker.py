@@ -18,6 +18,7 @@ from lib import yaml_fast
 
 UNIT = "claude-restart@.service.j2"
 CONFIG = "claude-restart-config.json.j2"
+RULE = "50-claude-restart.rules.j2"
 
 
 def config(overrides: dict | None = None) -> dict:
@@ -52,7 +53,7 @@ def test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap() -> None:
     assert moved == config()
 
 
-def test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule() -> None:
+def test_the_broker_ships_only_behind_its_toggle() -> None:
     entries = shipped()
     assert {e.get("src", e.get("lib")) for e in entries} == {
         "files/claude_restart.py",
@@ -60,24 +61,53 @@ def test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule() -> No
         "weekly_window.py",
         f"templates/{CONFIG}",
         f"templates/{UNIT}",
+        f"templates/{RULE}",
     }
-    assert {e["when"] for e in entries} == {"claude_code_restart_enabled"}
-    rules = sorted(p.name for p in (CLAUDE_CODE / "templates").glob("*.rules.j2"))
-    assert "50-claude-land.rules.j2" in rules
-    assert not [
-        name
-        for name in rules
-        if "claude-restart" in render_component_text("claude-code", name)
-    ]
+    assert all("claude_code_restart_enabled" in e["when"] for e in entries)
+    # The rule names the triage controller, a user only triage's toggles create.
+    (rule,) = [e for e in entries if e.get("src") == f"templates/{RULE}"]
+    assert "claude_code_triage_enabled" in rule["when"]
+
+
+def rule_pattern() -> re.Pattern:
+    (found,) = re.findall(
+        r"!/(\^[^/]+\$)/\.test\(", render_component_text("claude-code", RULE)
+    )
+    return re.compile(found)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("homelab-claude-restart@docs.service", True),
+        ("homelab-claude-restart@docs --all.service", False),
+        ("homelab-claude-restart@docs.service.d", False),
+        ("x-homelab-claude-restart@docs.service", False),
+    ],
+)
+def test_the_rule_admits_only_the_broker_in_the_scripts_name_shape(
+    name, expected
+) -> None:
+    assert bool(rule_pattern().search(name)) is expected
+
+
+def test_only_the_triage_controller_may_start_the_broker_and_only_start_it() -> None:
+    """The operator's 2026-11-20 ruling: the controller, never `claude` or the session user."""
+    rendered = render_component_text("claude-code", RULE)
+    users = re.findall(r'subject\.user !== "([^"]+)"', rendered)
+    assert users == ["claude-triage-ctl"]
+    assert 'action.lookup("verb") !== "start"' in rendered
+    assert rendered.count("polkit.Result.YES") == 1
+    # The rule's instance shape is the script's NAME, so polkit admits no name the script
+    # would call malformed.
+    script = (CLAUDE_CODE / "files" / "claude_restart.py").read_text()
+    (name,) = re.findall(r'^NAME = re\.compile\(r"\^(.+)\$"\)$', script, re.MULTILINE)
+    assert rule_pattern().pattern == rf"^homelab-claude-restart@{name}\.service$"
 
 
 @pytest.mark.parametrize(
     "path",
-    [
-        "hosts/components/claude-code/files/claude_restart.py",
-        f"hosts/components/claude-code/templates/{UNIT}",
-        f"hosts/components/claude-code/templates/{CONFIG}",
-    ],
+    sorted(f"hosts/components/claude-code/{e['src']}" for e in shipped() if "src" in e),
 )
 def test_a_pr_changing_the_broker_needs_the_operator(path, tmp_path) -> None:
     assert (REPO / path).is_file(), f"{path} moved; update this list"

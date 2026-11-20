@@ -227,6 +227,7 @@ FLOOR = [
     "hosts/components/claude-code/files/claude_triage_poll.py",
     # The restart broker.
     "hosts/components/claude-code/templates/claude-restart",
+    "hosts/components/claude-code/templates/50-claude-restart.rules.j2",
     "hosts/components/claude-code/files/claude_restart.py",
     # The root inspector and its grant.
     "hosts/components/claude-code/files/homelab_rootq.py",
