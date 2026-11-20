@@ -221,7 +221,7 @@ def _construct_include_dir_merge_named(loader: HAConfigLoader, node: yaml.Node):
     return merged
 
 
-def _construct_placeholder(loader: HAConfigLoader, node: yaml.Node):
+def _construct_placeholder(_loader: HAConfigLoader, node: yaml.Node):
     # We don't validate secret/env values; return a harmless string so the tree loads.
     return f"<{node.tag.removeprefix('!')}>"
 

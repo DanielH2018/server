@@ -96,7 +96,7 @@ def format_shed_set(targets_by_service, tags_by_service=None):
     return "\n".join(lines), 0
 
 
-def run_shed_set(ns):
+def run_shed_set(_ns):
     """Print the shed set derived from the inventory's `tier` fields."""
     namespace = core.k8s_namespace()
     targets = {svc: role_scalable_targets(svc, namespace) for svc in shed_set()}
