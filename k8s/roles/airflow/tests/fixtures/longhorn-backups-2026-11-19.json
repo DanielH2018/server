@@ -1,0 +1,111 @@
+{
+ "lines": [
+  "[pvc-a840bbef-b0d6-4ca6-8740-b4f64ed05658-r-b603754c] time=\"2026-11-19T03:30:41.21073695Z\" level=info msg=\"Created snapshot changed blocks: 106 mappings, 106 blocks and 105 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=2097152 event=backup object=snapshot pkg=backupstore reason=complete snapshot=daily-ba-2f491aa0-0dbb-4904-ab51-67a6452acabe",
+  "[pvc-4ee9f2af-9a09-4011-994f-57395434ae28-r-5175ef86] time=\"2026-11-19T03:31:01.531065769Z\" level=info msg=\"Created snapshot changed blocks: 20 mappings, 20 blocks and 20 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=2097152 event=backup object=snapshot pkg=backupstore reason=complete snapshot=daily-ba-2f630f2c-bfa0-4449-ac13-e94832b23b96",
+  "[pvc-1f29a849-9ef6-42fc-825a-8159bb5c2e27-r-442f0024] time=\"2026-11-19T03:31:17.826019252Z\" level=info msg=\"Created snapshot changed blocks: 10 mappings, 10 blocks and 6 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=2097152 event=backup object=snapshot pkg=backupstore reason=complete snapshot=daily-ba-1fbcb04e-ee82-4833-ac3f-b7df57f7fd50",
+  "[pvc-5baed174-e761-488b-88ea-8285b5d0ead2-r-8fa7a9b6] time=\"2026-11-19T03:31:37.965194122Z\" level=info msg=\"Created snapshot changed blocks: 35 mappings, 35 blocks and 34 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=2097152 event=backup object=snapshot pkg=backupstore reason=complete snapshot=daily-ba-46bdb33a-ba7e-44b0-ace6-58ed11c0489f",
+  "[pvc-f7c223ec-c5fc-49d4-a0ab-c33f934dffbb-r-7f170cad] time=\"2026-11-19T04:30:32.315354952Z\" level=info msg=\"Created snapshot changed blocks: 32 mappings, 32 blocks and 32 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=16777216 event=backup object=snapshot pkg=backupstore reason=complete snapshot=weekly-b-e3c0ea48-bb0a-4087-979d-1095eabdfe73",
+  "[pvc-62a58ceb-a58e-4572-91b5-5b7103189d95-r-4a56c302] time=\"2026-11-19T04:30:50.570704041Z\" level=info msg=\"Created snapshot changed blocks: 5 mappings, 5 blocks and 5 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=16777216 event=backup object=snapshot pkg=backupstore reason=complete snapshot=weekly-b-6683dd46-799a-4d5e-8c18-e6c3654c6c3f",
+  "[pvc-7d3ad40e-d345-43f1-ae70-78e21202a345-r-fa155816] time=\"2026-11-19T04:31:16.202737329Z\" level=info msg=\"Created snapshot changed blocks: 15 mappings, 15 blocks and 15 new blocks\" func=backupstore.performBackup file=\"deltablock.go:623\" backup_block_size=16777216 event=backup object=snapshot pkg=backupstore reason=complete snapshot=weekly-b-d431d1b7-7d08-4245-b50b-610964f3431d"
+ ],
+ "volumes": [
+  {
+   "metadata": {
+    "name": "pvc-1f29a849-9ef6-42fc-825a-8159bb5c2e27"
+   },
+   "spec": {
+    "backupTargetName": "r2"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "traefik-acme"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-4ee9f2af-9a09-4011-994f-57395434ae28"
+   },
+   "spec": {
+    "backupTargetName": "r2"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "authelia-config"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-5baed174-e761-488b-88ea-8285b5d0ead2"
+   },
+   "spec": {
+    "backupTargetName": "r2"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "zigbee2mqtt-data"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-62a58ceb-a58e-4572-91b5-5b7103189d95"
+   },
+   "spec": {
+    "backupTargetName": "default"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "wg-easy-config"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-7d3ad40e-d345-43f1-ae70-78e21202a345"
+   },
+   "spec": {
+    "backupTargetName": "default"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "qbittorrent-config"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-a840bbef-b0d6-4ca6-8740-b4f64ed05658"
+   },
+   "spec": {
+    "backupTargetName": "r2"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "home-assistant-config"
+    }
+   }
+  },
+  {
+   "metadata": {
+    "name": "pvc-f7c223ec-c5fc-49d4-a0ab-c33f934dffbb"
+   },
+   "spec": {
+    "backupTargetName": "default"
+   },
+   "status": {
+    "kubernetesStatus": {
+     "namespace": "homelab",
+     "pvcName": "prowlarr-config"
+    }
+   }
+  }
+ ]
+}
