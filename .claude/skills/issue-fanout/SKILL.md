@@ -308,7 +308,8 @@ Watch the run with a Monitor (`timeout_ms` 1800000) running `cc-wait fanout <run
 [<run-id> …] --budget 1740`, and re-arm it if it exits 75. Do not write the `while … status …
 sleep` loop by hand. The Monitor prints a line each time a batch finishes, and nothing in
 between. Its last line ends the run: `finished` (exit 0), `needs-attention` (1) or `failed` (5).
-That line names every batch that is not plain success. The source is
+That line names every batch that is not plain success. The wait stays open while a
+daniel-server batch awaits the server lander, so `finished` means every PR landed. The source is
 `scripts/dev/fanout.py probe`, which reads the `status` command below and shares one read per
 90s among every watcher on the host.
 
@@ -370,8 +371,10 @@ progress report and the Stop hook's three continuations ran out. Both print the 
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
 PR from this session with `land.sh`. A daniel-server batch whose PR the server lander holds
-for a person reads `needs-input: the server lander will not land #N`, with the next step
-and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`). A batch on either host whose CI stayed red after its one
+for a person or for you reads `needs-input: the server lander will not land #N`, with the
+next step and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`).
+One that awaited the lander for 30 minutes with no landing started reads `needs-input: the
+server lander has not taken #N`. A batch on either host whose CI stayed red after its one
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing. A batch whose landing
 conflicted with master a second time, or with too little run time left for its one resume,

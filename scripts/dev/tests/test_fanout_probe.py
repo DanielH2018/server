@@ -17,8 +17,8 @@ def status(**runs: tuple[int, list[dict]]):
     return lambda run_id: runs[run_id]
 
 
-def row(batch: str, state: str, line: str = "") -> dict:
-    """One row as `status --json` prints it; only `batch`, `state` and `line` are read."""
+def row(batch: str, state: str, line: str = "", awaiting: bool = False) -> dict:
+    """One row as `status --json` prints it; `host`, `branch` and `pr_url` are not read."""
     return {
         "batch": batch,
         "host": "daniel-box",
@@ -26,6 +26,7 @@ def row(batch: str, state: str, line: str = "") -> dict:
         "state": state,
         "pr_url": "",
         "line": line or f"{batch} on daniel-box: {state}",
+        "awaiting_lander": awaiting,
     }
 
 
@@ -48,6 +49,15 @@ def test_every_batch_done_is_finished_and_counts_them():
     rows = [row("a", "done"), row("b", "landed")]
     reading = wait_probe.read(["r1"], status(r1=(0, rows)))
     assert reading == {"state": "finished", "detail": "2 batches finished"}
+
+
+def test_a_done_batch_awaiting_the_server_lander_keeps_the_wait_open():
+    rows = [row("a", "done", awaiting=True), row("b", "landed")]
+    reading = wait_probe.read(["r1"], status(r1=(0, rows)))
+    assert reading == {
+        "state": "running",
+        "detail": "0 running; 1 finished; 1 awaiting the server lander",
+    }
 
 
 def test_output_with_no_batch_row_is_unreadable_not_finished():

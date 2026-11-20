@@ -254,7 +254,8 @@ def resumable(
         return (
             f"{name}: the repo's open PRs could not be read; run the same command again"
         )
-    urls = tools.branch_prs(b.branch, b.repo) or []
+    held = tools.branch_prs(b.branch, b.repo)
+    urls = held.urls if held else []
     if b.branch not in open_branches or not urls:
         return (
             f"{name}: {b.branch} has no open PR, so nothing is left to land; discard the "

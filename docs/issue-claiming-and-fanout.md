@@ -663,19 +663,39 @@ daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the new
 `needs-input` naming the verdict. That directory belongs to the user the lander runs as, so a
 session of another user reads none and reports `done`.
 
+A PR that merged with no lander result reads `landed`: a coordinator landed it by hand.
+`status` takes the merged state from the answer GitHub already gave for the branch's PRs
+(`scripts/dev/fanout_lib/status.py:with_own_pr`), so it costs no call.
+
 With no result yet, `status` reads the ruling the lander made on the PR from the lander unit's
 journal, in the same call to daniel-box. Each lander pass prints one line per candidate PR,
 and `scripts/dev/fanout_lib/status.py:lander_rulings` takes the newest pass's line.
 
-- A ruling that waits on a person reads `needs-input: the server lander will not land #N`,
-  followed by the next step and the ruling. `scripts/dev/fanout_lib/operator_waits.py:reason_of`
-  decides which rulings those are: the surface the lander itself runs from, an operator step in the PR body,
-  findings left after the fix round, and a batch that ended `needs-input`. `place runs` lists
-  the batch the same way, and `cc-wait fanout` names it as a batch that needs a hand.
-- Any other ruling, such as a draft or a head that moved since the review, stays `done
-  (awaiting the server lander: <ruling>)`.
-- A PR the newest pass did not name has merged, closed or aged out of the review records the lander reads,
-  and reads `done (awaiting the server lander)`.
+- A ruling the lander does not clear itself reads `needs-input: the server lander will not
+  land #N`, followed by the next step and the ruling.
+  `scripts/dev/fanout_lib/operator_waits.py:reason_of` decides which rulings those are. Four
+  wait on a person: the surface the lander itself runs from, an operator step in the PR body,
+  findings left after the fix round, and a batch that ended `needs-input`. Three wait on the
+  batch's coordinator, because the lander judges the same review record on every pass: a
+  head that moved since the review, a CI gate that did not pass, and a review that did not
+  complete. `place runs` lists the batch the same way, and `cc-wait fanout` names it as a
+  batch that needs a hand.
+- Any other ruling, such as a draft, stays `done (awaiting the server lander: <ruling>)`.
+- A PR the newest pass did not name reads `done (awaiting the server lander)`. The lander
+  has not passed since the PR opened, or the PR has no review record the lander reads.
+
+**The awaiting state ends.** A batch reads `awaiting the server lander` for at most
+`scripts/dev/fanout_lib/status.py:AWAIT_LANDER_S`, 30 minutes from the last write of its
+report, unless the lander has started a landing of the PR. Past that, `place status` reads
+`needs-input: the server lander has not taken #N in 30 minutes`, and the coordinator runs
+`probe.py lander` and lands the PR. A landing the lander started ends in its own
+`LAND-RESULT:` line, which `status` reads. `place runs` does not apply the bound, because it
+never asks GitHub whether the PR merged.
+
+`cc-wait fanout` stays `running` while a batch awaits the lander, and its detail counts
+those batches. The row `status --json` prints carries `awaiting_lander`, which is the field
+the probe reads (`scripts/dev/fanout_lib/wait_probe.py:read`). So the wait ends only once
+every PR is `landed` or named as needing a hand.
 
 DECIDED: `status` reads the ruling the lander recorded and does not evaluate
 `autoland.problems` itself. That function needs the review record and the PR's file list
@@ -984,7 +1004,12 @@ at its PR, and a review batch whose PR the rule holds.
 |---|---|
 | A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
 | A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, or passes an operator step to the operator. |
-| A PR the lander rules ineligible for a reason it clears itself (a draft, a head that moved) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`. |
+| A PR the lander rules ineligible for a reason it clears itself (a draft) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`, for 30 minutes at most. |
+| A PR whose head moved since the review | The sub-coordinator. It reads the commits pushed since the review, then lands the PR with `land.sh`. |
+| A PR whose CI gate did not pass | The sub-coordinator. It reads the PR's checks, then lands the PR with `land.sh` once they pass. |
+| A PR whose review did not complete | The sub-coordinator. It reviews the diff, then lands the PR with `land.sh`. |
+| A PR that awaited the lander for 30 minutes with no landing started | The sub-coordinator. `place status` reads `needs-input: the server lander has not taken #N in 30 minutes`; it runs `probe.py lander`, then lands the PR with `land.sh`. |
+| A PR its coordinator landed by hand | Nobody. `place status` reads `landed`. |
 | A `--no-review` batch that qualifies for the server lander | The server lander. The sub-coordinator never lands it. |
 | A server lander landing refused before merge | The server lander, which starts the PR again once the rule clears (`scripts/dev/fanout_lib/autoland.py:refused_for_now`). |
 | A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |

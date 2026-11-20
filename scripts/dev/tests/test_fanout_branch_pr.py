@@ -11,7 +11,12 @@ import dataclasses
 import json
 
 from _review_fakes import BRANCH, _finding, _pipeline, _report
-from dev.fanout_lib.branch_pr import own_pr, parse_branch_prs, parse_merged_before
+from dev.fanout_lib.branch_pr import (
+    BranchPrs,
+    own_pr,
+    parse_branch_prs,
+    parse_merged_before,
+)
 from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.status import parse_status, with_own_pr
 
@@ -78,8 +83,10 @@ def test_parse_branch_prs_lists_open_before_merged_and_drops_closed_ones():
         {"url": "open5", "number": 5, "state": "OPEN"},
         {"url": "merged7", "number": 7, "state": "MERGED"},
     ]
-    assert parse_branch_prs(json.dumps(rows)) == ["open5", "merged7"]
-    assert parse_branch_prs(json.dumps(rows[:1])) == []
+    held = parse_branch_prs(json.dumps(rows))
+    assert held == BranchPrs(open=("open5",), merged=("merged7",))
+    assert held.urls == ["open5", "merged7"]
+    assert parse_branch_prs(json.dumps(rows[:1])) == BranchPrs()
 
 
 def test_a_relaunch_binds_its_open_pr_not_the_abandoned_closed_one(tmp_path):
@@ -115,7 +122,7 @@ def test_a_relaunch_whose_only_branch_pr_is_closed_ends_needs_input_not_on_its_c
 
 def test_parse_branch_prs_lists_the_newest_first_and_rejects_other_shapes():
     rows = [{"url": "u1", "number": 1}, {"url": "u9", "number": 9}]
-    assert parse_branch_prs(json.dumps(rows)) == ["u9", "u1"]
+    assert parse_branch_prs(json.dumps(rows)) == BranchPrs(open=("u9", "u1"))
     assert parse_branch_prs("not json") is None
     assert parse_branch_prs('{"url": "u"}') is None
 
@@ -144,13 +151,13 @@ def _status(text: str):
 def test_status_reports_the_branchs_pr_when_the_text_names_another_first():
     parsed = _status(TEXT)
     assert parsed.pr_url == FOREIGN
-    done = with_own_pr(parsed, B.branch, lambda *_: [OWN], "o/r")
+    done = with_own_pr(parsed, B.branch, lambda *_: BranchPrs(open=(OWN,)), "o/r")
     assert (done.state, done.pr_url) == ("done", OWN)
 
 
 def test_status_reads_a_foreign_only_text_as_needs_input_never_done():
     parsed = _status(f"Measured against {FOREIGN}.")
-    held = with_own_pr(parsed, B.branch, lambda *_: [], "o/r")
+    held = with_own_pr(parsed, B.branch, lambda *_: BranchPrs(), "o/r")
     assert (held.state, held.pr_url) == ("needs-input", "")
     assert (
         FOREIGN in held.final_text
@@ -164,11 +171,17 @@ def test_status_reads_a_citation_of_a_pr_merged_before_the_launch_as_no_pr():
     """A relaunched batch that opened nothing cites its branch's earlier merged PR."""
     parsed = _status(f"Already fixed by {FOREIGN}.")
     cited = with_own_pr(
-        parsed, B.branch, lambda *_: [FOREIGN], "o/r", lambda: [FOREIGN]
+        parsed,
+        B.branch,
+        lambda *_: BranchPrs(merged=(FOREIGN,)),
+        "o/r",
+        lambda: [FOREIGN],
     )
     assert (cited.state, cited.pr_url) == ("no-pr", "")
     # A merge after the launch is this batch's own landing, which stays its PR.
-    own = with_own_pr(parsed, B.branch, lambda *_: [FOREIGN], "o/r", lambda: [])
+    own = with_own_pr(
+        parsed, B.branch, lambda *_: BranchPrs(merged=(FOREIGN,)), "o/r", lambda: []
+    )
     assert (own.state, own.pr_url) == ("done", FOREIGN)
 
 

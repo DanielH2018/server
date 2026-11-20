@@ -15,8 +15,11 @@ ONE DEFINITION OF A BATCH'S STATE. This runs `fanout_lib.place.main(["status", <
 that decides a batch's state and its exit tier (the issue-fanout skill documents both). A
 regex over the text lines would break silently when their wording changes.
 
-THE STATE. `running` while any batch runs or could not be read, with a count of the finished
-batches as its detail, and the name of each one that needs a hand. A Monitor running `cc-wait
+THE STATE. `running` while any batch runs, could not be read, or is `done` with its PR still
+the server lander's to land (the row's `awaiting_lander` field), with a count of the finished
+batches as its detail, and the name of each one that needs a hand. `status` ends an awaiting
+batch as `landed` or as `needs-input` (`status.AWAIT_LANDER_S` bounds a wait the lander
+never ends), so this wait ends with it. A Monitor running `cc-wait
 fanout` therefore prints one line each time a batch finishes, and nothing in between. Once no batch runs, the worst exit tier `status` returned
 decides:
 
@@ -91,9 +94,10 @@ def describe() -> dict:
 
 
 def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
-    """The runs' state: `running` until no batch runs, then the worst tier's state."""
+    """The runs' state: `running` until no batch runs or awaits the lander, then the worst tier's."""
     tiers: list[int] = []
     running: list[str] = []
+    awaiting: list[str] = []
     finished: list[tuple[str, str, str]] = []
     for run_id in run_ids:
         rc, rows = status(run_id)
@@ -101,15 +105,17 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
         for row in rows:
             if row["state"] in _OPEN:
                 running.append(row["batch"])
+            elif row.get("awaiting_lander"):
+                awaiting.append(row["batch"])
             else:
                 finished.append((row["batch"], row["state"], row["line"]))
     finished.sort()
-    if not running and not finished:
+    if not running and not awaiting and not finished:
         # No row is an unreadable output, not a finished run: the worst tier of an empty
         # read is 0, which would end the wait as `finished`. Unreadable is a failed read,
         # which cc-wait retries and then gives up on with exit 2.
         raise Unreadable(f"no batch row in `status` output for {', '.join(run_ids)}")
-    if running:
+    if running or awaiting:
         # Counts, not names: cc-wait prints a line whenever the detail changes, so a finish
         # still prints one, and an earlier finish is not re-listed on every poll. A
         # batch that needs a hand keeps its name, because the orchestrator acts on it.
@@ -117,6 +123,8 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
             f"{batch} {state}" for batch, state, _ in finished if state not in _SUCCESS
         ]
         detail = f"{len(running)} running; {len(finished)} finished"
+        if awaiting:
+            detail += f"; {len(awaiting)} awaiting the server lander"
         if stuck:
             detail += f" ({', '.join(stuck)})"
         return {"state": "running", "detail": detail}
