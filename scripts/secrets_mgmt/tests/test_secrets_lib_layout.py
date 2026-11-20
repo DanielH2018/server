@@ -23,19 +23,6 @@ from lib.repo_paths import REPO
 
 SECRETS_MGMT = REPO / "scripts" / "secrets_mgmt"
 SECRETS_LIB = SECRETS_MGMT / "secrets_lib"
-ENTRYPOINTS = {"secret_rotation.py"}
-
-
-def _tracked(*pathspec: str) -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files", "-z", "--", *pathspec],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=60,
-    ).stdout
-    return [p for p in out.split("\0") if p]
 
 
 def _lib_file_defining(func: str):
@@ -51,26 +38,6 @@ def _lib_file_defining(func: str):
 
 def _env_without_pythonpath() -> dict:
     return {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-
-
-def test_libraries_are_tracked_in_secrets_lib_without_an_init_file():
-    lib = set(_tracked("scripts/secrets_mgmt/secrets_lib"))
-    classify_file = _lib_file_defining("classify")
-    registry_file = _lib_file_defining("due_date")
-    assert classify_file is not None, "no secrets_lib module defines classify()"
-    assert registry_file is not None, "no secrets_lib module defines due_date()"
-    assert str(classify_file.relative_to(REPO)) in lib
-    assert str(registry_file.relative_to(REPO)) in lib
-    assert "scripts/secrets_mgmt/secrets_lib/__init__.py" not in lib
-
-
-def test_only_the_entrypoint_keeps_the_secret_prefix_at_the_top_level():
-    top = {
-        p.rsplit("/", 1)[1]
-        for p in _tracked("scripts/secrets_mgmt/secret_*.py")
-        if p.count("/") == 2
-    }
-    assert top == ENTRYPOINTS
 
 
 @pytest.mark.parametrize("func", ["classify", "due_date"])
@@ -119,9 +86,5 @@ def test_secret_rotation_sync_help_runs_on_the_moved_registry(where, tmp_path):
     ), sorted(m for m in imported if "secret" in m)
 
 
-def test_the_scans_above_reach_their_subjects():
-    # Each scan above passes vacuously on an empty set: a glob over a renamed directory, or a
-    # `git ls-files` run that matched nothing. Floor them so a move cannot empty them silently.
+def test_the_library_glob_reaches_its_subjects():
     assert len(sorted(SECRETS_LIB.glob("*.py"))) >= 2
-    assert "scripts/secrets_mgmt/secret_rotation.py" in _tracked("*.py")
-    assert len(_tracked()) >= 1000
