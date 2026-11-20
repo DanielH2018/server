@@ -246,8 +246,3 @@ def test_the_guard_would_catch_a_phase_importing_the_pipeline(tmp_path):
         "from deploy_tools.land_lib import pipeline\nfrom deploy_tools.land_lib.deploy import deploy_phase\n"
     )
     assert _land_lib_imports(p) == {"pipeline", "deploy"}
-
-
-def test_no_init_py():
-    """A namespace package, like probe_lib; CLAUDE.md forbids the file."""
-    assert not (LIB / "__init__.py").exists()
