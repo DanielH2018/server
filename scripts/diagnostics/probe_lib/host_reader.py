@@ -17,7 +17,7 @@ keys:
   lines about the unit). `lines`
   keeps only the newest that many, and a null `since` reads without a window. Its entries
   come back as `[epoch_s, priority, invocation_id, identifier, message]`.
-- `files`: paths whose text to return.
+- `files`: paths whose text to return. A leading `~` is the reading user's home on that host.
 - `show`: `{unit: [property, ...]}` read with `systemctl show`.
 - `timers`: timer units whose `systemctl list-timers -o json` row to return, null for one
   systemd does not list. Its `next` is wall-clock microseconds even for a monotonic timer,
@@ -78,7 +78,7 @@ def journal(unit, since, until, by="-u", lines=None):
 
 def text(path):
     try:
-        with open(path, errors="replace") as f:
+        with open(os.path.expanduser(path), errors="replace") as f:
             return {"status": "ok", "text": f.read()}
     except FileNotFoundError:
         return {"status": "absent"}

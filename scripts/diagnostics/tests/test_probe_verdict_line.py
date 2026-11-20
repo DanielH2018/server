@@ -18,6 +18,7 @@ import pytest
 
 
 from diagnostics import probe
+from lib import proc_testing
 from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.exit_codes import FAILED, OK, PROBE_NOT_APPLICABLE, TEMP_FAIL, contract
 from lib.exit_messages import verdict_line
@@ -200,12 +201,16 @@ def test_verdict_subcommand_help_names_the_unreadable_exit(path):
     )
 
 
-def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
+def test_a_json_view_prints_no_verdict_line_after_its_document(
+    capsys, monkeypatch, tmp_path
+):
     """`--json` stdout is one document, so `jq` and an agent can parse it as one.
 
-    `landing-verdicts` reads one local file and nothing over a network, so the run is real;
-    whatever the file holds, stdout must still parse as JSON.
+    `landing-verdicts` reads one local file and, through an `ssh` that fails here, no other
+    host, so the run is real; whatever the file holds, stdout must still parse as JSON.
     """
+    bin_dir = proc_testing.fake_bin(tmp_path, ssh="exit 255\n")
+    monkeypatch.setenv("PATH", proc_testing.path_with(bin_dir))
     probe.main(["landing-verdicts", "--json"])
     out = capsys.readouterr().out
     assert "PROBE-VERDICT" not in out

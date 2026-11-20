@@ -17,7 +17,8 @@ WHERE. `$LAND_VERDICT_LOG` when set, which is how the deploy-tools tests keep a 
 the real file. Otherwise `$XDG_STATE_HOME/homelab/landing-verdicts.jsonl`, defaulting to
 `~/.local/state/`. The file is per user and per host, for the reason `detach.default_log_dir`
 gives for its own directory: a shared one created under the operator's umask shut the
-`claude` user out. A landing run on daniel-box is therefore readable only on daniel-box.
+`claude` user out. So `probe.py landing-verdicts` reads the file on each k3s host, the other
+one over ssh, as the user that runs it (`probe_lib/landing_verdicts.py`).
 
 GROWTH. A write that leaves more than `KEEP * 2` lines trims the file to its newest `KEEP`. At
 a few dozen landings a day, `KEEP` covers weeks, and nothing reads further back.
@@ -74,9 +75,13 @@ def latest(path: Path | None = None) -> list[dict]:
     """
     target = path or default_path()
     try:
-        text = target.read_text(errors="replace")
+        return parse(target.read_text(errors="replace"))
     except FileNotFoundError:
         return []
+
+
+def parse(text: str) -> list[dict]:
+    """The newest record of each PR in a record file's `text`, newest first."""
     newest: dict[str, dict] = {}
     for raw in text.splitlines():
         try:
@@ -90,9 +95,3 @@ def latest(path: Path | None = None) -> list[dict]:
         except ValueError, KeyError, TypeError:
             continue
     return sorted(newest.values(), key=lambda e: e["at"], reverse=True)
-
-
-def format_row(entry: dict) -> str:
-    """`#<pr>  <UTC time>  rc=<n>  <line>`, one landing to a line."""
-    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(entry["at"]))
-    return f"#{entry['pr']}  {stamp}  rc={entry['rc']}  {entry['line']}"
