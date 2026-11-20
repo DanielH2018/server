@@ -1361,6 +1361,116 @@
       ],
       "title": "DNS queries per client per day",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Pull requests merged into this repo per day, by author.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 113
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key AS metric, n AS value FROM github.counts_daily WHERE metric = 'prs_merged' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "PRs merged per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Wall-clock time the repo's Actions runs took per day, by workflow, for the eight busiest workflows over the time range.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 113
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH r AS (SELECT day, key, sum(seconds) AS s FROM github.counts_daily WHERE metric = 'ci_runs' AND $__timeFilter(day) GROUP BY 1, 2), top AS (SELECT key FROM r GROUP BY key ORDER BY sum(s) DESC LIMIT 8) SELECT day::timestamptz AS time, key AS metric, s AS value FROM r WHERE key IN (SELECT key FROM top) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Actions run time per day",
+      "type": "barchart"
     }
   ],
   "refresh": "",

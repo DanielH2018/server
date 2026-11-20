@@ -84,9 +84,12 @@ role as built.
   by ClusterIP, as `smart_daily_rollup` into `smart.attribute_daily`. Scrutiny keeps a
   reading for every day only for about six days, then keeps sparser points, so the warehouse holds
   the only daily record.
-- **Slice 5, repo engineering metrics (idea 5).** PRs, CI runs and findings issues,
-  incremental by `updated_at`. All of one user's tokens share one GitHub quota, so each run is
-  budgeted and scheduled in quiet hours.
+- **Slice 5, repo engineering metrics (idea 5).** Merged PRs, Actions runs and findings
+  issues per UTC day, as `github_daily_rollup` into `github.counts_daily`, read with a
+  fine-grained read-only token. All of one user's tokens share one GitHub quota, so the DAG
+  runs one day at a time at 02:00 and waits for the next window below 2,000 calls left. A day
+  costs about 30 calls, most of them the hourly windows that keep each Actions query under
+  the API's 1,000-result cap.
 - **Slice 6, cost per merged PR (idea 6).** Joins slices 2 and 5 on assets. The join key is
   open: check whether the telemetry carries a branch or worktree name per session.
 - **Slice 7a, network edge history (idea 7).** Traefik's requests per entrypoint and route by

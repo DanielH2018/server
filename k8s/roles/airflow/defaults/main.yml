@@ -101,6 +101,8 @@ image_builder_builds:
       "{{ role_file('files/dags/homelab_warehouse/smart_history.py') }}": smart_history.py
       "{{ role_file('files/dags/dns_daily_rollup.py') }}": dns_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/dns_history.py') }}": dns_history.py
+      "{{ role_file('files/dags/github_daily_rollup.py') }}": github_daily_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/github_history.py') }}": github_history.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 
@@ -134,3 +136,6 @@ render_secrets:
       # A Home Assistant long-lived access token, made in HA's UI under the operator's
       # profile. Task pods read history with it (ha_daily_rollup).
       HA_TOKEN: airflow_ha_token
+      # A fine-grained GitHub token, read-only on this repo's Actions, issues, metadata and
+      # pull requests. Only github_daily_rollup's load task reads it, by its executor_config.
+      GITHUB_TOKEN: airflow_github_token
