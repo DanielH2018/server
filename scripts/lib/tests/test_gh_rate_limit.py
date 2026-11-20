@@ -99,6 +99,59 @@ def test_a_refusal_in_primary_words_with_quota_left_waits_as_a_secondary_limit()
     )
 
 
+def _quota_over_time(*answers):
+    """A clock that `sleep` advances, and a `gh api rate_limit` giving `answers` in turn.
+
+    Each answer is `(remaining, reset)`; the last one repeats. Returns the seconds slept, in
+    a list, then `sleep`, `run` and `now` for `wait_out`.
+    """
+    clock = [NOW]
+    slept: list[float] = []
+    queue = list(answers)
+
+    def sleep(seconds):
+        slept.append(seconds)
+        clock[0] += seconds
+
+    def run(argv, **_kwargs):
+        remaining, reset = queue.pop(0) if len(queue) > 1 else queue[0]
+        quota = json.dumps({"remaining": remaining, "reset": reset})
+        return subprocess.CompletedProcess(argv, 0, quota + "\n", "")
+
+    return slept, sleep, run, lambda: clock[0]
+
+
+def test_a_wait_for_a_spent_quota_ends_at_a_reset_sooner_than_the_first():
+    slept, sleep, run, now = _quota_over_time((0, int(NOW) + 2689), (0, int(NOW) + 600))
+    lines: list[str] = []
+    gh_rate_limit.wait_out(PRIMARY, sleep, lines.append, run, now)
+    assert lines == [
+        "hit the GitHub rate limit; waiting 2691s",
+        "stopped waiting after 600s: the core quota has reset",
+    ]
+    assert sum(slept) == 600
+
+
+def test_a_wait_for_a_spent_quota_ends_once_the_quota_has_calls_again():
+    slept, sleep, run, now = _quota_over_time(
+        (0, int(NOW) + 2689), (0, int(NOW) + 2689), (5000, int(NOW) + 3600)
+    )
+    lines: list[str] = []
+    gh_rate_limit.wait_out(GRAPHQL, sleep, lines.append, run, now)
+    assert sum(slept) == 2 * gh_rate_limit.RECHECK_S
+    assert lines[-1] == "stopped waiting after 120s: the graphql quota has reset"
+
+
+def test_a_secondary_limit_sleeps_its_whole_wait_without_reading_a_quota():
+    slept: list[float] = []
+
+    def read(_name):
+        raise AssertionError("a secondary limit spends no quota to read")
+
+    assert gh_rate_limit.sleep_until_reset("", 300, slept.append, read) == 300
+    assert slept == [300]
+
+
 def _quota(remaining, reset=int(NOW) + 600):
     return lambda _name: {"remaining": remaining, "reset": reset}
 
@@ -154,22 +207,23 @@ def _http_403(body=b"", **headers):
 def test_a_rest_403_with_the_quota_spent_waits_until_its_reset():
     reset = str(int(NOW) + 600)
     with _http_403(X_RateLimit_Remaining="0", X_RateLimit_Reset=reset) as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 602
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (602, "core")
 
 
 def test_a_rest_403_with_retry_after_waits_that_long():
     with _http_403(Retry_After="45") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 45
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (45, "")
 
 
 def test_a_rest_403_with_quota_left_is_not_a_rate_limit():
     with _http_403(X_RateLimit_Remaining="4999") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) is None
+        assert gh_rate_limit.http_wait(error, lambda: NOW) is None
 
 
 def test_a_rest_403_whose_body_names_a_secondary_limit_waits_the_minimum():
     body = b'{"message": "You have exceeded a secondary rate limit."}'
     with _http_403(body, X_RateLimit_Remaining="4999") as error:
-        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == (
-            gh_rate_limit.SECONDARY_WAIT_S
+        assert gh_rate_limit.http_wait(error, lambda: NOW) == (
+            gh_rate_limit.SECONDARY_WAIT_S,
+            "",
         )
