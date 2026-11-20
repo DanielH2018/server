@@ -3,7 +3,7 @@
 Under `prune: true`, a render that dropped a CRD file makes Flux delete that CRD, and the API
 server then deletes every custom object of its kind. For traefik's CRDs that is every
 IngressRoute and Middleware, so the edge goes down. A tag that renders a CRD therefore sets
-H1.1a's `flux_prune: false` in its defaults, which `role_fields` reads and the bundle writes as
+H1.1a's `flux_prune: false` in its defaults, which `role_defaults` reads and the bundle writes as
 `prune: false`. The lever reaches `<tag>` alone, so a CRD in a `<tag>-deferred` directory is
 always under prune (`bundle.flux_files`). The census reads the
 same lever for every render target, Ansible-owned ones included, because a flip carries the
@@ -22,7 +22,7 @@ import pytest
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from lib.k8s_roles import K8S_ROLES, role_fields
+from lib.k8s_roles import K8S_ROLES, RoleDefaults, role_defaults
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
 from lib.k8s_roles import k8s_tags
@@ -61,7 +61,7 @@ def crds_by_tag(directories: Mapping[str, Mapping[str, str]]) -> dict[str, set[s
 
 
 def pruned_crds(
-    crds: Mapping[str, set[str]], fields: Mapping[str, Mapping]
+    crds: Mapping[str, set[str]], defaults: Mapping[str, RoleDefaults]
 ) -> dict[str, list[str]]:
     """Each directory that renders a CRD and whose Kustomization renders `prune: true`.
 
@@ -70,7 +70,7 @@ def pruned_crds(
     return {
         name: sorted(names)
         for name, names in sorted(crds.items())
-        if split_kind(name)[1] or fields.get(name, {}).get("prune", True)
+        if split_kind(name)[1] or defaults[name].prune
     }
 
 
@@ -90,12 +90,12 @@ def _render(out: Path, tmp_path: Path, roles: list[str] | None = None) -> dict:
 
 def test_a_crd_in_a_tag_that_prunes_is_flagged():
     crds = crds_by_tag({"one": {"crd.yaml": CRD.format(name="widgets.example.io")}})
-    assert pruned_crds(crds, {}) == {"one": ["widgets.example.io"]}
+    assert pruned_crds(crds, {"one": RoleDefaults()}) == {"one": ["widgets.example.io"]}
 
 
 def test_a_crd_in_a_tag_with_prune_false_is_clean():
     crds = crds_by_tag({"one": {"crd.yaml": CRD.format(name="widgets.example.io")}})
-    assert pruned_crds(crds, {"one": {"prune": False}}) == {}
+    assert pruned_crds(crds, {"one": RoleDefaults(prune=False)}) == {}
 
 
 def test_a_crd_in_a_deferred_directory_of_a_tag_with_prune_false_is_flagged():
@@ -103,7 +103,7 @@ def test_a_crd_in_a_deferred_directory_of_a_tag_with_prune_false_is_flagged():
     crds = crds_by_tag(
         {"one-deferred": {"crd.yaml": CRD.format(name="widgets.example.io")}}
     )
-    assert pruned_crds(crds, {"one": {"prune": False}}) == {
+    assert pruned_crds(crds, {"one": RoleDefaults(prune=False)}) == {
         "one-deferred": ["widgets.example.io"]
     }
 
@@ -118,9 +118,9 @@ def test_a_member_with_flux_prune_removed_is_flagged(tmp_path, member):
     text = defaults.read_text()
     assert "\nflux_prune: false" in text
     defaults.write_text(text.replace("\nflux_prune: false", "\n"))
-    fields, problems = role_fields([member], roles)
+    defaults, problems = role_defaults([member], roles)
     assert problems == []
-    [(name, names)] = pruned_crds(crds_by_tag(directories), fields).items()
+    [(name, names)] = pruned_crds(crds_by_tag(directories), defaults).items()
     assert name == member
     assert MEMBERS[member] in names
 
@@ -131,11 +131,11 @@ def test_no_render_target_renders_a_crd_under_prune(tmp_path):
     targets = set(render_targets())
     assert targets <= {split_kind(d)[0] for d in directories}
     crds = crds_by_tag(directories)
-    fields, problems = role_fields(targets)
+    defaults, problems = role_defaults(targets)
     assert problems == []
     # Non-vacuity: each named member renders its kinds, is flux-owned, and its lever is off.
     assert set(MEMBERS) <= k8s_tags()
     for member, crd in MEMBERS.items():
         assert crd in crds.get(member, set()), member
-        assert fields[member].get("prune") is False, member
-    assert pruned_crds(crds, fields) == {}
+        assert defaults[member].prune is False, member
+    assert pruned_crds(crds, defaults) == {}

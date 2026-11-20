@@ -1441,7 +1441,7 @@ The bundle holds:
   (`docs/archive/contracts.md`, *Deletion policy*).
   A role's `defaults/main.yml` changes two of those fields. `flux_prune: false` renders
   `prune: false`, and `manifests_rollout_timeout` replaces the default `timeout`. Each must
-  be a literal, and `scripts/lib/k8s_roles.py:role_fields` refuses a Jinja expression.
+  be a literal, and `scripts/lib/k8s_roles.py:role_defaults` refuses a Jinja expression.
   It substitutes exactly when the render of its own directory, `cluster/<tag>/`, holds a
   placeholder, as *Which Kustomizations substitute* below says.
 - `flux/cluster-vars.yaml` and `cluster/cluster-vars/`, the `cluster-vars` shared kind,
@@ -1464,7 +1464,7 @@ snapshot is taken. `<tag>-prepull` does the same beside it, never after it (*The
 below). `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. It also depends on the last Kustomization of each tag the role
 names in `flux_verify_after`, so its Jobs probe that tag's rolled pod; `crowdsec` names `traefik`
-(`ordering.verify_after`, #5999). A `K8S_APPLIES_LAST` tag waits on no other tag's
+(`RoleDefaults.verify_after`, #5999). A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
 renders `<tag>-snapshot` (*The snapshot Job* below). A published tag whose role ships
 `templates/verify/*.yaml.j2` renders `<tag>-verify`; sonarr and radarr were the first, in D5.20.
@@ -1705,7 +1705,7 @@ A published tag's object also holds two fields (D5.1a2):
 
 - `claims` lists the snapshot claims the tag's role declares in
   `k8s_autodeploy_snapshot_pvcs`, sorted. The publish census's `-snapshot` rule reads the
-  same function, `scripts/lib/k8s_roles.py:snapshot_claims`.
+  same function, `scripts/lib/k8s_roles.py:role_defaults`.
 - `suspended` is true when the tag's rendered Kustomization sets `spec.suspend: true`.
 
 `flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
@@ -1724,7 +1724,7 @@ never from the render, so a renderer bug cannot widen it. Each per-tag kind has 
 - `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
 - `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
   same `verify_files` the renderer reads), or opts a CronJob into a gate Job with
-  `flux_cronjob_gates` (`cronjob_gates`). sonarr, radarr, n8n, prowlarr and media-volume do
+  `flux_cronjob_gates` (`RoleDefaults.cronjob_gates`). sonarr, radarr, n8n, prowlarr and media-volume do
   the first; karakeep and pi-peer-backup do the second (#5652). configarr sets the second
   ahead of its flip, which stays inert while it is Ansible-owned.
 
