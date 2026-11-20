@@ -88,9 +88,9 @@ section line spans, taken from `grep -n '^#' CLAUDE.md`, are:
 
 - The harness loads it at session start.
 - A fan-out batch in this repo runs every phase after the implementer on held settings,
-  `claude --setting-sources user` (`scripts/dev/fanout_lib/review/review.py:Pipeline._held_settings`).
+  `claude --setting-sources user` (`scripts/dev/fanout_lib/review/batch_run.py:BatchRun._held_settings`).
   The reviewer, the implement phase that follows a red phase, and every phase that resumes
-  it get the start-time root as text (`Pipeline._reviewer`, `Pipeline._red_claude_md`).
+  it get the start-time root as text (`BatchRun._reviewer`, `Pipeline._red_claude_md`).
 - The `DECIDED` marker in the `held_hooks.py` module docstring that starts *in this repo's
   batch, every phase that starts after the implementer ran* records a probe from
   2026-10-09. The flag drops the project `CLAUDE.md` and the project skills from a fresh

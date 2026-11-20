@@ -34,16 +34,12 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-from pathlib import Path as _Path
-
-
 from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
 from dev.findings_lib.board import sync_board
 from dev.findings_lib import milestone
 from dev.findings_lib.issue_model import PR_REPO
 from dev.fanout_lib.manifest import branches_launched_by
+from dev.fanout_lib.target import REGISTER_CHECKOUTS
 from dev.findings_lib.peer_trees import peer_worktree_list
 from dev.findings_lib.tracked_paths import tracked_files
 from lib.repo_paths import REPO
@@ -55,15 +51,6 @@ from lib.json_types import JsonValue
 # (worktrees, dirty, merged, ok) — `lib.worktrees.worktree_facts`'s own return, named here
 # so the field below reads as one thing rather than a four-element tuple spelled out.
 WorktreeFacts = tuple[list[Any], Callable[[str], bool], Callable[[Any], bool], bool]
-
-# The registers `--repo` can aim at, each with the checkout whose worktrees decide whether a
-# claim on it is live. None is this repo's own primary checkout. A repo missing here can still
-# be read and written, but `claim`, `claims`, `reap` and `next` refuse it: judged against
-# THIS repo's worktrees, every claim on it would read as stale and `reap` would release them.
-REGISTER_CHECKOUTS: dict[str, str | None] = {
-    "DanielH2018/server": None,
-    "DanielH2018/dotfiles": str(_Path.home() / ".local/share/chezmoi"),
-}
 
 
 def read_peer_worktrees(repo: str | None) -> list[Worktree] | None:

@@ -19,7 +19,7 @@ from _findings_fakes import (
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 
 from dev.findings import main
-from dev.findings_lib.boundaries import REGISTER_CHECKOUTS
+from dev.fanout_lib.target import REGISTER_CHECKOUTS
 from dev.findings_lib.issue_model import claim_comment
 from lib.worktrees import worktree_facts, is_merged
 

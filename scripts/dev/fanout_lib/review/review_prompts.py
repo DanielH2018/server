@@ -1,13 +1,11 @@
 """What the review pipeline asks each phase it resumes or starts, and the reviewer's schema.
 
 `fanout_lib.review.review` runs the phases; this module is the text they read. Every payload a model
-wrote goes in through `_as_data`, fenced and labelled as data. `is_held` decides which findings
-stay off the public PR and tracker.
+wrote goes in through `_as_data`, fenced and labelled as data.
 """
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -15,12 +13,8 @@ from pathlib import Path
 
 
 from dev.fanout_lib.brief import APPLY_OWED, DESIGN_HEADING, DESIGN_RULES, fence_for
-from dev.fanout_lib.review.review_land import LAND_SH
-
-if TYPE_CHECKING:
-    from dev.fanout_lib.review.review_ci import Failure
-    from dev.fanout_lib.review.review_land import Landing
-    from dev.fanout_lib.review.review_record import Record
+from dev.fanout_lib.review.review_land import LAND_SH, Landing
+from dev.fanout_lib.review.review_record import Record, is_held
 
 HYGIENE_SKILL = (
     Path.home() / ".claude" / "skills" / "test-scenario-hygiene" / "SKILL.md"
@@ -179,12 +173,7 @@ End your final message with the PR URL.
 """
 
 
-def is_held(finding: dict) -> bool:
-    """Whether a finding stays off the public PR and tracker for disclosure reasons."""
-    return finding.get("category") == "security"
-
-
-def apply_prompt(pr: str, landing: "Landing", log_dir: str) -> str:
+def apply_prompt(pr: str, landing: Landing, log_dir: str) -> str:
     """The prompt that resumes the implementer after a landing whose verdict needs a decision.
 
     The pipeline ran `land.sh` itself (`review_land`), so this session never saw the landing.
@@ -296,7 +285,7 @@ as unverified and does not hold the PR.
 """
 
 
-def file_prompt(record: "Record") -> str:
+def file_prompt(record: Record) -> str:
     public = [f for f in record.remaining if not is_held(f)]
     return f"""The review of {record.pr} is finished. These findings were not resolved. File
 each with `findings.py open --review-leftover`, and add `Filed for later: #N` to the PR body
@@ -309,13 +298,18 @@ End your final message with the PR URL.
 """
 
 
-def ci_fix_prompt(pr: str, line: str, failures: "Sequence[Failure]") -> str:
+def ci_fix_prompt(pr: str, line: str, failures: Sequence[tuple[str, str]]) -> str:
     """The prompt that resumes the implementer after its PR's CI went red (`review_ci`).
 
     The pipeline or its landing waited for CI, so this session never saw it. It gets each failed check's name
     and the end of its job's log, as data: a log can echo text a PR author wrote.
+
+    Args:
+        pr: the PR's URL.
+        line: the line that reported the red run.
+        failures: each failed check as a `(name, log tail)` pair.
     """
-    failed = [{"check": f.name, "log_tail": f.tail} for f in failures]
+    failed = [{"check": name, "log_tail": tail} for name, tail in failures]
     return f"""CI ran on {pr} after the review, and it is red:
 
 {line}
