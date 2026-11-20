@@ -98,9 +98,8 @@ DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
 
-    `ci_verdict` returns `pass` for an empty set for the disarmed gate. That is a deliberate
-    disarm switch, reachable only by an operator emptying the required contexts. Inheriting it here would turn a wait-for-green into an unconditional
-    green, so this refuses instead of returning a verdict it did not check.
+    An operator empties the required contexts to disarm the gate. The landing names that
+    state from this error, which `verdict_for` raises before it reads GitHub.
     """
 
 
