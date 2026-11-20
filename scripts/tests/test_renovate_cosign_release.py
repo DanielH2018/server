@@ -9,7 +9,7 @@ match.
 
 The cosign version decides the signature format Flux's source-controller verifies, so a bump
 must not automerge. This module holds every pin in the table with its digest and equal to
-promote.yml's. The `cosign-` rows of test_renovate_package_rules.py hold each pin in the one
+promote.yml's. The `cosign-` rows of _renovate_rule_rows.py hold each pin in the one
 manual cosign group, and the rule off any other `sigstore/` dep.
 
 Run: uv run pytest scripts/tests/test_renovate_cosign_release.py
@@ -36,7 +36,7 @@ ACTION_FETCH = "version: ${{ env.COSIGN_VERSION }}"
 def test_every_cosign_pin_is_extracted_with_its_digest_and_equals_promotes(
     workflow: str,
 ) -> None:
-    # The datasource the `cosign-` rows of test_renovate_package_rules.py resolve against.
+    # The datasource the `cosign-` rows of _renovate_rule_rows.py resolve against.
     assert [
         (d.datasource, d.digest) for d in expected_deps(workflow, "sigstore/cosign")
     ] == [("github-release-attachments", "digest")]

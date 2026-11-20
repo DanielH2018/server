@@ -13,7 +13,7 @@ Docker's index on every run. They assert the config's own internal agreement ins
 depName is the apt package its var renders into, the registryUrl is Docker's index with the
 three query parameters the `deb` datasource requires, extractVersion reads the apt version
 shapes that index actually serves. The `docker-engine-` rows of
-test_renovate_package_rules.py keep the group out of the automerging catch-all.
+_renovate_rule_rows.py keep the group out of the automerging catch-all.
 
 Run: uv run pytest scripts/tests/test_renovate_docker_engine_pins.py
 """

@@ -8,7 +8,7 @@ pin carrying one, so Renovate writes back a bare version and every URL built fro
 
 The packageRule that finishes an annotated pin, and the per-package rules after it that it
 yields to, are the `annotated-`, `crowdsec-` and `node-exporter-` rows of
-test_renovate_package_rules.py.
+_renovate_rule_rows.py.
 
 Run: uv run pytest scripts/tests/test_renovate_annotated_pins.py
 """

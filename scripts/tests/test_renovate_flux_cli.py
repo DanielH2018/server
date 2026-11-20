@@ -12,7 +12,7 @@ digest in one match.
 
 This module holds every pin in the table with its digest and equal to the role's
 `flux_version` and homelab-tools' amd64 digest. The `flux-` rows of
-test_renovate_package_rules.py hold each pin and `flux_version` in the one manual flux group,
+_renovate_rule_rows.py hold each pin and `flux_version` in the one manual flux group,
 so a bump opens as one PR.
 
 Run: uv run pytest scripts/tests/test_renovate_flux_cli.py

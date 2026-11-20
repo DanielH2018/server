@@ -1,7 +1,7 @@
 """The packageRules table's harness, and its rows for the CI, host and lockstep pins.
 
 `test_renovate_package_rules.py` runs every row; its docstring says what a row asserts. The
-rows for the k8s and Pi image pins sit there, because one module of both would pass the
+rows for the k8s and Pi image pins sit there, because one module of both would exceed the
 module-length cap.
 """
 
@@ -186,7 +186,10 @@ K3S = _annotated("k3s-io/k3s", "k8s/roles/system-upgrade/defaults/main.yml")
 METALLB = _annotated("metallb/metallb", "k8s/roles/metallb/defaults/main.yml")
 LONGHORN = _annotated("longhorn/longhorn", "k8s/roles/longhorn/defaults/main.yml")
 CLUSTER_PINS = (K3S, METALLB, LONGHORN)
-CLUSTER_GATED = ((METALLB, "metallb-upgrade"), (LONGHORN, "longhorn-upgrade"))
+CLUSTER_GATED = (
+    (METALLB, "MetalLB (manual —", "metallb-upgrade"),
+    (LONGHORN, "Longhorn (manual —", "longhorn-upgrade"),
+)
 
 # Every site that reports the repo's Python to Renovate moves in one PR.
 PYTHON_CI = Dep("python", ".github/actions/setup/action.yml", "python-version")
@@ -351,9 +354,9 @@ HOST_ROWS = [
     ),
     *(
         Row(f"cluster-{d.name}-{field}", d, "minor", field, value)
-        for d, gate in CLUSTER_GATED
+        for d, name, gate in CLUSTER_GATED
         for field, value in (
-            ("groupName", Has("(manual —", gate)),
+            ("groupName", Has(name, gate)),
             ("description", Has("land.sh", "homelab/upgrade-gates")),
         )
     ),

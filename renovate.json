@@ -120,7 +120,7 @@
     },
     {
       "customType": "regex",
-      "description": "The flux CLI release each flux CI job fetches (#7778), pinned as `FLUX_VERSION` and `FLUX_SHA256` in env. depName equals the annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts every pin in one PR. ENFORCED by scripts/tests/test_renovate_flux_cli.py and the `flux-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The flux CLI release each flux CI job fetches (#7778), pinned as `FLUX_VERSION` and `FLUX_SHA256` in env. depName equals the annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts every pin in one PR. ENFORCED by scripts/tests/test_renovate_flux_cli.py and the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/promote\\.yml$/",
         "/(^|/)\\.github/workflows/ci\\.yml$/",
@@ -135,7 +135,7 @@
     },
     {
       "customType": "regex",
-      "description": "The cosign release that promote.yml, prune-artifacts.yml and flux-deletion-drill.yml fetch (#7781), pinned as `COSIGN_VERSION` and `COSIGN_SHA256` in env. The `sigstore/cosign` packageRule puts all three pins in one manual PR. ENFORCED by scripts/tests/test_renovate_cosign_release.py and the `cosign-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The cosign release that promote.yml, prune-artifacts.yml and flux-deletion-drill.yml fetch (#7781), pinned as `COSIGN_VERSION` and `COSIGN_SHA256` in env. The `sigstore/cosign` packageRule puts all three pins in one manual PR. ENFORCED by scripts/tests/test_renovate_cosign_release.py and the `cosign-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/promote\\.yml$/",
         "/(^|/)\\.github/workflows/prune-artifacts\\.yml$/",
@@ -185,7 +185,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kind binary CI's `sops_manifest_type_proof` job builds its cluster with (D3.3d, #5173), pinned by version and sha256. The `kind` packageRule puts it and the node image in one PR, because each kind release lists the node images it built. ENFORCED by the `kind-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The kind binary CI's `sops_manifest_type_proof` job builds its cluster with (D3.3d, #5173), pinned by version and sha256. The `kind` packageRule puts it and the node image in one PR, because each kind release lists the node images it built. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -197,7 +197,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (#5173), pinned by tag and digest. Its Kubernetes minor follows `k3s_version`, which tests/repo/test_kind_node_image_follows_k3s.py holds. ENFORCED by the `kind-` rows of scripts/tests/_renovate_rule_rows.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -749,7 +749,7 @@
       "automerge": false
     },
     {
-      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (#5479): the CI setup action, `.python-version`, Dockerfile `FROM python:` tags and the k8s `python:<minor>-alpine` pins (#8532). A PR that bumped only the CI pin stayed red against tests/repo/test_python_version_consistency.py. The group carries `k8s_autodeploy: false` because it owns denied roles' pins. ENFORCED: the `python-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchManagers": [
         "custom.regex",
         "pyenv",
@@ -814,7 +814,7 @@
       "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
-      "description": "Every `# renovate:` annotated pin. Most pair the version with a digest Renovate cannot compute, so NO automerge, and the group name names the command that finishes it: `asset_pins.py --refresh <depName>` (#3732). The `crowdsec-` and `annotated-` rows of scripts/tests/test_renovate_package_rules.py assert that a pin with its own later rule overrides this one.",
+      "description": "Every `# renovate:` annotated pin. Most pair the version with a digest Renovate cannot compute, so NO automerge, and the group name names the command that finishes it: `asset_pins.py --refresh <depName>` (#3732). The `crowdsec-` and `annotated-` rows of scripts/tests/_renovate_rule_rows.py assert that a pin with its own later rule overrides this one.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -831,7 +831,7 @@
       "automerge": false
     },
     {
-      "description": "node_exporter is pinned twice (#3893): the cluster DaemonSet image and the Pi's host binary in `hosts/packages/homelab-tools/package.yml`, which hosts/tests/test_pi_node_exporter_host_unit.py holds equal. One group means one PR, and it must stay AFTER the annotated-pin and homelab-tools rules. NO automerge, because the Pi's updater installs the host binary. ENFORCED: the `node-exporter-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "node_exporter is pinned twice (#3893): the cluster DaemonSet image and the Pi's host binary in `hosts/packages/homelab-tools/package.yml`, which hosts/tests/test_pi_node_exporter_host_unit.py holds equal. One group means one PR, and it must stay AFTER the annotated-pin and homelab-tools rules. NO automerge, because the Pi's updater installs the host binary. ENFORCED: the `node-exporter-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchPackageNames": [
         "prom/node-exporter",
         "prometheus/node_exporter"
@@ -898,7 +898,7 @@
       "automerge": false
     },
     {
-      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "Flux, the deploy controller (k8s/roles/flux). A `flux_version` bump is unfinished until files/gotk-components.yaml is regenerated at the new release, which Renovate cannot run, and tests/k8s/test_flux_role.py fails a bump that skipped it. Own group, no automerge, with the `k8s_autodeploy: false` marker (#1963). The rule covers every dep named `fluxcd/flux2` (#4822). ENFORCED by the `flux-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchDatasources": [
         "github-release-attachments",
         "github-releases"
@@ -916,7 +916,7 @@
       "automerge": false
     },
     {
-      "description": "The Pi's Docker engine packages, one group, NO automerge. Merging moves nothing: the apply is homelab-docker-engine.service, which stops the Pi's Compose project (#1961), so the operator merges and starts the unit from a LAN session. ENFORCED by the `docker-engine-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The Pi's Docker engine packages, one group, NO automerge. Merging moves nothing: the apply is homelab-docker-engine.service, which stops the Pi's Compose project (#1961), so the operator merges and starts the unit from a LAN session. ENFORCED by the `docker-engine-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchFileNames": [
         "hosts/components/pi-docker/component.yml"
       ],
@@ -1335,7 +1335,7 @@
       "groupName": "gitleaks (prek.toml and the promote workflow)"
     },
     {
-      "description": "The cosign release that promote.yml, prune-artifacts.yml and flux-deletion-drill.yml fetch (#7781). No automerge, because the cosign version decides the signature format Flux's source-controller verifies, and a bump it cannot verify stops every promotion. ENFORCED by the `cosign-` rows of scripts/tests/test_renovate_package_rules.py.",
+      "description": "The cosign release that promote.yml, prune-artifacts.yml and flux-deletion-drill.yml fetch (#7781). No automerge, because the cosign version decides the signature format Flux's source-controller verifies, and a bump it cannot verify stops every promotion. ENFORCED by the `cosign-` rows of scripts/tests/_renovate_rule_rows.py.",
       "matchManagers": [
         "custom.regex"
       ],

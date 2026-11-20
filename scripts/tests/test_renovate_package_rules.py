@@ -3,8 +3,8 @@
 Each row resolves one field for one dep and one update type through `_resolve_setting`, which
 walks the packageRules in order the way Renovate does, so a later rule that overrides an
 earlier one is what the row sees. A row with `rules` resolves against a mutated rule list
-instead: those rows are the red halves, each showing that the rule they name, in the place it
-sits, is what decides the value. Rows that share a `shares` key must resolve to one value,
+instead. Most of those rows are red halves, each showing that the rule they name, in the
+place it sits, is what decides the value; a few use the mutation only to read one rule alone. Rows that share a `shares` key must resolve to one value,
 which is how a lockstep group is held in one PR.
 
 The reason behind each policy is in that rule's `description` in `renovate.json`. A guard that
@@ -20,9 +20,11 @@ from _renovate import _REPO
 from _renovate_rule_rows import (
     CI,
     HOST_ROWS,
+    NODE_EXPORTER_RULE,
     PI_COMPOSE,
     Dep,
     Has,
+    Mutation,
     Row,
     appended,
     edited,
@@ -215,13 +217,23 @@ def test_each_row_resolves_as_the_table_says(row: Row) -> None:
     assert resolve(row) == row.expected
 
 
-def test_rows_sharing_a_group_resolve_to_one_value() -> None:
+def split_groups(rows: list[Row], mutation: Mutation | None = None) -> dict[str, set]:
+    """Each `shares` key whose rows resolve to more than one value, with the values."""
     values: dict[str, set] = defaultdict(set)
-    for row in ROWS:
+    for row in rows:
         if row.shares:
-            values[row.shares].add(resolve(row))
-    split = {key: found for key, found in values.items() if len(found) != 1}
+            values[row.shares].add(resolve(row._replace(rules=mutation)))
+    return {key: found for key, found in values.items() if len(found) != 1}
+
+
+def test_rows_sharing_a_group_resolve_to_one_value_is_clean() -> None:
+    split = split_groups(ROWS)
     assert not split, f"a lockstep group splits into several PRs: {split}"
+
+
+def test_rows_sharing_a_group_split_by_a_moved_rule_is_flagged() -> None:
+    mutation = moved(NODE_EXPORTER_RULE, before="CI toolchain and docs-lint pins")
+    assert set(split_groups(ROWS, mutation)) == {"node_exporter"}
 
 
 @pytest.mark.parametrize(
