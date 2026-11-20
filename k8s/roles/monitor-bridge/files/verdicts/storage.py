@@ -238,11 +238,19 @@ def r2_usage_verdict(
     return True, msg
 
 
+# How old a weekly backup gets before its prune deletes it, which the B2 lock must stay under
+# (ADR-0041): `k3s_longhorn_weekly_backup_retain` weekly backups. test_check_bucket_locks.py
+# derives it from that default.
+B2_PRUNE_AGE_DAYS = 14
+_PERIOD_DAYS = {"days": 1, "years": 365}
+
+
 def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     """(ok, msg) for Object Lock on the B2 bucket Longhorn's weekly tier writes to.
 
-    ADR-0041 records the choice: Object Lock on, governance-mode default retention, and a writer
-    key that cannot bypass governance.
+    ADR-0041 records the choice: Object Lock on, a governance-mode default retention shorter than
+    `B2_PRUNE_AGE_DAYS`, and a writer key that cannot bypass governance. Compliance mode is
+    flagged because no key can shorten it.
 
     Args:
       bucket: One entry of a `b2_list_buckets` response.
@@ -270,13 +278,33 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     retention = value.get("defaultRetention") or {}
     mode = retention.get("mode")
     period = retention.get("period") or {}
-    if mode not in ("governance", "compliance") or not period.get("duration"):
+    duration = period.get("duration")
+    if mode not in ("governance", "compliance") or not duration:
         return CheckResult(
             False,
             "%s has no default retention, so new uploads are not locked" % name,
             ["no default retention"],
         )
-    if mode == "governance" and "bypassGovernance" in capabilities:
+    if mode == "compliance":
+        return CheckResult(
+            False,
+            "%s retains in compliance mode, which no key can shorten; ADR-0041 picks governance"
+            % name,
+            ["compliance mode"],
+        )
+    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
+    if (
+        not isinstance(duration, int)
+        or unit_days is None
+        or duration * unit_days >= B2_PRUNE_AGE_DAYS
+    ):
+        return CheckResult(
+            False,
+            "%s retains for %s %s, not less than the %d days the weekly prune waits"
+            % (name, duration, period.get("unit"), B2_PRUNE_AGE_DAYS),
+            ["retention outlasts the prune"],
+        )
+    if "bypassGovernance" in capabilities:
         return CheckResult(
             False,
             "the key Longhorn writes with holds bypassGovernance, so governance mode does "
@@ -288,59 +316,4 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
         mode,
         period.get("duration"),
         period.get("unit"),
-    )
-
-
-# Where k3s uploads the etcd snapshots (`etcd-s3-folder` in longhorn-backup's
-# k3s-etcd-snapshot-s3-secret.yaml.j2) and where Longhorn's R2 target writes
-# (`k3s_longhorn_r2_backup_prefix`). Policy, like the action lists above: no env var names them,
-# and test_check_bucket_locks.py holds both to their sources.
-R2_ETCD_PREFIX = "etcd-snapshots/"
-R2_LONGHORN_PREFIX = "longhorn/"
-
-
-def _covers(rule_prefix: str, path_prefix: str) -> bool:
-    """Whether a rule on `rule_prefix` locks any object under `path_prefix`."""
-    return path_prefix.startswith(rule_prefix) or rule_prefix.startswith(path_prefix)
-
-
-def r2_lock_verdict(rules: list[dict]) -> tuple[bool, str]:
-    """(ok, msg) for the R2 bucket lock rules ADR-0041 requires.
-
-    An enabled `Age` rule must cover every object under `R2_ETCD_PREFIX`. No enabled rule may
-    lock anything under `R2_LONGHORN_PREFIX`: R2 keeps no versions, so a locked block fails
-    Longhorn's prune, and a failing prune retries.
-
-    Args:
-      rules: The `rules` list of the bucket's lock configuration.
-    """
-    enabled = [r for r in rules if r.get("enabled") is True]
-    over_longhorn = sorted(
-        str(r.get("id"))
-        for r in enabled
-        if _covers(str(r.get("prefix") or ""), R2_LONGHORN_PREFIX)
-    )
-    if over_longhorn:
-        return CheckResult(
-            False,
-            "R2 lock rule %s covers %s, whose prune cannot delete a locked block"
-            % (", ".join(over_longhorn), R2_LONGHORN_PREFIX),
-            ["lock over the Longhorn tier"],
-        )
-    for rule in enabled:
-        condition = rule.get("condition") or {}
-        if (
-            R2_ETCD_PREFIX.startswith(str(rule.get("prefix") or ""))
-            and condition.get("type") == "Age"
-            and (condition.get("maxAgeSeconds") or 0) > 0
-        ):
-            return True, "R2 lock rule %s holds %s for %.0f days" % (
-                rule.get("id"),
-                R2_ETCD_PREFIX,
-                condition["maxAgeSeconds"] / 86400,
-            )
-    return CheckResult(
-        False,
-        "no enabled Age lock rule covers %s" % R2_ETCD_PREFIX,
-        ["etcd snapshots unlocked"],
     )

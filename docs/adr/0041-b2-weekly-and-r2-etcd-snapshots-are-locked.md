@@ -1,7 +1,7 @@
 ---
 id: "0041"
 title: The B2 weekly bucket and the R2 etcd snapshots are locked, and the R2 daily tier is not
-status: Accepted
+status: Proposed
 date: 2026-11-20
 governs: []
 ---
@@ -10,11 +10,14 @@ governs: []
 
 ## Status
 
-Accepted. The operator ruled on 2026-11-20, on
-[#8511](https://github.com/DanielH2018/server/issues/8511). The bucket settings themselves
-are operator steps, because no session holds a credential that can change a bucket. The
-steps and the live half of the prune spike are in
-[Bucket immutability](../longhorn-backup-tiering.md#bucket-immutability-adr-0041), and
+Proposed. The operator ruled on 2026-11-20, on
+[#8511](https://github.com/DanielH2018/server/issues/8511). The B2 half rests on a premise
+the source reading below cannot confirm: that B2 accepts Longhorn's version-less delete of a
+locked version. Step 1 of
+[Bucket immutability](../longhorn-backup-tiering.md#bucket-immutability-adr-0041) runs a real
+Longhorn backup and backup deletion against a lock-enabled scratch bucket. This record becomes
+Accepted when that step passes, and is revisited if it fails. The bucket settings are
+operator steps, because no session holds a credential that can change a bucket, and
 [#9699](https://github.com/DanielH2018/server/issues/9699) tracks them.
 
 ## Context
@@ -45,14 +48,14 @@ removal. The two stores differ in what that call does to a locked object:
   a hide marker and leaves the version in place. Under S3 Object Lock semantics a hide is
   allowed while the version is locked. Backblaze's own pages do not state the B2 behaviour,
   so this half is unconfirmed until the live spike runs.
+- **R2 keeps no versions.** Cloudflare documents that a delete blocked by a lock rule fails
+  with HTTP 409 `ObjectLockedByBucketPolicy`. A locked Longhorn block on R2 therefore fails
+  the prune, and the prune retries.
 
 The stake is larger than the prune. Every backup writes a `locks/*.lck` object and removes
 it when the backup ends (`lock.go`, `Lock` and `Unlock`), seconds after the upload, so the
 removal always meets a locked version. If B2 refused a version-less delete of a locked
 version, every weekly backup would fail, not only the prune.
-- **R2 keeps no versions.** Cloudflare documents that a delete blocked by a lock rule fails
-  with HTTP 409 `ObjectLockedByBucketPolicy`. A locked Longhorn block on R2 therefore fails
-  the prune, and the prune retries.
 
 k3s prunes its S3 snapshots by count (`etcd-snapshot-retention` in
 `hosts/components/k3s-server/component.yml`), and deletes only the snapshots past that
@@ -76,10 +79,17 @@ prune would retry it.
 No bucket uses a writer key without delete rights. Longhorn's prune would fail on every
 delete and retry.
 
-monitor-bridge reads both settings once a day: `b2_object_lock`
-(`k8s/roles/monitor-bridge/files/checks/b2.py:check_b2_object_lock`) and `r2_etcd_lock`
-(`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`). Each pages a warning when
-its bucket departs from this record.
+monitor-bridge's `b2_object_lock` row
+(`k8s/roles/monitor-bridge/files/checks/b2.py:check_b2_object_lock`) reads the B2 setting
+once a day. It pages a warning when the bucket departs from this record: the lock off, no
+default retention, compliance mode, a retention as long as the weekly prune age, or a writer
+key that holds `bypassGovernance`.
+
+The R2 rule has no standing reader. The operator verifies it once, with
+`wrangler r2 bucket lock list`, after setting it. No credential the cluster holds can change
+an R2 lock rule: R2's S3 API implements no lock operation, so only a Cloudflare account token
+can. A daily reader would therefore watch only the operator's own edits, and it would need a
+Cloudflare token in a pod that holds none today.
 
 ## Consequences
 
@@ -105,17 +115,15 @@ prefix younger than the retention cannot be drained until its lock expires.
 **Object Lock on a B2 bucket cannot be turned off.** The default retention can be changed
 or removed later, but the bucket stays lock-enabled.
 
-**The Cloudflare analytics token gains Workers R2 Storage: Read.** The R2 lock read needs
-it, and the token is the bridge's one Cloudflare credential. The permission cannot change a
-bucket or a rule. Whether it also lets the REST API read object contents is not settled by
-Cloudflare's documentation. If it does, the bridge can read the etcd snapshots, which hold
-every cluster Secret.
+**An edit to the R2 rule goes unnoticed** until someone lists the rules again.
+[#9702](https://github.com/DanielH2018/server/issues/9702) holds a standing R2 check that
+needs no new standing credential.
 
-**Both rows read red from deploy until the operator acts**, and each fires a warning. A
+**The B2 row reads red from deploy until the operator acts**, and fires a warning. A
 warning that holds for 48 hours escalates to a page through `WarningUnresolved`.
 
 ## Governs
 
-No single line. The settings live in the two buckets, outside the tree. The two
-monitor-bridge rows read them, and `k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py`
-holds the rows' verdicts to this record.
+No single line. The settings live in the two buckets, outside the tree. The `b2_object_lock`
+row reads the B2 one, and `k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py` holds
+its verdict to this record.

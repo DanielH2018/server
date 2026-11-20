@@ -270,7 +270,7 @@ def check_b2_object_lock(
 ) -> tuple[bool, str]:
     """Daily read of the Object Lock setting on the bucket the B2 key is scoped to. (ok, msg).
 
-    Every answer from B2 is cached for BUCKET_LOCK_PROBE_INTERVAL_S, a refusal included: each
+    Every answer from B2 is cached for B2_LOCK_PROBE_INTERVAL_S, a refusal included: each
     probe costs two Class C calls, and a lock that is off stays off until the operator acts. A
     transport failure was billed nothing, so it raises and the next cycle probes again. Empty
     credentials disable the check.
@@ -279,7 +279,7 @@ def check_b2_object_lock(
         return True, "B2 Object Lock check disabled (no credentials)"
     now = now if now is not None else time.time()
     cache = src.state.b2_lock_probe
-    if cache["ts"] is not None and now - cache["ts"] < cfg.BUCKET_LOCK_PROBE_INTERVAL_S:
+    if cache["ts"] is not None and now - cache["ts"] < cfg.B2_LOCK_PROBE_INTERVAL_S:
         return cache["ok"], "%s (checked %.0fh ago)" % (
             cache["msg"],
             (now - cache["ts"]) / 3600,

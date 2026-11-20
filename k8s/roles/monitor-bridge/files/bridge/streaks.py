@@ -77,7 +77,6 @@ class State:
       b2_storage: The B2 storage-usage cache (`checks.b2.b2_storage_usage`).
       r2_probe: The R2 usage cache (`checks.r2.r2_usage`).
       b2_lock_probe: The B2 Object Lock cache (`checks.b2.check_b2_object_lock`).
-      r2_lock_probe: The R2 bucket-lock cache (`checks.r2.check_r2_etcd_lock`).
       email_probe: The SMTP backstop cache (`checks.notify.email_backstop`).
       cloudflare_ips_probe: The Cloudflare allowlist drift cache (`checks.cloudflare_ips`).
       healthchecks_probe: The Healthchecks.io console drift cache (`checks.healthchecks`).
@@ -101,7 +100,6 @@ class State:
     )
     r2_probe: ProbeCache = field(default_factory=_never_probed)
     b2_lock_probe: ProbeCache = field(default_factory=_never_probed)
-    r2_lock_probe: ProbeCache = field(default_factory=_never_probed)
     email_probe: StampedCache = field(
         default_factory=lambda: {"ts": 0.0, "ok": True, "msg": "not yet probed"}
     )

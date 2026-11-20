@@ -1,4 +1,4 @@
-"""The two bucket-lock rows ADR-0041 adds: Object Lock on B2, and the etcd lock rule on R2."""
+"""The B2 Object Lock row ADR-0041 adds."""
 
 import email.message
 import urllib.error
@@ -7,17 +7,11 @@ from dataclasses import replace
 import pytest
 
 import checks.b2
-import checks.r2
 from _fake_sources import FakeSources
 from bridge.types import CheckResult
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
-from verdicts.storage import (
-    R2_ETCD_PREFIX,
-    R2_LONGHORN_PREFIX,
-    b2_lock_verdict,
-    r2_lock_verdict,
-)
+from verdicts.storage import B2_PRUNE_AGE_DAYS, b2_lock_verdict
 
 SEVEN_DAYS = {"mode": "governance", "period": {"duration": 7, "unit": "days"}}
 
@@ -34,12 +28,6 @@ def _bucket(enabled: bool = True, retention: dict | None = SEVEN_DAYS) -> dict:
 
 GOVERNED = _bucket()
 WRITER = ["listBuckets", "writeFiles", "deleteFiles", "readBucketRetentions"]
-ETCD_RULE = {
-    "id": "etcd-7d",
-    "enabled": True,
-    "prefix": "etcd-snapshots/",
-    "condition": {"type": "Age", "maxAgeSeconds": 604800},
-}
 AUTH = {
     "accountId": "acct",
     "authorizationToken": "tok",
@@ -75,6 +63,25 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
         ),
         (GOVERNED, [*WRITER, "bypassGovernance"], "key bypasses governance"),
         ({"bucketName": "weekly"}, WRITER, "no lock config"),
+        (
+            _bucket(retention={**SEVEN_DAYS, "mode": "compliance"}),
+            WRITER,
+            "compliance mode",
+        ),
+        (
+            _bucket(
+                retention={**SEVEN_DAYS, "period": {"duration": 14, "unit": "days"}}
+            ),
+            WRITER,
+            "retention outlasts the prune",
+        ),
+        (
+            _bucket(
+                retention={**SEVEN_DAYS, "period": {"duration": 1, "unit": "years"}}
+            ),
+            WRITER,
+            "retention outlasts the prune",
+        ),
     ],
     ids=[
         "lock off",
@@ -82,45 +89,15 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
         "no default retention",
         "key bypasses governance",
         "no lock config",
+        "compliance",
+        "as long as the prune",
+        "a year",
     ],
 )
 def test_a_bucket_that_does_not_bind_the_writer_is_flagged(
     bucket, capabilities, detail
 ):
     result = CheckResult.of(b2_lock_verdict(bucket, capabilities))
-    assert not result.ok
-    assert result.details == (detail,)
-
-
-def test_an_age_rule_over_the_etcd_prefix_alone_is_clean():
-    ok, msg = r2_lock_verdict([ETCD_RULE])
-    assert ok
-    assert "7 days" in msg
-
-
-@pytest.mark.parametrize(
-    "rules, detail",
-    [
-        ([{**ETCD_RULE, "enabled": False}], "etcd snapshots unlocked"),
-        (
-            [{**ETCD_RULE, "condition": {"type": "Indefinite"}}],
-            "etcd snapshots unlocked",
-        ),
-        ([{**ETCD_RULE, "prefix": ""}], "lock over the Longhorn tier"),
-        (
-            [ETCD_RULE, {**ETCD_RULE, "id": "lh", "prefix": "longhorn/backupstore/"}],
-            "lock over the Longhorn tier",
-        ),
-    ],
-    ids=[
-        "disabled",
-        "indefinite",
-        "whole bucket",
-        "inside the Longhorn prefix",
-    ],
-)
-def test_a_lock_that_misses_etcd_or_reaches_longhorn_is_flagged(rules, detail):
-    result = CheckResult.of(r2_lock_verdict(rules))
     assert not result.ok
     assert result.details == (detail,)
 
@@ -165,37 +142,8 @@ def test_a_b2_refusal_is_cached_because_b2_billed_it(b2_cfg):
     assert later.calls == []
 
 
-@pytest.fixture
-def r2_cfg(cfg):
-    return replace(cfg, CF_ACCOUNT_ID="acct", CF_ANALYTICS_TOKEN="tok", R2_BUCKET="bkt")
-
-
-def test_the_r2_row_reads_the_buckets_lock_rules(r2_cfg):
-    src = FakeSources(
-        get_json=lambda url, headers: {
-            "success": True,
-            "result": {"rules": [ETCD_RULE]},
-        }
+def test_the_b2_bound_is_the_age_the_weekly_prune_deletes_at():
+    defaults = yaml_fast.safe_load(
+        (K8S_ROLES / "longhorn-backup" / "defaults" / "main.yml").read_text()
     )
-    ok, _ = checks.r2.check_r2_etcd_lock(r2_cfg, src, now=1000.0)
-    assert ok
-    assert src.queries("get_json") == [
-        "https://api.cloudflare.com/client/v4/accounts/acct/r2/buckets/bkt/lock"
-    ]
-
-
-def test_an_r2_read_cloudflare_refuses_raises_rather_than_reading_as_unlocked(r2_cfg):
-    src = FakeSources(
-        get_json=lambda url, headers: {"success": False, "errors": [{"code": 10000}]}
-    )
-    with pytest.raises(RuntimeError, match="refused"):
-        checks.r2.check_r2_etcd_lock(r2_cfg, src, now=1000.0)
-    assert src.state.r2_lock_probe["ts"] is None
-
-
-def test_the_r2_prefixes_are_the_ones_k3s_and_longhorn_write_under():
-    role = K8S_ROLES / "longhorn-backup"
-    defaults = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())
-    assert R2_LONGHORN_PREFIX == defaults["k3s_longhorn_r2_backup_prefix"] + "/"
-    secret = (role / "templates" / "k3s-etcd-snapshot-s3-secret.yaml.j2").read_text()
-    assert f"etcd-s3-folder: {R2_ETCD_PREFIX.rstrip('/')}\n" in secret
+    assert B2_PRUNE_AGE_DAYS == 7 * defaults["k3s_longhorn_weekly_backup_retain"]
