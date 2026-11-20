@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Daily rollups from the Warehouse datasource, which Airflow loads each night from Prometheus (k8s/roles/airflow/CLAUDE.md). Prometheus keeps about three weeks; these panels keep every day since 2026-10-28. Volume figures are filesystem usage of mounted claims, from kubelet, not Longhorn's actual size.",
+  "description": "Daily rollups from the Warehouse datasource, which Airflow loads each night from Prometheus and Home Assistant (k8s/roles/airflow/CLAUDE.md). Prometheus keeps about three weeks and Home Assistant one; these panels keep every day since each DAG began. Volume figures are filesystem usage of mounted claims, from kubelet, not Longhorn's actual size.",
   "editable": true,
   "id": null,
   "panels": [
@@ -416,6 +416,145 @@
       ],
       "title": "UPS battery",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Each room sensor's time-weighted daily mean, from Home Assistant.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, replace(replace(entity_id, 'sensor.', ''), '_temperature', '') AS metric, avg AS value FROM ha.sensor_daily WHERE entity_id LIKE '%\\_temperature' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Indoor temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "The bedroom AirGradient's time-weighted daily mean and peak CO2.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ppm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, 'mean' AS metric, avg AS value FROM ha.sensor_daily WHERE entity_id = 'sensor.bedroom_airgradient_one_carbon_dioxide' AND $__timeFilter(day) UNION ALL SELECT day::timestamptz, 'peak', \"max\" FROM ha.sensor_daily WHERE entity_id = 'sensor.bedroom_airgradient_one_carbon_dioxide' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Bedroom CO2",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Each smart plug's daily kWh, from its own cumulative counter.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatth"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 41
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, replace(replace(entity_id, 'sensor.', ''), '_energy', '') AS metric, increase AS value FROM ha.sensor_daily WHERE kind = 'total' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Plug energy per day",
+      "type": "barchart"
     }
   ],
   "refresh": "",

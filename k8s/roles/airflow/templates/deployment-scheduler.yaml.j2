@@ -3,6 +3,7 @@
 {% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 {% from 'airflow-env.yaml.j2' import airflow_env, airflow_mounts, airflow_volumes with context %}
+{% set health = container_item.netpol_fences | selectattr('app', 'equalto', 'airflow-scheduler') | first %}
 ---
 # The scheduler, which launches one KubernetesExecutor pod per task. Its init container runs
 # `airflow db migrate`; every other Airflow pod waits for that migration before it starts.
@@ -43,9 +44,17 @@ spec:
           image: {{ airflow_k8s_image }}
           imagePullPolicy: Always
           args: ["airflow", "scheduler"]
+          ports:
+            - containerPort: {{ health.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
 {{ airflow_env(true) }}
+{# The scheduler's own health server: 200 while its job is RUNNING with a fresh heartbeat,
+   else 503. monitor-bridge's airflow_scheduler row reads it. #}
+            - name: AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK
+              value: "True"
+            - name: AIRFLOW__SCHEDULER__SCHEDULER_HEALTH_CHECK_SERVER_PORT
+              value: "{{ health.port }}"
           volumeMounts:
 {{ airflow_mounts() }}
           livenessProbe:
