@@ -375,12 +375,16 @@ def refuse_live_shared_files(
 ) -> dict[str, tuple[str, ...]] | None:
     """Refuse a launch citing a file that a live batch in another run holds.
 
-    A batch holds the files it cites while its unit is active or its branch has an open PR.
-    A batch whose agent ended with no PR holds nothing, however long its worktree stands:
-    "uncleaned" is not the rule, because a finished batch can stand for weeks.
+    A batch holds the files it cites, and the files its open PR has changed, while its unit
+    is active or its branch has an open PR. A batch that has opened no PR holds its cited
+    files only: its agent pushes when it opens the PR, so nothing it has edited is readable
+    before then. A batch whose agent ended with no PR holds nothing, however long its
+    worktree stands: "uncleaned" is not the rule, because a finished batch can stand for
+    weeks. The new batches are compared by their cited files, having edited nothing yet.
 
-    Reads the open PRs in one `gh pr list` call, and only when another run has an uncleaned
-    batch. Reads a unit's state only for a batch with no open PR that could collide, at one
+    Reads the open PRs and their files in one `gh pr list` call, and only when another run
+    has an uncleaned batch (`transport.open_pr_files` says when a PR costs a second read).
+    Reads a unit's state only for a batch with no open PR that could collide, at one
     connection per host holding one. A batch
     saved before `Batch.cited_paths` existed has its issue bodies fetched, once each. Every
     read that fails refuses the launch, because it cannot tell who holds what.
@@ -409,57 +413,59 @@ def refuse_live_shared_files(
     standing = standing_batches(repo, root)
     if not standing or not any(new.values()):
         return {}
-    open_branches = tools.open_pr_branches(repo)
-    if open_branches is None:
+    edited = tools.open_pr_files(repo, {b.branch for _, b in standing})
+    if edited is None:
         error(
-            f"could not read the open PRs of {repo}, so cannot tell which batches in "
-            "other runs still hold their files — run launch again"
+            f"could not read the open PRs of {repo} and the files they change, so cannot "
+            "tell which batches in other runs hold which files — run launch again"
         )
         return None
 
     def could_collide(b: Batch) -> bool:
         if b.cited_paths is None:
             return True
-        return any(paths & set(b.cited_paths) for paths in new.values())
+        held = set(b.cited_paths) | edited.get(b.branch, frozenset())
+        return any(paths & held for paths in new.values())
 
     candidates = [(run, b) for run, b in standing if could_collide(b)]
     running = _with_running_unit(
-        tools, [b for _, b in candidates if b.branch not in open_branches]
+        tools, [b for _, b in candidates if b.branch not in edited]
     )
     holders = [
         (
             run,
             b,
-            "an open PR"
-            if b.branch in open_branches
-            else "an agent not read as stopped",
+            "an open PR" if b.branch in edited else "an agent not read as stopped",
         )
         for run, b in candidates
-        if b.branch in open_branches or (b.host, b.unit) in running
+        if b.branch in edited or (b.host, b.unit) in running
     ]
-    collisions: list[tuple[str, str, Manifest, Batch, str]] = []
+    collisions: list[tuple[str, str, Manifest, Batch, str, str]] = []
     for run, b, why in holders:
-        held = b.cited_paths
-        if held is None:
+        cited = b.cited_paths
+        if cited is None:
             try:
-                held = batch_paths([tools.gh_issue(n, repo) for n in b.issues], tracked)
+                cited = batch_paths(
+                    [tools.gh_issue(n, repo) for n in b.issues], tracked
+                )
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
                 error(
                     f"could not fetch the issues of batch {b.batch} (run {run.run_id}) to "
                     f"read the files it holds: {error_text(exc)}"
                 )
                 return None
+        held = set(cited) | edited.get(b.branch, frozenset())
         collisions += [
-            (path, batch, run, b, why)
+            (path, batch, run, b, why, "cites" if path in cited else "has edited")
             for batch, paths in new.items()
-            for path in sorted(paths & set(held))
+            for path in sorted(paths & held)
         ]
     excused: dict[str, set[str]] = {}
     refused = []
-    for path, batch, run, b, why in sorted(collisions, key=lambda c: c[:2]):
+    for path, batch, run, b, why, how in sorted(collisions, key=lambda c: c[:2]):
         holder = (
-            f"batch {b.batch} holds it with {why} (run {run.run_id}, orchestrator "
-            f"branch `{run.orchestrator_branch}`)"
+            f"batch {b.batch} {how} it and holds it with {why} (run {run.run_id}, "
+            f"orchestrator branch `{run.orchestrator_branch}`)"
         )
         if path in allowed and excusable(path):
             warn(
