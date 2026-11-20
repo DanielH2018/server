@@ -44,7 +44,9 @@ through `gh api`. At a 180s interval that is 40 calls an hour.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# `forge` imports `forge_transport` by bare name, so `deploy_tools/` stays on the path until
+# the deploy_tools area qualifies it.
+# TODO: https://github.com/DanielH2018/server/issues/9403 - drop this insert once #9274 lands.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "deploy_tools"))
 
 import json

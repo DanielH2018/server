@@ -10,19 +10,14 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_verdict_line.py
 
 import argparse
 import json
-import os
 import re
 import subprocess
-import sys
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-# `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
-# module puts its own parent directory on `sys.path` — the insert every sibling here carries.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import probe
+from diagnostics import probe
 from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.exit_codes import FAILED, OK, PROBE_NOT_APPLICABLE, TEMP_FAIL, contract
 from lib.exit_messages import verdict_line

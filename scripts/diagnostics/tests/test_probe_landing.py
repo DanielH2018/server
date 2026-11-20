@@ -4,10 +4,7 @@ Every source is handed to `collect` as a callable, so no test reaches deploy-ui,
 """
 
 import json
-import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import landing_blockers as landing
@@ -227,8 +224,8 @@ def test_deploy_ui_port_is_the_components_default():
 
 def _verdicts(monkeypatch, tmp_path, capsys, argv, records):
     """Run `probe.py landing-verdicts <argv>` over a record holding `records`; (rc, stdout)."""
-    import probe
-    from land_lib import verdict_log
+    from diagnostics import probe
+    from deploy_tools.land_lib import verdict_log
 
     path = tmp_path / "landing-verdicts.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in records))

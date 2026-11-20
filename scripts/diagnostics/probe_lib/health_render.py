@@ -6,10 +6,6 @@ every caller.
 """
 
 import functools
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import K8S_ROLES
 
@@ -24,7 +20,6 @@ def entries() -> dict[str, dict]:
     median to render one role and 0.22s for the slowest (home-assistant) — against the 300s
     `PROBE_TIMEOUT_S` the notifier allows.
     """
-    # The bootstrap above put `scripts/` on sys.path, the root pytest imports from.
     from lib.k8s_roles import k8s_entries
 
     return k8s_entries()
