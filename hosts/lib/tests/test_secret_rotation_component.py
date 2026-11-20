@@ -16,13 +16,10 @@ from _k3s_schedule import calendar_fires
 from _secret_rotation_package import LIB, UNITS, render_fixture, text
 
 from _component_contract import component_contract
-from deploy_tools.promote_lib.reboot_window import read_schedule
+from _reboot_mute import MINUTES_PER_DAY, MINUTES_PER_WEEK, mute_minutes
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import REPO
 
-MINUTES_PER_DAY = 24 * 60
-MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
 SUNDAY = date(2026, 11, 1)
 
 CONTRACT_PARTS = (
@@ -89,20 +86,8 @@ def _audit_fires(package) -> list[int]:
 
 
 def test_the_audit_fires_outside_the_weekly_reboot_mute(package):
-    """A verdict written inside Alertmanager's `weekly-reboot` mute pages only once it closes.
-
-    `tests/services/test_alertmanager_reboot_mute.py` holds the rendered mute to this sum.
-    """
-    reboot = read_schedule(REPO)
-    opens = (
-        reboot.weekday * MINUTES_PER_DAY
-        + reboot.hour * 60
-        + reboot.minute
-        - reboot.lead_min
-    )
-    length = reboot.lead_min + reboot.delay_min + reboot.recovery_min
-    mute = {(opens + minute) % MINUTES_PER_WEEK for minute in range(length)}
-    assert not mute.intersection(_audit_fires(package))
+    """A verdict written inside Alertmanager's `weekly-reboot` mute pages only once it closes."""
+    assert not mute_minutes().intersection(_audit_fires(package))
 
 
 def test_the_audit_fires_again_inside_its_not_reporting_deadline(package):
