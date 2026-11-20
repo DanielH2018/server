@@ -13,3 +13,4 @@
 | `daniel-pi-docker-prune` | Cron | 1 hour |
 | `daniel-box-worktree-sweep` | Cron | 1 hour |
 | `daniel-server-worktree-sweep` | Cron | 1 hour |
+| `airflow-warehouse-fresh` | Cron | 1 hour |

@@ -14,7 +14,12 @@ from airflow.sdk import Asset, dag, task
 from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import ha_rollup as ha
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 
 WAREHOUSE_CONN = "warehouse"
 HA_SENSOR_DAILY = Asset("warehouse://ha/sensor_daily")
@@ -69,8 +74,12 @@ def ha_daily_rollup():
         finally:
             conn.close()
         problems = ha.quality_problems(day, rows)
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "ha_daily_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 

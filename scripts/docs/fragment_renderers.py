@@ -146,6 +146,7 @@ def deadman_crons(
     docker_hosts: list[str],
     observability: dict,
     sweep_hosts: list[str],
+    warehouse_freshness: str,
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
@@ -155,7 +156,8 @@ def deadman_crons(
     The weekly reboot pings a slug for each of `hosts`, and the Docker prune pings one for
     each of `docker_hosts`, the hosts whose package lists the `pi-docker` component.
     `sweep_hosts` names each host whose package lists the `worktree-sweep` component; each
-    pings its own `<host>-worktree-sweep` slug.
+    pings its own `<host>-worktree-sweep` slug. `warehouse_freshness` is the cron of Airflow's
+    `warehouse_freshness` DAG, which pings `airflow-warehouse-fresh`.
 
     `alertmanager-watchdog` has no cron: Alertmanager re-sends the always-firing Watchdog alert
     every `observability_alertmanager_watchdog_repeat_seconds`. Its cadence is `every <N>s`,
@@ -233,6 +235,13 @@ def deadman_crons(
         )
         for host in sweep_hosts
     ]
+    rows.append(
+        (
+            "airflow-warehouse-fresh",
+            warehouse_freshness,
+            "`HC_SCHEDULE` in Airflow's `homelab_warehouse/freshness.py`, a DAG, not a host cron",
+        )
+    )
     return rows
 
 
@@ -246,6 +255,7 @@ def render_deadman_cadences(
     docker_hosts: list[str],
     observability: dict,
     sweep_hosts: list[str],
+    warehouse_freshness: str,
 ) -> str:
     """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
     rows = deadman_crons(
@@ -258,6 +268,7 @@ def render_deadman_cadences(
         docker_hosts,
         observability,
         sweep_hosts,
+        warehouse_freshness,
     )
     lines = ["| Check slug | Cron (host clock, UTC) | Set by |", "|---|---|---|"]
     lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]

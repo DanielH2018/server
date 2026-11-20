@@ -190,6 +190,16 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   repo's Actions, issues, metadata and pull requests. It expires; to rotate it, the operator
   makes a new one with the same access, sets it with `sops set`, runs `cluster_vars.py write`,
   and deletes the old one on GitHub once the new one deploys.
+- **A warehouse DAG that misses a day pages through Healthchecks.io.** Each DAG's `check`
+  ends in `k8s/roles/airflow/files/dags/homelab_warehouse/warehouse.py:finish_check`, which
+  fails the task on a problem or records the passed day in `meta.check_log`. At 06:00 UTC
+  `warehouse_freshness` pings the `airflow-warehouse-fresh` check, or its `/fail` naming each
+  DAG with no passed record for yesterday, and Healthchecks.io also alerts when no ping
+  comes. A new warehouse DAG joins
+  `k8s/roles/airflow/files/dags/homelab_warehouse/freshness.py:WAREHOUSE_DAGS`;
+  `k8s/roles/airflow/tests/test_freshness.py::test_every_dag_that_records_its_check_is_watched`
+  fails until it does. To find what missed a day, read the ping's body in the Healthchecks.io
+  console, then the DAG's runs in Airflow.
 - **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
   row reads the scheduler's own health server every cycle, and goes down on a 503 or when the
   server does not answer (`k8s/roles/monitor-bridge/files/checks/service.py:check_airflow_scheduler`).
