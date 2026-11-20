@@ -12,18 +12,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge`, `chained_timeout` and `flux_host` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.git import git
 from lib.repo_paths import REPO
 
-import forge
-from artifact_retention import LAST_GOOD_TAG, PROD_TAG
-from chained_timeout import VERIFY_CAP_S
+from deploy_tools import forge
+from deploy_tools.artifact_retention import LAST_GOOD_TAG, PROD_TAG
+from deploy_tools.chained_timeout import VERIFY_CAP_S
 from deploy_tools.kustomizations import REVISION as _REVISION
 from deploy_tools.promote_lib import reboot_window
 from deploy_tools.promote_lib.wait import (
@@ -36,7 +31,7 @@ from deploy_tools.promote_lib.wait import (
     WaitReadError,
     WaitReads,
 )
-from flux_host import FluxHost
+from deploy_tools.flux_host import FluxHost
 
 
 def _wait_is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool | None:

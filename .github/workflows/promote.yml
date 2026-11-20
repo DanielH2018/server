@@ -423,6 +423,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # ci_images.py runs on the runner's python3, with no venv `.pth` to supply the import root.
+    env:
+      PYTHONPATH: scripts
     steps:
       - uses: actions/checkout@v7.0.1
         with:

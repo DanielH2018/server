@@ -12,7 +12,7 @@ from types import ModuleType
 
 import pytest
 
-import land  # loads the landing's modules, which gate_hits reads
+from deploy_tools import land  # loads the landing's modules, which gate_hits reads
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools
 from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.options import PRIMARY_ENV, REQUIRE_BRANCH_PREFIX_ENV

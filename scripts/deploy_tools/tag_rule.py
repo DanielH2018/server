@@ -27,15 +27,12 @@ from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import Protocol
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.exit_codes import FAILED, OK
 from lib.k8s_roles import role_dirs
 from lib.repo_paths import K8S_ROLES
 
-from artifact_retention import PROD_TAG
+from deploy_tools.artifact_retention import PROD_TAG
 from deploy_tools.object_loss import bundle_documents
 from deploy_tools.promote_lib.prune import READ_ERRORS
 from renderer.renderer_lib.bundle import (

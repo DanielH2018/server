@@ -751,6 +751,21 @@ sub-coordinator started one worker. It answered three questions:
 - **2026-11-19: a batch holds its files while its unit is active or its PR is open.** An
   earlier draft held them until `clean`, which the 21 standing batches of that day would
   have turned into refusals on files nobody was editing.
+- **2026-11-20: a coordinator passes `--fresh` to every `land.sh`.** A coordinator's locked
+  worktree never follows master. In the first two-project run, on 2026-11-19 and
+  2026-11-20, every `land.sh` a sub-coordinator ran from its worktree ended `refused` for
+  landing code older than master's, [#9373](https://github.com/DanielH2018/server/pull/9373)
+  and [#9386](https://github.com/DanielH2018/server/pull/9386) among them, and was run
+  again with `--fresh`.
+- **2026-11-20: the serial pause runs from the start of the serial PR's landing to its
+  verdict.** The rule had the root pause the other projects when a recap named a serial
+  PR. #9386 was named at triage, hours before it could land. The root paused the other
+  project while #9386 was a draft in review, lost about half an hour of refills, lifted
+  the pause, and applied it again once the landing was live. `land.sh` already keeps every
+  other merge out while a serial PR drains (`scripts/deploy_tools/land_lib/slots.py`). The
+  pause only stops the other project launching batches whose landings would be refused
+  meanwhile, so a sub-coordinator reports a serial PR under `asks:` when its landing
+  starts, and its verdict in the same place.
 
 ### Who lands a daniel-server batch's PR
 

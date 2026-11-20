@@ -19,19 +19,23 @@ doesn't) exactly the same way in a bare subprocess.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_fakes_cleanup.py
 """
 
+import os
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
-DEPLOY_TOOLS_DIR = TESTS_DIR.parent
-SCRIPTS_DIR = DEPLOY_TOOLS_DIR.parent
+SCRIPTS_DIR = TESTS_DIR.parents[1]
 
 
 def _run(code: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-c", code],
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join([str(TESTS_DIR), str(SCRIPTS_DIR)]),
+        },
         capture_output=True,
         text=True,
         timeout=30,
@@ -40,10 +44,8 @@ def _run(code: str) -> subprocess.CompletedProcess[str]:
 
 def test_importing_land_fakes_warns_nothing_at_interpreter_exit():
     """The fixed shape: _land_fakes' module-scope TemporaryDirectory must not warn on teardown."""
-    code = textwrap.dedent(f"""
-        import sys, warnings
-        for _p in ({str(TESTS_DIR)!r}, {str(DEPLOY_TOOLS_DIR)!r}, {str(SCRIPTS_DIR)!r}):
-            sys.path.insert(0, _p)
+    code = textwrap.dedent("""
+        import warnings
         warnings.filterwarnings("error")
         import _land_fakes  # noqa: F401
     """)

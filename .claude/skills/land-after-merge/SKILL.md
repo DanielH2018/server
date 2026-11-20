@@ -25,6 +25,12 @@ is the wait: it prints the landing's `VERDICT:` line and exits with the landing'
 `land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
 checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
+**From a checkout that does not follow master, add `--fresh` from the first attempt.** A
+locked coordinator worktree, or any worktree cut before master last changed the landing code,
+ends `refused` without it. With `--fresh`, `land.sh` lands from a detached checkout of
+`origin/master` that it adds under `/tmp` and removes when the landing ends. The cost is one
+fetch and one worktree (`docs/landing.md`, *The refusal before the merge names `--fresh`*).
+
 **Do not arm auto-merge.** Ruleset 27167149 lets only the admin role and Renovate update
 master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leaves the PR
 `BLOCKED` from either account. `land.sh` merges as the operator, which the bypass covers.

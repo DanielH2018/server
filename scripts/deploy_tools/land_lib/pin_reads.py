@@ -14,14 +14,11 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `promote.py` imports `forge` and its siblings bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from validate import cluster_pins
 from validate.cluster_pins import Pin
 
-import forge
-from artifact_retention import LAST_GOOD_TAG
+from deploy_tools import forge
+from deploy_tools.artifact_retention import LAST_GOOD_TAG
 from deploy_tools.promote import prod_commit
 from deploy_tools.promote_lib.prune import READ_ERRORS
 

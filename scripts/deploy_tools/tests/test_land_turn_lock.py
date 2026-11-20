@@ -246,13 +246,15 @@ def test_a_landing_run_by_the_landing_that_holds_the_lock_is_not_refused(land_ru
 def test_a_lock_left_by_a_dead_landing_refuses_nothing():
     scripts = Path(pr_lock.__file__).resolve().parents[2]
     dies_holding = (
-        "import os, sys\n"
-        "sys.path.insert(0, sys.argv[1])\n"
+        "import os\n"
         "from deploy_tools.land_lib import pr_lock\n"
         "assert isinstance(pr_lock.take('7', 'daniel-box'), pr_lock.Held)\n"
         "os._exit(0)\n"
     )
-    dead = subprocess.Popen([sys.executable, "-c", dies_holding, str(scripts)])
+    dead = subprocess.Popen(
+        [sys.executable, "-c", dies_holding],
+        env={**os.environ, "PYTHONPATH": str(scripts)},
+    )
     assert dead.wait(timeout=60) == 0
     left = Path(os.environ[turn.TURN_DIR_ENV]) / pr_lock.lock_name("7")
     assert json.loads(left.read_text())["pid"] == dead.pid

@@ -10,8 +10,8 @@ import shutil
 
 import pytest
 
-import bundle_census
-import promote
+from deploy_tools import bundle_census
+from deploy_tools import promote
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK, RENDER_OK
 from lib.repo_paths import K8S_ROLES
