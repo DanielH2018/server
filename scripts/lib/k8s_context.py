@@ -39,7 +39,7 @@ __all__ = [
 # A wrapper here costs nothing until a default calls the filter, and then the call builds the
 # heavy environment once.
 _DEFAULTS_PLUGIN_FILTERS = (
-    "tier_backup_claims",
+    "longhorn_r2_claims",
     "longhorn_weekly_claims",
     "longhorn_nobackup_claims",
     "basename",

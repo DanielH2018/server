@@ -16,11 +16,10 @@ from lib.render_guard import load_yaml
 from lib.repo_paths import ALL_VARS
 from renderer.template_filters.longhorn_groups import (
     longhorn_nobackup_claims,
+    longhorn_r2_claims,
     longhorn_weekly_claims,
 )
-from renderer.template_filters.service_tier import shed_entries, tier_backup_claims
-
-R2_TIER = "home-critical"  # a TIER_GROUPS name: home-edge and home-automation
+from renderer.template_filters.service_tier import shed_entries
 
 
 def r2_volumes(
@@ -37,7 +36,7 @@ def r2_volumes(
         entries = list(k8s_entries().values())
     if namespace is None:
         namespace = load_yaml(ALL_VARS)["k8s_namespace"]
-    return tier_backup_claims(entries, R2_TIER, namespace)
+    return longhorn_r2_claims(entries, namespace)
 
 
 def shed_set(entries: list[dict] | None = None) -> list[str]:
@@ -54,9 +53,7 @@ def shed_set(entries: list[dict] | None = None) -> list[str]:
 # Each tier list the k3s role derives, and the filter that derives it from
 # ``(entries, namespace)``.
 _DERIVED = {
-    "k3s_longhorn_r2_volumes": lambda entries, ns: tier_backup_claims(
-        entries, R2_TIER, ns
-    ),
+    "k3s_longhorn_r2_volumes": longhorn_r2_claims,
     "k3s_longhorn_weekly_volumes": longhorn_weekly_claims,
     "k3s_longhorn_nobackup_volumes": longhorn_nobackup_claims,
 }
