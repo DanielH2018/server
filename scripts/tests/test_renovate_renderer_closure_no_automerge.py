@@ -19,13 +19,14 @@ from lib.repo_paths import REPO
 
 # An import's top-level module, where its distribution's name differs.
 DISTRIBUTIONS = {"yaml": "pyyaml"}
-# Where `import x` finds first-party code, as the renderer's own sys.path bootstrap does.
+# Where `import x` finds first-party code, as the renderer's own sys.path bootstrap does, plus `hosts/lib`, which `longhorn_backups` (a module the renderer reaches) inserts.
 ROOTS = (
     REPO / "scripts",
     REPO / "scripts" / "lib",
     REPO / "scripts" / "renderer",
     REPO / "scripts" / "renderer" / "job_files",
     REPO / "scripts" / "deploy_tools",
+    REPO / "hosts" / "lib",
 )
 
 
