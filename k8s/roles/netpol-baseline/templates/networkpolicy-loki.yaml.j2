@@ -1,13 +1,15 @@
-{# DECIDED: loki-callers sits in the observability namespace and admits homelab-mcp from the
-   homelab namespace, so it stays bespoke.
+{# DECIDED: loki-callers sits in the observability namespace and admits homelab-mcp and
+   airflow-task from the homelab namespace, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    k8s/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape.
 #}
 ---
-# THIS loki (the observability one) has one cross-namespace, in-cluster caller: homelab-mcp, via
-# CLAUDE_LOKI_URL, not the plain LOKI_URL homelab-mcp also holds, which points at the different
-# loki-homelab service in {{ k8s_namespace }}. monitor-bridge does not call THIS loki: its
+# THIS loki (the observability one) has two cross-namespace, in-cluster callers. homelab-mcp
+# reads it via CLAUDE_LOKI_URL, not the plain LOKI_URL homelab-mcp also holds, which points at
+# the different loki-homelab service in {{ k8s_namespace }}. Airflow's task pods
+# (`app: airflow-task`) read its Claude Code events for the warehouse's claude_decisions_rollup.
+# monitor-bridge does not call THIS loki: its
 # LOKI_URL, check_loki_ingestion and check_loki_reachable all target loki-homelab.
 #
 # loki itself is ALSO read on host loopback by `otelq` (a workstation host process — see
@@ -44,9 +46,9 @@ spec:
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: homelab-mcp, but only inside {{ k8s_namespace }}. As two separate list items
-        # they would OR, admitting the entire {{ k8s_namespace }} namespace (or any pod anywhere
-        # labelled homelab-mcp) rather than just this one caller.
+        # together: the listed apps, but only inside {{ k8s_namespace }}. As two separate list
+        # items they would OR, admitting the entire {{ k8s_namespace }} namespace (or any pod
+        # anywhere carrying a listed label) rather than just these callers.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_namespace }}
@@ -54,7 +56,7 @@ spec:
             matchExpressions:
               - key: app
                 operator: In
-                values: [homelab-mcp]
+                values: [airflow-task, homelab-mcp]
       ports:
         - protocol: TCP
           port: 3100

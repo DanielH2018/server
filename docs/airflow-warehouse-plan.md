@@ -70,9 +70,11 @@ role as built.
   before the day, merged across collector restarts; `increase()` drops every new session's
   first export, and read 14 to 41% low on each day from 2026-11-05 to 11-18.
 - **Slice 2b, Claude Code decision history (idea 2).** Tool errors and permission decisions
-  from the `tool_result` and `tool_decision` events in observability's Loki, with the four
-  counting traps of permission-decision telemetry as tested code. It needs a grant on Loki's
-  fence for `app: airflow-task`.
+  from the `tool_result` and `tool_decision` events in observability's Loki, as
+  `claude_decisions_rollup` into `claude.decision_daily` and `claude.tool_result_daily`, with
+  the four counting traps of permission-decision telemetry as tested code. Loki keeps 31
+  days, so slice 7, whose `loki-homelab` keeps 31 too, comes next, ahead of slices 4 to 6,
+  whose sources keep far longer.
 - **Slice 3, Home Assistant history (idea 3).** Daily min, time-weighted mean, max and
   unavailable time for a declared sensor list, and each energy counter's daily increase, as
   `ha_daily_rollup` into `ha.sensor_daily`. The source keeps seven days, so a longer DAG

@@ -132,10 +132,23 @@ def fetch_instant(
 ) -> list[dict]:
     """Run a Prometheus instant query and return its `result` list, retried as `fetch_range`."""
     params = urllib.parse.urlencode({"query": query})
-    return _get(f"{base_url}/api/v1/query?{params}", opener, sleep)["result"]
+    return get_json(f"{base_url}/api/v1/query?{params}", opener, sleep)["result"]
 
 
-def _get(url: str, opener: Callable, sleep: Callable[[float], None]) -> dict:
+def get_json(
+    url: str,
+    opener: Callable = urllib.request.urlopen,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict:
+    """GET a Prometheus or Loki API URL and return its `data`.
+
+    Both APIs answer `{"status": "success", "data": ...}`. Retries a refused or unreachable
+    connection `CONNECT_ATTEMPTS` times; an HTTP error or a non-success body is not retried.
+
+    Raises:
+      RuntimeError: The API answered with a non-success status.
+      urllib.error.URLError: The connection failed on every attempt.
+    """
     for attempt in range(CONNECT_ATTEMPTS):
         try:
             with opener(url, timeout=60) as response:
@@ -148,7 +161,7 @@ def _get(url: str, opener: Callable, sleep: Callable[[float], None]) -> dict:
                 raise
             sleep(CONNECT_BACKOFF_S * (attempt + 1))
     if body.get("status") != "success":
-        raise RuntimeError(f"prometheus refused {url}: {body.get('error', body)}")
+        raise RuntimeError(f"refused {url}: {body.get('error', body)}")
     return body["data"]
 
 
@@ -179,7 +192,7 @@ def fetch_range(
     params = urllib.parse.urlencode(
         {"query": query, "start": window.start, "end": end, "step": step_s}
     )
-    return _get(f"{base_url}/api/v1/query_range?{params}", opener, sleep)["result"]
+    return get_json(f"{base_url}/api/v1/query_range?{params}", opener, sleep)["result"]
 
 
 def _points(series: Mapping) -> dict[int, float]:
