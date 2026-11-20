@@ -30,15 +30,7 @@ from collections.abc import Callable
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# `forge` imports `forge_transport` by bare name, so `deploy_tools/` stays on the path until
-# the deploy_tools area qualifies it.
-# TODO: https://github.com/DanielH2018/server/issues/9403 - drop this insert once #9274 lands.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
-
-import forge
+from deploy_tools import forge
 from lib import kubectl as _kubectl
 from lib.gh import gh
 
