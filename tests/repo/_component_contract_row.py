@@ -75,13 +75,7 @@ COMPONENT_TIMERS_CARRY_A_CONTRACT = Census(
     files=lambda: tracked("hosts/components/*/component.yml"),
     offence=_uncontracted_timers,
     count=lambda subject: 1 if _timers(subject) else 0,
-    red=(
-        Subject("hosts/components/fixture/component.yml", _TIMER_FILE),
-        Subject(
-            "hosts/components/fixture/component.yml",
-            f"# {HEADING} (a).\n# - Scope: one file.\n{_TIMER_FILE}",
-        ),
-    ),
+    red=(Subject("hosts/components/fixture/component.yml", _TIMER_FILE),),
     green=(
         Subject("hosts/components/board-sync/component.yml", _TIMER_FILE),
         Subject(
