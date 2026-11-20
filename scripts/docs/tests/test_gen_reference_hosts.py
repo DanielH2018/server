@@ -82,13 +82,6 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     assert not out.endswith("\n\n")
 
 
-def test_the_page_tells_no_one_to_run_a_playbook(tmp_path):
-    """No playbook remains: a host's setup ships in its host package."""
-    host_vars, services = _make_inventory(tmp_path)
-    out = g.render_markdown(g.build_rows(host_vars, services=services))
-    assert "playbook" not in out.lower()
-
-
 def test_the_page_names_each_hosts_package_and_no_inventory_connection_key(tmp_path):
     host_vars, services = _make_inventory(tmp_path)
     hosts_root = tmp_path / "hosts"

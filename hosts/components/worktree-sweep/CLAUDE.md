@@ -17,6 +17,11 @@
   than this repo was written for, fails the run and pages
   (`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure`).
   daniel-server's dotfiles checkout needs a `git pull --ff-only` before its `chezmoi apply`.
+- **A checkout with no policy file fails the run.** Without `.claude/prune-worktrees.json` the
+  pruner keeps every fan-out tree and exits 0, so the script skips the pruner and exits 66
+  (`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py::test_a_checkout_with_no_policy_file_fails_the_run_and_pings_the_failure`).
+  The usual cause is a stale primary checkout: daniel-server has no `checkout-sync`, so
+  `git pull --ff-only` in `/home/<sys_user>/server` is the repair.
 - **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
   link from a package version, or reverting this component, stops the timer on the install that
   drops it. `systemctl stop homelab-worktree-sweep.timer` stops it until the next install.

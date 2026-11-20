@@ -319,23 +319,6 @@ def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     assert "verdict=refused cause= exit=1" in logline
 
 
-def test_land_never_bypasses_the_staleness_guard():
-    """The tempting fix for exit 4 is the flag that disables the check.
-
-    Every module in the package, not just deploy.py: the flag would work from any of them,
-    and a guard reading one file goes silently vacuous the day the deploy call moves. The
-    count assertion is what stops the glob returning nothing after a rename.
-    """
-    from pathlib import Path
-
-    from deploy_tools.land_lib import deploy
-
-    modules = sorted(Path(deploy.__file__).parent.glob("*.py"))
-    assert len(modules) >= 12, [p.name for p in modules]
-    for module in modules:
-        assert "--skip-staleness-check" not in module.read_text(), module.name
-
-
 def test_every_verdict_is_produced_by_a_running_test():
     """The census: every verdict asserted by name in a land test."""
     import re

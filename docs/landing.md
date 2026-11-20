@@ -512,7 +512,10 @@ registers; that is the grace period, so no landing is cut short for polling befo
 or `--pr <n>`, and prints each failed job's test IDs, error lines and annotations. For one
 master run it printed 1,117 bytes, where `ghread run logs --failed` printed 40 KB to 380 KB.
 Read the full log only for a job whose failure the summary does not explain. To survey red
-attempts across a date range, run `scripts/dev/ci_failures.py`.
+attempts across a date range, run `scripts/dev/ci_failures.py`. Its `N flaky` tally lists the
+attempts that went red and then green on a re-run of the same commit. To survey one workflow,
+pass `--workflow ci.yml`, which costs a fraction of the API calls of a survey over every
+workflow.
 
 **To grep a raw log for the errors that fired, match `##[error]`, not `::error`.** GitHub
 writes an emitted `::error::` command into the log as a `##[error]` line. Each step's

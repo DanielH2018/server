@@ -13,6 +13,8 @@ import threading
 import types
 from pathlib import Path
 
+from lib.proc_testing import live_session_lock
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
@@ -87,9 +89,9 @@ def test_a_hung_worktree_costs_its_own_session_line_only():
     porcelain = (
         "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
         "worktree /repo/.claude/worktrees/slow\nHEAD bbb\nbranch refs/heads/slow\n"
-        "locked some-other-session\n\n"
+        f"locked {live_session_lock()}\n\n"
         "worktree /repo/.claude/worktrees/fast\nHEAD ccc\nbranch refs/heads/fast\n"
-        "locked some-other-session\n\n"
+        f"locked {live_session_lock()}\n\n"
     )
     never = threading.Event()
 

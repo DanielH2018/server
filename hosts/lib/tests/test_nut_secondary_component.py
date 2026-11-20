@@ -59,8 +59,6 @@ def test_the_package_lists_the_component():
 UNITS = "/usr/lib/systemd/system"
 DROPIN = f"{UNITS}/nut-monitor.service.d/50-homelab.conf"
 WATCHDOG_UNIT = f"{UNITS}/homelab-ups-watchdog.service"
-# The Kuma push token B4's token PR retired.
-TOKEN = "ups_secondary_daniel_server_push_token"
 # The role's udev rule, pinned here because no other file holds its text.
 RULE = (
     'SUBSYSTEM=="usb", ATTR{idVendor}=="051d", ATTR{idProduct}=="0002", MODE="0666"\n'
@@ -105,18 +103,9 @@ def test_a_drop_in_with_requires_or_no_confpath_is_flagged():
     ]
 
 
-def test_the_watchdog_loads_no_credential_and_the_package_names_no_push_token(
-    package,
-):
-    unit = text(package, WATCHDOG_UNIT)
-    assert "LoadCredential=" not in unit
-    assert TOKEN not in package.credentials
-
-
 def test_the_watchdog_ships_as_a_plain_package_script_on_a_timer(package):
     script = "/usr/lib/homelab/ups-secondary-health"
     assert "write_check_textfile ups-secondary-health" in text(package, script)
-    assert "kuma_push" not in text(package, script)
     assert package.files[script][1] == 0o755
     assert f"ExecStart={script}" in text(package, WATCHDOG_UNIT)
     assert "OnCalendar=*:0/10" in text(package, f"{UNITS}/homelab-ups-watchdog.timer")

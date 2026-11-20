@@ -21,6 +21,7 @@ import pytest
 from _helpers import REPO
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
+from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
     Census,
     Subject,
@@ -483,6 +484,7 @@ ROWS = (
         ),
     ),
     CONDITION_STATUS_IS_PARSED,
+    RENDERED_OBJECTS_ARE_PARSED,
 )
 _IDS = [row.name for row in ROWS]
 

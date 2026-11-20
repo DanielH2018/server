@@ -56,11 +56,12 @@ def gate_name(cronjob: str, spec_digest8: str) -> str:
     return f"{cronjob}{GATE_INFIX}{spec_digest8}"
 
 
-def gate_job(cronjob: Mapping, digest8: str, gate: Mapping) -> dict:
+def gate_job(cronjob: K8sObject, digest8: str, gate: Mapping) -> dict:
     """The gate Job for `cronjob`, a rendered CronJob document.
 
     Args:
-        cronjob: The CronJob as `cluster/<tag>/` holds it.
+        cronjob: The CronJob as `cluster/<tag>/` holds it. Its `jobTemplate` is deep-copied,
+            so the CronJob itself is left as it was.
         digest8: The role's `digest8` (`snapshot.role_digest8`).
         gate: Its `flux_cronjob_gates` entry: `kind`, and `rerun_safe` for a mutation.
 
@@ -68,9 +69,8 @@ def gate_job(cronjob: Mapping, digest8: str, gate: Mapping) -> dict:
         RenderError: The CronJob has no pod template, a mutation gate's has no
             `backoffLimit`, or the name is longer than `MAX_NAME`.
     """
-    meta = cronjob.get("metadata") or {}
-    name = str(meta.get("name"))
-    template = copy.deepcopy((cronjob.get("spec") or {}).get("jobTemplate") or {})
+    name = cronjob.name
+    template = copy.deepcopy(cronjob.spec.get("jobTemplate") or {})
     spec = template.get("spec") or {}
     if not (spec.get("template") or {}).get("spec"):
         raise RenderError(f"CronJob {name} has no jobTemplate pod template to copy")
@@ -86,7 +86,7 @@ def gate_job(cronjob: Mapping, digest8: str, gate: Mapping) -> dict:
                 f"CronJob {name}'s mutation gate copies its backoffLimit, and it sets none"
             )
         annotations[RERUN_SAFE] = gate["rerun_safe"]
-    job_meta = {"name": name, "namespace": meta.get("namespace")}
+    job_meta = {"name": name, "namespace": cronjob.namespace}
     if (template.get("metadata") or {}).get("labels"):
         job_meta["labels"] = dict(template["metadata"]["labels"])
     job_meta["annotations"] = annotations
@@ -143,10 +143,10 @@ def is_gate_copy(
     return False
 
 
-def _cronjobs(files: Mapping[str, str]) -> dict[str, dict]:
+def _cronjobs(files: Mapping[str, str]) -> dict[str, K8sObject]:
     return {
-        obj.name: doc
-        for obj, doc in parse_documents(files.values())
+        obj.name: obj
+        for obj, _ in parse_documents(files.values())
         if obj.kind == "CronJob"
     }
 

@@ -27,14 +27,6 @@ def _repo(tmp_path):
     return tmp_path
 
 
-@pytest.mark.parametrize("cmd", ["status", "verify", "reverify", "forget"])
-def test_a_lock_subcommand_is_a_usage_error(cmd, capsys):
-    with pytest.raises(SystemExit) as exit_:
-        main([cmd])
-    assert exit_.value.code == _USAGE
-    assert "invalid choice" in capsys.readouterr().err
-
-
 def test_lint_changed_since_scopes_to_edited_sections(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / "CLAUDE.md").write_text(

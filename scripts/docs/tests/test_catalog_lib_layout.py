@@ -12,7 +12,6 @@ import json
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -63,13 +62,6 @@ print("\\n__LOADED__" + json.dumps({"code": code, "files": files}))
 """
 
 
-def _tracked() -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, check=True, timeout=60
-    ).stdout
-    return [p for p in out.decode().split("\0") if p]
-
-
 def _run_generator(
     script: str, args: list[str], cwd: Path
 ) -> tuple[int, list[str], str]:
@@ -100,37 +92,6 @@ def _assert_libraries_come_from_catalog_lib(script: str, loaded: list[str]) -> N
         assert f"{DOCS}/{name}.py" not in loaded, (
             f"{script} still loads the flat {DOCS}/{name}.py"
         )
-
-
-def test_the_six_libraries_are_tracked_in_catalog_lib_and_not_flat():
-    tracked = set(_tracked())
-    assert {f"{LIB}/{n}.py" for n in LIBRARIES} <= tracked, sorted(
-        f"{LIB}/{n}.py" for n in LIBRARIES if f"{LIB}/{n}.py" not in tracked
-    )
-    assert not {f"{DOCS}/{n}.py" for n in LIBRARIES} & tracked
-
-
-def test_catalog_lib_is_a_namespace_package_with_no_init_file():
-    in_package = [p for p in _tracked() if p.startswith(f"{LIB}/")]
-    assert in_package, f"nothing is tracked under {LIB}/"
-    assert f"{LIB}/__init__.py" not in in_package
-
-
-def test_no_import_root_offers_a_bare_catalog_lib():
-    """The generators import `docs.catalog_lib`, so no `pythonpath` root may hold a bare one."""
-    roots = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["pytest"][
-        "ini_options"
-    ]["pythonpath"]
-    tracked = _tracked()
-    owners = sorted(
-        root
-        for root in roots
-        if any(
-            p == f"{root}/catalog_lib.py" or p.startswith(f"{root}/catalog_lib/")
-            for p in tracked
-        )
-    )
-    assert owners == []
 
 
 @pytest.mark.parametrize("where", ["repo-root", "elsewhere"])

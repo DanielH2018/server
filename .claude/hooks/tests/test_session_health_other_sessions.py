@@ -12,6 +12,8 @@ import os
 import subprocess
 import types
 
+from lib.proc_testing import live_session_lock
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
 )
@@ -28,7 +30,7 @@ def _result(stdout, returncode=0):
 _OTHER_WORKTREE_PORCELAIN = (
     "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
     "worktree /repo/.claude/worktrees/other\nHEAD bbb\nbranch refs/heads/feature\n"
-    "locked some-other-session\n\n"
+    f"locked {live_session_lock()}\n\n"
 )
 
 
@@ -66,7 +68,7 @@ def test_other_live_sessions_shows_a_trees_label_beside_its_name(tmp_path):
     porcelain = (
         "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n"
         f"worktree {tree}\nHEAD bbb\nbranch refs/heads/worktree-agent-a1\n"
-        "locked some-other-session\n\n"
+        f"locked {live_session_lock()}\n\n"
     )
 
     def run(cmd, *_a, **_k):
@@ -83,7 +85,7 @@ def test_other_live_sessions_shows_a_trees_label_beside_its_name(tmp_path):
 def test_only_a_session_sharing_a_path_gets_its_own_line():
     porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
         f"worktree /repo/.claude/worktrees/{name}\nHEAD bbb\nbranch refs/heads/{name}\n"
-        "locked some-other-session\n\n"
+        f"locked {live_session_lock()}\n\n"
         for name in ("near", "far", "empty")
     )
     diffs = {
@@ -111,7 +113,7 @@ def test_only_a_session_sharing_a_path_gets_its_own_line():
 def test_uncommitted_edits_on_both_sides_count_as_overlap():
     porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
         f"worktree /repo/.claude/worktrees/{name}\nHEAD bbb\nbranch refs/heads/{name}\n"
-        "locked some-other-session\n\n"
+        f"locked {live_session_lock()}\n\n"
         for name in ("near", "far")
     )
     statuses = {
