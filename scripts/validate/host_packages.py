@@ -61,12 +61,6 @@ usage error. `diff` exits 0 whether or not the renders differ, and prints `chang
 decide, and CI's render step fails on that rather than reading it as `false`.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
-import importlib
 import os
 import re
 import subprocess
@@ -76,14 +70,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from lib import host_modules  # noqa: F401
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
-from lib.repo_paths import HOST_LIB_FILES
 from validate.validate_lib import package_roots
 
-# The module the builder fetches tools with (stdlib only), which CI runs the same way.
-_TOOL_FETCH_DIR = HOST_LIB_FILES
+import homelab_tool_fetch
 
 _UNIT = r"homelab-[a-z0-9-]+\.(?:service|timer|socket|path)"
 _HOST = r"[a-z0-9][a-z0-9-]*"
@@ -155,13 +148,6 @@ def lint_deb(deb: Path) -> list[str]:
     return problems
 
 
-def tool_fetch_module():
-    """`homelab_tool_fetch`, which sits in `hosts/lib/`, outside `scripts/`."""
-    if str(_TOOL_FETCH_DIR) not in sys.path:
-        sys.path.insert(0, str(_TOOL_FETCH_DIR))
-    return importlib.import_module("homelab_tool_fetch")
-
-
 def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
     """Fetch, verify and place the binaries of every `tools.json` tree under `render`.
 
@@ -171,15 +157,14 @@ def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
     A render with no such tree has nothing to fetch, which is how a merge base from before
     H3.11 reads.
     """
-    builder = tool_fetch_module()
-    trees = sorted(pins.parent for pins in render.rglob(builder.PINS_FILE))
+    trees = sorted(pins.parent for pins in render.rglob(homelab_tool_fetch.PINS_FILE))
     problems = []
     for tree in trees:
         try:
-            builder.install_tools(tree, cache, opener)
-        except builder.Failure as exc:
+            homelab_tool_fetch.install_tools(tree, cache, opener)
+        except homelab_tool_fetch.Failure as exc:
             problems.append(f"[FAIL] {tree}: {exc}")
-            if isinstance(exc, builder.Unavailable):
+            if isinstance(exc, homelab_tool_fetch.Unavailable):
                 break
     return problems
 
@@ -198,6 +183,11 @@ def specs(tree: Path) -> list[tuple[str, str, str]]:
     return shared + host
 
 
+def _tree_env(tree: Path) -> dict[str, str]:
+    """The environment that imports `tree`'s scripts/ ahead of the venv's own checkout."""
+    return {**os.environ, "PYTHONPATH": str(tree / "scripts")}
+
+
 def render(tree: Path, out: Path) -> int:
     """Render every package in `tree` into `out` with `tree`'s own renderer."""
     if not (tree / "hosts").is_dir():
@@ -213,8 +203,7 @@ def render(tree: Path, out: Path) -> int:
         result = subprocess.run(
             [sys.executable, str(renderer), mode, flag, name, "--out", str(out)],
             cwd=tree,
-            # `tree`'s scripts/ goes ahead of this venv's .pth, which names this checkout's.
-            env={**os.environ, "PYTHONPATH": str(tree / "scripts")},
+            env=_tree_env(tree),
             check=False,
         )
         if result.returncode != 0:
@@ -315,18 +304,16 @@ def job_changed(base: str, workflow: Path, jobs: list[str]) -> bool:
     return jobs_differ(before, workflow.read_text(), jobs)
 
 
-# Run by `tree`'s own interpreter in isolated mode, so that tree's `validate_lib` and renderer
-# are the ones imported. The payload variant's payload is random bytes; an empty one keeps the
-# render the same from run to run.
+# Run with `_tree_env`, so `tree`'s `validate_lib` and renderer are the ones imported. The
+# payload variant's payload is random bytes; an empty one keeps the render the same from run to run.
 _RENDER_FIXTURES = """
 import sys
 from pathlib import Path
 
-sys.path.insert(0, sys.argv[1])
-from validate_lib import host_fixtures
+from validate.validate_lib import host_fixtures
 
 for variant in host_fixtures.VARIANTS:
-    host_fixtures.render_fixture(variant, Path(sys.argv[2]) / variant, payload_bytes=0)
+    host_fixtures.render_fixture(variant, Path(sys.argv[1]) / variant, payload_bytes=0)
 """
 
 
@@ -347,8 +334,9 @@ def render_fixtures(tree: Path, out: Path) -> bool:
         )
         return False
     subprocess.run(
-        [sys.executable, "-I", "-c", _RENDER_FIXTURES, str(validate), str(out)],
+        [sys.executable, "-s", "-P", "-c", _RENDER_FIXTURES, str(out)],
         cwd=tree,
+        env=_tree_env(tree),
         check=True,
         stdout=subprocess.DEVNULL,
     )

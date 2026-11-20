@@ -14,11 +14,6 @@ line. A 404 still fails: it means the pinned snapshot is wrong. So does a run th
 else, such as on a package that ships no `age-keygen`.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import re
 import shutil
 import subprocess

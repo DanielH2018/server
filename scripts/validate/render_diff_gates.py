@@ -55,11 +55,6 @@ from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from deploy_tools.changed_set import suspended_changed
 from deploy_tools.object_loss import bundle_documents, prune_disabled, stem
 from deploy_tools import tag_rule

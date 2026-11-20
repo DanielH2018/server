@@ -130,10 +130,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from lib.cli_help import ArgumentParser
 from lib.k8s_roles import k8s_entries
 from lib.render_context import render_context
