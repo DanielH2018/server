@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-20 03:13 UTC
-generated_sha: 444b5c9eb
+generated_at: 2026-11-20 06:17 UTC
+generated_sha: e1464d63a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,8 +16,8 @@ generated_sha: 444b5c9eb
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 54 | 48 | `scripts/diagnostics/probe_lib/landing_blockers.py` (2026-11-20) |
-| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 78 | 37 | `scripts/diagnostics/probe.py` (2026-11-20) |
+| [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-11-13 | 54 | 48 | `pyproject.toml` (2026-11-20) |
+| [claude-tooling.md](../claude-tooling.md) | 2026-11-19 | 78 | 38 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-11-13 | 38 | 34 | `prek.toml` (2026-11-20) |
 | [landing.md](../landing.md) | 2026-11-19 | 46 | 26 | `scripts/deploy_tools/land_lib/detach.py` (2026-11-20) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-11-13 | 27 | 23 | `scripts/deploy_tools/land_lib/merge.py` (2026-11-20) |
@@ -26,54 +26,56 @@ generated_sha: 444b5c9eb
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-11-19 | 36 | 13 | `docs/monitor-bridge-checks.md` (2026-11-20) |
 | [autofix-bridge-actuators.md](../autofix-bridge-actuators.md) | 2026-11-13 | 13 | 12 | `k8s/roles/autofix-bridge/CLAUDE.md` (2026-11-19) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-11-14 | 18 | 12 | `scripts/deploy_tools/runbook_gates.py` (2026-11-20) |
+| [claude-agent-user.md](../claude-agent-user.md) | 2026-11-19 | 49 | 12 | `scripts/diagnostics/ui_login.py` (2026-11-20) |
 | [crowdsec-waf-record.md](../crowdsec-waf-record.md) | 2026-11-13 | 13 | 11 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [claude-code-root-helpers.md](../claude-code-root-helpers.md) | 2026-11-14 | 11 | 11 | `CLAUDE.md` (2026-11-19) |
 | [deploying.md](../deploying.md) | 2026-11-14 | 15 | 11 | `.github/workflows/promote.yml` (2026-11-20) |
+| [secret-rotation.md](../secret-rotation.md) | 2026-11-19 | 36 | 11 | `secrets/secrets.yml` (2026-11-20) |
 | [observability-dashboards.md](../observability-dashboards.md) | 2026-11-13 | 15 | 10 | `k8s/roles/observability/CLAUDE.md` (2026-11-20) |
 | [target-architecture/docs-guard/g7-removed-names.md](../target-architecture/docs-guard/g7-removed-names.md) | 2026-11-15 | 10 | 10 | `scripts/dev/fact_status.py` (2026-11-19) |
-| [secret-rotation.md](../secret-rotation.md) | 2026-11-19 | 36 | 10 | `secrets/secrets.yml` (2026-11-20) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-11-13 | 9 | 9 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-11-13 | 10 | 9 | `cluster/services.yml` (2026-11-20) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-11-14 | 10 | 9 | `secrets/secrets.yml` (2026-11-20) |
-| [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-11-14 | 10 | 9 | `scripts/diagnostics/probe.py` (2026-11-20) |
+| [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-11-14 | 10 | 9 | `k8s/roles/homepage/CLAUDE.md` (2026-11-20) |
 | [target-architecture/docs-guard/g11-binding-sweep.md](../target-architecture/docs-guard/g11-binding-sweep.md) | 2026-11-15 | 12 | 9 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [break-glass.md](../break-glass.md) | 2026-11-19 | 49 | 9 | `secrets/secrets.yml` (2026-11-20) |
-| [claude-agent-user.md](../claude-agent-user.md) | 2026-11-19 | 49 | 9 | `scripts/diagnostics/ui_login.py` (2026-11-20) |
+| [host-packages.md](../host-packages.md) | 2026-11-19 | 57 | 9 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [ubuntu-26.04-upgrade-plan.md](../ubuntu-26.04-upgrade-plan.md) | 2026-11-12 | 13 | 8 | `scripts/validate/validate_lib/repos_case.py` (2026-11-20) |
 | [hypervisor-libvirt-internals.md](../hypervisor-libvirt-internals.md) | 2026-11-13 | 11 | 8 | `hosts/components/hypervisor/CLAUDE.md` (2026-11-19) |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-11-13 | 10 | 8 | `k8s/roles/traefik/templates/edge-selfcheck-ingressroute.yaml.j2` (2026-11-19) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-11-13 | 9 | 8 | `secrets/secrets.yml` (2026-11-20) |
-| [host-packages.md](../host-packages.md) | 2026-11-19 | 57 | 8 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [headlamp-oidc-and-plugins.md](../headlamp-oidc-and-plugins.md) | 2026-11-13 | 9 | 7 | `renovate.json` (2026-11-20) |
 | [adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | 2026-11-19 | 13 | 7 | `cluster/services.yml` (2026-11-20) |
+| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-11-19 | 22 | 7 | `renovate.json` (2026-11-20) |
+| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-11-19 | 12 | 7 | `docs/monitor-bridge-checks.md` (2026-11-20) |
 | [adr/0027-fanout-batches-stay-on-host-cgroups.md](../adr/0027-fanout-batches-stay-on-host-cgroups.md) | 2026-11-08 | 7 | 6 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-11-13 | 6 | 6 | `secrets/secrets.yml` (2026-11-20) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-11-14 | 8 | 6 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [qbittorrent-vpn-and-prefs.md](../qbittorrent-vpn-and-prefs.md) | 2026-11-14 | 9 | 6 | `secrets/secrets.yml` (2026-11-20) |
-| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-11-19 | 22 | 6 | `renovate.json` (2026-11-20) |
+| [authelia-sessions-and-crowdsec-init.md](../authelia-sessions-and-crowdsec-init.md) | 2026-11-19 | 13 | 6 | `scripts/validate/render_lib/k8s.py` (2026-11-20) |
+| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-19 | 21 | 6 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md](../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | 2026-11-13 | 6 | 5 | `scripts/deploy_tools/promote.py` (2026-11-20) |
 | [registry-push-store-gc.md](../registry-push-store-gc.md) | 2026-11-13 | 5 | 5 | `scripts/diagnostics/probe.py` (2026-11-20) |
+| [failure-classes.md](../failure-classes.md) | 2026-11-19 | 21 | 5 | `docs/reference/backlog.md` (2026-11-20) |
+| [github-quota.md](../github-quota.md) | 2026-11-19 | 22 | 5 | `scripts/deploy_tools/land_lib/gh_read.py` (2026-11-20) |
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-11-19 | 33 | 5 | `tests/repo/test_census_rows_roles.py` (2026-11-20) |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-19 | 16 | 5 | `scripts/diagnostics/probe.py` (2026-11-20) |
-| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-11-19 | 21 | 5 | `scripts/diagnostics/probe.py` (2026-11-20) |
-| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-11-19 | 12 | 5 | `docs/monitor-bridge-checks.md` (2026-11-20) |
+| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-19 | 29 | 5 | `docs/reference/backlog.md` (2026-11-20) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-11-12 | 4 | 4 | `scripts/infra_map/gen_infra_map.py` (2026-11-19) |
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-11-13 | 4 | 4 | `.github/workflows/ci.yml` (2026-11-20) |
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-11-13 | 4 | 4 | `scripts/diagnostics/ui_login.py` (2026-11-20) |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-11-14 | 4 | 4 | `CLAUDE.md` (2026-11-19) |
-| [game-stats-internals.md](../game-stats-internals.md) | 2026-11-14 | 6 | 4 | `scripts/renderer/tests/test_renderer_game_stats_restart.py` (2026-11-20) |
-| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `docs/archive/README.md` (2026-11-19) |
-| [authelia-sessions-and-crowdsec-init.md](../authelia-sessions-and-crowdsec-init.md) | 2026-11-19 | 13 | 4 | `scripts/validate/render_lib/k8s.py` (2026-11-20) |
-| [failure-classes.md](../failure-classes.md) | 2026-11-19 | 21 | 4 | `docs/reference/backlog.md` (2026-11-20) |
-| [github-quota.md](../github-quota.md) | 2026-11-19 | 22 | 4 | `scripts/deploy_tools/land_lib/gh_read.py` (2026-11-20) |
-| [target-architecture/docs-guard/g4-drop-size-test.md](../target-architecture/docs-guard/g4-drop-size-test.md) | 2026-11-19 | 29 | 4 | `docs/reference/backlog.md` (2026-11-20) |
+| [game-stats-internals.md](../game-stats-internals.md) | 2026-11-14 | 6 | 4 | `k8s/roles/game-stats/files/stats_lib.py` (2026-11-20) |
+| [target-architecture/docs-guard/g8-memory-resolver-and-replica.md](../target-architecture/docs-guard/g8-memory-resolver-and-replica.md) | 2026-11-14 | 6 | 4 | `docs/archive/README.md` (2026-11-20) |
 | [target-architecture/docs-guard/handoff.md](../target-architecture/docs-guard/handoff.md) | 2026-11-19 | 14 | 4 | `.claude/rules/python-layout.md` (2026-11-20) |
 | [adr/0007-backup-tiering-r2-daily-b2-weekly.md](../adr/0007-backup-tiering-r2-daily-b2-weekly.md) | 2026-11-13 | 3 | 3 | `docs/break-glass.md` (2026-11-19) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-11-13 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-20) |
 | [adr/0031-each-kind-of-fact-has-one-stateless-detector.md](../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) | 2026-11-14 | 4 | 3 | `.github/workflows/ci.yml` (2026-11-20) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-11-14 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-20) |
+| [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-11-14 | 3 | 3 | `k8s/roles/pihole/CLAUDE.md` (2026-11-20) |
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-11-14 | 6 | 3 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [adr/0028-the-renderer-supports-a-closed-jinja-subset.md](../adr/0028-the-renderer-supports-a-closed-jinja-subset.md) | 2026-11-19 | 6 | 3 | `scripts/renderer/shadow_diff.py` (2026-11-20) |
+| [adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md](../adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md) | 2026-11-19 | 7 | 3 | `pyproject.toml` (2026-11-20) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-19 | 15 | 3 | `secrets/secrets.yml` (2026-11-20) |
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-19 | 35 | 3 | `renovate.json` (2026-11-20) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-11-19) |
@@ -82,13 +84,12 @@ generated_sha: 444b5c9eb
 | [adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md](../adr/0034-github-quota-is-budgeted-per-session-in-the-wrappers.md) | 2026-11-14 | 2 | 2 | `scripts/lib/gh_rate_limit.py` (2026-11-19) |
 | [adr/0035-skeptic-and-implementer-carry-no-maxturns.md](../adr/0035-skeptic-and-implementer-carry-no-maxturns.md) | 2026-11-14 | 2 | 2 | `.claude/skills/homelab-review/SKILL.md` (2026-11-19) |
 | [jellyfin-plugins.md](../jellyfin-plugins.md) | 2026-11-14 | 2 | 2 | `k8s/roles/jellyfin/CLAUDE.md` (2026-11-20) |
-| [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-11-14 | 3 | 2 | `scripts/renderer/renderer_lib/ordering.py` (2026-11-20) |
 | [target-architecture/docs-guard/g6-repair-audit-defects.md](../target-architecture/docs-guard/g6-repair-audit-defects.md) | 2026-11-14 | 4 | 2 | `.claude/rules/k8s-templates.md` (2026-11-19) |
-| [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-11-15 | 3 | 2 | `scripts/backup/volume_revert.py` (2026-11-19) |
+| [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-11-15 | 3 | 2 | `scripts/backup/volume_revert.py` (2026-11-20) |
 | [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-11-19 | 4 | 2 | `secrets/secrets.yml` (2026-11-20) |
 | [adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md](../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | 2026-11-19 | 8 | 2 | `secrets/secrets.yml` (2026-11-20) |
+| [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-11-19 | 6 | 2 | `hosts/lib/k3s_gates.py` (2026-11-20) |
 | [adr/0037-the-renderer-keeps-jinja-after-ansible.md](../adr/0037-the-renderer-keeps-jinja-after-ansible.md) | 2026-11-19 | 3 | 2 | `docs/homelab-render.md` (2026-11-20) |
-| [adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md](../adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md) | 2026-11-19 | 7 | 2 | `tests/repo/copied_tests_allowlist.txt` (2026-11-20) |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-11-19 | 19 | 2 | `k8s/roles/observability/templates/alertmanager-secret.yaml.j2` (2026-11-20) |
 | [renovate-notify-internals.md](../renovate-notify-internals.md) | 2026-11-19 | 10 | 2 | `renovate.json` (2026-11-20) |
 | [target-architecture/docs-guard/g9-blocking-gate.md](../target-architecture/docs-guard/g9-blocking-gate.md) | 2026-11-19 | 8 | 2 | `scripts/deploy_tools/land_lib/merge.py` (2026-11-20) |
@@ -102,9 +103,9 @@ generated_sha: 444b5c9eb
 | [valheim-modding.md](../valheim-modding.md) | 2026-11-13 | 1 | 1 | `k8s/roles/valheim/CLAUDE.md` (2026-11-15) |
 | [adr/0033-game-server-replicas-are-runtime-state.md](../adr/0033-game-server-replicas-are-runtime-state.md) | 2026-11-14 | 3 | 1 | `inventory/group_vars/all.yml` (2026-11-19) |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-11-19 | 2 | 1 | `scripts/validate/render_lib/k8s.py` (2026-11-20) |
-| [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-11-19 | 6 | 1 | `scripts/deploy_tools/land_lib/policy.py` (2026-11-20) |
 | [adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md](../adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md) | 2026-11-19 | 2 | 1 | `scripts/diagnostics/probe.py` (2026-11-20) |
 | [adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md](../adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) | 2026-11-19 | 3 | 1 | `secrets/secrets.yml` (2026-11-20) |
+| [adr/0038-design-is-checked-where-code-is-written.md](../adr/0038-design-is-checked-where-code-is-written.md) | 2026-11-19 | 5 | 1 | `pyproject.toml` (2026-11-20) |
 | [index.md](../index.md) | 2026-11-19 | 1 | 1 | `cluster/services.yml` (2026-11-20) |
 | [security-tools.md](../security-tools.md) | 2026-11-19 | 8 | 1 | `hosts/components/integrity-scans/templates/rkhunter-check.sh.j2` (2026-11-20) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
@@ -112,7 +113,6 @@ generated_sha: 444b5c9eb
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-11-19 | 1 | 0 | — |
 | [adr/0013-daniel-pi-stays-on-docker.md](../adr/0013-daniel-pi-stays-on-docker.md) | 2026-11-19 | 2 | 0 | — |
 | [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-11-19 | 6 | 0 | — |
-| [adr/0038-design-is-checked-where-code-is-written.md](../adr/0038-design-is-checked-where-code-is-written.md) | 2026-11-19 | 5 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-11-19 | 1 | 0 | — |
 | [claude-code-rc-caps.md](../claude-code-rc-caps.md) | 2026-11-19 | 3 | 0 | — |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-11-19 | 9 | 0 | — |
@@ -127,7 +127,7 @@ generated_sha: 444b5c9eb
 | [airflow-warehouse-plan.md](../airflow-warehouse-plan.md) | 2026-11-20 | 5 | 0 | — |
 | [alert-runbooks.md](../alert-runbooks.md) | 2026-11-20 | 15 | 0 | — |
 | [ci-throughput.md](../ci-throughput.md) | 2026-11-20 | 28 | 0 | — |
-| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-20 | 93 | 0 | — |
+| [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-11-20 | 94 | 0 | — |
 | [homelab-render.md](../homelab-render.md) | 2026-11-20 | 63 | 0 | — |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-20 | 37 | 0 | — |
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-20 | 44 | 0 | — |
