@@ -23,58 +23,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
+from lib.k8s_conditions import Condition, parse_conditions
 from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
-
-
-class ConditionStatus(StrEnum):
-    """A condition's `status`, which Kubernetes spells with a capital letter."""
-
-    TRUE = "True"
-    FALSE = "False"
-    UNKNOWN = "Unknown"
-
-    @classmethod
-    def _missing_(cls, value: object) -> ConditionStatus:
-        return cls.UNKNOWN
-
-
-@dataclass(frozen=True)
-class Condition:
-    """One entry of `.status.conditions`, without its `type`, which keys it.
-
-    Attributes:
-        status: `status`.
-        reason: `reason`, or "".
-        message: `message`, or "".
-        last_transition: `lastTransitionTime`, unparsed RFC3339, or "".
-    """
-
-    status: ConditionStatus
-    reason: str
-    message: str
-    last_transition: str
-
-
-def parse_conditions(item: Mapping) -> dict[str, Condition]:
-    """`item`'s `.status.conditions` keyed by `type`, in the order the object lists them.
-
-    When two entries share a type, the first wins, as a scan for the first match would pick it.
-    An entry that is not an object is skipped.
-    """
-    conditions: dict[str, Condition] = {}
-    for raw in (item.get("status") or {}).get("conditions") or []:
-        if not isinstance(raw, Mapping):
-            continue
-        conditions.setdefault(
-            str(raw.get("type") or ""),
-            Condition(
-                status=ConditionStatus(raw.get("status")),
-                reason=str(raw.get("reason") or ""),
-                message=str(raw.get("message") or ""),
-                last_transition=str(raw.get("lastTransitionTime") or ""),
-            ),
-        )
-    return conditions
 
 
 @dataclass(frozen=True)

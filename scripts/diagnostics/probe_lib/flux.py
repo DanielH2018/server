@@ -44,7 +44,7 @@ from deploy_tools.kustomizations import (
 )
 from lib.exit_codes import PROBE_UNREADABLE
 from lib.git import git
-from lib.k8s_objects import Condition, ConditionStatus, parse_conditions
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, kubectl_argv, kubectl_json
 
 FLUX_NAMESPACE = "flux-system"
@@ -133,9 +133,6 @@ class Row:
             and self.applied is not None
             and self.applied == self.served
         )
-
-
-NO_CONDITION = Condition(ConditionStatus.UNKNOWN, "", "", "")
 
 
 def served(ocirepository: dict | None) -> tuple[str | None, str]:

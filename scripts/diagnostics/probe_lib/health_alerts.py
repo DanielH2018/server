@@ -39,7 +39,7 @@ from typing import Callable
 
 from diagnostics.probe_lib import alertmanager_api, core
 from diagnostics.probe_lib.obs_api import prom_query_url
-from lib.k8s_objects import ConditionStatus, parse_conditions
+from lib.k8s_conditions import ConditionStatus, parse_conditions
 
 
 # C7 *Health gate*: `shadow!="true"`, `alertname!="Watchdog"`, and `severity="critical"` or

@@ -13,7 +13,7 @@ from diagnostics import flux_wait
 import pytest
 from diagnostics.probe_lib import flux
 from lib.exit_codes import PROBE_UNREADABLE
-from lib.k8s_objects import ConditionStatus
+from lib.k8s_conditions import ConditionStatus
 from renderer.renderer_lib.ordering import TAG_KIND_SUFFIXES
 
 OLD = "613ab5028cd4974a6f0247400e58749705719a72"

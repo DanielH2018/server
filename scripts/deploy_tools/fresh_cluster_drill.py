@@ -33,6 +33,7 @@ import yaml
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
+from lib.k8s_conditions import ConditionStatus
 from lib.repo_paths import ALL_VARS, K8S_ROLES
 from renderer.deletion_drill import (
     FLUX_DEFAULTS,
@@ -332,10 +333,10 @@ def fresh_cluster_problems(items: list[dict], url: str, tag: str) -> list[str]:
     problems = []
     if (source or {}).get("spec", {}).get("url") != url:
         problems.append(f"OCIRepository {ROOT} does not follow {url}")
-    if _condition(source, "Ready").get("status") != "True":
-        message = _condition(source, "Ready").get("message", "no Ready condition")
+    if _condition(source, "Ready").status is not ConditionStatus.TRUE:
+        message = _condition(source, "Ready").message or "no Ready condition"
         problems.append(f"OCIRepository {ROOT} is not Ready: {message[:200]}")
-    if _condition(source, "SourceVerified").get("status") != "True":
+    if _condition(source, "SourceVerified").status is not ConditionStatus.TRUE:
         problems.append(f"OCIRepository {ROOT} reports no SourceVerified=True")
     if not revision.startswith(f"{tag}@"):
         problems.append(f"the served revision {revision!r} is not the {tag} bundle's")

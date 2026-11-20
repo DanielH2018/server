@@ -621,8 +621,9 @@ import-not-found = "ignore"
 
 [[tool.ty.overrides]]
 # One file runs from a staged copy whose layout no search path reproduces: the soak Job mounts
-# flux_soak.py beside `changed_set.py`. It imports that staged sibling by bare name, while the
-# checkout keeps it under `scripts/deploy_tools/`. The same per-file collateral as the block
+# flux_soak.py beside `changed_set.py` and `k8s_conditions.py`. It imports those staged siblings
+# by bare name, while the checkout keeps them under `scripts/deploy_tools/` and `scripts/lib/`.
+# The same per-file collateral as the block
 # above applies; its own tests cover that import.
 include = ["scripts/renderer/job_files/flux_soak.py"]
 [tool.ty.overrides.rules]

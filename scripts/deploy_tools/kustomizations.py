@@ -9,6 +9,8 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_land_
 
 import re
 
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
+
 # The `lastAppliedOriginRevision` form that names a commit: the `--revision` that `flux push
 # artifact` writes (contract C6). promote.py reads the same form off `prod`'s manifest.
 REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
@@ -30,12 +32,8 @@ def origin_commit(kustomization: dict) -> str | None:
 
 def is_ready(kustomization: dict) -> bool:
     """Whether the Kustomization's `Ready` condition reads `True`."""
-    status = kustomization.get("status")
-    conditions = status.get("conditions") if isinstance(status, dict) else None
-    return isinstance(conditions, list) and any(
-        isinstance(c, dict) and c.get("type") == "Ready" and c.get("status") == "True"
-        for c in conditions
-    )
+    ready = parse_conditions(kustomization).get("Ready", NO_CONDITION)
+    return ready.status is ConditionStatus.TRUE
 
 
 def kustomization_name(kustomization: dict) -> str:
