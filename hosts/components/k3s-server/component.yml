@@ -13,8 +13,7 @@
 #
 # FORWARD-ONLY. A file here is named by a k3s flag (`audit-policy-file`, `authentication-config`)
 # or read at startup, and a missing authentication config wedges the API server on its next
-# start. Reverting the PR that added a file deletes it. Return a file to Ansible with the
-# attended procedure in the k3s SUC plan's *Rollback*.
+# start. Reverting the PR that added a file deletes it.
 #
 # The rest of the server's host half: Longhorn's packages and multipath drop-in, the read-only kubeconfig, the inotify key, the join
 # rules and the address pin. k3s-agent renders this component's defaults and the pin's
@@ -199,8 +198,8 @@ files:
   # releases k3s's bundled CoreDNS to Flux's `coredns` tag. k3s reads it live.
   - {src: templates/coredns.yaml.skip, dst: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail: multipathd claims freshly
-  # attached /dev/longhorn devices and every mount reads "already in use". The block Ansible wrote
-  # in the owned /etc/multipath.conf stays as a harmless duplicate.
+  # attached /dev/longhorn devices and every mount reads "already in use". The older block in the
+  # owned /etc/multipath.conf stays as a harmless duplicate.
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
   - {src: templates/k3s-readonly-kubeconfig.j2, dst: /usr/lib/homelab/k3s-readonly-kubeconfig, mode: "0755", activate: "try-restart:homelab-k3s-kubeconfig.service"}
   - {src: units/homelab-k3s-kubeconfig.service.j2, dst: /usr/lib/systemd/system/homelab-k3s-kubeconfig.service}
@@ -242,7 +241,7 @@ enable:
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Emptying a link is the way back from the pin or the fallback: the next package drops the file
-  # and this retires the path Ansible wrote. The link's live value stays until the next reboot.
+  # and this retires any copy left in place. The link's live value stays until the next reboot.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
   - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
   # Both copies of the wifi credentials.

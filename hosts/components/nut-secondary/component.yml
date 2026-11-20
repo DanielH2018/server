@@ -46,7 +46,7 @@ files:
   # The drop-in that points upsmon at the rendered file. Its name must stay 50-homelab.conf: the
   # manifest lists nut-monitor.service only for a drop-in of that name.
   - {src: units/50-homelab.conf, dst: /usr/lib/systemd/system/nut-monitor.service.d/50-homelab.conf}
-  # A packaged rule, found by reconcile's udev arm. The Ansible rule it replaces is a legacy entry.
+  # A packaged rule, found by reconcile's udev arm. The /etc rule it replaces is a legacy entry.
   - {src: rules/99-homelab-nut-apc.rules, dst: /usr/lib/udev/rules.d/99-homelab-nut-apc.rules}
   # A plain file, not a declared output: the script holds many shell `${...}` expansions and
   # reads no secret in its packaged branch.

@@ -1,15 +1,15 @@
 ---
-# Template for a new host's host_vars. Copy to `<hostname>.yml` and edit — Ansible only
-# loads a host_vars file whose name matches an inventory hostname, so this one is inert.
-# Full walkthrough: docs/host-bring-up.md §4. Defaults quoted below come from
-# inventory/group_vars/all.yml; anything already correct there can simply be left out.
+# Template for a new host's host_vars. Copy it to `<hostname>.yml` and edit the copy. The
+# inventory skips a `_`-prefixed file (scripts/lib/inventory_lists.py), so this one is no host.
+# docs/host-packages.md, *Adding a host*, is the walkthrough. Defaults quoted below come from
+# inventory/group_vars/all.yml; leave out anything already correct there.
 #
-# Never put a secret here — inventory/ is NOT SOPS-auto-encrypted and NOT hook-guarded
-# (see .claude/rules/secrets.md). Secrets go in vars/secrets.yml and are referenced by name.
+# Never put a secret here: inventory/ is neither SOPS-encrypted nor hook-guarded
+# (.claude/rules/secrets.md). A host's secrets go in secrets/hosts/<hostname>.sops.yaml.
 
-# Required: no default exists, and a role will fail or misbehave without it
+# Required: no default exists, and the host's package fails to render or misbehaves without it
 
-# The host's LAN IP. Needed by every role that publishes a LAN-bound port or firewalls by
+# The host's LAN IP. Needed by every component that publishes a LAN-bound port or firewalls by
 # IP, and read cross-host as hosts[<other>].server_ip.
 server_ip: 10.0.0.x
 
@@ -20,26 +20,18 @@ server_ip: 10.0.0.x
 ssh_config_path: /etc/ssh/sshd_config
 
 # A Docker host lists its Compose services here, which its host package deploys. A k3s node
-# deletes the key, because the k3s services live in cluster/services.yml (repo-root CLAUDE.md,
+# deletes the key, because its services are k3s roles under k8s/roles/ (repo-root CLAUDE.md,
 # "Project Overview").
 compose_services: []
 
-# Bring-up: revert once the host is established
-
-
-# Whether this host holds a checkout of THIS repo at ~/server.
-# Default: true. Set false for a host Ansible drives over ssh that never checks the repo out.
-# No host in the inventory sets it false, and no setup task reads it since H7.44.
+# Whether this host holds a checkout of THIS repo at ~/server. Default: true. The k3s-host-checks
+# component reads it to decide whether the host runs the B2-accounting crons.
 has_repo_checkout: true
 
 # Hardware / capability flags: set only what this host actually has
 
 # Default: false. Intel iGPU present → /dev/dri passthrough for jellyfin/tdarr transcode.
 # has_igpu: true
-
-# Physical location for the homepage weather widget — only the host running homepage needs it.
-# lat: 38.89
-# long: -77.08
 
 # Optional overrides
 
@@ -51,12 +43,8 @@ has_repo_checkout: true
 # container_healthcheck_timeout: 60s
 # container_healthcheck_retries: 5
 
-# Disk-backed swap, created before the apt tasks run. Only needed on a host with too little
-# RAM for `upgrade: dist` / AIDE init (the 512 MB Pi Zero 2 W).
+# Disk-backed swap, for a host with too little RAM for a heavy apt run (the 512 MB Pi Zero 2 W).
+# bootstrap-host.sh step 4 creates it ahead of its apt steps, and its PI_SWAPFILE and
+# PI_SWAPFILE_SIZE pins equal these values (hosts/lib/tests/test_bootstrap_host_pins.py).
 # pi_swapfile_path: /swapfile
 # pi_swapfile_size: 1G
-
-# Fleet-role assignments (defined in group_vars/all.yml, all defaulting to
-# daniel-server). Override only when MOVING a role to this host, and make sure
-# the old host stops claiming it.
-# renovate_notify_host: <hostname>

@@ -25,7 +25,7 @@
 # Each spec is what `ufw show added` prints for the rule, from ufw 0.36.2-6's own parser:
 # `port: ssh` prints as `22`. The live rules carry no comment, so the arm
 # adopts each by appending it again, which relabels it in place. The legacy entries name each
-# rule the Ansible role wrote by its exact spec and comment. The first two share a declared spec, so the arm
+# older rule by its exact spec and comment. The first two share a declared spec, so the arm
 # never deletes them; `allow 22/tcp` is the plain allow initial_setup removed on every apply.
 ufw:
   rules:

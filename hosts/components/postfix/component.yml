@@ -1,6 +1,6 @@
 # Postfix as a send-only local mailer: three lines of /etc/postfix/main.cf. The file belongs to no
 # package, because postfix's maintainer scripts generate it, so it takes the line arm. Each regexp
-# matches the line the Ansible role wrote, so the first reconcile adopts it.
+# matches the line already in the file, so reconcile adopts it.
 #
 # - `inet_interfaces = loopback-only` removes the 0.0.0.0:25 listener. Postfix delivers only local
 #   system mail (cron, AIDE and rkhunter to root), and `mynetworks` already refuses relaying.

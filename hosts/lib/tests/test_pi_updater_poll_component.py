@@ -14,11 +14,10 @@ from pathlib import Path
 
 import pytest
 
+from _component_contract import component_contract
 from lib.proc_testing import fake_bin, run, write_exec
-from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "pi-updater-poll"
 SCRIPT = "/usr/lib/homelab/homelab-updater-poll"
 UNITS = "/usr/lib/systemd/system"
 SOURCES = "/etc/apt/sources.list.d/homelab.sources"
@@ -93,13 +92,9 @@ def test_the_updater_units_outrank_the_aide_scans_io_class(package, unit):
     assert IO_CLASSES[unit_class] < int(aide_class)
 
 
-def test_the_component_header_carries_the_contract():
-    header = "\n".join(
-        line
-        for line in (COMPONENT / "component.yml").read_text().splitlines()
-        if line.startswith("#")
-    )
-    assert [part for part in CONTRACT_PARTS if part not in header] == []
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("pi-updater-poll")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []
 
 
 def _packages_index(*rows: tuple[str, str]) -> bytes:

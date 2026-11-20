@@ -149,7 +149,7 @@ k3s_flannel_node_ips:
   - 10.42.0.0/32
   - 10.42.1.0/32
 # wg-easy v15 picks its own client pool internally (no WG_DEFAULT_ADDRESS env in this
-# deploy) rather than Ansible assigning it, so this isn't a Service/Deployment input —
+# deploy), so this isn't a Service/Deployment input —
 # it exists purely so the comments that describe wg-easy's client range (traefik's
 # trustedIPs note, authelia's bypass policy, docker_install's bridge-carve-out) cite one
 # name instead of repeating the literal.
@@ -319,9 +319,8 @@ k8s_psa_labels:
 # Default container resources, applied to homelab and observability.
 #
 # A LimitRange, and deliberately NOT a ResourceQuota. Every container this repo renders
-# already carries requests and limits, so this changes nothing on the Ansible path. It
-# exists for the objects that never take that path — a hand-created pod, a Helm chart, a
-# `kubectl run`.
+# already carries requests and limits, so this changes nothing for them. It exists for the
+# objects this repo does not render — a hand-created pod, a Helm chart, a `kubectl run`.
 #
 # DEFAULTS ONLY — no `min`, no `max`. A `min`/`max` REJECTS every pod outside the band,
 # including ones this repo already renders at 2Gi and 4Gi, while a default only fills in
@@ -580,12 +579,8 @@ weekly_reboot_timezone: UTC
 # the time to the outage — it is slack for a monitor that flips in the seconds around the cron,
 # and for a heartbeat window that was already half-spent when the shutdown landed.
 weekly_reboot_mute_lead_minutes: 5
-# How long after the reboot itself the mute stays open. Measured: daniel-server
-# was down 07:35 to 07:48:25 and the in-cluster monitor was Ready again at ~07:51, and its
-# status-page sync recorded ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
-# for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
-# whose 1200s window meant a tile could flip DOWN up to 20 minutes after the last missed push.
-# With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
+# How long after the reboot itself the mute stays open: a node's measured recovery of about
+# 16 minutes, plus room for a slow boot. With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
 # 08:15 at the committed schedule. observability's alertmanager-secret.yaml.j2 does that sum;
 # nothing here repeats it.
 weekly_reboot_mute_recovery_minutes: 40
@@ -658,7 +653,7 @@ claude_agent_ssh_key_host: daniel-box
 # (hosts/components/claude-code). Each peer carries the `.pub` half as claude_agent_peer_public_key.
 claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 
-# --- The CI gate every deploy path grades by (H7.2e) ---
+# --- The CI gate every deploy path grades by ---
 #
 # Check-run names that must be green on a master commit before anything deploys it. These are
 # GitHub's check-run NAMES, which are also the strings branch protection calls contexts, so they
@@ -672,9 +667,8 @@ claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 #
 # Four readers share the list, so it lives here: `scripts/deploy_tools/promote.py decide`, the
 # host packages' builder, `homelab-checkout-sync` and
-# `tests/repo/test_ci_contexts_match_workflows.py`. `decide` reads this file by path, not
-# through Ansible, and refuses anything but a non-empty list of strings, so this key stays a
-# literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
+# `tests/repo/test_ci_contexts_match_workflows.py`. `decide` reads this file by path and
+# refuses anything but a non-empty list of strings, so this key stays a literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
 #
 # A change to this key or to `ci_ancestor_walk_max` reaches daniel-box only through its host
 # package: the builder and checkout-sync components render both into `homelab-daniel-box`, so

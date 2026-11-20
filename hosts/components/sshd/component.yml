@@ -2,11 +2,11 @@
 # 50-cloud-init.conf on daniel-pi and daniel-box. Two drop-ins carry the settings:
 #
 # - 10-homelab.conf holds the settings. sshd keeps the first value it reads, and `10-` sorts
-#   before 50-cloud-init.conf, so the package's value wins over the lines Ansible left there.
+#   before 50-cloud-init.conf, so the package's value wins over the lines already there.
 # - 90-homelab-match.conf holds the `Match User <sys_user>` block, in its own file.
 #
-# The lines the Ansible role wrote stay in the old file as harmless duplicates with the same
-# values, for removal by hand. Each file activates `reload:ssh.service`, which runs
+# Older lines in sshd_config stay as harmless duplicates with the same values, for removal by
+# hand. Each file activates `reload:ssh.service`, which runs
 # `sshd -t` first, so a config sshd rejects leaves the running daemon untouched and holds the host.
 #
 # Step 4 of hosts/bootstrap-host.sh creates the `ssh-users` group and adds the sys user, because
