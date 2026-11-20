@@ -4,7 +4,7 @@ These tests hold
 the output's mode, owner, `persist` flag and dependent, the absence of a symlink onto the
 nut-client conffile, and the upsd endpoint and the placeholder in the MONITOR line. They also
 hold the nut-monitor drop-in and its boot order, the watchdog unit (which loads no credential
-since M6 batch B4's Cutover-2 dropped its Kuma push), the udev rule, the legacy entries and the
+since M6 batch B4's Cutover-2 dropped its Kuma push), the udev rule and the
 manifest rows reconcile reads.
 
 Run: uv run pytest hosts/lib/tests/test_nut_secondary_component.py
@@ -129,100 +129,8 @@ def test_the_package_ships_the_apc_udev_rule_with_the_roles_text(package):
     assert text(package, "/usr/lib/udev/rules.d/99-homelab-nut-apc.rules") == RULE
 
 
-def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package):
+def test_the_manifest_lists_nut_monitor(package):
     manifest = json.loads(text(package, "/usr/lib/homelab/manifest.json"))
     assert "nut-monitor.service" in manifest["units"]
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
-    # These components retire their own entries; the rest are the package's and nut's.
-    others = (
-        "claude-code",
-        "host-maintenance",
-        "hypervisor",
-        "integrity-scans",
-        "k3s-agent",
-        "kuma-check-dir",
-        "loki-route-witness",
-        "worktree-holders",
-        "worktree-sweep",
-    )
-    # claude-code's one templated entry names daniel-server's sys_user, and a `when:` never
-    # reaches the manifest.
-    theirs = [
-        json.dumps({k: v for k, v in e.items() if k != "when"}, sort_keys=True).replace(
-            "{{ sys_user }}", "ubuntu"
-        )
-        for name in others
-        for e in yaml.safe_load(
-            (REPO / f"hosts/components/{name}/component.yml").read_text()
-        )["legacy"]
-    ]
-    ours = [
-        e for e in manifest["legacy"] if json.dumps(e, sort_keys=True) not in theirs
-    ]
-    assert ours == [
-        {"path": "/etc/apt/sources.list.d/github-cli.list"},
-        {"path": "/etc/systemd/system/sockets.target.wants/homelab-rootq.socket"},
-        {"path": "/usr/local/bin/sops"},
-        {"path": "/usr/local/bin/vale"},
-        {"path": "/usr/local/bin/uv"},
-        {"path": "/usr/local/bin/prek"},
-        {"cron": "Update Crowdsec Hub", "user": "root"},
-        {"path": "/var/lib/node-exporter-textfile/eval-run.prom"},
-        {"path": "/etc/sudoers.d/20-worktree-holders"},
-        {"path": "/usr/local/bin/secret-rotation-audit.sh"},
-        {"path": "/usr/local/bin/secret-rotate.sh"},
-        {"path": "/etc/homelab/cert-expiry-webhook.env"},
-        {"cron": "Daily secret rotation audit", "user": "ubuntu"},
-        {"cron": "Weekly secret rotation (auto tier)", "user": "ubuntu"},
-        {"cron": "TLS cert-expiry watch", "user": "ubuntu"},
-        {"cron": "Redeploy ical-proxy", "user": "ubuntu"},
-        {"cron": "Clean stale tdarr transcode cache", "user": "ubuntu"},
-        {"path": "/etc/systemd/system/docker.service.d/20-go-runtime.conf"},
-        {"path": "/etc/systemd/system/docker.service.d"},
-        {"path": "/etc/systemd/system/containerd.service.d/20-go-runtime.conf"},
-        {"path": "/etc/systemd/system/containerd.service.d"},
-        {"unit": "gitops-deploy.timer"},
-        {"unit": "gitops-deploy.service"},
-        {"unit": "gitops-deploy-alert.service"},
-        {"unit": "staging-backfill.timer"},
-        {"unit": "staging-backfill.service"},
-        {"unit": "staging-backfill-alert.service"},
-        {"path": "/etc/polkit-1/rules.d/50-gitops-deploy.rules"},
-        {"path": "/var/lib/node-exporter-textfile/gitops_tick.prom"},
-        {"path": "/var/lib/homelab/setup-render-manifest.d/gitops-deploy"},
-        {"path": "/var/lib/homelab/setup-deployed-manifest.d/gitops-deploy"},
-        {"unit": "kuma-check-github-ruleset-drift.timer"},
-        {"unit": "kuma-check-github-ruleset-drift.service"},
-        {"unit": "kuma-check-github-ruleset-drift-boot.service"},
-        {"unit": "kuma-check-github-interaction-limit.timer"},
-        {"unit": "kuma-check-github-interaction-limit.service"},
-        {"unit": "kuma-check-github-interaction-limit-boot.service"},
-        {"path": "/var/lib/kuma-check/github-ruleset-drift.down"},
-        {"path": "/var/lib/kuma-check/github-interaction-limit.down"},
-        {"cron_file": "github-ruleset-drift"},
-        {"cron_file": "github-interaction-limit"},
-        {"path": "/var/lib/node-exporter-textfile/github-ruleset-drift.prom"},
-        {"path": "/var/lib/node-exporter-textfile/github-interaction-limit.prom"},
-        {
-            "path": "/var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks"
-        },
-        {"path": "/usr/local/bin/github-ruleset-drift.sh"},
-        {"path": "/usr/local/bin/github-interaction-limit.sh"},
-        {"unit": "kuma-check-setup-drift.timer"},
-        {"unit": "kuma-check-setup-drift.service"},
-        {"unit": "kuma-check-setup-drift-boot.service"},
-        {"path": "/usr/local/bin/setup-drift-check.sh"},
-        {"path": "/var/lib/node-exporter-textfile/setup-drift-check.prom"},
-        {"path": "/var/lib/kuma-check/setup-drift.down"},
-        {"path": "/usr/local/lib/setup-drift-lib.sh"},
-        {"path": "/usr/local/lib/homelab-check-lib.sh"},
-        {"path": "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"},
-        {"path": "/var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib"},
-        {"path": "/var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib"},
-        {"cron": "Clear ansible log file", "user": "root"},
-        {"cron_file": "ups-secondary-health"},
-        {"path": "/usr/local/bin/ups-secondary-health.sh"},
-        {"path": "/etc/udev/rules.d/99-nut-apc.rules"},
-        {"path": "/var/lib/homelab/setup-render-manifest.d/nut-host"},
-    ]
     assert "nut-client" in package.depends

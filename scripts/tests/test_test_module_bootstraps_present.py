@@ -1,9 +1,10 @@
 """Guard 3: every test module importing a repo module by bare name carries its own bootstrap.
 
-This is the pytest-only half of `test_script_bootstraps_present.py`, which skips exactly the
-files this one reads: `test_*.py`, `conftest.py`, and every module under a `tests/` directory,
-fixture modules included. `is_pytest_only` there is the one predicate both consult, so the two
-are jointly exhaustive over the repo's Python by construction.
+It reads the pytest-only modules outside `scripts/`: `test_*.py`, `conftest.py`, and every
+module under a `tests/` directory, fixture modules included. `_bootstrap_eval.is_pytest_only`
+is that predicate. Under `scripts/`, every module imports dotted from the one root, and the
+`no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses any
+insert there.
 
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the `pythonpath`
 entries in `pyproject.toml`. A test module importing anything else by bare name resolves only
@@ -24,16 +25,14 @@ cannot leak across files in the same directory. That is the whole point of the g
 `test_a_sibling_module_s_insert_does_not_count` pins it.
 
 The inverse holds too: a test module must NOT carry an insert `pythonpath` already supplies.
-`pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`, so an
-insert of one of those directories, or of the module's own directory, is dead weight copied from
-a sibling. Guard 2 mandates the bootstrap for a directly-invoked script; this guard's
-`find_redundant_test_bootstraps` refuses it where pytest is the only invoker. The rule is
-redundancy, not absence: an insert of a directory `pythonpath` omits still resolves a name, and
-passes on that merit rather than by exclusion.
+An insert of a `pythonpath` directory, or of the module's own directory, is dead weight copied
+from a sibling, and `find_redundant_test_bootstraps` refuses it. The rule is redundancy, not
+absence: an insert of a directory `pythonpath` omits still resolves a name, and passes on that
+merit rather than by exclusion.
 
-This stays a file rather than a census row for the reason Guard 2 gives: it judges
-each import through Guard 2's evaluator against an index of the tree, and its accept/reject
-pairs build synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
+This stays a file rather than a census row: it judges each import through
+`_bootstrap_eval`'s evaluator against an index of the tree, and its accept/reject pairs build
+synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
 
 A role's tests get one more directory. `k8s/conftest.py` puts `k8s/roles/<role>/files`
 on `sys.path` when pytest collects a module under that role's `tests/`, so the guard
@@ -54,7 +53,7 @@ import tomllib
 from pathlib import Path
 
 from _renovate import _tracked_files
-from test_script_bootstraps_present import (
+from _bootstrap_eval import (
     _insert_target,
     _parsed,
     _scoped_nodes,
@@ -126,11 +125,14 @@ def repo_module_dirs() -> dict[str, set[Path]]:
 
 
 def collect_test_modules() -> list[Path]:
-    """Every pytest-only module under `testpaths`: what pytest collects, plus the fixture
-    modules those collect from (`is_pytest_only` in Guard 2 is the boundary)."""
+    """Every pytest-only module under `testpaths` outside `scripts/`: what pytest collects, plus
+    the fixture modules those collect from. Under `scripts/`, the
+    `no-sys-path-change-under-scripts` row of `tests/repo/test_census_rows_layout.py` refuses
+    every insert, test modules included."""
     found: set[Path] = set()
+    scripts = REPO / "scripts"
     for file in _tracked_python():
-        if not is_pytest_only(file.relative_to(REPO)):
+        if not is_pytest_only(file.relative_to(REPO)) or file.is_relative_to(scripts):
             continue
         if any(base == file.parent or base in file.parents for base in TESTPATH_DIRS):
             found.add(file.resolve())
@@ -227,7 +229,7 @@ def test_no_test_module_insert_is_unresolvable():
     )
     assert not unresolvable, (
         "test module whose candidate sys.path.insert could not be evaluated (extend "
-        f"eval_path_expr in test_script_bootstraps_present, or add a bootstrap): {unresolvable}"
+        f"eval_path_expr in _bootstrap_eval, or add a bootstrap): {unresolvable}"
     )
 
 
@@ -279,22 +281,17 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     """Non-vacuity: name the members, not a count.
 
     A census that globs for its own subject returns an empty set the moment those files move,
-    and an `all(...)` over nothing passes. The first three are the modules the guard was
-    written for: `test_ui_login.py` broke when sharding separated it from the two siblings
-    whose insert it borrowed. The next two pin two other census shapes: a `scripts/tests` guard, and
-    a `conftest.py` outside `scripts/`. The last two are fixture modules, one under
-    `scripts/` and one under `tests/` — a shape a census narrowed back to `test_*.py`
-    would drop without moving the count past 200.
+    and an `all(...)` over nothing passes. The first three are the shapes the guard exists
+    for: a hook test, a host-package test and a `conftest.py`. The fixture module under
+    `tests/` is a shape a census narrowed back to `test_*.py` would drop without moving the
+    count past 200, and the role test reaches its `files/` through `k8s/conftest.py` alone.
     """
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
     required = frozenset(
         {
-            "scripts/diagnostics/tests/test_ui_login.py",
-            "scripts/diagnostics/tests/test_probe_vip_placement.py",
-            "scripts/diagnostics/tests/test_probe_readonly_rbac.py",
-            "scripts/tests/test_script_bootstraps_present.py",
+            ".claude/hooks/tests/test_fanout_stop.py",
+            "hosts/tests/test_claude_lander.py",
             "tests/conftest.py",
-            "scripts/deploy_tools/tests/_land_fakes.py",
             "tests/_k8s_render.py",
             # Imports its role's `files/` module through k8s/conftest.py alone.
             "k8s/roles/crowdsec/tests/test_bouncer_prune.py",

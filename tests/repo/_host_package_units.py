@@ -10,6 +10,24 @@ from _row_table import Subject, tracked
 from lib import yaml_fast
 from renderer.renderer_lib import host as host_mode
 
+# Units that kept their Ansible-era name: reconcile handed each over from /etc/systemd/system,
+# which a rename could not do for a running service that holds a port (h7, *Ruling 3*,
+# 2026-10-24), or a hook, poller or polkit rule starts it by name.
+KEPT_NAMES = frozenset(
+    {
+        "claude-stop-alert@.service",
+        "claude-triage-report-alert@.service",
+        "claude-triage@.service",
+        "coredns-host.service",
+        "deploy-ui.service",
+        "fanout-alert@.service",
+        "node_exporter.service",
+        "renovate-agent-land@.service",
+        "worktree-holders.socket",
+        "worktree-holders@.service",
+    }
+)
+
 
 def host_package_units() -> list[Subject]:
     """One subject per unit a host spec ships: its name as `rel`, the spec's path as `text`.
@@ -21,26 +39,17 @@ def host_package_units() -> list[Subject]:
     units = []
     for rel in tracked("hosts/*package.yml", "hosts/*component.yml"):
         spec = yaml_fast.safe_load((REPO / rel).read_text()) or {}
-        # A unit the spec hands over from /etc/systemd/system keeps its Ansible-era name on
-        # purpose: reconcile removes the shadowing copy and restarts the unit (h7, *Ruling 3*,
-        # 2026-10-24), which a rename could not do for a running service that holds a port.
-        handed = {
-            PurePosixPath(str(entry.get("path", entry.get("unit", "")))).name
-            for entry in spec.get("legacy") or []
-            if str(entry.get("path", "")).startswith("/etc/systemd/system/")
-            or "unit" in entry
-        }
         units.extend(
             Subject(str(unit), rel)
             for unit in spec.get("enable") or {}
-            if str(unit) not in handed
+            if str(unit) not in KEPT_NAMES
         )
         for entry in spec.get("files") or []:
             dst = PurePosixPath(str(entry.get("dst", "")))
             if (
                 dst.parent == host_mode.UNIT_DIR
                 and dst.name.endswith(host_mode.UNIT_SUFFIXES)
-                and dst.name not in handed
+                and dst.name not in KEPT_NAMES
             ):
                 units.append(Subject(dst.name, rel))
     return units

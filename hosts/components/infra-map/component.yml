@@ -32,7 +32,3 @@ files:
   - {src: units/homelab-infra-map.timer, dst: /usr/lib/systemd/system/homelab-infra-map.timer}
 enable:
   homelab-infra-map.timer: timers.target
-# The earlier install. Reconcile retires the cron once the timer above has
-# started, so the map never regenerates twice or not at all.
-legacy:
-  - {cron: "Refresh homelab infrastructure map", user: "{{ sys_user }}"}

@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import sys
 
-import gh as ghmod
+from lib import gh as ghmod
 import gh_quota
 import pytest
 from lib.proc_testing import run as run_proc

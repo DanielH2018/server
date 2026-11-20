@@ -126,6 +126,9 @@ narrowed by name, and no collector exports ConfigMap `data`.
 
 Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
 carries no `origin` label, and `ScrapeTargetDown` pages a failed scrape.
+An Alertmanager that crash-loops on `invalid state` after a Longhorn fault has a corrupt
+`nflog` or `silences` file, and `docs/healthchecks-io-deadman.md`, *When Alertmanager fails to
+start*, has the recovery.
 Its config, credentials included, is the `alertmanager-config` Secret, and every Go template
 expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file in
 `files/rules/` with a promtool test in `tests/rules/`, and ships only once

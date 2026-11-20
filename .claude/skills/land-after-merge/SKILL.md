@@ -74,8 +74,11 @@ cannot be woken once its turn ends, so it runs the command in the foreground wit
 `timeout: 600000` and does not end its turn on it.
 
 **To read a verdict after the wait, run `probe.py landing-verdicts <n>`**, never a grep of a
-task's output file. Every landing records its `VERDICT:` line there as it exits, and the
-record outlives the session.
+task's output file. Every landing records its `VERDICT:` line as it exits, on the host it ran
+on, and the record outlives the session. The probe reads daniel-box's record and
+daniel-server's in one call, and each row names the host that recorded it. Exit 1 means
+neither host has a record. Exit 75 with a `note:` line means one host did not answer: that is
+no answer, so run it again.
 
 The landing runs outside the caller's process tree, so a Bash call killed at its time limit does
 not kill it. Started from a systemd user unit, such as a
@@ -156,8 +159,9 @@ merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `lan
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
-operator clears it, or once a red master CI goes green, run `cc-wait landing-clear` in the
-background and re-run the same `land.sh` command when it ends 0. It ends 1 as
+operator clears it, once a red master CI goes green, or once a live serial landing ends, run
+`cc-wait landing-clear` in the background and re-run the same `land.sh` command when it ends
+0. `probe.py landing` names the same blockers and exits 1 while one holds. It ends 1 as
 `gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A

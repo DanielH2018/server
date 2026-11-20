@@ -84,25 +84,3 @@ enable:
   homelab-renovate-agent.timer: {target: timers.target, when: renovate_agent_enabled}
   # Armed or not, so the session's toolchain and clone exist before the first session.
   homelab-renovate-agent-setup.service: multi-user.target
-# What the renovate_agent role installed. Reconcile retires each once the units above
-# have started, and leaves a legacy service alone while a session still runs in it.
-legacy:
-  - {unit: renovate-agent.timer}
-  - {unit: renovate-agent.service}
-  - {unit: renovate-agent-alert.service}
-  - {path: "/etc/systemd/system/renovate-agent-land@.service"}
-  - {path: /etc/polkit-1/rules.d/50-renovate-agent-land.rules}
-  - {path: /etc/renovate-agent/alert-webhook.env}
-  - {path: /opt/renovate-agent/renovate_agent.py}
-  - {path: /opt/renovate-agent/agent_toolbox.py}
-  - {path: /opt/renovate-agent/run_worktree.py}
-  - {path: /opt/renovate-agent/agent_logic.py}
-  - {path: /opt/renovate-agent/land_renovate_pr.py}
-  - {path: /opt/renovate-agent/gitops_markers.py}
-  - {path: /opt/renovate-agent/gitops_ledger.py}
-  - {path: /opt/renovate-agent/gitops_hold.py}
-  - {path: /opt/renovate-agent/host_lib.py}
-  - {path: /opt/renovate-agent/prompt.txt}
-  - {path: /var/lib/renovate-agent/claude-install.sh}
-  - {path: /var/lib/homelab/setup-render-manifest.d/renovate-agent}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/renovate-agent}

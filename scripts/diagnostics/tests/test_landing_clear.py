@@ -5,9 +5,11 @@ Run: uv run pytest scripts/diagnostics/tests/test_landing_clear.py
 
 import json
 import subprocess
+from unittest import mock
 
 
 from diagnostics import landing_clear
+from diagnostics.probe_lib import landing_blockers
 import pytest
 from deploy_tools.land_lib import serial_lock, turn
 from lib import proc_testing
@@ -24,7 +26,7 @@ def _run(status="completed", conclusion="success"):
     }
 
 
-def _read(hold="none", run=None, serial=False):
+def _read(hold="none", run=None, serial=None):
     return landing_clear.read(lambda: hold, lambda: run or _run(), lambda: serial)
 
 
@@ -58,9 +60,9 @@ def test_a_pending_or_cancelled_master_is_not_a_blocker(run):
 
 
 def test_a_live_serial_landing_blocks():
-    state = _read(serial=True)
+    state = _read(serial="9418")
     assert state["state"] == "blocked"
-    assert "serial PR is live" in state["detail"]
+    assert state["detail"].startswith("PR #9418's serial landing is live")
 
 
 def test_both_blockers_are_named():
@@ -77,7 +79,7 @@ def test_both_blockers_are_named():
 )
 def test_a_failed_read_exits_1_and_prints_no_state(hold_read, ci_read, capsys):
     def read_state():
-        return landing_clear.read(hold_read, ci_read, lambda: False)
+        return landing_clear.read(hold_read, ci_read, lambda: None)
 
     assert landing_clear.main([], read_state=read_state) == 1
     out = capsys.readouterr()
@@ -125,7 +127,7 @@ def test_any_other_gh_failure_is_a_failed_read(capsys):
 
 def test_a_master_with_no_ci_run_reads_pending():
     state = landing_clear.read(
-        lambda: "none", _ci_read(0, '{"workflow_runs": []}'), lambda: False
+        lambda: "none", _ci_read(0, '{"workflow_runs": []}'), lambda: None
     )
     assert state == {"state": "clear", "detail": "DEPLOY_HOLD none; master CI pending"}
 
@@ -134,21 +136,61 @@ def _hold(directory, name):
     return turn.try_take(directory / name)
 
 
-def test_a_held_serial_lock_keeps_the_wait_open_and_freeing_it_clears(
-    tmp_path, monkeypatch
-):
+def _serial_landing_of(directory, pr):
+    """Hold the locks a serial landing of `pr` holds in `directory`; the call that ends it."""
+    serial = _hold(directory, serial_lock.SERIAL_NAME)
+    own = _hold(directory, serial_lock.lock_name(pr))
+    serial_lock.record_holder("anywhere", pr)
+
+    def end():
+        serial()
+        own()
+
+    return end
+
+
+def test_a_held_serial_lock_names_its_pr_and_freeing_it_clears(tmp_path, monkeypatch):
     monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+    end = _serial_landing_of(tmp_path, "9418")
+    assert serial_lock.serial_landing("anywhere") == "9418"
+    end()
+    assert serial_lock.serial_landing("anywhere") is None
+
+
+def test_a_number_left_by_an_ended_landing_names_no_holder(tmp_path, monkeypatch):
+    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+    _serial_landing_of(tmp_path, "9386")()
     held = _hold(tmp_path, serial_lock.SERIAL_NAME)
-    assert serial_lock.serial_landing_live("anywhere")
+    assert serial_lock.serial_landing("anywhere") == ""
     held()
-    assert not serial_lock.serial_landing_live("anywhere")
 
 
 def test_a_held_landing_slot_is_not_a_serial_landing(tmp_path, monkeypatch):
     monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
     held = _hold(tmp_path, "homelab-land-slot-0.lock")
-    assert not serial_lock.serial_landing_live("anywhere")
+    assert serial_lock.serial_landing("anywhere") is None
     held()
+
+
+def test_the_probe_and_the_wait_name_the_same_blockers(tmp_path, monkeypatch):
+    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+
+    def serial():
+        return serial_lock.serial_landing("anywhere")
+
+    def both():
+        snap = landing_blockers.collect(
+            lambda path: {"runs": []}, lambda argv: "[]", serial=serial
+        )
+        wait = landing_clear.read(lambda: "none", _run, serial)
+        return snap["blockers"], wait
+
+    assert both() == ([], {"state": "clear", "detail": mock.ANY})
+    end = _serial_landing_of(tmp_path, "9418")
+    probe_blockers, wait = both()
+    end()
+    assert wait == {"state": "blocked", "detail": " | ".join(probe_blockers)}
+    assert probe_blockers[0].startswith("PR #9418's serial landing is live")
 
 
 def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
@@ -164,7 +206,7 @@ def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
         return landing_clear.read(
             lambda: "none",
             lambda: _run(),
-            lambda: serial_lock.serial_landing_live("daniel-server"),
+            lambda: serial_lock.serial_landing("daniel-server"),
         )
 
     assert landing_clear.main([], read_state=read_state) == 1

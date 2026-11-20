@@ -257,9 +257,8 @@ on `user@<uid>.service`: the operator's binds nothing, so a late manager fails n
 `homelab-sync-artifacts.timer` (the peer artifact sync) and `homelab-claude-otel-health.timer`
 (the OTLP-door heartbeat) ship only on `claude_code_artifacts_node` (daniel-box), in its host
 package. They were the role's crons `Sync peer Claude artifacts` and `Claude Code telemetry
-health` until H7.40's fourth slice, whose `legacy:` entries in
-`hosts/components/claude-code/component.yml` retire the cron files and the scripts that
-embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
+health` until H7.40's fourth slice, which retired the cron files and the scripts that embedded the
+push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
 unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
 `claude-otel-health`. Loki keeps each run's `status=` line under that tag.
 `k8s/roles/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's

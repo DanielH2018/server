@@ -72,37 +72,3 @@ enable:
   homelab-b2-deletion-accounting.timer: timers.target
   homelab-b2-budget-listing.timer: timers.target
   homelab-etcd-restore-drill.timer: {target: timers.target, when: k3s_etcd_restore_drill_armed}
-# Paths the setup/k3s role installed. Reconcile retires each once the timers above have started,
-# so no check runs twice or not at all. Two kinds of path stay for the operator, because reconcile
-# never removes a non-empty directory: /opt/homelab/releases/k3s-*, which holds one directory per
-# release, and /opt/longhorn-backup-health, which holds a __pycache__ of no fixed name.
-legacy:
-  - {cron_file: longhorn-backup-health}
-  - {cron_file: b2-deletion-accounting}
-  - {cron_file: b2-budget-listing}
-  - {cron_file: disk-health}
-  - {cron_file: etcd-token-drift}
-  - {cron_file: etcd-restore-drill}
-  - {cron_file: longhorn-trim}
-  - {cron_file: longhorn-restore-drill}
-  - {cron_file: etcd-snapshot-offbox}
-  - {path: /usr/local/bin/longhorn-backup-health.sh}
-  - {path: /usr/local/bin/disk-health.sh}
-  - {path: /usr/local/bin/etcd-token-drift.sh}
-  - {path: /usr/local/bin/longhorn-trim-volumes.sh}
-  - {path: /usr/local/bin/longhorn-restore-drill.sh}
-  - {path: /usr/local/bin/etcd-snapshot-offbox.sh}
-  - {path: /usr/local/bin/longhorn-reap-orphan-backups.sh}
-  - {path: /usr/local/bin/longhorn-reap-orphan-snapshots.sh}
-  - {path: /opt/homelab/current/k3s-backup-health}
-  - {path: /opt/homelab/current/k3s-disk-health}
-  - {path: /opt/homelab/current/k3s-etcd-snapshot}
-  - {path: /etc/rancher/k3s/kuma-push.env}
-  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-backup-health}
-  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-disk-health}
-  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-etcd-snapshot}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/k3s-longhorn-backup-health-reader}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/k3s-longhorn-reap}
-  - {path: /etc/healthchecks/ping.env}
-  - {path: /etc/healthchecks}
-  - {path: /var/lib/longhorn-cron-fired/longhorn-trim}

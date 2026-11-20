@@ -139,9 +139,8 @@ the docs page has why.
   rather than the sidecar's startup window. It carries no ownerReference to the CronJob, so
   `concurrencyPolicy: Forbid` does not keep the 06:37 firing off it; the check only reads, so
   an overlap is harmless.
-- **No daniel-box cron runs it.** The old cron and `/usr/local/bin/qbittorrent-prefs-check.sh`
-  are `legacy:` entries in `hosts/daniel-box/package.yml`, and `homelab-reconcile`
-  removes each from a host that still holds it.
+- **No daniel-box cron runs it.** `homelab-reconcile` removed the old cron and its script from
+  daniel-box.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty

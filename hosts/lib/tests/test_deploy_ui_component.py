@@ -1,8 +1,8 @@
 """daniel-box's package carries the deploy UI daemon with its in-flight panel.
 
 The daemon's behaviour has its own tests under `hosts/components/deploy-ui/tests/`. These hold what
-the move added: the unit and its enable link, the port's ufw allows, and the legacy entries that hand
-the Ansible-era unit, files and rules to the package.
+the move added: the unit and its enable link, the port's ufw allows, and the ufw legacy entries that hand
+the Ansible-era rules to the package.
 
 Run: uv run pytest hosts/lib/tests/test_deploy_ui_component.py
 """
@@ -98,26 +98,6 @@ def test_the_port_admits_the_pod_cidr_and_both_nodes_and_never_the_lan(
     sources = {r["spec"].split()[2] for r in _port_rules(manifest)}
     assert sources == {context["k3s_pod_cidr"]} | nodes
     assert context["lan_subnet"] not in sources
-
-
-def test_every_file_the_role_installed_is_handed_to_the_package(package, manifest):
-    retired = {e["path"] for e in manifest["legacy"] if "path" in e}
-    shipped = [
-        dst.removeprefix(DEFAULTS["deploy_ui_dir"])
-        for dst in package.files
-        if dst.startswith(DEFAULTS["deploy_ui_dir"] + "/")
-    ]
-    assert {"/etc/systemd/system/deploy-ui.service"} <= retired
-    no_longer_shipped = {
-        f"/opt/deploy-ui/{name}"
-        for name in ("gitops_hold.py", "gitops_ledger.py", "gitops_markers.py")
-    }
-    assert {
-        p
-        for p in retired
-        if p.startswith("/opt/deploy-ui/") and p not in no_longer_shipped
-    } <= {f"/opt/deploy-ui{rel}" for rel in shipped if rel}
-    assert no_longer_shipped <= retired
 
 
 def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(

@@ -260,10 +260,15 @@ worktrees with the issues each has claimed. While something blocks, the text vie
 worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document with every worktree, for `jq` or an agent to read.
 
-A blocker is one of two states: a `DEPLOY_HOLD` that reads anything but `none`, or a red
-master CI run. The command computes that list itself, so every surface that shows it
-agrees. Each fact comes from a reader that already exists:
+A blocker is one of three states: a `DEPLOY_HOLD` that reads anything but `none`, a red
+master CI run, or a live serial landing. The command computes that list itself, so every
+surface that shows it agrees. Each fact comes from a reader that already exists:
 
+- The serial landing comes from `land_lib.serial_lock.serial_landing`, the read `cc-wait
+  landing-clear` makes. It answers from `/proc/locks` on daniel-box and through one ssh call
+  on daniel-server. The blocker line names the PR that holds the serial lock, and the run of
+  that PR is marked `(serial)` in the list of runs in flight. `docs/landing.md` says when the
+  line names no PR.
 - `DEPLOY_HOLD` comes from one `gh variable get`. The blocker line says the hold is set and
   leaves its value to the text view, because the value is free text.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
@@ -283,19 +288,32 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
-### `landing-verdicts [<pr>] [--json] [--limit N]`
+### `landing-verdicts [<pr>] [--json] [--limit N] [--all]`
 
-`landing-verdicts` prints the newest `VERDICT:` line of each PR you landed, newest first,
-with its time and land.sh's exit code (#6325). Given a PR, it prints that PR's line alone and
-exits 1 when it has none. Read it instead of grepping a background task's output file for
-`VERDICT`, which is a harness internal that disappears with the session.
+`landing-verdicts` reads the newest `VERDICT:` line of each PR you landed on either k3s
+host, with its time, land.sh's exit code and the host that recorded it (#6325). Given a PR,
+it prints that PR's line alone and exits 1 when no host has one. Without a PR, the first line
+counts the newest `--limit` PRs by host and by exit code, and the rows under it are the
+landings that exited non-zero; `--all` lists every row. Read it instead of grepping a
+background task's output file for `VERDICT`, which is a harness internal that disappears
+with the session.
+
+One call reads this host's file directly and the other host's through one
+`host_reader.read_host`, which is one ssh call of about 0.3 s however many PRs it covers
+([#9477](https://github.com/DanielH2018/server/issues/9477)). The alternative was for a
+landing to write its record where both hosts read it. That puts an ssh write on every
+landing's exit path and a second file each user must be able to write, and a record lost to
+an unreachable host stays lost. A read that fails is repeated at no cost. A host that does not
+answer adds a `note:` line naming it, and the rows that were read still print. A PR with no
+row among the hosts that answered then exits 75, because an unread host is not an empty
+record. The read of the other host is the file of the user ssh logs in as, at the default
+path.
 
 Every landing appends its line as it exits, plain, `--detach` or crashed, to
 `$XDG_STATE_HOME/homelab/landing-verdicts.jsonl` (`~/.local/state/` by default;
 `$LAND_VERDICT_LOG` overrides it). A handed-off landing is recorded by the user that handed
-it off as well as by the lander unit. The file is per user and per host, so a landing run on
-daniel-box reads back only on daniel-box. `land_lib/verdict_log.py` owns the format and the
-trim.
+it off as well as by the lander unit. The file is per user and per host.
+`land_lib/verdict_log.py` owns the format and the trim.
 
 ### `push-rules <branch> [--rev HEAD] [--remote origin]`
 

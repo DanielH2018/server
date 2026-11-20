@@ -149,8 +149,3 @@ def test_no_host_depends_on_a_repos_package_and_daniel_box_gets_nfpm():
     for host in HOSTS:
         assert "homelab-repos" not in host_mode.render_host(host).depends, host
     assert "homelab-tools" in host_mode.render_host("daniel-box").depends
-
-
-def test_daniel_server_retires_the_hand_installed_github_cli_list():
-    legacy = host_mode.render_host("daniel-server").legacy
-    assert {"path": "/etc/apt/sources.list.d/github-cli.list"} in legacy

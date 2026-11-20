@@ -43,13 +43,3 @@ files:
 enable:
   homelab-secret-rotation-audit.timer: timers.target
   homelab-secret-rotation-audit-boot.service: multi-user.target
-# What the initial_setup role installed, and the down marker the audit kept outside
-# /var/lib/homelab/check. Reconcile retires each once the timers above have
-# started, so a rotation or an audit never runs twice or not at all.
-legacy:
-  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
-  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
-  - {path: /usr/local/bin/secret-rotate.sh}
-  - {path: /usr/local/bin/secret-rotation-audit.sh}
-  - {path: /var/lib/kuma-check/secret-rotation-audit.down}
-  - {path: /var/lib/homelab/setup-render-manifest.d/secret-rotation}

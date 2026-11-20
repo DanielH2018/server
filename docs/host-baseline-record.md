@@ -28,9 +28,8 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   `/usr/bin/vale` are one-line execs of the `homelab-tools` binaries, the `worktree-holders`
   component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
   Python. H7.63 deleted the role's last two tools, the `ansible-core` and `ansible-lint` uv
-  installs; the copies already on the hosts stay until H7.56. Each cluster host's package lists
-  `/usr/local/bin/uv` as a legacy entry, so the install removes the copy that `initial_setup`
-  wrote.
+  installs; the copies already on the hosts stay until H7.56. `homelab-reconcile` removed
+  the copy of `/usr/local/bin/uv` that `initial_setup` wrote from each cluster host.
 - **Vale's copies are in `homelab-tools` and CI** (`tests/repo/test_vale_matches_the_ci_pin.py`).
   The dotfiles repo's `tools.toml` pins uv, prek and Python, and this repo holds no twin of uv or
   prek.
@@ -185,8 +184,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 source, each rendered setup template's source checksum with the one stamped at render time, and
 the checkout's age with a 14-day limit. H7.52 retired the deployer's timer, so nothing renders
 setup templates any more, and H7.63 deleted the check, its library, its stamp fragments and its
-`SetupDrift` rules. Each host package's `legacy:` list removes the timer, the script and its
-files.
+`SetupDrift` rules. `homelab-reconcile` removed the timer, the script and its files from every
+host.
 
 Two lessons from it still apply to any host check:
 

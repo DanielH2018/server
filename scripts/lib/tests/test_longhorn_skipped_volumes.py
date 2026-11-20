@@ -7,7 +7,7 @@ The reader-side half, that the pod-log read reaches this check with the right fl
 Run: uv run pytest scripts/lib/tests/test_longhorn_skipped_volumes.py
 """
 
-from longhorn_lib import longhorn_skipped_volumes_logic as logic
+from lib.longhorn_lib import longhorn_skipped_volumes_logic as logic
 from host_lib import rfc3339_to_epoch
 
 # The d4 line as `kubectl logs --prefix` printed it, nanosecond timestamp included.

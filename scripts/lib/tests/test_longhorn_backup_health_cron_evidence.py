@@ -16,7 +16,7 @@ The B2 transport is pinned separately by a real subprocess run in
 Run: uv run pytest scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py
 """
 
-from longhorn_lib import longhorn_cron_evidence_logic as logic
+from lib.longhorn_lib import longhorn_cron_evidence_logic as logic
 
 _NOW = 1_700_000_000.0
 

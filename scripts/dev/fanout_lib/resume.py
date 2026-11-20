@@ -249,7 +249,7 @@ def resumable(
     merged = tools.merged_pr(b.branch, b.repo)
     if merged:
         return f"{name}: {merged} merged; run `fanout.py place clean {run_id}`"
-    open_branches = tools.open_pr_branches(b.repo)
+    open_branches = tools.open_pr_files(b.repo)
     if open_branches is None:
         return (
             f"{name}: the repo's open PRs could not be read; run the same command again"

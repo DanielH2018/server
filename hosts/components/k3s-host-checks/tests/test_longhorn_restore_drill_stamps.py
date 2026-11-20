@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from longhorn_lib import longhorn_restore_drill_stamps as stamps
+from lib.longhorn_lib import longhorn_restore_drill_stamps as stamps
 from _longhorn_reader_stubs import (
     NOW as READER_NOW,
     _green_path_stub_kubectl,

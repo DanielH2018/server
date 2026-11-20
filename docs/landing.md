@@ -149,6 +149,18 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   every edit to the file lands alone, a field change on one service included: the operator
   accepted that cost on 2026-11-19 in place of a rule that reads the diff. A refusal names
   what a serial PR changes from `live_limit.SERIAL_WHAT`.
+- A landing that takes the serial lock writes its PR number into
+  `/run/lock/homelab-land-serial.holder` beside it. `serial_lock.serial_landing` reads the
+  lock and that number without taking the lock, and it is the one read both `probe.py landing`
+  and `cc-wait landing-clear` make. Both report a live serial landing as a blocker in the
+  words of `landing_blockers.blockers`, and the probe exits 1 with `PROBE-VERDICT: fail` while
+  the lock is held. The number is trusted only while that PR's own lock is held, because the
+  file outlives the landing that wrote it. A holder that could not write its number reads as
+  `a serial landing is live`, with no PR. Until 2026-11-20 the probe counted only
+  `DEPLOY_HOLD` and master CI, so it ended `ok` while
+  [#9418](https://github.com/DanielH2018/server/pull/9418) held the lock, and a coordinator
+  read that as leave to re-land two parked PRs
+  ([#9434](https://github.com/DanielH2018/server/issues/9434)).
 - The cost was first measured on 2026-11-20, when two PRs that change the file landed in
   a row. [#9386](https://github.com/DanielH2018/server/pull/9386) merged at 00:05 UTC and
   ended `settled` at 00:29. [#9418](https://github.com/DanielH2018/server/pull/9418)

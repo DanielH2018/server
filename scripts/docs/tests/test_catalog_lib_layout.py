@@ -116,8 +116,8 @@ def test_catalog_lib_is_a_namespace_package_with_no_init_file():
     assert f"{LIB}/__init__.py" not in in_package
 
 
-def test_catalog_lib_is_the_only_entry_by_that_name_on_any_import_root():
-    """Every `pythonpath` directory is one import root, so the package name must be unique."""
+def test_no_import_root_offers_a_bare_catalog_lib():
+    """The generators import `docs.catalog_lib`, so no `pythonpath` root may hold a bare one."""
     roots = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["pytest"][
         "ini_options"
     ]["pythonpath"]
@@ -130,7 +130,7 @@ def test_catalog_lib_is_the_only_entry_by_that_name_on_any_import_root():
             for p in tracked
         )
     )
-    assert owners == [DOCS]
+    assert owners == []
 
 
 @pytest.mark.parametrize("where", ["repo-root", "elsewhere"])

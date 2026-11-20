@@ -86,17 +86,6 @@ def test_the_package_ships_no_weekly_rotation(package):
     assert "homelab-secret-rotation.timer" not in set(package.enable_links())
 
 
-def test_the_package_retires_the_ansible_era_cron_timer_and_scripts(package):
-    legacy = [e for e in package.legacy if "secret" in str(e)]
-    assert {e.get("cron") or e.get("unit") or e.get("path") for e in legacy} >= {
-        "Weekly secret rotation (auto tier)",
-        "Daily secret rotation audit",
-        "/usr/local/bin/secret-rotate.sh",
-        "/usr/local/bin/secret-rotation-audit.sh",
-        "/var/lib/kuma-check/secret-rotation-audit.down",
-    }
-
-
 def test_the_component_header_carries_the_contract():
     header = "\n".join(
         line for line in COMPONENT.read_text().splitlines() if line.startswith("#")

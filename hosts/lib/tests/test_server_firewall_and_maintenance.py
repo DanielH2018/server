@@ -1,11 +1,9 @@
 """daniel-server ships the same last three `initial_setup` subjects as the Pi.
 
 The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
-tests hold what is specific to this host: the crons the role once wrote here are retired and
-replaced by timers without the Pi's Docker prune, the scans
+tests hold what is specific to this host: the timers ship without the Pi's Docker prune, the scans
 read this host's own tokens, and reconcile adopts the two SSH rules while it leaves the k3s
-agent's rules and the hand-added rule alone. Reconcile also removes the `eval-run` textfile a test
-run leaked here, which no daniel-server component writes.
+agent's rules and the hand-added rule alone.
 
 Run: uv run pytest hosts/lib/tests/test_server_firewall_and_maintenance.py
 """
@@ -46,42 +44,14 @@ def context() -> dict:
     return render_context(None, HOST, inventory=REPO_INVENTORY)
 
 
-def test_each_cron_the_role_once_wrote_here_is_retired_and_a_timer_replaces_it(
-    package, manifest
-):
-    retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
+def test_each_timer_the_role_once_ran_as_a_cron_ships_here(package, manifest):
     for name, timer in TIMERS.items():
         if name in NOT_HERE:
             continue
-        assert retired.get(name) == "root", name
         assert timer in manifest["enable_links"]
         assert f"/usr/lib/systemd/system/{timer}" in package.files
     assert "homelab-docker-prune.timer" not in manifest["enable_links"]
     assert "/usr/lib/homelab/docker-prune" not in package.files
-
-
-def test_reconcile_retires_the_compose_era_crowdsec_hub_cron(manifest):
-    retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
-    assert retired.get("Update Crowdsec Hub") == "root"
-
-
-def _eval_run_writers(package: host_mode.Package) -> list[str]:
-    return [
-        dst
-        for dst, (body, *_) in package.files.items()
-        if b"write_check_textfile eval-run " in body
-    ]
-
-
-def test_reconcile_retires_the_leaked_eval_run_textfile(package, manifest):
-    leaked = "/var/lib/node-exporter-textfile/eval-run.prom"
-    assert {"path": leaked} in manifest["legacy"]
-    # The entry deletes a live producer's file once anything on this host writes the check.
-    # daniel-box ships the producer, so the pattern must still find it there.
-    assert _eval_run_writers(host_mode.render_host("daniel-box")) == [
-        "/usr/lib/homelab/eval-run"
-    ]
-    assert _eval_run_writers(package) == []
 
 
 def test_the_scans_load_no_credential_and_the_package_lists_no_scan_token(package):

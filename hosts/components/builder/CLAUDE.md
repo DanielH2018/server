@@ -31,10 +31,8 @@ repository (daniel-box)* holds the design.
 - `/usr/lib/homelab/publish-textfile` and `/usr/lib/homelab/builder-fingerprint`, both root-owned.
 - `homelab-builder.service` and `homelab-builder.timer` (every 2 minutes),
   `homelab-repo-sign.service` and `homelab-apt-repo.service`. The units keep the names the Ansible
-  copies had, so the `legacy:` entries name each file under `/etc/systemd/system`, and reconcile's
-  shadow handoff removes them, runs one `daemon-reload`, and restarts each unit whose file differed.
-  The package's own enable links live under `/usr/lib/systemd/system`, and the handoff never
-  touches them.
+  copies had. Reconcile's shadow handoff removed those copies from `/etc/systemd/system`. The
+  package's own enable links live under `/usr/lib/systemd/system`.
 - Two ufw rules, one per peer's `server_ip`, on port 8791. The rule admits the two peer hosts and
   every pod on daniel-server, because flannel masquerades a pod's traffic to an address outside the
   pod CIDR to that node's LAN IP. That reach is accepted: the repository serves only signed, public

@@ -8,7 +8,7 @@ import json
 from collections import defaultdict
 from pathlib import PurePosixPath
 
-import export_grafana_dashboards as exporter
+from grafana import export_grafana_dashboards as exporter
 from _row_table import Census, Subject, tracked
 
 _DASHBOARDS = "k8s/roles/observability/files/dashboards"

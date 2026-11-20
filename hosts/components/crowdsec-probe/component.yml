@@ -41,10 +41,3 @@ files:
   - {src: units/homelab-crowdsec-probe.timer, dst: /usr/lib/systemd/system/homelab-crowdsec-probe.timer}
 enable:
   homelab-crowdsec-probe.timer: timers.target
-# The earlier install through k8s_host_files. Reconcile retires each once the timer
-# above has started, and keeps each while that start fails, so the probe still runs. Both run only
-# if the timer starts outside reconcile while the host holds (docs/host-packages.md).
-legacy:
-  - {unit: crowdsec-edge-probe.timer}
-  - {unit: crowdsec-edge-probe.service}
-  - {path: /usr/local/bin/crowdsec-edge-probe}

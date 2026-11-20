@@ -48,17 +48,3 @@ enable:
   homelab-github-ruleset-drift-boot.service: multi-user.target
   homelab-github-interaction-limit.timer: timers.target
   homelab-github-interaction-limit-boot.service: multi-user.target
-# The earlier installs of these checks. Reconcile retires each once the timers above
-# have started, so neither check runs twice or not at all.
-legacy:
-  - {unit: kuma-check-github-ruleset-drift.timer}
-  - {unit: kuma-check-github-ruleset-drift.service}
-  - {unit: kuma-check-github-ruleset-drift-boot.service}
-  - {unit: kuma-check-github-interaction-limit.timer}
-  - {unit: kuma-check-github-interaction-limit.service}
-  - {unit: kuma-check-github-interaction-limit-boot.service}
-  - {path: /usr/local/bin/github-ruleset-drift.sh}
-  - {path: /usr/local/bin/github-interaction-limit.sh}
-  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
-  - {path: /var/lib/kuma-check/github-interaction-limit.down}
-  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}

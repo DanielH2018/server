@@ -88,8 +88,8 @@ which have no checkout and no install step.
 
 **HISTORY —** On 2026-11-19 `scripts/` was installed in place
 ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so in a venv it no longer runs
-uninstalled. The role-shipped programs still run with no install, and the bootstraps stand
-until the scripts packaging milestone's slice 3 removes them.
+uninstalled, and its modules carry no `sys.path` bootstraps. The role-shipped programs and
+the files a host package or a Job stages still run with no install.
 
 ### PEP 420 namespace packages, no `__init__.py` anywhere
 
@@ -129,7 +129,7 @@ and every `scripts/<dir>` holding a `tests/`, the
 catches two roots that hold the same module name. No test catches a module that shadows a
 directory in another root.
 
-### Per-module `sys.path` bootstraps, not `python -m`
+### One installed root, not per-module bootstraps or `python -m`
 
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path
 initialization][syspath]). `python -m scripts.dir.name` would put the current directory
@@ -137,24 +137,32 @@ first instead, but that requires every cron and every hook to start from the rep
 the role-shipped programs have no repo root at all. `scripts/` itself is the installed import
 root ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so every module under it
 imports dotted, as `from lib.repo_paths import REPO` or `from dev.fanout_lib import place`
-does, and carries no insert. Slice 3 of the scripts packaging milestone qualified every area.
-The inserts that remain reach a directory outside the root: `lib.host_modules` for
-`hosts/lib`, a module a host package copies, and the few that reach the repo's `tests/`.
+does, and carries no insert. That holds inside a module's own directory too, because one
+file imported under two names is two module objects.
 
-Such an insert goes on the module that needs it, never on a shared module, because a single
-insert in an imported module only works for whoever imports it first.
-`scripts/tests/test_script_bootstraps_present.py` resolves the AST of every `scripts/**`
-module outside a `tests/` directory and evaluates what each insert actually puts on the
-path, so a missing or wrong bootstrap fails CI. A module under `tests/` — a `test_*.py` or a
-`_*.py` fixture beside it — has pytest as its only invoker, so
-`scripts/tests/test_test_module_bootstraps_present.py` refuses the insert there instead
-(#2061, #2099). It does not cover `k8s/roles/**/files/`; those modules resolve their
-siblings by bare name from `sys.path[0]`, which is correct by construction on the host.
+Two rows of `tests/repo/test_census_rows_layout.py` hold the rule.
+`no-sys-path-change-under-scripts` refuses a `sys.path` change in any module under
+`scripts/`, tests included. Its `SYS_PATH_WRITERS` allow-list names each one that remains
+and why: `lib.host_modules` for `hosts/lib`, the `longhorn_lib` modules a host package copies
+beside `host_lib.py`, and the dev tools that reach the repo's `tests/` or the dotfiles
+checkout, or set `sys.path[0]` for the pytest run they trace. `scripts-import-their-siblings-dotted` refuses a bare import of a sibling
+module or package. Outside `scripts/`, a module under `tests/` has pytest as its only
+invoker, and `scripts/tests/test_test_module_bootstraps_present.py` refuses an insert there
+that `pythonpath` already supplies (#2061, #2099). Neither covers `k8s/roles/**/files/`;
+those modules resolve their siblings by bare name from `sys.path[0]`, which is correct by
+construction on the host.
 
-`pythonpath` in `pyproject.toml` is a pytest setting and nothing else reads it. ty resolves the
-same directories through `[tool.ty.environment] extra-paths`, which its docs describe as the
-knob for "first-party or third-party modules that are not installed into your project's Python
-environment in a conventional way" ([ty configuration][ty-config]);
+A file a host package or a Job stages keeps the staged layout's bare import. The soak Job
+mounts `scripts/deploy_tools/changed_set.py` beside `flux_soak.py`, and
+`scripts/renderer/tests/conftest.py` binds `changed_set` to the same module object as
+`deploy_tools.changed_set` so the tests see that layout.
+
+`pythonpath` in `pyproject.toml` is a pytest setting and nothing else reads it. It lists
+`scripts/` once and no subdirectory of it, so a bare sibling import that pytest resolved would
+fail in the cron or hook that runs it. ty resolves the same directories through
+`[tool.ty.environment] extra-paths`, which its docs describe as the knob for "first-party or
+third-party modules that are not installed into your project's Python environment in a
+conventional way" ([ty configuration][ty-config]);
 `tests/repo/test_ty_config_covers_the_repo.py` keeps the two lists aligned.
 
 ### Tests in a sibling `tests/`, never beside the code

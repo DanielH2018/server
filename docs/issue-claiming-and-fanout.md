@@ -473,20 +473,29 @@ host. A launch from another host, or as another user, takes a different lock and
 different manifests. Every coordinator runs on daniel-box as `ubuntu`, so one lock covers
 them all.
 
-**A live batch holds the files it cites.** `launch` records on each batch the files its
-issues cite (`Batch.cited_paths`), resolved as the within-launch check resolves them
-(`scripts/dev/fanout_lib/launch_gates.py:batch_paths`).
+**A live batch holds the files it cites and the files its open PR has edited.** `launch`
+records on each batch the files its issues cite (`Batch.cited_paths`), resolved as the
+within-launch check resolves them (`scripts/dev/fanout_lib/launch_gates.py:batch_paths`).
+The files a batch has edited are the files its open PR changes, which
+`scripts/dev/fanout_lib/transport.py:open_pr_files` reads from GitHub at each launch.
 `scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files` then refuses a launch
-that cites a file a live batch in another run holds. The refusal names the file, the run
-and the orchestrator branch the run was launched under. Ask that coordinator to finish or
-release its batch. Do not clean another coordinator's run.
+that cites a file a live batch in another run holds. The launch's own side is the files its
+issues cite, because its agents have edited nothing yet. The refusal names the file, the
+run and the orchestrator branch the run was launched under, and says whether the live batch
+cites the file or has edited it
+(`scripts/dev/tests/test_fanout_launch_gates.py::test_launch_refuses_a_file_the_open_pr_of_a_batch_in_another_run_has_edited`).
+Ask that coordinator to finish or release its batch. Do not clean another coordinator's
+run.
 
 A batch is live for this rule while its unit is active or its branch has an open PR. An
 uncleaned batch is not live for that reason alone: on 2026-11-19 `place runs` listed over
 20 standing batches, the oldest from 2026-10-22. A parked batch has an open PR, so it keeps
-its files. The gate reads the open PRs with one `gh pr list` call. It reads a unit's state
-only for a batch with no open PR that could collide. A read that fails refuses the launch.
-A batch saved before `cited_paths` existed has its issue bodies fetched instead.
+its files. The gate reads the open PRs and the files each changes with one `gh pr list`
+call, which costs the same GraphQL point as reading the branches alone. That call returns
+at most 100 files of a PR, so a PR that changes more, on a standing batch's branch, costs
+one paginated REST read for the rest. The gate reads a unit's state only for a batch with
+no open PR that could collide. A read that fails refuses the launch. A batch saved before
+`cited_paths` existed has its issue bodies fetched instead.
 
 `--allow-shared-file <path>` excuses a path here as it does within one launch, and the
 launch records the path on the new batch as `Batch.excused_paths`, where the holder's
@@ -505,12 +514,12 @@ holds `.github/workflows/ci.yml`.
 
 The rule has four known limits:
 
-- **A batch's diff can exceed its cited paths.** The gate compares what each batch was
-  briefed on, not what its agent edits. Two batches that cite different files can still
-  edit one. In the run of 2026-11-19, one fix changed 11 files and its issue cited one of
-  them (*The first two-project run*).
-  [#9479](https://github.com/DanielH2018/server/issues/9479) holds the proposal to compare
-  edited files.
+- **A batch that has opened no PR holds only the files it cites.** An agent pushes its
+  branch when it opens its PR, so GitHub has none of its edits before then. Two batches
+  that run at once and cite different files can still edit one. A launch is compared by
+  its cited files for the same reason, so a file it goes on to edit without citing is
+  checked against nothing. In the run of 2026-11-19, one fix changed 11 files and its issue
+  cited three of them (*The first two-project run*).
 - **A change that lands on master is not a live batch.** The gate compares batches, so a
   file master changes under a running batch is held by nothing. That batch finds out at
   its landing, as a red CI run or a `merge-conflict` verdict, and the conflict resume
@@ -544,6 +553,15 @@ already removed is skipped without an ssh call, `status` reports it as `cleaned`
 reading a host whose report file went with the worktree. Once every batch is removed, the
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
+
+`clean` runs each batch's leg on the batch's host in one ssh call
+(`scripts/dev/fanout_lib/clean.py:remote_clean_command`). The leg fetches master, archives
+`origin/master`'s `scripts/` into a temporary directory, runs `fanout.py place clean-one` from
+that snapshot and removes the directory. So the code that judges a batch is master's on both
+hosts, whatever commit the host's primary checkout stands at. Only daniel-box has
+`homelab-checkout-sync`, and daniel-server's primary checkout lags master by hundreds of
+commits. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
+no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
 
 ### A batch whose landing conflicts with master
 
@@ -835,7 +853,8 @@ table names its own.
 - The run manifests are in `~/.claude/fanout/retired/` on daniel-box. Each names its
   orchestrator branch, its batches and each batch's host.
 - The verdict log is `~/.local/state/homelab/landing-verdicts.jsonl`, one per host.
-  `probe.py landing-verdicts <pr>` reads the log of the host it runs on. A batch that
+  On the day of the run, `probe.py landing-verdicts <pr>` read only the log of the host it
+  ran on. A batch that
   lands its own draft on daniel-server writes there, so daniel-box's log holds no row for
   [#9450], [#9461] or [#9475].
 - The review records are in `~/.local/state/fanout-review/` on the batch's host. Each
@@ -874,13 +893,13 @@ arrived in a form the gate does not read:
   at 23:37 UTC. A landing on master is not a live batch, so the gate compares nothing for
   it.
 
-A clean launch therefore means that no live batch cites a file this launch cites. It does
-not mean that no live batch edits one. The collision the run planned, between [#9118] and
+A clean launch in that run therefore meant that no live batch cited a file the launch
+cited. It did not mean that no live batch edited one. The collision the run planned, between [#9118] and
 [#9119] in different projects, never reached the gate: [#9382] merged [#9119]'s fix on
 2026-11-19 at 23:15 UTC, and [#9118] launched on 2026-11-20 at 04:41 UTC.
-[#9479](https://github.com/DanielH2018/server/issues/9479) holds the proposal to compare
-the files a live batch has edited. Until it lands, a sub-coordinator checks an open PR's
-file list against the next batch's issues by hand when two batches work one role.
+[#9479](https://github.com/DanielH2018/server/issues/9479) proposed comparing the files a
+live batch has edited, and the gate reads them from each live batch's open PR (*One launch
+at a time, and files held across runs*).
 
 **The serial rule's cost was two landings in a row.** [#9386] and [#9418] both change
 `cluster/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.

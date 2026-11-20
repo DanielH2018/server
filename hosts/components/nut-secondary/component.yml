@@ -55,10 +55,3 @@ files:
   - {src: units/homelab-ups-watchdog.timer.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.timer}
 enable:
   homelab-ups-watchdog.timer: {target: timers.target, when: nut_host_watchdog_armed}
-# What the nut_host role installed on daniel-server. Reconcile retires each once the
-# package's units have started.
-legacy:
-  - {cron_file: ups-secondary-health}
-  - {path: /usr/local/bin/ups-secondary-health.sh}
-  - {path: /etc/udev/rules.d/99-nut-apc.rules}
-  - {path: /var/lib/homelab/setup-render-manifest.d/nut-host}

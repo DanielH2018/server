@@ -43,7 +43,7 @@
 # The host baseline (host-hardening) is the sudo cache, auditd's rules, the module blacklist, the
 # core-dump drop-in, the login banner and the base packages. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening, kuma-check-dir]
+components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening]
 credentials:
   - healthchecks_ping_key
 # The Pi is the arm64 pilot of homelab-tools, whose arm64 build ships sops and
@@ -58,71 +58,6 @@ files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
 enable:
   homelab-updater.timer: timers.target
-legacy:
-  # The hypervisor role's teardown half kept this host free of the network source directory. The
-  # role is empty and nothing recreates it, so the entry stays a no-op on a clean host.
-  - {path: /etc/libvirt/declared-networks}
-  # The Pi's heartbeats read their push tokens from /run/credstore, and nothing reads the interim
-  # copies optimize_pi staged (pi-heartbeats/component.yml). The directory comes after its files,
-  # because reconcile removes a directory only once it is empty.
-  - {path: /etc/homelab/interim/pi_sd_health_push_token}
-  - {path: /etc/homelab/interim/pi_recovery_push_token}
-  - {path: /etc/homelab/interim}
-  # The binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
-  - {path: /usr/local/bin/sops}
-  # The absent arms of initial_setup's crons.yml. Each names what the role removes from a host
-  # with no Claude sessions, no gitops and no witness.
-  - {unit: worktree-holders.socket}
-  - {unit: worktree-holders@.service}
-  - {path: /usr/local/libexec/worktree-holders}
-  - {path: /etc/worktree-holders.json}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/worktree-holders}
-  - {path: /etc/sudoers.d/20-worktree-holders}
-  - {path: /usr/local/bin/secret-rotation-audit.sh}
-  - {path: /usr/local/bin/secret-rotate.sh}
-  - {path: /etc/homelab/cert-expiry-webhook.env}
-  # The cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
-  # component never lists its two crons here.
-  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
-  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
-  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
-  # What gitops_deploy's teardown half removed from this host, which never ran the
-  # deployer. Its three directories are not listed: the teardown removed them, and reconcile
-  # removes a directory only when it is empty.
-  - {unit: gitops-deploy.timer}
-  - {unit: gitops-deploy.service}
-  - {unit: gitops-deploy-alert.service}
-  - {unit: staging-backfill.timer}
-  - {unit: staging-backfill.service}
-  - {unit: staging-backfill-alert.service}
-  - {path: /etc/polkit-1/rules.d/50-gitops-deploy.rules}
-  - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
-  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
-  - {unit: kuma-check-github-ruleset-drift.timer}
-  - {unit: kuma-check-github-ruleset-drift.service}
-  - {unit: kuma-check-github-ruleset-drift-boot.service}
-  - {unit: kuma-check-github-interaction-limit.timer}
-  - {unit: kuma-check-github-interaction-limit.service}
-  - {unit: kuma-check-github-interaction-limit-boot.service}
-  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
-  - {path: /var/lib/kuma-check/github-interaction-limit.down}
-  - {cron_file: github-ruleset-drift}
-  - {cron_file: github-interaction-limit}
-  - {path: /var/lib/node-exporter-textfile/github-ruleset-drift.prom}
-  - {path: /var/lib/node-exporter-textfile/github-interaction-limit.prom}
-  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
-  - {path: /usr/local/bin/github-ruleset-drift.sh}
-  - {path: /usr/local/bin/github-interaction-limit.sh}
-  # What initial_setup's untagged copies left on this host, which never ran the setup-drift
-  # check: the Ansible copy of the host-check library (pi-heartbeats ships
-  # /usr/lib/homelab/homelab-check-lib.sh), the drift library and their stamp fragments, and the
-  # ansible.log cron's absent arm.
-  - {path: /usr/local/lib/setup-drift-lib.sh}
-  - {path: /usr/local/lib/homelab-check-lib.sh}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
-  - {cron: "Clear ansible log file", user: root}
 # The Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
 # added` prints for the rule the Ansible task added, and each legacy entry names that rule by its
 # exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it

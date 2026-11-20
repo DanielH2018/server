@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import render_guard
-from render_guard import (
+from lib import render_guard
+from lib.render_guard import (
     BASE_CONTEXT,
     HOST_VARS,
     SERVICES_IN_TREE,
@@ -22,7 +22,7 @@ from render_guard import (
     k8s_services_at,
     service_tags_at_or_none,
 )
-from repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
+from lib.repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
 from lib import yaml_fast
 from lib.container_entry import ContainerEntryError
 from lib.git_testing import commit, init_repo
@@ -176,7 +176,7 @@ def test_anchors_resolve_to_the_real_tree():
 
 
 def test_render_guard_re_exports_the_same_anchor_objects():
-    from repo_paths import REPO as PATHS_REPO
+    from lib.repo_paths import REPO as PATHS_REPO
 
     assert REPO == PATHS_REPO
     assert isinstance(REPO, Path)
@@ -191,7 +191,7 @@ def test_every_public_name_is_listed_in_all():
     """
     import types
 
-    import render_guard
+    from lib import render_guard
 
     public = {
         name

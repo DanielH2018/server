@@ -28,7 +28,7 @@ import re
 from _shell_render import rendered_shell_texts
 
 from backup.longhorn_reap_lib import logic
-from _reap_entrypoint_harness import _backup
+from backup.tests._reap_entrypoint_harness import _backup
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
 # list. This matches ranging into a map-valued field, which is the defect.

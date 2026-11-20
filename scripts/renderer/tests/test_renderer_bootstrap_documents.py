@@ -19,8 +19,8 @@ import copy
 
 import pytest
 
-import bootstrap_drill as drill
-from bundle_census import NAMED_MEMBERS
+from deploy_tools import bootstrap_drill as drill
+from deploy_tools.bundle_census import NAMED_MEMBERS
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.k8s_roles import k8s_tags

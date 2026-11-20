@@ -116,12 +116,3 @@ enable:
   homelab-pi-recovery.timer: {target: timers.target, when: optimize_pi_recovery_restart_enabled}
   homelab-pi-watchdog-health.timer: timers.target
   homelab-pi-audit-health.timer: timers.target
-# What the optimize_pi role installed. Reconcile retires each once the timers above have
-# started, so a heartbeat never runs twice or not at all.
-legacy:
-  - {cron: "Pi SD-card health heartbeat", user: "{{ sys_user }}"}
-  - {cron: "Pi rotated-log integrity sweep", user: "{{ sys_user }}"}
-  - {cron: "Pi container-recovery heartbeat", user: "{{ sys_user }}"}
-  - {path: /usr/local/bin/pi-sd-health.sh}
-  - {path: /usr/local/bin/pi-gz-integrity.sh}
-  - {path: /usr/local/bin/pi-recovery-health.sh}
