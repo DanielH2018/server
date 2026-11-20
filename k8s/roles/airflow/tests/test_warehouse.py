@@ -1,11 +1,17 @@
 """`replace_partition` and `read_partition` against sqlite, which shares the DB-API semantics they rely on."""
 
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
-from dags.homelab_warehouse.warehouse import read_partition, replace_partition
+from dags.homelab_warehouse.warehouse import (
+    CHECK_DDL,
+    finish_check,
+    read_partition,
+    record_check,
+    replace_partition,
+)
 
 COLUMNS = ("day", "host", "max_c")
 NOV_17 = date(2026, 11, 17)
@@ -76,4 +82,28 @@ def test_a_day_reads_back_as_one_dict_per_row_keyed_by_column(conn):
 
     assert read_partition(conn, "temps", "day", NOV_17, placeholder="?") == [
         {"day": NOV_17, "host": "daniel-box", "max_c": 70.0}
+    ]
+
+
+def test_a_failed_check_raises_before_it_connects():
+    def connect():
+        raise AssertionError("a failed check must not record a pass")
+
+    with pytest.raises(ValueError, match="quality check failed:\nmissing host"):
+        finish_check(connect, "prom_daily_rollup", NOV_17, ["missing host"])
+
+
+def test_a_recheck_replaces_the_days_record(conn):
+    sqlite3.register_adapter(datetime, datetime.isoformat)
+    conn.execute("ATTACH DATABASE ':memory:' AS meta")
+    conn.execute(CHECK_DDL[0].replace("timestamptz", "text"))
+    first = datetime(2026, 11, 18, 1, tzinfo=timezone.utc)
+
+    record_check(conn, "prom_daily_rollup", NOV_17, first, placeholder="?")
+    record_check(
+        conn, "prom_daily_rollup", NOV_17, first.replace(hour=2), placeholder="?"
+    )
+
+    assert conn.execute("SELECT dag_id, day FROM meta.check_log").fetchall() == [
+        ("prom_daily_rollup", NOV_17)
     ]

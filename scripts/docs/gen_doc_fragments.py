@@ -52,6 +52,7 @@ Usage::
     uv run python scripts/docs/gen_doc_fragments.py --fix  # write, exit 1 if any was stale
 """
 
+import re
 from collections.abc import Callable
 from pathlib import Path as _Path
 
@@ -121,6 +122,7 @@ FAIL2BAN_CONF = (
     / "fail2ban_homelab.conf.j2"
 )
 TRAEFIK_ROLE = K8S_ROLES / "traefik"
+WAREHOUSE_FRESHNESS = K8S_ROLES / "airflow/files/dags/homelab_warehouse/freshness.py"
 K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
@@ -185,7 +187,7 @@ def _traefik_ports() -> tuple[str, list[str]]:
 
 def deadman_inputs(
     estate: Estate | None = None,
-) -> tuple[dict, dict, dict, dict, dict, list[str], list[str], dict, list[str]]:
+) -> tuple[dict, dict, dict, dict, dict, list[str], list[str], dict, list[str], str]:
     """The arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
@@ -202,7 +204,22 @@ def deadman_inputs(
         hosts_listing_component("pi-docker"),
         estate.role_vars(OBSERVABILITY_ROLE),
         hosts_listing_component("worktree-sweep"),
+        warehouse_freshness_schedule(),
     )
+
+
+def warehouse_freshness_schedule(path: _Path = WAREHOUSE_FRESHNESS) -> str:
+    """The cron of Airflow's `warehouse_freshness` DAG: `HC_SCHEDULE` in its module.
+
+    Read as text, because the module ships in the Airflow image and is not importable here.
+
+    Raises:
+      ValueError: The module holds no `HC_SCHEDULE = "..."` line.
+    """
+    match = re.search(r'^HC_SCHEDULE = "([^"]+)"$', path.read_text(), re.M)
+    if match is None:
+        raise ValueError(f"{path}: no HC_SCHEDULE line")
+    return match.group(1)
 
 
 def _deadman() -> tuple[str, list[str]]:
@@ -213,6 +230,7 @@ def _deadman() -> tuple[str, list[str]]:
         "k8s/roles/observability/defaults/main.yml",
         "hosts/components/pi-docker/defaults/main.yml",
         "hosts/components/worktree-sweep/defaults/main.yml",
+        "k8s/roles/airflow/files/dags/homelab_warehouse/freshness.py",
         "inventory/group_vars/all.yml",
         "inventory/host_vars/",
         *(

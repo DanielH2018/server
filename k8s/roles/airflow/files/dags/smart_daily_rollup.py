@@ -13,7 +13,12 @@ from airflow.sdk import Asset, dag, task
 from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import smart_history as sh
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 
 WAREHOUSE_CONN = "warehouse"
 SMART_DAILY = Asset("warehouse://smart/attribute_daily")
@@ -63,8 +68,12 @@ def smart_daily_rollup():
             conn.close()
         devices = sh.active_devices(sh.fetch_summary())
         problems = sh.quality_problems(day, rows, devices, datetime.now(timezone.utc))
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "smart_daily_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 
