@@ -269,9 +269,10 @@ def test_the_gate_passes_when_every_target_is_ready():
         _slices(),
         _slices({"conditions": {"ready": False}}),
         _slices({"conditions": {}}),
+        _slices({"conditions": {"ready": True, "terminating": True}}),
         {"items": []},
     ],
-    ids=["null-endpoints", "not-ready", "no-condition", "no-slice"],
+    ids=["null-endpoints", "not-ready", "no-condition", "terminating", "no-slice"],
 )
 def test_the_gate_fails_a_target_with_no_ready_endpoint(slices):
     def get(path):

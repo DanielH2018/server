@@ -167,6 +167,50 @@ def test_only_a_5xx_or_a_dropped_connection_reads_as_transient(
     assert isinstance(error, flux_soak.TransientError) is is_transient
 
 
+def _read(tmp_path, read: str, body: object):
+    """What `live_reads` returns when a real server answers every GET with `body`."""
+    payload = json.dumps(body).encode()
+
+    class Body(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Body)
+    threading.Thread(target=server.handle_request, daemon=True).start()
+    token = tmp_path / "token"
+    token.write_text("t")
+    reads = flux_soak.live_reads(f"http://127.0.0.1:{server.server_port}", str(token))
+    try:
+        return reads.query("up", None) if read == "query" else reads.prometheus_start()
+    finally:
+        server.server_close()
+
+
+@pytest.mark.parametrize(
+    ("read", "body"),
+    [
+        ("query", {"status": "success", "data": None}),
+        ("query", {"status": "success", "data": {"result": None}}),
+        ("start", {"data": None}),
+        ("start", {"data": {"startTime": None}}),
+    ],
+    ids=["query-null-data", "query-null-result", "start-null-data", "start-null-time"],
+)
+def test_a_null_prometheus_answer_is_a_soak_error(tmp_path, read, body):
+    with pytest.raises(flux_soak.SoakError, match=r"data|result"):
+        _read(tmp_path, read, body)
+
+
+def test_a_query_answer_without_a_result_reads_as_no_series(tmp_path):
+    assert _read(tmp_path, "query", {"status": "success", "data": {}}) == []
+
+
 @pytest.mark.parametrize(("named", "code"), [(R, 0), (OTHER, 1)])
 def test_the_revision_check_reads_the_origin_key(world, tmp_path, named, code):
     # The red half: `artifact.revision` is `prod@sha256:...`, so a check on it fails both.

@@ -8,6 +8,8 @@ import json
 import threading
 from unittest import mock
 
+import pytest
+
 import stats_lib
 
 # The handler reads this instant on every request and `last_poll_ok` is set against it, so
@@ -45,6 +47,16 @@ def test_extract_entries_sorts_ascending():
 
 def test_extract_entries_handles_an_empty_result():
     assert stats_lib.extract_entries({"data": {"result": []}}) == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"data": None}, {"data": {"result": None}}, {"data": {"result": [None]}}],
+    ids=["null-data", "null-result", "null-stream"],
+)
+def test_extract_entries_raises_on_a_null_envelope(payload):
+    with pytest.raises(ValueError, match="loki answer"):
+        stats_lib.extract_entries(payload)
 
 
 def test_build_query_range_url_carries_the_query_and_window():

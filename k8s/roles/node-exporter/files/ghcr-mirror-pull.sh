@@ -15,7 +15,7 @@
 # sidecar mounts it as a directory and reads it on every write, so a new tag reaches the check
 # within the kubelet's ConfigMap sync without a roll. A missing file is a down verdict, never a
 # skipped write. The file follows the check-file half of M3's producer metric contract
-# (docs/target-architecture/monitoring/m3-textfile-timer.md).
+# (docs/archive/monitoring/m3-textfile-timer.md).
 #
 # The `dockerhub-mirror-pull` sidecar runs this same script against the docker.io mirror.
 # It sets CHECK, and names a fixed REPOSITORY and REFERENCE in place of TARGET_DIR's

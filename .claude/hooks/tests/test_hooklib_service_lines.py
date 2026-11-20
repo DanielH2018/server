@@ -87,6 +87,11 @@ def test_target_problems_swallows_bad_json():
     assert _targets("not json") == []
 
 
+def test_target_problems_swallows_a_null_target_list():
+    assert _targets('{"data":{"activeTargets":null}}') == []
+    assert _targets('{"data":{"activeTargets":[null]}}') == []
+
+
 def test_target_problems_filters_scaled_to_zero_deployments():
     # terraria-stats/valheim-stats are on-demand game servers deliberately scaled to 0 —
     # reporting them every session open forever is exactly the noise the all-green contract

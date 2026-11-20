@@ -104,6 +104,8 @@ continuity (`tests/services/test_pihole_redundancy.py::test_two_instances_are_re
   pihole-2 has no ready, non-terminating endpoint for 300s, so Flux holds `pihole` and instance 1
   keeps serving
   (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_sibling_with_no_ready_endpoint_holds_instance_1`).
+  An endpoint with no `ready` condition counts as ready, as the API reads it
+  (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_ready_sibling_lets_instance_1_roll`).
   It passes at once when `pihole` has no EndpointSlice at all, so a first apply
   cannot deadlock on an instance 2 that only `pihole-deferred` creates
   (`k8s/roles/pihole/tests/test_pihole_sibling_guard.py::test_a_first_apply_passes_without_reading_the_sibling`).

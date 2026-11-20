@@ -67,6 +67,29 @@ def is_scaled_to_zero(run, job, namespace):
         return False
 
 
+# DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
+# import: hooklib imports nothing first-party, and reads probe.py only as a subprocess.
+def _active_targets(stdout):
+    """The `data.activeTargets` objects of `probe.py targets --json`.
+
+    An absent `data` or `activeTargets` reads as an empty list.
+
+    Raises:
+        ValueError: The output is not JSON, or the answer, its `data` or a target is not an
+            object, or `activeTargets` is not a list. A `"data": null` raises.
+    """
+    body = json.loads(stdout)
+    if not isinstance(body, dict):
+        raise ValueError(f"the answer is {type(body).__name__}, not an object")
+    data = body.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError(f"data is {type(data).__name__}, not an object")
+    active = data.get("activeTargets", [])
+    if not isinstance(active, list) or not all(isinstance(t, dict) for t in active):
+        raise ValueError("data.activeTargets is not a list of objects")
+    return active
+
+
 def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero):
     """Return down Prometheus scrape targets, minus any deliberately scaled to 0 replicas.
 
@@ -93,7 +116,7 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
             ],
             6,
         )
-        active = json.loads(res.stdout)["data"]["activeTargets"]
+        active = _active_targets(res.stdout)
     except Exception:
         return []
     if namespace is None:
