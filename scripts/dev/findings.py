@@ -118,7 +118,8 @@ project and a session milestone reserve nothing.
 
 GROUPS. `milestone group "<title>" <n...>` makes a milestone no branch owns and files the
 issues in it, so a backlog can be prepared before a session runs it. A group reserves
-nothing and nothing closes it on its own. `status`, `close`, `add` and `remove` name it with
+nothing and nothing closes it on its own. A group's issues leave `next --milestone none`;
+`next --milestone "<title>"` lists them. `status`, `close`, `add` and `remove` name it with
 `--group "<title>"` in place of `--worktree`. `milestone start --project "<title>"
 --worktree <branch>` ADOPTS a group of that title: it becomes the branch's project, backlog
 included. The same command adopts a project whose owner branch no worktree on either host
