@@ -7,7 +7,7 @@
   scripts/renderer/tests/test_renderer_autofix_bridge_script.py holds the test.
 
   The modules live in files/ and in two other roles, never in templates/, because
-  validate/k8s_manifests.py renders every *.j2 under templates/ as a manifest. `lookup('file')`
+  scripts/validate/render_lib/k8s.py renders every *.j2 under templates/ as a manifest. `lookup('file')`
   strips trailing whitespace, and the `|` block puts back exactly one newline, so each key
   equals its source file's bytes.
 

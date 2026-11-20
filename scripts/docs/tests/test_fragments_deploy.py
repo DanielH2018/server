@@ -55,67 +55,33 @@ def test_land_exit_codes_include_every_code_land_sh_can_exit_with():
 # --- the git-tree lock holders -------------------------------------------------------------
 
 
-def _lock_tree(root: Path, *, cron_body: str, unit_exec: str) -> Path:
-    """A minimal tree: one cron template and one unit template."""
-    templates = root / fd.HOST_COMPONENTS / "nightly" / "templates"
-    templates.mkdir(parents=True)
-    (templates / "nightly.sh.j2").write_text(cron_body)
-    (templates / "bystander.sh.j2").write_text("echo no lock here\n")
+def _lock_tree(root: Path, *, unit_exec: str) -> Path:
+    """A minimal tree holding one unit template."""
     unit_dir = root / fd.HOST_COMPONENTS / "ticker" / "units"
     unit_dir.mkdir(parents=True)
     (unit_dir / "tick.service.j2").write_text(unit_exec)
     return root
 
 
-_CRON_WITH_LOCK = (
-    "{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}\n"
-    "{{ take_git_tree_lock('nightly') }}\n"
-)
 _UNIT_WITH_LOCK = (
     "ExecStart=/usr/bin/flock -w 180 {{ server_git_tree_lock }} /bin/run\n"
 )
 
 
-def test_tree_lock_holders_lists_a_cron_and_a_unit_and_skips_a_bystander(
-    tmp_path,
-):
-    root = _lock_tree(tmp_path, cron_body=_CRON_WITH_LOCK, unit_exec=_UNIT_WITH_LOCK)
-    assert [h["job"] for h in fd.tree_lock_holders(root)] == [
-        "tick.service",
-        "nightly",
-    ]
-
-
-def test_tree_lock_holders_finds_a_cron_script_shipped_in_a_host_component(tmp_path):
-    root = _lock_tree(tmp_path, cron_body="echo none\n", unit_exec=_UNIT_WITH_LOCK)
-    component = root / fd.HOST_COMPONENTS / "nightly-sweep" / "templates"
-    component.mkdir(parents=True)
-    (component / "sweep.sh.j2").write_text(_CRON_WITH_LOCK.replace("nightly", "sweep"))
-    holder = next(h for h in fd.tree_lock_holders(root) if h["job"] == "sweep")
-    assert holder["source"] == "hosts/components/nightly-sweep/templates/sweep.sh.j2"
+def test_tree_lock_holders_lists_a_unit_that_wraps_flock(tmp_path):
+    root = _lock_tree(tmp_path, unit_exec=_UNIT_WITH_LOCK)
+    holders = fd.tree_lock_holders(root)
+    assert [h["job"] for h in holders] == ["tick.service"]
+    assert holders[0]["source"] == "hosts/components/ticker/units/tick.service.j2"
 
 
 def test_tree_lock_holders_skips_a_unit_that_does_not_wrap_flock(tmp_path):
     root = _lock_tree(
-        tmp_path,
-        cron_body=_CRON_WITH_LOCK,
-        unit_exec="Environment=LOCK={{ server_git_tree_lock }}\n",
+        tmp_path, unit_exec="Environment=LOCK={{ server_git_tree_lock }}\n"
     )
-    assert "tick.service" not in [h["job"] for h in fd.tree_lock_holders(root)]
-
-
-def test_tree_lock_holders_rejects_a_template_that_imports_the_macro_and_never_calls_it(
-    tmp_path,
-):
-    root = _lock_tree(
-        tmp_path,
-        cron_body="{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}\n",
-        unit_exec=_UNIT_WITH_LOCK,
-    )
-    with pytest.raises(ValueError, match="never calls it"):
-        fd.tree_lock_holders(root)
+    assert fd.tree_lock_holders(root) == []
 
 
 def test_tree_lock_holders_in_the_real_tree_include_every_known_job():
     jobs = {h["job"] for h in fd.tree_lock_holders()}
-    assert {"homelab-checkout-sync.service", "eval-run"} <= jobs
+    assert "homelab-checkout-sync.service" in jobs

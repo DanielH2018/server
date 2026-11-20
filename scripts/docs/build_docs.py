@@ -152,16 +152,6 @@ MKDOCS_TIMEOUT = 600
 RSYNC_TIMEOUT = 300
 
 
-def time_budget(generators: bool = True) -> int:
-    """The longest one run can take, in seconds, when every timed step runs to its timeout.
-
-    Args:
-        generators: False for a `--skip-generators` run, which builds and syncs the site only.
-    """
-    generator_s = len(GENERATORS) * GENERATOR_TIMEOUT if generators else 0
-    return generator_s + MKDOCS_TIMEOUT + RSYNC_TIMEOUT
-
-
 def _absolute_out(argv: list[str], out: str) -> list[str]:
     """`argv` with its `--out`/`--out-dir` value made absolute under `REPO`.
 

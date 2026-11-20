@@ -5,10 +5,10 @@ failures here are silent from the passing side: a file assigned to no shard is n
 CI still reports a green leg for every shard; a file assigned to two shards costs time and hides nothing,
 but says the split is not a partition and the first failure is a coin flip away.
 
-The workflow half matters as much as the helper. The `pytest` job passes `strategy.job-total`
-as `--of`, so the split follows the matrix by construction — this guard pins that, because a
-hardcoded `--of 4` beside a five-entry matrix would drop a fifth of the suite with no error to
-read anywhere.
+The workflow half matters as much as the helper. The legs split by `pytest_shard.CI_LEGS`,
+and the matrix a run with no plan starts must name every one of them. This guard pins that,
+because a fallback list of five beside a split of six would drop a sixth of the suite with
+no error to read anywhere.
 
 Every assignment here packs the committed runner-seconds table,
 `scripts/dev/pytest_shard_runner_weights.json`. This module does not check whether a file is
@@ -22,11 +22,10 @@ balance.
 Run: uv run pytest tests/repo/test_pytest_shards_partition_the_suite.py
 """
 
-import re
-
 import pytest
 from dev import pytest_shard
 from _helpers import REPO
+from _workflow_rows import axis_values
 from lib import yaml_fast
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
@@ -145,13 +144,16 @@ def _pytest_job() -> dict:
     return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest"]
 
 
-def test_the_matrix_is_a_contiguous_one_based_range():
-    """`--shard` is 1-based and `shard_files` rejects anything outside 1..N, so a matrix list
-    that skips or starts at 0 fails the leg rather than mis-splitting — but it fails it on every
-    run, which is a worse way to find out than here."""
-    shards = _pytest_job()["strategy"]["matrix"]["shard"]
-    assert shards == list(range(1, len(shards) + 1)), (
-        f"ci.yml matrix shard list is {shards}"
+def _plan_job() -> dict:
+    return yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest_plan"]
+
+
+def test_a_run_with_no_plan_starts_every_leg_the_split_fills():
+    """`--shard` is 1-based and `shard_files` rejects anything outside 1..N. A fallback list
+    shorter than `CI_LEGS` leaves the last legs' modules unrun on every push and dispatch."""
+    shards = axis_values(_pytest_job()["strategy"]["matrix"]["shard"])
+    assert shards == list(range(1, pytest_shard.CI_LEGS + 1)), (
+        f"ci.yml's fallback shard list is {shards}"
     )
 
 
@@ -180,20 +182,12 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
     )
 
 
-def test_the_workflow_derives_the_shard_count_from_the_matrix():
-    """The drift this guard exists for. A literal `--of 4` beside a matrix of any other length
-    silently drops or double-runs part of the suite, and every leg still reports green."""
-    steps = _pytest_job()["steps"]
-    # By `--of`, not by the script name: the job invokes the same helper twice, once to select
-    # this shard's files and once for the measured coverage gate (`--check-durations`).
-    selects = [s for s in steps if "--of" in str(s.get("run", ""))]
-    assert len(selects) == 1, (
-        "expected exactly one step to pass --of to pytest_shard.py"
-    )
-    step = selects[0]
-    assert re.search(r'--of\s+"\$SHARDS"', step["run"]), (
-        "the shard-selection step must pass --of from the environment, not a literal count"
-    )
-    assert step["env"]["SHARDS"] == "${{ strategy.job-total }}", (
-        f"SHARDS is {step['env']['SHARDS']!r}, not the matrix's own size"
-    )
+def test_every_leg_splits_by_the_count_the_plan_and_the_fallback_use():
+    """A literal `--of 4` beside a six-leg matrix silently drops or double-runs part of the
+    suite, and every leg still reports green. The legs and the plan take the default."""
+    steps = _pytest_job()["steps"] + _plan_job()["steps"]
+    runs = [
+        str(s.get("run", "")) for s in steps if "pytest_shard.py" in str(s.get("run"))
+    ]
+    assert len(runs) == 3, runs
+    assert not [r for r in runs if "--of" in r]

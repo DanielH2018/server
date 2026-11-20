@@ -7,6 +7,7 @@ built by `mutant`.
 """
 
 import copy
+import json
 import re
 from collections.abc import Callable
 from functools import cache
@@ -114,6 +115,27 @@ def index_of(job: dict, step_id: str) -> int:
     if at is None:
         raise KeyError(f"no step with id {step_id!r}")
     return at
+
+
+_FROM_JSON_FALLBACK = re.compile(r"\$\{\{\s*fromJSON\(\S+ \|\| '(\[.*\])'\)\s*\}\}")
+
+
+def axis_values(axis: list | str) -> list:
+    """A matrix axis's values, reading `fromJSON(<output> || '<list>')` as its fallback list.
+
+    The fallback is every leg the job can start: what a run with no plan starts.
+
+    Raises:
+        ValueError: `axis` is an expression with no fallback list.
+    """
+    if not isinstance(axis, str):
+        return axis
+    m = _FROM_JSON_FALLBACK.fullmatch(axis.strip())
+    if not m:
+        raise ValueError(
+            f"a matrix axis read from an expression has no fallback: {axis!r}"
+        )
+    return json.loads(m[1])
 
 
 def condition(node: dict) -> str:

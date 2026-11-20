@@ -119,11 +119,6 @@ TEMPLATE_SOURCE_READERS = {
         "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
         "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
     ),
-    "deploy/test_tree_lock_single_definition.py": (
-        "whether a host cron CALLS git-tree-lock.j2's macro or writes the `exec 9>` idiom out "
-        "by hand; both render the same two lines, so only the source tells them apart. The "
-        "rendered wait is checked by hosts/tests/test_tree_lock_wait_covers_holders.py"
-    ),
     "k8s/test_arr_deployments_share_one_macro.py": (
         "whether radarr's and sonarr's templates CALL the shared macro or write its body out "
         "beside the call; both render the same Deployment, so only the source tells them "
