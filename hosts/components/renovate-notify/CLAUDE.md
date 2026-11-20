@@ -10,7 +10,7 @@ work, that one does it.
 host duplicates every notification. A merged change reaches the host when the builder publishes the
 next package version and the updater installs it.
 
-`component.yml` holds the contract. The working-out behind the rules below is
+The last section holds the contract. The working-out behind the rules below is
 `docs/renovate-notify-internals.md`: the sandbox's two overrides, the dashboard parsers, the
 module layout and what a dry run does not prove.
 
@@ -64,7 +64,7 @@ failed Discord post retries next run (`hosts/components/renovate-notify/files/re
 
 ## Liveness, and the sandbox
 
-`ExecStartPost` writes `renovate-notify.prom` to node_exporter's textfile directory (M6 batch
+`ExecStartPost` writes the `renovate-notify` textfile to node_exporter's textfile directory (M6 batch
 B4) and runs only when `ExecStart` succeeded, so a crash pages twice:
 `OnFailure=homelab-alert@%n.service`, and `RenovateNotifyNotReporting` once the file is
 older than its 36h deadline. **That verdict watches the notifier, not Renovate**, and greens
@@ -110,3 +110,19 @@ ls -l /var/lib/renovate-notify/          # last_run mtime; last_notified holds t
 ```
 
 An empty `last_notified` means nothing needs a human — not that the notifier is broken.
+
+## Autonomous-role contract (the timer posts a digest to Discord with no human in the loop)
+
+- **Scope / exclusions:** reads the repo's open Renovate PRs and the dependency dashboard, and posts a
+  Discord digest when what needs a human changes. It writes only /var/lib/renovate-notify.
+- **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
+  link from a package version, or reverting this component, stops the timer on the install that
+  drops it.
+- **Authoritative sources:** GitHub's REST API, as host_lib.github_get reads it.
+- **Abort valves:** the fingerprint gate, which keeps a standing problem to one page, and reconcile's
+  `hold_sha`.
+- **Required evidence, every run:** renovate-notify.prom in node_exporter's textfile directory, which
+  RenovateNotifyNotReporting reads, and a page from homelab-alert@ on a crash.
+- **Next-run review:** `journalctl -u homelab-renovate-notify` before you change a threshold.
+
+ENFORCED: this component's tests/ and hosts/lib/tests/test_h737_box_components.py.

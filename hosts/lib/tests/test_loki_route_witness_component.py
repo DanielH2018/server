@@ -12,13 +12,13 @@ import pytest
 import yaml
 from _secret_rotation_package import LIB, UNITS, render_fixture, text
 
+from _component_contract import component_contract
 from lib.repo_paths import REPO
 
 COMPONENT = REPO / "hosts" / "components" / "loki-route-witness" / "component.yml"
 # The Kuma push token B2's token PR retired.
 RETIRED = "loki_route_witness_push_token"
 CONTRACT_PARTS = (
-    "Autonomous-role contract",
     "Scope / exclusions:",
     "Mode (explicit and reversible):",
     "Authoritative sources:",
@@ -80,8 +80,6 @@ def test_both_cluster_nodes_witness_and_the_pi_does_not():
     assert "credentials" not in yaml.safe_load(COMPONENT.read_text())
 
 
-def test_the_component_header_carries_the_contract():
-    header = "\n".join(
-        line for line in COMPONENT.read_text().splitlines() if line.startswith("#")
-    )
-    assert [part for part in CONTRACT_PARTS if part not in header] == []
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("loki-route-witness")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []

@@ -3,8 +3,7 @@
 The scripts' own behaviour is run against stubs in `hosts/tests/test_pi_*.py`. These
 tests hold what the move added: the units that run the scripts, the absence of any credential
 or push in the two token heartbeats, the copied push helper the Pi's scans still source, and the
-Autonomous-role contract, which moved from
-`optimize_pi`'s `CLAUDE.md` into `component.yml`'s header with the recovery heartbeat.
+Autonomous-role contract in the component's `CLAUDE.md`.
 
 Run: uv run pytest hosts/lib/tests/test_pi_heartbeats_component.py
 """
@@ -13,16 +12,15 @@ import re
 
 import pytest
 
+from _component_contract import component_contract
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "pi-heartbeats" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 LIB = "/usr/lib/homelab"
-CONTRACT_HEADING = "# Autonomous-role contract"
-# The parts of the contract a reader acts on, as `optimize_pi`'s section carried them.
+# The parts of the contract a reader acts on.
 CONTRACT_PARTS = (
     "Scope / exclusions:",
     "Mode (explicit and reversible):",
@@ -45,31 +43,9 @@ def _text(package: host_mode.Package, dst: str) -> str:
     return package.files[dst][0].decode()
 
 
-def contract_problems(text: str) -> list[str]:
-    """What the component's header lacks of the contract, [] when it carries all of it."""
-    header = [line for line in text.splitlines() if line.startswith("#")]
-    if CONTRACT_HEADING not in "\n".join(header):
-        return [f"no `{CONTRACT_HEADING}` in the header comment"]
-    return [
-        f"no `{part}`"
-        for part in CONTRACT_PARTS
-        if not any(part in line for line in header)
-    ]
-
-
-def test_the_component_header_carries_the_contract_is_clean():
-    assert contract_problems(COMPONENT.read_text()) == []
-
-
-def test_a_header_without_the_contract_is_flagged():
-    stripped = "\n".join(
-        line
-        for line in COMPONENT.read_text().splitlines()
-        if "contract" not in line.lower()
-    )
-    assert contract_problems(stripped) == [
-        f"no `{CONTRACT_HEADING}` in the header comment"
-    ]
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("pi-heartbeats")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []
 
 
 def test_the_component_ships_its_units_and_links_its_timers(package):

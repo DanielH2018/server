@@ -4,7 +4,7 @@
 `scripts/backup/longhorn_reap.py backups` and `longhorn_reap.py snapshots` delete stranded
 recovery points, and which ones are safe to delete depends on live state — when the
 weekly tier has produced nothing, the strays are the only recovery a volume has. The k3s-host-checks
-component's autonomous-role contract therefore lists them under **Never a cron**, and this guard
+component's autonomous-role contract therefore puts scheduling either out of contract, and this guard
 fails a systemd unit template naming the script.
 
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
@@ -95,8 +95,8 @@ def test_census_finds_the_scheduled_heartbeat() -> None:
 def test_no_host_component_schedules_a_reaper() -> None:
     """The contract itself: no unit template names either reaper."""
     assert scheduled_reapers(COMPONENTS) == [], (
-        "a reaper is scheduled; they are operator-invoked only (Never a cron, "
-        "hosts/components/k3s-host-checks/component.yml)"
+        "a reaper is scheduled; they are operator-invoked only "
+        "(hosts/components/k3s-host-checks/CLAUDE.md)"
     )
 
 

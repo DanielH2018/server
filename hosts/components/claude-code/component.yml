@@ -13,7 +13,7 @@
 #     them;
 #   - the root inspector: the operator's sudo grant and the agent's socket;
 #   - daniel-box's own timers and grants: the agent's lander, the server-batch lander, the
-#     pipeline timeline, the memory store copy, and the D5 takeover check's wrapper and sudoers
+#     pipeline timeline, the memory store copy, and the takeover check's wrapper and sudoers
 #     grant. Each is armed only in daniel-box's host_vars, so daniel-server's package ships none
 #     of them;
 #   - the artifacts node's peer sync and OTLP-door heartbeat timers with the directories the
@@ -191,7 +191,7 @@ files:
   - {src: templates/claude-pipeline-timeline.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.timer, when: "claude_code_pipeline_timeline_enabled"}
   - {src: templates/claude-memory-sync.service.j2, dst: /usr/lib/systemd/system/homelab-claude-memory-sync.service, when: "claude_code_memory_sync_enabled"}
   - {src: templates/claude-memory-sync.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-memory-sync.timer, when: "claude_code_memory_sync_enabled"}
-  # The D5 takeover check: the wrapper and the grant land in one package version, so the grant
+  # The takeover check: the wrapper and the grant land in one package version, so the grant
   # never names a missing command. The flux CLI it runs is homelab-tools', which daniel-box's
   # package depends on, and the wrapper creates its own state directory.
   - {src: files/homelab-takeover-check.sh, dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}

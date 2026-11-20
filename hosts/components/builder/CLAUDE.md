@@ -40,8 +40,8 @@ repository (daniel-box)* holds the design.
   comment, which a ufw spec cannot hold, so the `legacy:` entries name it and `replaced_by` the
   declared rules. The arm relabels the live rules in place.
 
-**The builder's token is a credential.** The unit's `LoadCredential=` line puts it in
-`$CREDENTIALS_DIRECTORY/github_token`, and `homelab-secrets` writes the source file from the SOPS key
+**The builder's token is a credential.** The unit's `LoadCredential=` line puts it in the
+unit's credentials directory as `github_token`, and `homelab-secrets` writes the source file from the SOPS key
 `homelab_builder_github_token` in daniel-box's host file. The builder reads that file ahead of
 `builder.conf`. A missing credential refuses the run with `reason="token"`.
 
