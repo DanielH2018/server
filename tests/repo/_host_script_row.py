@@ -15,6 +15,7 @@ _LONGHORN_BACKUP_HEALTH = (
 )
 _TAKEOVER_CHECK = "hosts/components/claude-code/files/homelab-takeover-check.sh"
 _SUC_REHEARSAL = "hosts/components/hypervisor/files/suc-rehearsal-guest-run.sh"
+_RESTART_BROKER = "hosts/components/claude-code/files/claude_restart.py"
 
 # ── No host script writes a cluster object ────────────────────────────────────────────
 
@@ -230,6 +231,13 @@ HOST_SCRIPT_WRITES = Census(
         _SUC_REHEARSAL: (
             "It runs inside the throwaway drill guest that etcd-restore-drill-vm creates, and "
             "its applies go to that guest's own k3s, which Flux does not manage"
+        ),
+        _RESTART_BROKER: (
+            "The broker the operator ruled on 2026-10-15: its one write is `rollout restart` "
+            "of an allowlisted Deployment, which sets the `restartedAt` annotation under the "
+            "field manager `claude-restart`. No role renders that annotation, and "
+            "kustomize-controller takes over only the managers named `kubectl*`, so Flux "
+            "neither reverts the write nor is reverted by it"
         ),
     },
 )

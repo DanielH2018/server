@@ -55,3 +55,11 @@ table raises how many runs a day the poller asks for, so it is pinned too. -#}
   "ScrapeTargetDown": "triage",
   "ExtraProbeFailed:wg-easy": "none",
 } -%}
+{#- The Deployments homelab-claude-restart@<name>.service may restart, keyed by the unit instance. Each
+entry names its `namespace` and `deployment`. docs/claude-agent-user.md, "The restart allowlist",
+has what an entry must satisfy. A restart is one per workload per cooldown, and no more than the
+cap in a UTC day across every workload. -#}
+{%- set restart_allowlist = {} -%}
+{%- set restart_workload_cooldown_s = 86400 -%}
+{%- set restart_daily_cap = 3 -%}
+{%- set restart_state_dir = "/var/lib/claude-restart" -%}
