@@ -11,6 +11,12 @@
 # Setting this to false stops AND disables the host and its restart timer; that is the rollback.
 claude_code_rc_enabled: true
 
+# The failure pages, the units the package ships for OnFailure=. claude-rc.service pages
+# through its own alert unit; the syncs, the memory store copy, the server-batch lander and the
+# pipeline timeline page through the shared instanced alert.
+claude_code_rc_alert_unit: homelab-claude-rc-alert.service
+claude_code_sync_alert_unit: homelab-alert@%n.service
+
 # The account claude-rc.service runs as. Only a non-operator user gets the unit's hardening
 # lines, which read claude_code_user_uid (that account's uid) to expose the account's user bus.
 # It has deliberately no default, because a guessed uid would bind another account's runtime

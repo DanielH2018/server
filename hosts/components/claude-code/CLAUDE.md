@@ -21,8 +21,10 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   changes both hosts' next package version.
 - **The packaged units are named `homelab-*`**, such as `homelab-claude-rc.service` and
   `homelab-claude-clone-sync.timer`. A template that names a sibling unit reads the name from a
-  variable whose `defaults/main.yml` value is the Ansible-era name. The component's `defaults:` give the
-  packaged names. Two instanced alerts keep their names,
+  variable. The component's `defaults:` give the packaged names of the Remote Control host and the
+  cgroup metrics unit. `defaults/main.yml` gives the two failure pages theirs:
+  `claude_code_rc_alert_unit` is `homelab-claude-rc-alert.service`, and
+  `claude_code_sync_alert_unit` is `homelab-alert@%n.service`. Two instanced alerts keep their names,
   `claude-stop-alert@` and `fanout-alert@`, because the dotfiles hook and the fan-out tooling
   start them by name.
 - **The agent user is declared to the users arm** in each host's `package.yml`, at uid 900 on
@@ -115,7 +117,7 @@ directory.
 
 ## What monitoring does and does not cover
 
-`OnFailure=claude-rc-alert.service` pages Discord when the host **crashes**, reusing the shared
+`OnFailure=homelab-claude-rc-alert.service` pages Discord when the host **crashes**, reusing the shared
 `discord_alert_webhook`.
 
 - **That value reaches the alert unit through an `EnvironmentFile=`, never the unit body.**
