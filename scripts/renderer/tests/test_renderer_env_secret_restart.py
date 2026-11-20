@@ -17,6 +17,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_roles import k8s_tags
 from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX
@@ -101,7 +102,7 @@ def _unstamped(out: Path, tags: Iterable[str]) -> list[tuple[str, str]]:
 
 @pytest.fixture(scope="module")
 def flux_tags() -> set[str]:
-    return homelab_render.k8s_tags()
+    return k8s_tags()
 
 
 @pytest.fixture(scope="module")

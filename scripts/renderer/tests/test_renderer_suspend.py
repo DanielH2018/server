@@ -115,11 +115,10 @@ def test_the_rendered_soak_lists_no_tag_when_none_is_suspended(tmp_path):
     assert _suspended_deps(soak) is None
 
 
-def test_a_suspended_flux_owned_tag_outside_the_render_is_dropped(tmp_path):
-    """The suspended set comes from every flux-owned role, so a `--role` subset agrees."""
+def test_a_suspended_tag_outside_the_render_is_dropped(tmp_path):
+    """The suspended set comes from every k8s role, so a `--role` subset agrees."""
     ordering = Ordering(
-        deps={"texbrain": ["sonarr"]},
-        flux_owned=frozenset({"sonarr", "texbrain"}),
+        deps={"texbrain": ["sonarr"], "sonarr": []},
         suspended=frozenset({"sonarr"}),
     )
     doc = _docs(_bundle(tmp_path, {}, ["texbrain"], ordering))["texbrain"]
@@ -160,13 +159,11 @@ def test_a_flux_suspend_that_is_not_a_literal_bool_is_a_problem(tmp_path):
     ]
 
 
-def test_the_live_ordering_reads_a_suspend_from_a_flux_owned_role_outside_the_render(
-    tmp_path,
-):
-    """`bundle_ordering` reads `flux_suspend` over every flux-owned role, so a `--role
+def test_the_live_ordering_reads_a_suspend_from_a_role_outside_the_render(tmp_path):
+    """`bundle_ordering` reads `flux_suspend` over every k8s role, so a `--role
     texbrain` render drops its edge to a suspended traefik that it does not render."""
     roles = _roles(tmp_path, traefik="flux_suspend: true\n")
-    ordering = cluster_mod.bundle_ordering({"texbrain", "traefik"}, roles=roles)
+    ordering = cluster_mod.bundle_ordering(roles=roles)
     assert ordering.suspended == {"traefik"}
     doc = _docs(_bundle(roles, {}, ["texbrain"], ordering))["texbrain"]
     assert "traefik" not in _depends(doc)
@@ -174,16 +171,16 @@ def test_the_live_ordering_reads_a_suspend_from_a_flux_owned_role_outside_the_re
 
 
 def test_the_live_ordering_keeps_the_edge_when_no_role_suspends(tmp_path):
-    ordering = cluster_mod.bundle_ordering({"texbrain", "traefik"}, roles=tmp_path)
+    ordering = cluster_mod.bundle_ordering(roles=tmp_path)
     assert ordering.suspended == frozenset()
     assert "traefik" in _depends(
         _docs(_bundle(tmp_path, {}, ["texbrain"], ordering))["texbrain"]
     )
 
 
-def test_a_non_literal_flux_suspend_on_an_unrendered_flux_owned_role_fails(tmp_path):
+def test_a_non_literal_flux_suspend_on_a_role_outside_the_render_fails(tmp_path):
     roles = _roles(tmp_path, traefik='flux_suspend: "{{ paused }}"\n')
     with pytest.raises(
         ValueError, match=r"traefik's flux_suspend is .* not a literal bool"
     ):
-        cluster_mod.bundle_ordering({"texbrain", "traefik"}, roles=roles)
+        cluster_mod.bundle_ordering(roles=roles)

@@ -3,7 +3,7 @@
 kustomize-controller garbage-collects an object it applied once the object leaves the render.
 A PersistentVolumeClaim or a Namespace dropped that way takes its data, or every object in it,
 with it. C3 *Prune exemptions* therefore has the renderer label every PersistentVolumeClaim and
-Namespace a flux-owned tag renders, and kustomize-controller then leaves the object serving
+Namespace a tag renders, and kustomize-controller then leaves the object serving
 when it leaves the render.
 
 `label` inserts the label as text, at the place the YAML parser marks, as `restart.stamp`
@@ -13,8 +13,6 @@ drop the quotes around a `"${key}"` and change the type Flux substitutes into it
 The plan is docs/archive/deploy/d5-bulk-move.md, *Prune exemptions, digests and
 the collision census (D5.1a1, D5.1a2)*.
 """
-
-from collections.abc import Iterable
 
 import yaml
 
@@ -68,22 +66,13 @@ def label(text: str, where: str) -> str:
     return "".join(lines)
 
 
-def label_tags(rendered: list[RenderedTag], owned: Iterable[str]) -> list[RenderedTag]:
-    """`rendered` with the prune label stamped into every directory of each flux-owned tag.
+def label_tags(rendered: list[RenderedTag]) -> list[RenderedTag]:
+    """`rendered` with the prune label stamped into every directory of each tag.
 
-    DECIDED: only a flux-owned tag is labelled, as only one gets `checksum/restart`. Both
-    render modes label, so the round trip compares labelled with labelled. The flip PR that
-    marks a tag `owner: flux` is the first to publish it, so the tag has no earlier `own`
-    digest for the label to move. That PR also adds `checksum/restart`, so its render was never byte-neutral. Before
-    the flip, `homelab_render.cluster` with `flux_owned` naming the tag shows the labelled
-    form, as `tests/test_renderer_prune_label.py` renders observability and sonarr.
+    Both render modes label, so the round trip compares labelled with labelled.
     """
-    owned = set(owned)
     labelled = []
     for tag in rendered:
-        if tag.tag not in owned:
-            labelled.append(tag)
-            continue
         dirs = {
             name: {file: label(text, f"{name}/{file}") for file, text in files.items()}
             for name, files in tag.directories().items()

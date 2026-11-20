@@ -18,7 +18,7 @@ import pytest
 import traefik_bouncer_key_precheck as precheck
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.k8s_roles import K8S_ROLES, k8s_tags
+from lib.k8s_roles import K8S_ROLES
 from lib.repo_paths import SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
@@ -161,7 +161,7 @@ def test_the_switched_on_job_passes_every_job_census_row(switched_on):
 
 def test_traefik_waits_on_the_precheck_and_the_precheck_on_crowdsec(switched_on):
     """A failing precheck holds `traefik`, and it runs only once the LAPI is applied."""
-    ordering = cluster.bundle_ordering(k8s_tags())
+    ordering = cluster.bundle_ordering()
     files = bundle_files(switched_on, {}, [TAG], "300s", DOTENV, (), ordering)
     flux = {
         doc["metadata"]["name"]: doc

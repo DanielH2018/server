@@ -395,7 +395,6 @@ def test_a_rendered_verify_directory_passes_check_bundle_only_for_its_role(
         out,
         ["littlelink"],
         None,
-        flux_owned=lambda: {"littlelink"},
         cluster_file=cluster_file,
         render=lambda tags, keys: render_placeholders(tags, keys, roles=roles),
         vendored=roles,

@@ -284,12 +284,11 @@ def _annotations(out, tag: str) -> dict[str, str | None]:
     return found
 
 
-def _render(out, tag, owned, source_file, cluster_file, stubs=None):
+def _render(out, tag, source_file, cluster_file, stubs=None):
     return homelab_render.cluster(
         out,
         [tag],
         stubs,
-        flux_owned=lambda: owned,
         cluster_file=cluster_file,
         source_file=source_file,
     )
@@ -300,10 +299,7 @@ def test_cloudflare_ddns_two_deployments_each_get_the_annotation(
 ):
     # fact: k8s/roles/cloudflare-ddns/CLAUDE.md#Notable
     out = tmp_path / "out"
-    owned = {"cloudflare-ddns"}
-    assert (
-        _render(out, "cloudflare-ddns", owned, source_file, cluster_file) == RENDER_OK
-    )
+    assert _render(out, "cloudflare-ddns", source_file, cluster_file) == RENDER_OK
     values = _annotations(out, "cloudflare-ddns")
     assert set(values) == {"cloudflare-ddns-direct", "cloudflare-ddns-proxied"}
     assert all(values.values())
@@ -314,29 +310,22 @@ def test_the_stub_and_placeholder_renders_of_a_flux_owned_tag_carry_the_same_val
 ):
     stubs = tmp_path / "stubs.yml"
     stubs.write_text(stub_file_text())
-    owned = {"cloudflare-ddns"}
     sides = {}
     for name, mode in (("placeholder", None), ("stub", stubs)):
         out = tmp_path / name
-        code = _render(out, "cloudflare-ddns", owned, source_file, cluster_file, mode)
+        code = _render(out, "cloudflare-ddns", source_file, cluster_file, mode)
         assert code == RENDER_OK
         sides[name] = _annotations(out, "cloudflare-ddns")
     assert sides["stub"] == sides["placeholder"]
     assert all(sides["stub"].values())
 
 
-def test_bento_pdf_gets_no_annotation_and_renders_as_if_unowned(
+def test_bento_pdf_reads_no_secret_and_gets_no_annotation(
     tmp_path, source_file, cluster_file
 ):
-    texts = {}
-    for name, owned in (("owned", {"bento-pdf"}), ("unowned", set())):
-        out = tmp_path / name
-        assert _render(out, "bento-pdf", owned, source_file, cluster_file) == RENDER_OK
-        texts[name] = {
-            p.name: p.read_text() for p in (out / "cluster" / "bento-pdf").iterdir()
-        }
-    assert texts["owned"] == texts["unowned"]
-    assert _annotations(tmp_path / "owned", "bento-pdf") == {"bento-pdf": None}
+    out = tmp_path / "out"
+    assert _render(out, "bento-pdf", source_file, cluster_file) == RENDER_OK
+    assert _annotations(out, "bento-pdf") == {"bento-pdf": None}
 
 
 # A reference a flux-owned pod may make to an object its own role does not render, as

@@ -465,9 +465,7 @@ def live_bundle(tmp_path):
     cluster_file.write_text(DOTENV)
     tags = published_tags()
     out = tmp_path / "out"
-    code = homelab_render.cluster(
-        out, tags, None, flux_owned=lambda: set(tags), cluster_file=cluster_file
-    )
+    code = homelab_render.cluster(out, tags, None, cluster_file=cluster_file)
     assert code == RENDER_OK
     return tags, load(out)
 

@@ -2,7 +2,7 @@
 
 `crowdsec_jobs.py` records one verdict per run of each job but the prune, and this module
 serves them on `/metrics`. It is M6's pod exporter
-(docs/target-architecture/monitoring/m6-retire-kuma.md, *B6b*), and it uses the same series
+(docs/archive/monitoring/m6-retire-kuma.md, *B6b*), and it uses the same series
 names as monitor-bridge's check exporter (`verdict_export.py`), so one rule shape reads both:
 
 - `homelab_check_success{check="<tag>"}` is 1 when the job's latest run exited 0 and 0 when it

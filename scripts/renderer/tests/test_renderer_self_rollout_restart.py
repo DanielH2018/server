@@ -122,7 +122,6 @@ def renders(tmp_path_factory) -> dict[str, Path]:
             sorted(SELF_ROLLED),
             None,
             render=render,
-            flux_owned=lambda: set(SELF_ROLLED),
             cluster_file=cluster_file,
             source_file=source,
         )
