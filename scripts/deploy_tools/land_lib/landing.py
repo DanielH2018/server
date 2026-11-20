@@ -119,6 +119,8 @@ class Landing:
         # Raises `turn.HandOver` when this landing can pass its turn to a fresh checkout's
         # landing, and returns when it cannot; None outside the merge wait.
         self.hand_over_turn: Callable[[str], None] | None = None
+        # The head `changed_paths` last read the PR's file list at, and that list.
+        self._changed: tuple[str, tuple[str, ...]] | None = None
 
     @property
     def plane(self) -> str:
@@ -191,17 +193,45 @@ class Landing:
             # json.JSONDecodeError is a ValueError subclass.
             self.die(f"could not read PR #{pr}: unparseable gh output: {exc}", 1)
 
+    def changed_paths(self, head: str, before_turn: bool = False) -> list[str]:
+        """The paths the PR changes, as `gh pr view` lists them with the PR at `head`.
+
+        The list is read from GitHub once per head: a call for the head the last read found
+        returns that read. The merge wait reads it before it asks for the landing turn
+        (`merge.await_merge`), so a rule the turn runs finds it here without a read of its own.
+        Only that read, `before_turn`, waits out a rate limit; a read inside the turn fails
+        at once rather than hold the turn through the wait.
+
+        Raises:
+            gh_read.GhReadFailed: GitHub did not answer, after `gh_read`'s retries and waits.
+            ValueError: gh answered with something that is not a PR's file list.
+        """
+        if self._changed and self._changed[0] == head:
+            return list(self._changed[1])
+        pr = self.opts.pr
+        label = f"gh pr view #{pr} files"
+
+        def call() -> PrView:
+            got = self.tools.gh_json("pr", "view", pr, "--json", "files,headRefOid")
+            return parse_view(as_object(got, label))
+
+        waits = gh_read.RATE_LIMIT_WAITS if before_turn else 0
+        view = gh_read.read(call, self.tools.sleep, label, waits)
+        paths = tuple(f["path"] for f in view.get("files", []))
+        self._changed = (view.get("headRefOid", ""), paths)
+        return list(paths)
+
     def remedy(self, why: str, otherwise: str) -> str:
         """The next step after GitHub refused a write with `why`: `otherwise`, or a rate limit's.
 
         A rate limit's remedy is to wait and re-run the landing (`gh_rate_limit.remedy`),
         because `otherwise` repeats the call the limit refused.
         """
+        return gh_rate_limit.remedy(why, self.read_quota) or otherwise
 
-        def read(name: str) -> object:
-            return self.tools.gh_json("api", "rate_limit", "--jq", f".resources.{name}")
-
-        return gh_rate_limit.remedy(why, read) or otherwise
+    def read_quota(self, name: str) -> object:
+        """One quota's `.resources.<name>` object from `gh api rate_limit`, which costs none."""
+        return self.tools.gh_json("api", "rate_limit", "--jq", f".resources.{name}")
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""

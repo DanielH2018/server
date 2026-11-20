@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""The Pi's services are its `compose_services`, and no host_vars file lists `containers_list`.
+"""The Pi's services are its `compose_services`.
 
-The `homelab-daniel-pi` package deploys the Pi's `compose_services` (H5). H7.20d deleted the
-Pi's empty `containers_list`, and H1.9 had already moved the cluster's list to
-`cluster/services.yml`, so a `containers_list` key in any host_vars file is a list nothing
-deploys. This census fails on two conditions:
-
-- a host_vars file defines `containers_list`;
-- the Pi's `compose_services` lacks `docker-proxy` or `alloy`.
+The `homelab-daniel-pi` package deploys the Pi's `compose_services` (H5). This census fails
+when that list lacks `docker-proxy` or `alloy`. `scripts/lib/tests/test_inventory_lists.py`
+holds the other half: no host_vars file defines `containers_list`, a list nothing deploys.
 
 Run: uv run pytest hosts/tests/test_pi_service_lists_census.py
 """
@@ -24,25 +20,6 @@ MUST_FIND = {"docker-proxy", "alloy"}
 
 def host_doc(path: Path) -> dict:
     return yaml_fast.safe_load(path.read_text()) or {}
-
-
-def defining_containers_list(host_vars: Path) -> list[str]:
-    """The host_vars files under `host_vars` that define `containers_list`, by stem."""
-    return sorted(
-        path.stem
-        for path in host_vars.glob("*.yml")
-        if "containers_list" in host_doc(path)
-    )
-
-
-def test_no_host_vars_file_defines_containers_list():
-    assert defining_containers_list(HOST_VARS) == []
-
-
-def test_a_host_vars_file_with_a_pi_containers_list_is_flagged(tmp_path):
-    (tmp_path / f"{HOST}.yml").write_text("containers_list: []\ncompose_services: []\n")
-    (tmp_path / "daniel-box.yml").write_text("server_ip: 10.0.0.2\n")
-    assert defining_containers_list(tmp_path) == [HOST]
 
 
 def test_the_pis_compose_services_hold_the_named_members():

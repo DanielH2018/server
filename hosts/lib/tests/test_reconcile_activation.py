@@ -153,10 +153,7 @@ def test_the_boot_metrics_run_reads_zero_once_the_boot_cleared_the_flag_and_acts
     result = node.run("--metrics")
 
     assert result.returncode == 0, result.stderr
-    assert metrics(node) == (
-        'homelab_host_reboot_pending{host="daniel-pi"} 0\n'
-        'homelab_host_reconcile_drift{host="daniel-pi",arm="legacy"} 0\n'
-    )
+    assert metrics(node) == ('homelab_host_reboot_pending{host="daniel-pi"} 0\n')
     assert node.applied_path.read_text() == record
     assert verbs(node) == []
 
@@ -341,67 +338,3 @@ def test_the_metrics_file_is_not_written_when_the_exporters_directory_is_missing
 
     assert not (node.root / PROM).exists()
     assert not (node.root / PROM).parent.exists()
-
-
-# Legacy service retirement.
-
-LEGACY = "pi-old-check.service"
-DRIFT = 'homelab_host_reconcile_drift{host="daniel-pi",arm="legacy"}'
-
-
-def legacy_service(node: Node, active: str) -> None:
-    path = node.root / "etc/systemd/system" / LEGACY
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("[Service]\n")
-    node.state["units"][LEGACY] = {
-        "load": "loaded",
-        "active": active,
-        "enabled": "enabled",
-    }
-    node.manifest["legacy"].append({"unit": LEGACY})
-
-
-def running_legacy_service_stays(node: Node) -> None:
-    legacy_service(node, "active")
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == [], "a running service is never stopped to retire it"
-    assert node.applied()["retired"] == []
-    assert f"{DRIFT} 1" in metrics(node)
-
-
-def test_a_legacy_service_that_is_running_stays_unretired_as_drift_with_no_hold(node):
-    running_legacy_service_stays(node)
-
-
-def test_red_a_legacy_step_that_retires_the_running_service_is_caught(tmp_path):
-    red(
-        tmp_path,
-        running_legacy_service_stays,
-        "homelab-reconcile",
-        "if key not in prev.retired and not waiting and running_service(entry, live):",
-        "if False:",
-    )
-
-
-def test_a_legacy_service_that_is_still_starting_counts_as_running(node):
-    legacy_service(node, "activating")
-
-    assert node.run().returncode == 0
-    assert node.actions() == []
-
-
-def test_the_same_service_once_inactive_is_disabled_stopped_removed_and_retired(node):
-    legacy_service(node, "active")
-    node.run()
-    node.state["units"][LEGACY]["active"] = "inactive"
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == [["disable", LEGACY], ["stop", LEGACY]]
-    assert len(node.applied()["retired"]) == 1
-    assert not (node.root / "etc/systemd/system" / LEGACY).exists()
-    assert f"{DRIFT} 0" in metrics(node)

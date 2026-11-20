@@ -256,7 +256,10 @@ file entry in `component.yml` carries `activate: "try-restart:deploy-ui.service"
 restarts the daemon when one of them changed. A new Python file needs the same action, or the
 daemon keeps running the old code (ENFORCED:
 `hosts/lib/tests/test_deploy_ui_component.py::test_a_changed_python_file_restarts_the_daemon_is_clean`).
-The HTML needs no action, because the daemon reads it on each request. To verify, run
+The HTML needs no action, because the daemon reads it on each request.
+`host_lib.py` and `ci_verdict.py` are `lib:` entries from `hosts/lib/`. The open-PR table's CI
+column is `hosts/lib/ci_verdict.py:checks_verdict` over each PR's status rollup, or `none` for
+a PR with no check. To verify, run
 `curl -s http://<daniel-box server_ip>:8790/api/inflight` from the box.
 
 Tests: `uv run pytest hosts/components/deploy-ui/tests hosts/lib/tests/test_deploy_ui_component.py`.

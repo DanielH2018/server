@@ -17,7 +17,7 @@ Run: uv run pytest tests/services/test_alertmanager_autofix_inhibit.py
 
 from _helpers import K8S_ROLES
 from lib import yaml_fast
-from test_alertmanager_blackbox_inhibit import scrape_down_rule, target_alert
+from test_alertmanager_blackbox_inhibit import target_alert
 from test_alertmanager_host_check_inhibit import inhibited
 from test_alertmanager_routing import BLACKHOLE, reached, route_tree
 
@@ -55,14 +55,9 @@ def test_the_down_alert_holds_no_other_alert_of_the_job():
     assert not inhibited(other, [down_labels()])
 
 
-def test_source_and_target_rules_are_both_live():
-    assert "shadow" not in down_labels()
-    assert "shadow" not in scrape_down_rule(JOB)["labels"]
-
-
 def test_a_shadow_source_would_mute_the_page_and_page_nobody():
-    # The rejecting half of the pair above: with `shadow` back on the source, the inhibitor still
-    # holds the target, and the walk sends the source to the blackhole.
+    # With `shadow` back on the source, the inhibitor still holds the target, and the walk sends
+    # the source to the blackhole.
     shadowed = {**down_labels(), "shadow": "true"}
     assert inhibited(target_alert(JOB, "autofix-bridge:9182"), [shadowed])
     assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]

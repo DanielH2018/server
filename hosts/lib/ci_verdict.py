@@ -1,6 +1,7 @@
 """Whether a commit's CI is green, and which ancestor a gate may choose when the tip is not.
 
-Every reader parses GitHub's check-runs into `CheckRun` where it fetches them. `ci_verdict`
+Every reader parses GitHub's check-runs into `CheckRun` and its check suites into `CheckSuite`
+where it fetches them. `ci_verdict`
 reduces ONE commit's runs to a `CIVerdict` over the required contexts, and `CheckRun.state` is
 the one rule for what a single run says. `ci_walk_candidates` bounds the ancestor walk that runs
 when the tip is not green. Stdlib only and importing nothing first-party, because the host
@@ -9,7 +10,7 @@ packages' builder grades the same rule and `homelab-checkout-sync` grades the fe
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -136,12 +137,15 @@ class CheckRun:
         status: lowercase; `completed` once the run finished.
         conclusion: lowercase, or None while the run has none.
         suite_id: the check suite's id, or None when the source carries none.
+        url: the page a rollup node links the check to, a job's page for an Actions run;
+            "" from the REST listing.
     """
 
     name: str
     status: str
     conclusion: str | None
     suite_id: int | None = None
+    url: str = ""
 
     @classmethod
     def parse(cls, raw: object) -> CheckRun:
@@ -180,7 +184,10 @@ class CheckRun:
             conclusion = None if state in ("pending", "expected") else state
         status = "completed" if conclusion else str(node.get("status") or "").lower()
         return cls(
-            str(node.get("name") or node.get("context") or ""), status, conclusion
+            str(node.get("name") or node.get("context") or ""),
+            status,
+            conclusion,
+            url=str(node.get("detailsUrl") or node.get("targetUrl") or ""),
         )
 
     @property
@@ -210,6 +217,108 @@ class CheckRun:
 def parse_check_runs(raw: list) -> list[CheckRun]:
     """Every entry of a REST `check_runs` listing, parsed; a non-object entry raises ValueError."""
     return [CheckRun.parse(entry) for entry in raw]
+
+
+def parse_rollup(raw: object) -> list[CheckRun]:
+    """A PR's `statusCheckRollup` as `gh` prints it, each node parsed; null is no checks.
+
+    A list of REST commit statuses parses the same way, because a status carries the
+    `context` and `state` of a StatusContext node.
+
+    Raises:
+        ValueError: the rollup is neither a list nor null, or a node is not a JSON object.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"a status rollup is not a list: {raw!r}")
+    return [CheckRun.from_rollup(node) for node in raw]
+
+
+def checks_verdict(checks: Iterable[CheckRun]) -> CIVerdict:
+    """Every check on one head reduced with no required set, for a reader that shows a PR's CI.
+
+    Any failed check is FAIL. Otherwise a check that is unfinished or ended with no verdict
+    is PENDING, and so is a head with no check at all: nothing ran, so nothing is green.
+    """
+    states = {check.state for check in checks}
+    if RunState.FAIL in states:
+        return CIVerdict.FAIL
+    if not states or RunState.PENDING in states:
+        return CIVerdict.PENDING
+    return CIVerdict.PASS
+
+
+@dataclass(frozen=True)
+class CheckSuite:
+    """One check suite of a commit, parsed from GitHub's REST listing.
+
+    A commit has one suite per workflow run and one per app that reports checks on it. The
+    suite outlives a run cancelled before any job registered a check-run.
+
+    Attributes:
+        id: the suite's id, which a `CheckRun` carries as `suite_id`; None when absent.
+        status: lowercase; `completed` once the suite finished.
+        conclusion: lowercase, or None while the suite has none.
+        run_count: how many check-runs the suite registered.
+        app: the slug of the app that owns the suite, or "" when the listing names none.
+    """
+
+    id: int | None
+    status: str
+    conclusion: str | None
+    run_count: int
+    app: str
+
+    @classmethod
+    def parse(cls, raw: object) -> CheckSuite:
+        """One entry of the REST `check_suites` listing.
+
+        Raises:
+            ValueError: the entry is not a JSON object.
+        """
+        if not isinstance(raw, dict):
+            raise ValueError(f"a check suite is not an object: {raw!r}")
+        suite_id, count, app = (
+            raw.get("id"),
+            raw.get("latest_check_runs_count"),
+            raw.get("app"),
+        )
+        return cls(
+            id=suite_id if type(suite_id) is int else None,
+            status=str(raw.get("status") or "").lower(),
+            conclusion=str(raw.get("conclusion") or "").lower() or None,
+            run_count=count if type(count) is int else 0,
+            app=str(app.get("slug") or "") if isinstance(app, dict) else "",
+        )
+
+    @property
+    def completed(self) -> bool:
+        return self.status == "completed"
+
+    @property
+    def cancelled(self) -> bool:
+        """Whether the suite's own conclusion says its run was cancelled."""
+        return self.conclusion == "cancelled"
+
+    @property
+    def ended_without_a_run(self) -> bool:
+        """Whether the suite finished with no verdict before any check-run registered."""
+        return (
+            self.completed
+            and self.conclusion in _CI_NO_VERDICT_CONCLUSIONS
+            and not self.run_count
+        )
+
+    @property
+    def from_actions(self) -> bool:
+        """Whether GitHub Actions owns the suite, so a workflow run exists for the commit."""
+        return self.app == "github-actions"
+
+
+def parse_check_suites(raw: list) -> list[CheckSuite]:
+    """Every entry of a REST `check_suites` listing, parsed; a non-object entry raises ValueError."""
+    return [CheckSuite.parse(entry) for entry in raw]
 
 
 def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
@@ -306,14 +415,12 @@ def cancellation_suspects(check_runs: list[CheckRun]) -> set[int | None]:
 def ci_verdict(
     check_runs: list[CheckRun],
     required: frozenset[str] | set[str],
-    read_suites: Callable[[], list[dict]] | None = None,
+    read_suites: Callable[[], list[CheckSuite]] | None = None,
 ) -> CIVerdict:
     """Reduce GitHub's check-runs for ONE commit to PASS / PENDING / FAIL.
 
     `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
-    as branch-protection contexts (`prek (lint + validate + tests + secrets)`). An empty set means
-    the gate is disarmed, which returns `pass` so a host that hasn't re-templated config.env keeps
-    behaving exactly as it does today.
+    as branch-protection contexts (`prek (lint + validate + tests + secrets)`).
 
     A name can carry SEVERAL runs (a re-run, or the same workflow triggered by both `push` and
     `pull_request`), so each name is reduced over all of its runs and the worst outcome wins: any
@@ -328,9 +435,14 @@ def ci_verdict(
     `read_suites()` reports `cancelled`. It is called only when a suspect exists, so an ordinary
     verdict costs no check-suites read, and a read that fails is `pending`. A caller that passes
     no reader keeps such a gate red.
+
+    Raises:
+        ValueError: `required` is empty. Every commit would grade green against it.
     """
     if not required:
-        return CIVerdict.PASS
+        raise ValueError(
+            "no required CI contexts: an empty set would grade every commit green"
+        )
     cancelled = set()
     suspects = cancellation_suspects(check_runs) if read_suites else set()
     if suspects and read_suites:
@@ -338,7 +450,7 @@ def ci_verdict(
             suites = read_suites()
         except (OSError, ValueError):
             return CIVerdict.PENDING
-        cancelled = {s.get("id") for s in suites if s.get("conclusion") == "cancelled"}
+        cancelled = {s.id for s in suites if s.cancelled}
         cancelled &= suspects
     states: dict[str, set[CIVerdict]] = {}
     for run in check_runs:

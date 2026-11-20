@@ -137,11 +137,11 @@ def test_an_activation_reports_its_time(node):
     assert longest(node.run().stderr, "sysctl") >= AT_LEAST
 
 
-def test_retiring_a_legacy_unit_reports_its_time(node):
-    node.manifest["legacy"].append({"unit": SLOW_UNIT})
-    slowed(node, "systemctl", f"stop {SLOW_UNIT}")
+def test_retiring_a_legacy_cron_reports_its_time(node):
+    node.manifest["legacy"].append({"cron": "pi-sd-health", "user": "ubuntu"})
+    slowed(node, "crontab", "-l -u ubuntu")
 
-    assert longest(node.run().stderr, SLOW_UNIT) >= AT_LEAST
+    assert longest(node.run().stderr, "crontab -l -u ubuntu") >= AT_LEAST
 
 
 def test_the_ufw_arm_reports_its_time(node):

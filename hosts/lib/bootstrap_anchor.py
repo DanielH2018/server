@@ -23,9 +23,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import yaml  # noqa: E402
+from builder_ci_grade import read_check_pages  # noqa: E402
 from ci_verdict import CheckRun, CIVerdict, ci_verdict, parse_check_runs  # noqa: E402
-
-PAGE_SIZE = 100
 
 
 def master_chain(clone: Path, repo: str) -> list[str]:
@@ -47,29 +46,19 @@ def check_runs(
     repo: str, sha: str, opener: Callable = urllib.request.urlopen
 ) -> list[CheckRun]:
     """Every check-run of `sha`, across pages. A short read raises, which reads as no verdict."""
-    found: list[dict] = []
-    for page in range(1, 11):
-        url = (
-            f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs"
-            f"?per_page={PAGE_SIZE}&page={page}"
-        )
+
+    def fetch_page(query: str) -> object:
         request = urllib.request.Request(
-            url,
+            f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs{query}",
             headers={
                 "User-Agent": "bootstrap-host",
                 "Accept": "application/vnd.github+json",
             },
         )
         with opener(request, timeout=30) as response:
-            body = json.load(response)
-        found.extend(body["check_runs"])
-        if len(body["check_runs"]) < PAGE_SIZE or len(found) >= body["total_count"]:
-            if len(found) < body["total_count"]:
-                raise ValueError(
-                    f"read {len(found)} of {body['total_count']} check-runs"
-                )
-            return parse_check_runs(found)
-    raise ValueError("more than 10 pages of check-runs")
+            return json.load(response)
+
+    return parse_check_runs(read_check_pages(fetch_page, "check_runs"))
 
 
 def required_contexts(tree: Path) -> frozenset[str]:

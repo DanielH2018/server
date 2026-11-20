@@ -2,9 +2,10 @@
 
 A rate-limit 403 is not an answer about the request. The shared token spends 5000 core calls an
 hour, and a landing that refused on the 403 was relaunched by hand, which spent more. A caller
-that reads through `gh` asks `wait_s` for the pause and retries after it; one that reads the
-REST API itself asks `http_wait_s`. A caller that reports a refused write asks `remedy` for
-the next step.
+that reads through `gh` sleeps through `wait_out` and retries after it; one that reads the
+REST API itself asks `http_wait`. Each long wait sleeps through `sleep_until_reset`, which
+ends it at the quota's reset. A caller that reports a refused write asks `remedy` for the next
+step.
 
 A secondary limit can arrive in a primary quota's words: GitHub refused GraphQL writes as
 "API rate limit already exceeded" while that quota had 4595 of 5000 calls left. So a refusal
@@ -18,6 +19,7 @@ import time
 import urllib.error
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 # gh prints the API's message: "API rate limit exceeded for user ID N" for the hourly core
 # quota, "API rate limit already exceeded for user ID N" for the GraphQL quota, and "You have
@@ -35,6 +37,8 @@ SECONDARY_WAIT_S = 60
 UNKNOWN_RESET_WAIT_S = 300
 # No wait exceeds one quota window.
 MAX_WAIT_S = 3600
+# How long `wait_out` sleeps for a spent quota before it reads the quota again.
+RECHECK_S = 60
 _SLACK_S = 2
 
 
@@ -61,6 +65,76 @@ def wait_s(
         return UNKNOWN_RESET_WAIT_S
     _name, remaining, reset = quota
     return SECONDARY_WAIT_S if remaining > 0 else _until(reset, now())
+
+
+def wait_out(
+    why: str,
+    sleep: Callable[[float], None],
+    say: Callable[[str], None] = lambda _line: None,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    now: Callable[[], float] = time.time,
+) -> None:
+    """Sleep until a call that failed with `why` is worth repeating.
+
+    The wait starts as `wait_s` and sleeps through `sleep_until_reset` on the quota `why`
+    names.
+
+    Args:
+        why: gh's stderr for the refused call.
+        sleep: sleeps for the seconds it is given.
+        say: gets a line as the wait starts, and another when it ends early. Each line reads
+          after the name of the refused call.
+        run: runs `gh api rate_limit`.
+        now: the epoch time a reset is measured from.
+    """
+    total = wait_s(why, run, now)
+    say(f"hit the GitHub rate limit; waiting {total}s")
+    name = _quota_name(why)
+    slept = sleep_until_reset(name, total, sleep, _reader(run), now)
+    if slept < total:
+        say(f"stopped waiting after {slept}s: the {name} quota has reset")
+
+
+def sleep_until_reset(
+    name: str,
+    total: int,
+    sleep: Callable[[float], None],
+    read: Callable[[str], object],
+    now: Callable[[], float] = time.time,
+) -> int:
+    """Sleep up to `total` seconds for the spent quota `name`; the seconds it slept.
+
+    A wait longer than `RECHECK_S` sleeps in pieces of that length and reads the quota between
+    them, because GitHub can reset a quota before the time it first reported. The wait ends
+    once the quota has calls again, or at the reset the newest read names. A read that fails
+    leaves the wait as it was. An empty `name` sleeps `total` at once: a secondary limit
+    spends no quota, so no read can shorten its wait.
+
+    Args:
+        name: the quota under `gh api rate_limit`'s `.resources`, such as `core`, or "".
+        total: the wait computed when the call failed, which the sleep never exceeds.
+        sleep: sleeps for the seconds it is given.
+        read: the quota's `.resources.<name>` object, by name.
+        now: the epoch time a reset is measured from.
+    """
+    if not name:
+        sleep(total)
+        return total
+    slept = 0
+    while slept < total:
+        piece = min(RECHECK_S, total - slept)
+        sleep(piece)
+        slept += piece
+        if slept >= total:
+            break
+        quota = _named_quota(name, read)
+        if quota is None:
+            continue
+        remaining, reset = quota
+        if remaining > 0 or reset <= now():
+            break
+        total = min(total, slept + _until(reset, now()))
+    return slept
 
 
 def remedy(why: str, read: Callable[[str], object] | None = None) -> str | None:
@@ -107,22 +181,46 @@ def _reader(run: Callable[..., subprocess.CompletedProcess]) -> Callable[[str], 
     return read
 
 
+def _quota_name(why: str) -> str:
+    """The quota a refusal reading `why` spent: `graphql` for a GraphQL one, else `core`."""
+    return "graphql" if _GRAPHQL.search(why) else "core"
+
+
 def _quota(why: str, read: Callable[[str], object]) -> tuple[str, int, int] | None:
     """`(name, remaining, reset epoch)` of the quota `why` names; None when unreadable."""
-    name = "graphql" if _GRAPHQL.search(why) else "core"
+    name = _quota_name(why)
+    quota = _named_quota(name, read)
+    return None if quota is None else (name, *quota)
+
+
+def _named_quota(name: str, read: Callable[[str], object]) -> tuple[int, int] | None:
+    """`(remaining, reset epoch)` of the quota `name`; None when unreadable."""
     try:
         got = read(name)
         if not isinstance(got, dict):
             return None
-        return name, int(got["remaining"]), int(got["reset"])
+        return int(got["remaining"]), int(got["reset"])
     except OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError:
         return None
 
 
-def http_wait_s(
+class HttpWait(NamedTuple):
+    """How long a REST read GitHub refused waits, and the quota the wait is for.
+
+    Attributes:
+        seconds: the wait.
+        quota: the spent quota's name, such as `core`, for `sleep_until_reset`; "" for a
+          secondary limit.
+    """
+
+    seconds: int
+    quota: str = ""
+
+
+def http_wait(
     error: urllib.error.HTTPError, now: Callable[[], float] = time.time
-) -> int | None:
-    """Seconds to wait before a REST read GitHub refused with `error`; None if no rate limit.
+) -> HttpWait | None:
+    """The wait before a REST read GitHub refused with `error`; None if no rate limit.
 
     A spent quota answers 403 or 429 with `X-RateLimit-Remaining: 0` and waits until
     `X-RateLimit-Reset`. A secondary limit waits its `Retry-After`, or `SECONDARY_WAIT_S`.
@@ -134,12 +232,13 @@ def http_wait_s(
     headers = error.headers or {}
     retry_after = headers.get("Retry-After")
     if retry_after and retry_after.isdigit():
-        return max(1, min(MAX_WAIT_S, int(retry_after)))
+        return HttpWait(max(1, min(MAX_WAIT_S, int(retry_after))))
     if headers.get("X-RateLimit-Remaining") == "0":
         reset = headers.get("X-RateLimit-Reset", "")
-        return _until(int(reset), now()) if reset.isdigit() else UNKNOWN_RESET_WAIT_S
+        seconds = _until(int(reset), now()) if reset.isdigit() else UNKNOWN_RESET_WAIT_S
+        return HttpWait(seconds, headers.get("X-RateLimit-Resource") or "core")
     if error.code == 429 or is_rate_limited(_body(error)):
-        return SECONDARY_WAIT_S
+        return HttpWait(SECONDARY_WAIT_S)
     return None
 
 
