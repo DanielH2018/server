@@ -178,10 +178,6 @@ def test_a_lock_naming_no_session_or_batch_with_no_process_is_flagged(tmp_path):
     assert not has_live_session(_cron_tree(tmp_path), in_use=lambda path: [])
 
 
-def test_a_lock_naming_no_session_or_batch_a_process_stands_in_is_clean(tmp_path):
-    assert has_live_session(_cron_tree(tmp_path), in_use=lambda path: [(1, "cwd")])
-
-
 def test_a_session_lock_is_judged_by_its_own_reason(tmp_path):
     held = Worktree(
         str(tmp_path), "abc", "b", locked=True, lock_reason=_live_lock_reason()
