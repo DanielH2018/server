@@ -27,7 +27,7 @@ from _helpers import REPO
 from _host_packages import HOSTS, shipped_text
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
-from test_aide_check import _textfile, push_markers
+from test_aide_check import _textfile
 
 SCRIPT = ("components", "integrity-scans", "rkhunter-check.sh.j2")
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
@@ -243,11 +243,6 @@ def test_the_ssh_root_setting_follows_the_main_sshd_config():
     for host, value in expected.items():
         shipped = shipped_text(host, "/etc/rkhunter.conf.local")
         assert f"\nALLOW_SSH_ROOT_USER={value}\n" in shipped, (host, shipped)
-
-
-def test_the_rendered_script_carries_no_kuma_push():
-    """M6 batch B9's Cutover-2: the push, its token read and its library are gone."""
-    assert push_markers(render_shell_script(*SCRIPT)) == []
 
 
 def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):

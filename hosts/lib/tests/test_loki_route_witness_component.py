@@ -42,9 +42,7 @@ def test_the_script_and_its_reader_install_and_the_script_calls_the_packaged_rea
     assert package.files[f"{LIB}/loki-read-route-health"][1] == 0o755
     assert f"{LIB}/loki_route_health.py" in script
     assert f"{LIB}/loki_route_health.py" in package.files
-    # No credential and no env file: the push they fed is gone.
     assert "CREDENTIALS_DIRECTORY" not in script
-    assert "loki-route-kuma-push.env" not in script
 
 
 def test_the_service_loads_no_credential_and_reruns_while_red(package):

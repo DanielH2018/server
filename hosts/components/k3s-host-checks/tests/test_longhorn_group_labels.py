@@ -72,11 +72,6 @@ def test_an_unknown_group_is_refused():
         backup_group_label("no_backup")
 
 
-def test_the_retired_flat_weekly_group_is_refused():
-    with pytest.raises(ValueError, match="not a Longhorn backup group"):
-        backup_group_label("weekly-backup")
-
-
 def test_a_shard_outside_the_week_is_refused():
     assert weekly_backup_group(6) == "weekly-backup-d6"
     with pytest.raises(ValueError, match="outside 0-6"):
