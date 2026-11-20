@@ -122,7 +122,8 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   `homelab/rerun-safe` test at its new path, because the renderer refuses a node ID that names
   no test in the tree. The annotation is metadata, and no Job name changes. The render-diff
   gates, `scripts/validate/render_diff_gates.py`, read a base before the rename at its
-  `ansible/` layout, so they judge a range that crosses the rename.
+  `ansible/` layout, so they judge a range that crosses the rename. That fallback was retired
+  on 2026-11-20, once no open PR and no `promote` revision predated the rename.
 - The homelab-mcp pod still mounts the node's `ansible/` through a hostPath, and is the one
   node-local reader step 2 does not move. It runs on daniel-server, whose checkout no timer
   syncs, so a mount of `k8s/` there would hold the pod in ContainerCreating. Its placement is
@@ -134,7 +135,10 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
   mounts `k8s/`, `inventory/` and `tests/` in place of `ansible/`.
 - The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
   `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
-  would otherwise read no pin and no forward-only role on that side.
+  would otherwise read no pin and no forward-only role on that side. Both read only the new
+  layout from 2026-11-20, under the same condition as the render-diff gates. The
+  secret-rotation history walk keeps both paths, because it reads every revision of
+  `secrets.yml`.
 - Comments inside shipped `templates/` and `files/` keep their `ansible/` paths. Each one
   reaches a rendered manifest or an image, and rewriting it would change the render.
 
