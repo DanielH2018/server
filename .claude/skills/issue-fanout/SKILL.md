@@ -74,12 +74,13 @@ direction differs from the two wave-level bounds below: a shared file is
 merged into one batch, never held for the next wave, because holding it would still produce
 two identical fixes.
 
-**Another coordinator's live batch holds the files it cites.** `launch` compares your
-batches with the batches other runs launched
+**Another coordinator's live batch holds the files it cites and the files its open PR has
+edited.** `launch` compares your batches with the batches other runs launched
 (`scripts/dev/fanout_lib/launch_gates.py:refuse_live_shared_files`). It refuses a batch that
 cites a file such a batch holds, and a batch holds its files while its unit is active or its
 branch has an open PR. The refusal names the file, the run and the orchestrator branch that
-launched it. Ask that coordinator, hold the issue for a later wave, or pass
+launched it, and says whether the live batch cites the file or has edited it. A batch with
+no PR yet holds its cited files only. Ask that coordinator, hold the issue for a later wave, or pass
 `--allow-shared-file <path>` when the citation is context. Never clean another coordinator's
 run to clear the refusal. `launch` also runs one at a time for all coordinators on the host:
 exit 8 (`scripts/lib/exit_codes.py:FANOUT_PLACE_LOCK_TIMEOUT`) means another launch held the

@@ -9,7 +9,7 @@ import os
 import socket
 import subprocess
 import dataclasses
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -270,14 +270,24 @@ def branch_pr_urls(branch: str, repo: str = SERVER) -> list[str] | None:
     return parse_branch_prs(out.stdout) if out.returncode == 0 else None
 
 
-def open_pr_branches(repo: str = SERVER) -> frozenset[str] | None:
-    """The head branch of every open PR in `repo`, read in one call; None when unreadable.
+def open_pr_files(
+    repo: str = SERVER,
+    complete: Collection[str] = (),
+    run: Callable[..., subprocess.CompletedProcess] = gh,
+) -> dict[str, frozenset[str]] | None:
+    """The files each open PR in `repo` changes, by head branch; None when unreadable.
 
-    None is a `gh` that failed, timed out or printed something unparseable. A caller must
-    not read it as "no open PR".
+    One `gh pr list` call reads every open PR, and it returns at most 100 files of each. A
+    PR that changes more, on a branch in `complete`, costs one paginated REST read for the
+    rest. On any other branch the entry is that first page, so a caller reads files only
+    for the branches it named and reads the keys as "has an open PR" for all of them.
+
+    None is a `gh` that failed, timed out or printed something unparseable, on either read.
+    A caller must not read it as "no open PR" or as "no files". `run` is `gh`, which a test
+    replaces.
     """
     try:
-        out = gh(
+        out = run(
             "pr",
             "list",
             "--repo",
@@ -285,7 +295,7 @@ def open_pr_branches(repo: str = SERVER) -> frozenset[str] | None:
             "--state",
             "open",
             "--json",
-            "headRefName",
+            "headRefName,number,changedFiles,files",
             "--limit",
             OPEN_PR_LIMIT,
             check=False,
@@ -293,7 +303,25 @@ def open_pr_branches(repo: str = SERVER) -> frozenset[str] | None:
         )
         if out.returncode != 0:
             return None
-        return frozenset(str(pr["headRefName"]) for pr in json.loads(out.stdout))
+        files: dict[str, frozenset[str]] = {}
+        for pr in json.loads(out.stdout):
+            branch = str(pr["headRefName"])
+            paths = frozenset(str(f["path"]) for f in pr["files"])
+            if branch in complete and int(pr["changedFiles"]) > len(paths):
+                rest = run(
+                    "api",
+                    "--paginate",
+                    f"repos/{repo}/pulls/{int(pr['number'])}/files?per_page=100",
+                    "--jq",
+                    ".[].filename",
+                    check=False,
+                    timeout=GH_TIMEOUT_S,
+                )
+                if rest.returncode != 0:
+                    return None
+                paths = frozenset(rest.stdout.split())
+            files[branch] = files.get(branch, frozenset()) | paths
+        return files
     except subprocess.TimeoutExpired, ValueError, KeyError, TypeError:
         return None
 
@@ -361,7 +389,8 @@ class Tools:
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
         branch_prs: every PR url for a branch in a repo, newest first, or None when unreadable.
         earlier_prs: the PR urls of a branch in a repo that merged before a launch time.
-        open_pr_branches: the head branch of every open PR in a repo, or None when unreadable.
+        open_pr_files: the files each open PR in a repo changes, by head branch, complete
+            for the branches named; None when unreadable.
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
@@ -376,7 +405,7 @@ class Tools:
     merged_pr: Callable[[str, str], str] = merged_pr_url
     branch_prs: Callable[[str, str], list[str] | None] = branch_pr_urls
     earlier_prs: Callable[[str, str, str], list[str]] = earlier_pr_urls
-    open_pr_branches: Callable[[str], frozenset[str] | None] = open_pr_branches
+    open_pr_files: Callable[..., dict[str, frozenset[str]] | None] = open_pr_files
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch
