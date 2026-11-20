@@ -37,6 +37,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
 
 import host_lib
 from host_lib import rfc3339_to_epoch
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 
 # ── the trim: Longhorn's `trim` RecurringJob ────────────────────────────────────────────────
 
@@ -112,10 +113,8 @@ def newest_trim_job(job_items: list[dict]) -> dict | None:
 
 
 def _job_failed(item: dict) -> bool:
-    return any(
-        c.get("type") == "Failed" and c.get("status") == "True"
-        for c in ((item.get("status") or {}).get("conditions") or [])
-    )
+    failed = parse_conditions(item).get("Failed", NO_CONDITION)
+    return failed.status is ConditionStatus.TRUE
 
 
 def trim_failures(pod_log: str, job_name: str | None) -> list[str]:
