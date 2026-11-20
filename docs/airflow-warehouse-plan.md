@@ -17,7 +17,7 @@ role as built.
 | GitHub PRs and CI runs | kept by GitHub, but costly to query live | 5, 6 |
 | Traefik and CrowdSec counters | Prometheus, as above | 7a |
 | Longhorn's backup log | `loki-homelab`, 31 days | 7b |
-| Pi-hole query DB | FTL default 91 days, not checked against this config | 8 |
+| Pi-hole query DB | FTL default 91 days; the pihole role sets no `database.maxDBdays` | 8 |
 
 ## Decisions
 
@@ -100,8 +100,10 @@ role as built.
   `longhorn.backup_daily`. The log line names no backup target, so the load task reads each
   volume's `spec.backupTargetName` through the Kubernetes API, as a ServiceAccount whose one
   grant is `list` on Longhorn volumes.
-- **Slice 8, DNS history (idea 8).** Both Pi-hole instances' query counts per client and
-  domain.
+- **Slice 8, DNS history (idea 8).** Both Pi-hole instances' daily totals, queries per
+  client and top permitted and blocked domains from FTL's database API, as
+  `dns_daily_rollup` into `dns.counts_daily`. Pi-hole v6 has no read-only credential, so only
+  the load task holds the admin password, through its `executor_config`.
 
 Later, once the warehouse holds a few months: forecasting DAGs, an energy-cost model, and
 weekly reconciliation checks.

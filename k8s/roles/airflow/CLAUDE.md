@@ -142,6 +142,14 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   dated that day, a day it no longer holds gets no row, and `check` requires every active
   disk only inside the daily window. The catchup from 2026-07-01 loaded the sparse older
   points once.
+- **`dns_daily_rollup`** loads `dns.counts_daily` from both Pi-hole instances' query
+  databases, which keep 91 days: each day's total, blocked and client counts, every client's
+  queries, and the top
+  `k8s/roles/airflow/files/dags/homelab_warehouse/dns_history.py:TOP_DOMAINS` permitted and
+  blocked domains, per instance. Task pods reach the API through netpol-baseline's `pihole`
+  fence. Pi-hole v6 has no read-only credential, so only the `load` task holds the admin
+  password, read from `pihole-env` by its `executor_config`, and every session it opens is
+  logged out, because Pi-hole caps open sessions.
 - **Only `backup_spend_rollup`'s `load` task holds a Kubernetes token.** Its
   `executor_config` runs it as `airflow-longhorn-reader`, whose one grant is `list` on
   Longhorn volumes (`k8s/roles/airflow/templates/rbac.yaml.j2`). Every other task pod runs as

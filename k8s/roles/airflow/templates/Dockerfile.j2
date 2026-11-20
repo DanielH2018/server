@@ -19,9 +19,9 @@ RUN pip install --no-cache-dir \
 USER root
 COPY . /opt/build-context/
 RUN mkdir -p /opt/dags/homelab_warehouse \
-    && cp -L /opt/build-context/prom_daily_rollup.py /opt/build-context/prom_series_rollup.py /opt/build-context/ha_daily_rollup.py /opt/build-context/claude_usage_rollup.py /opt/build-context/claude_decisions_rollup.py /opt/build-context/edge_daily_rollup.py /opt/build-context/backup_spend_rollup.py /opt/build-context/smart_daily_rollup.py /opt/dags/ \
+    && cp -L /opt/build-context/prom_daily_rollup.py /opt/build-context/prom_series_rollup.py /opt/build-context/ha_daily_rollup.py /opt/build-context/claude_usage_rollup.py /opt/build-context/claude_decisions_rollup.py /opt/build-context/edge_daily_rollup.py /opt/build-context/backup_spend_rollup.py /opt/build-context/smart_daily_rollup.py /opt/build-context/dns_daily_rollup.py /opt/dags/ \
     && cp -L /opt/build-context/airflowignore /opt/dags/.airflowignore \
-    && cp -L /opt/build-context/warehouse.py /opt/build-context/prom_rollup.py /opt/build-context/prom_series.py /opt/build-context/ha_rollup.py /opt/build-context/claude_usage.py /opt/build-context/claude_decisions.py /opt/build-context/edge_counts.py /opt/build-context/backup_spend.py /opt/build-context/smart_history.py /opt/dags/homelab_warehouse/ \
+    && cp -L /opt/build-context/warehouse.py /opt/build-context/prom_rollup.py /opt/build-context/prom_series.py /opt/build-context/ha_rollup.py /opt/build-context/claude_usage.py /opt/build-context/claude_decisions.py /opt/build-context/edge_counts.py /opt/build-context/backup_spend.py /opt/build-context/smart_history.py /opt/build-context/dns_history.py /opt/dags/homelab_warehouse/ \
     && cp -L /opt/build-context/check_dags.py /opt/check_dags.py \
     && rm -rf /opt/build-context \
     && chmod -R a+rX /opt/dags /opt/check_dags.py
