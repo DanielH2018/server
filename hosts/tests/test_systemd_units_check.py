@@ -41,19 +41,28 @@ nut-monitor.service                      loaded failed failed Network UPS Tools 
 """
 
 
-def _run(tmp_path, listed: str, rc: int = 0):
+def _run(tmp_path, listed: str, rc: int = 0, shown: dict[str, str] | None = None):
     """Run the check with `systemctl list-units` printing `listed` and exiting `rc`.
 
-    Returns (exit code, stdout, every `homelab_*` series of check systemd-units by name).
+    The stub's `show` verb prints `shown[unit]` for the last argument, and nothing for a unit
+    `shown` lacks. Returns (exit code, stdout, every `homelab_*` series of check systemd-units
+    by name).
     """
     script = write_exec(tmp_path / "systemd-units-check.sh", SCRIPT.read_text())
     textfile = tmp_path / "textfile"
     textfile.mkdir()
     (tmp_path / "listed").write_text(listed)
+    show_dir = tmp_path / "show"
+    show_dir.mkdir()
+    for unit, props in (shown or {}).items():
+        (show_dir / unit).write_text(props)
     stubs = fake_bin(
         tmp_path / "bin",
         logger=LOGGER_STUB,
-        systemctl=f'cat "{tmp_path / "listed"}"\nexit {rc}\n',
+        systemctl=(
+            f'if [ "$1" = show ]; then for u; do :; done; cat "{show_dir}/$u" 2>/dev/null; exit 0; fi\n'
+            f'cat "{tmp_path / "listed"}"\nexit {rc}\n'
+        ),
     )
     result = run(
         [str(script)],
@@ -111,6 +120,61 @@ def test_a_unit_name_with_a_systemd_escape_is_escaped_for_the_text_format(tmp_pa
     )
     assert _unit_series(tmp_path) == [
         'homelab_systemd_unit_failed{check="systemd-units",unit="systemd-fsck@dev-disk-by\\\\x2duuid-1.service"} 1'
+    ]
+
+
+HOOKED = "homelab-builder.service"
+HOOK = f"homelab-alert@{HOOKED}.service"
+FAILED_AT = 5_000_000
+
+
+def _hooked_unit(on_failure: str = HOOK) -> str:
+    return f"OnFailure={on_failure}\nInactiveEnterTimestampMonotonic={FAILED_AT}\n"
+
+
+def _hook(state: str, result: str, inactive_since: int) -> str:
+    return (
+        f"ActiveState={state}\nResult={result}\n"
+        f"InactiveEnterTimestampMonotonic={inactive_since}\n"
+    )
+
+
+def test_a_unit_whose_hook_delivered_is_labelled_paged_by_the_hook(tmp_path):
+    shown = {HOOKED: _hooked_unit(), HOOK: _hook("inactive", "success", FAILED_AT + 1)}
+    _run(tmp_path, f"{HOOKED} loaded failed failed builder\n", shown=shown)
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}",paged_by="homelab-alert"}} 1'
+    ]
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        pytest.param(
+            {HOOKED: _hooked_unit(), HOOK: _hook("activating", "exit-code", 0)},
+            id="hook-still-retrying",
+        ),
+        pytest.param(
+            {HOOKED: _hooked_unit(), HOOK: _hook("inactive", "success", 0)},
+            id="hook-never-ran",
+        ),
+        pytest.param(
+            {HOOKED: _hooked_unit(), HOOK: _hook("inactive", "success", FAILED_AT - 1)},
+            id="hook-delivered-for-an-earlier-failure",
+        ),
+        pytest.param(
+            {
+                HOOKED: _hooked_unit("wd_keepalive.service"),
+                "wd_keepalive.service": _hook("inactive", "success", FAILED_AT + 1),
+            },
+            id="on-failure-names-another-unit",
+        ),
+    ],
+)
+def test_a_unit_without_a_delivered_hook_page_carries_no_paged_by(tmp_path, shown):
+    _run(tmp_path, f"{HOOKED} loaded failed failed builder\n", shown=shown)
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"}} 1'
     ]
 
 

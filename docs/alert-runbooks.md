@@ -299,6 +299,12 @@ alert fires once per failed unit.
 - A summary that names no unit means the host wrote no `homelab_systemd_unit_failed` series.
   Either `systemctl` could not list the units (`journalctl -t systemd-units`), or the host's
   package predates the per-unit series. Run `systemctl --failed` on the host.
+- A unit that names `OnFailure=homelab-alert@%n.service` pages Discord through that hook
+  first. Once the hook delivers, the check labels the unit's series
+  `paged_by="homelab-alert"`, and Alertmanager sends this alert to its `blackhole` receiver,
+  which notifies nobody. The alert stays visible in Karma. A hook that is still retrying
+  leaves the label off, so this alert pages while the hook cannot. After 48 hours the alert
+  still escalates to `WarningUnresolved`, which pages.
 
 ### `TextfileCollectorError`
 

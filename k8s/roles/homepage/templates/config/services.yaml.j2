@@ -88,8 +88,8 @@
             href: {{ services | homepage_href('karma', domain, lan=True) }}
             description: Alerts
             # The alert plane at a glance, read from Prometheus's ALERTS series. Critical and
-            # Warning count what pages: they drop shadow="true" and drill="true", the two matchers the
-            # Alertmanager routing tree sends to its blackhole receiver.
+            # Warning count what pages: they drop shadow="true", paged_by="homelab-alert" and
+            # drill="true", the matchers the Alertmanager routing tree sends to its blackhole receiver.
             # `or vector(0)`: the widget reads the first sample, and a count over no alerts
             # is an empty vector that would render a blank block instead of 0.
             #
@@ -103,11 +103,11 @@
                 refreshInterval: 60000
                 metrics:
                     - label: Critical
-                      query: 'count(ALERTS{alertstate="firing",severity="critical",shadow!="true",drill!="true"}) or vector(0)'
+                      query: 'count(ALERTS{alertstate="firing",severity="critical",shadow!="true",drill!="true",paged_by!="homelab-alert"}) or vector(0)'
                       format:
                           type: number
                     - label: Warning
-                      query: 'count(ALERTS{alertstate="firing",severity="warning",shadow!="true",drill!="true"}) or vector(0)'
+                      query: 'count(ALERTS{alertstate="firing",severity="warning",shadow!="true",drill!="true",paged_by!="homelab-alert"}) or vector(0)'
                       format:
                           type: number
         - Pihole:
