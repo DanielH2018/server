@@ -530,20 +530,6 @@ k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_r
 # The UPS's USB host: the nut-secondary component reads it, paired with the k8s/nut pod's
 # nodeSelector.
 ups_host: daniel-server
-# The one host that checks for open Renovate PRs and posts the Discord digest (see
-# renovate_notify CLAUDE.md) — fleet-wide by nature (it queries the GitHub repo, not anything
-# host-local), so running it on more than one host would duplicate every notification.
-# Doesn't matter which host, but must be exactly one.
-renovate_notify_host: daniel-box
-# The one host that runs the unattended Renovate agent (see renovate_agent CLAUDE.md). Same
-# "exactly one host" reasoning as renovate_notify_host, and here for the same scope reason —
-# but with a harder constraint on WHICH host: the agent needs Claude Code installed and logged
-# in, a gh CLI logged in as the repo owner, and the primary checkout the landings deploy from.
-# Arming the timer is a separate switch, renovate_agent_enabled in the role's defaults.
-renovate_agent_host: daniel-box
-# Which host runs the fake-remux detector + reconciler — daniel-box, where the media stack
-# lives. The fake-remux component's defaults read it.
-fake_remux_host: daniel-box
 # The Raspberry Pi; hosts/components/pi-tuning/ ships its tuning.
 optimize_pi_host: daniel-pi
 # The one host that runs the repo-level ops crons gated to a single host: the worktree sweep,
