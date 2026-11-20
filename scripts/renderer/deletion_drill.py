@@ -298,8 +298,9 @@ def revision_1_problems(items: list[dict]) -> list[str]:
     problems = []
     for tag in TAGS:
         ks = _find(items, "Kustomization", tag, FLUX_NAMESPACE)
-        if _condition(ks, "Ready").status is not ConditionStatus.TRUE:
-            message = _condition(ks, "Ready").message or "no Ready condition"
+        ready = _condition(ks, "Ready")
+        if ready.status is not ConditionStatus.TRUE:
+            message = ready.message or "no Ready condition"
             problems.append(f"Kustomization {tag} is not Ready: {message[:200]}")
     for ns, claim in (
         (AS_RENDERED, "data"),
@@ -369,8 +370,9 @@ def break_glass_problems(items: list[dict]) -> list[str]:
     source = _find(items, "OCIRepository", ROOT, FLUX_NAMESPACE)
     revision = _artifact_revision(items)
     problems = []
-    if _condition(source, "Ready").status is not ConditionStatus.TRUE:
-        message = _condition(source, "Ready").message or "no Ready condition"
+    ready = _condition(source, "Ready")
+    if ready.status is not ConditionStatus.TRUE:
+        message = ready.message or "no Ready condition"
         problems.append(f"OCIRepository {ROOT} is not Ready: {message[:200]}")
     if _condition(source, "SourceVerified").status is not ConditionStatus.TRUE:
         problems.append(f"OCIRepository {ROOT} reports no SourceVerified=True")

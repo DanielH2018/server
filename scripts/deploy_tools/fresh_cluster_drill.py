@@ -333,8 +333,9 @@ def fresh_cluster_problems(items: list[dict], url: str, tag: str) -> list[str]:
     problems = []
     if (source or {}).get("spec", {}).get("url") != url:
         problems.append(f"OCIRepository {ROOT} does not follow {url}")
-    if _condition(source, "Ready").status is not ConditionStatus.TRUE:
-        message = _condition(source, "Ready").message or "no Ready condition"
+    ready = _condition(source, "Ready")
+    if ready.status is not ConditionStatus.TRUE:
+        message = ready.message or "no Ready condition"
         problems.append(f"OCIRepository {ROOT} is not Ready: {message[:200]}")
     if _condition(source, "SourceVerified").status is not ConditionStatus.TRUE:
         problems.append(f"OCIRepository {ROOT} reports no SourceVerified=True")
