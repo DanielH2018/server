@@ -18,6 +18,7 @@ from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.guard_jinja_env import template_env
 from _helpers import K8S_ROLES, SHARED_TPL
+from lib.container_entry import ContainerEntry
 from lib.render_guard import k8s_services
 from lib.repo_paths import ALL_VARS
 
@@ -26,7 +27,7 @@ GATE = K8S_ROLES / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
 DOMAIN = "example.com"
 
 
-def _containers() -> list[dict]:
+def _containers() -> tuple[ContainerEntry, ...]:
     return k8s_services()
 
 

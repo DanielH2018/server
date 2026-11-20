@@ -24,6 +24,7 @@ from render_guard import (
 )
 from repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
 from lib import yaml_fast
+from lib.container_entry import ContainerEntryError
 from lib.git_testing import commit, init_repo
 
 # One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
@@ -78,8 +79,16 @@ def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
     assert service_tags_at_or_none(shas[1], tmp_path) is None
 
 
-def test_k8s_services_at_a_ref_reads_the_named_entries_of_that_commit(tmp_path):
+def test_an_unnamed_entry_at_the_ref_is_none_rather_than_dropped(tmp_path):
+    """A malformed service list at the ref is a damaged read, so the caller reads the tree."""
     shas = _tags_repo(tmp_path, _WITHOUT, _WITH + "  - port: 1\n")
+    with pytest.raises(ContainerEntryError, match="item 2 has no `name`"):
+        k8s_services_at(shas[1], tmp_path)
+    assert service_tags_at_or_none(shas[1], tmp_path) is None
+
+
+def test_k8s_services_at_a_ref_reads_the_entries_of_that_commit(tmp_path):
+    shas = _tags_repo(tmp_path, _WITHOUT, _WITH)
     assert [e["name"] for e in k8s_services_at(shas[1], tmp_path)] == [
         "sonarr",
         "newsvc",
