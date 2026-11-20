@@ -13,17 +13,19 @@ import json
 
 import pytest
 from renderer.renderer_lib import host as host_mode
+from _aide_fake_host import (
+    RENAMED_SECRET_LINK,
+    SECRET_LINK,
+    SECRET_TARGET,
+    SECRETS_MANIFEST,
+    SYSTEM_SECRET_LINK,
+)
 from _aide_check_run import (
     CHANGED_CONTENT,
     CHANGED_MODE,
     LINK_ADDED,
     LINK_CHANGED,
     LINK_CHANGED_MODE,
-    RENAMED_SECRET_LINK,
-    SECRET_LINK,
-    SECRET_TARGET,
-    SECRETS_MANIFEST,
-    SYSTEM_SECRET_LINK,
     _report,
     _run_check,
 )

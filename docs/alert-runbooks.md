@@ -356,6 +356,9 @@ Alertmanager repeats it daily and `WarningUnresolved` never pages it.
   and checked nothing, or when the previous week's run still held the lock.
 - Review every unexplained path before you accept it. `sudo /usr/lib/homelab/aide-check
   --accept` records the new baseline.
+- A reason ending in `original unavailable` means the run could not fetch the package copy of a
+  conffile the lines arm edits. `sudo journalctl -t aide-check --since -7d | grep 'not kept:'`
+  names why; `docs/security-tools.md` has the rest.
 - `sudo systemctl start homelab-aide-check.service` re-runs the check. A pass clears this
   alert. A DOWN run exits 0, so the unit fails only when the run could not write its verdict.
 

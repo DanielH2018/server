@@ -57,7 +57,7 @@ nothing else upgrades k3s. The decision is
   without a reset, so `promote` never lowers the Plans below a version a node already runs.
 - **The Kustomization judges the Plans.** `flux_health_check_exprs` and `flux_timeout` in
   `defaults/main.yml` render as `spec.healthCheckExprs` and `spec.timeout`
-  (`scripts/lib/k8s_roles.py:role_fields`). The expressions compare `status.latestVersion` with the
+  (`scripts/lib/k8s_roles.py:role_defaults`). The expressions compare `status.latestVersion` with the
   pin after SUC's `+` to `-` mapping, because a Plan has no `observedGeneration`. A selector-only
   change keeps the version and the hash, so its evidence is each node's
   `plan.upgrade.cattle.io/<plan>` label against the Plan's `status.latestHash`, never the

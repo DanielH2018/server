@@ -3,7 +3,7 @@
 Under Ansible, `k8s/cronjob-gate` runs `kubectl create job --from=cronjob/<name>` after each
 deploy, so a CronJob-only role's new image runs once before the schedule reaches it. Under Flux
 the renderer writes that Job instead (D5, *`cronjob-gate`'s gate Job*). A role opts a CronJob
-in through `flux_cronjob_gates` in its `defaults/main.yml` (`ordering.cronjob_gates`), and
+in through `flux_cronjob_gates` in its `defaults/main.yml` (`RoleDefaults.cronjob_gates`), and
 `DIR/cluster/<tag>-verify/` then holds the Job `<cronjob>-deploy-gate-<spec digest8>`:
 
 - its spec is the CronJob's `jobTemplate.spec`, as `restart.py` stamped it, less
@@ -36,7 +36,8 @@ from renderer.renderer_lib.bundle import KUSTOMIZATION, kustomization_text
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import VERIFY_SUFFIX, cronjob_gates, split_kind
+from lib.k8s_roles import role_defaults
+from renderer.renderer_lib.ordering import VERIFY_SUFFIX, split_kind
 from renderer.renderer_lib.restart import any_pod_template
 from renderer.renderer_lib.snapshot import role_digest8
 
@@ -207,9 +208,14 @@ def attach_gates(
     Raises:
         RenderError: A tag's `flux_cronjob_gates` cannot be read, or `gate_files` refuses it.
     """
-    gates, problems = cronjob_gates(set(published) & {t.tag for t in rendered}, roles)
+    defaults, problems = role_defaults(
+        set(published) & {t.tag for t in rendered}, roles
+    )
     if problems:
         raise RenderError("; ".join(problems))
+    gates = {
+        tag: own.cronjob_gates for tag, own in defaults.items() if own.cronjob_gates
+    }
     return [
         replace(
             tag,

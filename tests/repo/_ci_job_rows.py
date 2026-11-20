@@ -17,9 +17,9 @@ from _workflow_rows import (
     Workflow,
     axis_values,
     checkouts,
-    condition,
     judge,
     jobs,
+    load,
     mutants,
     parsed,
     steps,
@@ -31,9 +31,7 @@ RATCHET = "tests/repo/test_module_length_ratchet.py"
 TEST_STEP = "Run the test suite"
 RESTORE = "actions/cache/restore"
 SAVE = "actions/cache/save"
-DAY = "${{ steps.rewrite-day.outputs.day }}"
-SHARD = "${{ matrix.shard }}"
-MASTER_ONLY = "github.ref == 'refs/heads/master' && "
+SWEEP = ".github/workflows/pytest-sweep.yml"
 REF_ONLY_GROUP = "${{ github.workflow }}-${{ github.ref }}"
 STALE_PYC_GLOB = "**/__pycache__/*.cpython-315.pyc"
 SWEEP_CITATION = re.compile(r"full[\s#]+sweep[\s#]+runs[\s#]+(\d+)[\s#]+jobs")
@@ -138,14 +136,18 @@ def _sweep_citation_problems(subject: Subject) -> list[str]:
     return [f"the comments cite sweeps of {found}, not two of {push}"]
 
 
-def _rewrite_step(wf: Workflow, action: str) -> dict | None:
-    """The first `action` step of the pytest job whose path glob matches a rewritten module."""
+def rewrite_step(job: dict, action: str) -> dict | None:
+    """The first `action` step of `job` whose path glob matches a rewritten module."""
     rewritten = PurePosixPath("tests/repo/__pycache__/test_x" + PYC_TAIL)
-    for step in steps(ci_job(wf, PYTEST_JOB)):
+    for step in steps(job):
         path = str((step.get("with") or {}).get("path", ""))
         if uses(step, action) and any(rewritten.full_match(g) for g in path.split()):
             return step
     return None
+
+
+def _restore_step(wf: Workflow) -> dict | None:
+    return rewrite_step(ci_job(wf, PYTEST_JOB), RESTORE)
 
 
 def _after_tests(wf: Workflow, step: dict) -> bool | None:
@@ -156,7 +158,7 @@ def _after_tests(wf: Workflow, step: dict) -> bool | None:
 
 
 def _restore_before_tests_problems(wf: Workflow) -> list[str]:
-    step = _rewrite_step(wf, RESTORE)
+    step = _restore_step(wf)
     if step is None:
         return [f"no {RESTORE} step matches the `*{PYC_TAIL}` files pytest writes"]
     if _after_tests(wf, step) is not False:
@@ -164,89 +166,50 @@ def _restore_before_tests_problems(wf: Workflow) -> list[str]:
     return []
 
 
-def _restore_key_problems(wf: Workflow) -> list[str]:
-    step = _rewrite_step(wf, RESTORE)
-    if step is None:
-        return [f"no {RESTORE} step matches the `*{PYC_TAIL}` files pytest writes"]
-    key, restore = str(step["with"].get("key")), step["with"].get("restore-keys")
-    found = []
-    if SHARD not in key:
-        found.append(f"the key {key!r} does not name the shard")
-    if not key.endswith(f"-{DAY}"):
-        found.append(f"the key {key!r} does not end in the day")
-    if restore != key.removesuffix(DAY):
-        found.append(f"restore-keys {restore!r} is not the key without the day")
-    return found
-
-
-def _save_problems(wf: Workflow) -> list[str]:
-    restore, save = _rewrite_step(wf, RESTORE), _rewrite_step(wf, SAVE)
+def _restore_reads_the_sweep_problems(wf: Workflow) -> list[str]:
+    restore = _restore_step(wf)
+    save = rewrite_step(jobs(load(SWEEP)).get("sweep", {}), SAVE)
     if restore is None or save is None:
-        return ["the pytest job lacks a rewrite-cache restore step or save step"]
+        return [
+            f"no rewrite-cache restore in {CI}, or no rewrite-cache save in {SWEEP}"
+        ]
     found = []
-    if save["with"].get("path") != restore["with"].get("path"):
-        found.append("the save path differs from the restore path")
-    primary = f"${{{{ steps.{restore.get('id')}.outputs.cache-primary-key }}}}"
-    if save["with"].get("key") != primary:
-        found.append(f"the save key is not {primary}")
-    gate = condition(save)
-    if "github.ref == 'refs/heads/master'" not in gate:
-        found.append(f"the save gate {gate!r} does not name master")
-    if f"steps.{restore.get('id')}.outputs.cache-hit != 'true'" not in gate:
-        found.append(f"the save gate {gate!r} saves a key the restore hit")
-    if _after_tests(wf, save) is not True:
-        found.append(f"the save step does not run after {TEST_STEP!r}")
+    if restore["with"].get("path") != save["with"].get("path"):
+        found.append("the restore path differs from the path the sweep saves")
+    prefix, key = (
+        str(restore["with"].get("restore-keys") or ""),
+        str(save["with"]["key"]),
+    )
+    if not prefix or not key.startswith(prefix):
+        found.append(
+            f"restore-keys {prefix!r} is not a prefix of the sweep's key {key!r}"
+        )
     return found
 
 
-def _edit_step(action: str, **fields: object) -> Callable[[Workflow], None]:
-    """A mutation that sets keys of `with` on the pytest job's rewrite step for `action`."""
+def _edit_restore(**fields: object) -> Callable[[Workflow], None]:
+    """A mutation that sets keys of `with` on the pytest job's rewrite-cache restore step."""
 
     def mutate(wf: Workflow) -> None:
-        step = _rewrite_step(wf, action)
+        step = _restore_step(wf)
         assert step is not None
         step["with"].update(fields)
 
     return mutate
 
 
-def _edit_restore_key(change: Callable[[str], str]) -> Callable[[Workflow], None]:
-    """A mutation that rewrites the restore step's cache key with `change`."""
-
-    def mutate(wf: Workflow) -> None:
-        step = _rewrite_step(wf, RESTORE)
-        assert step is not None
-        step["with"]["key"] = change(step["with"]["key"])
-
-    return mutate
+def _drop_restore_keys(wf: Workflow) -> None:
+    step = _restore_step(wf)
+    assert step is not None
+    step["with"].pop("restore-keys")
 
 
-def _edit_save_gate(find: str) -> Callable[[Workflow], None]:
-    def mutate(wf: Workflow) -> None:
-        save = _rewrite_step(wf, SAVE)
-        assert save is not None
-        save["if"] = condition(save).replace(find, "")
-
-    return mutate
-
-
-def _move(action: str, before_tests: bool) -> Callable[[Workflow], None]:
-    """A mutation that moves the rewrite step for `action` to either side of the test step."""
-
-    def mutate(wf: Workflow) -> None:
-        job = wf["jobs"][PYTEST_JOB]
-        moved = _rewrite_step(wf, action)
-        rest = [s for s in steps(job) if s is not moved]
-        at = [s.get("name") for s in rest].index(TEST_STEP) + (not before_tests)
-        job["steps"] = [*rest[:at], moved, *rest[at:]]
-
-    return mutate
-
-
-def _drop_save(wf: Workflow) -> None:
+def _restore_after_tests(wf: Workflow) -> None:
     job = wf["jobs"][PYTEST_JOB]
-    save = _rewrite_step(wf, SAVE)
-    job["steps"] = [s for s in steps(job) if s is not save]
+    moved = _restore_step(wf)
+    rest = [s for s in steps(job) if s is not moved]
+    at = [s.get("name") for s in rest].index(TEST_STEP) + 1
+    job["steps"] = [*rest[:at], moved, *rest[at:]]
 
 
 def _bare_sweep(comment: str, jobs_block: str) -> Subject:
@@ -397,58 +360,37 @@ CI_JOB_ROWS = (
             offence=judge(_restore_before_tests_problems),
             red=mutants(
                 CI,
-                a_glob_missing_the_pytest_tag=_edit_step(RESTORE, path=STALE_PYC_GLOB),
-                a_restore_after_the_tests=_move(RESTORE, before_tests=False),
+                a_glob_missing_the_pytest_tag=_edit_restore(path=STALE_PYC_GLOB),
+                a_restore_after_the_tests=_restore_after_tests,
             ),
         )
     ),
     Census(
         **ci_row(
-            name="ci-rewrite-cache-restores-the-newest-entry-and-names-one-per-day",
+            name="ci-rewrite-cache-restores-the-nightly-sweeps-entry",
             reason=(
-                "Each shard restores its newest entry and writes one entry per day (#8693). "
-                "The key names the shard and ends in the day. `restore-keys` is the key "
-                "without the day, so a restore falls back to the newest earlier entry of the "
-                "same shard."
+                "No leg saves the rewrite cache: the nightly sweep in pytest-sweep.yml saves "
+                "one entry over every module on master, which every leg of every event can "
+                "read, whatever its shard packed. The restore reads the path the sweep saves, "
+                "byte for byte, since the cache version hashes the path, and its `restore-keys` "
+                "is a prefix of the sweep's key, so it takes the newest sweep entry. A shard or "
+                "a lock hash in the prefix would match no sweep entry."
             ),
-            offence=judge(_restore_key_problems),
+            offence=judge(_restore_reads_the_sweep_problems),
             red=mutants(
                 CI,
-                a_key_without_the_shard=_edit_restore_key(
-                    lambda key: key.replace(SHARD, "1")
+                restore_keys_that_name_the_shard=_edit_restore(
+                    **{
+                        "restore-keys": "pytest-rewrite-${{ runner.os }}-shard${{ matrix.shard }}-"
+                    }
                 ),
-                a_key_without_the_day=_edit_restore_key(
-                    lambda key: key.removesuffix(DAY)
+                restore_keys_that_hash_the_lock=_edit_restore(
+                    **{
+                        "restore-keys": "pytest-rewrite-${{ runner.os }}-${{ hashFiles('uv.lock') }}-"
+                    }
                 ),
-                restore_keys_that_name_no_shard=_edit_step(
-                    RESTORE, **{"restore-keys": "pytest-rewrite-"}
-                ),
-            ),
-        )
-    ),
-    Census(
-        **ci_row(
-            name="ci-only-master-saves-the-rewrite-cache-once-per-key",
-            reason=(
-                "Only master saves the rewritten modules, once per shard per day, and only a "
-                "key it did not restore. A per-run or per-branch save would churn a cache "
-                "budget already over 10 GB and evict the pinned-tool caches the workflow "
-                "reads (#8693). The save writes the path the restore reads, under the key "
-                "the restore computed, after the tests have written the files."
-            ),
-            offence=judge(_save_problems),
-            red=mutants(
-                CI,
-                a_save_on_every_branch=_edit_save_gate(MASTER_ONLY),
-                a_save_over_a_key_the_restore_hit=_edit_save_gate(
-                    " && steps.rewrite-cache.outputs.cache-hit != 'true'"
-                ),
-                a_save_under_a_per_run_key=_edit_step(
-                    SAVE, key="pytest-rewrite-${{ github.run_id }}"
-                ),
-                a_save_of_another_path=_edit_step(SAVE, path="**/__pycache__/*.pyc"),
-                a_save_before_the_tests=_move(SAVE, before_tests=True),
-                a_pytest_job_with_no_save=_drop_save,
+                a_restore_with_no_restore_keys=_drop_restore_keys,
+                a_restore_of_another_path=_edit_restore(path="**/__pycache__/*.pyc"),
             ),
         )
     ),

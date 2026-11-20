@@ -1,6 +1,6 @@
 """D5.1a2's two fields on each tag's object in `digests.json`: `claims` and `suspended`.
 
-`claims` comes from `snapshot_claims`, the reader the publish census's `-snapshot` rule reads
+`claims` comes from `RoleDefaults.snapshot_pvcs`, the reader the publish census's `-snapshot` rule reads
 too, and `suspended` from the rendered Kustomization `<tag>`. A shared kind's object and
 `_unclassified` carry neither (C1 *Cluster output*).
 
@@ -13,7 +13,7 @@ import yaml
 
 from deploy_tools.changed_set import changed_set
 from deploy_tools.bundle_census import snapshot_tags
-from lib.k8s_roles import snapshot_claims
+from lib.k8s_roles import role_defaults
 from renderer.renderer_lib.bundle_readme import BUNDLE_README
 from renderer.renderer_lib.bundle import (
     CLUSTER_VARS,
@@ -83,11 +83,12 @@ def test_the_fields_move_no_digest_and_changed_set_still_reads_the_file(tmp_path
 def test_live_claims_agree_with_the_censuss_snapshot_rule():
     # Three roles that declare snapshot claims and one that declares none.
     tags = ["code-server", "sonarr", "tdarr", "peanut"]
-    claims, problems = snapshot_claims(tags)
+    found, problems = role_defaults(tags)
     assert problems == []
-    assert claims["code-server"] == ["code-server-config", "code-server-workspace"]
-    assert claims["sonarr"] == ["sonarr-config"]
-    assert claims["peanut"] == []
+    claims = {tag: own.snapshot_pvcs for tag, own in found.items()}
+    assert claims["code-server"] == ("code-server-config", "code-server-workspace")
+    assert claims["sonarr"] == ("sonarr-config",)
+    assert claims["peanut"] == ()
     assert snapshot_tags(tags)[0] == {t for t, c in claims.items() if c}
 
 
@@ -95,8 +96,8 @@ def test_a_claims_value_that_is_not_a_literal_list_is_flagged(tmp_path):
     defaults = tmp_path / "sonarr" / "defaults"
     defaults.mkdir(parents=True)
     (defaults / "main.yml").write_text("k8s_autodeploy_snapshot_pvcs: '{{ x }}'\n")
-    claims, problems = snapshot_claims(["sonarr"], tmp_path)
-    assert claims == {}
+    found, problems = role_defaults(["sonarr"], tmp_path)
+    assert found == {}
     assert problems and "not a literal list" in problems[0]
 
 

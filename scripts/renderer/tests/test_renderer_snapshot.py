@@ -16,7 +16,7 @@ from _job_census import load, problems
 from deploy_tools.bundle_census import report
 from lib import yaml_fast
 from lib.exit_codes import OK, RENDER_OK
-from lib.k8s_roles import snapshot_claims
+from lib.k8s_roles import role_defaults
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
@@ -128,11 +128,15 @@ def test_the_job_name_moves_with_the_role_digest_and_with_the_script():
 
 
 def test_every_snapshot_roles_longest_name_stays_within_63_bytes():
-    claims, unjudged = snapshot_claims(
-        sorted(p.parent.parent.name for p in K8S_ROLES.glob("*/defaults/main.yml"))
+    found, unjudged = role_defaults(
+        p.parent.parent.name for p in K8S_ROLES.glob("*/defaults/main.yml")
     )
     assert unjudged == []
-    names = [snapshot_name(t, "0" * 8, c) for t, held in claims.items() for c in held]
+    names = [
+        snapshot_name(t, "0" * 8, c)
+        for t, own in found.items()
+        for c in own.snapshot_pvcs
+    ]
     assert len(names) >= 14, (
         "the census found fewer snapshot claims than the fleet holds"
     )
