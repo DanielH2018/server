@@ -10,11 +10,6 @@ Typical usage example:
     text = render_file(env, "deployment.yaml.j2", ctx)
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import warnings
 from pathlib import Path
 from typing import cast

@@ -52,11 +52,8 @@ A `lines:` key declares edits in files dpkg does not overwrite (`hosts/lib/recon
 action when the file changes. A `mode:` is the octal mode of a file the arm has to create.
 """
 
-import sys as _sys
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
 from pathlib import Path
