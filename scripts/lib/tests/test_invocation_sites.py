@@ -6,7 +6,7 @@ reading green forever.
 
 import textwrap
 
-from invocation_sites import (
+from lib.invocation_sites import (
     claude_hook_files,
     claude_settings_entries,
     prek_hook_entries,

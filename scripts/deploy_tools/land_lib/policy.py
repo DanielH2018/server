@@ -212,12 +212,13 @@ def import_roots(checkout: _Path, search_dirs: Iterable[str]) -> list[str]:
     """The directories on `search_dirs` inside `checkout`, as repo-relative paths, in order.
 
     `search_dirs` is `sys.path` once land.py has imported its modules, so the roots are the
-    lander's own inserts rather than a list kept by hand. `scripts` is a root whether or not
-    one of them inserts it, because the project's editable install supplies it in any venv
-    synced from this checkout. The checkout root itself is left out: it is on `sys.path` only
-    under `python -c` or pytest, never when land.py runs.
+    lander's own inserts rather than a list kept by hand. Two roots hold whatever `search_dirs`
+    says: `scripts`, because the project's editable install supplies it in any venv synced from
+    this checkout, and `scripts/deploy_tools`, because land.sh runs land.py by path and Python
+    puts a script's own directory first. The checkout root itself is left out: it is on
+    `sys.path` only under `python -c` or pytest, never when land.py runs.
     """
-    roots: list[str] = ["scripts"]
+    roots: list[str] = ["scripts", "scripts/deploy_tools"]
     for entry in search_dirs:
         path = _Path(entry or ".").resolve()
         if path.is_relative_to(checkout) and path != checkout:

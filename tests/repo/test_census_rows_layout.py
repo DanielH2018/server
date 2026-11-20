@@ -15,6 +15,7 @@ from functools import cache
 from pathlib import PurePosixPath
 
 import pytest
+from _helpers import REPO
 from _row_table import Census, Subject, check, proof_problems, tracked
 from lib.script_classify import _has_main_guard
 
@@ -158,9 +159,34 @@ _TYPE_CHECKING = (
 _ARG_CALLS = 'import sys\n\nfrom foo import main\n\nif __name__ == "__main__":\n    sys.exit(main(sum([1])))\n'
 
 
-# ── A qualified area writes nothing to sys.path ──────────────────────────────────────
+# ── scripts/ writes nothing to sys.path and imports nothing bare ─────────────────────
 
 _SYS_PATH = {"sys.path", "_sys.path"}
+_REACHES_TESTS = "reaches the repo's tests/, which is outside the scripts/ import root"
+_SHARED_LONGHORN = (
+    "k3s-host-checks copies it beside host_lib.py, where no lib/host_modules ships "
+    "(docs/adr/0039-scripts-is-installed-in-place.md)"
+)
+SYS_PATH_WRITERS = {
+    "scripts/lib/host_modules.py": "the one module that adds hosts/lib, gh-quota and the "
+    "role modules for its callers",
+    "scripts/lib/_claude_worktree.py": "reaches the dotfiles checkout, outside the repo",
+    "scripts/dev/affected_lib/traced_pytest.py": "sets sys.path[0] as pytest itself does, "
+    "for the run it traces",
+    "scripts/dev/pytest_shard.py": _REACHES_TESTS,
+    "scripts/dev/shard_prebuild.py": _REACHES_TESTS,
+    "scripts/dev/tighten_ratchets.py": _REACHES_TESTS,
+    **{
+        f"scripts/lib/longhorn_lib/{name}.py": _SHARED_LONGHORN
+        for name in (
+            "longhorn_backup_health_logic",
+            "longhorn_backups",
+            "longhorn_cron_evidence_logic",
+            "longhorn_etcd_s3_logic",
+            "longhorn_skipped_volumes_logic",
+        )
+    },
+}
 _LIST_WRITES = {"insert", "append", "extend", "remove", "pop", "clear"}
 
 
@@ -184,6 +210,33 @@ def _sys_path_offence(subject: Subject) -> list[str]:
         for node in ast.walk(ast.parse(subject.text))
         if isinstance(node, ast.expr | ast.stmt) and _writes_sys_path(node)
     ]
+
+
+def _dotted_modules() -> list[str]:
+    """scripts/ modules below an area, but not tests or job_files, which ship flat."""
+    return [
+        rel
+        for rel in tracked("scripts/*/*.py")
+        if "/tests/" not in rel and not rel.startswith("scripts/renderer/job_files/")
+    ]
+
+
+def _bare_sibling_offence(subject: Subject) -> list[str]:
+    """Each import whose top name is a module or package in the importer's own directory."""
+    here = REPO / subject.rel.rsplit("/", 1)[0]
+    own = subject.rel.rsplit("/", 1)[-1].removesuffix(".py")
+    hits = []
+    for node in ast.walk(ast.parse(subject.text)):
+        if isinstance(node, ast.Import):
+            tops = [alias.name.split(".")[0] for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            tops = [node.module.split(".")[0]]
+        else:
+            continue
+        for top in tops:
+            if top != own and ((here / f"{top}.py").is_file() or (here / top).is_dir()):
+                hits.append(f"line {node.lineno}: {ast.unparse(node)}")
+    return hits
 
 
 def _fixture(key: str, **members: str) -> Family:
@@ -235,18 +288,18 @@ ROWS = (
         min_matches=4,
     ),
     Census(
-        name="a-qualified-area-writes-nothing-to-sys-path",
+        name="no-sys-path-change-under-scripts",
         reason=(
-            "Slice 3 of the scripts packaging milestone qualifies an area's imports from the "
-            "installed `scripts/` root, which the venv's `.pth` and each no-venv launcher "
-            "supply (docs/adr/0039-scripts-is-installed-in-place.md). A module there that "
-            "inserts a directory again brings back a second spelling of its modules, and a "
-            "test that patches one copy misses the other. Import `lib.host_modules` for a "
-            "host or role module; a child process gets its path from `PYTHONPATH`. Each area "
-            "slice 3 finishes joins `files`."
+            "`scripts/` is the installed import root, which the venv's `.pth` and each "
+            "no-venv launcher supply (docs/adr/0039-scripts-is-installed-in-place.md). A "
+            "module that inserts a directory again brings back a second spelling of its "
+            "modules, and a test that patches one copy misses the other. Import "
+            "`lib.host_modules` for a host or role module; a child process gets its path from "
+            "`PYTHONPATH`. `allow` holds the inserts that reach outside the root."
         ),
-        files=lambda: tracked("scripts/deploy_tools/*.py"),
+        files=lambda: tracked("scripts/*.py"),
         offence=_sys_path_offence,
+        allow=SYS_PATH_WRITERS,
         red=(
             Subject("a.py", "import sys\nsys.path.insert(0, 'scripts')\n"),
             Subject("b.py", "import sys as _sys\n_sys.path.append(str(DIR))\n"),
@@ -258,14 +311,42 @@ ROWS = (
                 "b.py", '"""Reads `sys.path.insert` calls."""\nroots = list(sys.path)\n'
             ),
         ),
-        min_matches=200,
+        min_matches=1000,
         must_find=frozenset(
             {
                 "scripts/deploy_tools/forge.py",
                 "scripts/deploy_tools/runbook_gates_lib/gate_runner.py",
                 "scripts/deploy_tools/tests/test_land_own_checkout.py",
+                "scripts/dev/fanout.py",
+                "scripts/lib/host_modules.py",
             }
         ),
+    ),
+    Census(
+        name="scripts-import-their-siblings-dotted",
+        reason=(
+            "A run by path puts the script's own directory first on `sys.path`, so a bare "
+            "`import prune_worktrees` beside it resolves there and fails when another module "
+            "loads it dotted. Both spellings in one process are two module objects. Import "
+            "from the root: `from dev import prune_worktrees`. A test's fixture beside it "
+            "(`_land_fakes.py`) is outside the selection, since pytest's prepend of the "
+            "test's directory is how it is reached, and `renderer/job_files` ships flat."
+        ),
+        files=_dotted_modules,
+        offence=_bare_sibling_offence,
+        red=(
+            Subject("scripts/dev/x.py", "import prune_worktrees\n"),
+            Subject("scripts/dev/x.py", "def f():\n    from fanout_lib import place\n"),
+        ),
+        green=(
+            Subject("scripts/dev/x.py", "from dev import prune_worktrees\n"),
+            Subject(
+                "scripts/lib/longhorn_lib/x.py", "from . import longhorn_backups\n"
+            ),
+            Subject("scripts/dev/x.py", "import json\nfrom lib import git\n"),
+        ),
+        min_matches=450,
+        must_find=frozenset({"scripts/dev/fanout.py", "scripts/lib/host_modules.py"}),
     ),
 )
 _IDS = [row.name for row in ROWS]

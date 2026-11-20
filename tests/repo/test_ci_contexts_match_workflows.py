@@ -20,7 +20,7 @@ from _helpers import REPO
 from lib.repo_paths import ALL_VARS
 
 
-import await_ci
+from deploy_tools import await_ci
 
 
 def _workflow_job_names() -> set[str]:

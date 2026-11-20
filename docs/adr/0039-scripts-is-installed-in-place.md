@@ -91,11 +91,19 @@ venv per tree.
   own insert of `hosts/lib`, which names a directory that does not exist on the host, and
   imports its own package's siblings relatively (`from . import longhorn_backups`), which
   resolves the same on the host and in the checkout.
-- Once slice 3 deletes the bootstraps, `python scripts/x.py` without `uv run` raises
-  `ModuleNotFoundError`. The repo's rule is already to run its Python through `uv run`.
-- Reverting is a revert of the slice 1 PR plus `uv sync --frozen` on each checkout, for as
-  long as the bootstraps still stand. Slice 4 deletes the last of them, and after it the
-  revert also needs the bootstraps back.
+- A file a Job stages beside its siblings keeps the staged layout's bare import, as the
+  `longhorn_lib` modules do on a host. The soak Job mounts `changed_set.py` beside
+  `flux_soak.py`, and `scripts/renderer/tests/conftest.py` binds the bare name to the
+  `deploy_tools.changed_set` module object, so the tests see that layout without a second
+  copy. A `[[tool.ty.overrides]]` block in `pyproject.toml` exempts both staged files from
+  `import-not-found`.
+- `python scripts/x.py` without `uv run` raises `ModuleNotFoundError`, because no module under
+  `scripts/` inserts its own root. The repo's rule is already to run its Python through
+  `uv run`.
+- `pytest`'s `pythonpath` lists `scripts` and no subdirectory of it, so a bare sibling import
+  fails under pytest as it does in a cron.
+- Reverting needs the per-module bootstraps back as well as a revert of the slice 1 PR and
+  `uv sync --frozen` on each checkout.
 
 ## Governs
 

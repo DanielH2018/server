@@ -18,7 +18,7 @@ import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
 from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
-from longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
+from lib.longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
 

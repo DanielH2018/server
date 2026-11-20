@@ -29,7 +29,7 @@ against those functions directly.
 Run: uv run pytest tests/longhorn/test_longhorn_backup_grace_visibility.py
 """
 
-from longhorn_lib import longhorn_backup_health_logic as logic
+from lib.longhorn_lib import longhorn_backup_health_logic as logic
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 

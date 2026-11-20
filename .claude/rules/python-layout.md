@@ -23,20 +23,24 @@ never `import prune_worktrees`. One file imported under two names is two module 
 test that patches one leaves the other untouched.
 
 `pythonpath` in `pyproject.toml` is a pytest setting, so pytest resolving a bare import
-proves nothing about the cron or hook that runs it.
-`scripts/tests/test_script_bootstraps_present.py` flags a bare import with no insert behind it.
+proves nothing about the cron or hook that runs it. It lists `scripts/` and no subdirectory of
+it, so a bare sibling import fails under pytest too. The `scripts-import-their-siblings-dotted`
+row of `tests/repo/test_census_rows_layout.py` flags one.
 
 A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade`, `gh_quota` or a role module
 `scripts/lib/repo_paths.py:ROLE_MODULES` lists by bare name imports `lib.host_modules` first
-(`from lib import host_modules  # noqa: F401`). It is the one module under `scripts/` that
-adds to `sys.path`. A module a host package copies (`shared:`)
-keeps its own insert of `hosts/lib/`, because no `lib` ships beside it.
+(`from lib import host_modules  # noqa: F401`). A module a host package copies (`shared:`)
+keeps its own insert of `hosts/lib/`, because no `lib` ships beside it. The
+`no-sys-path-change-under-scripts` row refuses every other `sys.path` change under `scripts/`,
+test modules included; its `SYS_PATH_WRITERS` allow-list names each one that remains.
 
-A module under a `tests/` directory carries none of this: pytest is its only invoker, and
-`pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test
-under `diagnostics` imports its package dotted (`from diagnostics import probe`), and a test
-under `validate` inserts its own package directory. Any other insert is dead weight, and
-`scripts/tests/test_test_module_bootstraps_present.py` refuses it.
+A test under `scripts/` imports the module it covers dotted (`from diagnostics import probe`).
+A fixture beside it (`_land_fakes.py`) resolves by bare name, because pytest prepends the
+test's own directory. A file a Job or a host package stages beside its siblings keeps the
+staged layout's bare import, and the tests bind that name: `scripts/renderer/tests/conftest.py`
+binds `changed_set` for `flux_soak.py`. Outside `scripts/`,
+`scripts/tests/test_test_module_bootstraps_present.py` refuses a test module's insert that
+`pythonpath` already supplies.
 
 The subdirectories have **no `__init__.py`**: they are PEP 420 namespace packages, and adding
 one changes how pytest names the test modules under them.

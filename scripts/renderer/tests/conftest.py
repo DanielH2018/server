@@ -7,9 +7,16 @@ the test files under this directory on its command line. `_render_audit.log_dige
 why the saving happens here and not in the test.
 """
 
+import importlib
+import sys
+
 import pytest
 import yaml
 from _render_audit import log_digest_lines
+
+# The soak Job mounts changed_set.py beside flux_soak.py, which imports it by bare name. One
+# module object under both names reproduces that layout without a second copy.
+sys.modules["changed_set"] = importlib.import_module("deploy_tools.changed_set")
 
 
 def pytest_terminal_summary(terminalreporter):

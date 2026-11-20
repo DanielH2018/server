@@ -10,7 +10,7 @@ drops it from the tag, which prunes like any per-tag Kustomization.
 Run: uv run pytest tests/k8s/test_restore_drill_stamps.py
 """
 
-import bundle_census
+from deploy_tools import bundle_census
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
