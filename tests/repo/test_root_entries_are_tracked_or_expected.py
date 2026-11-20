@@ -34,9 +34,6 @@ EXPECTED_IGNORED = frozenset(
         ".mypy_cache",
         ".superpowers",  # SDD task specification directories
         ".claim",  # scripts/dev/label_worktree.py names a generated worktree here
-        # The tree ADR 0030 renamed. A checkout from before the rename keeps its gitignored
-        # leftovers (collections/, a stale tests/setup/) here after the tracked files move.
-        "ansible",
     }
 )
 
