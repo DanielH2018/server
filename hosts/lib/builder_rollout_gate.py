@@ -17,6 +17,7 @@ import re
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from host_lib import log as host_log
@@ -75,6 +76,60 @@ def admit(
     if canary_package in staged:
         gate = {**gate, "sha": chosen}
     return staged, deferred, gate
+
+
+class PromAnswerError(ValueError):
+    """A Prometheus answer that is not a successful instant vector."""
+
+
+@dataclass(frozen=True)
+class Series:
+    """One instant-vector sample: its string labels and its value."""
+
+    labels: dict[str, str]
+    value: float
+
+
+def parse_vector(body: object) -> list[Series]:
+    """The samples of a Prometheus instant query's answer.
+
+    An absent `data` or `result` reads as no series, as monitor-bridge's
+    `bridge/net.py:_query_result` reads it.
+
+    Raises:
+        PromAnswerError: `body` is not a `{status: success, data: {result: [...]}}` envelope, or a
+            sample is not `{metric, value: [time, "number"]}`. A `"data": null` or
+            `"result": null` raises here rather than reading as no series.
+    """
+    if not isinstance(body, dict):
+        raise PromAnswerError(f"the answer is not a JSON object: {body!r:.80}")
+    if body.get("status") != "success":
+        raise PromAnswerError(
+            f"the answer's status is {body.get('status')!r}: {body.get('error')}"
+        )
+    data = body.get("data", {})
+    if not isinstance(data, dict):
+        raise PromAnswerError(f"the answer's data is not an object: {data!r:.80}")
+    result = data.get("result", [])
+    if not isinstance(result, list):
+        raise PromAnswerError(f"the answer's result is not a list: {result!r:.80}")
+    return [_series(sample) for sample in result]
+
+
+def _series(sample: object) -> Series:
+    if not isinstance(sample, dict):
+        raise PromAnswerError(f"a sample is not an object: {sample!r:.80}")
+    metric = sample.get("metric") or {}
+    pair = sample.get("value")
+    if not isinstance(metric, dict) or not isinstance(pair, list) or len(pair) != 2:
+        raise PromAnswerError(
+            f"a sample is not {{metric, value: [time, number]}}: {sample!r:.80}"
+        )
+    try:
+        value = float(pair[1])
+    except (TypeError, ValueError) as err:
+        raise PromAnswerError(f"a sample's value {pair[1]!r} is not a number") from err
+    return Series({k: v for k, v in metric.items() if isinstance(v, str)}, value)
 
 
 def fetch_url(url: str, timeout: float) -> bytes:
@@ -151,37 +206,36 @@ class RolloutGate:
         reconcile = self.prom(f'{RECONCILE_OK}{{host="{host}"}}')
         if applied is None or reconcile is None:
             log(
-                "rollout gate stays open: Prometheus unreachable at every PROMETHEUS_URLS address"
+                "rollout gate stays open: no PROMETHEUS_URLS address answered with an instant vector"
             )
             return False
-        if any(float(s["value"][1]) == 1 for s in reconcile) and any(
-            self.descends(gate["sha"], s["metric"].get("sha", "")) for s in applied
+        if any(s.value == 1 for s in reconcile) and any(
+            self.descends(gate["sha"], s.labels.get("sha", "")) for s in applied
         ):
             return True
         # Prometheus answered, so say what it holds: without this line a gate held by a
         # canary that reports an older SHA, or none, looks like a gate held by nothing.
-        shas = ",".join(s["metric"].get("sha", "") for s in applied) or "none"
-        oks = ",".join(str(s["value"][1]) for s in reconcile) or "none"
+        shas = ",".join(s.labels.get("sha", "") for s in applied) or "none"
+        oks = ",".join(f"{s.value:g}" for s in reconcile) or "none"
         log(
             f"rollout gate at {gate['sha'][:12]} stays open: {host} reports"
             f" sha={shas} reconcile_ok={oks}"
         )
         return False
 
-    def prom(self, promql: str) -> list[dict] | None:
-        """The instant-vector result of `promql`, asking each PROMETHEUS_URLS entry in turn.
+    def prom(self, promql: str) -> list[Series] | None:
+        """The instant-vector samples of `promql`, asking each PROMETHEUS_URLS entry in turn.
 
-        None when none answers with a success. config.env carries both addresses, never the clone.
+        None when none answers with an instant vector `parse_vector` accepts. config.env carries
+        both addresses, never the clone.
         """
         fetch: Callable[[str, float], bytes] = self.prom_fetch or fetch_url
         query = urllib.parse.urlencode({"query": promql})
         for base in self.config.get("PROMETHEUS_URLS", "").split():
             try:
-                answer = json.loads(
-                    fetch(f"{base}/api/v1/query?{query}", QUERY_TIMEOUT_S)
+                return parse_vector(
+                    json.loads(fetch(f"{base}/api/v1/query?{query}", QUERY_TIMEOUT_S))
                 )
-                if answer["status"] == "success":
-                    return answer["data"]["result"]
-            except (OSError, ValueError, KeyError, TypeError) as exc:
+            except (OSError, ValueError) as exc:
                 log(f"{base} did not answer {promql}: {type(exc).__name__}: {exc}")
         return None
