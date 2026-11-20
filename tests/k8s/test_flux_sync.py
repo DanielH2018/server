@@ -13,7 +13,7 @@ import copy
 import re
 import shutil
 
-import forge
+from deploy_tools import forge
 import pytest
 
 from _k8s_render import render_role_template

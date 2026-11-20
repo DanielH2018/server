@@ -10,7 +10,7 @@ import os
 import subprocess
 
 import pytest
-from land_lib.outcome import VERDICTS
+from deploy_tools.land_lib.outcome import VERDICTS
 
 import deploy_ui
 from deploy_ui_lib import deploy_ui_reads as reads

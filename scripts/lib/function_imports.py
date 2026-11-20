@@ -1,4 +1,4 @@
-"""Whether each entry point's function-local imports execute, under each way it is loaded.
+"""Whether each entry point's function-local imports execute when the module loads from the root.
 
 `test_entry_points_answer_help.py` catches a broken top-level import, but an import inside a
 subcommand never runs under `--help`: `ha_state_model refresh` can raise
@@ -7,12 +7,10 @@ subcommand never runs under `--help`: `ha_state_model refresh` can raise
 `importlib.util.find_spec` is not enough either. It passes there, because the function-local
 `diagnostics.probe_ha` itself resolved; what failed was probe_ha's own top-level
 `import probe_core`. So this module EXECUTES each function-local import, which runs everything
-below it, in a fresh interpreter that has only the `sys.path` the real load would have:
-
-- `mode="path"`: the module's own directory, as `python scripts/<dir>/<name>.py` gives it.
-- `mode="dotted"`: only `scripts/`, the module loaded as `<dir>.<name>`. This applies only to
-  a module that some other module loads by dotted name (`dotted_loaded`); for any other module
-  that loading never happens, so a bare sibling import there is not a bug.
+below it, in a fresh interpreter that has only `scripts/` on `sys.path`, with the module loaded
+as `<dir>.<name>`. Every real run has that root, from the venv's `.pth` or the launcher's
+`PYTHONPATH` (docs/adr/0039-scripts-is-installed-in-place.md), and nothing under `scripts/`
+imports a sibling by bare name, so a by-path run adds nothing an import may rely on.
 
 The subprocess runs with `-I`, so neither the caller's `PYTHONPATH` nor pytest's `pythonpath`
 can supply a directory the real invocation lacks. Each function's imports run against a
@@ -29,39 +27,24 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from lib.repo_paths import SCRIPTS
 from lib.script_imports import is_test_file
 
-__all__ = [
-    "ENTRY_POINTS",
-    "EXEMPTIONS",
-    "OFF_TREE_IMPORTS",
-    "Finding",
-    "check",
-    "dotted_loaded",
-]
+__all__ = ["ENTRY_POINTS", "EXEMPTIONS", "Finding", "check"]
 
 # A module that waits on a network or a lock at import is a defect the --help census already
 # reports; this bound only stops one from hanging the suite.
 TIMEOUT_S = 120
 
 
-# Function-local imports that fail under dotted-name loading and are never reached that way.
-# Keyed by (file, enclosing function, imported module), not by line, so an edit above the
-# import leaves the entry valid. An entry whose import has left that function is reported as
-# `stale-exemption`, and one whose import no longer fails as `unused-exemption`, so the list
-# cannot outlive what it excuses. The exemption applies to the dotted mode only: by path,
-# every one of these imports must still execute.
+# Function-local imports that fail and are never reached in production. Keyed by (file,
+# enclosing function, imported module), not by line, so an edit above the import leaves the
+# entry valid. An entry whose import has left that function is reported as `stale-exemption`,
+# and one whose import no longer fails as `unused-exemption`, so the list cannot outlive what
+# it excuses.
 EXEMPTIONS: dict[tuple[str, str, str], str] = {}
-
-# Function-local imports of a module that lives outside the repo, from a directory the function
-# itself puts on `sys.path` just before the import. No repo-side loading can resolve one, so
-# these are exempt in BOTH modes, with the same stale and unused reporting as `EXEMPTIONS`.
-# Empty since H7.2e, when `host_lib.py` moved into `hosts/lib/`, which the checkout can load.
-OFF_TREE_IMPORTS: dict[tuple[str, str, str], str] = {}
 
 
 @dataclass(frozen=True)
@@ -144,75 +127,13 @@ def _local_imports(tree: ast.Module) -> list[tuple[str, str, ast.stmt]]:
     return found
 
 
-def _resolve_dotted(parts: list[str], base: Path) -> Path | None:
-    """The `.py` under `base` that the dotted name `parts` loads, through at least one package."""
-    here = base
-    for i, part in enumerate(parts):
-        if (here / part).is_dir() and i < len(parts) - 1:
-            here /= part
-            continue
-        candidate = here / f"{part}.py"
-        return candidate if here != base and candidate.is_file() else None
-    return None
-
-
-@lru_cache(maxsize=8)
-def _dotted_loaded(scripts_root: Path) -> frozenset[Path]:
-    loaded: set[Path] = set()
-    for importer in _py_files(scripts_root):
-        if is_test_file(importer):
-            continue
-        try:
-            tree = ast.parse(importer.read_text(), str(importer))
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            targets: list[Path | None] = []
-            if isinstance(node, ast.Import):
-                targets = [
-                    _resolve_dotted(a.name.split("."), scripts_root) for a in node.names
-                ]
-            elif isinstance(node, ast.ImportFrom):
-                if node.level:
-                    # A relative import loads its target as a submodule of the importer's
-                    # package, which is a dotted-name load from wherever that package sits.
-                    base = importer.parent
-                    for _ in range(node.level - 1):
-                        base = base.parent
-                    parts = node.module.split(".") if node.module else []
-                    pkg = base.joinpath(*parts)
-                    targets = [pkg.with_suffix(".py")] if parts else []
-                    targets += [pkg / f"{a.name}.py" for a in node.names]
-                elif node.module:
-                    parts = node.module.split(".")
-                    targets = [_resolve_dotted(parts, scripts_root)]
-                    targets += [
-                        _resolve_dotted([*parts, a.name], scripts_root)
-                        for a in node.names
-                    ]
-            for target in targets:
-                if target is not None and target.is_file() and target != importer:
-                    loaded.add(target.resolve())
-    return frozenset(loaded)
-
-
-def dotted_loaded(scripts_root: Path = SCRIPTS) -> set[Path]:
-    """The modules under `scripts_root` some other non-test module loads by dotted name.
-
-    A dotted load is one that goes through a package directory: `from home_assistant import
-    ha_state_model`, `import a.b`, or a relative import. Function-local loads count. A bare
-    `import sibling` does not, and neither does an import only a test makes, since a test is
-    not how the module is reached in production.
-    """
-    return set(_dotted_loaded(scripts_root.resolve()))
-
-
-# The child process: load the module the way `mode` says, then run each function's imports
-# against a restored snapshot. Results go to a file, because the module's top level may print.
+# The child process: load the module by dotted name with only the root on the path, then run
+# each function's imports against a restored snapshot. Results go to a file, because the
+# module's top level may print.
 _RUNNER = r"""
-import importlib, importlib.util, json, sys, traceback
+import importlib, json, sys, traceback
 
-mode, target, root, name, out, groups = sys.argv[1:]
+target, root, name, out, groups = sys.argv[1:]
 groups = json.loads(groups)
 results = {"unloadable": None, "broken": []}
 
@@ -220,15 +141,8 @@ def describe(exc):
     return "".join(traceback.format_exception_only(type(exc), exc)).strip()
 
 try:
-    if mode == "path":
-        sys.path.insert(0, str(__import__("pathlib").Path(target).parent))
-        spec = importlib.util.spec_from_file_location("__function_imports_check__", target)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-    else:
-        sys.path.insert(0, root)
-        module = importlib.import_module(name)
+    sys.path.insert(0, root)
+    module = importlib.import_module(name)
 except BaseException as exc:
     if isinstance(exc, KeyboardInterrupt):
         raise
@@ -254,7 +168,7 @@ with open(out, "w") as fh:
 
 
 def _run(
-    path: Path, mode: str, scripts_root: Path, groups: dict[str, list[tuple[int, str]]]
+    path: Path, scripts_root: Path, groups: dict[str, list[tuple[int, str]]]
 ) -> dict:
     """Load `path` in a fresh `-I` interpreter and execute `groups`, one function at a time."""
     name = ".".join(path.relative_to(scripts_root).with_suffix("").parts)
@@ -266,7 +180,6 @@ def _run(
             "-B",
             "-c",
             _RUNNER,
-            mode,
             str(path),
             str(scripts_root),
             name,
@@ -296,43 +209,30 @@ def _run(
 def check(
     path: Path,
     *,
-    mode: str,
     scripts_root: Path = SCRIPTS,
     exemptions: dict[tuple[str, str, str], str] = EXEMPTIONS,
-    off_tree: dict[tuple[str, str, str], str] = OFF_TREE_IMPORTS,
 ) -> list[Finding]:
-    """Every function-local import in `path` that fails when the module is loaded by `mode`.
+    """Every function-local import in `path` that fails with only `scripts_root` on the path.
 
     Args:
-        path: the module to check.
-        mode: `"path"` for a direct invocation, `"dotted"` for a load by dotted name with only
-            `scripts_root` on the path. The dotted mode reports nothing for a module no other
-            module loads by dotted name, beyond stale entries in `exemptions`.
+        path: the module to check, loaded by its dotted name under `scripts_root`.
         scripts_root: the `scripts/` directory the module sits under.
-        exemptions: `{(file, function, module): reason}`, suppressing `broken` findings in the
-            dotted mode only.
-        off_tree: the same shape, suppressing `broken` findings in both modes.
+        exemptions: `{(file, function, module): reason}`, suppressing `broken` findings.
 
     Returns:
         The findings, `[]` when every import executes and every exemption still applies.
     """
-    if mode not in ("path", "dotted"):
-        raise ValueError(f"mode must be 'path' or 'dotted', not {mode!r}")
     scripts_root = scripts_root.resolve()
     path = path.resolve()
     rel = path.relative_to(scripts_root.parent).as_posix()
     imports = _local_imports(ast.parse(path.read_text(), str(path)))
     present = {(rel, function, module) for function, module, _ in imports}
-    reasons = {**exemptions, **off_tree}
-    mine: set[tuple[str, str, str]] = {key for key in exemptions if key[0] == rel}
-    mine_off_tree: set[tuple[str, str, str]] = {
-        key for key in off_tree if key[0] == rel
-    }
+    mine = {key for key in exemptions if key[0] == rel}
     findings = [
-        Finding(*key, "stale-exemption", reasons[key])
-        for key in sorted((mine | mine_off_tree) - present)
+        Finding(*key, "stale-exemption", exemptions[key])
+        for key in sorted(mine - present)
     ]
-    if not imports or (mode == "dotted" and path not in _dotted_loaded(scripts_root)):
+    if not imports:
         return findings
 
     # One entry per statement: `import a, b` is one statement and runs as one.
@@ -342,14 +242,12 @@ def check(
         if node not in nodes:
             nodes.append(node)
             groups.setdefault(function, []).append((len(nodes) - 1, ast.unparse(node)))
-    result = _run(path, mode, scripts_root, groups)
+    result = _run(path, scripts_root, groups)
     if result["unloadable"]:
         return [*findings, Finding(rel, "", "", "unloadable", result["unloadable"])]
 
     failed = {index: detail for index, detail in result["broken"]}
-    suppress: set[tuple[str, str, str]] = (
-        (mine if mode == "dotted" else set()) | mine_off_tree
-    ) & present
+    suppress = mine & present
     used: set[tuple[str, str, str]] = set()
     for function, module, node in imports:
         key = (rel, function, module)
@@ -361,7 +259,7 @@ def check(
             continue
         findings.append(Finding(*key, "broken", failed[index]))
     findings += [
-        Finding(*key, "unused-exemption", reasons[key])
+        Finding(*key, "unused-exemption", exemptions[key])
         for key in sorted(suppress - used)
     ]
     return findings

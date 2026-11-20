@@ -8,7 +8,7 @@ subprocess runs in `test_longhorn_backup_health_reader.py`.
 Run: uv run pytest scripts/lib/tests/test_longhorn_restore_drill_checks.py
 """
 
-from longhorn_lib import longhorn_backup_health_logic as logic
+from lib.longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
 DAY = 86400.0

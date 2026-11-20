@@ -1,7 +1,7 @@
 """The narrowing helpers a caller applies to a parsed JSON document."""
 
 import pytest
-from json_types import as_list, as_object, as_object_list
+from lib.json_types import as_list, as_object, as_object_list
 
 
 def test_as_object_names_what_it_received():

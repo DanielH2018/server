@@ -11,7 +11,7 @@ The three limits move together. `verify`'s `timeout-minutes` holds the capped de
 leaves no verdict, and `settle` writes `<T> unverified`, a hold only an operator clears.
 """
 
-import chained_timeout
+from deploy_tools import chained_timeout
 from _promote_workflow import job, promote_row, step_by
 from _row_table import Census
 from _workflow_rows import PROMOTE, condition, judge, mutants, steps

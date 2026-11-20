@@ -77,7 +77,6 @@ LISTED = (
     # The census and structure tests behind 15 failed runs in the week to 2026-11-06.
     "scripts/lib/tests/test_entry_points_answer_help.py",
     "scripts/lib/tests/test_script_classify_package_imports.py",
-    "scripts/tests/test_script_bootstraps_present.py",
     "scripts/validate/tests/test_render_shell.py",
     "hosts/lib/tests/test_k3s_restart_window.py",
     "scripts/renderer/tests/test_renderer_task_inputs.py",

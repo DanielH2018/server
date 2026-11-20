@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from git import (
+from lib.git import (
     gc_log_path,
     git,
     git_dirty,
