@@ -202,7 +202,7 @@ def run_once(
         # `b2_storage` during a cap breach would bill one listing every 300s cycle, and the
         # four WAN bodies would each wait out their timeouts through a WAN outage. A rule
         # cannot stop a call. Full account in
-        # docs/target-architecture/monitoring/m6-retire-kuma.md, "Gates and grace".
+        # docs/archive/monitoring/m6-retire-kuma.md, "Gates and grace".
         if entry.gate in down_gates:
             ok, msg = True, GATE_SKIP[entry.gate]
             log_skip(name, msg)

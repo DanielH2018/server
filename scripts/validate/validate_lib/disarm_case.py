@@ -6,11 +6,6 @@ package by hand, then upgrades to one whose recovery timer is disarmed. The disa
 the timer's enable link, and reconcile step 1 stops a timer whose link the new manifest dropped.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from validate.validate_lib import secrets_case
 from validate.validate_lib.host_container import expect
 from validate.validate_lib.host_fixtures import RECOVERY_TIMER

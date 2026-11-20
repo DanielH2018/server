@@ -217,6 +217,45 @@ def test_the_same_tree_renders_the_same_fixture(tmp_path):
     assert not host_packages.fixture_changed(REPO, REPO)
 
 
+def test_a_tree_renders_its_packages_with_its_own_lib(tmp_path):
+    """A merge base's renderer must not import the checkout's `lib`, which the venv puts on the path."""
+    tree = tmp_path / "base"
+    (tree / "hosts" / "daniel-pi").mkdir(parents=True)
+    (tree / "hosts" / "daniel-pi" / "package.yml").write_text("")
+    (tree / "scripts" / "lib").mkdir(parents=True)
+    (tree / "scripts" / "lib" / "repo_paths.py").write_text('REPO = "base tree"\n')
+    (tree / "scripts" / "renderer").mkdir()
+    (tree / "scripts" / "renderer" / "homelab_render.py").write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from lib.repo_paths import REPO\n"
+        "Path(sys.argv[-1], 'repo').write_text(REPO)\n"
+    )
+    out = tmp_path / "out"
+    out.mkdir()
+    assert host_packages.render(tree, out) == 0
+    assert (out / "repo").read_text() == "base tree"
+
+
+def test_a_tree_renders_its_fixture_with_its_own_lib(tmp_path):
+    """A merge base's render must not import the checkout's `lib`, which the venv puts on the path."""
+    tree = tmp_path / "base"
+    (tree / "scripts" / "lib").mkdir(parents=True)
+    (tree / "scripts" / "lib" / "repo_paths.py").write_text('REPO = "base tree"\n')
+    fixtures = tree / "scripts" / "validate" / "validate_lib" / "host_fixtures.py"
+    fixtures.parent.mkdir(parents=True)
+    fixtures.write_text(
+        "from lib.repo_paths import REPO\n"
+        'VARIANTS = ("base",)\n'
+        "def render_fixture(variant, out, payload_bytes):\n"
+        "    out.write_text(REPO)\n"
+    )
+    out = tmp_path / "out"
+    out.mkdir()
+    assert host_packages.render_fixtures(tree, out)
+    assert (out / "base").read_text() == "base tree"
+
+
 def test_a_base_without_the_fixture_module_is_a_fixture_change(tmp_path):
     assert host_packages.fixture_changed(tmp_path, REPO)
 

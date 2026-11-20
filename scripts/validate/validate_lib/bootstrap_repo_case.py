@@ -25,11 +25,6 @@ server log holds a GET of the suite's InRelease and that `/var/lib/apt/lists/` h
 127.0.0.1:8791, which together show that the REPO_URL rewrite took effect.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import functools
 import re
 import shutil

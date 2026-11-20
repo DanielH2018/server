@@ -6,11 +6,6 @@ test image with systemd as PID 1 and hostname daniel-pi unless told otherwise, a
 `host_fixtures.publish` writes with `python3 -m http.server` on 127.0.0.1:8791.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import shlex
 import subprocess
 import time

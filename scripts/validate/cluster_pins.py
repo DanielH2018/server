@@ -46,11 +46,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git, git_stdout

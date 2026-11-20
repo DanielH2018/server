@@ -1509,16 +1509,16 @@ writes one. The `no-template-hand-writes-depends-on` row of
 the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
 render publishes, and the publish job renders every published tag. The edges are:
 
-- **A tag's toposort edges, kept when flux-owned.** `<tag>` depends on each member of its
-  `build_k8s_dep_map` edges that the bundle publishes. Any other edge is
-  dropped, because a `dependsOn` naming a missing Kustomization fails every reconcile.
-- **The dropped edges stay visible.** The annotation `homelab/unrendered-deps` lists them,
-  comma-separated and sorted. Every k8s role is flux-owned, so a full render writes it on no
-  Kustomization; a fixture `flux_owned` set in a test is what produces it.
+- **A tag's toposort edges.** `<tag>` depends on each member of its `build_k8s_dep_map`
+  edges, whether or not the render names that member with `--role`.
+- **An edge to a name that is no k8s tag fails the render.** The keys of the dependency map
+  are every k8s tag. A `dependsOn` naming any other name would name a missing Kustomization,
+  which fails every reconcile, so `kustomization_edges` in
+  `scripts/renderer/renderer_lib/ordering.py` refuses it and the render writes nothing.
 - **A `K8S_APPLIES_LAST` tag waits on the deferred applies.** It also depends on every other
   tag's `<tag>-deferred`, never its own, which depends on it.
 - **`<tag>-deferred` depends on `<tag>`.** It also depends on the role that creates a
-  namespace one of its documents names, by the same flux-owned rule.
+  namespace one of its documents names, by the same rule.
   `NAMESPACE_ROLE_VARS` in the same file maps `k8s_observability_namespace` to
   `observability`, so `headlamp-deferred` and `netpol-baseline-deferred` wait on
   `observability`.

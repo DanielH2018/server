@@ -20,11 +20,6 @@ The line is read before that reconcile as well as after it. Reconcile re-adds a 
 only the read before it can see an upgrade that replaced the local file.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import shlex
 import shutil
 import subprocess

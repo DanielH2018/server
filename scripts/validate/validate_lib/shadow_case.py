@@ -14,11 +14,6 @@ the copy. `scripts/validate/host_package_cases.py` runs this case after the conf
     unit runs its packaged command, and the orphan is still in place.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import shutil
 import subprocess
 import sys
