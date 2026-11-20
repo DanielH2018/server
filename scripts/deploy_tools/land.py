@@ -60,7 +60,9 @@ Usage::
                                              # put the log somewhere else
     land.sh --pr 574 --arm-merge --await-merge --fresh
                                              # land from a checkout of origin/master this
-                                             # run makes and removes (`land_lib/fresh.py`)
+                                             # run makes and removes (`land_lib/fresh.py`);
+                                             # a landing whose code is older than master's
+                                             # does this itself, so the flag is optional
     land.sh --regate 574                     # re-run a merged pin bump's gates and
                                              # re-post homelab/upgrade-gates; never merges
 
@@ -105,11 +107,15 @@ landing's host, pid and log and the `cc-wait land <n>` command that waits on it.
 `land_lib/pr_lock.py` has the rule.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
-has changed since, before `--arm-merge` merges anything
-(`classify.refuse_stale_code_before_merge`); re-run that one with `--fresh`. After the merge, such
-a checkout hands the grading to a fresh checkout of origin/master itself, whose landing prints
-the verdict (`classify.refuse_stale_code`). The `land:` line on stderr, repeated in the
-verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
+has changed since, under a lander unit or when git could not compare. Outside a unit, a
+landing that finds such a checkout re-runs itself from a fresh checkout of origin/master:
+the whole landing before `--arm-merge` merges anything
+(`classify.refuse_stale_code_before_merge`), the grading after the merge
+(`classify.refuse_stale_code`). One `land:` line on stderr says so, and the fresh checkout's
+landing prints the `LAND-RESULT:` and `VERDICT:` lines. It re-runs once: when master's landing
+code moves again before the fresh landing's own check, that landing ends `refused` and a
+re-run of the same command lands. The `land:` line on stderr, repeated in the verdict's
+detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
 host's `deferred` when the builder reports a failing reason and has published no package of
 that host at or after the merge, so no updater fire can apply it: fix the builder (`probe.py
@@ -235,7 +241,7 @@ def main(
         return _refuse_second(opts, tools, lock)
     try:
         if opts.detach:
-            return _detached(opts, landing, lock)
+            return _detached(opts, tools, landing, lock)
         return landing()
     finally:
         if lock:
@@ -305,7 +311,7 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             tools.record_verdict(opts.pr, rc, line)
         return rc
 
-    return _detached(opts, land) if opts.detach else land()
+    return _detached(opts, tools, land) if opts.detach else land()
 
 
 def _resolve_since(opts: Options) -> Options:
@@ -335,14 +341,17 @@ def _resolve_since(opts: Options) -> Options:
 
 
 def _detached(
-    opts: Options, landing: Callable[[], int], lock: pr_lock.Held | None = None
+    opts: Options,
+    tools: Tools,
+    landing: Callable[[], int],
+    lock: pr_lock.Held | None = None,
 ) -> int:
     """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it.
 
     The landing inherits `lock`, the PR lock this process took, and holds it to its end.
     """
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, landing, f"land{opts.pr}", keep=lock.keep if lock else ())
+    pid = tools.fork(log, landing, f"land{opts.pr}", keep=lock.keep if lock else ())
     if lock:
         lock.pass_on(pid, log)
     detach.announce(pid, log, opts.pr)
@@ -369,7 +378,9 @@ def _land(
     record and annotation from that checkout's landing, so this one writes none of them. When
     that landing never starts (`fresh.CheckoutFailed`), this one ends `refused` and records it.
     A landing that hands its turn over (`turn.HandOver`) runs `child`, its own arguments,
-    from a fresh checkout the same way, and that landing inherits the turn.
+    from a fresh checkout the same way, and that landing inherits the turn. So does a landing
+    that finds its code older than master's before the merge (`fresh.LandFresh`), with no
+    turn to pass.
     """
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
@@ -402,15 +413,17 @@ def _land(
             print(result_line(ln.ledger, refused))
             refused.emit()
             line = refused.file_line()
-    except turn.HandOver as handed:
-        print(f"land: {handed}", file=sys.stderr)
+    except (fresh.LandFresh, turn.HandOver) as moved:
+        # A `LandFresh` holds no turn: its check runs before the landing asks for one.
+        fd = moved.fd if isinstance(moved, turn.HandOver) else None
+        print(f"land: {moved}", file=sys.stderr)
         try:
-            rc = tools.fresh_landing(opts.primary, child, handed.fd)
+            rc = tools.fresh_landing(opts.primary, child, fd)
             graded_here = False
         except fresh.CheckoutFailed as failed:
             refused = Outcome(
                 1,
-                f"PR #{opts.pr} — {handed}, but {failed}; nothing is merged; re-run the "
+                f"PR #{opts.pr} — {moved}, but {failed}; nothing is merged; re-run the "
                 "same land.sh command",
             )
             ln.ledger.verdict = refused.verdict or ""
@@ -419,7 +432,8 @@ def _land(
             refused.emit()
             line = refused.file_line()
         finally:
-            os.close(handed.fd)
+            if fd is not None:
+                os.close(fd)
     except Exception as exc:
         # Still one VERDICT line, as every exit-1 end prints, and the same verdict a
         # crash reaches through the handoff unit's STOPPED line. The traceback follows, and

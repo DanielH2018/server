@@ -1,14 +1,18 @@
 """`land.sh --fresh`: land from a detached checkout of origin/master made for this run.
 
-`classify.refuse_stale_code_before_merge` refuses a landing whose own code lags master, and
-names the flag. A checkout the caller makes by hand goes stale again as soon as master moves,
-and the `git -C <primary> worktree add` it took is a command a worktree-isolated session's
-guard refuses. `--fresh` makes that checkout inside the landing, from the primary so it shares
-the primary's refs, runs the `land.sh` in it with the same arguments minus `--fresh`, and
-removes it afterwards.
+A checkout the caller makes by hand goes stale again as soon as master moves, and the
+`git -C <primary> worktree add` it took is a command a worktree-isolated session's guard
+refuses. `--fresh` makes that checkout inside the landing, from the primary so it shares the
+primary's refs, runs the `land.sh` in it with the same arguments minus `--fresh`, and removes
+it afterwards.
 
-After the merge, `classify.refuse_stale_code` raises `GradeFresh` instead, and land.py runs the
-merged PR's grading from the same kind of checkout without asking.
+A landing whose own code lags master reaches the same checkout without the flag. Before the
+merge, `classify.refuse_stale_code_before_merge` raises `LandFresh`, and land.py re-runs the
+whole landing there. After the merge, `classify.refuse_stale_code` raises `GradeFresh`, and
+land.py runs the merged PR's grading there.
+
+The landing `land_fresh` runs reads `CHILD_ENV` and never re-runs itself that way, so a master
+that moves again ends that landing `refused` and no landing re-runs twice.
 
 A landing that holds the landing turn with landing code older than master's hands the turn to
 the same kind of checkout (`turn.HandOver`), so the turn's holder forms its batch with
@@ -35,6 +39,8 @@ BASE = "origin/master"
 LAND_SH = "scripts/deploy_tools/land.sh"
 # The landing turn's locked descriptor, which a child landing inherits (`turn._adopt`).
 TURN_FD_ENV = "LAND_TURN_FD"
+# Set for the landing `land_fresh` runs, which refuses where its parent re-ran.
+CHILD_ENV = "LAND_FRESH_CHILD"
 # Each git step is a fetch or a local worktree change; ten minutes bounds a hung remote.
 GIT_TIMEOUT_S = 600
 
@@ -62,6 +68,10 @@ class GradeFresh(Exception):
     def __init__(self, argv: list[str], why: str) -> None:
         super().__init__(why)
         self.argv = argv
+
+
+class LandFresh(Exception):
+    """An unmerged PR whose landing re-runs from a fresh checkout, because this one lags master."""
 
 
 class CheckoutFailed(Exception):
@@ -117,12 +127,10 @@ def land_fresh(
         print(
             f"land: landing from a fresh checkout of {BASE} at {path}", file=sys.stderr
         )
-        inherit = {}
+        inherit: dict = {"env": {**os.environ, CHILD_ENV: "1"}}
         if turn_fd is not None:
-            inherit = {
-                "pass_fds": (turn_fd,),
-                "env": {**os.environ, TURN_FD_ENV: str(turn_fd)},
-            }
+            inherit["pass_fds"] = (turn_fd,)
+            inherit["env"][TURN_FD_ENV] = str(turn_fd)
         try:
             return run([str(path / LAND_SH), *argv], check=False, **inherit).returncode
         except OSError as exc:

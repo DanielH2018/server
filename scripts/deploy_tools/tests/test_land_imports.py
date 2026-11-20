@@ -63,6 +63,8 @@ ALLOWED = {
         "own_checkout",
         # `Tools.fresh_landing`, the checkout `--fresh` lands from.
         "fresh",
+        # `Tools.fork`, the detached process `--detach` lands in.
+        "detach",
         "land_tags",
         "land_tested_base",
         # `Tools.gate`, the health gate the landing ends with.
