@@ -12,6 +12,7 @@ difference would silently corrupt the tests if we used a bare Jinja2 env. Pinned
 test_ha_round_semantics.py.
 """
 
+import json
 import math
 from functools import lru_cache
 from pathlib import Path
@@ -83,6 +84,8 @@ def _env() -> Environment:
     env.filters["int"] = _forgiving_int
     env.filters["round"] = _forgiving_round
     env.filters["bool"] = _forgiving_bool
+    env.filters["to_json"] = json.dumps
+    env.filters["from_json"] = json.loads
     return env
 
 
