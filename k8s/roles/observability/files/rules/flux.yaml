@@ -19,7 +19,7 @@ groups:
           severity: critical
           service: flux
         annotations:
-          summary: Prometheus cannot scrape the Flux controller {{ $labels.app }}.
+          summary: 'flux: Prometheus cannot scrape the controller {{ $labels.app }}.'
           description: >-
             {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
             or unreachable from Prometheus. Read its pod's events and log in the flux-system
@@ -46,7 +46,7 @@ groups:
           severity: critical
           service: flux
         annotations:
-          summary: A Flux controller has no pod, or Prometheus lost its metrics.
+          summary: 'flux: a controller has no pod, or Prometheus lost its metrics.'
           description: >-
             For 5 minutes {{ $labels.app }} has either had no scrape target, so its pod is
             gone or the flux scrape job is missing from prometheus.yml, or it has been scraped
@@ -94,9 +94,9 @@ groups:
           service: flux
         annotations:
           summary: >-
-            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
-            {{ $labels.name }} has not been Ready for 15 minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
-            root Kustomization for 15 minutes.{{ end }}
+            flux: {{ if $labels.exported_namespace }}the {{ $labels.customresource_kind }} {{
+            $labels.name }} has not been Ready for 15 minutes.{{ else }}kube-state-metrics has
+            exported no gotk_resource_info for the root Kustomization for 15 minutes.{{ end }}
           description: >-
             {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }} {{ $labels.name }}
             in {{ $labels.exported_namespace }} is not Ready after 15 minutes; read its conditions.
@@ -131,7 +131,8 @@ groups:
           service: flux
           escalate: "false"
         annotations:
-          summary: The Kustomization {{ $labels.name }} has been suspended for more than 24 hours.
+          summary: >-
+            flux: the Kustomization {{ $labels.name }} has been suspended for more than 24 hours.
           description: >-
             The Kustomization {{ $labels.name }} in {{ $labels.exported_namespace }} has been
             suspended for 24 hours, so Flux applies nothing it owns. If its role sets
@@ -163,7 +164,7 @@ groups:
           severity: warning
           service: flux
         annotations:
-          summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+          summary: 'flux: every kustomize-controller reconcile worker has been busy for 30 minutes.'
           description: >-
             All {{ $value | printf "%.0f" }} of {{ $labels.pod }}'s reconcile workers have been busy
             for 30 minutes with Kustomizations still queued, usually because unhealthy ones each
