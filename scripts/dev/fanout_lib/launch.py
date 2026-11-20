@@ -275,14 +275,24 @@ def snapshot_command(
     the checkout is left exactly as it was.
     """
     root = snapshot_root(worktree_path(batch, target))
-    tar = f"{root}.tar"
-    base = SERVER_TARGET.base
     return _step(
         f"git -C {server} fetch --quiet origin {SERVER_TARGET.base_branch} && "
-        f"mkdir -p {root} && "
-        f"git -C {server} archive -o {tar} {base} {' '.join(paths)} && "
-        f"tar -xf {tar} -C {root} && rm {tar}",
+        f"{archive_command(server, root, paths)}",
         _SNAPSHOT_STEP,
+    )
+
+
+def archive_command(server: str, root: str, paths: tuple[str, ...]) -> str:
+    """Shell that extracts `origin/master`'s `paths` from `server`'s object store into `root`.
+
+    It reads the ref as `server` holds it, so the caller fetches first. `root` may be a
+    quoted shell expansion; the tar file is written beside it.
+    """
+    tar = f"{root}.tar"
+    return (
+        f"mkdir -p {root} && "
+        f"git -C {server} archive -o {tar} {SERVER_TARGET.base} {' '.join(paths)} && "
+        f"tar -xf {tar} -C {root} && rm {tar}"
     )
 
 

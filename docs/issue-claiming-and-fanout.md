@@ -545,6 +545,15 @@ reading a host whose report file went with the worktree. Once every batch is rem
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
 
+`clean` runs each batch's leg on the batch's host in one ssh call
+(`scripts/dev/fanout_lib/clean.py:remote_clean_command`). The leg fetches master, archives
+`origin/master`'s `scripts/` into a temporary directory, runs `fanout.py place clean-one` from
+that snapshot and removes the directory. So the code that judges a batch is master's on both
+hosts, whatever commit the host's primary checkout stands at. Only daniel-box has
+`homelab-checkout-sync`, and daniel-server's primary checkout lags master by hundreds of
+commits. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
+no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
+
 ### A batch whose landing conflicts with master
 
 A review batch's landing ends `VERDICT: merge-conflict` when master moved under its PR. That
