@@ -21,7 +21,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: Prometheus has lost the homelab Loki's scrape job.
+              summary: 'loki-homelab: Prometheus has lost the scrape job.'
               description: >-
                 No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
                 prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
@@ -69,7 +69,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: The homelab Loki ruler keeps failing to evaluate its log rules.
+              summary: 'loki-homelab: the ruler keeps failing to evaluate its log rules.'
               description: >-
                 The homelab-logs group has failed an evaluation in each of the last 15 minutes'
                 10-minute windows, so its log rules are not being checked. Each evaluation is a
@@ -129,7 +129,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
+              summary: 'loki-homelab: the ruler has not evaluated its log rules in 10 minutes.'
               description: >-
                 The homelab Loki answers its scrape, but its homelab-logs group has not evaluated
                 in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
@@ -157,7 +157,7 @@ tests:
               severity: warning
               service: loki-homelab
             exp_annotations:
-              summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
+              summary: 'loki-homelab: the ruler has not evaluated its log rules in 10 minutes.'
               description: >-
                 The homelab Loki answers its scrape, but its homelab-logs group has not evaluated
                 in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
@@ -196,7 +196,7 @@ tests:
               severity: critical
               service: loki-homelab
             exp_annotations:
-              summary: The homelab Loki ruler cannot deliver its alerts to Alertmanager.
+              summary: 'loki-homelab: the ruler cannot deliver its alerts to Alertmanager.'
               description: >-
                 3 sends from the homelab Loki ruler to
                 http://alertmanager.observability.svc:9093/api/v2/alerts failed in the last 15
