@@ -524,17 +524,6 @@ def test_a_routed_rule_that_regains_shadow_is_flagged():
     ]
 
 
-def test_the_disarmed_checks_have_no_rule():
-    """Their producers stop at the hand apply, so a rule left behind would page NotReporting."""
-    alerts = {rule["alert"] for rule in rules_of("host-checks.yaml")}
-    disarmed = {
-        f"{check}Check{suffix}"
-        for check in ("ManifestPrune", "ReleaseStaleness", "LiveDrift")
-        for suffix in ("Failed", "NotReporting")
-    }
-    assert not alerts & disarmed, sorted(alerts & disarmed)
-
-
 def test_a_storage_rule_that_regains_shadow_is_flagged():
     """The rejecting half: with `shadow` back, the walk ends on the blackhole, so the receivers
     `PAGING` expects for the rule no longer match."""

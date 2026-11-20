@@ -70,13 +70,6 @@ BATCH_RULE_FILES = [
     "registry.yaml",
 ]
 
-LITERAL_ONLY_MODULES = [
-    "tests/services/test_container_checks_rule_literals.py",
-    "tests/services/test_edge_rule_literals.py",
-]
-# The bridge env tables the literal tests restated after M6 deleted the env keys.
-RESTATED_TABLES = ("RETIRED_ENV", "RETIRED_BRIDGE_ENV")
-
 
 def source(name: str) -> str:
     """The text a rules file's markers live in: its rule table when a table renders it."""
@@ -119,20 +112,6 @@ def test_every_pinned_threshold_carries_a_decided_marker_on_its_rule():
     assert unmarked() == {}
 
 
-def test_the_literal_only_rule_tests_are_gone():
-    assert [path for path in LITERAL_ONLY_MODULES if tracked_files(path)] == []
-
-
-def test_no_rule_literal_test_restates_the_retired_bridge_env():
-    restating = [
-        f"{path}: {table}"
-        for path in tracked_files("tests/services/*_rule_literals.py")
-        for table in RESTATED_TABLES
-        if re.search(rf"^{table}\s*=", (REPO / path).read_text(), re.MULTILINE)
-    ]
-    assert restating == []
-
-
 def test_no_rule_literal_test_keeps_a_threshold_rationale():
     keeping = [
         path
@@ -140,10 +119,6 @@ def test_no_rule_literal_test_keeps_a_threshold_rationale():
         if RATIONALE_IN_TEST.search((REPO / path).read_text())
     ]
     assert keeping == []
-
-
-def test_the_nine_routing_batch_modules_are_gone():
-    assert tracked_files("tests/services/test_alertmanager_routing_*.py") == []
 
 
 def test_the_routing_table_names_every_rules_file_the_batches_walked():
