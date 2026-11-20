@@ -11,11 +11,9 @@ out with `BARE_GIT`, which reads no global, system or worktree configuration, an
 
 import re
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
 
-# One process boundary for git: argv and stdin in, the finished process out.
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
+from dev.fanout_lib.review.processes import Runner
 
 # Settings in the worktree's own git config that would run a command or change what a call
 # reads, each pinned to git's Linux default for every call below. A hook can fire on any

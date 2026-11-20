@@ -22,11 +22,14 @@ import json
 import os
 import signal
 import subprocess
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
 PR_SET_CHILD_SUBREAPER = 36
+
+# One process boundary for claude, git and gh: argv and stdin in, the finished process out.
+Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 def otel_attributes(batch: str, phase: str) -> str:

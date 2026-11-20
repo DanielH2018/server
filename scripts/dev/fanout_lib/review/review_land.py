@@ -37,6 +37,7 @@ from dev.fanout_lib.land_result import (
     last_verdict,
     park_line,
 )
+from dev.fanout_lib.review.processes import Runner
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 # The verdicts after which an apply is owed or the deploy needs a look. The landing is
@@ -56,8 +57,6 @@ LAND_MARGIN_S = 90 * 60
 # A wait started with less than this left on the unit's run time could be cut off mid-wait.
 WAIT_MARGIN_S = 600
 TAIL_LINES = 40
-
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 @dataclass
