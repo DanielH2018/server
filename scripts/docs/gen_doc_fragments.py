@@ -26,10 +26,12 @@ run a commit. When a fragment's content last changed is its git history.
 STATIC PARSING ONLY, like every generator here. Role defaults and the inventory are read
 through `lib.estate`, which parses the YAML and applies Ansible's precedence, and Python
 constants with `ast`, never by importing the rotation tool --
-it bootstraps sys.path and read the environment on import. The k8s Renovate stance is
-the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `lib.k8s_roles` derivation
-it wraps do neither -- they only walk role directories and `yaml.safe_load` their
-defaults -- so this script imports them rather than re-deriving the same partition.
+it bootstraps sys.path and read the environment on import. There are two exceptions. The
+k8s Renovate stance comes from `scripts/dev/k8s_autodeploy_counts.py` and the `lib.k8s_roles`
+derivation it wraps, which only walk role directories and `yaml.safe_load` their defaults.
+The rotation registry comes from `rotation_tools.load_registry` and `secret_registry`, the
+leaves the rotation tool imports, which read nothing on import. Each is imported rather than
+re-derived, so the fragment and the tool cannot disagree.
 
 WHERE THE PIECES LIVE. `fragment_readers.py` parses the tree, `fragment_renderers.py` turns
 what a reader returned into markdown, and this file holds the seam: the source paths, the
@@ -53,6 +55,7 @@ Usage::
 """
 
 import re
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path as _Path
 
@@ -62,8 +65,6 @@ from docs.fragment_readers import (
     hosts_listing_component,
     module_constant,
     parse_jails,
-    registry_counts,
-    registry_record_keys,
 )
 from docs.fragment_renderers import (
     render_autodeploy_coverage,
@@ -102,6 +103,8 @@ from lib.repo_paths import (
     REPO,
 )
 from lib.service_tiers import resolved_tier_lists
+from secrets_mgmt.rotation_tools import load_registry
+from secrets_mgmt.secrets_lib.secret_registry import record_names
 
 SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
@@ -271,12 +274,12 @@ def _lan() -> tuple[str, list[str]]:
 def _secrets() -> tuple[str, list[str]]:
     return render_secret_tiers(
         module_constant(SECRET_ROTATION, "TIER_DAYS"),
-        registry_counts(SECRET_REGISTRY),
+        Counter(e.tier for e in load_registry(SECRET_REGISTRY).entries.values()),
     ), ["scripts/secrets_mgmt/secret_rotation.py", "secrets/secret_rotation.yml"]
 
 
 def _record_keys() -> tuple[str, list[str]]:
-    return render_record_keys(registry_record_keys(SECRET_REGISTRY)), [
+    return render_record_keys(record_names(load_registry(SECRET_REGISTRY))), [
         "secrets/secret_rotation.yml"
     ]
 

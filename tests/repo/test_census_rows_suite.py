@@ -358,6 +358,10 @@ ROWS = (
             "tests/services/test_scrape_target_flap_rule.py": (
                 "a join of the flap rules against the promtool cases that exercise them"
             ),
+            "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
+                "a join of each pinned threshold against its rule's span in two "
+                "directories, and of the rules files against the routing table"
+            ),
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
             ),

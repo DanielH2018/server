@@ -47,7 +47,7 @@ def test_the_unit_runs_the_joiner_over_a_window_with_the_server_pull():
 
 def test_a_failed_run_pages_and_a_clean_one_writes_the_heartbeat():
     unit = _render()
-    assert "OnFailure=claude-pipeline-timeline-alert.service" in unit
+    assert "OnFailure=homelab-alert@%n.service" in unit
     assert "write_check_textfile claude-pipeline-timeline 1" in unit
 
 

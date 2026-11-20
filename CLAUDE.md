@@ -38,7 +38,7 @@ A task a skill covers routes through the skill listing; this table holds the res
 | A config edit won't restart the pod | `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation; content that reaches the cluster another way needs a `checksum/<thing>` annotation from `k8s/templates/checksum-annotation.yml.j2`. |
 | Adding / changing a cron that changes state | That role's `CLAUDE.md` *Autonomous-role contract*; a host component's timer owes one too. |
 | Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md` |
-| GitHub refuses a call for its rate, or asking which session spends the quota | `gh-quota status` prints each session's calls beside GitHub's own count, which `hosts/components/gh-quota/files/gh_quota.py:record` keeps. `docs/github-quota.md` has the design. |
+| GitHub refuses a call for its rate, or asking which session spends the quota | `gh-quota status` prints each session's calls beside GitHub's own count, which `hosts/components/gh-quota/files/gh_quota.py:record` keeps, and each identity's writes in the last minute and hour against the secondary limits. `docs/github-quota.md` has the design. |
 
 ## After a PR Merges — Pull, Deploy, Verify
 

@@ -49,7 +49,13 @@ from pathlib import Path
 from typing import Any
 
 from builder_ci_grade import CiSettings, read_check_pages, token_refused
-from ci_verdict import CIVerdict, ci_verdict, ci_walk_candidates, parse_check_runs
+from ci_verdict import (
+    CIVerdict,
+    ci_verdict,
+    ci_walk_candidates,
+    parse_check_runs,
+    parse_check_suites,
+)
 from host_lib import (
     ERR,
     github_get,
@@ -259,7 +265,11 @@ class CheckoutSync:
         except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
             return CIVerdict.PENDING
-        return ci_verdict(runs, contexts, lambda: read("check-suites", "check_suites"))
+        return ci_verdict(
+            runs,
+            contexts,
+            lambda: parse_check_suites(read("check-suites", "check_suites")),
+        )
 
     def write_prom(self, reason: str | None, dirty: bool | None) -> None:
         now = self.now()

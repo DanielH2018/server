@@ -102,7 +102,10 @@ bedroom_notify:
     # entire purpose is to reach you WHILE away — held-then-digested would defeat them; unlike
     # pierce they don't also sound through DND at home). `away` fails open (unknown/unavailable ->
     # deliver) so a tracker glitch over-notifies rather than swallowing.
-    - if: "{{ away and not (pierce | default(false)) and not (critical_away | default(false)) }}"
+    # TODO: https://github.com/DanielH2018/server/issues/9598 - the hold is off, so every alert
+    # pushes while away. A parked alert is never delivered: the arrival flush reads
+    # states.persistent_notification, which Home Assistant does not populate.
+    - if: "{{ false }}"
       then:
         - if: "{{ recovery | default(false) }}"
           then:

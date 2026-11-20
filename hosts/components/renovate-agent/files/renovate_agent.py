@@ -50,7 +50,7 @@ from host_lib import (
     read_untrusted,
     start_unit,
 )
-from renovate_identity import is_renovate
+from renovate_identity import RenovatePR
 from renovate_session import OUT_DIR, OUTPUT_FILE
 from run_requests import REQUESTS_DIR, Outcome, carry_out
 
@@ -104,22 +104,25 @@ def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
             str(OPEN_PR_LIMIT),
             "--json",
             # `updatedAt` is the one field a comment-only triage moves.
-            "number,title,url,updatedAt,author",
+            "number,title,url,updatedAt,author,headRefName",
         ]
     )
 
 
 def _renovate_prs(listing: str) -> list[OpenPR]:
-    return [
-        OpenPR(
-            number=int(p["number"]),
-            title=p.get("title", ""),
-            url=p.get("url", ""),
-            updated_at=p.get("updatedAt") or "",
-        )
-        for p in json.loads(listing)
-        if is_renovate(p.get("author"))
-    ]
+    prs = []
+    for p in json.loads(listing):
+        renovate = RenovatePR.from_gh(p)
+        if renovate.is_renovate:
+            prs.append(
+                OpenPR(
+                    number=renovate.number,
+                    title=p.get("title", ""),
+                    url=p.get("url", ""),
+                    updated_at=p.get("updatedAt") or "",
+                )
+            )
+    return prs
 
 
 def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:

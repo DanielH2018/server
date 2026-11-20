@@ -49,6 +49,7 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
 from deploy_tools.land_lib.pin_gate import hold_problem
 from deploy_tools.land_lib.pin_reads import PinReads
 from deploy_tools.land_lib.pin_reads import Unreadable as HoldUnreadable
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
 
 # The Backup CR reader the backup-health cron ships; it imports host_lib.
@@ -111,17 +112,15 @@ def nodes_not_ready(doc, expected=CLUSTER_NODES[CLUSTER]) -> list[str]:
     """`name (reason)` for every expected node that is missing or whose Ready condition is not True."""
     if doc is None:
         return ["<could not list nodes>"]
-    seen: dict[str, str] = {}
+    seen: dict[str, ConditionStatus] = {}
     for item in _items(doc):
-        conditions = (item.get("status") or {}).get("conditions") or []
-        ready = next((c for c in conditions if c.get("type") == "Ready"), None)
-        seen[_name(item)] = str((ready or {}).get("status", "Unknown"))
+        seen[_name(item)] = parse_conditions(item).get("Ready", NO_CONDITION).status
     found = []
     for name in sorted(expected):
         status = seen.get(name)
         if status is None:
             found.append(f"{name} (not in the cluster)")
-        elif status != "True":
+        elif status is not ConditionStatus.TRUE:
             found.append(f"{name} (Ready={status})")
     return found
 

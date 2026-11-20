@@ -28,6 +28,12 @@ import yaml
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
+from lib.k8s_conditions import (
+    NO_CONDITION,
+    Condition,
+    ConditionStatus,
+    parse_conditions,
+)
 
 NAMESPACE = "drill"
 PLUMBING = "drill-plumbing"
@@ -227,11 +233,8 @@ def _find(items: list[dict], kind: str, name: str, namespace: str) -> dict | Non
     return None
 
 
-def _ready(obj: dict | None) -> str | None:
-    for cond in (obj or {}).get("status", {}).get("conditions", []):
-        if cond.get("type") == "Ready":
-            return cond.get("status")
-    return None
+def _ready(obj: dict | None) -> Condition:
+    return parse_conditions(obj or {}).get("Ready", NO_CONDITION)
 
 
 def before_root_problems(items: list[dict]) -> list[str]:
@@ -264,7 +267,8 @@ def before_root_problems(items: list[dict]) -> list[str]:
 def after_root_problems(items: list[dict], standin_uid: str) -> list[str]:
     """Judge the cluster after the root has applied everything (step 9)."""
     problems = []
-    if _ready(_find(items, "Kustomization", STATEFUL, "flux-system")) != "True":
+    stateful = _find(items, "Kustomization", STATEFUL, "flux-system")
+    if _ready(stateful).status is not ConditionStatus.TRUE:
         problems.append(f"Kustomization {STATEFUL} is not Ready")
     if not _find(items, "ConfigMap", MARKER_CONFIGMAP, NAMESPACE):
         problems.append(f"ConfigMap {MARKER_CONFIGMAP} does not exist")
@@ -277,7 +281,7 @@ def after_root_problems(items: list[dict], standin_uid: str) -> list[str]:
     if meta.get("labels", {}).get(OWNER_LABEL) != STATEFUL:
         problems.append(f"claim {CLAIM} is not owned by Kustomization {STATEFUL}")
     plumbing = _find(items, "Kustomization", PLUMBING, "flux-system")
-    if _ready(plumbing) != "True":
+    if _ready(plumbing).status is not ConditionStatus.TRUE:
         problems.append(f"Kustomization {PLUMBING} is not Ready")
     if (plumbing or {}).get("metadata", {}).get("labels", {}).get(
         OWNER_LABEL
@@ -293,13 +297,11 @@ def after_root_problems(items: list[dict], standin_uid: str) -> list[str]:
 
 def no_decrypt_problems(items: list[dict]) -> list[str]:
     """Judge the leg that skips `sops-age`: `cluster-vars` must fail on decryption."""
-    ks = _find(items, "Kustomization", "cluster-vars", "flux-system")
-    if _ready(ks) == "True":
+    ready = _ready(_find(items, "Kustomization", "cluster-vars", "flux-system"))
+    if ready.status is ConditionStatus.TRUE:
         return ["cluster-vars is Ready without the sops-age Secret"]
-    conds = (ks or {}).get("status", {}).get("conditions", [])
-    message = " ".join(c.get("message", "") for c in conds if c.get("type") == "Ready")
-    if "decrypt" not in message.lower() and "sops-age" not in message:
-        return [f"cluster-vars failed, but not on decryption: {message[:200]!r}"]
+    if "decrypt" not in ready.message.lower() and "sops-age" not in ready.message:
+        return [f"cluster-vars failed, but not on decryption: {ready.message[:200]!r}"]
     return []
 
 

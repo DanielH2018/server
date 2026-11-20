@@ -28,6 +28,7 @@ SHARED_FILES = {
     "etcd_restore_drill.sh": "scripts/backup/etcd_restore_drill.sh",
     # What the backup-health reader imports. The reapers, `probe.py` and the runbook gates import
     # the same modules from the checkout, so they stay single in scripts/lib/.
+    "k8s_conditions.py": "scripts/lib/k8s_conditions.py",
     "k8s_objects.py": "scripts/lib/k8s_objects.py",
     "longhorn_backup_health_logic.py": f"{_LONGHORN_LIB}/longhorn_backup_health_logic.py",
     "longhorn_backups.py": f"{_LONGHORN_LIB}/longhorn_backups.py",

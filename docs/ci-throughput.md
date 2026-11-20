@@ -3,8 +3,9 @@
 GitHub runs at most 20 hosted jobs at once for this account, and one full run of `ci.yml` is
 more jobs than that. This page records what the cap costs a landing, the rule for when a job
 may skip without taking a runner, and the plan to get under the cap in two phases, A and B.
-Phase C, runner pods for the heavy jobs, is set aside in
-[#8982](https://github.com/DanielH2018/server/issues/8982).
+Phase C, runner pods for the heavy jobs, is not planned: the operator ruled on 2026-11-20
+that CI gets no self-hosted runner and no paid GitHub plan
+([#8982](https://github.com/DanielH2018/server/issues/8982)).
 
 ## What the cap costs
 
@@ -709,13 +710,75 @@ cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:
 the run it merged on started. The landing now updates the branch first, waits up to
 60 s for GitHub to show the new head, and then marks the draft ready.
 
-## Phase C, set aside: runner pods for `hooks` and `pytest`
+## Phase C, not planned: runner pods for `hooks` and `pytest`
 
-**The operator took Phase C out of the plan on 2026-11-18**, and
-[#8982](https://github.com/DanielH2018/server/issues/8982) tracks it for later. The plan ends
+**The operator ruled on 2026-11-20 that CI gets no self-hosted runner**, and closed
+[#8982](https://github.com/DanielH2018/server/issues/8982) as not planned. The same day the
+operator ruled out a paid GitHub plan, whose Pro tier allows 40 concurrent hosted jobs. The cap
+is therefore relieved only by taking fewer slots. *What 2026-11-20 measured* below holds the
+evidence and what would reopen the question.
+[ADR-0032](adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) stands: it sets the conditions
+a runner would exist under, and no runner exists.
+
+**The operator took Phase C out of the plan on 2026-11-18.** The plan ends
 with Phase B. The cap still bound for 18.4 minutes in the window after option B and the turn
 fixes, in bursts (*After option B and the turn fixes, measured*). This section keeps C2 and C3
-as they were planned, for whoever picks the issue up.
+as they were planned, as history.
+
+### What 2026-11-20 measured
+
+The re-measurement of 2026-11-19 on #8982 said that a busy day of merges after `763092f`
+would rule on Phase C. The window is 04:00 UTC on 2026-11-19 to 20:00 on 2026-11-20, which
+held 217 pushes to master. The counts come from GitHub's run and job listings, by the method
+of the sections above. The job listings of every workflow were read only for the 9.5 busiest
+hours, 17:00 UTC on 2026-11-19 to 02:30 on 2026-11-20, which held 104 merges. Reading all 40
+hours would have spent most of an hour of the API quota that live landings share.
+
+- **The 20-job cap: 99.0 minutes at it in the 9.5 hours**, which is 17% of the window and
+  0.95 minutes per merge, against 0.66 when Phase C was set aside. The window is busier than
+  that one, at 11 merges an hour against 7. No regression is behind the figure: 100 of the
+  104 master runs skipped as tested, and 210 of 217 over the 40 hours.
+- **The waits.** Over the 40 hours a CI job waited 2 s for a runner at the median, 83 s at
+  p90 and 387 s at p99, and 88 of 5,784 jobs waited over 300 s. In the 9.5 hours waiting was
+  31.1% of the CI jobs' wall time.
+- **What held the slots at the cap.** Pull-request runs held 50.7%, and their `hooks` and
+  `pytest` jobs 31.5%. Landing batches held 15.7%, and their `hooks` and `pytest` jobs 7.5%.
+  Renovate's pull requests held 8.5%. Four workflows beside `ci.yml` held 17.7%: the
+  Bootstrap drill 8.3%, the Flux deletion drill 5.0%, `render-diff` 2.9% and `image-smoke`
+  1.5% ([#9650](https://github.com/DanielH2018/server/issues/9650)). `promote` held 4.8%
+  and master pushes under 1%.
+- **Runs per merge: 1.89.** 410 runs ran more than two jobs for the 217 merges: 328
+  pull-request runs, 49 batch runs, 26 Renovate runs and 7 master runs. The estimate for
+  batches of four was 0.3 to 0.4
+  ([#9651](https://github.com/DanielH2018/server/issues/9651)). A run costs less than it did:
+  the median pull-request run used 1,039 slot-seconds, against 1,414 for a run with no host
+  change on 2026-11-14.
+- **The heavy jobs' share fell.** `hooks` and the `pytest` legs were 57.9% of CI's
+  slot-seconds, against 1,243 of one full run's 1,424 on 2026-11-13, because a pull request
+  runs a selection.
+
+Three facts decided against runner pods:
+
+- **Pods reach little of what holds the cap.** The launcher starts pods only for a run it
+  dispatched, so pods serve batch runs and master pushes. The `hooks` and `pytest` jobs of
+  those runs held 8.3% of the slots at the cap and were 11.9% of CI's slot-seconds.
+- **A pod is slower than a hosted leg.** A hosted `hooks` or `pytest` job ran for 145 s at
+  the median, each leg on a machine of its own. One pod on daniel-box ran the whole suite in
+  209 s on 8 workers, before the pod starts and the runner registers. A pod therefore wins
+  only when the hosted wait is over about 100 s. For batch and master runs the waits past
+  100 s summed to 7.3 minutes in the 9.5 hours, which is 4.2 s a merge.
+- **The hosts are loaded when the cap binds, and short of memory.** The cap binds during
+  fan-out bursts. From 18:00 to 20:00 UTC on 2026-11-19 daniel-box ran at 40% CPU with 8.2 GiB
+  available at its lowest. One run's heavy jobs need about 5 GiB under `kubepods`, outside the
+  fleet's bound, and both hosts fell below the 8 GiB floor in the same fortnight
+  ([#9199](https://github.com/DanielH2018/server/issues/9199)).
+
+The question reopens on one of three changes. The heavy jobs of launcher-dispatched runs come
+to hold more than about a third of the slots at the cap. The operator reopens the runner
+controller's credential or paid capacity. The repository goes private, which is the question
+of [ADR-0018](adr/0018-the-repository-stays-public-and-ci-stays-hosted.md).
+
+### Phase C as it was planned
 
 **D8 stayed closed, ruled by the operator on 2026-11-15**, after the measurement under load.
 The pool spent 24.1 minutes at the cap in that window, in 245 spans of at most 0.7 minutes,

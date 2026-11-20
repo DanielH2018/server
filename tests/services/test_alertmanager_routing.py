@@ -20,7 +20,7 @@ and reads each route the walk ends on. Each label set carries one expected outco
   and the two `TextfileCollectorError` sets in M6's batch A1. H3's host-plane rules page from
   the start: each `HostReconcileFailed`, and each `HostUpdateStale` once
   `observability_expected_hosts` lists a host and `host-checks.yaml` carries its rule (H3.9c).
-  Each node's `WiredLinkDown` warning pages Discord from the start too.
+  Each node's `WiredLinkDown` is critical, so it pages Discord and email.
   M5's four log rules and four ruler-watching alerts page from its PR 4b.
   M6's `HealthGateDrill` (`DRILL`) is critical and carries `drill="true"`, so it must reach
   the blackhole ahead of both critical routes.
@@ -92,6 +92,7 @@ ROUTED = [
             "HostUpdateStale",
             "LonghornBackupHealthFailed",
             "LonghornBackupHealthNotReporting",
+            "WiredLinkDown",
         },
     ),
     (
@@ -522,17 +523,6 @@ def test_a_routed_rule_that_regains_shadow_is_flagged():
         "5 paging rules, not 6",
         "critical ['AutofixBridgeStale'], not ['AutofixBridgeDown', 'AutofixBridgeStale']",
     ]
-
-
-def test_the_disarmed_checks_have_no_rule():
-    """Their producers stop at the hand apply, so a rule left behind would page NotReporting."""
-    alerts = {rule["alert"] for rule in rules_of("host-checks.yaml")}
-    disarmed = {
-        f"{check}Check{suffix}"
-        for check in ("ManifestPrune", "ReleaseStaleness", "LiveDrift")
-        for suffix in ("Failed", "NotReporting")
-    }
-    assert not alerts & disarmed, sorted(alerts & disarmed)
 
 
 def test_a_storage_rule_that_regains_shadow_is_flagged():

@@ -13,40 +13,43 @@ reads the head green and the wait has sat on that head for `AFTER_S`, so the ord
 makes no extra read. A read that fails names nothing, so it never ends a wait on its own.
 """
 
-from lib.json_types import as_list, as_object_list
+from lib import host_modules  # noqa: F401
+from lib.json_types import as_list
+
+from ci_verdict import CheckRun, CheckSuite, parse_check_runs, parse_check_suites
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import Landing
 
 # How long a green head waits unmerged before its checks are read, and between reads after.
 AFTER_S = 600
 
-_PENDING_RUNS = (
-    '[.check_runs[] | select(.status != "completed") | {name, suite: .check_suite.id}]'
-)
-_COMPLETED_SUITES = '[.check_suites[] | select(.status == "completed") | .id]'
-
 
 def find(ln: Landing, head: str) -> list[str]:
     """The names of `head`'s check runs still pending under a completed suite; [] on a failed read."""
 
-    def pending() -> list:
-        url = f"repos/{{owner}}/{{repo}}/commits/{head}/check-runs?per_page=100"
-        got = ln.tools.gh_json("api", url, "--jq", _PENDING_RUNS)
-        return as_object_list(got, "gh api check-runs")
+    def listing(name: str, key: str) -> list:
+        url = f"repos/{{owner}}/{{repo}}/commits/{head}/{name}?per_page=100"
+        return as_list(
+            ln.tools.gh_json("api", url, "--jq", f".{key}"), f"gh api {name}"
+        )
 
-    def completed() -> list:
-        url = f"repos/{{owner}}/{{repo}}/commits/{head}/check-suites?per_page=100"
-        got = ln.tools.gh_json("api", url, "--jq", _COMPLETED_SUITES)
-        return as_list(got, "gh api check-suites")
+    def pending() -> list[CheckRun]:
+        runs = parse_check_runs(listing("check-runs", "check_runs"))
+        return [r for r in runs if r.status != "completed"]
+
+    def completed() -> list[CheckSuite]:
+        suites = parse_check_suites(listing("check-suites", "check_suites"))
+        return [s for s in suites if s.completed]
 
     try:
         runs = gh_read.read(pending, ln.tools.sleep, "gh api check-runs")
         if not runs:
             return []
-        done = set(gh_read.read(completed, ln.tools.sleep, "gh api check-suites"))
+        suites = gh_read.read(completed, ln.tools.sleep, "gh api check-suites")
     except gh_read.GhReadFailed, ValueError:
         return []
-    return sorted({str(r.get("name")) for r in runs if r.get("suite") in done})
+    done = {s.id for s in suites if s.id is not None}
+    return sorted({r.name for r in runs if r.suite_id in done})
 
 
 def dead_end(pr: str, head: str, names: list[str]) -> str:

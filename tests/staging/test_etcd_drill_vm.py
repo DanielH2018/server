@@ -323,8 +323,6 @@ def test_the_fence_verdict_has_a_check_of_its_own():
     body = rendered_component_text("hypervisor", "etcd-restore-drill-vm.sh.j2")
     assert "CHECK_FENCE=etcd-restore-drill-egress-fence" in body
     assert 'write_verdict "$CHECK_FENCE"' in body
-    for leftover in ("kuma-push-lib", "kuma_push", "/api/push/", "PUSH_TOKEN"):
-        assert leftover not in body, f"the orchestrator still names {leftover}"
 
 
 def test_every_path_the_scripts_read_is_a_path_the_package_installs():

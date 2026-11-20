@@ -11,9 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from ci_verdict import CIVerdict
 from host_lib import DISCORD_MAX, clamp_discord
 from pending_logic import PENDING_HEADER
-from renovate_identity import is_renovate
+from renovate_identity import RenovatePR, is_renovate
 
 # Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
 # daily schedule + at-any-time security/lockfile runs). If the dashboard goes stale or
@@ -22,16 +23,6 @@ from renovate_identity import is_renovate
 # "backlog cleared". 8 days = comfortably past the run cadence without false-firing.
 DASHBOARD_STALE_DAYS = 8
 DASHBOARD_TITLE = "Dependency Dashboard"
-
-# check-run conclusions that mean "this will not merge" (besides success/neutral/skipped).
-_FAIL_CONCLUSIONS = {
-    "failure",
-    "cancelled",
-    "timed_out",
-    "action_required",
-    "stale",
-    "startup_failure",
-}
 
 
 @dataclass(frozen=True)
@@ -45,7 +36,7 @@ class PR:
     title: str
     url: str
     automerge: bool  # Renovate body says Automerge Enabled
-    ci: str  # "success" | "pending" | "failure"
+    ci: CIVerdict
     conflicting: bool
     created_at: str = (
         ""  # GitHub's PR `created_at` (ISO-8601), already in the pulls-list payload
@@ -241,31 +232,6 @@ def read_check_pages(fetch_page: Callable[[str], object], key: str) -> list[dict
     raise ValueError(f"{key}: more than {CHECK_PAGES_MAX} pages")
 
 
-def ci_rollup(check_runs: list[dict], statuses: list[dict]) -> str:
-    """Fold the two disjoint GitHub CI sources into one verdict: "failure", "pending", or "success".
-
-    Checks API (check_runs) and the legacy Commit Status API (statuses). Failure precedes
-    pending precedes success: a failure in EITHER source counts.
-    """
-    failure = pending = False
-    for c in check_runs:
-        if c.get("status") != "completed":
-            pending = True
-        elif c.get("conclusion") in _FAIL_CONCLUSIONS:
-            failure = True
-    for s in statuses:
-        st = s.get("state")
-        if st in ("failure", "error"):
-            failure = True
-        elif st == "pending":
-            pending = True
-    if failure:
-        return "failure"
-    if pending:
-        return "pending"
-    return "success"
-
-
 def is_dead_path(pr: PR) -> bool:
     """True when a conflicting PR edits ONLY files that no longer exist on the base branch.
 
@@ -295,7 +261,7 @@ def classify_pr(pr: PR) -> str:
         return "dead-path"
     if not pr.automerge:
         return "manual"
-    if pr.ci == "failure" or pr.conflicting:
+    if pr.ci is CIVerdict.FAIL or pr.conflicting:
         return "stuck"
     return "on-track"
 
@@ -382,9 +348,9 @@ def _pr_note(pr: PR) -> str:
         )
     if pr.conflicting:
         return "CONFLICTING"
-    if pr.ci == "failure":
+    if pr.ci is CIVerdict.FAIL:
         return "CI FAILING"
-    if pr.ci == "pending":
+    if pr.ci is CIVerdict.PENDING:
         return "CI pending"
     return "green"
 
@@ -528,22 +494,24 @@ def find_autoclosed(
     listed = dashboard_branches(body)
     out = []
     for pr in closed_pulls:
+        head = RenovatePR.from_rest(pr)
         title = (pr.get("title") or "").strip()
-        branch = (pr.get("head") or {}).get("ref", "")
         closed_at = pr.get("closed_at") or ""
         if (
-            not is_renovate(pr.get("user"))
+            not head.is_renovate
             or pr.get("merged_at")
             or not title.endswith(AUTOCLOSED_SUFFIX)
             or not closed_at
-            or branch not in listed
-            or branch in open_branches
+            or head.head_ref not in listed
+            or head.head_ref in open_branches
         ):
             continue
         closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
         if (now - closed).total_seconds() > lookback_days * 86400:
             continue
-        out.append(Autoclosed(pr["number"], title, pr.get("html_url", ""), branch))
+        out.append(
+            Autoclosed(head.number, title, pr.get("html_url", ""), head.head_ref)
+        )
     return sorted(out, key=lambda a: a.number)
 
 

@@ -33,7 +33,6 @@ from notify_logic import (
     PR,
     actionable,
     autoclosed_fingerprint,
-    ci_rollup,
     dashboard_body,
     dashboard_headers_unrecognized,
     dashboard_stale,
@@ -52,6 +51,8 @@ from notify_logic import (
     DASHBOARD_UNPARSEABLE_MSG,
 )
 import renovate_identity
+from ci_verdict import checks_verdict, parse_check_runs, parse_rollup
+from renovate_identity import RenovatePR
 from pending_logic import (
     churn_fingerprint,
     churning_pending,
@@ -99,12 +100,6 @@ def get(path: str):
     return github_get(path, _token, user_agent=USER_AGENT)
 
 
-def is_renovate(pr: dict) -> bool:
-    return renovate_identity.is_renovate(pr.get("user")) or (pr.get("head") or {}).get(
-        "ref", ""
-    ).startswith("renovate/")
-
-
 def build_pr(repo: str, pr: dict) -> PR:
     """Build a PR record for one open Renovate pull, fetching its detail, CI, and dead paths.
 
@@ -122,21 +117,26 @@ def build_pr(repo: str, pr: dict) -> PR:
         detail.get("mergeable_state") == "dirty" or detail.get("mergeable") is False
     )
     sha = pr["head"]["sha"]
-    runs = read_check_pages(
-        lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
-        "check_runs",
+    # A PR's CI is two disjoint sources: the Checks API and the legacy Commit Status API.
+    runs = parse_check_runs(
+        read_check_pages(
+            lambda query: get("repos/%s/commits/%s/check-runs%s" % (repo, sha, query)),
+            "check_runs",
+        )
     )
     # The combined status pages its `statuses` the same way, at a default of 30 contexts.
-    statuses = read_check_pages(
-        lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
-        "statuses",
+    statuses = parse_rollup(
+        read_check_pages(
+            lambda query: get("repos/%s/commits/%s/status%s" % (repo, sha, query)),
+            "statuses",
+        )
     )
     return PR(
         number=n,
         title=pr.get("title", "").strip(),
         url=pr.get("html_url", ""),
         automerge=parse_automerge(pr.get("body") or ""),
-        ci=ci_rollup(runs, statuses),
+        ci=checks_verdict([*runs, *statuses]),
         conflicting=conflicting,
         created_at=pr.get("created_at", ""),
         dead_paths=dead_paths(repo, n, pr) if conflicting else None,
@@ -322,7 +322,12 @@ def main() -> int:
     state_file = os.path.join(state_dir, "last_notified")
 
     pulls = get_open(repo, "pulls")
-    prs = [build_pr(repo, p) for p in pulls if is_renovate(p)]
+    heads = [(RenovatePR.from_rest(p), p) for p in pulls]
+    prs = [
+        build_pr(repo, p)
+        for head, p in heads
+        if head.is_renovate or head.on_renovate_branch
+    ]
     items = actionable(prs)
 
     # Fail-loud backstop: Renovate rewrites its Dependency Dashboard issue every run, so a
@@ -361,8 +366,8 @@ def main() -> int:
     # dashboard as an ordinary awaiting row.
     now_dt = datetime.fromtimestamp(now, timezone.utc)
     autoclosed = find_autoclosed(
-        [p for p in autoclosed_candidates(repo, now_dt) if is_renovate(p)],
-        {(p.get("head") or {}).get("ref", "") for p in pulls},
+        autoclosed_candidates(repo, now_dt),
+        {head.head_ref for head, _ in heads},
         body or "",
         now=now_dt,
     )

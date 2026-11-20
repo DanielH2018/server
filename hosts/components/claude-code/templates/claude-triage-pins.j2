@@ -56,10 +56,14 @@ table raises how many runs a day the poller asks for, so it is pinned too. -#}
   "ExtraProbeFailed:wg-easy": "none",
 } -%}
 {#- The Deployments homelab-claude-restart@<name>.service may restart, keyed by the unit instance. Each
-entry names its `namespace` and `deployment`. docs/claude-agent-user.md, "The restart allowlist",
-has what an entry must satisfy. A restart is one per workload per cooldown, and no more than the
-cap in a UTC day across every workload. -#}
-{%- set restart_allowlist = {} -%}
+entry names its `namespace` and `deployment`, and its `service`: the deploy tag its alerts carry,
+which the poller then routes nowhere. docs/claude-agent-user.md, "The restart allowlist", has what
+an entry must satisfy, and hosts/tests/test_claude_restart_allowlist.py holds each entry to it. A
+restart is one per workload per cooldown, and no more than the cap in a UTC day across every
+workload. -#}
+{%- set restart_allowlist = {
+  "docs": {"namespace": "homelab", "deployment": "docs", "service": "docs"},
+} -%}
 {%- set restart_workload_cooldown_s = 86400 -%}
 {%- set restart_daily_cap = 3 -%}
 {%- set restart_state_dir = "/var/lib/claude-restart" -%}

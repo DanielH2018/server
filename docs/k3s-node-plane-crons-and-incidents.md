@@ -256,9 +256,9 @@ main table, which picks WiFi once the wired routes are skipped. This paragraph i
 the routing tables and the forwarding entries on 2026-10-15; no unplug test has confirmed it.
 
 Because the node stays Ready on WiFi, a pulled cable or a dead switch port causes no outage
-that anything else reports. Prometheus raises `WiredLinkDown`, a warning routed to Discord,
-once the link that `k3s_node_static_link` names has had no carrier, or has been down, for 5
-minutes. The rules live in the observability role's `host-checks` group, one per node.
+that anything else reports. Prometheus raises `WiredLinkDown`, a critical alert that pages
+Discord and email, once the link that `k3s_node_static_link` names has had no carrier, or
+has been down, for 5 minutes. `docs/alert-runbooks.md` says why it pages. The rules live in the observability role's `host-checks` group, one per node.
 `scripts/dev/gen_host_rules.py` renders them from each node's `k3s_node_static_link`, so a
 node that pins a new link gains its rule at the next render (#5124).
 

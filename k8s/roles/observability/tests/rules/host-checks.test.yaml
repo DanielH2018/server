@@ -782,7 +782,7 @@ tests:
               instance: daniel-box
               job: node
               origin: daniel-box
-              severity: warning
+              severity: critical
               service: daniel-box
             exp_annotations:
               summary: 'daniel-box: the wired link eno1 is down, so the node runs on WiFi.'
@@ -791,6 +791,7 @@ tests:
                 node routes over its slower WiFi fallback, which carries Longhorn replication.
                 Check the cable and the switch port, then run `ip link show eno1` and `ip route
                 get 1.1.1.1` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
 
   # daniel-server's enp88s0 is set administratively down from minute 3, so node_exporter
   # serves no carrier series for it and only node_network_up reads 0. The `up` arm fires
@@ -813,7 +814,7 @@ tests:
               instance: daniel-server
               job: node
               origin: daniel-server
-              severity: warning
+              severity: critical
               service: daniel-server
             exp_annotations:
               summary: 'daniel-server: the wired link enp88s0 is down, so the node runs on WiFi.'
@@ -822,6 +823,7 @@ tests:
                 the node routes over its slower WiFi fallback, which carries Longhorn
                 replication. Check the cable and the switch port, then run `ip link show
                 enp88s0` and `ip route get 1.1.1.1` on daniel-server.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
 
   # A three-minute flap, as a switch reboot leaves, reads carrier 0 at minutes 3 to 5 and
   # ends inside the 5-minute hold. The 5m evaluation sits inside the flap, so it fails if

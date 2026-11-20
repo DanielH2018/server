@@ -57,7 +57,7 @@ def _opener(pages):
 
 
 def test_check_runs_walks_every_page():
-    full = [{"name": str(n)} for n in range(anchor.PAGE_SIZE)]
+    full = [{"name": str(n)} for n in range(100)]
     pages = [
         {"total_count": 101, "check_runs": full},
         {"total_count": 101, "check_runs": [{"name": "x"}]},

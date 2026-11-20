@@ -44,6 +44,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
 
 import host_lib
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 
 from . import longhorn_backups
 
@@ -313,16 +314,11 @@ def check_failed_jobs(
     """`job_items` is `.items` from `kubectl get jobs.batch -o json`."""
     names = []
     for item in job_items:
-        status = item.get("status") or {}
-        failed = [
-            c
-            for c in (status.get("conditions") or [])
-            if c.get("type") == "Failed" and c.get("status") == "True"
-        ]
-        if not failed:
+        failed = parse_conditions(item).get("Failed", NO_CONDITION)
+        if failed.status is not ConditionStatus.TRUE:
             continue
         at = (
-            failed[0].get("lastTransitionTime")
+            failed.last_transition
             or (item.get("metadata") or {}).get("creationTimestamp")
             or ""
         )
