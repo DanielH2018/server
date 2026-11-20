@@ -17,7 +17,7 @@ FILES = Path(__file__).resolve().parent.parent / "files"
 
 NOTIFY_PREFIXES = ("script.bedroom_notify", "notify.mobile_app_")
 
-# Aborts on purpose: a failed digest push must leave the held notes undismissed.
+# Aborts on purpose: a failed digest push must leave the alerts in the held store.
 ABORT_BY_DESIGN = {"bedroom_flush_held_notifications"}
 
 # Callers that run a state change and a notify in one sequence; the census must reach each.
