@@ -6,7 +6,7 @@ metadata:
 ---
 
 Clearing a bedroom alert has TWO surfaces, and they need TWO different calls:
-- **HA UI persistent_notification** (the `critical_away`/pierce/watch visibility fallback, id = `tag`):
+- **HA UI persistent_notification** (the pierce/watch/pushed-while-away visibility fallback, id = `tag`):
   cleared by `persistent_notification.dismiss` with `notification_id: <tag>`.
 - **Delivered Android phone push** (companion app, carried `data.tag: <tag>`): NOT touched by
   `persistent_notification.dismiss`. Clear it by re-sending the SAME notify service a magic message:
@@ -29,12 +29,12 @@ Clearing a bedroom alert has TWO surfaces, and they need TWO different calls:
 files/scripts/alerts.yaml + `bedroom_flush_held_notifications` in files/automations/alerts.yaml). `bedroom_notify` is NOT the right tool for a
 clear (it always sends a title/message push + runs away-hold logic) — call the notify service directly.
 
-**bedroom_away recovery, now closed:** the away "🏠 Left on" push (tag `bedroom_away`, `critical_away:
-true` so it bypasses the hold and lands as a real push) only cleared on a "Turn back on" tap. A genuine
+**bedroom_away recovery, now closed:** the away "🏠 Left on" push (tag `bedroom_away`, `alert_class:
+away_only` so it is never held and lands as a real push) only cleared on a "Turn back on" tap. A genuine
 away (you don't tap) stranded it. `automation.bedroom_arrive_home` already dismissed the *persistent
 note* (added earlier by the maintainer); the remaining strand was the *phone push*. Added the
 `clear_notification` above to `bedroom_arrive_home`; since #8203 it runs after the fan/light resume. Deployed + all 33 automations loaded; can't live-fire without a real person.daniel→home
 GPS transition. The sibling orphan class — `bedroom_notify`'s away-hold recovery branch leaving
 bare-`tag` visibility notes stranded for watch-tier alerts (a different bug from this one) — was
-fixed the same day: it now dismisses both `hold_{{ tag }}` and `{{ tag }}`
+fixed the same day: it cancels the held alert in `sensor.bedroom_held_alerts` and dismisses `{{ tag }}`
 (`k8s/roles/home-assistant/files/scripts/alerts.yaml`).
