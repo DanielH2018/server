@@ -974,12 +974,15 @@ The run changed the tooling six times, and each change edited the section it tou
 - **2026-11-19: a batch holds its files while its unit is active or its PR is open.** An
   earlier draft held them until `clean`, which the 21 standing batches of that day would
   have turned into refusals on files nobody was editing.
-- **2026-11-20: a coordinator passes `--fresh` to every `land.sh`.** A coordinator's locked
-  worktree never follows master. In the first two-project run, on 2026-11-19 and
-  2026-11-20, every `land.sh` a sub-coordinator ran from its worktree ended `refused` for
-  landing code older than master's, [#9373](https://github.com/DanielH2018/server/pull/9373)
-  and [#9386](https://github.com/DanielH2018/server/pull/9386) among them, and was run
-  again with `--fresh`.
+- **2026-11-20: a landing from a stale worktree re-runs itself from a fresh checkout.** A
+  coordinator's locked worktree never follows master. In the first two-project run, on
+  2026-11-19 and 2026-11-20, every `land.sh` a sub-coordinator ran from its worktree ended
+  `refused` for landing code older than master's,
+  [#9373](https://github.com/DanielH2018/server/pull/9373) and
+  [#9386](https://github.com/DanielH2018/server/pull/9386) among them, and was run again
+  with `--fresh`. `land.sh` makes that re-run itself, so a coordinator passes no extra flag
+  (`docs/landing.md`, *Before the merge, a stale checkout re-runs the landing from a fresh
+  one without asking*).
 - **2026-11-20: the serial pause runs from the start of the serial PR's landing to its
   verdict.** The rule had the root pause the other projects when a recap named a serial
   PR. #9386 was named at triage, hours before it could land. The root paused the other

@@ -5,11 +5,18 @@ move the bundle has nothing to wait for, and CI on the merge commit is not this 
 A host package applies a setup-plane change, and `host_wait` waits for that host.
 """
 
+import os
 import shlex
 from collections.abc import Callable
 
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
-from deploy_tools.land_lib.fresh import FRESH_FLAG, GradeFresh, grading_argv
+from deploy_tools.land_lib.fresh import (
+    CHILD_ENV,
+    FRESH_FLAG,
+    GradeFresh,
+    LandFresh,
+    grading_argv,
+)
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
@@ -68,25 +75,53 @@ def code_lags_master(ln: Landing) -> str:
 
 
 def refuse_stale_code_before_merge(ln: Landing) -> None:
-    """Die before `await_merge` merges the PR when land.py's checkout lags origin/master.
+    """Stop `await_merge` merging the PR from a checkout of land.py that lags origin/master.
 
     `refuse_stale_code` runs after the merge, so on its own a stale checkout's merge wait
     would merge the PR first. The base is all of master, the PR not yet on it. The
     fetch runs in the primary, and land.py's checkout reads it because it is a worktree of the
     primary and shares its refs.
+
+    DECIDED: before the merge, a stale checkout re-runs the landing from a fresh checkout of
+    origin/master without asking, as it does after the merge. The operator ruled so on
+    2026-11-20, against the earlier rule that a landing merges only from the release it ships
+    with unless the caller passes `--fresh`: a session's worktree does not follow master, so
+    on 2026-11-19 and 2026-11-20 every landing from one paid a refused attempt per PR, and
+    the answer was always the same command with `--fresh`. `docs/landing.md` has the record.
+    The re-run happens once. The landing a fresh checkout runs (`CHILD_ENV`) refuses when
+    master has moved again, so no landing loops. A lander unit runs a fixed command line, and
+    a comparison git could not make proves nothing, so both still refuse.
+
+    Raises:
+      LandFresh: the checkout lags master; land.py re-runs the landing from a fresh checkout.
+      Outcome: `refused`, under a lander unit, in a landing a fresh checkout runs, or when
+        git could not compare.
     """
-    what = code_lags_master(ln)
-    if not what:
+    ln.fetch_branch()
+    base = f"origin/{BRANCH}"
+    stale = ln.tools.stale_code(base)
+    if stale == []:
         return
-    rerun = (
-        f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a checkout "
-        f"of origin/{BRANCH} it makes and removes itself"
+    where = (
+        f"this landing runs from {OWN_CHECKOUT}, and {_stale_code_reason(stale, base)}"
     )
-    ln.die(
-        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; "
-        f"{_unit_rerun(ln) or rerun}",
-        1,
-    )
+    reran = CHILD_ENV in os.environ
+    if stale and not ln.opts.policy_active and not reran:
+        raise LandFresh(
+            f"{where}. Nothing is merged, so the landing of PR #{ln.opts.pr} re-runs from "
+            f"a fresh checkout of {base}"
+        )
+    if reran:
+        rerun = (
+            f"that checkout of {base} was made for this landing, so master moved again; "
+            "re-run the same land.sh command"
+        )
+    else:
+        rerun = (
+            f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a "
+            f"checkout of {base} it makes and removes itself"
+        )
+    ln.die(f"{where}. Nothing is merged; {_unit_rerun(ln) or rerun}", 1)
 
 
 def refuse_stale_code(ln: Landing) -> None:
@@ -103,9 +138,8 @@ def refuse_stale_code(ln: Landing) -> None:
     DECIDED: after the merge, a stale checkout hands the grading to a fresh checkout without
     asking. A refusal that named `--fresh` drew that same `--fresh` re-run every time, with
     the PR already merged, and the re-run waited on master CI again.
-    Before the merge the landing still refuses (`refuse_stale_code_before_merge`). A lander
-    unit cannot take `--fresh`, and a comparison git could not make proves nothing, so both
-    still refuse here.
+    A lander unit cannot take `--fresh`, and a comparison git could not make proves nothing,
+    so both still refuse here.
 
     Raises:
       GradeFresh: the checkout lags master; land.py runs the grading from a fresh checkout.

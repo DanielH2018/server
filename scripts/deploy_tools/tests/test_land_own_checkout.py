@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from _land_fakes import PRIMARY, Fakes, make_landing
-from deploy_tools.land_lib import classify, fresh, own_checkout
+from deploy_tools.land_lib import classify, fresh, own_checkout, pr_lock
 from deploy_tools.land_lib.outcome import Outcome
 from lib import git_testing
 from lib.git_testing import commit, init_repo, scrubbed_env
@@ -177,32 +177,6 @@ def test_a_hand_off_whose_checkout_failed_ends_refused_and_records_it(
     assert "refused" in verdict_record.read_text()
 
 
-def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_run):
-    """The refusal at step 1 came after await_merge had already merged the PR."""
-    fakes = Fakes(
-        gh_views={
-            "state,title,body,reviewDecision": {
-                "state": "OPEN",
-                "title": "Document the lander",
-                "body": "",
-            },
-            "headRefOid": {"headRefOid": "c" * 40},
-            "state,mergeable,headRefOid": [
-                {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
-                {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
-            ],
-        },
-        stale_code=["scripts/lib/render_guard.py"],
-    )
-    rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
-    assert rc == 1 and "VERDICT: refused" in out
-    assert "scripts/lib/render_guard.py" in out
-    merges = [
-        c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
-    ]
-    assert not merges, f"merged from a stale checkout: {merges}"
-
-
 # Answers `log`/`diff` with the one path master changed, filtered by the pathspec it is given,
 # so a path the comparison leaves out of its pathspec is never reported stale.
 _GIT_REPORTING_A_MASTER_CHANGE = """#!{python}
@@ -342,16 +316,68 @@ def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
     assert "worktree add" not in printed
 
 
-def test_a_stale_landing_before_the_merge_refuses_and_names_fresh(land_run):
-    """The absence checks above pass for a landing that never reached the refusal."""
-    fakes = Fakes(
-        stale_code=["scripts/deploy_tools/land_lib/classify.py"],
-        gh_views=_armed_open_pr(),
-    )
-    argv, _ = _STALE_LANDINGS["before-merge"]
-    rc, out, err, _, _ = land_run(argv, fakes)
+_BEFORE_MERGE = ["--arm-merge", "--await-merge", "--subject", "Kept"]
+_STALE = "scripts/deploy_tools/land_lib/classify.py"
+
+
+def _merges(calls: list) -> list:
+    return [
+        c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
+    ]
+
+
+def test_a_stale_landing_before_the_merge_reruns_from_a_fresh_checkout(land_run):
+    fakes = Fakes(stale_code=[_STALE], gh_views=_armed_open_pr(), fresh_rc=75)
+    rc, out, err, calls, logline = land_run(_BEFORE_MERGE, fakes)
+    [rerun] = [c for c in calls if c[0] == "fresh_landing"]
+    assert rerun[1][1] == [*_BEFORE_MERGE, "--pr", "999"]
+    assert rerun[2] == {"turn_fd": None}
+    assert rc == 75
+    # The fresh checkout's landing merges, prints the verdict and writes the annotation.
+    assert not _merges(calls) and "VERDICT:" not in out and logline == ""
+    [said] = [line for line in err.splitlines() if "fresh checkout" in line]
+    assert _STALE in said and "Nothing is merged" in said
+
+
+def test_a_rerun_that_finds_master_moved_again_refuses(land_run, monkeypatch):
+    monkeypatch.setenv(fresh.CHILD_ENV, "1")
+    fakes = Fakes(stale_code=[_STALE], gh_views=_armed_open_pr())
+    rc, out, _, calls, _ = land_run(_BEFORE_MERGE, fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "land_lib/classify.py" in out and "--fresh`" in out + err
+    assert "master moved again; re-run the same land.sh command" in out
+    assert not _merges(calls)
+    assert not [c for c in calls if c[0] == "fresh_landing"]
+
+
+def test_the_pr_lock_admits_the_rerun_and_refuses_another_landing(land_run):
+    seen = {}
+
+    def during_fresh() -> None:
+        seen["rerun"] = pr_lock.take("999", "daniel-box")
+        # Another process's landing names no held PR.
+        del os.environ[pr_lock.HELD_ENV]
+        seen["other"] = pr_lock.take("999", "daniel-box")
+        os.environ[pr_lock.HELD_ENV] = "999"
+
+    fakes = Fakes(
+        stale_code=[_STALE], gh_views=_armed_open_pr(), during_fresh=during_fresh
+    )
+    rc, *_ = land_run(_BEFORE_MERGE, fakes)
+    assert rc == 0
+    assert seen["rerun"] is None
+    assert isinstance(seen["other"], pr_lock.Holder)
+    assert seen["other"].pid == str(os.getpid())
+
+
+def test_a_detached_stale_landing_reruns_inside_its_one_log(land_run, tmp_path):
+    fakes = Fakes(stale_code=[_STALE], gh_views=_armed_open_pr())
+    argv = [*_BEFORE_MERGE, "--since", "pre", "--detach", "--log-dir", str(tmp_path)]
+    rc, out, _, calls, _ = land_run(argv, fakes)
+    [log] = [c[1][0] for c in calls if c[0] == "fork"]
+    [rerun] = [c for c in calls if c[0] == "fresh_landing"]
+    assert rc == 0 and "--detach" not in rerun[1][1]
+    waits = [line for line in out.splitlines() if "cc-wait land" in line]
+    assert waits == [f"  wait: cc-wait land 999 --log {log}"]
 
 
 def test_a_stale_landing_after_the_merge_reaches_the_hand_off(land_run):
