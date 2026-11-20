@@ -105,6 +105,17 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   restarted collector re-exports each live session under a new `instance`, and the baseline
   looks back eight days, past the collector's 168h `metric_expiration`. A day loads only
   once Prometheus holds those eight days, so the DAG backfills about two weeks, not three.
+- **`claude_decisions_rollup`** loads `claude.decision_daily` and `claude.tool_result_daily`
+  from observability's Loki, which its task pods reach through netpol-baseline's
+  `loki-callers`. LogQL metric queries give exact counts; each `user_*` decision is
+  classified from its session's raw events as `prompted`, `machine`, `remembered` or
+  `unresolved`, and a `config` or `hook` decision is a `rule` or `hook`. The load refuses a
+  day where the classified decisions do not add up to the counts, and halves any raw page
+  that comes back full. The rules and their measured thresholds are in
+  `k8s/roles/airflow/files/dags/homelab_warehouse/claude_decisions.py:classify`.
+  `k8s/roles/airflow/tests/test_claude_decisions.py::test_the_backfill_window_stays_a_day_inside_lokis_retention`
+  holds `LOKI_KEEP_DAYS` to `observability_loki_retention`. The query keeps only the fields
+  the classification reads, so no command, prompt or session id leaves Loki.
 - **Grafana's "Homelab history" board**
   (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads every
   DAG's tables through the `Warehouse` datasource.

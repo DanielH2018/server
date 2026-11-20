@@ -7,8 +7,8 @@
   Both names end in a digest, as the Job census requires: the ConfigMap's in `configmap_digest8`
   of its data, the Job's in `job_spec_digest8` of its spec. Each is computed here from the same
   JSON those functions hash, so the spec is written once as YAML text, parsed for the hash and
-  emitted verbatim. The renderer passes `flux_job_image` and `flux_job_connect`, the helper's
-  text, to every `templates/verify/` file (`render_tag`).
+  emitted verbatim. The renderer passes `flux_job_image`, `flux_job_connect`, the helper's
+  text, and `flux_job_parse`, the parser's, to every `templates/verify/` file (`render_tag`).
 
   DECIDED: the spec embeds a digest of this role's rendered NetworkPolicies, every
   `networkpolicy*.yaml.j2` that `policies` below looks up, the deferred observability four
@@ -51,6 +51,7 @@
 {% set data = {
   script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
+  'flux_job_parse.py': flux_job_parse,
 } %}
 {% set configmap_name = 'netpol-baseline-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set policies = lookup('template', 'networkpolicy.yaml.j2')

@@ -14,8 +14,8 @@ docs/archive/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The bundle gets
 - `cluster/soak/`: the Job `soak-<spec digest8>` in `flux-system`, which runs
   `scripts/renderer/job_files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
   `soak-<content digest8>` holding that script, its read layer `soak_reads.py`, its pod
-  reader `soak_pods.py`, byte copies of
-  `flux_job_connect.py` and `scripts/deploy_tools/changed_set.py`, and `services.json`, the
+  reader `soak_pods.py`, byte copies of `flux_job_connect.py`, `flux_job_parse.py` and
+  `scripts/deploy_tools/changed_set.py`, and `services.json`, the
   per-service map W reads; and the ServiceAccount `soak` with its RBAC, whose pod and ReplicaSet reads are a ClusterRole.
 
 `services.json` maps each published tag to the longest `for:` among the Prometheus rules that
@@ -66,6 +66,7 @@ SCRIPT = FILES / "flux_soak.py"
 READS = FILES / "soak_reads.py"
 PODS = FILES / "soak_pods.py"
 HELPER = FILES / "flux_job_connect.py"
+PARSE = FILES / "flux_job_parse.py"
 CHANGED_SET = SCRIPTS / "deploy_tools" / "changed_set.py"
 SERVICES = "services.json"
 RULES = K8S_ROLES / "observability" / "files" / "rules"
@@ -337,6 +338,7 @@ def soak_files(
             READS.name: READS.read_text(),
             PODS.name: PODS.read_text(),
             HELPER.name: HELPER.read_text(),
+            PARSE.name: PARSE.read_text(),
             CHANGED_SET.name: CHANGED_SET.read_text(),
             SERVICES: json.dumps(services, sort_keys=True, indent=1) + "\n",
         },

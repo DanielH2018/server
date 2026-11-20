@@ -44,6 +44,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from flux_job_connect import Request, open_url, refused
+from flux_job_parse import EndpointState, endpoint_states
 
 API = "https://kubernetes.default.svc"
 TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -137,13 +138,11 @@ def ready(slices: Mapping) -> bool:
     """Whether any endpoint in an EndpointSliceList states `conditions.ready: true`.
 
     A Service with no ready pod keeps its EndpointSlice and sets `endpoints` to null, which
-    reads as no endpoint here. Only an explicit `true` counts: an absent condition does not.
+    reads as no endpoint here. Only an explicit `true` counts, though the API reads an absent
+    condition as ready: an inverted leg passes on a failed connection, so the gate admits no
+    endpoint whose readiness is unstated.
     """
-    return any(
-        (endpoint.get("conditions") or {}).get("ready") is True
-        for item in slices.get("items") or []
-        for endpoint in item.get("endpoints") or []
-    )
+    return EndpointState.READY in endpoint_states(slices.get("items") or [])
 
 
 def exempt(sets: Sequence[Mapping], get: Callable[[str], dict]) -> list[str]:

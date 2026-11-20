@@ -44,6 +44,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from flux_job_connect import Request, open_url
+from flux_job_parse import EndpointState, endpoint_states
 
 API = "https://kubernetes.default.svc"
 TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -137,14 +138,12 @@ def slices(kube: Kube, namespace: str, service: str) -> list[dict]:
 def serving(items: list[dict]) -> int:
     """How many endpoints in the slices `items` are ready and not terminating.
 
-    The API reads a missing `ready` as true and a missing `terminating` as false.
+    This follows the API, which reads a missing `ready` as true: an endpoint whose pod states
+    no readiness still takes DNS traffic, so it keeps instance 1's roll unblocked.
     """
     return sum(
-        1
-        for item in items
-        for endpoint in item.get("endpoints") or []
-        if (endpoint.get("conditions") or {}).get("ready") is not False
-        and not (endpoint.get("conditions") or {}).get("terminating")
+        state in (EndpointState.READY, EndpointState.UNSTATED)
+        for state in endpoint_states(items)
     )
 
 

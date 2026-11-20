@@ -96,10 +96,34 @@ def build_query_range_url(loki_url, query, start_ns, end_ns, page_limit):
     return loki_url.rstrip("/") + "/loki/api/v1/query_range?" + qs
 
 
+# DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
+# import: each game's ConfigMap carries only its script and this file.
+def _loki_streams(loki_json):
+    """The stream objects of a Loki answer; an absent `data` or `result` reads as none.
+
+    Raises:
+        ValueError: The answer, its `data` or a stream is not an object, or `result` is not a
+            list. A `"data": null` raises rather than reading as no entries.
+    """
+    if not isinstance(loki_json, dict):
+        raise ValueError(f"loki answer is {type(loki_json).__name__}, not an object")
+    data = loki_json.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError(f"loki answer's data is {type(data).__name__}, not an object")
+    streams = data.get("result", [])
+    if not isinstance(streams, list) or not all(isinstance(s, dict) for s in streams):
+        raise ValueError("loki answer's data.result is not a list of objects")
+    return streams
+
+
 def extract_entries(loki_json):
-    """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending."""
+    """Flatten a Loki query_range response to [(ts_ns:int, line:str)] ascending.
+
+    Raises:
+        ValueError: The response is not a Loki streams answer, `"data": null` included.
+    """
     out = []
-    for stream in loki_json.get("data", {}).get("result", []):
+    for stream in _loki_streams(loki_json):
         for ts, line in stream.get("values", []):
             out.append((int(ts), line))
     out.sort(key=lambda tl: tl[0])

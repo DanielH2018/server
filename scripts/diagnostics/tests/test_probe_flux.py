@@ -13,6 +13,7 @@ from diagnostics import flux_wait
 import pytest
 from diagnostics.probe_lib import flux
 from lib.exit_codes import PROBE_UNREADABLE
+from lib.k8s_objects import ConditionStatus
 from renderer.renderer_lib.ordering import TAG_KIND_SUFFIXES
 
 OLD = "613ab5028cd4974a6f0247400e58749705719a72"
@@ -150,6 +151,12 @@ def test_a_row_with_no_ready_condition_fails():
     text, code = flux.format_flux([_source(), item], ["sonarr"])
     assert code == 1
     assert "FAIL:\n  sonarr: Ready=Unknown" in text
+
+
+def test_a_row_reads_ready_as_a_condition_status_and_an_undefined_one_as_unknown():
+    sources = {"homelab": _source()}
+    assert flux.row(_ks("sonarr"), sources).ready is ConditionStatus.TRUE
+    assert flux.row(_ks("sonarr", "maybe"), sources).ready is ConditionStatus.UNKNOWN
 
 
 def test_a_failed_row_beside_a_reconciling_one_still_fails():

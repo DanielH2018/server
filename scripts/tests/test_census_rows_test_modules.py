@@ -275,6 +275,10 @@ ROWS = (
         must_find=frozenset({"hosts/lib/tests/test_host_package_builder_refusals.py"}),
         allow={
             SELF: "the row's own pattern and subjects name the directory",
+            "tests/repo/_archived_plan_citations_row.py": (
+                "the shipped-files row that refuses a stub citation names the directory in "
+                "its pattern and subjects; it reads no plan"
+            ),
             "tests/services/test_alert_runbook_urls.py": (
                 "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
                 "rule, and its fixture is an alert description; it reads no plan"

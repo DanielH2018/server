@@ -113,9 +113,8 @@ exclude_docs: |
 # links it. Declaring it here is what separates "decided to leave unlinked" from "nobody
 # noticed", which is the distinction the nav coverage test now enforces.
 #
-# `target-architecture/` holds the docs-guard slices, which are still in progress, and one
-# stub per archived plan that a rendered comment still cites. A stub goes once no rendered
-# comment cites its path. what-the-migration-built.md links the docs-guard handoff.
+# `target-architecture/` holds only the docs-guard slices, which are still in progress.
+# what-the-migration-built.md links the docs-guard handoff.
 #
 # DECIDED: docs/archive stays; size was never the concern, and a PR number is not greppable
 # offline the way the linked record is.

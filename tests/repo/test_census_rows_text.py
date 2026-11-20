@@ -22,6 +22,7 @@ from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
 from _review_ledger_glob_row import REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE
+from _archived_plan_citations_row import SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib.facts.citations import macro_citations
@@ -420,6 +421,7 @@ ROWS += (
     UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG,
     REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE,
     COMMENTS_CITE_NO_TICKET,
+    SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
 )
 
 _IDS = [row.name for row in ROWS]

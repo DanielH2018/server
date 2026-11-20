@@ -15,7 +15,13 @@ def test_conditions_are_keyed_by_type_and_the_first_of_a_type_wins():
     item = {
         "status": {
             "conditions": [
-                {"type": "Ready", "status": "True", "reason": "Done", "message": "ok"},
+                {
+                    "type": "Ready",
+                    "status": "True",
+                    "reason": "Done",
+                    "message": "ok",
+                    "lastTransitionTime": "2026-11-20T10:00:00Z",
+                },
                 {"type": "Ready", "status": "False", "message": "later"},
                 None,
                 {"type": "Stalled", "status": "maybe"},
@@ -23,8 +29,8 @@ def test_conditions_are_keyed_by_type_and_the_first_of_a_type_wins():
         }
     }
     assert parse_conditions(item) == {
-        "Ready": Condition(ConditionStatus.TRUE, "Done", "ok"),
-        "Stalled": Condition(ConditionStatus.UNKNOWN, "", ""),
+        "Ready": Condition(ConditionStatus.TRUE, "Done", "ok", "2026-11-20T10:00:00Z"),
+        "Stalled": Condition(ConditionStatus.UNKNOWN, "", "", ""),
     }
 
 

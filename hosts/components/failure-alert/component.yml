@@ -1,5 +1,6 @@
-# The failure page every packaged unit can name with `OnFailure=homelab-alert@%n.service`. Only
-# the two builder units use it.
+# The failure page every packaged unit can name with `OnFailure=homelab-alert@%n.service`. Once
+# it delivers, host-maintenance's systemd-units check labels the unit `paged_by="homelab-alert"`,
+# and Alertmanager blackholes that unit's SystemdUnitsFailed, so a failure pages once.
 #
 # The unit loads one credential, `discord_alert_webhook`, from /run/credstore, where
 # `homelab-secrets.service` writes it. A host that lists this component lists `secrets-unit` too.
