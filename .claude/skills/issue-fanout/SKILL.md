@@ -148,12 +148,14 @@ cost and what the reviewer found.
 
 **Stop here for approval.** Present the grouping and each batch's rung — which issues, which
 batch, why they're split this way, and why a batch sits off `opus-medium` — and wait.
-Spawning several agents is not a routine action.
+Spawning several agents is not a routine action. One session does not stop here: a
+sub-coordinator whose brief carries the operator's launch approval, as the `coordinate`
+skill's *Approval* section defines it.
 
 Done when: every issue `next` returned is in exactly one batch or named as
 held for the next wave, no two batches share a role, no two batches share a cited file, at
 most one batch touches SOPS, no batch that adds a role shares the wave, and the operator has
-approved the grouping.
+approved the grouping, here or through such a brief.
 
 ## 2. Claim before spawning, under the orchestrator's own worktree name
 

@@ -870,7 +870,9 @@ sub-coordinator started one worker. It answered three questions:
 - **A sub-coordinator cannot start a session from the root's brief.** The app refuses to
   start a session on a turn another session started. The operator's message in the
   sub-coordinator's chat is the step that unlocks it, and the fan-out's grouping approval
-  is that message.
+  was that message. Since 2026-11-20 the root's brief carries the launch approval
+  (*Decisions, with their dates*), and the workers are fan-out batches, which need no
+  session start.
 - **Recaps travel up one level at a time.** The worker woke the sub-coordinator, and the
   sub-coordinator woke the root. The root receives one recap per project, cut to about 400
   characters, which is why the skill fixes the recap's format.
@@ -1044,8 +1046,9 @@ The run changed the tooling six times, and each change edited the section it tou
   On 2026-11-19 the operator dropped a second limit, under which a PR that changes code
   `land.py` imports waited for approval.
 - **2026-11-15: one approval covers one milestone plus the grouping rules.** The operator
-  types it once, in the sub-coordinator's chat. Refills stay inside that milestone, and a
-  new milestone needs a new approval.
+  typed it once, in the sub-coordinator's chat, until the ruling of 2026-11-20 below moved
+  where it is given. Refills stay inside that milestone, and a new milestone needs a new
+  approval.
 - **2026-11-15: build the serial turnstile, and defer a root status command.** The
   turnstile landed as a wait in the landing turn. The root reads recaps until a real run
   shows that it needs more.
@@ -1073,6 +1076,20 @@ The run changed the tooling six times, and each change edited the section it tou
   pause only stops the other project launching batches whose landings would be refused
   meanwhile, so a sub-coordinator reports a serial PR under `asks:` when its landing
   starts, and its verdict in the same place.
+- **2026-11-20: telling the root to start a project is the launch approval.** The operator
+  told the root "Start 24 and 26" to start two projects, then had to type a second
+  approval into each sub-coordinator's chat. The operator's question "Is there anyway so
+  that I don't have to approve the initial launch on sub-coordinator sessions?" drew a
+  proposal from the root: the root's brief counts as the launch approval. The operator's
+  answer "Yes, change it" is the ruling. The rule of 2026-11-15 existed so the root
+  cannot invent an approval. The
+  brief therefore quotes the operator's words that named the project, and those quoted
+  words are what a reader checks. A brief with no quoted words, a project the root chose
+  itself, or grouping rules wider than the standing ones still stops at the gate in the
+  sub-coordinator's chat. Dropping the review phase, `--allow-shared-file` and an issue
+  from outside the project's milestone are never covered. The `coordinate` skill's
+  *Approval* section holds the rule and the standing grouping rules
+  ([#9551](https://github.com/DanielH2018/server/issues/9551)).
 
 ### Who lands a daniel-server batch's PR
 
