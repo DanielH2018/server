@@ -7,13 +7,19 @@
 # whose package lists the worktree-sweep component, on Sunday at 04:20 UTC. Running it by hand removes merged worktrees and drops unreachable
 # objects for real.
 #
-# `prune_worktrees.py --prune --brief` removes the merged worktrees, deletes the orphan
-# session branches (`worktree-*` and `claude/*`) whose content is on origin/master, deletes the unregistered directories
-# under .claude/worktrees/ whose every file a ref already reaches (dev/worktree_orphans.py),
-# then drops the unreachable objects older than a day and clears a stale gc.log. See
-# repair_object_store in that script for why the grace period is not `now`.
+# The pruner is the dotfiles repo's, deployed by `chezmoi apply` at
+# ~/.claude/hooks/prune-worktrees.py, and it reads this repo's policy from
+# .claude/prune-worktrees.json. `--prune --brief` removes the merged worktrees, deletes the
+# unregistered directories under .claude/worktrees/ whose every file a ref already reaches,
+# deletes the orphan session branches (`worktree-*` and `claude/*`) whose content is on
+# origin/master, then drops the unreachable objects older than a day and clears git's stale gc log.
 #
-# THE EXIT CODE REACHES HEALTHCHECKS.IO. `prune_worktrees.py` exits 1 when a removal or a
+# A HOST WITH NO PRUNER, OR AN OLD ONE, FAILS THE RUN. `--require` names the pruner interface
+# this repo was written for (scripts/lib/_claude_worktree.py:REQUIRED_INTERFACE). A copy older
+# than that exits 78, a copy with no package beside it exits 69, and no copy at all exits 127.
+# None of the three reads as "nothing to remove": `chezmoi apply` on the host is the repair.
+#
+# THE EXIT CODE REACHES HEALTHCHECKS.IO. The pruner exits 1 when a removal or a
 # branch deletion failed. `$rc` on the ping URL is Healthchecks.io's exit-status
 # endpoint: 0 is a success ping and anything else is a failure, so a failed sweep pages at once
 # and a sweep that never ran pages on silence. The key arrives as the systemd credential
@@ -30,13 +36,30 @@ for arg in "$@"; do
 done
 
 cd /home/{{ sys_user }}/server || exit 1
+# DECIDED: the banner REPORTS, the weekly timer PRUNES. No SessionStart hook removes anything
+# here: `.claude/prune-worktrees.json` sets `"session_start": "off"`. A prune removes worktrees
+# and deletes branches in the primary checkout, which every session shares, and ends in a
+# `git gc` with no bound on its duration. Run at every session start, N sessions would race
+# for a saving one weekly run already gets. A worktree-isolated session's git commands are
+# refused against the primary checkout, so the sessions that see the mess cannot clear it.
 # PATH explicitly: the unit's environment inherits neither /usr/local/bin nor the user's
-# ~/.local/bin, so a bare `uv` is not found.
-# Only ops_cron_host reaps claims. `findings.py reap` judges a claim against this checkout's
-# worktrees and this host's fan-out manifests alone. The fan-out orchestrator runs on
-# ops_cron_host, so a reap on any other host reads its claims as stale and releases them.
-PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief{{ '' if inventory_hostname == ops_cron_host else ' --no-reap' }}
+# ~/.local/bin, and the pruner's `branch_holds` command and the reap below both run `uv`.
+export PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+out="$(/home/{{ sys_user }}/.claude/hooks/prune-worktrees.py --require 2 --prune --brief)"
 rc=$?
+[ -n "$out" ] && printf '%s\n' "$out"
+{% if inventory_hostname == ops_cron_host %}
+# A removed worktree's claims read as stale from then on, but only `reap` releases them. Only
+# ops_cron_host reaps. `findings.py reap` judges a claim against this checkout's worktrees and
+# this host's fan-out manifests alone. The fan-out orchestrator runs on ops_cron_host, so a
+# reap on any other host reads its claims as stale and releases them. A reap that fails is
+# named in the journal and leaves the sweep's own exit code alone.
+case "$out" in
+  *"PRUNE-RESULT: removed="[1-9]*)
+    uv run --quiet python scripts/dev/findings.py reap || echo "claims not reaped: reap exited $?"
+    ;;
+esac
+{% endif %}
 key=""
 if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
   key="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"

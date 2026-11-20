@@ -1,3 +1,8 @@
 {
-  "session_start": "off"
+  "session_start": "off",
+  "landed_by": ["patch-id", "content"],
+  "branch_prefixes": ["worktree-", "claude/"],
+  "unit_locks": "fanout(?:-[A-Za-z][\\w.]*)*(?:-\\d+)+",
+  "branch_holds": ["uv", "run", "--quiet", "python", "scripts/dev/held_branches.py"],
+  "label_file": ".claim"
 }

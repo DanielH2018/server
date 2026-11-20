@@ -443,7 +443,7 @@ def unlabelled_worktree_lines(cwd, *, run=None):
 
 
 # Well inside the 15s budget settings.json kills this hook at (this file's gen-hooks
-# header). prune_worktrees.py --brief takes 1.3s warm.
+# header). The dotfiles pruner's `--brief` takes 1.3s warm.
 WORKTREE_TIMEOUT_S = 5
 
 # How long every probe together may take, from when they start. The 15s hook budget less

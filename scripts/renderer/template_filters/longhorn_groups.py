@@ -9,9 +9,8 @@ instead.
 - `backup_group_label`: the volume label key for a group, `recurring-job-group.longhorn.io/<group>`.
 - `weekly_backup_group`: the group of weekly shard N, `weekly-backup-d<N>`.
 - `weekly_backup_shard`: the shard a weekly-tier volume belongs to, as its entry declares it.
-- `longhorn_weekly_claims` and `longhorn_nobackup_claims`: the k3s role's weekly and no-backup
-  volume sets, derived from each `containers_list` entry's `weekly_backup_claims` and
-  `no_backup_claims` the way `tier_backup_claims` derives the R2 set.
+- `longhorn_r2_claims`, `longhorn_weekly_claims` and `longhorn_nobackup_claims`: the k3s
+  role's R2, weekly and no-backup volume sets, derived from each `containers_list` entry.
 - `longhorn_backup_name`: a bare name by key — the label prefix, a group or a BackupTarget —
   for a template that matches on a name rather than writing one label, such as the restore
   drill's jq selector and `seed_volume_backup.yml`.
@@ -26,6 +25,10 @@ so the `ValueError` reaches the operator as `FilterError("<filter>: ...")`.
 """
 
 from lib.longhorn_lib import longhorn_backups
+from renderer.template_filters.service_tier import tier_entries
+
+# The tier group whose `backup_claims` the daily R2 tier holds: home-edge and home-automation.
+R2_TIER = "home-critical"
 
 
 _SHARDS = range(longhorn_backups.WEEKLY_SHARDS)
@@ -63,6 +66,28 @@ def weekly_backup_shard(pvc: str, weekly_volumes: dict) -> int:
     if pvc not in weekly_volumes:
         raise ValueError(f"{pvc!r} is not a weekly-tier volume")
     return weekly_volumes[pvc]
+
+
+def longhorn_r2_claims(containers_list, namespace: str) -> list:
+    """`namespace/claim` for every volume backed up daily to R2, in list order.
+
+    That is each `backup_claims` volume of an `R2_TIER` entry, then each entry's
+    `r2_backup_claims`: a volume outside that tier whose loss is not recoverable from its
+    sources within a week. `namespace` is the default for an entry that names none; pass
+    `k8s_namespace`. Raises `ValueError` on a claim declared twice.
+    """
+    found = [
+        f"{entry.get('namespace') or namespace}/{claim}"
+        for entry in tier_entries(containers_list, R2_TIER)
+        for claim in entry.get("backup_claims") or []
+    ]
+    for entry in containers_list or []:
+        for claim in entry.get("r2_backup_claims") or []:
+            pvc = f"{entry.get('namespace') or namespace}/{claim}"
+            if pvc in found:
+                raise ValueError(f"{pvc} is declared twice")
+            found.append(pvc)
+    return found
 
 
 def longhorn_weekly_claims(containers_list, namespace: str) -> dict:

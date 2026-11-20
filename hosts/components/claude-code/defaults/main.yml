@@ -28,7 +28,7 @@ claude_code_user_home: >-
 claude_code_rc_workdir: "{{ claude_code_user_home }}/server"
 
 # DECIDED: worktree, not same-dir. Concurrent sessions sharing one checkout is the exact
-# thing this repo's parallel-session rule forbids, and `prune_worktrees.py` already
+# thing this repo's parallel-session rule forbids, and the worktree pruner already
 # collects finished worktrees while respecting a live session's lock.
 claude_code_rc_spawn_mode: worktree
 

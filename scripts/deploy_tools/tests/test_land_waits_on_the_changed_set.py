@@ -1,9 +1,7 @@
 """Every landing reaches land-wait, and the changed set names the tags it gates (D6.12).
 
-`land.sh` derived its k8s tags from the PR's paths until D6.12, and a deploy-plane PR waited
-on the tick's `ansible/deploy.yml` receipt instead. The tick applies no `deploy.yml` since,
-so each PR here must reach `promote.py land-wait`, and the tags its `source=promote`
-annotation and its health gate name come from the two `digests.json` files.
+Each PR here must reach `promote.py land-wait`, and the tags its `source=promote` annotation
+and its health gate name come from the two `digests.json` files, not from the PR's paths.
 
 Every boundary is a `_land_fakes.py` fake except land-wait, which is the real
 `promote_wait.land_wait` over `_land_wait_fakes.Sim`. The classifier answers what the real

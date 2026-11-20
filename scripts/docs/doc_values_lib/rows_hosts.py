@@ -109,13 +109,6 @@ VALUES = rows(
         "scripts/lib/exit_codes.py": [
             (_WORKTREE_SKILL, r"Exit (\d+) means the branch", constant("USAGE_ERROR")),
         ],
-        "scripts/lib/git.py": [
-            (
-                _WORKTREE_SKILL,
-                r"objects older than (a day)",
-                constant("PRUNE_GRACE", phrase({"1.day.ago": "a day"})),
-            ),
-        ],
         "hosts/components/worktree-sweep/units/homelab-worktree-sweep.timer": [
             (
                 _WORKTREE_SKILL,

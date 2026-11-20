@@ -359,7 +359,6 @@ select = [
 "scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py" = ["ARG001"]
 "scripts/deploy_tools/runbook_gates_lib/metallb_upgrade.py" = ["ARG001"]
 "scripts/dev/fanout_lib/place.py" = ["ARG001"]
-"scripts/dev/prune_worktrees.py" = ["ARG001"]
 "scripts/diagnostics/probe_lib/longhorn_budget.py" = ["ARG001"]
 "scripts/diagnostics/probe_lib/shed_set.py" = ["ARG001"]
 "scripts/docs/build_docs.py" = ["ARG001"]

@@ -102,7 +102,7 @@ once `flock -n` on that file succeeds, the way it already clears a stale Ansible
 The pid in the directory name is for a human reading `ls` and decides nothing: `--detach` runs
 its playbook in a background shell whose `$$` is still the parent's, and the parent exits
 at once — so a pid-based reaper found a dead pid for the whole life of every detached deploy
-and deleted the worktree out from under it. `scripts/dev/prune_worktrees.py` is the other
+and deleted the worktree out from under it. The worktree pruner is the other
 collector, and it keeps any detached worktree rather than classifying it.
 
 **`uv` resolves its project from the working directory**, and a snapshot has no `.venv`. The

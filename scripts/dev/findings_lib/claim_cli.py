@@ -337,8 +337,8 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         verb = "would be released" if args.dry_run else "released"
         print(f"#{s.number} {verb} — {s.reason}")
         reaped += 1
-    # On stdout, not stderr: `prune_worktrees.reap_claims` relays only stdout from a reap
-    # that exits 0, and the weekly sweep is where a lasting ssh failure has to show.
+    # On stdout, not stderr: the weekly sweep's journal is where a lasting ssh failure has
+    # to show, and a reader of a reap that exits 0 looks at stdout.
     unread = [s.number for s in states if s.reason == PEER_UNREADABLE]
     if unread:
         print(

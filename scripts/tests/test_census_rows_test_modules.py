@@ -82,7 +82,6 @@ ROWS = (
                 "tests/repo/test_ci_empty_pr_merge_fails.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
-                "scripts/dev/tests/test_prune_worktrees.py",
                 "scripts/lib/tests/test_render_guard.py",
             }
         ),

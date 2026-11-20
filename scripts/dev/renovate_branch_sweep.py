@@ -6,7 +6,7 @@ the app's own delete after a merge, so a branch Renovate merged survives (`renov
 skill, §8). Such a branch is invisible to every arm of `renovate-notify`, which reads open
 PRs and the dashboard — an orphan appears in neither. The skill censused them through
 `/tmp/rb-all` and `/tmp/rb-live` and a `comm -23`; this is that census as one command, in the
-shape of `prune_worktrees.py`.
+shape of the worktree pruner's report.
 
 Two readings are deliberately wider than any one day needs:
 
