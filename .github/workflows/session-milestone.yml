@@ -41,6 +41,7 @@ jobs:
 
       - name: File the PR under its session milestone
         env:
+          PYTHONPATH: scripts
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python scripts/dev/session_milestone.py attach-pr "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
@@ -73,6 +74,7 @@ jobs:
 
       - name: Close the milestone if nothing in it is open
         env:
+          PYTHONPATH: scripts
           GH_TOKEN: ${{ github.token }}
           MILESTONE: ${{ github.event.pull_request.milestone.number || github.event.issue.milestone.number }}
         run: python scripts/dev/session_milestone.py close-if-done "$MILESTONE" --repo "$GITHUB_REPOSITORY"
