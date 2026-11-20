@@ -37,6 +37,7 @@ WIRED_SLUGS = frozenset(
         "daniel-pi-docker-prune",
         "daniel-box-worktree-sweep",
         "daniel-server-worktree-sweep",
+        "airflow-warehouse-fresh",
     }
 )
 

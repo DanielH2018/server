@@ -110,6 +110,9 @@ monitor_bridge_healthchecks_expected:
   - {slug: daniel-pi-docker-prune, kind: cron, schedule: "30 6 * * *", tz: UTC, grace: 3600}
   - {slug: daniel-box-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
   - {slug: daniel-server-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
+  # Airflow's warehouse_freshness DAG, which pings /fail when a warehouse DAG missed yesterday.
+  # Its task retries three times five minutes apart, inside the hour's grace.
+  - {slug: airflow-warehouse-fresh, kind: cron, schedule: "0 6 * * *", tz: UTC, grace: 3600}
 
 manifests_rollout: monitor-bridge
 

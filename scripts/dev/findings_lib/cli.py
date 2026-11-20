@@ -307,28 +307,36 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     ms = sub.add_parser(
         "milestone",
-        help="open, show or close the branch's milestone for focused work, or change a "
-        "project milestone's backlog",
+        help="open, show or close the branch's milestone for focused work, make a group "
+        "no branch owns, or change a backlog",
         example=_example(
             'milestone start "Opt-in session milestones" --worktree worktree-my-branch'
         ),
-        epilog="Only `start` makes a milestone. Once one is open, `claim` files the "
+        epilog="Only `start` and `group` make a milestone. Once a branch's is open, `claim` files the "
         "branch's issues under it and the session-milestone workflow files its PR. The "
         "workflow closes it once nothing in it is open, and a later claim or PR reopens it. "
         "`start --project` makes one that also holds a backlog: `add` files unclaimed "
         "issues under it, `remove` takes them out, a released issue stays in it, and "
         '`next --milestone "<title>"` lists its free issues. While it is open, only its '
         "branch claims from that backlog, and a plain `next` counts the backlog instead "
-        "of offering it.",
+        'of offering it. `group "<title>" <n...>` makes a group: no branch owns it, it '
+        "reserves nothing, and it takes no --worktree. `start --project` under a group's "
+        "title adopts it for the branch, backlog included. It also adopts a project whose "
+        "owner branch nothing holds any more, and refuses one whose owner is live. "
+        "`disown` returns the branch's project to a group.",
     )
     _add_dry_run(ms, suppress=True)
     _add_repo(ms)
-    ms.add_argument("action", choices=["start", "status", "close", "add", "remove"])
+    ms.add_argument(
+        "action",
+        choices=["start", "group", "status", "close", "disown", "add", "remove"],
+    )
     ms.add_argument(
         "subject",
         nargs="*",
         metavar="TITLE|ISSUE",
-        help="for `start`: what the work is; for `add` and `remove`: issue numbers",
+        help="for `start`: what the work is; for `group`: a title, then issue numbers; "
+        "for `add` and `remove`: issue numbers",
     )
     ms.add_argument(
         "--project",
@@ -337,9 +345,14 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     ms.add_argument(
         "--worktree",
-        required=True,
         type=worktree_name,
-        help="the branch doing the work",
+        help="the branch doing the work; `start` and `disown` need it",
+    )
+    ms.add_argument(
+        "--group",
+        metavar="TITLE",
+        help="with `status`, `close`, `add` and `remove`: the group of this title, in "
+        "place of --worktree",
     )
 
     c = sub.add_parser(
