@@ -231,7 +231,7 @@ def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path)
     write(
         paths["k3s_defaults"],
         """\
-        k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
+        k3s_longhorn_r2_volumes: "{{ services | longhorn_r2_claims(k8s_namespace) }}"
         k3s_longhorn_weekly_volumes: []
         k3s_longhorn_nobackup_volumes: []
         """,

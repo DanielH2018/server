@@ -63,6 +63,7 @@ outlive H7.
 | `list` | Jinja | See the spec case. |
 | `longhorn_backup_name` | `scripts/renderer/template_filters/` | See the spec case. |
 | `longhorn_nobackup_claims` | `scripts/renderer/template_filters/` | See the spec case. |
+| `longhorn_r2_claims` | `scripts/renderer/template_filters/` | See the spec case. |
 | `longhorn_weekly_claims` | `scripts/renderer/template_filters/` | See the spec case. |
 | `lower` | Jinja | See the spec case. |
 | `map` | Jinja | See the spec case. |
@@ -79,7 +80,6 @@ outlive H7.
 | `selectattr` | Jinja | See the spec case. |
 | `sort` | Jinja | See the spec case. |
 | `string` | Jinja | See the spec case. |
-| `tier_backup_claims` | `scripts/renderer/template_filters/` | See the spec case. |
 | `tier_priority_class` | `scripts/renderer/template_filters/` | See the spec case. |
 | `to_json` | `jinja_filters.py` | Keeps key order and escapes non-ASCII to `\uXXXX`. No `<` escape, unlike `tojson`. |
 | `tojson` | Jinja | Sorts keys and escapes `<`, `>`, `&` and `'` for HTML. |

@@ -33,6 +33,8 @@
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
 # `tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
+# `r2_backup_claims` puts an untiered entry's volume on the same daily R2 list, for data
+# that no source can re-derive once a week has passed; ADR 0007 names each one.
 #
 # The other two Longhorn tiers derive from the entries the same way.
 # `weekly_backup_claims` maps a claim to its weekly B2 shard, 0 (Sunday) to 6, and becomes
@@ -1022,9 +1024,10 @@ containers_list:
     # this once vaultwarden_k8s_replicas is raised.
     probe: false
   - name: airflow
-    # Flux applies airflow through `promote`. A lost week of rollups re-derives from sources
-    # that keep at least seven days, so the warehouse needs no daily copy.
-    weekly_backup_claims: {airflow-postgres-data: 2}  # Tue
+    # Flux applies airflow through `promote`. The warehouse holds daily history its sources
+    # have discarded, Scrutiny's after six days and Home Assistant's after seven, so a week-old
+    # restore would lose days nothing can re-derive (ADR 0007).
+    r2_backup_claims: [airflow-postgres-data]
     hostname: "airflow"
     port: 8080
     use_authelia: true

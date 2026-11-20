@@ -15,16 +15,18 @@ which one holds the volume it wants. Routing is per-volume, via `spec.backupTarg
 | Target | Longhorn name | Holds | Credential Secret | Rendered from |
 |---|---|---|---|---|
 | Backblaze B2 | `default` | everything not listed below (weekly, weekday-sharded since 2026-08-16) | `longhorn-b2` | `longhorn_b2_key_id` / `longhorn_b2_application_key` |
-| Cloudflare R2 | `r2` | the four volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
+| Cloudflare R2 | `r2` | the five volumes below | `longhorn-r2` | `r2_access_key_id` / `r2_secret_access_key` / `r2_account_id` |
 
 The R2 set (`k3s_longhorn_r2_volumes`) is `homelab/traefik-acme`,
-`homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data`.
-The `longhorn-reconcile` role derives it from the `backup_claims` of every `home-critical`
-entry (tier `home-edge` or `home-automation`) in
-`containers_list`, so a change to the set is an edit to those entries. Its hourly CronJob
-sets each Volume's `spec.backupTargetName` from the set. The four volumes are
-the TLS material every route depends on, the SSO store behind every authenticated route,
-and the two home-automation stores that are slow to rebuild by hand. They are on **both**
+`homelab/authelia-config`, `homelab/home-assistant-config`, `homelab/zigbee2mqtt-data` and
+`homelab/airflow-postgres-data`. The `longhorn-reconcile` role derives it from the
+`backup_claims` of every `home-critical` entry (tier `home-edge` or `home-automation`) in
+`containers_list`, then every entry's `r2_backup_claims`, so a change to the set is an edit
+to those entries. Its hourly CronJob sets each Volume's `spec.backupTargetName` from the set.
+The five volumes are the TLS material every route depends on, the SSO store behind every
+authenticated route, the two home-automation stores that are slow to rebuild by hand, and
+the Airflow warehouse, whose daily history its sources discard within a week. They are on
+**both**
 targets' worth of protection in the sense that matters: a B2 account-level failure (cap,
 billing, key revocation) does not take them with it.
 
@@ -143,7 +145,7 @@ the per-volume map and each exclusion's rationale:
    targets, their credential Secrets (`longhorn-b2`, `longhorn-r2`, substituted from
    `homelab-cluster-vars`) and the RecurringJobs. The arm flags `k3s_longhorn_backup_armed`
    and `k3s_longhorn_r2_armed` are tracked in `longhorn-backup`'s defaults. Both must be
-   `true` in the render at `prod`: the four volumes in the table above restore from the R2
+   `true` in the render at `prod`: the five volumes in the table above restore from the R2
    target, so a B2-only bring-up leaves them with nothing to restore from. The bootstrap
    section's step 1 checks them.
 3. **Wait for the backupstore sync** — `uv run python scripts/diagnostics/probe.py health longhorn-backup`
@@ -191,7 +193,7 @@ the per-volume map and each exclusion's rationale:
    sync rather than on the cap.
 
    Restore from the target that holds each volume (the
-   table above); in the Longhorn UI the backups are listed per target, so the four R2
+   table above); in the Longhorn UI the backups are listed per target, so the five R2
    volumes do not appear under `default`. In the UI (or per-backup `Volume` CRs with
    `spec.fromBackup`): restore each backed-up volume under its original PV name, then use
    Longhorn's **Create PV/PVC** with the original namespace/PVC names
