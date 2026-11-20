@@ -19,14 +19,12 @@ closes each one at render time, and sets the controller flags the role names:
 - each Deployment's entry in `controller_resources` is merged into its first container's
   `resources`, so one controller's request moves without a hand edit to the vendored file.
 
-A merge patch cannot replace one item of a list either, which is why the flags are code too.
-A merge patch cannot rename a list item, which is why the rename is code rather than patch
-data. Each renamed item is written with `name` as its first key. `_IndentedDumper` indents
-every block sequence two columns under its key, the style the hand-written templates use.
-That is a style choice only: PyYAML's default writes a sequence at its key's own column, and
-the volume-name guard (`volume_blocks` in `tests/k8s/test_volume_names_descriptive.py`)
-reads that form too since #4733. Dropping the dumper would change the flux render's whitespace
-and nothing else.
+A merge patch can neither replace nor rename one item of a list, so the flags and the
+rename are code rather than patch data. Each renamed item is written with `name` as its first
+key. `_IndentedDumper` indents every block sequence two columns under its key, the style the
+hand-written templates use. That is a style choice only: the volume-name guard (`volume_blocks`
+in `tests/k8s/test_volume_names_descriptive.py`) reads PyYAML's default form too, so dropping
+the dumper would change the flux render's whitespace and nothing else.
 """
 
 import copy
