@@ -1,4 +1,4 @@
-"""`lib.inventory_lists`: the one reading of the host list and the service lists.
+"""`lib.inventory_lists`: the host list and the Pi's service list.
 
 Run: uv run pytest scripts/lib/tests/test_inventory_lists.py
 """
@@ -13,7 +13,6 @@ from lib.inventory_lists import (
     K8S_HOST,
     PI_HOST,
     PI_HOST_VARS,
-    containers_entries_in,
     host_names,
     pi_entries_in,
 )
@@ -83,21 +82,6 @@ def test_a_second_armed_host_breaks_the_pin(tmp_path):
     (tmp_path / "daniel-new.yml").write_text("x: 1\nhas_docker: true  # armed\n")
     (tmp_path / "daniel-off.yml").write_text("has_docker: false\n  has_docker: true\n")
     assert hosts_arming("has_docker", tmp_path) == ("daniel-box", "daniel-new")
-
-
-def test_containers_entries_keep_named_mappings_only():
-    data = {
-        "containers_list": [
-            {"name": "a"},
-            {"name": ""},
-            {"platform": "k8s"},
-            "not-a-mapping",
-            {"name": "b", "platform": "k8s"},
-        ]
-    }
-    assert [e["name"] for e in containers_entries_in(data)] == ["a", "b"]
-    assert containers_entries_in(None) == []
-    assert containers_entries_in({"containers_list": None}) == []
 
 
 def test_pi_entries_in_reads_compose_services_alone():

@@ -40,18 +40,13 @@ from typing import Protocol
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `changed_set` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.git import git
 from validate.cluster_pins import PINS, Pin, Unjudged, version
 
-import forge
-from changed_set import footprints
+from deploy_tools import forge
+from deploy_tools.changed_set import footprints
 from deploy_tools.promote_lib.prune import ReadError
 
 FORWARD_ONLY_FLAG = "flux_forward_only"

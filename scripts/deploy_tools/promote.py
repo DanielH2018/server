@@ -120,16 +120,15 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
 from lib.repo_paths import REPO
 
-import bundle_census
-import forge
-from changed_set import suspended_changed
-import object_loss
-import tag_rule
+from deploy_tools import bundle_census
+from deploy_tools import forge
+from deploy_tools.changed_set import suspended_changed
+from deploy_tools import object_loss
+from deploy_tools import tag_rule
 from deploy_tools.promote_lib import forward_only, reset, stateful, supersede
 from deploy_tools.promote_lib import verify_promotion as verify, wait, wait_reads
 from deploy_tools.promote_lib.decision import (

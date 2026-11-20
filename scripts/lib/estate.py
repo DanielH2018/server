@@ -27,6 +27,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
+from lib.container_entry import ContainerEntry
 from lib.inventory_lists import K8S_HOST
 from lib.render_guard import host_files, host_layer, k8s_services, load_yaml
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
@@ -148,7 +149,7 @@ class Estate:
         return None
 
     @cached_property
-    def services(self) -> list[dict]:
+    def services(self) -> tuple[ContainerEntry, ...]:
         """Every k8s service's entry, in ``cluster/services.yml`` order."""
         return k8s_services(self.inventory.services)
 

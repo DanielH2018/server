@@ -100,7 +100,7 @@ def _step_3_over_master(
     REAL await_ci.wait runs over a fake clock and a fake GitHub, and the origin is a real
     repository, so the wait reaches a descendant through whichever git query a fix chooses.
     """
-    import await_ci
+    from deploy_tools import await_ci
     from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 
     scrub_process_git_env(monkeypatch)

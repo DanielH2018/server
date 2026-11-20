@@ -6,7 +6,7 @@ The `digests.json` fixtures are in contract C1's format.
 
 from dataclasses import dataclass, field
 
-import chained_timeout
+from deploy_tools import chained_timeout
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
 from lib import yaml_fast

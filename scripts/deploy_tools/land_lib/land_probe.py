@@ -37,7 +37,6 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
