@@ -240,6 +240,14 @@ before deciding what is due. Examples:
   - The CrowdSec LAPI holds `crowdsec_k8s_bouncer_api_key` and `crowdsec_k8s_agent_password`
     in its registrations. The CrowdSec bullet below gives the deletes that let them
     re-register.
+  - Two stores hold copies that the tree cannot list, so the operator listed them on
+    2026-11-20. No MCP client held `homelab_mcp_token`: neither account on daniel-box or
+    daniel-server registered homelab-mcp in its `~/.claude.json`, and neither did the
+    operator's PC or work laptop. A client that registers homelab-mcp holds a copy there,
+    and the key gets its `OUTSIDE_THE_TREE` row in that change. n8n held three credentials.
+    Its Google Calendar and Gmail credentials are OAuth2 grants that copy no SOPS key, and
+    its Gemini credential copies `karakeep_gemini_api_key`, which the `external` section
+    covers. A credential added to n8n that copies a SOPS key gets a row in the same way.
 - `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
   (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API and
   `homelab-k3s-kubeconfig` writes into the read-only `~/.kube/config` on daniel-box and
@@ -490,6 +498,11 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   `k8s/roles/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
   that one small Secret. Flux owns qbittorrent, so it takes the new Secret once
   `cluster_vars.py write` has updated the cluster file and the change lands.
+- `karakeep_gemini_api_key`: Google AI Studio → API keys. **n8n holds a second copy that no
+  deploy reaches**, so `stale_copies.OUTSIDE_THE_TREE` lists the key, and a landing that
+  rotates it ends `needs-manual-apply`. The copy is n8n's `Google Gemini(PaLM) Api account`
+  credential, entered through its UI and stored in `database.sqlite` on the `n8n-data` PVC.
+  After rotating the key, set it in n8n → Overview → Credentials → that credential → API Key.
 - `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
 - `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
   tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The

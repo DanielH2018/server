@@ -216,3 +216,13 @@ def test_remove_takes_a_backlog_issue_out_and_refuses_a_claimed_one(capsys):
     assert main(["milestone", "remove", "1132", "1140", "--worktree", WT], tools) == 3
     assert calls.gh == [["issue", "edit", "1132", "--remove-milestone"]]
     assert "#1140 refused: claimed by `worktree-b`" in capsys.readouterr().err
+
+
+def test_start_project_dry_run_words_the_adoption_as_not_done(capsys):
+    group = {**PROJECT, "description": GROUP_DESCRIPTION}
+    tools, _ = build_tools(Fakes(api={MILESTONES: [[group]]}))
+    argv = ["milestone", "start", "--project", "Backups", "--worktree", WT, "--dry-run"]
+    assert main(argv, tools) == 0
+    out = capsys.readouterr().out
+    assert "would open" in out
+    assert "would adopt" in out

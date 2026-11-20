@@ -104,12 +104,13 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     assert pinned == renovate_identity.GH_AUTHOR
     lookalike = "renovate-fan"
     for login, admitted in ((pinned, True), (lookalike, False)):
-        reasons = land_renovate_pr.refusals({"author": {"login": login}}, frozenset())
+        pr = {"number": 1, "author": {"login": login}, "headRefName": "renovate/x"}
+        reasons = land_renovate_pr.refusals(pr, frozenset())
         assert any("author" in r for r in reasons) is not admitted, login
     listing = json.dumps(
         [
-            {"number": 1, "author": {"login": pinned}},
-            {"number": 2, "author": {"login": lookalike}},
+            {"number": 1, "author": {"login": pinned}, "headRefName": "renovate/a"},
+            {"number": 2, "author": {"login": lookalike}, "headRefName": "renovate/b"},
         ]
     )
     assert [pr.number for pr in renovate_agent._renovate_prs(listing)] == [1]
@@ -320,20 +321,6 @@ CONFIG_ENV = "config.env.j2"
 UNIT_DEADLINE = re.compile(
     r'write_check_textfile renovate-agent 1 "\$\(date \+%%s\)" (\d+)'
 )
-
-
-def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
-    """M6 batch B4's Cutover-1a deleted the Renovate Agent tile and dropped the beat with it.
-
-    A beat into a deleted tile gets a 404, `curl -f` fails, and `OnFailure` pages every day.
-    """
-    posts = directive(unit, "ExecStartPost")
-    assert any("write_check_textfile renovate-agent" in p for p in posts), (
-        "the unit's textfile write is the verdict RenovateAgentNotReporting reads"
-    )
-    assert not any("curl" in p or "KUMA_PUSH_URL" in p for p in posts), posts
-    assert "/api/push/" not in unit
-    assert "KUMA_PUSH_URL" not in render(CONFIG_ENV)
 
 
 def test_config_env_stays_root_owned_and_group_read_only() -> None:

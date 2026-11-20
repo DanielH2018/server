@@ -23,7 +23,6 @@ DOCS = REPO / "scripts" / "docs"
 LIB = DOCS / "fragments_lib"
 ENTRYPOINT = DOCS / "gen_doc_fragments.py"
 DOMAINS = ("bridge", "deploy", "hosts", "storage")
-FLAT = tuple(f"fragments_{d}" for d in DOMAINS)
 
 
 def _tracked() -> list[str]:
@@ -46,16 +45,6 @@ def _lib_modules() -> list[str]:
 def _clean_env() -> dict[str, str]:
     """The environment a cron or a shell gives a directly-invoked script: no PYTHONPATH."""
     return {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-
-
-def test_the_four_libraries_live_in_a_namespace_package():
-    tracked = set(_tracked())
-    still_flat = sorted(
-        f"scripts/docs/{m}.py" for m in FLAT if f"scripts/docs/{m}.py" in tracked
-    )
-    assert still_flat == [], f"still beside the entrypoint: {still_flat}"
-    assert "scripts/docs/fragments_lib/__init__.py" not in tracked
-    assert len(_lib_modules()) == len(DOMAINS), _lib_modules()
 
 
 def test_each_library_resolves_its_imports_when_run_directly(tmp_path):

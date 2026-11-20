@@ -367,7 +367,7 @@ and the bedtime/wake routines that drive them.
   drop the hold for an instant. `bedroom_apply_natural` keeps reading `wake_start` alone, because
   `bedroom_apply_wake` halts without it. The two per-minute ramp tickers also compute their own
   elapsed.
-- **The wake ramp does not read sleep quality.** The short-night softening and the "you slept
-  N h" note were removed 2026-08-16: their only source, `sensor.pixel_9_pro_sleep_duration`, no
+- **HISTORY — the wake ramp stopped reading sleep quality on 2026-08-16.** The short-night
+  softening and the "you slept N h" note were removed: their only source, `sensor.pixel_9_pro_sleep_duration`, no
   longer exists on either device. The `wake_brightness` comment in `custom_templates/lighting.jinja`
   says what rebuilding it would take.

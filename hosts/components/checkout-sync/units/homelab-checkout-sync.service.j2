@@ -24,7 +24,7 @@ SyslogIdentifier=homelab-checkout-sync
 # Well under the 10-minute timer interval, so a slow walk cannot hold the tree from the next run.
 TimeoutStartSec=150
 # -n: a run that finds the tree lock held skips with 75 rather than waiting, and the next run
-# 10 minutes later tries again. Every tree job takes the same lock.
+# 10 minutes later tries again.
 # Deliberately WITHOUT --no-python-downloads, like gitops-deploy.service: a missing interpreter
 # must not stop the sync, because every landing tool refuses to work from a stale checkout.
 # hosts/tests/test_host_python_invocations.py pins the exemption.

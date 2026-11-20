@@ -42,6 +42,7 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
+from renderer.renderer_lib.documents import parse_documents
 from renderer.renderer_lib.environment import RenderError
 
 FILES = JOB_FILES
@@ -104,12 +105,11 @@ def claim_namespaces(
     Raises:
         RenderError: A claim matches no rendered PersistentVolumeClaim.
     """
-    rendered = {}
-    for text in files.values():
-        for doc in yaml_fast.safe_load_all(text):
-            if isinstance(doc, dict) and doc.get("kind") == "PersistentVolumeClaim":
-                meta = doc.get("metadata") or {}
-                rendered[str(meta.get("name"))] = str(meta.get("namespace"))
+    rendered = {
+        obj.name: obj.namespace
+        for obj, _ in parse_documents(files.values())
+        if obj.kind == "PersistentVolumeClaim"
+    }
     missing = sorted(set(claims) - set(rendered))
     if missing:
         raise RenderError(

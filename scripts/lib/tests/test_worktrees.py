@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
+from lib.proc_testing import live_session_lock
 from lib.worktrees import (
     COORDINATOR_LOCK,
     FOREIGN_UID,
@@ -29,16 +30,6 @@ from lib.worktrees import (
     lock_is_live,
     worktree_facts,
 )
-
-LIVE_LOCK = "claude session mine (pid {pid} start {start})"
-
-
-def _live_lock_reason():
-    """A lock reason naming this process, which is by definition still running."""
-    pid = os.getpid()
-    with open(f"/proc/{pid}/stat") as handle:
-        start = handle.read().rpartition(")")[2].split()[19]
-    return LIVE_LOCK.format(pid=pid, start=start)
 
 
 @contextmanager
@@ -167,16 +158,27 @@ def test_a_coordinator_project_an_idle_process_stands_in_is_clean(tmp_path):
         assert has_live_session(_project_tree(tmp_path))
 
 
-def test_any_other_lock_is_judged_by_its_own_reason(tmp_path):
+def _cron_tree(path):
+    reason = "docs-refresh's own tree"
+    return Worktree(str(path), "abc", None, locked=True, lock_reason=reason)
+
+
+def test_a_lock_naming_no_session_or_batch_with_no_process_is_flagged(tmp_path):
+    assert lock_is_live(_cron_tree(tmp_path))
+
+    assert not has_live_session(_cron_tree(tmp_path), in_use=lambda path: [])
+
+
+def test_a_session_lock_is_judged_by_its_own_reason(tmp_path):
     held = Worktree(
-        str(tmp_path), "abc", "b", locked=True, lock_reason=_live_lock_reason()
+        str(tmp_path), "abc", "b", locked=True, lock_reason=live_session_lock()
     )
     gone = Worktree(
         str(tmp_path),
         "abc",
         "b",
         locked=True,
-        lock_reason=LIVE_LOCK.format(pid=1, start=0),
+        lock_reason="claude session gone (pid 1 start 0)",
     )
 
     assert has_live_session(held, in_use=lambda path: [])

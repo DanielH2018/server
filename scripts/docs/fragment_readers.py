@@ -5,10 +5,10 @@ touches the tree. Each function takes a path or a blob of text and returns plain
 renderer in `fragment_renderers.py` is a pure function of what one of these returns and
 neither half has to know about the other.
 
-STATIC PARSING ONLY, for the reason the generator's own docstring gives: importing the
-rotation tool would bootstrap `sys.path` and read the environment on import.
+STATIC PARSING ONLY, for the reason the generator's own docstring gives.
 Python constants come from `ast`, package listings from `yaml_fast`, and the
-fail2ban jail template from `configparser`.
+fail2ban jail template from `configparser`. The rotation registry is the generator's to
+read, through `rotation_tools.load_registry`.
 """
 
 import ast
@@ -42,21 +42,6 @@ def hosts_listing_component(
         if component
         in (yaml_fast.safe_load(path.read_text()) or {}).get("components", [])
     )
-
-
-def registry_counts(path: _Path) -> dict[str, int]:
-    """How many registered secrets sit in each tier."""
-    counts: dict[str, int] = {}
-    for entry in yaml_fast.safe_load(path.read_text())["entries"].values():
-        tier = str(entry.get("tier", "?"))
-        counts[tier] = counts.get(tier, 0) + 1
-    return counts
-
-
-def registry_record_keys(path: _Path) -> list[str]:
-    """The registered secrets marked `source: record`, sorted by name."""
-    entries = yaml_fast.safe_load(path.read_text())["entries"]
-    return sorted(n for n, e in entries.items() if e.get("source") == "record")
 
 
 def parse_jails(conf: str) -> list[dict[str, str]]:

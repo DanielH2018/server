@@ -211,7 +211,9 @@ Each note names which of slices H7.53 to H7.57 removed the statements it marks a
   `scripts/lib/tree_lock.py` still guards the tree lock. `deploy.sh` and
   `gitops-deploy.service` are no longer holders: H7.52 retired the deployer's timer, and
   H7.53 deleted `deploy.sh` and the deployer's code. `homelab-checkout-sync` and the crons
-  that write the tree (docs-refresh and eval-run) still take the tree lock.
+  that write the tree (docs-refresh and eval-run) still take the tree lock. Since 2026-11-20
+  neither cron takes it: each commits in its own worktree, and ADR-0011's amendment names
+  the one holder left.
 - **[ADR-0012](0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md).** Its two gates
   describe the Ansible deploy path, and its ADR-0020 amendment says `deploy.sh` refuses a
   k8s tag. H7.53 deleted `deploy.sh`, H7.55 deleted `ansible/deploy.yml`, and H7.56 removed

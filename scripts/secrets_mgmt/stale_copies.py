@@ -28,6 +28,7 @@ OUTSIDE_THE_TREE: Mapping[str, str] = MappingProxyType(
     {
         "crowdsec_k8s_agent_password": "the CrowdSec LAPI's machine registrations",
         "crowdsec_k8s_bouncer_api_key": "the CrowdSec LAPI's bouncer registration",
+        "karakeep_gemini_api_key": "n8n's Google Gemini credential",
         "lidarr_api_key": "Prowlarr's Lidarr application",
         "livesync_db_password": "each Obsidian LiveSync client's plugin settings",
         "livesync_sync_token": "each Obsidian LiveSync client's plugin settings",

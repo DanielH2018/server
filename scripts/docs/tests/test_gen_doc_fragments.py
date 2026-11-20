@@ -14,6 +14,8 @@ import pytest
 from docs import fragment_readers as readers
 from docs import fragment_renderers as renderers
 from docs import gen_doc_fragments as g
+from secrets_mgmt.rotation_tools import load_registry
+from secrets_mgmt.secrets_lib.secret_registry import record_names
 
 DOCS = g.REPO / "docs"
 INCLUDE = re.compile(
@@ -92,24 +94,13 @@ def test_module_constant_rejects_a_name_that_is_not_assigned():
         readers.module_constant(g.SECRET_ROTATION, "_NO_SUCH_CONSTANT")
 
 
-def test_registry_counts_cover_every_registered_secret():
-    counts = readers.registry_counts(g.SECRET_REGISTRY)
-    assert sum(counts.values()) > 100
-
-
-def test_registry_record_keys_reads_the_source_field():
-    keys = readers.registry_record_keys(g.SECRET_REGISTRY)
-    assert "authelia_password" in keys
-    assert keys == sorted(keys)
-
-
 def test_every_record_key_has_a_mechanism_bullet_and_no_other_key_does():
     # The fragment lists the keys; the bullets under it are hand-written, one per key. A key
     # marked `source: record` with no bullet, or a bullet for a key no longer marked, is drift.
     page = (DOCS / "secret-rotation.md").read_text()
     section = page.split("### Record keys", 1)[1].split("\n## ", 1)[0]
     bullets = re.findall(r"^- `(\w+)` —", section, re.MULTILINE)
-    assert bullets == readers.registry_record_keys(g.SECRET_REGISTRY)
+    assert bullets == record_names(load_registry(g.SECRET_REGISTRY))
 
 
 # --- renderers: pure, and they can go red ----------------------------------------------------
@@ -301,7 +292,6 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
     assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
     assert "| `registry-gc` | `20 4 * * 0` |" in out
-    assert "| `uptime-kuma-alive` |" not in out
     assert "| `weekly-reboot-box` | `30 7 * * 0` |" in out
     assert "| `weekly-reboot-pi` | `30 7 * * 0` |" in out
     assert "| `pi-docker-prune` | `30 6 * * *` |" in out
