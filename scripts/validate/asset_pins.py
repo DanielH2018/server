@@ -71,10 +71,6 @@ from dataclasses import dataclass
 from typing import Any
 from pathlib import Path as _Path
 
-# `lib` is a sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import jinja2
 
 from lib.cli_help import ArgumentParser

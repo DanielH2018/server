@@ -10,11 +10,6 @@ is checkable the day k3s ships it rather than when a third-party package republi
 validator that reads them.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import enum
 import functools
 import json
