@@ -40,7 +40,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-from lib import yaml_fast
 from lib.k8s_roles import WHOLE_DURATION
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.documents import parse_documents
