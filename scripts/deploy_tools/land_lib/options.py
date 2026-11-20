@@ -9,11 +9,9 @@ shim as a process has no other way to aim a landing away from the live checkout.
 import argparse
 import os
 import re
-import sys as _sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import PRIMARY_CHECKOUT
 

@@ -78,6 +78,11 @@ venv per tree.
 - `lib.host_modules` is the one module under `scripts/` that puts a directory on `sys.path`:
   `hosts/lib` and the gh-quota component's `files/`, whose modules ship to the hosts as flat
   files and import by bare name. A caller imports it before those bare imports.
+- `lib.host_modules` also appends each role directory `repo_paths.ROLE_MODULES` lists, such as
+  monitor-bridge's `files/` for `longhorn_robustness`. Appending keeps a role's modules from
+  shadowing anything else. `deploy_tools/forge.py` imports `lib.host_modules`, so a landing
+  counts that role directory among its import roots. The landing gate therefore reads more
+  paths as gate code, never fewer.
 - A module a host package copies (a `shared:` entry, such as `scripts/lib/longhorn_lib/`) is
   the exception. No `lib` ships beside it, so it cannot import `lib.host_modules`. It keeps its
   own insert of `hosts/lib`, which names a directory that does not exist on the host, and

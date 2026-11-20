@@ -120,9 +120,9 @@ ls -d scripts/*/ scripts/*/*/ tests/*/ k8s/roles/monitor-bridge/files/*/
 
 For an agent PR, the landing policy enforces the rule. `land_lib/policy.py:shape_hits` needs
 the operator's approval for a module added beside a directory of the same name, at any depth.
-It also needs approval for a module at the top of one `sys.path` root that `land.py` inserts
+It also needs approval for a module at the top of one of `land.py`'s `sys.path` roots
 when it shadows a directory or module at the top of another. It reads those roots from
-`land.py`'s own inserts, not from `pythonpath`: the refusal protects what `land.py` imports,
+`land.py`'s `sys.path` once its imports have run, not from `pythonpath`: the refusal protects what `land.py` imports,
 and `pythonpath` applies only under pytest. Across the `pythonpath` roots, every role's `files/`
 and every `scripts/<dir>` holding a `tests/`, the
 `no-two-import-roots-share-a-module-basename` row of `tests/repo/test_census_rows_python.py`

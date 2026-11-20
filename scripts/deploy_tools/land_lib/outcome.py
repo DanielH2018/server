@@ -16,7 +16,6 @@ import sys
 from enum import StrEnum
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP
 
 

@@ -9,10 +9,7 @@ master, and the merge base alone would send it through a second CI run it did no
 import re
 import subprocess
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.gh import gh as run_gh, gh_json as run_gh_json
 from lib.json_types import as_list
 
