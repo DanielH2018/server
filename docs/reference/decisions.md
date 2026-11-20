@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-19 23:49 UTC
-generated_sha: 519b8536a
+generated_at: 2026-11-20 01:49 UTC
+generated_sha: a1215438a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 519b8536a
 
 # Decisions
 
-628 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+629 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -543,6 +543,7 @@ generated_sha: 519b8536a
 | `manual` issues are not counted. | `scripts/dev/fanout_lib/operator_waits.py` | 2026-10-18 |
 | on by default (#3675, operator 2026-10-09). for a batch whose review would cost more than it can catch. | `scripts/dev/fanout_lib/place.py` | 2026-10-11 |
 | 2.0 GiB per agent (#5667, 2026-10-29). on the per-batch series (`claude_fanout_batch_memory_bytes{kind="anon"}`, 30s samples) peaked at 1781 MiB of anon on daniel-server and 1544 MiB on daniel-box. Whole-suite runs peak at 2473 MiB and are refused inside a batch. 2.0 GiB sits 267 MiB above the largest batch, and the margin is there because 30s sampling understates a short pytest spike. Raise it if a week of that query passes 2 GiB. The `peak` kind counts page cache and is not what this reserves. The reservation rarely binds: headroom subtracts the whole cgroup's memory.current, page cache included, so the cache binds first, and daniel-server's live cap binds before either. Do not read a launch refusal on daniel-box as a reservation problem. | `scripts/dev/fanout_lib/placement.py` | 2026-10-29 |
+| the conflict resume rebases, and the pipeline lands again only after a delta review. | `scripts/dev/fanout_lib/review/conflict_resume.py` | 2026-11-19 |
 | pin settings rather than snapshot and restore the config file. | `scripts/dev/fanout_lib/review/hardened_runs.py` | 2026-10-10 |
 | in this repo's batch, every phase that starts after the implementer ran (review, fix, | `scripts/dev/fanout_lib/review/held_hooks.py` | 2026-10-09 |
 | the implement phase keeps the project source. | `scripts/dev/fanout_lib/review/held_hooks.py` | 2026-11-19 |
@@ -674,8 +675,8 @@ generated_sha: 519b8536a
 | `ha-review` stays its own skill, not a `/homelab-review` domain (#2428, | `.claude/skills/ha-review/SKILL.md` | 2026-09-24 |
 | no skeptic cap and no `maxTurns` on `skeptic` (#4615). | `.claude/skills/homelab-review/SKILL.md` | 2026-11-14 |
 | no `maxTurns` on `implementer` (#4652, #4663). | `.claude/skills/homelab-review/SKILL.md` | 2026-11-14 |
-| the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-19 |
-| no download-artifact step in ci.yml, promote.yml or an action they call retries, unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure that a rerun cleared; every red one followed a build that never uploaded. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-19 |
+| the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-20 |
+| no download-artifact step in ci.yml, promote.yml or an action they call retries, unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure that a rerun cleared; every red one followed a build that never uploaded. | `.github/actions/host-packages-handoff/action.yml` | 2026-11-20 |
 | the step below names actions/cache by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/pinned-tool/action.yml` | 2026-11-19 |
 | the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`, for the reason .github/actions/setup/action.yml gives. | `.github/actions/pytest-tools/action.yml` | 2026-11-18 |
 | callers write `uses: $/.github/actions/setup`, which pins this action to the workflow's own commit, and the `actionlint` prek hook runs through scripts/validate/actionlint_dollar_refs.py (2026-11-12). actionlint 1.7.12 rejects `$/` as "ref is missing" and then skips checking the caller's `with:` keys against the inputs below (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and its test. The pin costs every job a download of this repository's tarball during `Set up job`, a median 2.3s on pytest legs (0.9s to 2.7s), accepted on 2026-11-15; a `./` reference reads the job's checkout and downloads nothing. | `.github/actions/setup/action.yml` | 2026-11-12 |
