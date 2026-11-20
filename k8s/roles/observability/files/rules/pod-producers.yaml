@@ -33,7 +33,7 @@ groups:
           severity: warning
           service: crowdsec
         annotations:
-          summary: The crowdsec remote allowlist job failed its last run.
+          summary: 'crowdsec: the remote allowlist job failed its last run.'
           description: >-
             The crowdsec-jobs remote allowlist run failed, so a new VPN exit or phone address is
             not exempt from CrowdSec bans. Causes: `kubectl` or `cscli` failing, no router
@@ -45,7 +45,7 @@ groups:
           severity: critical
           service: crowdsec
         annotations:
-          summary: The crowdsec engine has no enabled AppSec configuration or rule.
+          summary: 'crowdsec: the engine has no enabled AppSec configuration or rule.'
           description: >-
             Run `cscli appsec-configs list` in the crowdsec pod, and read the crowdsec-appsec-verify
             lines in the crowdsec-jobs container log. No appsec-config or appsec-rule is enabled, so
@@ -57,7 +57,7 @@ groups:
           severity: warning
           service: crowdsec
         annotations:
-          summary: The crowdsec home allowlist job failed its last run.
+          summary: 'crowdsec: the home allowlist job failed its last run.'
           description: >-
             The crowdsec-jobs home allowlist sync failed: a lookup or a cscli call failed, or the
             CronJob is not running and the crowdsec-home-ips ConfigMap has gone three periods
@@ -76,7 +76,8 @@ groups:
           severity: critical
           service: crowdsec
         annotations:
-          summary: The crowdsec-jobs sidecar has not finished a {{ $labels.check }} run in time.
+          summary: >-
+            crowdsec: the crowdsec-jobs sidecar has not finished a {{ $labels.check }} run in time.
           description: >-
             The {{ $labels.check }} job has not ended a run within three of its periods, so the
             sidecar's scheduler is hung or the job is skipped at every slot. Read the
@@ -91,7 +92,7 @@ groups:
           severity: critical
           service: crowdsec
         annotations:
-          summary: Prometheus has no crowdsec-jobs scrape job.
+          summary: 'crowdsec: Prometheus has no crowdsec-jobs scrape job.'
           description: >-
             No up{job="crowdsec-jobs"} series has existed for 10 minutes, so the job is gone from
             prometheus.yml and the three crowdsec sidecar verdicts are UNMONITORED, which is not
@@ -107,7 +108,7 @@ groups:
           severity: warning
           service: configarr
         annotations:
-          summary: configarr's last sync is stale, failed or logged an error.
+          summary: 'configarr: the last sync is stale, failed or logged an error.'
           description: >-
             The configarr-health reader judged the newest configarr Job down: older than 26
             hours, exited non-zero, logged an error-level line, or its pod logs are gone. Read
@@ -120,7 +121,7 @@ groups:
           severity: warning
           service: janitorr
         annotations:
-          summary: janitorr logged a scheduled-task error in the last 12 hours.
+          summary: 'janitorr: logged a scheduled-task error in the last 12 hours.'
           description: >-
             The janitorr-health reader counted at least one "Unexpected error occurred in
             scheduled task" line in the janitorr pod log over its window, or could not read the
@@ -142,7 +143,7 @@ groups:
           severity: warning
           service: configarr
         annotations:
-          summary: The configarr-health CronJob has not succeeded in 30 minutes.
+          summary: 'configarr: the configarr-health CronJob has not succeeded in 30 minutes.'
           description: >-
             The configarr-health CronJob has no successful run newer than three periods, so
             nothing watches the configarr sync. Read `kubectl -n homelab get jobs` for its newest
@@ -160,7 +161,7 @@ groups:
           severity: warning
           service: janitorr
         annotations:
-          summary: The janitorr-health CronJob has not succeeded in 30 minutes.
+          summary: 'janitorr: the janitorr-health CronJob has not succeeded in 30 minutes.'
           description: >-
             The janitorr-health CronJob has no successful run newer than three periods, so
             nothing watches janitorr's scheduled tasks. Read `kubectl -n homelab get jobs` for
