@@ -74,7 +74,7 @@ def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
     assert pushed[0] == "down", pushed
     assert "aide exited 17" in pushed[1]
     assert "ERROR: missing configuration" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
     assert (tmp_path / "aide-db" / "aide.db").read_text() == "last week\n"
     # The durable record of the verdict, which Loki keeps.
     assert any(line.startswith("aide-check: status=down ") for line in logged), logged
@@ -87,7 +87,7 @@ def test_a_held_lock_pushes_down_without_starting_a_second_scan(tmp_path):
     assert pushed[0] == "down", pushed
     assert "previous aide-check run still holds" in pushed[1]
     assert any(line.startswith("aide-check: status=down") for line in logged), logged
-    assert code == 1
+    assert code == 0
 
 
 def _textfile(root, check):
@@ -112,6 +112,15 @@ def test_an_error_exit_and_a_held_lock_each_write_success_0(tmp_path):
         root.mkdir()
         _run_check(root, ERROR_REPORT, rc=17, lock_held=held)
         assert _textfile(root, "aide-check")["homelab_check_success"] == "0", name
+
+
+def test_a_verdict_it_cannot_write_exits_non_zero(tmp_path):
+    """A DOWN exits 0, so the unit's failed state is left to say that no verdict was written."""
+    (tmp_path / "textfile").mkdir(mode=0o500)
+    code, pushed, logged, _ = _run_check(tmp_path, CLEAN_REPORT, rc=0)
+    assert pushed[0] == "up", pushed
+    assert any("textfile write failed" in line for line in logged), logged
+    assert code == 1
 
 
 def test_a_free_lock_lets_the_scan_run(tmp_path):
