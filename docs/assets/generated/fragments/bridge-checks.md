@@ -13,10 +13,12 @@
 | `speedtest` | `startup_grace` |  |  |
 | `discord` | `wan_reachable` | yes | `alert-runbooks` |
 | `r2_usage` | `wan_reachable` | yes | `longhorn-backup-tiering` |
+| `r2_etcd_lock` | `wan_reachable` |  | `longhorn-backup-tiering` |
 | `cloudflare_ips_drift` | `wan_reachable` |  |  |
 | `healthchecks_drift` | `wan_reachable` |  | `healthchecks-io-deadman` |
 | `domain_registration` | `wan_reachable` |  |  |
 | `uptime_robot_monitors` | `wan_reachable` |  | `uptime-robot-monitors` |
 | `b2_storage` | `b2_reachable` | yes | `longhorn-backup-tiering` |
+| `b2_object_lock` | `b2_reachable` |  | `longhorn-backup-tiering` |
 | `b2_reachable` | is a gate | yes | `longhorn-backup-tiering` |
 | `wan_reachable` | is a gate | yes | `alert-runbooks` |

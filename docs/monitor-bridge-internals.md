@@ -133,8 +133,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 3. `sonarr_api_key` / `radarr_api_key` / `bazarr_api_key` / `prowlarr_api_key`: the apps' own
    keys; re-derive from `/config/config.xml` inside the pod if needed.
 4. `cloudflare_analytics_token`: a Custom token with exactly **Account → Account Analytics →
-   Read** — never write or R2 permissions, which would let the bridge hard-stop the bucket it
-   guards; the monitor pages and a human decides. Run `secret_rotation.py sync`, then smoke-test
+   Read** and **Account → Workers R2 Storage → Read**. The second is for `r2_etcd_lock`'s
+   bucket-lock read (ADR-0041). Never give it a write permission, which would let the bridge
+   hard-stop the bucket it guards; the monitor pages and a human decides. Run `secret_rotation.py sync`, then smoke-test
    with `--once`: the unit tests mock the payload, so only the live run proves Cloudflare
    accepts the query and the token's scope. The check also reads the existing `r2_account_id`
    and `r2_bucket`.

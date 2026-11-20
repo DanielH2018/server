@@ -199,6 +199,7 @@ nav:
       - "ADR-0038 Design is checked where code is written": adr/0038-design-is-checked-where-code-is-written.md
       - "ADR-0039 scripts/ is installed in place": adr/0039-scripts-is-installed-in-place.md
       - "ADR-0040 Dead names, copied tests and unused parameters are gated": adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md
+      - "ADR-0041 The B2 weekly bucket and the R2 etcd snapshots are locked": adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a

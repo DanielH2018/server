@@ -144,8 +144,8 @@ checks each gate suppresses.
   they reported their cron's LAST SUCCESSFUL RUN rather than current B2 health. Those checks left
   with kopia, and backup moved to Longhorn
   (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`). The `b2_reachable` gate's members are
-  `check_b2_storage` (B2 Storage Usage), which queries B2 live and is gated here, so a
-  transaction-cap incident does not page twice for one root cause. This check reports B2's own
+  `check_b2_storage` (B2 Storage Usage) and `check_b2_object_lock`, which query B2 live and are
+  gated here, so a transaction-cap incident does not page twice for one root cause. This check reports B2's own
   `transaction_cap_exceeded` error text directly.
   **Throttled**, unlike the other two gates: the probe runs at most once per
   `B2_PROBE_INTERVAL_S` (1800 s = 48 calls/day in each class) and a BILLED outcome is cached, because the fault
@@ -182,6 +182,14 @@ checks each gate suppresses.
   failure is more often a 5xx. Empty credentials disable the check. **Behind `b2_reachable`**: a
   transaction cap fails this check and B2 Reachable together, and one root cause must not light
   two tiles. Runbook: `longhorn-backup-tiering`.)
+- **`b2_object_lock`** (`files/checks/b2.py:b2_object_lock`. One `b2_authorize_account` and one
+  `b2_list_buckets` for the bucket the `B2_PROBE_*` key is scoped to, two Class C calls. `down`
+  when the bucket's Object Lock is off, has no default retention, or cannot be read because the
+  key lacks `readBucketRetentions`. `down` too when the retention is governance mode and the
+  key, the one Longhorn writes with, holds `bypassGovernance`. Any answer from B2 is cached for
+  `BUCKET_LOCK_PROBE_INTERVAL_S` (a day), a refusal included, because B2 billed it. A transport
+  failure raises and the next cycle probes again. Behind `b2_reachable`, and its rule shares the
+  gate's `for: 10m`, because the row reads 0 whenever the gate does. The record is ADR-0041.)
 - **`r2_usage`** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
   `r2OperationsAdaptiveGroups` in ONE POST: month-to-date storage bytes, Class A and Class B
   operation counts as a percentage of the free tier (10 GB / 1M / 10M), `down` past
@@ -214,6 +222,14 @@ checks each gate suppresses.
   which point drop the `bucketName` filter rather than raising the thresholds.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
+- **`r2_etcd_lock`** (`files/checks/r2.py:r2_etcd_lock`. Reads the R2 bucket's lock rules from
+  Cloudflare's REST API, `GET /accounts/<id>/r2/buckets/<bucket>/lock`, with
+  `CF_ANALYTICS_TOKEN`, which needs Workers R2 Storage: Read for it. `down` unless an enabled
+  `Age` rule covers `etcd-snapshots/`, and `down` when any enabled rule covers `longhorn/`, the
+  daily tier, whose prune cannot delete a locked block. A verdict is cached for
+  `BUCKET_LOCK_PROBE_INTERVAL_S` (a day), either outcome, because only the operator changes a
+  lock. A refused read raises and is not cached. Behind `wan_reachable`. The record is ADR-0041,
+  and the operator steps are in `longhorn-backup-tiering`'s *Bucket immutability*.)
 - **`cloudflare_ips_drift`** (`checks/cloudflare_ips.py`: the two published range pages against
   `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and whose IPv4
   half netpol-baseline admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with

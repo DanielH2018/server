@@ -1,23 +1,39 @@
-"""Cloudflare R2 free-tier headroom for monitor-bridge — one GraphQL query, four arms.
+"""Cloudflare R2 for monitor-bridge: free-tier headroom, and the bucket lock on the etcd snapshots.
 
 Reads config as `cfg.X` and queries R2 through the `src` argument (`bridge.sources.Sources`),
-which a test replaces with a fake. Its cache is `src.state.r2_probe` (`bridge.streaks.State`). Rule and
-enforcement: bridge/config.py's header.
+which a test replaces with a fake. Its caches are `src.state.r2_probe` and
+`src.state.r2_lock_probe` (`bridge.streaks.State`). Rule and enforcement: bridge/config.py's
+header.
 """
 
 import json
 import time
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 from bridge.config import Config
 from bridge.sources import Sources
 from bridge.parsing import FETCH_BODY_MAX
-from bridge.types import JsonValue, as_list, as_object, as_object_list
+from bridge.types import (
+    CheckResult,
+    JsonValue,
+    as_list,
+    as_object,
+    as_object_list,
+    optional_object,
+)
 from verdicts.storage import (
     r2_classify_operations,
+    r2_lock_verdict,
     r2_month_start,
     r2_usage_verdict,
 )
+
+CF_API_URL = "https://api.cloudflare.com/client/v4"
+# `etcd-s3-folder` in longhorn-backup's k3s-etcd-snapshot-s3-secret.yaml.j2, and that role's
+# `k3s_longhorn_r2_backup_prefix`; test_check_r2_lock.py holds both to their sources.
+R2_ETCD_PREFIX = "etcd-snapshots/"
+R2_LONGHORN_PREFIX = "longhorn/"
 
 
 R2_QUERY = """query {
@@ -168,3 +184,49 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
 
 def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:
     return r2_usage(cfg, src)
+
+
+def r2_etcd_lock(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
+    """Daily read of the R2 bucket's lock rules. (ok, msg).
+
+    Every verdict is cached for BUCKET_LOCK_PROBE_INTERVAL_S. A failed read raises and is not
+    cached, because the Cloudflare API bills nothing. Empty `CF_ACCOUNT_ID`, `CF_ANALYTICS_TOKEN`
+    or `R2_BUCKET` disables the check.
+    """
+    if not cfg.CF_ACCOUNT_ID or not cfg.CF_ANALYTICS_TOKEN or not cfg.R2_BUCKET:
+        return True, "R2 lock check disabled (no account id / token / bucket)"
+    now = now if now is not None else time.time()
+    cache = src.state.r2_lock_probe
+    if cache["ts"] is not None and now - cache["ts"] < cfg.BUCKET_LOCK_PROBE_INTERVAL_S:
+        return cache["ok"], "%s (checked %.0fh ago)" % (
+            cache["msg"],
+            (now - cache["ts"]) / 3600,
+        )
+    body = as_object(
+        src.get_json(
+            "%s/accounts/%s/r2/buckets/%s/lock"
+            % (
+                CF_API_URL,
+                urllib.parse.quote(cfg.CF_ACCOUNT_ID, safe=""),
+                urllib.parse.quote(cfg.R2_BUCKET, safe=""),
+            ),
+            headers={"Authorization": "Bearer %s" % cfg.CF_ANALYTICS_TOKEN},
+        ),
+        "R2 bucket lock response",
+    )
+    if body.get("success") is not True:
+        raise RuntimeError(
+            "Cloudflare refused the R2 lock read: %s" % body.get("errors")
+        )
+    result_body = optional_object(body.get("result"), "R2 bucket lock result") or {}
+    rules = as_object_list(result_body.get("rules") or [], "R2 bucket lock rules")
+    result = CheckResult.of(r2_lock_verdict(rules, R2_ETCD_PREFIX, R2_LONGHORN_PREFIX))
+    cache["ts"] = now
+    cache["ok"], cache["msg"] = result
+    return result
+
+
+def check_r2_etcd_lock(cfg: Config, src: Sources) -> tuple[bool, str]:
+    return r2_etcd_lock(cfg, src)

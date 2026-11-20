@@ -236,3 +236,107 @@ def r2_usage_verdict(
             members,
         )
     return True, msg
+
+
+def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
+    """(ok, msg) for Object Lock on the B2 bucket Longhorn's weekly tier writes to.
+
+    ADR-0041 records the choice: Object Lock on, governance-mode default retention, and a writer
+    key that cannot bypass governance.
+
+    Args:
+      bucket: One entry of a `b2_list_buckets` response.
+      capabilities: The capabilities `b2_authorize_account` granted the key, which is the key
+        Longhorn writes with.
+    """
+    name = bucket.get("bucketName") or "the bucket"
+    lock = bucket.get("fileLockConfiguration")
+    if not isinstance(lock, dict):
+        return CheckResult(
+            False,
+            "B2 returned no fileLockConfiguration for %s" % name,
+            ["no lock config"],
+        )
+    if lock.get("isClientAuthorizedToRead") is not True:
+        return CheckResult(
+            False,
+            "the key has no readBucketRetentions, so %s's Object Lock is unreadable"
+            % name,
+            ["lock unreadable"],
+        )
+    value = lock.get("value") or {}
+    if value.get("isFileLockEnabled") is not True:
+        return CheckResult(False, "Object Lock is off on %s" % name, ["lock off"])
+    retention = value.get("defaultRetention") or {}
+    mode = retention.get("mode")
+    period = retention.get("period") or {}
+    if mode not in ("governance", "compliance") or not period.get("duration"):
+        return CheckResult(
+            False,
+            "%s has no default retention, so new uploads are not locked" % name,
+            ["no default retention"],
+        )
+    if mode == "governance" and "bypassGovernance" in capabilities:
+        return CheckResult(
+            False,
+            "the key Longhorn writes with holds bypassGovernance, so governance mode does "
+            "not bind it",
+            ["key bypasses governance"],
+        )
+    return True, "Object Lock on %s: %s, %s %s" % (
+        name,
+        mode,
+        period.get("duration"),
+        period.get("unit"),
+    )
+
+
+def _covers(rule_prefix: str, path_prefix: str) -> bool:
+    """Whether a rule on `rule_prefix` locks any object under `path_prefix`."""
+    return path_prefix.startswith(rule_prefix) or rule_prefix.startswith(path_prefix)
+
+
+def r2_lock_verdict(
+    rules: list[dict], locked_prefix: str, unlocked_prefix: str
+) -> tuple[bool, str]:
+    """(ok, msg) for the R2 bucket lock rules ADR-0041 requires.
+
+    An enabled `Age` rule must cover every object under `locked_prefix`, the etcd snapshots. No
+    enabled rule may lock anything under `unlocked_prefix`, Longhorn's daily tier: R2 keeps no
+    versions, so a locked block fails Longhorn's prune, and a failing prune retries.
+
+    Args:
+      rules: The `rules` list of the bucket's lock configuration.
+      locked_prefix: The key prefix the etcd snapshots upload under, with its trailing slash.
+      unlocked_prefix: The key prefix Longhorn's R2 target writes under, with its trailing slash.
+    """
+    enabled = [r for r in rules if r.get("enabled") is True]
+    over_longhorn = sorted(
+        str(r.get("id"))
+        for r in enabled
+        if _covers(str(r.get("prefix") or ""), unlocked_prefix)
+    )
+    if over_longhorn:
+        return CheckResult(
+            False,
+            "R2 lock rule %s covers %s, whose prune cannot delete a locked block"
+            % (", ".join(over_longhorn), unlocked_prefix),
+            ["lock over the Longhorn tier"],
+        )
+    for rule in enabled:
+        condition = rule.get("condition") or {}
+        if (
+            locked_prefix.startswith(str(rule.get("prefix") or ""))
+            and condition.get("type") == "Age"
+            and (condition.get("maxAgeSeconds") or 0) > 0
+        ):
+            return True, "R2 lock rule %s holds %s for %.0f days" % (
+                rule.get("id"),
+                locked_prefix,
+                condition["maxAgeSeconds"] / 86400,
+            )
+    return CheckResult(
+        False,
+        "no enabled Age lock rule covers %s" % locked_prefix,
+        ["etcd snapshots unlocked"],
+    )

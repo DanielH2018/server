@@ -37,10 +37,13 @@ DOCS = "https://docs.local.daniel-hunter.com"
 GRACE = "startup_grace"
 # Two bridge cycles (operator ruling 2026-10-31): a one-cycle blip must not fire.
 GRACE_FOR = "10m"
-# The three rows whose rules read 0 for two minutes at the weekly reboot on 2026-11-01 07:43 to
+# The rows whose rules read 0 for two minutes at the weekly reboot on 2026-11-01 07:43 to
 # 07:44Z, and so carry `for: 10m` without being `startup_grace` rows (operator ruling 2026-11-02).
-# Named, not derived: a fourth row that wants a `for:` has to be added here in a reviewed PR.
-REBOOT_ROWS = frozenset({"b2_reachable", "b2_storage", "host_packages"})
+# `b2_object_lock` joins its B2 siblings: it reads 0 whenever its gate does.
+# Named, not derived: another row that wants a `for:` has to be added here in a reviewed PR.
+REBOOT_ROWS = frozenset(
+    {"b2_reachable", "b2_storage", "b2_object_lock", "host_packages"}
+)
 EXPORTER_EXCLUSION = 'unless on() (up{job="node"} == 0)'
 EQUALITY = re.compile(r'^(\w+)="([^"]*)"$')
 
@@ -209,12 +212,13 @@ def test_each_gate_value_holds_the_rows_its_rules_were_placed_for():
         "wan_reachable": {
             "discord",
             "r2_usage",
+            "r2_etcd_lock",
             "cloudflare_ips_drift",
             "healthchecks_drift",
             "domain_registration",
             "uptime_robot_monitors",
         },
-        "b2_reachable": {"b2_storage"},
+        "b2_reachable": {"b2_storage", "b2_object_lock"},
         GRACE: {
             "n8n",
             "bazarr",

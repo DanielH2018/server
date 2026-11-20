@@ -16,7 +16,7 @@ groups:
       # monitor-bridge" points the operator at the wrong component. No route or inhibit matches
       # `service`; Alertmanager groups by [alertname, service], and alertname already separates
       # these rules.
-      # THE WAN FAMILY: the gate row and the six rows behind it. Each rule reads one row's
+      # THE WAN FAMILY: the gate row and the seven rows behind it. Each rule reads one row's
       # `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict is
       # down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as
       # the gate, so source and targets reach Alertmanager in one batch. No rule has a `for:`:
@@ -70,6 +70,20 @@ groups:
             Month-to-date R2 storage, Class A operations, Class B operations or incomplete multipart
             uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this is the only
             boundary.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
+      - alert: R2EtcdSnapshotLockMissing
+        expr: homelab_check_success{job="monitor-bridge", check="r2_etcd_lock"} == 0
+        labels:
+          severity: warning
+          service: r2
+          requires: wan
+        annotations:
+          summary: "r2: no lock rule holds the etcd snapshots, or a rule locks Longhorn's tier."
+          description: >-
+            ADR-0041 requires an enabled Age lock rule over etcd-snapshots/ and none over
+            longhorn/. The monitor-bridge log names which failed: `kubectl -n homelab logs
+            deploy/monitor-bridge | grep 'DOWN r2_etcd_lock '`. A 403 means the analytics token
+            lacks Workers R2 Storage: Read.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: CloudflareIPRangesDrifted
         expr: homelab_check_success{job="monitor-bridge", check="cloudflare_ips_drift"} == 0
@@ -217,8 +231,8 @@ groups:
             minutes a row has aged past its deadline or fewer rows export homelab_check_success than
             homelab_check_rows counts, so the run loop is hung or skipping rows.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#bridgecheckstale
-      # THE B2 FAMILY: the gate row and the one row behind it. Both rules are `for: 10m`, so the
-      # two-minute gate dip of the weekly reboot does not page. The two rules share one `for:`
+      # THE B2 FAMILY: the gate row and the two rows behind it. All three rules are `for: 10m`, so
+      # the two-minute gate dip of the weekly reboot does not page. The rules share one `for:`
       # on purpose: the dependent must not page before its inhibit source exists, and both go
       # to 0 in the same cycle.
       # `B2Unreachable` sources the inhibit in alertmanager-secret.yaml.j2 for `requires: b2`.
@@ -255,6 +269,20 @@ groups:
           description: >-
             A drain is nearly free, but a prune pays per deleted backup, so read
             longhorn-backup-tiering before deleting anything.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
+      - alert: B2ObjectLockOff
+        expr: homelab_check_success{job="monitor-bridge", check="b2_object_lock"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: b2
+          requires: b2
+        annotations:
+          summary: "b2: the weekly backup bucket's Object Lock is off, unreadable or bypassable."
+          description: >-
+            ADR-0041 requires Object Lock with a default retention on the B2 bucket, and a writer
+            key without bypassGovernance. The monitor-bridge log names which failed: `kubectl -n
+            homelab logs deploy/monitor-bridge | grep 'DOWN b2_object_lock '`.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       # THE UNGATED FAMILY: the three rows with no `gate` column value. None reads
       # Prometheus, Loki or the WAN, and none is a `startup_grace` row, so no rule here carries

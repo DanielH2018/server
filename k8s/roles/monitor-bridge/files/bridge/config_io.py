@@ -45,6 +45,7 @@ class IoConfig:
     R2_USAGE_MAX_PCT: float
     R2_UPLOADS_MAX: float
     R2_PROBE_INTERVAL_S: float
+    BUCKET_LOCK_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
     DOMAIN_RDAP_URL: str
@@ -194,9 +195,10 @@ def io_config(
         # ~2.5k B2 Class B/day against a cap) while the fix is still a config edit.
         #
         # CF_ANALYTICS_TOKEN is file-mounted like HA_TOKEN and the B2 key, for the same reason
-        # (H2): an account-scoped credential must not sit inline in the container Env. Its ONLY
-        # permission is Account Analytics: Read — it cannot touch bucket data, which is why the
-        # check reads usage and pages rather than revoking anything itself.
+        # (H2): an account-scoped credential must not sit inline in the container Env. It holds
+        # read permissions only: Account Analytics: Read for this usage check, and Workers R2
+        # Storage: Read for r2_etcd_lock's bucket-lock read (ADR-0041). It cannot change a bucket
+        # or delete an object, which is why both checks page rather than act.
         CF_GRAPHQL_URL=_env(
             "CF_GRAPHQL_URL", "https://api.cloudflare.com/client/v4/graphql"
         ),
@@ -224,6 +226,10 @@ def io_config(
         # Cloudflare's pricing page decides them, not this deployment — so they live in
         # verdicts/storage.py beside r2_classify_operations, their only reader.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
+        # How long the two bucket-lock rows (checks/b2.py:b2_object_lock,
+        # checks/r2.py:r2_etcd_lock) hold a verdict, either outcome. A lock setting changes only
+        # by the operator's hand, and the B2 read costs two Class C calls.
+        BUCKET_LOCK_PROBE_INTERVAL_S=_num("BUCKET_LOCK_PROBE_INTERVAL_S"),
         # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
         # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
         # because Cloudflare moves these ranges on a multi-year cadence; the interval caches

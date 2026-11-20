@@ -270,6 +270,75 @@ ones whose `action` is `hide`; a plain `b2_list_file_names` reports the hidden n
 the reclaimed bytes as already saved, which is wrong in both directions. This is the same trap as
 the drain's `b2_list_file_versions` above, one level up.
 
+## Bucket immutability (ADR-0041)
+
+[ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) locks the B2 weekly bucket
+with Object Lock and the R2 etcd snapshots with a bucket lock rule. It leaves the R2 daily
+tier unlocked. Two monitor-bridge rows read the settings once a day. `b2_object_lock` fires
+`B2ObjectLockOff`, and `r2_etcd_lock` fires `R2EtcdSnapshotLockMissing`. Both are warnings,
+and both read red until the steps below are done.
+
+Every step is **operator-only**. A session holds no credential that can change a bucket, a
+key or a Cloudflare token.
+
+### Step 1: confirm that a locked B2 version accepts a hide
+
+Longhorn deletes with an S3 `DeleteObject` that names no version. On B2 that call should
+write a hide marker and leave a locked version in place. Backblaze does not document it, so
+confirm it on a scratch bucket before you lock the real one. The commands use the B2
+command-line tool v4 and the AWS CLI, with a key that holds `writeBuckets` and
+`writeBucketRetentions`.
+
+```bash
+b2 bucket create --file-lock-enabled lock-spike-<random> allPrivate
+b2 bucket update --default-retention-mode governance \
+  --default-retention-period "1 days" lock-spike-<random>
+echo spike > /tmp/spike.blk
+b2 file upload lock-spike-<random> /tmp/spike.blk backupstore/spike.blk
+aws s3api delete-object --endpoint-url https://s3.us-east-005.backblazeb2.com \
+  --bucket lock-spike-<random> --key backupstore/spike.blk
+b2 ls --versions b2://lock-spike-<random>/backupstore/
+b2 rm --versions b2://lock-spike-<random>/backupstore/spike.blk
+```
+
+The `delete-object` must succeed, and the listing must show a hide marker beside the
+version. The `rm --versions` must be refused for the locked version. If the `delete-object`
+is refused instead, stop: Longhorn's prune would fail on every locked block, and ADR-0041
+needs revisiting before step 2. Delete the scratch bucket once its one-day lock expires.
+
+### Step 2: lock the B2 weekly bucket
+
+Run this with the account's master key. The Longhorn key cannot change a bucket's
+retention and must not.
+
+```bash
+b2 bucket update --file-lock-enabled --default-retention-mode governance \
+  --default-retention-period "7 days" daniel-server-kopia
+```
+
+Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` clears at the
+next daily read. If it reads `key bypasses governance`, the Longhorn key holds
+`bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
+`longhorn_b2_application_key`.
+
+### Step 3: let the analytics token read R2 bucket locks
+
+To let the `r2_etcd_lock` row read the lock rules, add **Account → Workers R2 Storage →
+Read** to the `cloudflare_analytics_token` token under My Profile → API Tokens. Editing the
+token's permissions keeps its value, so no SOPS key or cluster variable changes.
+
+### Step 4: lock the R2 etcd snapshot prefix
+
+```bash
+npx wrangler r2 bucket lock add <r2_bucket> etcd-snapshots-7d etcd-snapshots/ --retention-days 7
+npx wrangler r2 bucket lock list <r2_bucket>
+```
+
+The list must show the one rule over `etcd-snapshots/` and nothing over `longhorn/` or over
+an empty prefix. A rule there would lock Longhorn's daily blocks, and R2 refuses a locked
+delete with a 409, so the daily prune would retry. `R2EtcdSnapshotLockMissing` clears at the
+next daily read.
+
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
 - ~~**code-server extensions (+VSIX caches)**: kopia excluded them as reinstallable; here

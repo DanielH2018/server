@@ -58,6 +58,7 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True, runbook="alert-runbooks"),
     # WAN-gated rather than startup-graced: the WAN gate covers the reboot transient.
     PushCheck(name="r2_usage", fn=r2.check_r2_usage, gate="wan_reachable", critical=True, runbook="longhorn-backup-tiering"),
+    PushCheck(name="r2_etcd_lock", fn=r2.check_r2_etcd_lock, gate="wan_reachable", runbook="longhorn-backup-tiering"),
     # cloudflare_ips gates Traefik's forwardedHeaders.trustedIPs. The bridge caches a success for a
     # day and re-probes a failure every cycle.
     PushCheck(name="cloudflare_ips_drift", fn=cloudflare_ips.check_cloudflare_ips_drift, gate="wan_reachable"),
@@ -68,6 +69,8 @@ CHECKS: tuple[PushCheck, ...] = (
     # Same cache shape as healthchecks_drift. A monitor that is down is Uptime Robot's own page.
     PushCheck(name="uptime_robot_monitors", fn=uptime_robot.check_uptime_robot_monitors, gate="wan_reachable", runbook="uptime-robot-monitors"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
+    # Reads the bucket's Object Lock (ADR-0041) and holds a verdict a day, either outcome.
+    PushCheck(name="b2_object_lock", fn=b2.check_b2_object_lock, gate="b2_reachable", runbook="longhorn-backup-tiering"),
     # The two reachability gates. A gate has no gate of its own: a gate that cannot go red is
     # not coverage. There is no `prometheus` gate: the Watchdog covers a dead
     # Prometheus, and `host_packages` keeps the value as the label of its exporter suppression.
