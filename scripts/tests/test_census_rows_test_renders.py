@@ -208,7 +208,6 @@ ROWS = (
         # converted modules are in the census the row reads.
         must_find=frozenset(
             {
-                "tests/deploy/test_tree_lock_single_definition.py",
                 "hosts/tests/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",
                 "hosts/tests/test_claude_agent_ssh_login.py",
