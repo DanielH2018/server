@@ -3,7 +3,8 @@ id: "0030"
 title: The ansible/ tree is renamed for what it holds, after its installed readers accept both paths
 status: Accepted
 date: 2026-11-13
-governs: []
+governs:
+  - "scripts/secrets_mgmt/git_dates.py#DECIDED: kept, the walks cross the rename"
 ---
 
 # ADR-0030: The ansible/ tree is renamed for what it holds, after its installed readers accept both paths
@@ -144,8 +145,9 @@ tree. [#8372](https://github.com/DanielH2018/server/issues/8372) dropped that la
 
 ## Governs
 
-No single line enforces this record. The tests that hold the installed readers to the new paths
-are `hosts/tests/test_claude_lander.py`,
+The `DECIDED:` marker on `PRE_RENAME_DIR` in `scripts/secrets_mgmt/git_dates.py` keeps the
+secret-rotation walk reading both paths. The tests that hold the installed readers to the new
+paths are `hosts/tests/test_claude_lander.py`,
 `hosts/components/renovate-agent/tests/test_land_renovate_pr.py`,
 `hosts/lib/tests/test_host_package_builder_python.py` and
 `hosts/components/hypervisor/tests/test_suc_rehearsal.py`.
