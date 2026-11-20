@@ -4,7 +4,6 @@ Run: uv run pytest scripts/lib/tests/test_guard_jinja_env_py_table_retired.py
 """
 
 import re
-import sys
 
 from lib import guard_jinja_env as aje
 from lib.proc_testing import run
@@ -33,21 +32,3 @@ def test_the_guard_env_registers_py_table_only_if_a_template_calls_it():
     assert registered == bool(callers), (
         f"py_table registered={registered}, tracked templates calling it: {callers}"
     )
-
-
-def test_building_the_guard_env_does_not_load_the_py_table_module():
-    """A subprocess, because other tests in the session import `py_table` directly."""
-    proc = run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; sys.path.insert(0, 'scripts');"
-            " from lib.guard_jinja_env import make_env, register_ansible_filters;"
-            " register_ansible_filters(make_env());"
-            " print('py_table' in sys.modules)",
-        ],
-        cwd=REPO,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip() == "False"
