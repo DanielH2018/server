@@ -81,6 +81,32 @@ def test_a_changed_set_name_flux_does_not_own_is_not_gated(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
 
 
+def test_path_derived_tags_with_an_empty_changed_set_are_nothing_to_deploy(land_run):
+    """A template comment edit names its role's tag, but the render, not the path, decides."""
+    paths = [
+        "k8s/roles/bento-pdf/templates/deployment.yaml.j2",
+        "k8s/roles/configarr/templates/health-cronjob.yaml.j2",
+        "k8s/roles/observability/templates/alertmanager.yaml.j2",
+    ]
+    declared = {"bento-pdf", "configarr", "observability"}
+    derived = land_tags.derive(paths, changed_files=len(paths), declared=declared)
+    assert derived.tags == sorted(declared)
+    fakes = _fakes(
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": p} for p in paths],
+                "changedFiles": len(paths),
+            }
+        },
+        derived=(derived.tags, derived.source),
+        land_wait=[WaitResult(WaitVerdict.SETTLED, detail="0 applied")],
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    assert "gate" not in _names(calls)
+
+
 @pytest.mark.parametrize(
     "path",
     [

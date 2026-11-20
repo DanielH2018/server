@@ -31,7 +31,11 @@ def _github(answers: list[tuple[int, str, str]]):
         code, out, err = answers.pop(0)
         return subprocess.CompletedProcess(argv, code, out, err)
 
-    return forge.GitHub(_no_rest, None, run=run, sleep=sleeps.append), sleeps, argvs
+    return (
+        forge.GitHub(_no_rest, lambda: None, run=run, sleep=sleeps.append),
+        sleeps,
+        argvs,
+    )
 
 
 def test_a_rate_limited_read_waits_and_reads_again():
