@@ -1,4 +1,4 @@
-"""The CI workflow's host-package case jobs, as census rows.
+"""The CI workflow's host-package case jobs and the hand-off action they call, as census rows.
 
 `test_census_rows_workflows.py` runs `CI_ROWS`. Each row's red half is the real file with one
 property broken.
@@ -14,6 +14,7 @@ from _workflow_rows import (
     Workflow,
     jobs,
     judge,
+    load,
     mutants,
     steps,
     uses,
@@ -25,7 +26,9 @@ LEGS_JOB = "host_packages"
 BOOTSTRAP_JOB = "host_packages_bootstrap"
 BUILD_JOB = "host_packages_build"
 GATE_JOB = "prek"
-
+CASE_JOBS = (LEGS_JOB, BOOTSTRAP_JOB, "k3s_download")
+HANDOFF = ".github/actions/host-packages-handoff/action.yml"
+HANDOFF_USES = "$/.github/actions/host-packages-handoff"
 CASES_STEP = "Run the updater cases in systemd containers"
 # The cases glob each side's updater .deb out of the build step's output and boot the image the
 # image step tags, so a run that skips either fails the cases rather than running them.
@@ -38,18 +41,17 @@ CASES_VERDICT = re.compile(
     r'\s+"\$RUNNER_TEMP/base-tree" --inputs "\$CASE_INPUTS"\)\n'
     r'echo "cases=\$cases" >> "\$GITHUB_OUTPUT"'
 )
-TAR_COMMAND = re.compile(r'host-packages-build\.tar" -C "\$RUNNER_TEMP" (.*)')
 
 
 def ci_job(wf: Workflow, name: str) -> dict:
     return jobs(wf).get(name, {})
 
 
-def _named(job: dict, name: str) -> list[dict]:
+def named_steps(job: dict, name: str) -> list[dict]:
     return [s for s in steps(job) if s.get("name") == name]
 
 
-def _row(**row) -> dict:
+def ci_row(**row) -> dict:
     return {
         "files": lambda: tracked(CI),
         "must_find": frozenset({CI}),
@@ -58,7 +60,7 @@ def _row(**row) -> dict:
     }
 
 
-def _edit(job: str, find: str, replace: str) -> Callable[[Workflow], None]:
+def edit_steps(job: str, find: str, replace: str) -> Callable[[Workflow], None]:
     """A mutation that rewrites `find` in the `run` and `if` of every step of `job`."""
 
     def mutate(wf: Workflow) -> None:
@@ -122,8 +124,8 @@ def _bootstrap_condition_problems(wf: Workflow) -> list[str]:
             expected = step.get("if")
         if step.get("if") != expected:
             found.append(f"{name!r} runs on {step.get('if')!r}, not {expected!r}")
-    if len(steps(boot)) < 6:
-        found.append(f"{BOOTSTRAP_JOB} has {len(steps(boot))} steps, fewer than six")
+    if len(steps(boot)) < 5:
+        found.append(f"{BOOTSTRAP_JOB} has {len(steps(boot))} steps, fewer than five")
     if boot.get("if") != legs.get("if"):
         found.append(f"{BOOTSTRAP_JOB} has a job `if` unlike the legs'")
     return found
@@ -139,7 +141,7 @@ def _cases_gate_problems(wf: Workflow) -> list[str]:
         )
     if CASES_READ not in str((build.get("outputs") or {}).get("run-cases")):
         found.append(f"the {BUILD_JOB} `run-cases` output does not read `cases`")
-    for step in _named(build, BUILD_STEP):
+    for step in named_steps(build, BUILD_STEP):
         if CASES_READ not in str(step.get("if")):
             found.append(f"{BUILD_STEP!r} does not read `cases`")
     if RUN_CASES_GATE not in str(legs.get("if")):
@@ -147,7 +149,7 @@ def _cases_gate_problems(wf: Workflow) -> list[str]:
     for name in (IMAGE_STEP, CASES_STEP):
         found += [
             f"{name!r} has its own `if:`, so the job's `run-cases` gate no longer decides it"
-            for step in _named(legs, name)
+            for step in named_steps(legs, name)
             if "if" in step
         ]
     return found
@@ -162,58 +164,28 @@ def _artifacts(job: dict, action: str) -> set[str]:
     }
 
 
+def _downloads(job: dict) -> set[str]:
+    """The artifact names a job downloads, itself or through the hand-off action."""
+    found = _artifacts(job, "download")
+    if any(uses(step, HANDOFF_USES) for step in steps(job)):
+        found |= _artifacts(load(HANDOFF)["runs"], "download")
+    return found
+
+
 def _build_consumer_problems(wf: Workflow) -> list[str]:
     built = _artifacts(ci_job(wf, BUILD_JOB), "upload")
     found = []
-    for consumer in (LEGS_JOB, "host_tools_arm64"):
+    for consumer in (*CASE_JOBS, "host_tools_arm64"):
         job = ci_job(wf, consumer)
         if job.get("needs") != ["prove", BUILD_JOB]:
             found.append(
                 f"{consumer} needs {job.get('needs')!r}, not prove and the build"
             )
-        downloads = _artifacts(job, "download")
+        downloads = _downloads(job)
         if not downloads:
             found.append(f"{consumer} downloads nothing from {BUILD_JOB}")
         elif not downloads <= built:
             found.append(f"{consumer} downloads {downloads - built}, never uploaded")
-    return found
-
-
-def _tools_cache_problems(wf: Workflow) -> list[str]:
-    build, legs = ci_job(wf, BUILD_JOB), ci_job(wf, LEGS_JOB)
-    build_run = "\n".join(runs(s) for s in steps(build))
-    found = []
-    if '--cache "$RUNNER_TEMP/tools-cache"' not in build_run:
-        found.append("the build no longer fetches into the tools-cache directory")
-    tar = TAR_COMMAND.findall(build_run)
-    if len(tar) != 1:
-        found.append(f"the build has {len(tar)} hand-off tar commands, not one")
-    elif "tools-cache" in tar[0]:
-        found.append("the hand-off tar carries the tools cache")
-    if (build.get("outputs") or {}).get("tools-key") != (
-        "${{ steps.tools-key.outputs.key }}"
-    ):
-        found.append(f"{BUILD_JOB} no longer outputs `tools-key` from its key step")
-    restores = [s for s in steps(legs) if s.get("id") == "tools-cache"]
-    if len(restores) != 1:
-        found.append(f"{LEGS_JOB} has {len(restores)} `tools-cache` steps, not one")
-    else:
-        if not uses(restores[0], "actions/cache/restore"):
-            found.append("the legs' tools-cache step is not actions/cache/restore")
-        if restores[0].get("with") != {
-            "path": "${{ runner.temp }}/tools-cache",
-            "key": f"${{{{ needs.{BUILD_JOB}.outputs.tools-key }}}}",
-        }:
-            found.append("the legs restore a path or key other than the build's own")
-    cases = _named(legs, CASES_STEP)
-    if len(cases) != 1:
-        found.append(f"{LEGS_JOB} has {len(cases)} steps named {CASES_STEP!r}")
-    else:
-        hit = "${{ steps.tools-cache.outputs.cache-hit }}"
-        if (cases[0].get("env") or {}).get("TOOLS_CACHE_HIT") != hit:
-            found.append("the cases step does not read the restore's cache-hit")
-        if 'seed=(--tools-cache "$RUNNER_TEMP/tools-cache")' not in runs(cases[0]):
-            found.append("the cases step does not seed from the restored cache")
     return found
 
 
@@ -243,7 +215,7 @@ def _drop_bootstrap_cases(wf: Workflow) -> None:
 
 def _set_if(job: str, name: str, value: str) -> Callable[[Workflow], None]:
     def mutate(wf: Workflow) -> None:
-        for step in _named(wf["jobs"][job], name):
+        for step in named_steps(wf["jobs"][job], name):
             step["if"] = value
 
     return mutate
@@ -255,20 +227,18 @@ def _rename_an_upload(wf: Workflow) -> None:
             step["with"]["name"] = "renamed-hand-off"
 
 
-def _tar_the_tools_cache(wf: Workflow) -> None:
-    for step in steps(wf["jobs"][BUILD_JOB]):
-        step["run"] = TAR_COMMAND.sub(lambda m: m.group(0) + " tools-cache", runs(step))
+def drop_the_hand_off(job: str) -> Callable[[Workflow], None]:
+    def mutate(wf: Workflow) -> None:
+        wf["jobs"][job]["steps"] = [
+            s for s in steps(wf["jobs"][job]) if not uses(s, HANDOFF_USES)
+        ]
 
-
-def _restore_another_key(wf: Workflow) -> None:
-    for step in steps(wf["jobs"][LEGS_JOB]):
-        if step.get("id") == "tools-cache":
-            step["with"]["key"] = "tools-${{ runner.os }}"
+    return mutate
 
 
 CI_ROWS = (
     Census(
-        **_row(
+        **ci_row(
             name="ci-bootstrap-cases-run-in-their-own-job",
             reason=(
                 "The bootstrap cases run in the `host_packages_bootstrap` job and nowhere else. "
@@ -286,7 +256,7 @@ CI_ROWS = (
         )
     ),
     Census(
-        **_row(
+        **ci_row(
             name="ci-bootstrap-job-covers-every-release-the-legs-run",
             reason=(
                 "Running the bootstrap cases in one release only would drop coverage, which is "
@@ -302,11 +272,11 @@ CI_ROWS = (
         )
     ),
     Census(
-        **_row(
+        **ci_row(
             name="ci-bootstrap-job-steps-run-on-the-legs-conditions",
             reason=(
                 "Each bootstrap step runs on its same-named leg step's `if`, its cases step on "
-                "the legs' cases step's, and the job on the legs' job `if`. The job keeps six "
+                "the legs' cases step's, and the job on the legs' job `if`. The job keeps five "
                 "steps or more. `ci-cases-gates-read-the-cases-changed-verdict` reads the legs' "
                 "gates alone."
             ),
@@ -319,14 +289,14 @@ CI_ROWS = (
                 a_job_condition_unlike_the_legs=lambda wf: wf["jobs"][
                     BOOTSTRAP_JOB
                 ].update({"if": "${{ true }}"}),
-                a_bootstrap_job_of_five_steps=lambda wf: wf["jobs"][
+                a_bootstrap_job_of_four_steps=lambda wf: wf["jobs"][
                     BOOTSTRAP_JOB
-                ].update({"steps": wf["jobs"][BOOTSTRAP_JOB]["steps"][:5]}),
+                ].update({"steps": wf["jobs"][BOOTSTRAP_JOB]["steps"][:4]}),
             ),
         )
     ),
     Census(
-        **_row(
+        **ci_row(
             name="ci-cases-gates-read-the-cases-changed-verdict",
             reason=(
                 "A PR that changes only the container cases' inputs runs those cases on both "
@@ -339,13 +309,13 @@ CI_ROWS = (
             offence=judge(_cases_gate_problems),
             red=mutants(
                 CI,
-                a_render_step_that_drops_the_verdict=_edit(
+                a_render_step_that_drops_the_verdict=edit_steps(
                     BUILD_JOB, 'echo "cases=$cases"', 'echo "cases=false"'
                 ),
                 a_run_cases_output_that_ignores_cases=lambda wf: wf["jobs"][BUILD_JOB][
                     "outputs"
                 ].update({"run-cases": "${{ steps.render.outputs.changed }}"}),
-                a_build_step_that_ignores_cases=_edit(
+                a_build_step_that_ignores_cases=edit_steps(
                     BUILD_JOB, f" || {CASES_READ}", ""
                 ),
                 a_legs_job_that_ignores_run_cases=lambda wf: wf["jobs"][
@@ -358,11 +328,11 @@ CI_ROWS = (
         )
     ),
     Census(
-        **_row(
+        **ci_row(
             name="ci-arm64-job-and-cases-legs-wait-for-the-build-alone",
             reason=(
-                "Neither consumer of the build waits for the other, and each downloads only "
-                "what the build uploads."
+                "No consumer of the build waits for another, and each downloads only what "
+                "the build uploads, itself or through `.github/actions/host-packages-handoff`."
             ),
             offence=judge(_build_consumer_problems),
             red=mutants(
@@ -373,54 +343,13 @@ CI_ROWS = (
                 an_arm64_job_without_the_build=lambda wf: wf["jobs"][
                     "host_tools_arm64"
                 ].update({"needs": ["prove"]}),
-                a_download_the_build_never_uploads=lambda wf: [
+                an_arm64_download_the_build_never_uploads=lambda wf: [
                     s["with"].update(name="never-uploaded")
-                    for s in steps(wf["jobs"][LEGS_JOB])
+                    for s in steps(wf["jobs"]["host_tools_arm64"])
                     if uses(s, "actions/download-artifact")
                 ],
                 an_upload_renamed_under_its_consumers=_rename_an_upload,
-                a_legs_job_that_downloads_nothing=lambda wf: wf["jobs"][
-                    LEGS_JOB
-                ].update(
-                    {
-                        "steps": [
-                            s
-                            for s in wf["jobs"][LEGS_JOB]["steps"]
-                            if not uses(s, "actions/download-artifact")
-                        ]
-                    }
-                ),
-            ),
-        )
-    ),
-    Census(
-        **_row(
-            name="ci-cases-legs-restore-the-cache-the-build-fetched",
-            reason=(
-                "A pin the build fetched is not requested again by a cases leg. The legs "
-                "restore it from actions/cache under the build's own key, not from the "
-                "hand-off tar."
-            ),
-            offence=judge(_tools_cache_problems),
-            red=mutants(
-                CI,
-                a_build_that_fetches_outside_the_cache=_edit(
-                    BUILD_JOB, '--cache "$RUNNER_TEMP/tools-cache"', "--no-cache"
-                ),
-                a_tar_that_carries_the_cache=_tar_the_tools_cache,
-                a_build_that_stops_outputting_the_key=lambda wf: wf["jobs"][BUILD_JOB][
-                    "outputs"
-                ].pop("tools-key"),
-                a_legs_restore_under_another_key=_restore_another_key,
-                a_cases_step_that_ignores_the_cache_hit=lambda wf: [
-                    s["env"].pop("TOOLS_CACHE_HIT")
-                    for s in _named(wf["jobs"][LEGS_JOB], CASES_STEP)
-                ],
-                a_cases_step_that_does_not_seed=_edit(
-                    LEGS_JOB,
-                    'seed=(--tools-cache "$RUNNER_TEMP/tools-cache")',
-                    "seed=()",
-                ),
+                a_legs_job_that_downloads_nothing=drop_the_hand_off(LEGS_JOB),
             ),
         )
     ),

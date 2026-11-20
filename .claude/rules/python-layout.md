@@ -33,7 +33,8 @@ keeps its own insert of `hosts/lib/`, because no `lib` ships beside it.
 
 A module under a `tests/` directory carries none of this: pytest is its only invoker, and
 `pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test
-under those two inserts its own package directory. Any other insert is dead weight, and
+under `diagnostics` imports its package dotted (`from diagnostics import probe`), and a test
+under `validate` inserts its own package directory. Any other insert is dead weight, and
 `scripts/tests/test_test_module_bootstraps_present.py` refuses it.
 
 The subdirectories have **no `__init__.py`**: they are PEP 420 namespace packages, and adding
@@ -89,10 +90,11 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   still a row: it passes that render as the row's `source` (`_prepull_property_rows.py`).
   One needing a long exemption list keeps its own file.
 - The `a-single-predicate-check-is-a-row` row of `tests/repo/test_census_rows_suite.py`
-  refuses a new module under `tests/repo/` or `tests/services/` with three test functions or
-  fewer that reads tracked text, by a walk or by one file's path, and runs no code: no
-  subprocess other than `git ls-files`, no render and no scratch tree. A file that must stay
-  one goes in that row's `allow` with the reason.
+  refuses a module under `tests/repo/` or `tests/services/` that reads tracked text, by a
+  walk or by one file's path, and runs no code: no subprocess other than `git ls-files`, no
+  render and no scratch tree. It counts a module of up to
+  `tests/repo/test_census_rows_suite.py:ROW_SIZED` test functions. A file that must stay one
+  goes in that row's `allow`, with a reason naming the join or the render that keeps it.
 
 ## A new check ships with a proof it can go red
 

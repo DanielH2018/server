@@ -1,9 +1,9 @@
-# The B2 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2): the
+# The B2 host checks of M6 (docs/archive/monitoring/m6-retire-kuma.md, batch B2): the
 # generated-docs refresh, the eval sweep, the secret-rotation audit, the setup-plane drift check
 # and the two Loki read-route witnesses, plus the checkout-sync check on daniel-box, which
 # pages from its first deploy. Each producer writes a `homelab_check_*` textfile to the
 # `node` scrape job, so these rules read the metric contract of
-# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# docs/archive/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # Severity is `warning`, so Discord alone. `service` is the host as a literal, because a node

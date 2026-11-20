@@ -6,7 +6,7 @@ reader and an order rule written out by hand. As a row, the section, the unit an
 data, and the reading, the verdict and the red proof are here once.
 
 A rule reads the text under `heading` in `doc`, splits it into units (`LINES`, `COMMANDS`,
-`STEPS`, `ITEMS` or `SECTION`), keeps the units `select` matches, and holds when:
+`STEPS`, `ITEMS`, `BLOCKS` or `SECTION`), keeps the units `select` matches, and holds when:
 
 - each kept unit carries every string in `require`;
 - no kept unit matches `forbid`;
@@ -144,6 +144,29 @@ def ITEMS(text: str) -> list[str]:
         else:
             items[-1].append(line)
     return [normalised(" ".join(item)) for item in items if item]
+
+
+def BLOCKS(text: str) -> list[str]:
+    """Each list item with every blank or deeper-indented line under it, normalised.
+
+    A nested item or an indented paragraph belongs to the item above it, so a rule that
+    judges a bullet also judges what hangs from it. A nested item is also a block of its own,
+    and an outer item's block holds the inner ones.
+    """
+    lines = text.splitlines()
+    blocks = []
+    for i, line in enumerate(lines):
+        if not _LIST_ITEM.match(line):
+            continue
+        indent = len(line) - len(line.lstrip())
+        end = i + 1
+        while end < len(lines) and (
+            not lines[end].strip()
+            or len(lines[end]) - len(lines[end].lstrip()) > indent
+        ):
+            end += 1
+        blocks.append(normalised("\n".join(lines[i:end])))
+    return blocks
 
 
 def SECTION(text: str) -> list[str]:

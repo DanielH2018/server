@@ -6,14 +6,9 @@ equivalent.
 """
 
 import json
-import os
-import sys
 
-# `probe.py` sits in `scripts/diagnostics`, which `pythonpath` leaves out, so this test module
-# puts its own parent directory on `sys.path`.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import probe
+from diagnostics import probe
 from diagnostics.probe_lib import core, pi_plane
 from lib.kubectl import WrongCluster
 

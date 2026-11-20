@@ -25,13 +25,8 @@ Exit codes: 0 the census printed; 75 the render or a live read failed, or the ta
 object whose live copy could be compared, because an empty census is not a clean one.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import json
 import subprocess

@@ -9,10 +9,13 @@ mostly render-based guards, which are not textual censuses. So the checks stay a
 Run: uv run pytest tests/repo/test_census_rows_suite.py
 """
 
+import ast
+import functools
 import re
 
 import pytest
 from _row_table import (
+    REPO,
     Census,
     Subject,
     check,
@@ -101,11 +104,68 @@ RUNS_CODE = re.compile(
     r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
     r"|\btmp_path\b|\bmonkeypatch\b|\burlopen\("
 )
+# A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
+# to `git ls-files`, which a row may do.
+RENDERS = re.compile(r"\brender\w*\(")
 TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-# A module with this many test functions or fewer is a selector, a predicate and its red
-# proof: a row's shape.
-ROW_SIZED = 3
+# A module with this many test functions or fewer reads like a selector and a few
+# predicates with their red proofs: the shape of one row or of a handful of rows.
+ROW_SIZED = 8
+
+
+@functools.cache
+def _helper_function_renders(module: str, name: str) -> bool:
+    """Whether tracked module `module` defines function `name`, and it renders.
+
+    The function renders when its own source does, or when it calls a function of the same
+    module that does, at any depth.
+    """
+    for rel in tracked(f"*/{module.rpartition('.')[2]}.py"):
+        text = (REPO / rel).read_text(errors="replace")
+        defs = {
+            node.name: node
+            for node in ast.walk(ast.parse(text))
+            if isinstance(node, ast.FunctionDef)
+        }
+        pending, seen = [name], set()
+        while pending:
+            current = pending.pop()
+            if current in seen or current not in defs:
+                continue
+            seen.add(current)
+            if RENDERS.search(ast.get_source_segment(text, defs[current]) or ""):
+                return True
+            pending += [
+                call.func.id
+                for call in ast.walk(defs[current])
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+            ]
+    return False
+
+
+def _calls_a_rendering_helper(text: str) -> bool:
+    """Whether the module calls a function it imports, and that function renders.
+
+    A test that renders through `route_tree()` has no `render(` of its own to match.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    imported = {
+        (alias.asname or alias.name): (node.module, alias.name)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+        for alias in node.names
+    }
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in imported
+        and _helper_function_renders(*imported[node.func.id])
+        for node in ast.walk(tree)
+    )
 
 
 def _standalone_check_offence(subject: Subject) -> list[str]:
@@ -116,6 +176,7 @@ def _standalone_check_offence(subject: Subject) -> list[str]:
         or BUILDS_A_ROW.search(text)
         or not READS_THE_TREE.search(text)
         or RUNS_CODE.search(text)
+        or _calls_a_rendering_helper(text)
     ):
         return []
     return [
@@ -227,6 +288,13 @@ ROWS = (
                 "    for p in DOCS.glob('*.md'):\n"
                 "        assert len(p.read_text()) < 9000\n",
             ),
+            Subject(
+                "tests/repo/test_x.py",
+                "from lib.git_testing import git_out\n"
+                "def test_every_doc_is_short():\n"
+                "    for p in git_out(REPO, 'ls-files', 'docs').splitlines():\n"
+                "        assert len((REPO / p).read_text()) < 9000\n",
+            ),
         ),
         green=(
             Subject(
@@ -242,13 +310,57 @@ ROWS = (
                 "def test_the_render_names_a_port():\n"
                 "    assert 'port' in render_role_template('a', 'b.j2')\n",
             ),
+            Subject(
+                "tests/repo/test_x.py",
+                "from test_alertmanager_routing import route_tree\n"
+                "def test_the_tree_names_a_receiver():\n"
+                "    assert 'blackhole' in route_tree()['receiver']\n"
+                "    assert (REPO / 'a.yml').read_text()\n",
+            ),
         ),
         min_matches=100,
         must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
         allow={
-            "tests/repo/test_shed_offline_hold_order.py": (
-                "a pinned sentence with a must-refuse case table, which no RunbookRule "
-                "field holds"
+            "tests/repo/test_ci_release_downloads_are_cached.py": (
+                "one of the per-tool cache checks that #9025 folds into one composite "
+                "action, which leaves it no file to judge"
+            ),
+            "tests/repo/test_ci_lint_group.py": (
+                "a join of pyproject.toml's lint group and default groups against every "
+                "workflow that installs the project"
+            ),
+            "tests/repo/test_claude_md_paragraphs_have_one_home.py": (
+                "a join of each long CLAUDE.md paragraph against every other operator doc"
+            ),
+            "tests/repo/test_doc_values_hook.py": (
+                "a join of the prek hook's `files` pattern against the paths the doc_values "
+                "rows name and the paths the docs-refresh cron stages"
+            ),
+            "tests/repo/test_failure_class_detectors.py": (
+                "a join of docs/failure-classes.md against the detector tests it cites"
+            ),
+            "tests/repo/test_host_package_case_inputs_census.py": (
+                "a join of the render step's CASE_INPUTS against the modules the cases "
+                "script imports and the tracked tree"
+            ),
+            "tests/repo/test_kind_node_image_follows_k3s.py": (
+                "a join of CI's kind node image against the k3s version in the "
+                "system-upgrade role's defaults"
+            ),
+            "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": (
+                "a join of ci.yml and renovate-config-canary.yml, which run the one "
+                "retrying validator script"
+            ),
+            "tests/repo/test_vale_matches_the_ci_pin.py": (
+                "a join of the Vale version and sha256 CI installs against the "
+                "homelab-tools package pin"
+            ),
+            "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
+                "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
+                "Cloudflare ranges in the group vars"
+            ),
+            "tests/services/test_scrape_target_flap_rule.py": (
+                "a join of the flap rules against the promtool cases that exercise them"
             ),
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"

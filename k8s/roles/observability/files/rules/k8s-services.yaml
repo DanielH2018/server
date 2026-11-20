@@ -3,7 +3,7 @@
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # MosquittoLanAddressNotPinned, JellyfinLanAddressNotPinned and PiholeLanAddressNotPinned verify
-# each role's pinned LAN address on a metric (docs/target-architecture/deploy/d5-bulk-move.md).
+# each role's pinned LAN address on a metric (docs/archive/deploy/d5-bulk-move.md).
 # Each carries verify="true", so the soak Job fails a revision that changes its service while
 # it fires. The address is a literal because a rule file is never Jinja;
 # tests/services/test_lan_address_rules_agree.py holds it, the namespace and the

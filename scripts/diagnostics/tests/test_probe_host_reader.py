@@ -6,9 +6,7 @@ the host it reads, against files in `tmp_path`.
 
 import os
 import subprocess
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import core, host_reader

@@ -10,11 +10,6 @@ everything. That is the `an-optimisation-can-land-green-and-be-inert` shape: pas
 wrong reason, indistinguishable from passing for the right one.
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from diagnostics.probe_lib import readonly_rbac as ph
 from lib.exit_codes import PROBE_UNREADABLE
 

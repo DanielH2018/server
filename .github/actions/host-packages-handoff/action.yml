@@ -1,0 +1,56 @@
+name: Restore the host-package hand-off
+description: >-
+  Downloads and unpacks the hand-off tarball the `host_packages_build` job uploads, and
+  restores that job's homelab-tools cache. The one copy of that sequence, so the case jobs in
+  ci.yml cannot drift apart.
+
+# The tarball unpacks to the paths the build job wrote: `$RUNNER_TEMP/render`,
+# `$RUNNER_TEMP/debs` and nfpm in `$RUNNER_TEMP/bin`, which joins the PATH.
+#
+# DECIDED: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`,
+# for the reason .github/actions/setup/action.yml gives.
+
+inputs:
+  tools-key:
+    description: >-
+      The `tools-key` output of `host_packages_build`, the key its cache was saved under. A
+      composite action cannot read `needs`, so the caller passes it. Empty skips the restore.
+    required: true
+
+outputs:
+  cache-hit:
+    description: "`true` when the build job's homelab-tools cache restored."
+    value: ${{ steps.tools-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # DECIDED: no download-artifact step in ci.yml, promote.yml or an action they call retries,
+    # unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found
+    # no download failure that a rerun cleared; every red one followed a build that never
+    # uploaded.
+    - name: Download the hand-off from the build job
+      uses: actions/download-artifact@v8.0.2 # zizmor: ignore[unpinned-uses]
+      with:
+        name: host-packages-build
+        path: ${{ runner.temp }}/handoff
+
+    # The GITHUB_PATH write appends a constant path, never an input, hence the zizmor ignore.
+    - name: Unpack the render, the debs and nfpm
+      shell: bash
+      run: |  # zizmor: ignore[github-env]
+        set -euo pipefail
+        tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
+        echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/bin/nfpm" --version
+
+    # The cases seed from the pins the build job fetched and saved under this key, so a pin is
+    # downloaded once per run. Restore-only: a case job never saves what its cases fetched
+    # under the build's key. A miss, such as a lost save race, makes the cases download instead.
+    - name: Restore the build job's homelab-tools cache
+      id: tools-cache
+      if: inputs.tools-key != ''
+      uses: actions/cache/restore@v6.1.0 # zizmor: ignore[unpinned-uses]
+      with:
+        path: ${{ runner.temp }}/tools-cache
+        key: ${{ inputs.tools-key }}

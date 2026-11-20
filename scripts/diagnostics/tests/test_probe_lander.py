@@ -4,13 +4,8 @@ The pass lines and landing logs are the ones daniel-box held on 2026-10-25, in t
 `host_reader.READER` returns them.
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from diagnostics.probe_lib import lander
-from fanout_lib import autoland
+from dev.fanout_lib import autoland
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 
 NOW = 1792959300.0

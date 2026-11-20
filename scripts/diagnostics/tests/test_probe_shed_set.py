@@ -1,10 +1,5 @@
 """Tests for `probe.py shed-set`'s rendering of the lost-node shed set."""
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from diagnostics.probe_lib import shed_set as ss
 
 
