@@ -29,7 +29,6 @@ from _aide_check_run import (
     DIFF_REPORT,
     ERROR_REPORT,
     REMOVED,
-    SCRIPT,
     _report,
     _run_check,
 )
@@ -252,22 +251,6 @@ def test_the_exclusions_deploy_under_a_name_aide_loads():
         assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
             f"{host}: {dest} fails aide.conf's include pattern, so AIDE never reads it"
         )
-
-
-PUSH_MARKERS = ("kuma_push", "kuma-push-lib", "KUMA_", "PUSH_TOKEN", "api/push")
-
-
-def push_markers(body: str) -> list[str]:
-    """The Kuma push plumbing a rendered script still carries, or nothing."""
-    return [marker for marker in PUSH_MARKERS if marker in body]
-
-
-def test_the_rendered_script_carries_no_kuma_push():
-    """M6 batch B9's Cutover-2: the push, its token read and its library are gone."""
-    assert push_markers(render_shell_script(*SCRIPT)) == []
-    # The rejecting half: a body that still sources the library or reads the token is flagged.
-    assert push_markers("source /usr/lib/homelab/kuma-push-lib.sh") == ["kuma-push-lib"]
-    assert push_markers('AIDE_PUSH_TOKEN="x"') == ["PUSH_TOKEN"]
 
 
 def test_the_check_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):

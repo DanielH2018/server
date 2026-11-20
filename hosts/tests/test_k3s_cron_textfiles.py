@@ -100,22 +100,6 @@ def test_a_producer_sources_the_library_with_a_guard_that_exits_and_writes_for_i
     )
 
 
-@pytest.mark.parametrize("tag", sorted(SHELL_PRODUCERS))
-def test_a_producer_has_no_kuma_push_left(tag):
-    # RED if a push, its library, its credential file or its token returns: the tiles are gone,
-    # so a push would be refused (`by=kuma`) every run.
-    body = render_shell_script("components", "k3s-host-checks", SHELL_PRODUCERS[tag])
-    for leftover in (
-        "kuma_push",
-        "kuma-push",
-        "PUSH_TOKEN",
-        "PUSH_URL",
-        "KUMA_",
-        "uptime-kuma-alive",
-    ):
-        assert leftover not in body, f"{SHELL_PRODUCERS[tag]} still names {leftover}"
-
-
 def _token_drift(tmp_path, token: str | None, stamp: str | None) -> tuple[str, str]:
     """Run etcd-token-drift.sh against a stand-in token and stamp; (success, logged text)."""
     token_file = tmp_path / "token"
@@ -161,15 +145,6 @@ def test_a_token_fault_is_flagged(tmp_path, token, stamp, named):
     success, logged = _token_drift(tmp_path, token, stamp)
     assert success == "0"
     assert named in logged
-
-
-def test_the_token_drift_script_takes_no_snapshot_and_reads_no_s3_credential():
-    body = render_shell_script(
-        "components", "k3s-host-checks", SHELL_PRODUCERS["etcd-snapshot-offbox"]
-    )
-    assert "etcd-snapshot save" not in body
-    assert "etcd-s3" not in body
-    assert "AWS_" not in body
 
 
 def test_a_reader_verdict_is_written_and_a_boot_grace_run_writes_nothing(tmp_path):

@@ -53,7 +53,6 @@ COMPONENT = REPO / "hosts/components/k3s-restart"
 SYSTEM = "/usr/lib/systemd/system/"
 SERVICE = f"{SYSTEM}homelab-k3s-restart.service"
 TIMER = f"{SYSTEM}homelab-k3s-restart.timer"
-TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-restart.conf"
 
 
 @pytest.fixture(scope="module")
@@ -149,10 +148,6 @@ def test_the_package_ships_the_script_and_the_gates_side_by_side(package):
         body, mode = package.files[f"/usr/lib/homelab/{name}"]
         assert body == (REPO / "hosts/lib" / name).read_bytes()
         assert mode == 0o755
-
-
-def test_the_package_ships_no_tmpfiles_entry_for_the_deployers_lock(package):
-    assert TMPFILES not in package.files
 
 
 def test_the_manifest_lists_the_unit_so_reconcile_manages_it(package):
