@@ -112,7 +112,8 @@ one worktree and one PR per session. A worktree `EnterWorktree` makes is on bran
 user's for `worktree-<prefix>+<name>` and the operator's for any other name. Before
 editing a file several sessions are near, run
 `uv run python .claude/hooks/session-health.py --sessions`
-(`.claude/hooks/session-health.py:print_all_sessions`).
+(`.claude/hooks/session-health.py:print_all_sessions`). It also names each coordinator
+project that no live session holds (`scripts/dev/fanout_lib/coordinators.py:projects`).
 
 **In a worktree session or isolated subagent, the Claude Code binary refuses a Bash command it
 cannot verify stays inside the worktree** ("too complex to verify"), and no hook lifts it. Open

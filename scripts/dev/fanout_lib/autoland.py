@@ -44,6 +44,10 @@ THE WORKTREE SWEEP. Nothing else cleans a landed batch's worktree unless an oper
 runs `place clean`, so a pass also runs `clean.sweep_runs` over this user's open run manifests,
 at most every `CLEAN_INTERVAL_S`. Its legs log lines and never change the exit status.
 
+THE COORDINATOR CHECK. Each pass ends with `coordinators.report`, which pages the operator
+for a coordinator project whose session is gone while a batch waits on it. It logs a line per
+change and never changes the exit status either.
+
 DECIDED: a daniel-server that cannot be read is a logged line and exit 0, not a failure. The
 host is off for the weekly reboot and for maintenance, and a page every ten minutes for that
 would teach the operator to ignore the page. A failed GitHub read exits 1, because that one
@@ -64,7 +68,7 @@ from pathlib import Path
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import load_issues
 from dev.findings_lib.issue_model import Issue
-from dev.fanout_lib import operator_waits, own_surface
+from dev.fanout_lib import coordinators, operator_waits, own_surface
 from deploy_tools.land_lib.detach import result_fields
 from dev.fanout_lib.clean import sweep_runs
 from dev.fanout_lib.land_result import another_has_it
@@ -554,13 +558,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--primary", type=Path, default=Path(SERVER_CHECKOUT))
     p.add_argument("--state-dir", type=Path, default=STATE_DIR)
     args = p.parse_args(argv)
-    return run(
+    code = run(
         Boundaries(),
         args.primary,
         args.state_dir,
         args.dry_run,
         gauge=operator_waits.TEXTFILE,
     )
+    # After the pass and whatever it returned: the check reads this host's worktrees and
+    # run manifests, so it still runs when daniel-server or GitHub could not be read.
+    coordinators.report(args.state_dir, dry_run=args.dry_run)
+    return code
 
 
 if __name__ == "__main__":

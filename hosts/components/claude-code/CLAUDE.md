@@ -613,6 +613,16 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   minutes (`scripts/dev/fanout_lib/clean.py:sweep_runs`). It runs no leg for a batch whose
   branch heads an open PR. Each leg keeps `clean`'s refusals: an active unit, a dirty tree or
   an unmerged branch keeps the tree. A failed leg logs a line and never changes the exit status.
+- **Coordinator check (#9533):** each pass ends with
+  `scripts/dev/fanout_lib/coordinators.py:report`. It lists the worktrees locked for a
+  coordinator project, and for each one no live process holds, the batches that read `parked`
+  or that this lander will not land. A project with such a batch pages the operator once,
+  on the second pass in a row that reads it so, through
+  `fanout-alert@fanout-coordinator-<worktree>:no-coordinator.service`
+  (`scripts/dev/tests/test_fanout_coordinators.py::test_an_orphaned_project_pages_once_on_its_second_pass`).
+  It starts no session and changes no worktree, lock, claim or PR. The record of what it
+  paged is `~/.local/state/fanout-server-lander/coordinator-pages.json`. A failed read logs a
+  line and never changes the exit status. `--dry-run` logs the page it would send.
 - **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:
   git refuses that clone as dubious ownership, and `ubuntu` cannot write to it (#5861).

@@ -59,7 +59,7 @@ def _locked_tree(root, name, reason):
     return f"worktree {tree}\nHEAD bbb\nbranch refs/heads/{name}\nlocked {reason}\n\n"
 
 
-def _scan(tmp_path, monkeypatch, show_all):
+def _scan(tmp_path, monkeypatch, show_all, more=()):
     stubs = fake_bin(tmp_path / "bin", systemctl=_SYSTEMCTL)
     monkeypatch.setenv("PATH", path_with(stubs))
     porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
@@ -67,6 +67,7 @@ def _scan(tmp_path, monkeypatch, show_all):
             _locked_tree(tmp_path, "finished-batch", "fanout-100"),
             _locked_tree(tmp_path, "running-batch", _ACTIVE_UNIT),
             _locked_tree(tmp_path, "claude-session", _own_session_reason()),
+            *(_locked_tree(tmp_path, name, reason) for name, reason in more),
         ]
     )
 
@@ -95,3 +96,32 @@ def test_the_sessions_listing_omits_a_tree_whose_fanout_unit_finished(
         "  • claude-session — no commits yet",
         "  • running-batch — no commits yet",
     ]
+
+
+def test_the_sessions_listing_omits_a_coordinator_project_no_process_holds(
+    tmp_path, monkeypatch
+):
+    dead = [("dead-project", "coordinator: project Backups")]
+    lines = _scan(tmp_path, monkeypatch, show_all=True, more=dead)
+    assert sorted(lines) == [
+        "  • claude-session — no commits yet",
+        "  • running-batch — no commits yet",
+    ]
+
+
+def test_sessions_names_each_project_no_live_session_holds():
+    from dev.fanout_lib.coordinators import Project
+
+    found = [
+        Project("Backups", "claude/backups", "/w/backups", live=False),
+        Project("Docs", "claude/docs", "/w/docs", live=True),
+    ]
+
+    lines = _mod.dead_project_lines(projects=lambda: found)
+
+    assert lines[0] == (
+        '  ✗ project "Backups" has no live session: claude/backups at /w/backups; '
+        "no batch waits on it"
+    )
+    assert not any("Docs" in line for line in lines)
+    assert _mod.dead_project_lines(projects=lambda: found[1:]) == []

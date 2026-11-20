@@ -57,9 +57,11 @@ __all__ = [
     "cherry_says_landed",
     "classify",
     "contained_in_merged_pr",
+    "coordinator_project",
     "default_ref",
     "forge_says_landed",
     "forge_says_merged",
+    "has_live_session",
     "held_by_readable_process",
     "is_dirty",
     "is_merged",
@@ -100,6 +102,42 @@ def lock_is_live(
             tree.path, tree.lock_reason, state, now, foreign
         )
     return session_is_alive(tree.lock_reason)
+
+
+# The lock reason a sub-coordinator writes, before its project's title
+# (`.claude/skills/coordinate/SKILL.md`). It names no pid, so `session_is_alive` reads it as
+# live for as long as the lock stands, which is what keeps the weekly sweep off the tree.
+COORDINATOR_LOCK = "coordinator: project "
+
+
+def coordinator_project(tree: Worktree) -> str:
+    """The title of the coordinator project `tree` is locked for, or "" when it holds none."""
+    if not tree.locked or not tree.lock_reason.startswith(COORDINATOR_LOCK):
+        return ""
+    return tree.lock_reason.removeprefix(COORDINATOR_LOCK).strip()
+
+
+def has_live_session(
+    tree: Worktree,
+    foreign: Callable[[str], str | None] | None = None,
+    in_use: Callable[[str], list[tuple[int, str]]] | None = None,
+) -> bool:
+    """Whether a session works in the locked `tree` at this moment.
+
+    `lock_is_live` answers for every lock but a coordinator project's. That lock outlives
+    its session on purpose, so the project is live only while a process has its cwd or its
+    `CLAUDE_PROJECT_DIR` inside the tree. A desktop session keeps its process between turns,
+    so an idle sub-coordinator counts. So does any other process left in the tree, and a
+    scan the root helper could not finish: a doubt reads as live.
+
+    Args:
+        tree: a locked worktree.
+        foreign: `lock_is_live`'s reader for a fan-out tree another user owns.
+        in_use: the process read, `processes_using` when None.
+    """
+    if coordinator_project(tree):
+        return bool((in_use or processes_using)(tree.path))
+    return lock_is_live(tree, foreign=foreign)
 
 
 def classify(

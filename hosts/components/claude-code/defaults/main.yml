@@ -469,7 +469,9 @@ claude_code_pipeline_timeline_server_host: daniel-server
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
 # state but `done`. The batch's ExecStopPost= starts it
 # (scripts/dev/fanout_lib/notify.py), and templates/50-claude-fanout-alert.rules.j2 lets the
-# operator and each agent user start it for the states that page and nothing else.
+# operator and each agent user start it for the states that page and nothing else. The server
+# lander starts the `no-coordinator` state for a coordinator project whose session is gone
+# while a batch waits on it (scripts/dev/fanout_lib/coordinators.py).
 
 # claude-stop-alert@<cause>.service pages Discord when a Claude Code session ends on an API
 # error. The session's StopFailure hook starts it, and

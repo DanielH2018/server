@@ -46,8 +46,13 @@ from lib.exit_codes import OK
 
 # Every state `parse_status` or `reconciled` gives a stopped unit that pages. `done` and
 # `landed` do not, and neither does `parked`: the sub-coordinator that owns the batch re-lands
-# it once the hold clears. The polkit rule admits exactly these, and a test holds the two equal.
+# it once the hold clears.
 PAGED_STATES = ("failed", NEEDS_INPUT, NO_PR, NO_VERDICT, NO_REPORT)
+# Not a batch's state: a coordinator project whose session is gone while a batch waits on it.
+# `coordinators.page_orphaned` pages it through the same unit, named for the project.
+NO_COORDINATOR = "no-coordinator"
+# Every state the polkit rule admits; a test holds the two equal.
+ALERT_STATES = (*PAGED_STATES, NO_COORDINATOR)
 ALERT_UNIT = "fanout-alert@{unit}:{state}.service"
 START_TIMEOUT_S = 30.0
 # This file, relative to a checkout, as `launch.REVIEW_SCRIPT` is.

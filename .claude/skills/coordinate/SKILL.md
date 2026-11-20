@@ -50,7 +50,12 @@ The root runs in the primary checkout and stays thin. It does six things:
 To add an issue to a running project, message its sub-coordinator with the number. A
 sub-coordinator's milestone wait also ends once `milestone add` files the issue.
 
-**A sub-coordinator that died is restarted, not cleaned up.** Start a session in the same
+**A sub-coordinator that died is restarted, not cleaned up.** To see which project has no
+live session, run `uv run python .claude/hooks/session-health.py --sessions`. It prints one
+line per such project with its branch, its worktree and the batches that wait on it
+(`scripts/dev/fanout_lib/coordinators.py:projects`). The server lander pages the operator
+for a project that also holds a waiting batch, so the page is the usual way a death is
+noticed. Start a session in the same
 worktree with the same milestone title; *Resume* rebuilds its state. The app starts a
 session only on a turn the operator typed, and takes a named folder only on a start the
 operator asked for. A recap or a peer message is no such turn, so ask the operator for one
