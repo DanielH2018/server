@@ -8,19 +8,23 @@ from _row_table import Census, Subject, tracked
 _PY_PATH = re.compile(r"(?<![\w/.-])((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_-]+\.py)\b")
 
 
+# First directories of paths that name another repository's files: upstream Home Assistant's
+# `homeassistant/components/...`. A directory name leaves the tracked tree when it is renamed,
+# so a path is skipped only for a name listed here, never for a name the tree lacks.
+_FOREIGN_ROOTS = frozenset({"homeassistant"})
+
+
 @cache
-def _repo_paths() -> tuple[frozenset[str], frozenset[str]]:
-    """Every tracked path, and every directory name that opens one or sits under its first."""
-    paths = frozenset(tracked())
-    return paths, frozenset(part for path in paths for part in path.split("/")[:2])
+def _repo_paths() -> frozenset[str]:
+    return frozenset(tracked())
 
 
 def _unresolved(subject: Subject) -> list[str]:
-    paths, top_dirs = _repo_paths()
+    paths = _repo_paths()
     return [
         f"`{cited}` matches no tracked file"
         for cited in _PY_PATH.findall(subject.text)
-        if cited.split("/")[0] in top_dirs
+        if cited.split("/")[0] not in _FOREIGN_ROOTS
         and not any(known == cited or known.endswith("/" + cited) for known in paths)
     ]
 
@@ -38,13 +42,14 @@ ROLE_FILES_CITE_REAL_PYTHON_PATHS = Census(
         "resolves as a suffix of a tracked file, because role text writes "
         "`validate/render_lib/k8s.py` and `scripts/validate/render_lib/k8s.py` alike. A "
         "path after `/`, `.`, `-` or a word character is a host or image location, and one "
-        "whose first directory is none of ours names another repository, so both are skipped."
+        "under a root in `_FOREIGN_ROOTS` names another repository, so both are skipped."
     ),
     files=_role_files,
     offence=_unresolved,
     red=(
         Subject("k8s/roles/x/a.j2", "{# validate/k8s_manifests.py renders it #}"),
         Subject("k8s/roles/x/b.yml", "# scripts/validate/k8s_manifests.py fails it"),
+        Subject("k8s/roles/x/c.md", "`deploy_tools/gone_lib/policy.py` decides it"),
     ),
     green=(
         Subject("k8s/roles/x/a.j2", "{# scripts/validate/render_lib/k8s.py #}"),
