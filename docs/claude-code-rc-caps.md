@@ -20,7 +20,7 @@ which cannot be checked from the repo:
 | Check | Why it decides something |
 |---|---|
 | A spawned worktree does not demand a workspace-trust dialog | Nobody can answer that dialog from a phone. If it appears, `claude_code_rc_spawn_mode: same-dir` is the fallback. |
-| The branch lands as `worktree-<name>` under `.claude/worktrees/` | Determines whether `prune_worktrees.py` collects them or they accumulate. |
+| The branch lands as `worktree-<name>` under `.claude/worktrees/` | Determines whether the worktree pruner collects them or they accumulate. |
 | The host does not fight terminal sessions for Remote Control | Every terminal session on the host also claims Remote Control via `remoteControlAtStartup`. |
 | A phone-spawned session gets real auto mode | Claude Code has a distinct headless classifier path. If auto degrades without a TTY, `claude_code_rc_permission_mode: default` is the fallback — answering prompts remotely is what Remote Control is for. |
 

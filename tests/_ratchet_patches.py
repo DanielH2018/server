@@ -20,7 +20,7 @@ What the heuristic counts, and what it misses:
 - Counted: the string-target form `monkeypatch.setattr("<mod>.<attr>", ...)`, when the first
   dotted segment is a first-party module name. It is the object form's equal at runtime and
   pins the same module name into the test, so counting one and not the other selected a
-  spelling rather than a design: `scripts/dev/tests/test_prune_worktrees.py` patched
+  spelling rather than a design: one test module patched
   first-party internals fourteen times and measured 0, and on 2026-09-05 an implementer chose
   the string form there because it was the form the ratchet did not see. The string carries
   the module's own dotted name rather than a local alias, so its root is matched against the

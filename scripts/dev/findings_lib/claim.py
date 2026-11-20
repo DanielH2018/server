@@ -3,7 +3,7 @@
 
 A claim names a worktree. The question "is this claim still live" is therefore the question
 "is this worktree still doing the work", which `lib.worktrees.classify` already answers for
-`prune_worktrees.py` — so this module reuses its judgment rather than adding a second one.
+the worktree pruner — so this module reuses its judgment rather than adding a second one.
 
 WHY NOT A HEARTBEAT, AND WHY NOT A TTL. Both key on the CLAIMING PROCESS. A container restart
 kills the agents mid-work while every worktree keeps its uncommitted edits, so each session
@@ -129,7 +129,7 @@ def claim_is_live(
 
     Returns:
         (live, reason). The reason is `classify`'s own, so a `claims` row and a
-        `prune_worktrees` row say the same thing about the same worktree.
+        pruner row say the same thing about the same worktree.
 
     DELEGATES TO `classify`. Re-implementing the verdict here would drop a condition: the
     live-session-lock check. An orchestrator worktree that only orchestrates has no commits

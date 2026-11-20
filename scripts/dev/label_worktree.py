@@ -2,7 +2,7 @@
 
 An `Agent` worktree is named `agent-<agentId>` and a Remote Control worktree `bridge-<sessionId>`,
 and neither can be renamed. This writes a one-line `.claim` at the worktree root, which the
-SessionStart banner and `prune_worktrees.py` print beside the name.
+SessionStart banner and the worktree pruner print beside the name.
 
     uv run python scripts/dev/label_worktree.py 1345 1386     # "#1345 <title> +1"
     uv run python scripts/dev/label_worktree.py --text "Tune the hallway lights"

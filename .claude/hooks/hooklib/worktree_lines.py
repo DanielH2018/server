@@ -7,6 +7,7 @@ own import comment).
 """
 
 import json
+import os
 import socket
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -129,31 +130,48 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None, now=N
     ]
 
 
+# The dotfiles pruner interface this banner was written for. `scripts/lib/_claude_worktree.py`
+# holds the same number for the importers, and
+# `.claude/hooks/tests/test_session_health.py::test_the_banner_requires_the_interface_the_library_does`
+# holds the two equal.
+PRUNER_INTERFACE = 2
+
+
+def pruner_path() -> Path:
+    """The dotfiles worktree pruner, in the user-level hooks directory `chezmoi apply` fills."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude"
+    return Path(config) / "hooks" / "prune-worktrees.py"
+
+
 def _stale_worktree_lines(run, timeout):
     """Merged worktrees this repo can remove, as ready-to-print banner lines.
 
     Claude Code's own worktree keeper reports these too, but each of its lines ends by
     asking the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
-    squash-merged branch from one that is merely behind. prune_worktrees.py already makes
-    that call, so this prints its verdict instead. Bounded and skipped on any failure, like
-    every other check here -- it reaches GitHub, and a slow API must never stall session
-    start.
+    squash-merged branch from one that is merely behind. The dotfiles pruner makes
+    that call, so this prints its `--brief` verdict instead. Bounded, like every other
+    check here: it reaches GitHub, and a slow API must never stall session start.
 
-    This is the only SessionStart pass that classifies this repo's worktrees (#6184). The
-    user-level `prune-worktrees.py --prune` hook returns before classifying any repo that
-    ships `scripts/dev/prune_worktrees.py`, the check its `OWN_PRUNER` constant names
-    (dotfiles a0f20e92), so no second classification runs to compare against or read.
+    This is the only SessionStart pass that classifies this repo's worktrees. The pruner's
+    own SessionStart sweep stays out of this repo, because `.claude/prune-worktrees.json`
+    says `"session_start": "off"`.
+
+    A host with no pruner, or one older than `PRUNER_INTERFACE`, gets a line saying so. An
+    empty banner would read as "nothing to remove".
 
     Args:
         run: the subprocess runner (session-health.py's `_run`, passed in rather than
             imported back -- this module cannot import from the hook that imports it).
         timeout: seconds before the subprocess is abandoned.
     """
+    pruner = str(pruner_path())
     try:
-        proc = run(
-            ["uv", "run", "python", "scripts/dev/prune_worktrees.py", "--brief"],
-            timeout,
-        )
+        proc = run([pruner, "--require", str(PRUNER_INTERFACE), "--brief"], timeout)
+    except FileNotFoundError:
+        return [f"  ⚠ no worktree pruner at {pruner}: `chezmoi apply` deploys it"]
     except Exception:
         return []
+    if proc.returncode != 0:
+        why = (proc.stderr.strip().splitlines() or [f"exit {proc.returncode}"])[-1]
+        return [f"  ⚠ the worktree pruner failed: {why}"]
     return [line for line in proc.stdout.splitlines() if line.strip()]

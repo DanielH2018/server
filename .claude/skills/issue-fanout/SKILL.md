@@ -21,8 +21,8 @@ uv run python scripts/dev/findings.py next --json
 
 `launch` runs `findings.py reap` itself, after every placement gate and before its first
 claim. `reap` releases every claim whose worktree no longer holds work: a session that died
-after its PR landed, or a worktree somebody pruned. `prune_worktrees.py --prune`, which the
-weekly sweep cron runs, also reaps once it has removed a tree. A failed reap only warns,
+after its PR landed, or a worktree somebody pruned. The weekly sweep timer on
+`ops_cron_host` also reaps once its prune has removed a tree. A failed reap only warns,
 because each claim still reaps a stale claim on the issue it takes.
 
 `next` withholds `manual` issues, issues deferred to a later date, issues an open issue
@@ -563,7 +563,7 @@ Each agent starts with none of this conversation's context, so its brief must ca
   shell does not run the backticks. Only this path needs it: `launch` posts the comment
   itself once a batch is running.
 - That it then labels its worktree with its issues, so the session banner and
-  `prune_worktrees.py` print what the `agent-<hash>` tree works on:
+  the worktree pruner print what the `agent-<hash>` tree works on:
   `uv run python scripts/dev/label_worktree.py <n>...`.
 - That its Bash commands follow the isolated-session rule in root `CLAUDE.md`'s *Parallel
   Claude Sessions*: open a compound command with `cd <its worktree> &&`, and write no shell

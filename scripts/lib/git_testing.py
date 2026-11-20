@@ -153,7 +153,7 @@ def scrub_process_git_env(monkeypatch) -> list[str]:
     """Drop every `GIT_*` variable from THIS process, and return the names dropped.
 
     For a test whose subject runs git in-process and builds its own environment, where passing
-    `scrubbed_env()` down is not possible — `prune_worktrees.remove()` is the worked example.
+    `scrubbed_env()` down is not possible — `lib.worktrees.remove()` is the worked example.
 
     Args:
         monkeypatch: pytest's fixture, so the variables come back at teardown.

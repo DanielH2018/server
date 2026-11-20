@@ -28,7 +28,7 @@ from _fanout_fakes import as_operator, fake_tools, ok
 
 B1 = Batch("1", "daniel-box", "/w1", "worktree-fanout-1", "fanout-1", [1], "t")
 B2 = Batch("2", "daniel-server", "/w2", "worktree-fanout-2", "fanout-2", [2], "t")
-UNMERGED = "kept: /w2 worktree-fanout-2 not merged into origin/master"
+UNMERGED = "kept: /w2 worktree-fanout-2 not merged"
 
 
 def _manifest(tmp_path, batches):
@@ -153,7 +153,7 @@ def test_a_traceback_is_reported_by_its_exception_line_not_its_header():
     stderr = (
         "warning: `VIRTUAL_ENV` does not match the project environment\n"
         "Traceback (most recent call last):\n"
-        '  File "/w2/scripts/dev/prune_worktrees.py", line 1, in <module>\n'
+        '  File "/w2/scripts/dev/fanout.py", line 1, in <module>\n'
         "    main()\n"
         "subprocess.CalledProcessError: Command '['git', 'status']' returned 128.\n"
         "\n"

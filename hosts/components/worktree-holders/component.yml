@@ -3,8 +3,9 @@
 # (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan). The sweep runs as
 # sys_user, and /proc refuses that uid another user's cwd and environ, so root does the scan.
 #
-# daniel-server and daniel-box list it. The helper is files/worktree_holders.py, which
-# scripts/lib/worktrees.py also imports.
+# daniel-server and daniel-box list it. The helper is files/worktree_holders.py. The client
+# is the dotfiles repo's `claude_worktree` library, and tests/test_worktree_holders.py reads
+# the helper's answer through it.
 #
 # The helper is root-owned and outside the checkout, because sys_user and every agent can write
 # the repo, and a root unit naming a file there is root for whoever edits it. fanout_lib.clean
