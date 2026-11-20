@@ -22,7 +22,7 @@ def estate(tmp_path: Path) -> Estate:
         yaml.safe_dump({"containers_list": [{"name": "web"}, {"name": "db"}]})
     )
     (tmp_path / "all.yml").write_text(
-        yaml.safe_dump({"port": 1, "has_docker": False, "alias": "{{ sys_user }}"})
+        yaml.safe_dump({"port": 1, "has_fwupd": False, "alias": "{{ sys_user }}"})
     )
     (host_vars / "box.yml").write_text(
         yaml.safe_dump(
@@ -34,7 +34,7 @@ def estate(tmp_path: Path) -> Estate:
     (host_vars / "pi.yml").write_text(
         yaml.safe_dump(
             {
-                "has_docker": True,
+                "has_fwupd": True,
                 "compose_services": [{"name": "wg"}],
             }
         )
@@ -61,8 +61,8 @@ def test_values_arrive_raw_rather_than_resolved(estate):
 
 
 def test_source_names_the_layer_a_value_comes_from(estate):
-    assert estate.source("pi", "has_docker") == "host"
-    assert estate.source("box", "has_docker") == "group"
+    assert estate.source("pi", "has_fwupd") == "host"
+    assert estate.source("box", "has_fwupd") == "group"
     assert estate.source("box", "never_declared") is None
 
 

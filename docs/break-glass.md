@@ -767,8 +767,8 @@ registry nor the Flux controllers. Run these after the render and before the pus
 1. Import item 8's image archives on each node with
    `sudo k3s ctr -n k8s.io images import --all-platforms <archive>`. Leave out `--digests`: it
    adds an `import-<date>@<digest>` alias for the archive's whole `index.json`, and containerd
-   2.x's CRI then fails every container create from that image with "failed to check if this is
-   a checkpoint image". Then check that `sudo k3s crictl inspecti <ref>` answers for each pinned
+   2.x's CRI then fails every container create from that image ("failed to check if this is
+   a checkpoint image"). Then check that `sudo k3s crictl inspecti <ref>` answers for each pinned
    reference.
 1. Apply the rendered `cluster/cluster-base/` and `cluster/homelab-namespace/` directories, as
    `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster* applies them. Flux's

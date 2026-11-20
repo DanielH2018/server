@@ -37,13 +37,12 @@ artifacts_k8s_node: "{{ k8s_primary_node }}"
 artifacts_host_dir: /home/ubuntu/.claude/artifacts
 # The agent user's tree (docs/claude-agent-user.md): where sessions that run as
 # `claude` write. Empty means "no agent tree" and the mount, the volume and the index source
-# all disappear. It defaults on only where the agent user is enabled, so a host without one
-# does not mount a path that is not there. The index lists it as the host
+# all disappear. The index lists it as the host
 # `<artifacts_k8s_node>-claude`, beside the operator's `<artifacts_k8s_node>`.
 # The pod is not root: it runs as puid:pgid (the operator), so it reads this tree through the
 # group grant on the directory (2750 claude:ubuntu, default ACL g:ubuntu:rX), not through
 # DAC_OVERRIDE. This role does not create the directory; hosts/components/claude-code/ does.
-artifacts_agent_dir: "{{ '/var/lib/claude/.claude/artifacts' if (claude_code_agent_user_enabled | default(false) | bool) else '' }}"
+artifacts_agent_dir: /var/lib/claude/.claude/artifacts
 # The triage controller's report tree: claude-triage-ctl writes a report
 # per episode there, apart from the agent's own tree, so a session as `claude` can neither fake
 # nor redirect one. The index lists it as `<artifacts_k8s_node>-claude-triage`. Empty means no

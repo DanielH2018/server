@@ -127,8 +127,8 @@ The `claude` agent reuses that shape: its own identity script in
 
 ## Slice 1: a read-only `claude` user
 
-The `claude` user has home `/var/lib/claude`, and `claude_code_agent_user_enabled` in
-daniel-box's host_vars switches it on. The operator enters as `claude` with
+The `claude` user has home `/var/lib/claude`, and `claude_code_agent_user_enabled`, true by
+default, switches it on. The operator enters as `claude` with
 `sudo machinectl shell claude@ /bin/bash -l`. The user has no `ssh-users` membership and no
 authorized key.
 
@@ -247,14 +247,13 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
   system unit in `OnFailure=` nor read the webhook. Its `ExecStopPost=`
   (`scripts/dev/fanout_lib/notify.py`) starts the alert instead, and the polkit rule
   `50-claude-fanout-alert.rules` lets `ubuntu` and each agent user start it for the paging
-  states only. `claude_code_fanout_alert_enabled: false` removes the unit and the rule.
+  states only.
 - **A session that ends on an API error pages Discord with its own message**, as
   `claude-stop-alert@<cause>.service` (#6021). The StopFailure hook runs as a user and cannot
   read the webhook, so it starts the alert, and the polkit rule `50-claude-stop-alert.rules`
   lets `ubuntu` and each agent user start an instance named `[a-z0-9_]+` and nothing else.
   The message speaks about a session. Before this unit the hook borrowed `fanout-alert@`,
-  whose body pointed at `fanout.py place status`. `claude_code_stop_alert_enabled: false`
-  removes the unit and the rule.
+  whose body pointed at `fanout.py place status`.
 
 ### The approval floor
 
@@ -443,12 +442,12 @@ batches on daniel-box only unless the agent has a login on daniel-server. The op
 full agent user there over an ssh login as `ubuntu`, whose shell has sudo, because a batch needs
 a clone, `uv`, Claude Code, a GitHub identity and a signing key.
 
-- **daniel-server.** `claude_code_agent_user_enabled: true` builds `claude` as on daniel-box,
+- **daniel-server.** The claude-code component builds `claude` as on daniel-box,
   minus the lander, `claude-rc.service`, the memory copy and the homelab-ui browser and login.
   `claude_agent_ssh_login_enabled: true` adds `ssh-users` to the agent's exact group list
   and `claude-agent-setup` writes a root-owned `authorized_keys` holding daniel-box's agent key
   with `restrict`. The host carries that key's public half as `claude_agent_peer_public_key`.
-  `claude_code_agent_dotfiles: true` gives the agent the operator's dotfiles, as on daniel-box.
+  `claude_code_agent_dotfiles`, true by default, gives the agent the operator's dotfiles.
   A batch needs them: every headless launch names claude-guard's prompt server, and refuses to
   start when the agent has no `claude-guard` shim (#6117).
 - **daniel-box.** `claude-agent-home` generates the agent's peer key once, as the agent, at
@@ -529,8 +528,7 @@ runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude ag
   daniel-box. The pytest fan-out cap is one `/usr/lib/environment.d` file that every user
   manager reads. Sessions started as either account carry the same `MemoryHigh`,
   `MemorySwapMax` and `PYTEST_XDIST_AUTO_NUM_WORKERS` as `claude-rc.service`, under the fleet
-  bound on `user.slice`. `claude_code_login_caps_enabled: false` drops every one from the next
-  package version.
+  bound on `user.slice`.
 - **A metric counts sessions that run as the wrong account.** `claude-cgroup-metrics.sh`
   writes `claude_uid_processes{uid}` for each uid in `claude_code_watch_uids`, an explicit 0
   included. It counts processes named `claude` by their real uid in `/proc/<pid>/status`.
@@ -890,8 +888,8 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
 | 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series. |
-| rootq socket | After `claude-rc.service` restarts, in a session as `claude` on each host: `rootq-socket nft` prints the host's ruleset (several chains, not an empty one), `rootq-socket cat /etc/shadow` and `rootq-socket cat /etc/netplan/../shadow` exit 2, and `id` lists `homelab-rootq`. As `ubuntu`, `rootq nft` still works through sudo. | `claude_code_rootq_socket_enabled: false` in that host's `host_vars` removes the socket, its units, the helper, the client and the group, and the agent leaves the group. The operator's `rootq` stays. |
-| dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Delete `claude_code_agent_dotfiles: true` from that host's `host_vars`. The next package version there drops the timer and its units. |
+| rootq socket | After `claude-rc.service` restarts, in a session as `claude` on each host: `rootq-socket nft` prints the host's ruleset (several chains, not an empty one), `rootq-socket cat /etc/shadow` and `rootq-socket cat /etc/netplan/../shadow` exit 2, and `id` lists `homelab-rootq`. As `ubuntu`, `rootq nft` still works through sudo. | Removing the four `homelab-rootq` socket entries from `hosts/components/claude-code/component.yml` removes the socket, its units, the helper and the client from the next package version. The operator's `rootq` stays. |
+| dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Set `claude_code_agent_dotfiles: false` in that host's `host_vars`; the default is true. The next package version there drops the timer and its units. |
 
 ## What the `claude` user cannot do
 

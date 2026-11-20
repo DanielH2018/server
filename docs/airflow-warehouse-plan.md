@@ -15,7 +15,8 @@ role as built.
 | Home Assistant recorder | 7 days (`configuration.yaml:145`) | 3 |
 | Scrutiny SMART history | forever, on `scrutiny-influxdb-data`, which is not backed up | 4 |
 | GitHub PRs and CI runs | kept by GitHub, but costly to query live | 5, 6 |
-| Traefik access log | the `loki-homelab` copy only | 7 |
+| Traefik and CrowdSec counters | Prometheus, as above | 7a |
+| Longhorn's backup log | `loki-homelab`, 31 days | 7b |
 | Pi-hole query DB | FTL default 91 days, not checked against this config | 8 |
 
 ## Decisions
@@ -62,7 +63,7 @@ role as built.
 - **Slice 1, long-term metrics (idea 1).** Volume usage and growth per claim, node load and
   memory, GPU busy and UPS battery, as `prom_series_rollup` into `prom.series_daily`, plus a
   "Homelab history" board. Volume usage reads kubelet's filesystem figures, because
-  `actualSize` is not filesystem usage (ADR 0006). Daily B2 Class-B counts moved to slice 7:
+  `actualSize` is not filesystem usage (ADR 0006). Daily B2 Class-B counts moved to slice 7b:
   Longhorn logs them, so they live in `loki-homelab`, not Prometheus.
 - **Slice 2a, Claude Code usage history (idea 2).** Daily spend, tokens, sessions, active
   time and output from Prometheus' per-session counters, as `claude_usage_rollup` into
@@ -73,7 +74,7 @@ role as built.
   from the `tool_result` and `tool_decision` events in observability's Loki, as
   `claude_decisions_rollup` into `claude.decision_daily` and `claude.tool_result_daily`, with
   the four counting traps of permission-decision telemetry as tested code. Loki keeps 31
-  days, so slice 7, whose `loki-homelab` keeps 31 too, comes next, ahead of slices 4 to 6,
+  days, so slice 7, whose sources keep 22 and 31, comes next, ahead of slices 4 to 6,
   whose sources keep far longer.
 - **Slice 3, Home Assistant history (idea 3).** Daily min, time-weighted mean, max and
   unavailable time for a declared sensor list, and each energy counter's daily increase, as
@@ -85,9 +86,15 @@ role as built.
   budgeted and scheduled in quiet hours.
 - **Slice 6, cost per merged PR (idea 6).** Joins slices 2 and 5 on assets. The join key is
   open: check whether the telemetry carries a branch or worktree name per session.
-- **Slice 7, network edge history (idea 7).** Traefik, CrowdSec and Authelia counts from
-  `loki-homelab`, and daily B2 Class-B counts from Longhorn's log, which
-  `probe.py b2-spend` already sums. Confirm the access log's format there first.
+- **Slice 7a, network edge history (idea 7).** Traefik's requests per entrypoint and route by
+  status code, and CrowdSec's overflows, AppSec requests and blocks, bouncer requests and
+  active decisions, as `edge_daily_rollup` into `edge.counts_daily`. The source is
+  Prometheus's counters, not `loki-homelab`: Alloy drops routine Traefik access lines before
+  they reach it (`k8s/roles/loki-homelab/templates/config/config.alloy.j2`). Authelia exports
+  no metrics, so its counts wait for a source.
+- **Slice 7b, B2 Class-B history.** Daily Class-B counts from Longhorn's log in
+  `loki-homelab`, which `probe.py b2-spend` already sums. Task pods need a grant in
+  the `loki-homelab` fence first.
 - **Slice 8, DNS history (idea 8).** Both Pi-hole instances' query counts per client and
   domain.
 

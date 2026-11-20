@@ -1,0 +1,12 @@
+# Shipped by the host package's pi-docker component with its enable link. The slot is the
+# component's `docker_prune_cron_*`, which the Healthchecks.io cadences fragment and
+# monitor-bridge also read.
+[Unit]
+Description=Prune unused Docker objects daily
+
+[Timer]
+OnCalendar=*-*-* {{ '%02d:%02d' | format(docker_prune_cron_hour | int, docker_prune_cron_minute | int) }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

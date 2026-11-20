@@ -25,7 +25,7 @@ from lib.repo_paths import HOST_VARS
 
 # The host that runs `land.sh`, the fan-out and the host-package builder.
 LANDING_HOST = "daniel-box"
-# The one host whose host_vars set `has_docker: true`; its host package ships its compose services.
+# The one Docker host; its host package ships the engine and its compose services.
 PI_HOST = "daniel-pi"
 # The host whose host_vars every k8s role renders with, the group_vars `k8s_primary_node`. The
 # same host as LANDING_HOST, but a different fact: moving the landing host would not move the

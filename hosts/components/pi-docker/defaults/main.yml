@@ -1,0 +1,6 @@
+---
+# When the daily Docker image prune runs, in the host's clock (UTC on every host). A variable
+# rather than a literal in `units/homelab-docker-prune.timer.j2`, so that the healthchecks.io
+# deadman-cadences fragment reads the schedule from the same place the timer does.
+docker_prune_cron_minute: 30
+docker_prune_cron_hour: 6

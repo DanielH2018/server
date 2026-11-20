@@ -650,8 +650,8 @@ def _unescape(value: str) -> str:
 def _warn_scan_unreachable(sock: str, why: str) -> None:
     warn(
         f"cannot connect to {sock} ({why}), so a process of another uid outside "
-        "this login slice is invisible to the in-use check (#4170). initial_setup installs "
-        "the socket on every has_claude_code host with `--tags worktree-sweep`, and a "
+        "this login slice is invisible to the in-use check (#4170). The "
+        "worktree-holders component of each Claude host's package ships the socket, and a "
         "session started before its user joined the socket's group must restart first."
     )
 

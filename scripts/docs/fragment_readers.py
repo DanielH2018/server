@@ -7,7 +7,7 @@ neither half has to know about the other.
 
 STATIC PARSING ONLY, for the reason the generator's own docstring gives: importing the
 rotation tool would bootstrap `sys.path` and read the environment on import.
-Python constants come from `ast`, role defaults and inventory from `lib.estate`, and the
+Python constants come from `ast`, package listings from `yaml_fast`, and the
 fail2ban jail template from `configparser`.
 """
 
@@ -17,7 +17,6 @@ from collections.abc import Sequence
 from pathlib import Path as _Path
 
 from lib import yaml_fast
-from lib.estate import Estate
 from lib.repo_paths import REPO
 
 
@@ -30,14 +29,6 @@ def module_constant(path: _Path, name: str):
         ):
             return ast.literal_eval(node.value)
     raise KeyError(f"{path.relative_to(REPO)}: no top-level `{name} = <literal>`")
-
-
-def host_has_docker(estate: Estate) -> dict[str, bool]:
-    """`{host: has_docker}` for every host, sorted by name."""
-    return {
-        host: bool(estate.vars(host).get("has_docker", False))
-        for host in estate.hosts()
-    }
 
 
 def hosts_listing_component(

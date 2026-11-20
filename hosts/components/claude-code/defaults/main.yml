@@ -77,13 +77,6 @@ claude_code_rc_alert_quiet_minutes: 360
 # vars below make the sum the number, applied to the one slice that is a parent of both
 # planes.
 
-# Whether the fleet bound is applied: the drop-in on claude_code_fleet_slice, and the
-# Slice= line that moves claude-rc.service under it. false removes both — the drop-in is
-# deleted and the RC unit goes back to system.slice keeping only its own per-plane cap.
-# That is the rollback if a shared parent ever needs to come off, e.g. to give one plane the
-# whole box for a deliberate heavy run.
-claude_code_fleet_caps_enabled: true
-
 # The slice both planes live under. user.slice is the only slice that can hold both:
 # user-<uid>.slice cannot be reparented (systemd.slice(5): its name fixes it under user.slice),
 # so user.slice is the tightest legal common ancestor. It is safe to place a unit in
@@ -170,9 +163,7 @@ claude_code_rc_restart_schedule: weekly
 
 # claude-bg-resume.service respawns, once at boot, the background sessions (`claude agents`,
 # `claude --bg`) the shutdown killed, so their Remote Control links come back without anyone
-# opening agent view first. True enables the unit for the next boot; false disables it and
-# leaves running sessions alone. This role's CLAUDE.md has what it does and does not restore.
-claude_code_bg_resume_enabled: true
+# opening agent view first. This role's CLAUDE.md has what it does and does not restore.
 
 # Whose background sessions to resume. The operator dispatches them; claude-rc.service's
 # sessions are a different feature and come back through that unit's own Restart=always.
@@ -186,13 +177,6 @@ claude_code_bg_resume_dir: /usr/local/lib/claude-bg-resume
 # which none of the three touch, so such a scope can grow without bound while
 # claude-rc.service stays small. The caps are rendered for every uid in claude_code_login_uids
 # plus the agent user's.
-
-# Whether the two tasks below are applied. Unlike claude_code_rc_enabled this has no
-# "installed but stopped" middle state to fall back to — false removes the drop-in and the
-# environment.d file outright, which is the rollback if the cap ever needs to come off a
-# login session (e.g. while debugging a plain human `pytest -n auto` run that wants full
-# width).
-claude_code_login_caps_enabled: true
 
 # The numeric uid of the account this role manages, whose login-session slice (user-<uid>.slice)
 # gets the same caps as claude-rc.service's own cgroup. Override per-host if a different uid
@@ -262,10 +246,9 @@ claude_code_memory_sync_interval: 15min
 # Each apply of this role syncs the clone's .venv, which the hooks run in. A pull that changes
 # uv.lock needs `uv sync` in ~/server before the next `claude`, as in any checkout.
 #
-# True only in daniel-box's host_vars. False expires the account rather than removing it, so
-# nothing can log in as it, and its home keeps the clone and any work not yet pushed. True
-# again lifts the expiry.
-claude_code_agent_user_enabled: false
+# False drops the agent's setup, its syncs, its lander and triage from the next package version.
+# The account itself follows the host's `users:` entry in its package.yml.
+claude_code_agent_user_enabled: true
 claude_code_agent_user: claude
 # Outside /home, as renovate-agent's is, so a unit's ProtectHome= hides every human home and
 # not this one.
@@ -316,10 +299,10 @@ claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 # Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
 # repo's `agent` flag on, in place of the subset above. claude-agent-setup clones the source,
 # and claude-dotfiles-sync.sh applies it: the agent then runs the operator's guard hooks,
-# agents, commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs
-# homelab-tools' chezmoi and a dotfiles source with the flag; a source without it is refused,
-# and the agent keeps what it had. False drops the sync from the next package version.
-claude_code_agent_dotfiles: false
+# agents, commands and CLIs. It needs homelab-tools' chezmoi and a dotfiles source with the
+# flag; a source without it is refused, and the agent keeps what it had. False drops the sync
+# from the next package version.
+claude_code_agent_dotfiles: true
 claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 # The dotfiles' `profile` answer: `server`, as the operator's own config on these hosts holds.
 claude_code_agent_dotfiles_profile: server
@@ -486,16 +469,12 @@ claude_code_pipeline_timeline_server_host: daniel-server
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
 # state but `done`. The batch's ExecStopPost= starts it
 # (scripts/dev/fanout_lib/notify.py), and templates/50-claude-fanout-alert.rules.j2 lets the
-# operator and each agent user start it for the states that page and nothing else. False
-# removes the unit, the rule and the webhook file, and a stopped batch then pages nothing.
-claude_code_fanout_alert_enabled: true
+# operator and each agent user start it for the states that page and nothing else.
 
 # claude-stop-alert@<cause>.service pages Discord when a Claude Code session ends on an API
 # error. The session's StopFailure hook starts it, and
 # templates/50-claude-stop-alert.rules.j2 lets the operator and each agent user start it for a
-# cause in [a-z0-9_]+ and nothing else. False removes the unit, the rule and the webhook file,
-# and a session that ends on an error then pages nothing.
-claude_code_stop_alert_enabled: true
+# cause in [a-z0-9_]+ and nothing else.
 
 # The peer sync (hosts/components/claude-code/templates/sync-artifacts.sh.j2) and the OTLP-door
 # heartbeat (claude-otel-health.sh.j2) ship only on this node, in its host package.
@@ -562,10 +541,8 @@ claude_code_takeover_check_state_dir: /var/lib/homelab-takeover-check
 
 # A root-owned, read-only script that reads root-only host state (nft, ufw, sshd -T, root's
 # crontab, and ls, stat and cat of an allowlisted path set), granted to the users below through
-# one NOPASSWD sudoers line, with an unprivileged shim on PATH. True in daniel-box.yml and
-# daniel-server.yml. False removes the grant, the shim and the script, in that order. CLAUDE.md,
-# "The root inspector", has the grant and its limits.
-claude_code_rootq_enabled: false
+# one NOPASSWD sudoers line, with an unprivileged shim on PATH. CLAUDE.md, "The root
+# inspector", has the grant and its limits.
 # The operator's account, which is where fan-out batches and the operator's sessions run. Not
 # the agent user: NoNewPrivileges in claude-rc.service stops sudo there (docs/claude-agent-user.md).
 claude_code_rootq_users:
@@ -576,12 +553,7 @@ claude_code_rootq_shim: /usr/local/bin/rootq
 # The same inspector for the agent user through a socket. `sudo` is no route for
 # the agent: claude-rc.service runs with NoNewPrivileges=yes. homelab-rootq.socket (0660, the
 # group below) starts a root helper per connection, and the helper runs the script above, so
-# the allowlist and the redaction are the same. True in daniel-box.yml and daniel-server.yml.
-# False removes the socket, its units, the helper, the client and the group, and
-# claude-agent-setup takes the agent out of the group. It does nothing while claude_code_rootq_enabled is false,
-# because a socket must not outlive the script it runs. CLAUDE.md, "The root inspector".
-claude_code_rootq_socket_enabled: false
-claude_code_rootq_socket_armed: "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"
+# the allowlist and the redaction are the same. CLAUDE.md, "The root inspector".
 claude_code_rootq_socket_group: homelab-rootq
 claude_code_rootq_socket_path: /run/homelab-rootq.sock
 claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket

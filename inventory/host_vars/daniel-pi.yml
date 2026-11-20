@@ -11,10 +11,6 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # give a future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
 # working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.
-# The only Docker host, so this is the one host that
-# opts IN to the engine (group_vars/all.yml defaults it false). Every service in
-# compose_services below runs on it.
-has_docker: true
 # rsyslog is masked here (journald is the log of record; rsyslog's text logs landed in
 # the RAM-backed log2ram tmpfs), so homelab-daniel-pi must not list the `rsyslog-filter`
 # component: its try-restart has nothing to restart. See group_vars/all.yml for the default.

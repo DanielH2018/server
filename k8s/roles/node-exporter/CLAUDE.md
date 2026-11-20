@@ -65,7 +65,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   a host that runs the RC unit. A writer that stops on one node therefore pages while the other
   node still reports, and so does a file that is missing or malformed on one host.
   `tests/services/test_host_check_rule_literals.py::test_the_cgroup_pairs_follow_the_inventory`
-  holds the pairs to the inventory, and
+  holds the pairs to the hosts whose package lists `claude-code` and to their RC toggle, and
   `tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py` holds the
   rules' selectors to the series the writer emits.
 - **The sidecar producer: `iscsi-sessions.prom` (#5826).** The `iscsi-sessions` container

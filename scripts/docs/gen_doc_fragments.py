@@ -58,7 +58,6 @@ from pathlib import Path as _Path
 from dev.k8s_autodeploy_counts import autodeploy_stances
 from docs.fragment_readers import (
     container_udp_port,
-    host_has_docker,
     hosts_listing_component,
     module_constant,
     parse_jails,
@@ -111,7 +110,7 @@ SECRET_REGISTRY = REPO / "secrets/secret_rotation.yml"
 PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
 REGISTRY_ROLE = K8S_ROLES / "registry"
 OBSERVABILITY_ROLE = K8S_ROLES / "observability"
-HOST_MAINTENANCE = REPO / "hosts" / "components" / "host-maintenance"
+PI_DOCKER = REPO / "hosts" / "components" / "pi-docker"
 WORKTREE_SWEEP = REPO / "hosts" / "components" / "worktree-sweep"
 FAIL2BAN_CONF = (
     REPO
@@ -186,7 +185,7 @@ def _traefik_ports() -> tuple[str, list[str]]:
 
 def deadman_inputs(
     estate: Estate | None = None,
-) -> tuple[dict, dict, dict, dict, dict, dict[str, bool], dict, list[str]]:
+) -> tuple[dict, dict, dict, dict, dict, list[str], list[str], dict, list[str]]:
     """The arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
@@ -198,8 +197,9 @@ def deadman_inputs(
         estate.role_vars(PI_PEER_ROLE),
         estate.role_vars(REGISTRY_ROLE),
         estate.group_vars,
-        {**estate.role_vars(HOST_MAINTENANCE), **estate.role_vars(WORKTREE_SWEEP)},
-        host_has_docker(estate),
+        {**estate.role_vars(PI_DOCKER), **estate.role_vars(WORKTREE_SWEEP)},
+        estate.hosts(),
+        hosts_listing_component("pi-docker"),
         estate.role_vars(OBSERVABILITY_ROLE),
         hosts_listing_component("worktree-sweep"),
     )
@@ -211,11 +211,19 @@ def _deadman() -> tuple[str, list[str]]:
         "k8s/roles/pi-peer-backup/defaults/main.yml",
         "k8s/roles/registry/defaults/main.yml",
         "k8s/roles/observability/defaults/main.yml",
-        "hosts/components/host-maintenance/defaults/main.yml",
+        "hosts/components/pi-docker/defaults/main.yml",
         "hosts/components/worktree-sweep/defaults/main.yml",
         "inventory/group_vars/all.yml",
         "inventory/host_vars/",
-        *(f"hosts/{h}/package.yml" for h in hosts_listing_component("worktree-sweep")),
+        *(
+            f"hosts/{h}/package.yml"
+            for h in sorted(
+                {
+                    *hosts_listing_component("pi-docker"),
+                    *hosts_listing_component("worktree-sweep"),
+                }
+            )
+        ),
     ]
 
 

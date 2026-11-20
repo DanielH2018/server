@@ -13,8 +13,6 @@ k3s_node_wifi_link: wlo1
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true
-# No Docker engine: this host is a k3s agent node.
-has_docker: false
 # DECIDED: no fwupd here, because LVFS carries no firmware for this hardware. The host is an
 # Intel NUC11TNHi5 (BIOS TNTGL357) with an SK hynix Platinum P41 NVMe (SHPP41-500GM). On
 # 2026-11-14 fwupd.org's search returned "No results" for "NUC11" and for "P41", while a
@@ -26,27 +24,10 @@ has_fwupd: false
 # Claude Code session host for issue-fanout agents. The Remote Control unit
 # stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the
 # PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
-has_claude_code: true
 claude_code_rc_enabled: false
-# The `claude` agent user, so a fan-out launched as `claude` on daniel-box can place a batch
-# here (docs/claude-agent-user.md, slice 5). Its batches stop at the PR as before. It needs one
-# interactive `/login` as `claude` here, and its signing key registered on the agent's GitHub
-# account, after the first apply. False expires the account and keeps its home.
-claude_code_agent_user_enabled: true
-# The read-only root inspector, `rootq`, for the operator's account.
-# False removes the grant, the shim and the script.
-claude_code_rootq_enabled: true
-# The same inspector for the agent user through a socket. False removes the
-# socket, its units, the helper, the client and the group, and the agent leaves the group.
-claude_code_rootq_socket_enabled: true
 # daniel-box's agent logs in here as `claude` with the key claude-agent-home generates there.
 # False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true
-# The agent user takes the operator's dotfiles here too, as on daniel-box. A fan-out batch
-# launched as `claude` needs the claude-guard shim they deploy: every headless
-# launch names claude-guard's prompt server, and refuses to start without the shim.
-# Rollback: delete this line; the hand-picked config copy comes back on the next apply.
-claude_code_agent_dotfiles: true
 
 # DECIDED: 24G fleet cap, derived the way defaults/main.yml derives daniel-box's 20G: the
 # operator set a floor of 8 GiB of host RAM available on 2026-11-13, and the cap is that floor

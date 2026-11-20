@@ -24,6 +24,7 @@ from _helpers import (
     load_yaml,
 )
 from _setup_render import CLAUDE_CODE, render_component_text
+from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
@@ -120,8 +121,8 @@ def test_the_deadlines_are_two_periods_plus_the_run_timeout_plus_300s():
     }
 
 
-# Alert -> the flags that must all be true, beside `has_claude_code`, for a host to run the
-# timer. Each is the `when:` its unit's install task reads.
+# Alert -> the flags that must all be true, on a host whose package lists claude-code, for it to
+# run the timer. Each is the `when:` its unit's install task reads.
 ARMED_BY = {
     "ClaudeCloneSyncNotReporting": ("claude_code_agent_user_enabled",),
     "ClaudeDotfilesSyncNotReporting": (
@@ -136,17 +137,15 @@ ARMED_BY = {
 
 
 def armed_hosts(alert: str) -> set[str]:
-    """The hosts whose inventory arms the alert's timer: role default < group_vars < host_vars."""
+    """The claude-code hosts whose inventory arms the alert's timer: defaults < group < host."""
     base = {**load_defaults(CLAUDE_CODE), **load_yaml(ALL_VARS)}
     armed = set()
-    for path in sorted(HOST_VARS.glob("*.yml")):
-        if path.name.startswith("_"):
-            continue
-        merged = {**base, **(load_yaml(path) or {})}
-        flags = [merged["has_claude_code"], *(merged[f] for f in ARMED_BY[alert])]
-        assert all(isinstance(f, bool) for f in flags), (path.name, alert, flags)
+    for host in hosts_listing_component("claude-code"):
+        merged = {**base, **(load_yaml(HOST_VARS / f"{host}.yml") or {})}
+        flags = [merged[f] for f in ARMED_BY[alert]]
+        assert all(isinstance(f, bool) for f in flags), (host, alert, flags)
         if all(flags):
-            armed.add(path.stem)
+            armed.add(host)
     return armed
 
 
