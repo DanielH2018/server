@@ -98,6 +98,7 @@ def test_a_key_with_a_copy_outside_the_tree_is_stale_however_fresh_the_rest(tmp_
     [
         "crowdsec_k8s_agent_password",
         "crowdsec_k8s_bouncer_api_key",
+        "karakeep_gemini_api_key",
         "lidarr_api_key",
         "livesync_db_password",
         "livesync_sync_token",
