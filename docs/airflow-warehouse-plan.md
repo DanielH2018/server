@@ -32,9 +32,9 @@ role as built.
   admin.** The fences admit only the pods that call each port.
 - **One Postgres, two databases**, `airflow` and `warehouse`. Grafana reads the warehouse as a
   SELECT-only role.
-- **The claim is backed up weekly to B2.** The R2 daily tier is derived from home-critical
-  entries only, and Airflow is not one. A lost week re-derives by backfill from sources that
-  keep at least seven days.
+- **The claim is backed up daily to R2.** Airflow is not home-critical, so its entry
+  declares the claim in `r2_backup_claims`. Scrutiny and Home Assistant discard daily data
+  within a week, so a week-old restore would lose days nothing re-derives.
 - **The backfill window is read from the source, not declared.** Prometheus' size cap moves
   its oldest day, so the DAG reads `prometheus_tsdb_lowest_timestamp_seconds` per run.
 
@@ -116,8 +116,8 @@ weekly reconciliation checks.
 
 ## Risks
 
-- **Losing the claim erases history the sources no longer hold.** The weekly B2 backup bounds
-  the loss to the last week, which backfill restores.
+- **Losing the claim erases history the sources no longer hold.** The daily R2 backup bounds
+  the loss to one day, which backfill restores.
 - **A DAG outage longer than a source's retention loses days.** The quality check fails on a
   gap, and slice 0b pages on a dead scheduler.
 - **Task logs reach Loki only when the pod outlives Alloy's tail.** A sub-second task often

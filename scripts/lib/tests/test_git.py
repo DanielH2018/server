@@ -1,21 +1,10 @@
 """The shared git runner: the repository is chosen by cwd, never by the environment."""
 
-import os
 import subprocess
 
 import pytest
 
-from lib.git import (
-    gc_log_path,
-    git,
-    git_dirty,
-    git_env,
-    git_stdout,
-    merge_tree,
-    repair_object_store,
-)
-from lib.git_testing import commit, init_repo
-from lib.git_testing import git as scrubbed_git
+from lib.git import git, git_dirty, git_env, git_stdout
 from lib.proc_testing import run
 
 
@@ -129,105 +118,3 @@ def test_an_ambient_git_dir_cannot_redirect_the_answer(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_DIR", str(dirty / ".git"))
     monkeypatch.setenv("GIT_WORK_TREE", str(dirty))
     assert git_dirty(clean) is False
-
-
-# --- the object-store repair ----------------------------------------------------
-#
-# Real git rather than mocks, because what is asserted here is what git DELETES: a mocked
-# `git prune` proves the argv and nothing about whether the grace period holds.
-
-
-# An mtime `git prune --expire=1.day.ago` reads as old under any clock this suite runs on. The
-# fresh case leaves the mtime alone: a file just written is new by construction, so neither
-# half reads the clock.
-LONG_AGO = 946_684_800.0  # 2000-01-01T00:00:00Z
-
-
-def _unreachable_object(repo, text, stale):
-    """Write a loose object no ref points at, backdated to LONG_AGO if `stale`, and return its file.
-
-    `git prune` decides by the object file's mtime, so backdating the file is what makes an
-    object old as far as the grace period is concerned.
-    """
-    blob = repo / "loose.txt"
-    blob.write_text(text)
-    sha = git("hash-object", "-w", "loose.txt", cwd=repo).stdout.strip()
-    blob.unlink()
-    path = repo / ".git" / "objects" / sha[:2] / sha[2:]
-    assert path.exists(), path
-    if stale:
-        os.utime(path, (LONG_AGO, LONG_AGO))
-    return path
-
-
-def test_the_repair_drops_an_old_unreachable_object_and_clears_the_gc_log(tmp_path):
-    """ACCEPT: worktree churn's leftovers go, and a stale gc.log goes with them.
-
-    Both halves matter. While gc.log is there and fresh, `git gc --auto` prints it and exits
-    however clean the store has since become.
-    """
-    _init_repo(tmp_path)
-    stale = _unreachable_object(tmp_path, "left by a removed worktree\n", stale=True)
-    gc_log = tmp_path / ".git" / "gc.log"
-    gc_log.write_text("warning: There are too many unreachable loose objects\n")
-
-    lines = repair_object_store(tmp_path)
-
-    assert not stale.exists(), lines
-    assert not gc_log.exists(), lines
-    assert any("automatic gc" in line for line in lines), lines
-
-
-def test_the_repair_leaves_an_object_a_live_session_just_wrote(tmp_path):
-    """REJECT: the grace period is real, so `--expire=now` cannot creep back in.
-
-    Several sessions write into this object store at once. An object one of them has written
-    but not yet pointed a ref at is unreachable and brand new, and deleting it destroys live
-    work — which is why this prunes on a day's grace rather than immediately.
-    """
-    _init_repo(tmp_path)
-    fresh = _unreachable_object(
-        tmp_path, "another session is mid-commit\n", stale=False
-    )
-
-    repair_object_store(tmp_path)
-
-    assert fresh.exists()
-
-
-def test_the_gc_log_is_read_from_the_shared_git_directory(tmp_path):
-    """A worktree has a private git directory; gc.log only ever lives in the shared one."""
-    repo, wt = tmp_path / "repo", tmp_path / "wt"
-    _init_repo(repo)
-    git("worktree", "add", "-q", "-b", "feature", str(wt), cwd=repo)
-
-    assert gc_log_path(wt) == repo / ".git" / "gc.log"
-
-
-def test_a_missing_gc_log_is_not_reported_as_a_repair(tmp_path):
-    """The common case prints only the prune line, so a caller's report stays quiet."""
-    _init_repo(tmp_path)
-
-    lines = repair_object_store(tmp_path)
-
-    assert not any("gc.log" in line for line in lines), lines
-
-
-def test_a_conflicting_merge_from_a_linked_worktree_keeps_exit_1_and_writes_nothing(
-    tmp_path,
-):
-    """The scratch store reads through the SHARED objects directory, which a worktree lacks."""
-    repo, wt = tmp_path / "repo", tmp_path / "wt"
-    init_repo(repo)
-    commit(repo, "init", **{"a.txt": "base\n"})
-    scrubbed_git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    commit(wt, "feature side", **{"a.txt": "feature\n"})
-    commit(repo, "master side", **{"a.txt": "master\n"})
-    objects = repo / ".git" / "objects"
-    before = set(objects.glob("??/*"))
-
-    result = merge_tree("master", "feature", cwd=wt)
-
-    assert result.returncode == 1, result.stderr
-    assert "a.txt" in result.stdout
-    assert set(objects.glob("??/*")) == before

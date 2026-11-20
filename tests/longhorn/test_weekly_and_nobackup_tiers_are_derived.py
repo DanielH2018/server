@@ -42,7 +42,6 @@ _REPLACED_WEEKLY = {
     "homelab/pi-peer-backup-data": 6,
     "homelab/lidarr-config": 6,
     "homelab/vaultwarden-data": 1,
-    "homelab/airflow-postgres-data": 2,
 }
 
 _REPLACED_NOBACKUP = frozenset(

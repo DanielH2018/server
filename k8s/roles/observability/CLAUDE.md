@@ -139,6 +139,10 @@ are in `docs/archive/monitoring/m1-alertmanager.md`.
 `service` label, an inventory host, or labels of the firing series, and
 `tests/services/test_alert_runbook_urls.py::test_every_alert_summary_opens_with_its_service_or_host_is_clean`
 fails any other shape. A summary holds a `: `, so its YAML scalar is quoted or folded.
+A summary fits `SUMMARY_CAP` as rendered, and
+`tests/services/test_alert_runbook_urls.py::test_every_alert_summary_fits_the_cap_once_rendered_is_clean`
+measures the `summary` a promtool test's `exp_annotations` holds, so a templated summary's
+render needs a test case that asserts it.
 
 **The notification text is pinned by its renders.** `files/alertmanager/homelab.tmpl` writes
 the Discord and email bodies, and `k8s/roles/observability/tests/alertmanager/` holds
@@ -211,8 +215,10 @@ pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it
 pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
 verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
 on each host every 5 minutes (#8219). It fires once per failed unit. A unit whose
-`OnFailure=homelab-alert@` hook had delivered its Discord page when the check first found it
-failed carries `paged_by="homelab-alert"` until it recovers. The label never changes
+`OnFailure=` Discord hook had paged when the check first found it failed carries
+`paged_by="homelab-alert"` until it recovers. The hook is a `homelab-alert@` instance or the
+unit's own `homelab-<name>-alert.service`, and a page that the hook's rate limit skipped
+counts as paged. The label never changes
 mid-failure, because a changed label set would resolve the firing alert. A blackhole route in `templates/alertmanager-secret.yaml.j2`
 takes that label, so the unit pages once, and `WarningUnresolved` drops the label so its
 escalation still pages

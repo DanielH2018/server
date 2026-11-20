@@ -68,7 +68,7 @@ CRs, and the PVC objects with their volume bindings. It is **not** the contents 
 | Loss | Restored from |
 |---|---|
 | Cluster objects (a bad delete, a corrupted etcd, daniel-box's disk) | the etcd snapshot, here |
-| PVC *contents* (the data inside a volume) | Longhorn backups — B2 by default, R2 for four volumes (`longhorn-disaster-recovery.md`, *Two targets*) |
+| PVC *contents* (the data inside a volume) | Longhorn backups — B2 by default, R2 for five volumes (`longhorn-disaster-recovery.md`, *Two targets*) |
 
 A full rebuild needs both, **etcd first**: restore the objects so the PVCs exist, then restore the
 volumes into them.

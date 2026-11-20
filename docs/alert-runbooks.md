@@ -13,7 +13,9 @@ description is over the cap the notification can carry.
 Every summary reads `<service or host>: <what is wrong>`, so each line of a notification opens
 with the thing that broke. The subject is the rule's own `service` label, an inventory host,
 or labels of the firing series such as `{{ $labels.namespace }}/{{ $labels.pod }}`. The same
-test fails a summary in any other shape.
+test fails a summary in any other shape. It also fails a summary over its length cap as
+rendered. A templated summary is measured as the text a `promtool` test expects it to render,
+and a plain summary, or one no test renders, as its source.
 
 ## The alert plane
 
@@ -304,10 +306,12 @@ alert fires once per failed unit.
 - A summary that names no unit means the host wrote no `homelab_systemd_unit_failed` series.
   Either `systemctl` could not list the units (`journalctl -t systemd-units`), or the host's
   package predates the per-unit series. Run `systemctl --failed` on the host.
-- A unit that names `OnFailure=homelab-alert@%n.service` pages Discord through that hook
-  first. Once the hook delivers, the check labels the unit's series
-  `paged_by="homelab-alert"`, and Alertmanager sends this alert to its `blackhole` receiver,
-  which notifies nobody. The alert stays visible in Karma. The check's first run after the
+- A unit that names `OnFailure=homelab-alert@%n.service`, or its own
+  `homelab-<name>-alert.service` such as `homelab-claude-triage-poll-alert.service`, pages
+  Discord through that hook first. Once the hook delivers, the check labels the unit's
+  series `paged_by="homelab-alert"`, and Alertmanager sends this alert to its `blackhole`
+  receiver, which notifies nobody. A page that the hook's own rate limit skipped counts as
+  delivered, because the skip means the hook paged earlier in its window. The alert stays visible in Karma. The check's first run after the
   failure decides the label, and the label holds until the unit recovers. If the hook has
   not delivered by that run, the label stays off and this alert pages. After 48 hours the
   alert still escalates to `WarningUnresolved`, which pages.

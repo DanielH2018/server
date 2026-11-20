@@ -356,7 +356,7 @@ def remote_clean_command(
 
     - The batch worktree's copy would freeze the merge judgement at whatever the batch was
       launched from. A batch started before `landed` existed would run a `clean-one` that has
-      no `landed`, so every squash-merged batch would read "not merged into origin/master"
+      no `landed`, so every squash-merged batch would read "not merged"
       for as long as it stood.
     - The primary checkout's work tree tracks master on daniel-box only, where
       `homelab-checkout-sync` fast-forwards it. daniel-server has no such job, and its

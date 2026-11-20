@@ -72,7 +72,7 @@ done
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"
 # Outside $REPO, so the primary checkout never lists it, and outside .claude/worktrees/, which
-# prune_worktrees.py sweeps. The directory is tmpfiles.d/homelab-docs-site.conf.j2's.
+# the worktree pruner sweeps. The directory is tmpfiles.d/homelab-docs-site.conf.j2's.
 TREE="/var/lib/homelab/docs-refresh.d/tree"
 # A copy of k8s/roles/docs' docs_host_site_dir, which the renderer does not load.
 # hosts/lib/tests/test_docs_refresh_component.py holds it equal to that role's default.

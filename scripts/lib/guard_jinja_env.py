@@ -152,6 +152,7 @@ def repo_filters() -> dict[str, FunctionType]:
         longhorn_groups.backup_group_label,
         longhorn_groups.longhorn_backup_name,
         longhorn_groups.longhorn_nobackup_claims,
+        longhorn_groups.longhorn_r2_claims,
         longhorn_groups.longhorn_weekly_claims,
         longhorn_groups.weekly_backup_group,
         longhorn_groups.weekly_backup_shard,
@@ -160,7 +161,6 @@ def repo_filters() -> dict[str, FunctionType]:
         scrape_jobs.metrics_port,
         scrape_jobs.scrape_jobs,
         service_tier.in_service_tier,
-        service_tier.tier_backup_claims,
         service_tier.tier_priority_class,
     )
     return {func.__name__: as_filter(func) for func in funcs}
@@ -196,9 +196,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     The k3s RecurringJob template names each weekly shard through ``weekly_backup_group``, which
     raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
-    longhorn-reconcile's ConfigMap computes the three tier lists with ``tier_backup_claims``,
+    longhorn-reconcile's ConfigMap computes the three tier lists with ``longhorn_r2_claims``,
     ``longhorn_weekly_claims`` and ``longhorn_nobackup_claims``, which raise on a shard outside
-    0-6 or a claim two entries declare.
+    0-6 or a claim declared twice.
     The flux role fits its vendored install to the workload guards through ``flux_components``,
     which raises on a Deployment volume it has no rename for. observability's dashboard
     ConfigMaps inject the deploy-annotation queries into each board through

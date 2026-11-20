@@ -227,6 +227,9 @@ _PIPELINE_TIMELINE = (
     "hosts/components/claude-code/templates/claude-pipeline-timeline.service.j2"
 )
 _BOARD_SYNC = "hosts/components/board-sync/units/homelab-board-sync.service.j2"
+_WORKTREE_SWEEP = (
+    "hosts/components/worktree-sweep/units/homelab-worktree-sweep.service.j2"
+)
 _LOKI_WITNESS = (
     "hosts/components/loki-route-witness/units/homelab-loki-route-witness.service.j2"
 )
@@ -293,6 +296,10 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
             "findings.py sync-board reads and writes the Project board through gh and runs no "
             "kubectl. The row counts it because findings_lib/precomputed.py imports "
             "land_lib.land_tags, whose own imports reach kubectl"
+        ),
+        _WORKTREE_SWEEP: (
+            "findings.py reap judges claims against worktrees and fan-out manifests and runs "
+            "no kubectl. The row counts it for the import the board sync's entry names"
         ),
         _LOKI_WITNESS: (
             "probe.py loki-labels reads Loki over HTTP and runs no kubectl. The row counts it "

@@ -17,14 +17,17 @@ It is split four ways: the CLI, `findings_lib/issue_model.py` (vocabulary and pu
 command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 
 `scripts/lib/worktrees.py` decides whether a session worktree is done with: `is_merged`,
-`classify` and `worktree_facts`. `scripts/dev/prune_worktrees.py` is only the CLI over it, and
-nothing else imports the CLI. `.claude/hooks/session-health.py` imports `parse_worktree_list`
+`classify` and `worktree_facts`. It binds this repo's two facts, the base `origin/master` and
+the fan-out lock pattern, onto the `claude_worktree` library the dotfiles repo deploys to
+`~/.local/share/claude-worktree`. That library holds the landed ladder, the holds, `classify`
+and `remove`, and the same repo's `~/.claude/hooks/prune-worktrees.py` is the one worktree
+pruner (#9033). The pruner reads this repo's policy from `.claude/prune-worktrees.json`.
+`.claude/hooks/session-health.py` imports `parse_worktree_list`
 and `lock_is_live` from `lib.worktrees` to print the other-live-sessions banner, so a
-`fanout-<batch>` lock counts only while its batch unit is active (#8576). Since #2133
-`parse_worktree_list`, `session_is_alive`, `Worktree` and the cherry and merge-tree readers come from the
-`claude_worktree` module the dotfiles repo deploys to `~/.local/share/claude-worktree`, and
-`lib.worktrees` re-exports them. `scripts/lib/_claude_worktree.py` is the bootstrap, and it
-raises rather than falls back, so a host without the deploy prunes and reaps nothing.
+`fanout-<batch>` lock counts only while its batch unit is active (#8576).
+`scripts/lib/_claude_worktree.py` is the bootstrap, and it raises rather than falls back, so
+a host without the deploy, or with one older than
+`scripts/lib/_claude_worktree.py:REQUIRED_INTERFACE`, prunes and reaps nothing.
 
 Every open issue except #3 carries the `claude` label. #3 is Renovate's Dependency Dashboard,
 created 2026-06-06 with no labels. Scoping claims to `claude`-labelled issues therefore costs
@@ -185,8 +188,9 @@ A claim names a branch, in either session form: `worktree-<name>` from `EnterWor
 `claude/<name>` from the desktop app (`scripts/lib/worktree_owner.py:SESSION_BRANCH_PREFIXES`).
 The pruner's branch sweep deletes an orphan branch of either form once its work is on
 `origin/master`. It keeps a branch that any open claim names, or that an open PR has as its
-head, and it keeps every landed branch when it cannot read the claims or the open PRs
-(`scripts/dev/prune_worktrees.py:judge_branches`). A stale claim therefore holds its branch
+head, and it keeps every landed branch when it cannot read the claims or the open PRs.
+`scripts/dev/held_branches.py` prints both lists, and the policy file names it as the
+pruner's `branch_holds` command. A stale claim therefore holds its branch
 until `reap` releases the claim.
 
 A claim is **not** reclaimable when the named worktree still exists with uncommitted changes,
@@ -200,7 +204,7 @@ process was gone while the work was not.
 
 Reusing `lib.worktrees` is what makes this self-healing without either. The staleness
 question — is this worktree done with — is a question that module already answers for
-`prune_worktrees.py`, and `session-health.py` already imports it from outside `scripts/`.
+the worktree pruner, and `session-health.py` already imports it from outside `scripts/`.
 
 A claim on another repo's register is judged against that repo's worktrees. With
 `--repo DanielH2018/dotfiles`, `findings.py` reads `git worktree list` in the chezmoi checkout
@@ -419,7 +423,7 @@ What this buys:
 - The `session-health.py` banner prints `worktree-issue-1132` where it prints
   `worktree-agent-a1f5b5e3cdf2f9684` today, so the other-live-sessions list becomes readable
   at a glance.
-- `prune_worktrees.py` reports the same way.
+- The worktree pruner reports the same way.
 - The PR body carries `Closes #1132`, so the merge closes the issue and the `land.sh` verdict
   attaches to it.
 
@@ -466,7 +470,8 @@ one untracked file in the primary checkout parks `homelab-checkout-sync`. Three 
 beside the name, with no network call:
 
 - `session-health.py`'s other-live-sessions list.
-- `prune_worktrees.py`, in both `--brief` and the long report.
+- The worktree pruner, in both `--brief` and the long report, through the policy's
+  `label_file`.
 - `session-health.py`'s own-tree prompt. A session that starts in an unlabelled `agent-` or
   `bridge-` tree is told to label it once it knows its task, which is how a Remote Control
   session learns to do it.
@@ -476,7 +481,7 @@ The local fan-out brief makes the label the agent's first act, beside the `Worke
 `DECIDED:` the names stay generated, and a label sits beside them. A `WorktreeCreate` hook can
 choose the directory, but it replaces worktree creation for every session in every repo. It
 would have to redo what `worktree.baseRef: fresh` does, keep the `worktree-<name>` branch shape
-that `lib/worktree_owner.py` and `prune_worktrees.py` parse, and delete its own branches,
+that `lib/worktree_owner.py` and the worktree pruner parse, and delete its own branches,
 which Claude Code never does for a hook-created worktree. Its input carries only `name`,
 `session_id`, `transcript_path` and `cwd` (Claude Code 2.1.296), so it cannot tell which of
 several parallel `Agent` calls a given `agent-<id>` belongs to.
@@ -870,7 +875,9 @@ sub-coordinator started one worker. It answered three questions:
 - **A sub-coordinator cannot start a session from the root's brief.** The app refuses to
   start a session on a turn another session started. The operator's message in the
   sub-coordinator's chat is the step that unlocks it, and the fan-out's grouping approval
-  is that message.
+  was that message. Since 2026-11-20 the root's brief carries the launch approval
+  (*Decisions, with their dates*), and the workers are fan-out batches, which need no
+  session start.
 - **Recaps travel up one level at a time.** The worker woke the sub-coordinator, and the
   sub-coordinator woke the root. The root receives one recap per project, cut to about 400
   characters, which is why the skill fixes the recap's format.
@@ -1044,8 +1051,9 @@ The run changed the tooling six times, and each change edited the section it tou
   On 2026-11-19 the operator dropped a second limit, under which a PR that changes code
   `land.py` imports waited for approval.
 - **2026-11-15: one approval covers one milestone plus the grouping rules.** The operator
-  types it once, in the sub-coordinator's chat. Refills stay inside that milestone, and a
-  new milestone needs a new approval.
+  typed it once, in the sub-coordinator's chat, until the ruling of 2026-11-20 below moved
+  where it is given. Refills stay inside that milestone, and a new milestone needs a new
+  approval.
 - **2026-11-15: build the serial turnstile, and defer a root status command.** The
   turnstile landed as a wait in the landing turn. The root reads recaps until a real run
   shows that it needs more.
@@ -1073,6 +1081,27 @@ The run changed the tooling six times, and each change edited the section it tou
   pause only stops the other project launching batches whose landings would be refused
   meanwhile, so a sub-coordinator reports a serial PR under `asks:` when its landing
   starts, and its verdict in the same place.
+- **2026-11-20: telling the root to start a project is the launch approval.** The operator
+  told the root "Start 24 and 26" to start two projects, then had to type a second
+  approval into each sub-coordinator's chat. The operator's question "Is there anyway so
+  that I don't have to approve the initial launch on sub-coordinator sessions?" drew a
+  proposal from the root: the root's brief counts as the launch approval. The operator's
+  answer "Yes, change it" is the ruling. The rule of 2026-11-15 existed so the root
+  cannot invent an approval. The
+  brief therefore quotes the operator's words that named the project, and those quoted
+  words are what a reader checks. A brief with no quoted words, a project the root chose
+  itself, or grouping rules wider than the standing ones still stops at the gate in the
+  sub-coordinator's chat. Dropping the review phase, `--allow-shared-file` and an issue
+  from outside the project's milestone are never covered. The `coordinate` skill's
+  *Approval* section holds the rule and the standing grouping rules
+  ([#9551](https://github.com/DanielH2018/server/issues/9551)).
+- **2026-11-20: the root archives a session once it has verified the session's result.**
+  The operator's words, as the root relayed them, were "I'd like it if completed sessions
+  under the coordinator were auto-archived" and nothing more. The root archives without
+  asking, in the turn that reads the landing verdict, sees the issue closed or ends the
+  project. A session stays open while another live session uses its worktree, while a
+  landing or a background wait runs in it, or when the app refuses the archive. A
+  sub-coordinator starts no sessions, so the duty is the root's alone.
 
 ### Who lands a daniel-server batch's PR
 

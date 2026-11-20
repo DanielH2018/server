@@ -89,10 +89,11 @@ runs:
         [ "$(command -v age-keygen)" = "$bin/age-keygen" ]
         age-keygen --version
         command -v apt-ftparchive
-    # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
-    # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
+    # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and
+    # `lib.worktrees` binds this repo onto its `claude_worktree` library, which also holds the
+    # worktree pruner. A host gets both from `chezmoi apply`;
     # this step lays the same two directories out where a host has them, so the bootstraps
-    # (`.claude/hooks/_claude_guard.py`, `scripts/dev/_claude_worktree.py`) import them
+    # (`.claude/hooks/_claude_guard.py`, `scripts/lib/_claude_worktree.py`) import them
     # unchanged. Both packages are plain files under `home/dot_local/share/` in that repo,
     # so no chezmoi render is needed. The fetch lands in $RUNNER_TEMP rather than in the
     # workspace, where an untracked tree would show up in the git-status tests. The repo is
@@ -104,7 +105,7 @@ runs:
     - name: Deploy the dotfiles packages the hooks and the pruner import
       shell: bash
       env:
-        DOTFILES_SHA: 77b0bdab9bba37a7b9e2afd5b7d5a67574c36f83
+        DOTFILES_SHA: 510ed191ebd31ace6d83406cb509dd649dae39ec
       run: |
         set -euo pipefail
         src="$RUNNER_TEMP/dotfiles"
