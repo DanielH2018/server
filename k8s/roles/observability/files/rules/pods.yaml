@@ -39,7 +39,7 @@ groups:
           severity: warning
           service: autofix-bridge
         annotations:
-          summary: autofix-bridge's last cycle failed.
+          summary: 'autofix-bridge: the last cycle failed.'
           description: >-
             The *arr auto-block loop reported down: Sonarr or Radarr was unreachable, a blocklist
             or search call failed, or more than the per-cycle cap of queue items were eligible
@@ -56,7 +56,7 @@ groups:
           severity: critical
           service: autofix-bridge
         annotations:
-          summary: Prometheus cannot scrape autofix-bridge's check exporter.
+          summary: 'autofix-bridge: Prometheus cannot scrape the check exporter.'
           description: >-
             up{job="autofix-bridge"} has been 0 or missing for 10 minutes, so either the
             autofix-bridge pod is down or the autofix-bridge scrape job is gone from
@@ -86,7 +86,7 @@ groups:
           severity: critical
           service: autofix-bridge
         annotations:
-          summary: autofix-bridge's loop has stopped recording its cycle verdict.
+          summary: 'autofix-bridge: the loop has stopped recording its cycle verdict.'
           description: >-
             Read the autofix-bridge pod's log in the homelab namespace. The scrape works, but for 10
             minutes the cycle's verdict has aged past its deadline or the exporter serves no
@@ -115,8 +115,7 @@ groups:
           service: cloudflare-ddns
           verify: "true"
         annotations:
-          summary: >-
-            {{ $labels.deployment }} has no available replica.
+          summary: 'cloudflare-ddns: {{ $labels.deployment }} has no available replica.'
           description: >-
             {{ $labels.deployment }} has had no available replica for 10 minutes, or
             kube-state-metrics reports none, so its Cloudflare A records are not being kept
@@ -132,7 +131,7 @@ groups:
           severity: warning
           service: pi-peer-backup
         annotations:
-          summary: The nightly daniel-pi peer-key backup failed.
+          summary: 'pi-peer-backup: the nightly daniel-pi peer-key backup failed.'
           description: >-
             The pi-peer-backup script reported down: rsync from daniel-pi failed, its host key no
             longer matches the committed pin, or fewer than two files came back. The WireGuard peer
@@ -157,7 +156,7 @@ groups:
           severity: warning
           service: pi-peer-backup
         annotations:
-          summary: The pi-peer-backup CronJob has not succeeded in three nights.
+          summary: 'pi-peer-backup: the CronJob has not succeeded in three nights.'
           description: >-
             The pi-peer-backup CronJob has no successful run newer than 72 hours, so the
             WireGuard peer keys have not been copied off daniel-pi for three nights. Read
