@@ -152,24 +152,36 @@ def test_a_unit_whose_hook_delivered_is_labelled_paged_by_the_hook(tmp_path):
 OWN_HOOK = "homelab-builder-alert.service"
 
 
+def _paged_by_own_hook(run_dir, hook_state: str) -> bool:
+    run_dir.mkdir()
+    shown = {HOOKED: _hooked_unit(OWN_HOOK), OWN_HOOK: hook_state}
+    _run(run_dir, f"{HOOKED} loaded failed failed builder\n", shown=shown)
+    [series] = _unit_series(run_dir)
+    return ',paged_by="homelab-alert"' in series
+
+
 @pytest.mark.parametrize(
-    "result",
+    ("paging", "not_paging"),
     [
-        pytest.param("success", id="delivered"),
-        pytest.param("exec-condition", id="skipped-by-its-rate-limit"),
+        pytest.param(
+            _hook("inactive", "success", FAILED_AT + 1),
+            _hook("activating", "exit-code", 0),
+            id="delivered-but-not-still-retrying",
+        ),
+        pytest.param(
+            _hook("inactive", "exec-condition", FAILED_AT + 1),
+            _hook("inactive", "exec-condition", FAILED_AT - 1),
+            id="skipped-after-the-failure-but-not-before-it",
+        ),
     ],
 )
-def test_a_unit_whose_own_alert_unit_paged_is_labelled_paged_by_the_hook(
-    tmp_path, result
+def test_a_unit_s_own_alert_unit_labels_only_a_page_made_since_the_failure(
+    tmp_path, paging, not_paging
 ):
-    shown = {
-        HOOKED: _hooked_unit(OWN_HOOK),
-        OWN_HOOK: _hook("inactive", result, FAILED_AT + 1),
-    }
-    _run(tmp_path, f"{HOOKED} loaded failed failed builder\n", shown=shown)
-    assert _unit_series(tmp_path) == [
-        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}",paged_by="homelab-alert"}} 1'
-    ]
+    assert (
+        _paged_by_own_hook(tmp_path / "paging", paging),
+        _paged_by_own_hook(tmp_path / "not-paging", not_paging),
+    ) == (True, False)
 
 
 @pytest.mark.parametrize(
@@ -193,20 +205,6 @@ def test_a_unit_whose_own_alert_unit_paged_is_labelled_paged_by_the_hook(
                 "wd_keepalive.service": _hook("inactive", "success", FAILED_AT + 1),
             },
             id="on-failure-names-another-unit",
-        ),
-        pytest.param(
-            {
-                HOOKED: _hooked_unit(OWN_HOOK),
-                OWN_HOOK: _hook("activating", "exit-code", 0),
-            },
-            id="own-alert-unit-still-retrying",
-        ),
-        pytest.param(
-            {
-                HOOKED: _hooked_unit(OWN_HOOK),
-                OWN_HOOK: _hook("inactive", "exec-condition", FAILED_AT - 1),
-            },
-            id="own-alert-unit-skipped-before-the-failure",
         ),
     ],
 )
