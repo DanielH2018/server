@@ -75,9 +75,8 @@ def _render() -> tuple[tuple[str, str, dict], ...]:
             out,
             tags,
             None,
-            flux_owned=lambda: set(tags),
             cluster_file=cluster_file,
-            ordering=lambda o: Ordering(flux_owned=frozenset(o)),
+            ordering=Ordering,
         )
         assert code == RENDER_OK, f"the Flux render of {tags} exited {code}"
         return tuple((tag, f"flux/{tag}.yaml", _bundle(out, tag)) for tag in tags)

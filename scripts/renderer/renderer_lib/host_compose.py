@@ -34,11 +34,6 @@ network a service's compose file declares `external: true`, so the unit can crea
 project needs and no other (H7.26).
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import hashlib
 import re
 from collections.abc import Callable, Iterable

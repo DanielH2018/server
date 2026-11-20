@@ -40,10 +40,6 @@ from fnmatch import fnmatch
 from pathlib import Path as _Path
 from typing import NamedTuple
 
-# `lib` is a sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.cli_help import ArgumentParser
 from lib.git import git_stdout
 from lib.renovate_annotations import annotations_in, is_annotation_manager

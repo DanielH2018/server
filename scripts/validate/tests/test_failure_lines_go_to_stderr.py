@@ -1,8 +1,8 @@
 """grafana_dashboard_uids.py and asset_pins.py print nothing on stdout when they exit non-zero.
 
 Most tests run a script as a subprocess against a scratch tree holding a copy of `scripts/lib`
-and the script. Both scripts read their repo from their own location, so the copy runs
-unpatched. A subprocess also sidesteps `asset_pins.main`'s `out=sys.stdout` default, which is
+and the script, with the copy's `scripts/` on `PYTHONPATH` as a launcher supplies it. Both
+scripts read their repo from their own location, so the copy runs unpatched. A subprocess also sidesteps `asset_pins.main`'s `out=sys.stdout` default, which is
 bound at import, where `capsys` cannot see it. Every pin in the asset_pins tree has a URL that
 does not render, so each check and refresh fails on `Pin.error` before it fetches anything.
 The suite runs under `-p leakguard`.
@@ -15,6 +15,7 @@ Run: uv run pytest scripts/validate/tests/test_failure_lines_go_to_stderr.py
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -47,6 +48,12 @@ def _copy_script(root: Path, script: str) -> Path:
     return target
 
 
+def _run_copy(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a validator `_copy_script` returned, importing the copied `lib`."""
+    env = {**os.environ, "PYTHONPATH": str(script.parents[1])}
+    return proc_testing.run([sys.executable, str(script), *args], env=env)
+
+
 def _lines_beyond_fail_lines(err: str) -> list[str]:
     return [
         line for line in err.splitlines() if line.strip() and not FAIL_LINE.match(line)
@@ -73,7 +80,7 @@ def grafana_failure(tmp_path_factory) -> subprocess.CompletedProcess[str]:
         "panels": [{"title": "P", "datasource": {"uid": "not-provisioned"}}],
     }
     (role / "files/dashboards/board.json").write_text(json.dumps(board))
-    return proc_testing.run([sys.executable, str(script)])
+    return _run_copy(script)
 
 
 def test_grafana_dashboards_prints_nothing_on_stdout_when_it_fails(grafana_failure):
@@ -160,7 +167,7 @@ def asset_pins_refusal(request, tmp_path_factory):
     defaults = root / "k8s/roles/scratch/defaults/main.yml"
     defaults.parent.mkdir(parents=True)
     defaults.write_text(_defaults_carrying(set(asset_pins.KNOWN_PINS) - {refusal.drop}))
-    return refusal, proc_testing.run([sys.executable, str(script), *refusal.argv])
+    return refusal, _run_copy(script, *refusal.argv)
 
 
 def test_asset_pins_prints_nothing_on_stdout_when_it_refuses(asset_pins_refusal):

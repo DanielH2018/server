@@ -101,8 +101,8 @@ DNS.
 
 ### `DiscordDeliveryFailing`
 
-One of the five Discord webhooks (Kuma, CrowdSec, `gitops-deploy`, *arr, healthchecks) no longer
-resolves, or the Gmail SMTP backstop login failed.
+One of the five Discord webhooks (Alertmanager, CrowdSec, `gitops-deploy`, *arr, healthchecks) no
+longer resolves, or the Gmail SMTP backstop login failed.
 
 - Read which: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN discord '`.
 - Rotate the named webhook in SOPS with the `add-secret` skill's flow, then let `promote`
@@ -338,8 +338,8 @@ Alertmanager repeats it daily and `WarningUnresolved` never pages it.
   and checked nothing, or when the previous week's run still held the lock.
 - Review every unexplained path before you accept it. `sudo /usr/lib/homelab/aide-check
   --accept` records the new baseline.
-- `sudo systemctl start homelab-aide-check.service` re-runs the check. A pass clears this alert
-  and the unit's failed state together.
+- `sudo systemctl start homelab-aide-check.service` re-runs the check. A pass clears this
+  alert. A DOWN run exits 0, so the unit fails only when the run could not write its verdict.
 
 ### `RkhunterScanFailed`
 
@@ -349,8 +349,8 @@ Alertmanager repeats it daily.
 - The scan fails when rkhunter raised a warning, a suspect file or a possible rootkit, or when
   it wrote no summary.
 - An account change clears on the next run.
-- `sudo systemctl start homelab-rkhunter-check.service` re-runs the scan and clears the unit's
-  failed state with it. A run of the script by hand leaves the unit failed.
+- `sudo systemctl start homelab-rkhunter-check.service` re-runs the scan. A DOWN run exits 0,
+  so the unit fails only when the run could not write its verdict.
 
 ### `KubeletShutdownLockMissing`
 

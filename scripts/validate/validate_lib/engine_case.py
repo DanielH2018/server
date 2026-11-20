@@ -38,11 +38,6 @@ simulation (`apt-get install -s` over a throwaway status file, the same dummy de
     (5:29.8.1-1~ubuntu.24.04~noble ...)`.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import shutil
 import subprocess
 import sys

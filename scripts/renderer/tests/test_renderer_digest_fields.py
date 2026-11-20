@@ -11,7 +11,7 @@ import json
 
 import yaml
 
-from changed_set import changed_set
+from deploy_tools.changed_set import changed_set
 from deploy_tools.bundle_census import snapshot_tags
 from lib.k8s_roles import snapshot_claims
 from renderer.renderer_lib.bundle_readme import BUNDLE_README

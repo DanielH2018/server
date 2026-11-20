@@ -52,7 +52,6 @@ def rendered(tmp_path_factory) -> dict[str, str]:
         out,
         [TAG],
         None,
-        flux_owned=lambda: {TAG},
         cluster_file=cluster_file,
         source_file=source,
     )

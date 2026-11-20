@@ -18,9 +18,7 @@ here names a RESOLVED object, so none carries a `detach_notify` skip marker (hea
 """
 
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from lib.exit_codes import PROBE_UNREADABLE

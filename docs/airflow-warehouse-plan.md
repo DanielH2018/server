@@ -64,8 +64,15 @@ role as built.
   "Homelab history" board. Volume usage reads kubelet's filesystem figures, because
   `actualSize` is not filesystem usage (ADR 0006). Daily B2 Class-B counts moved to slice 7:
   Longhorn logs them, so they live in `loki-homelab`, not Prometheus.
-- **Slice 2, Claude Code telemetry history (idea 2).** Daily spend, tokens, cache hit rate,
-  tool errors and permission decisions, with the four counting traps as tested code.
+- **Slice 2a, Claude Code usage history (idea 2).** Daily spend, tokens, sessions, active
+  time and output from Prometheus' per-session counters, as `claude_usage_rollup` into
+  `claude.usage_daily`. Each session counts its rise from its last value in the eight days
+  before the day, merged across collector restarts; `increase()` drops every new session's
+  first export, and read 14 to 41% low on each day from 2026-11-05 to 11-18.
+- **Slice 2b, Claude Code decision history (idea 2).** Tool errors and permission decisions
+  from the `tool_result` and `tool_decision` events in observability's Loki, with the four
+  counting traps of permission-decision telemetry as tested code. It needs a grant on Loki's
+  fence for `app: airflow-task`.
 - **Slice 3, Home Assistant history (idea 3).** Daily min, time-weighted mean, max and
   unavailable time for a declared sensor list, and each energy counter's daily increase, as
   `ha_daily_rollup` into `ha.sensor_daily`. The source keeps seven days, so a longer DAG

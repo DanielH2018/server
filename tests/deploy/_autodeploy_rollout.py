@@ -8,6 +8,7 @@ Consumed by `test_k8s_autodeploy_rollout_gates.py`.
 """
 
 import re
+from functools import cache
 from pathlib import Path
 
 from _autodeploy import (
@@ -16,7 +17,9 @@ from _autodeploy import (
     _deployment_templates,
     _template_texts,
 )
-from _autodeploy_batch import _owners
+from lib.k8s_roles import k8s_tags
+
+_k8s_tags = cache(k8s_tags)
 
 
 def _sets_empty_rollout(role: Path) -> bool:
@@ -79,7 +82,7 @@ def _rollout_gate_offender(role: Path) -> bool:
         return False
     # Flux applies a flux-owned role. The Kustomization's `wait` takes the rollout wait's place, and the
     # batch guard still requires each CronJob in `flux_cronjob_gates`.
-    if _owners().get(role.name) == "flux":
+    if role.name in _k8s_tags():
         return False
     if _ungated_deployments(role):
         return True

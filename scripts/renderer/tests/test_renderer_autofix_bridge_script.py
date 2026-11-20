@@ -41,12 +41,11 @@ def _files(out) -> dict[str, str]:
     }
 
 
-def _render(out, owned, source_file, cluster_file):
+def _render(out, source_file, cluster_file):
     return homelab_render.cluster(
         out,
         [TAG],
         None,
-        flux_owned=lambda: owned,
         cluster_file=cluster_file,
         source_file=source_file,
     )
@@ -58,16 +57,13 @@ def rendered(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("autofix-bridge")
     cluster_file = tmp / "cluster-vars.sops.env"
     cluster_file.write_text("k=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n")
-    # A first render, unowned, names the keys the fixture `.source` must record.
     source_file = tmp / "cluster-vars.source"
-    source_file.write_text("")
-    assert _render(tmp / "unowned", set(), source_file, cluster_file) == RENDER_OK
-    keys = sorted(
-        {key for text in _files(tmp / "unowned").values() for key in references(text)}
+    source_file.write_text(
+        "".join(f"{key} {'d' * 64}\n" for key in homelab_render.secret_keys())
     )
-    source_file.write_text("".join(f"{key} {'d' * 64}\n" for key in keys))
-    assert _render(tmp / "owned", {TAG}, source_file, cluster_file) == RENDER_OK
-    return _files(tmp / "owned"), keys
+    assert _render(tmp / "out", source_file, cluster_file) == RENDER_OK
+    files = _files(tmp / "out")
+    return files, sorted({key for text in files.values() for key in references(text)})
 
 
 def _deployment(files: dict[str, str]) -> dict:

@@ -5,12 +5,8 @@ The three reads are fakes handed to `collect`, so no test reaches GitHub, GHCR o
 Run: uv run pytest scripts/diagnostics/tests/test_probe_landing_promote.py
 """
 
-import os
-import sys
-
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import landing_blockers as landing
 from diagnostics.probe_lib import promote_state

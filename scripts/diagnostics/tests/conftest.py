@@ -5,7 +5,7 @@ Run: uv run pytest scripts/diagnostics/tests
 
 import pytest
 
-from land_lib.detach import LOG_DIR_ENV
+from deploy_tools.land_lib.detach import LOG_DIR_ENV
 
 
 @pytest.fixture(autouse=True)

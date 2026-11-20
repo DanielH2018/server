@@ -13,24 +13,12 @@ longhorn.py keeps the subcommands that drive these, and b2_ledger.py reads `pvc_
 
 import json
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching `lib` needs `scripts/` on
-# sys.path — a module gets only its importer's path otherwise, and pyproject's `pythonpath` is
-# a pytest setting. This has to sit ABOVE the import below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from diagnostics.probe_lib.core import Unreadable
 from lib.k8s_objects import BackupTarget
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
-# The Backup CR reader and the backup group and target names, shared with the backup-health
-# cron; it imports host_lib, so both directories go on sys.path.
-from lib import host_modules  # noqa: F401
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_backups
+# The Backup CR reader and the backup group and target names, shared with the backup-health cron.
+from lib.longhorn_lib import longhorn_backups
 
 
 def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):

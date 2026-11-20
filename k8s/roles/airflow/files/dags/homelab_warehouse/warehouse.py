@@ -16,16 +16,23 @@ from datetime import date
 # The role Grafana reads as. The Postgres init script creates it with no grant on any schema;
 # `ensure_schema`, run as the schema's owner, grants it each one.
 READER_ROLE = "warehouse_reader"
+# Postgres refuses two concurrent GRANTs on one catalog row with "tuple concurrently
+# updated", and catchup runs several loads at once, so every load's DDL takes this lock.
+DDL_LOCK_KEY = 74_657_201
 
 
 def ensure_schema(cursor, schema: str, ddl: Iterable[str]) -> None:
     """Create a source's schema and tables if missing, and let the reader role read them.
 
+    Holds a transaction-scoped advisory lock until the caller commits, so concurrent loads
+    run their DDL one at a time.
+
     Args:
-      cursor: A DB-API cursor on the warehouse database.
+      cursor: A DB-API cursor on the warehouse database, inside a transaction.
       schema: The source's schema name, such as `prom`.
       ddl: `CREATE TABLE IF NOT EXISTS` statements for the schema's tables.
     """
+    cursor.execute(f"SELECT pg_advisory_xact_lock({DDL_LOCK_KEY})")
     cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
     for statement in ddl:
         cursor.execute(statement)

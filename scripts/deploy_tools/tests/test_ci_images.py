@@ -37,7 +37,6 @@ def out(tmp_path_factory):
         root / "out",
         images.builder_roles(),
         None,
-        flux_owned=lambda: set(),
         cluster_file=dotenv,
     )
     assert code == RENDER_OK

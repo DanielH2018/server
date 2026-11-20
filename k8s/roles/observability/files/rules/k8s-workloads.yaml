@@ -1,6 +1,6 @@
 # The Kubernetes workload rules, from monitor-bridge's k8s_workloads check arms. Plain YAML,
 # never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m2-first-bridge-family.md, "The rules".
+# docs/archive/monitoring/m2-first-bridge-family.md, "The rules".
 #
 # EVERY ALERT HERE PAGES, from Alertmanager alone.
 #

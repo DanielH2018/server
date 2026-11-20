@@ -35,9 +35,7 @@ A failed kubectl read exits 1 with the reason on stderr, which cc-wait retries.
 
 import json
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
 from diagnostics.probe_lib.flux import FluxUnreadable, read_flux, wait_state
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
 from lib.kubectl import DEFAULT_CLUSTER, WrongCluster, kubectl_json

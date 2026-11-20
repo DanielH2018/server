@@ -19,13 +19,6 @@ from pathlib import Path
 
 import yaml
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from lib import yaml_fast
 from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context

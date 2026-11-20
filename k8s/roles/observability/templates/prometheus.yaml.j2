@@ -196,8 +196,8 @@ data:
             action: drop
             regex: .+_bucket
       # The deploy-pipeline exporter's five homelab_deploy_* gauges, which monitor-bridge serves
-      # and the deploy-pipeline rule group reads (docs/target-architecture/deploy/
-      # d2-first-leaf.md, *The deploy-pipeline exporter and its alerts*). The bridge refreshes
+      # and the deploy-pipeline rule group reads (docs/archive/deploy/d2-first-leaf.md,
+      # *The deploy-pipeline exporter and its alerts*). The bridge refreshes
       # them once per 300s cycle, so 1m loses nothing. Hand-written rather than a `metrics`
       # item on monitor-bridge's entry, because the deploy tags derive a change to that field
       # onto every role that reads it. The port is monitor-bridge's
@@ -251,7 +251,7 @@ data:
           credentials_file: /etc/prometheus-scrape-creds/ha_token
         static_configs:
           - targets: ['home-assistant.{{ k8s_namespace }}.svc:{{ services | entry_port('home-assistant') }}']
-      # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md): one
+      # The ingress probes (docs/archive/monitoring/m4-blackbox-ingress.md): one
       # target per entry the `ingress_probe_targets` filter yields, so an entry with a
       # `hostname` gets a probe with no edit here and `probe: false` opts it out. These are the
       # only probes of the ingress names. The
@@ -290,7 +290,7 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ services | entry_port('blackbox-exporter') }}'
-      # The extra probes (docs/target-architecture/monitoring/m6-retire-kuma.md). The Pi's
+      # The extra probes (docs/archive/monitoring/m6-retire-kuma.md). The Pi's
       # ping has no target: `up{job="node-pi"}` carries it. Loki's /ready has none
       # either, because `ScrapeTargetDown` (service loki-homelab) covers it. Each target sets
       # `service`, so the extra-probes rules take it from this job, and `page_tier` picks the

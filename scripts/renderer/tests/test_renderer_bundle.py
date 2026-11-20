@@ -11,7 +11,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_bundle.py
 import json
 import pytest
 
-from changed_set import changed_set
+from deploy_tools.changed_set import changed_set
 from lib import yaml_fast
 from lib.exit_codes import RENDER_BAD_ARGS, RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render
@@ -184,7 +184,6 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file)
             out,
             ["littlelink"],
             None,
-            flux_owned=lambda: {"littlelink"},
             cluster_file=cluster_file,
         )
         assert code == RENDER_OK
@@ -223,15 +222,6 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path, cluster_file)
     }
 
 
-def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_path):
-    """pihole defers files, which only a published tag is refused for, and builds no image."""
-    out = tmp_path / "out"
-    assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
-    assert sorted(p.name for p in out.iterdir()) == ["cluster"]
-    names = ["pihole", "pihole-deferred", "pihole-precheck", "pihole-verify"]
-    assert sorted(p.name for p in (out / "cluster").iterdir()) == names
-
-
 def test_a_flux_owned_tag_that_defers_files_publishes_both_kustomizations(
     tmp_path, cluster_file
 ):
@@ -240,7 +230,6 @@ def test_a_flux_owned_tag_that_defers_files_publishes_both_kustomizations(
         out,
         ["pihole"],
         None,
-        flux_owned=lambda: {"pihole"},
         cluster_file=cluster_file,
     )
     assert code == RENDER_OK

@@ -1,9 +1,9 @@
-# The B5 Pi checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5), the
+# The B5 Pi checks of M6 (docs/archive/monitoring/m6-retire-kuma.md, batch B5), the
 # SD-card health heartbeat and the container-recovery heartbeat, plus the watchdog daemon and
 # audit-log heartbeats. All four ship in the homelab-daniel-pi
 # package (hosts/components/pi-heartbeats/) and write a `homelab_check_*` textfile to the
 # `node-pi` scrape job, so these rules read the metric contract of
-# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# docs/archive/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # Severity: the SD-health rules are critical (they mail), the recovery rules are warnings

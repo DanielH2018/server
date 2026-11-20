@@ -202,9 +202,9 @@ pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it
 `*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
 pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
 verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
-on each host every 5 minutes (#8219). It fires once per failed unit, so a weekly scan's own
-`*Failed` alert holds the copy for the scan's unit through an inhibit, and the host's other
-failed units keep paging (`tests/services/test_alertmanager_scan_unit_inhibit.py`). The per-check literals and their pin tests stay, for the
+on each host every 5 minutes (#8219). It fires once per failed unit. A check that writes a
+verdict exits 0 on a DOWN, as the weekly scans and `systemd-units` itself do, so its unit fails
+only when no verdict was written and the verdict never pages twice. The per-check literals and their pin tests stay, for the
 reason `docs/archive/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never

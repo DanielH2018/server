@@ -27,7 +27,7 @@ DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 TAG = "code-server"
 
 
-def _render(tmp_path, owned: set[str]):
+def _render(tmp_path):
     cluster_file = tmp_path / CLUSTER_VARS_FILE
     cluster_file.write_text(DOTENV)
     out = tmp_path / "out"
@@ -35,9 +35,8 @@ def _render(tmp_path, owned: set[str]):
         out,
         [TAG],
         None,
-        flux_owned=lambda: owned,
         cluster_file=cluster_file,
-        ordering=lambda o: Ordering(flux_owned=frozenset(o)),
+        ordering=Ordering,
     )
     assert code == RENDER_OK
     return out
@@ -45,7 +44,7 @@ def _render(tmp_path, owned: set[str]):
 
 @pytest.fixture(scope="module")
 def rendered(tmp_path_factory):
-    return _render(tmp_path_factory.mktemp("prepull"), {TAG})
+    return _render(tmp_path_factory.mktemp("prepull"))
 
 
 def _kustomizations(out) -> dict[str, dict]:
@@ -166,11 +165,6 @@ def test_the_census_refuses_a_prepull_job_that_cannot_retry():
 def test_the_prepull_directory_passes_the_job_census_and_check_bundle(rendered):
     assert problems(load(rendered)) == []
     assert report(rendered, [TAG]) == OK
-
-
-def test_an_unpublished_prepull_role_renders_no_prepull_directory(tmp_path):
-    out = _render(tmp_path, set())
-    assert sorted(p.name for p in (out / "cluster").iterdir()) == [TAG]
 
 
 def _deployment(spec: str) -> dict[str, str]:

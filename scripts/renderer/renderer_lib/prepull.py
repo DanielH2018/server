@@ -60,11 +60,6 @@ no network call, so the Job census holds it byte-identical to `SCRIPT` instead o
 the way it reads a Python script.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from pathlib import Path

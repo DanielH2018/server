@@ -1,8 +1,8 @@
-# The B4 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B4): the
+# The B4 host checks of M6 (docs/archive/monitoring/m6-retire-kuma.md, batch B4): the
 # two UPS secondary watchdogs, the three fake-remux heartbeats, the monthly etcd restore drill
 # with its egress-fence leg, and the renovate notifier and agent. Each producer writes a
 # `homelab_check_*` textfile to the `node` scrape job, so these rules read the metric contract of
-# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# docs/archive/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # Severity: `critical` for both UPS secondaries and the full drill, which email as well as
