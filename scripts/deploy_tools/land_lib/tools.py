@@ -33,7 +33,7 @@ from pathlib import Path as _Path
 from deploy_tools.chained_timeout import VERIFY_CAP_S
 from deploy_tools import await_ci
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
-from deploy_tools.land_lib import fresh, own_checkout, verdict_log
+from deploy_tools.land_lib import detach, fresh, own_checkout, verdict_log
 from deploy_tools.land_lib.health_gate import GateResult, gate as health_gate
 from deploy_tools.promote_lib import reboot_window
 from lib.exit_codes import CI_DISARMED
@@ -298,6 +298,8 @@ class Tools:
     # `--fresh`: runs `land.sh <argv>` from a new checkout of origin/master; its exit code. A
     # third argument, the landing turn's locked descriptor, passes the turn to that landing.
     fresh_landing: Callable[..., int] = fresh.land_fresh
+    # `--detach`: runs the landing in a detached, logged process and returns its pid.
+    fork: Callable[..., int] = detach.fork
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
     follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal

@@ -65,10 +65,10 @@ __all__ = [
     "is_merged",
     "local_landed_layer",
     "lock_is_live",
-    "locally_landed",
     "memoised_merged",
     "merge_tree_says_contained",
     "merged_layer",
+    "open_pr_heads",
     "parse_worktree_list",
     "primary_checkout",
     "processes_using",
@@ -214,6 +214,29 @@ def contained_in_merged_pr(repo: str, head: str, branch: str, run_gh=_forge_gh) 
     return False
 
 
+OPEN_PR_LIMIT = 1000
+
+
+def open_pr_heads(repo: str) -> set[str] | None:
+    """The head branch of every open PR, or None when the forge gave no whole answer.
+
+    None covers a `gh` that failed and a list cut off at OPEN_PR_LIMIT: a caller that deletes
+    by this must not read either as "no open PR".
+    """
+    try:
+        listed = _forge_gh(
+            "pr", "list", "--state", "open", "--limit", str(OPEN_PR_LIMIT),
+            "--json", "headRefName", "--jq", ".[].headRefName",
+            check=False, cwd=repo,
+        )  # fmt: skip
+    except OSError, subprocess.TimeoutExpired:
+        return None
+    heads = listed.stdout.split()
+    if listed.returncode != 0 or len(heads) >= OPEN_PR_LIMIT:
+        return None
+    return set(heads)
+
+
 def forge_says_landed(repo: str, branch: str, head: str) -> bool:
     """The ladder's forge layer: GitHub merged `head` itself, or a merged PR's head holds it."""
     return forge_says_merged(repo, branch, head) or contained_in_merged_pr(
@@ -351,30 +374,17 @@ def record_verdict(repo: str, key: str, layer: str) -> None:
         tmp.unlink(missing_ok=True)
 
 
-def locally_landed(
-    repo: str, head: str, ancestry_known: bool = False, base: str = "origin/master"
-) -> bool:
-    """The first three layers of is_merged — the ones that cost no network round-trip.
-
-    Split out for the branch sweep, which asks this question of every orphan `worktree-*`
-    branch and must not reach the forge to answer it. `is_merged`'s fourth layer is one
-    `gh pr list` per unsettled branch; the memo on `memoised_merged` records what that class
-    of traffic already cost once, and a sweep over a couple of hundred branches is the
-    same bug at a larger N.
-
-    `ancestry_known` says the caller has already settled the ancestry layer in bulk, through
-    `ancestry_landed_branches`, so this skips the per-branch `merge-base` call.
-    """
-    return local_landed_layer(repo, head, ancestry_known, base) is not None
-
-
 def local_landed_layer(
     repo: str, head: str, ancestry_known: bool = False, base: str = "origin/master"
 ) -> str | None:
     """The local layer that settled `head` as landed: `ancestry`, `patch-id` or `content`.
 
-    None when no local layer did. locally_landed is this as a bool. A settled answer is read
-    from and written to the cache described at VERDICT_CACHE.
+    The first three layers of is_merged, the ones that cost no network round-trip. None when
+    no local layer did. A settled answer is read from and written to the cache described at
+    VERDICT_CACHE.
+
+    `ancestry_known` says the caller has already settled the ancestry layer in bulk, so this
+    skips the per-branch `merge-base` call.
     """
     return _local_layer(repo, head, ancestry_known, base, verdict_key(repo, head, base))
 

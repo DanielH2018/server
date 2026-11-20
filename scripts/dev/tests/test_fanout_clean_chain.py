@@ -33,7 +33,7 @@ from dev.fanout_lib import clean
 from dev.fanout_lib.clean import live_process_scan, remote_clean_command
 from dev.fanout_lib.manifest import Batch
 from lib.worktrees import escape_holder
-from lib.git_testing import git, git_out, init_repo, scrubbed_env
+from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
 from lib.socket_testing import listening, short_socket_path
 
@@ -132,7 +132,7 @@ def _run_chain(repo, worktree, stub_bin, proc_root=None):
     # `remote_clean_command` takes no proc-root seam, so the scan it calls is wrapped here.
     scan = partial(live_process_scan, proc_root=str(proc_root))
     with mock.patch.object(clean, "live_process_scan", scan):
-        cmd = remote_clean_command(batch, repo=str(repo), script_root=str(repo))
+        cmd = remote_clean_command(batch, repo=str(repo), server=str(repo))
     # The guard that makes running this safe: never let it name the shared checkout.
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     return run(["bash", "-c", cmd], env=_scrubbed_env(extra_path=str(stub_bin)))
@@ -306,6 +306,9 @@ def test_a_directory_that_is_still_a_checkout_reaches_clean_one(tmp_path):
     git(repo, "worktree", "unlock", str(worktree))
     git(repo, "worktree", "remove", "--force", str(worktree))
     git(repo, "worktree", "add", "-q", str(worktree), BRANCH)
+    # The leg archives `scripts` from `origin/master` before it reaches `uv`.
+    commit(repo, "scripts", **{"scripts/dev/fanout.py": ""})
+    git(repo, "push", "-q", "origin", "master")
     stub_bin = _stub_uv(_stub_bin(tmp_path, f"{tip}\n"))
     proc = _run_chain(repo, worktree, stub_bin)
     assert proc.stdout.strip() == "kept: by-uv"

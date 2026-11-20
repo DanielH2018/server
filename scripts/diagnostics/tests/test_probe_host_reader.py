@@ -37,6 +37,18 @@ def test_the_reader_tells_a_present_file_from_an_absent_one(tmp_path):
     assert doc["files"][str(tmp_path / "gone")] == {"status": "absent"}
 
 
+def test_the_reader_resolves_a_leading_tilde_to_the_reading_users_home(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "record").write_text("x\n")
+    doc = _local({"files": ["~/record", "~/gone"]})
+    assert doc["files"] == {
+        "~/record": {"status": "ok", "text": "x\n"},
+        "~/gone": {"status": "absent"},
+    }
+
+
 def test_landing_logs_report_their_verdict_rc_and_liveness(tmp_path):
     (tmp_path / "land6319-1.log").write_text("x\nVERDICT: settled (PR #6319)\n")
     (tmp_path / "land6319-1.rc").write_text("0\n")

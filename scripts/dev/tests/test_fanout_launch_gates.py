@@ -286,6 +286,7 @@ def test_a_launch_that_cannot_take_the_lock_exits_8_naming_the_holder(tmp_path, 
 
 
 ALERTS = "scripts/diagnostics/probe_lib/alerts.py"
+LANDING_DOC = "docs/landing.md"
 SOPS = "secrets/secrets.yml"
 HELD_BRANCH = "worktree-fanout-91"
 
@@ -327,7 +328,7 @@ def test_launch_refuses_a_file_a_batch_with_an_open_pr_in_another_run_cites(
     assert not run.calls
     err = capsys.readouterr().err
     assert (
-        f"{ALERTS}: batch 1 cites it; batch 91 holds it with an open PR "
+        f"{ALERTS}: batch 1 cites it; batch 91 cites it and holds it with an open PR "
         "(run 20260101T000010Z, orchestrator branch `worktree-project-a`)"
     ) in err
 
@@ -346,7 +347,7 @@ def test_a_batch_whose_agent_still_runs_holds_its_files_before_it_opens_a_pr(
     reply = _headroom_with(_unit_state("91", running=True))
     tools, _ = fake_tools(answers={"daniel-box": reply}, issues=_citing(ALERTS))
     assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 1
-    assert f"{ALERTS}: batch 1 cites it; batch 91 holds it" in capsys.readouterr().err
+    assert f"{ALERTS}: batch 1 cites it; batch 91 cites it" in capsys.readouterr().err
 
 
 def test_open_prs_that_cannot_be_read_refuse_the_launch(tmp_path, capsys):
@@ -375,18 +376,49 @@ def test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds(
     assert "--allow-shared-file cannot excuse this path" in capsys.readouterr().err
 
 
-def test_an_excused_file_is_recorded_on_the_batch_that_was_let_through(tmp_path):
-    _held_elsewhere(tmp_path, (ALERTS,))
+@pytest.mark.parametrize(
+    ("held_cites", "pr_edits"),
+    [(ALERTS, ()), (LANDING_DOC, (ALERTS,))],
+    ids=["cited", "edited"],
+)
+def test_an_excused_file_is_recorded_on_the_batch_that_was_let_through(
+    tmp_path, held_cites, pr_edits
+):
+    _held_elsewhere(tmp_path, (held_cites,))
     tools, _ = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
         issues=_citing(ALERTS),
-        open_prs={HELD_BRANCH},
+        open_prs={HELD_BRANCH: pr_edits},
     )
     argv = ("--host", "daniel-box", "--batch", "1", "--allow-shared-file", ALERTS)
     assert _launch(tools, tmp_path, *argv) == 0
     new_run = max(tmp_path.glob("*.json"))
     (batch,) = json.loads(new_run.read_text())["batches"]
     assert (batch["cited_paths"], batch["excused_paths"]) == ([ALERTS], [ALERTS])
+
+
+def test_launch_refuses_a_file_the_open_pr_of_a_batch_in_another_run_has_edited(
+    tmp_path, capsys
+):
+    _held_elsewhere(tmp_path, (LANDING_DOC,))
+    tools, run = fake_tools(
+        answers={"daniel-box": ok(HEADROOM)},
+        issues=_citing(ALERTS),
+        open_prs={HELD_BRANCH: [LANDING_DOC, ALERTS]},
+    )
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 1
+    assert not run.calls
+    assert (
+        f"{ALERTS}: batch 1 cites it; batch 91 has edited it and holds it with an open PR "
+        "(run 20260101T000010Z, orchestrator branch `worktree-project-a`)"
+    ) in capsys.readouterr().err
+
+
+def test_a_running_batch_with_no_open_pr_holds_only_the_files_it_cites(tmp_path):
+    _held_elsewhere(tmp_path, (LANDING_DOC,))
+    reply = _headroom_with(_unit_state("91", running=True))
+    tools, _ = fake_tools(answers={"daniel-box": reply}, issues=_citing(ALERTS))
+    assert _launch(tools, tmp_path, "--host", "daniel-box", "--batch", "1") == 0
 
 
 def _ended_batch(tmp_path, host="daniel-box"):

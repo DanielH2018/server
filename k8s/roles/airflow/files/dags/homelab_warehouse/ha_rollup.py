@@ -17,7 +17,6 @@ Typical usage example:
     rows = sensor_rows(day, history)
 """
 
-import json
 import time
 import urllib.error
 import urllib.parse
@@ -25,6 +24,8 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+
+from .prom_rollup import read_json
 
 HA_URL = "http://home-assistant.homelab.svc.cluster.local:8123"
 # The recorder's purge_keep_days (k8s/roles/home-assistant/files/configuration.yaml).
@@ -53,8 +54,6 @@ DDL = (
 )
 
 # kube-router admits a new pod's traffic a few seconds after the pod starts (ADR 0009).
-CONNECT_ATTEMPTS = 6
-CONNECT_BACKOFF_S = 5.0
 
 
 @dataclass(frozen=True)
@@ -139,8 +138,7 @@ def fetch_history(
 ) -> list[list[dict]]:
     """HA's state history for `entity_ids` over `day`.
 
-    Retries a refused or unreachable connection `CONNECT_ATTEMPTS` times. An HTTP error is not
-    retried: the request, not the network, is wrong.
+    Retries a refused connection as `prom_rollup.read_json` does.
 
     Raises:
       urllib.error.URLError: The connection failed on every attempt.
@@ -149,17 +147,7 @@ def fetch_history(
         history_url(base_url, day, entity_ids),
         headers={"Authorization": f"Bearer {token}"},
     )
-    for attempt in range(CONNECT_ATTEMPTS):
-        try:
-            with opener(request, timeout=120) as response:
-                return json.load(response)
-        except urllib.error.HTTPError:
-            raise
-        except urllib.error.URLError:
-            if attempt == CONNECT_ATTEMPTS - 1:
-                raise
-            sleep(CONNECT_BACKOFF_S * (attempt + 1))
-    raise AssertionError("unreachable")
+    return read_json(request, opener, sleep, timeout=120)
 
 
 def _number(state: str) -> float | None:

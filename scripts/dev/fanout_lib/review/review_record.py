@@ -15,7 +15,6 @@ from pathlib import Path as _Path
 
 
 from dev.fanout_lib.brief import ISSUES_HEADING
-from dev.fanout_lib.review.review_prompts import is_held
 from dev.fanout_lib.sizing import DEFAULT, REVIEWER, Rung
 from dev.fanout_lib.status import BLOCKER, NO_PR
 
@@ -144,6 +143,11 @@ def blocker(report: dict) -> str:
     if not found:
         return ""
     return text[found.start() :].split("\n", 1)[0].strip()[:BLOCKER_CHARS]
+
+
+def is_held(finding: dict) -> bool:
+    """Whether a finding stays off the public PR and tracker for disclosure reasons."""
+    return finding.get("category") == "security"
 
 
 def actionable(findings: Sequence[dict]) -> list[dict]:

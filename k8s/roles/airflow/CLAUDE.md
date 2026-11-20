@@ -134,6 +134,14 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   catchup reaches back 30 days. A volume's claim and backup target come from its Longhorn
   Volume object, read when the day loads, so a volume moved between tiers counts wholly
   under its new target. B2's target is named `default`.
+- **`smart_daily_rollup`** loads `smart.attribute_daily`, one row per day, disk and SMART
+  attribute, from Scrutiny by ClusterIP through scrutiny's `netpol_from` entry. Scrutiny keeps a
+  reading for each day only for about the last
+  `k8s/roles/airflow/files/dags/homelab_warehouse/smart_history.py:DAILY_DAYS` days, then
+  points days apart, then one a month. So a day's row is the latest reading Scrutiny holds
+  dated that day, a day it no longer holds gets no row, and `check` requires every active
+  disk only inside the daily window. The catchup from 2026-07-01 loaded the sparse older
+  points once.
 - **Only `backup_spend_rollup`'s `load` task holds a Kubernetes token.** Its
   `executor_config` runs it as `airflow-longhorn-reader`, whose one grant is `list` on
   Longhorn volumes (`k8s/roles/airflow/templates/rbac.yaml.j2`). Every other task pod runs as

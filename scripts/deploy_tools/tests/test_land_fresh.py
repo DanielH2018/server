@@ -27,8 +27,9 @@ def primary(tmp_path: Path) -> Path:
 
 
 def _child(seen: list):
-    def run(argv, check):
+    def run(argv, check, env):
         checkout = Path(argv[0]).parents[2]
+        assert env[fresh.CHILD_ENV]
         seen.append((argv, (checkout / "reader.py").read_text(), checkout))
         return subprocess.CompletedProcess(argv, 75)
 
