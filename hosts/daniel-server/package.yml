@@ -74,6 +74,9 @@ enable:
 depends:
   - libyaml-dev
 files:
+  # The Pi's pinned host key, under the name the /etc/hosts line above gives it. Without it
+  # `ssh daniel-pi` ends "Host key verification failed" for every user.
+  - {src: ssh_known_hosts.j2, dst: /etc/ssh/ssh_known_hosts}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf

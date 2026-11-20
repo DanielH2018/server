@@ -71,7 +71,7 @@ def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD, closed=()):
         lambda url: (
             {"items": [{"number": p["number"]} for p in closed]}
             if url.startswith("search/issues")
-            else [dashboard]
+            else [dashboard] * (dashboard is not None)
             if "/issues" in url
             else next(p for p in closed if url.endswith("/pulls/%d" % p["number"]))
             if "/pulls/" in url
@@ -135,6 +135,17 @@ def test_the_clock_survives_across_runs(monkeypatch, tmp_path):
     _wire(monkeypatch, tmp_path, posts, start + 20 * DAY)
     rn.main()
     assert len(posts) == 1
+
+
+def test_a_run_that_misses_the_dashboard_keeps_every_clock(monkeypatch, tmp_path):
+    """A missed read parses no items, and a rewrite from them would restart every clock."""
+    posts = []
+    now = 1_000_000.0
+    seen = {"renovate/promtail": now - 5 * DAY, _PROMTAIL_DIGEST_KEY: now - 5 * DAY}
+    (tmp_path / "pending_seen.json").write_text(json.dumps(seen))
+    _wire(monkeypatch, tmp_path, posts, now, dashboard=None)
+    assert rn.main() == 0
+    assert json.loads((tmp_path / "pending_seen.json").read_text()) == seen
 
 
 def test_a_dry_run_does_not_touch_the_clock(monkeypatch, tmp_path):

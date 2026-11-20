@@ -45,9 +45,10 @@ import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-# The poller runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
-# ships host_lib.py beside it.
+# The poller runs from /opt/claude-triage, where component.yml's `lib:` entries ship host_lib.py
+# and prom_envelope.py beside it.
 from host_lib import WARNING, atomic_write, log, parse_env_file
+from prom_envelope import PromAnswerError, prom_result
 
 CONFIG = "/etc/claude-triage/config.env"
 # Watchdog always fires by design; shadow and drill alerts page nobody.
@@ -110,8 +111,8 @@ def prom_vector(
         )
         return None
     try:
-        return _query_result(body)
-    except ValueError as exc:
+        return prom_result(body)
+    except PromAnswerError as exc:
         log(
             f"Prometheus answered without a result: {exc}",
             WARNING,
@@ -120,31 +121,6 @@ def prom_vector(
             query=query,
         )
         return None
-
-
-# DECIDED: a copy of monitor-bridge's envelope rule (`bridge/net.py:_query_result`), not an
-# import: the host package ships this file and host_lib, and no k8s role file.
-def _query_result(body: object) -> list[dict]:
-    """The `data.result` objects of a successful Prometheus answer.
-
-    An absent `data` or `result` reads as an empty list.
-
-    Raises:
-        ValueError: The answer is not an object, its status is not `success`, its `data` is
-            not an object, or `result` is not a list of objects. A `"data": null` raises
-            rather than reading as no alerts.
-    """
-    if not isinstance(body, dict):
-        raise ValueError(f"the answer is {type(body).__name__}, not an object")
-    if body.get("status") != "success":
-        raise ValueError(f"status={body.get('status')}")
-    data = body.get("data", {})
-    if not isinstance(data, dict):
-        raise ValueError(f"data is {type(data).__name__}, not an object")
-    result = data.get("result", [])
-    if not isinstance(result, list) or not all(isinstance(s, dict) for s in result):
-        raise ValueError("data.result is not a list of objects")
-    return result
 
 
 def read_all(
