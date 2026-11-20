@@ -1724,7 +1724,7 @@ never from the render, so a renderer bug cannot widen it. Each per-tag kind has 
 - `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
 - `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
   same `verify_files` the renderer reads), or opts a CronJob into a gate Job with
-  `flux_cronjob_gates` (`cronjob_gates`). sonarr, radarr, n8n, prowlarr and media-volume do
+  `flux_cronjob_gates` (`RoleDefaults.cronjob_gates`). sonarr, radarr, n8n, prowlarr and media-volume do
   the first; karakeep and pi-peer-backup do the second (#5652). configarr sets the second
   ahead of its flip, which stays inert while it is Ansible-owned.
 
