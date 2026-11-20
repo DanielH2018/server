@@ -445,7 +445,6 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     ):
         live_unit(node, unit)
     node.state["users"] = {"node_exporter": 904}  # the ids the Pi's package declares
-    node.state["gids"] = {"node_exporter": 986}
     (node.root / "var/lib/node-exporter-textfile").mkdir(parents=True)
     for edit in package.lines:
         target = node.root / edit["path"].lstrip("/")
