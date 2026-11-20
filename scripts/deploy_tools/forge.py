@@ -8,7 +8,8 @@ fact it reads from outside the checkout comes through this module:
   pulls and `land-wait`. It lists no tags, so a run's request count does not grow with the
   number of published versions.
 - `GitHub` reads a repository variable through `gh variable get`, and a commit's check-runs,
-  commit statuses and pull requests through the REST API. It writes one variable, DEPLOY_HOLD,
+  commit statuses and pull requests through the REST API, and refuses a REST call it has no
+  token for: the anonymous quota is 60 an hour per source IP. It writes one variable, DEPLOY_HOLD,
   through `gh variable set`, for `decide`'s forward-only gate hold. For `promote.py prune` it also lists the
   artifact's package versions and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
@@ -38,6 +39,7 @@ from lib import gh_rate_limit
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
 from lib import host_modules  # noqa: F401
 from ci_verdict import CheckRun, parse_check_runs
+from host_lib import github_token
 from deploy_tools.forge_transport import (
     TIMEOUT_S,
     ForgeError,
@@ -105,8 +107,9 @@ class GitHub:
 
         Args:
             transport: sends each REST request.
-            token: the bearer token for REST calls. The variable read does not use it,
-                because `gh` reads `GH_TOKEN` from its own environment.
+            token: the bearer token for REST calls; with None, each REST call raises
+                `ForgeError` before it is sent. The variable read does not use it, because
+                `gh` reads `GH_TOKEN` from its own environment.
             run: starts the `gh` subprocess.
             repository: the `owner/name` slug.
             versions_per_page: the page size of the package listing.
@@ -389,13 +392,16 @@ class GitHub:
         )
 
     def _rest_headers(self) -> dict[str, str]:
-        headers = {
+        if not self._token:
+            raise ForgeError(
+                "no GitHub token, and a REST read never goes out anonymous: "
+                "set GITHUB_TOKEN or GH_TOKEN, or run `gh auth login`"
+            )
+        return {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
+            "Authorization": f"Bearer {self._token}",
         }
-        if self._token:
-            headers["Authorization"] = f"Bearer {self._token}"
-        return headers
 
 
 class Cosign:
@@ -460,12 +466,17 @@ def connect(
 ) -> Forge:
     """The live clients, with `GITHUB_TOKEN` from `env` for the registry and REST calls.
 
+    Without `GITHUB_TOKEN`, as on a host, the REST calls take `host_lib.github_token`'s
+    answer (`GH_TOKEN`, then `gh auth token`), and the registry pulls anonymously: a `gh`
+    login token usually lacks the `read:packages` scope GHCR's token endpoint checks.
+
     `gh` reads `GH_TOKEN` from the environment it inherits, which the workflow sets to
-    `PROMOTE_TOKEN` on the step that runs `promote.py decide`.
+    `PROMOTE_TOKEN` on the step that runs `promote.py decide`. `GITHUB_TOKEN` wins for REST,
+    so there the job token, not `PROMOTE_TOKEN`, reads the check-runs and statuses.
     """
     token = env.get("GITHUB_TOKEN") or None
     return Forge(
         registry=Registry(transport, token),
-        github=GitHub(transport, token, run=run),
+        github=GitHub(transport, token or github_token(env, run), run=run),
         cosign=Cosign(run=run),
     )

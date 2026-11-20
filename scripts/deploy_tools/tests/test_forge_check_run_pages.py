@@ -51,14 +51,14 @@ def two_page_check_runs(
 
 def test_a_failing_run_on_the_second_page_reaches_the_reader():
     failing = {"name": FAILING, "status": "completed", "conclusion": "failure"}
-    runs = forge.GitHub(two_page_check_runs([failing]), None).check_runs(T)
+    runs = forge.GitHub(two_page_check_runs([failing]), "token").check_runs(T)
     assert len(runs) == 101
     assert CheckRun.parse(failing) in runs
 
 
 def test_a_failing_run_on_the_second_page_fails_the_ci_verdict():
     failing = {"name": FAILING, "status": "completed", "conclusion": "failure"}
-    runs = forge.GitHub(two_page_check_runs([failing]), None).check_runs(T)
+    runs = forge.GitHub(two_page_check_runs([failing]), "token").check_runs(T)
     assert ci_verdict(runs, frozenset({FAILING})) == "fail"
 
 
@@ -75,7 +75,7 @@ def test_a_rerun_on_the_second_page_overrides_a_pass_on_the_first(rerun, verdict
     transport = two_page_check_runs(
         [{"name": FAILING, **rerun}], page_one_tail=(passing(FAILING),)
     )
-    runs = forge.GitHub(transport, None).check_runs(T)
+    runs = forge.GitHub(transport, "token").check_runs(T)
     assert ci_verdict(runs, frozenset({FAILING})) == verdict
 
 
@@ -83,13 +83,13 @@ def test_a_read_short_of_total_count_is_refused():
     # GitHub reports 150 runs, but page 2 comes back empty: the list read is partial.
     transport = two_page_check_runs([], total_count=150)
     with pytest.raises(forge.ForgeError):
-        forge.GitHub(transport, None).check_runs(T)
+        forge.GitHub(transport, "token").check_runs(T)
 
 
 def test_a_run_created_between_page_reads_is_not_a_short_read():
     # Page 1 reported 101 runs; a re-run started before page 2 was read, which holds two.
     pending = {"name": FAILING, "status": "queued", "conclusion": None}
     transport = two_page_check_runs([passing("late"), pending], total_count=101)
-    runs = forge.GitHub(transport, None).check_runs(T)
+    runs = forge.GitHub(transport, "token").check_runs(T)
     assert len(runs) == 102
     assert CheckRun.parse(pending) in runs

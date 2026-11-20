@@ -475,7 +475,7 @@ def test_verify_without_a_handoff_exits_1_with_no_verdict(tmp_path, capsys):
         target=T, prior=PRIOR, bundle_dir=tmp_path, moved_at="2026-10-15T01:00:00Z"
     )
     output = tmp_path / "out"
-    assert vp.run(forge.connect({}), args, str(output)) == 1
+    assert vp.run(forge.connect({"GITHUB_TOKEN": "job-token"}), args, str(output)) == 1
     assert not output.exists(), "settle reads no verdict, and holds as unverified"
     assert "holds no target/" in capsys.readouterr().err
 
@@ -507,5 +507,5 @@ def test_verify_without_a_zoned_move_time_is_a_usage_error(tmp_path, capsys):
     args = argparse.Namespace(
         target=T, prior=PRIOR, bundle_dir=tmp_path, moved_at="2026-10-15 01:00"
     )
-    assert vp.run(forge.connect({}), args, None) == 64
+    assert vp.run(forge.connect({"GITHUB_TOKEN": "job-token"}), args, None) == 64
     assert "--moved-at" in capsys.readouterr().err
