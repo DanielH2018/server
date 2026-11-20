@@ -220,6 +220,7 @@ files:
   - {src: templates/claude-triage-setup.sh.j2, dst: /usr/lib/homelab/claude-triage-setup, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: prom_envelope.py, dst: /opt/claude-triage/prom_envelope.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {lib: weekly_window.py, dst: /opt/claude-triage/weekly_window.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: claude_config_lock.py, dst: /opt/claude-triage/claude_config_lock.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
@@ -231,6 +232,14 @@ files:
   - {src: templates/claude-triage-poll.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.timer, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: units/homelab-claude-triage-poll-alert.service, dst: /usr/lib/systemd/system/homelab-claude-triage-poll-alert.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/50-claude-triage.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-triage.rules, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  # The restart broker: a root unit that restarts one allowlisted Deployment. No polkit rule
+  # ships for it, so only root starts it. Its allowlist and caps are pins in
+  # templates/claude-triage-pins.j2.
+  - {src: files/claude_restart.py, dst: /opt/claude-restart/claude_restart.py, when: "claude_code_restart_enabled"}
+  - {lib: host_lib.py, dst: /opt/claude-restart/host_lib.py, when: "claude_code_restart_enabled"}
+  - {lib: weekly_window.py, dst: /opt/claude-restart/weekly_window.py, when: "claude_code_restart_enabled"}
+  - {src: templates/claude-restart-config.json.j2, dst: /etc/claude-restart/config.json, when: "claude_code_restart_enabled"}
+  - {src: templates/claude-restart@.service.j2, dst: /usr/lib/systemd/system/homelab-claude-restart@.service, when: "claude_code_restart_enabled"}
 units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}

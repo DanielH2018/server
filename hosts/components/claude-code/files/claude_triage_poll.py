@@ -43,12 +43,12 @@ import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from datetime import datetime, timezone
 
 # The poller runs from /opt/claude-triage, where component.yml's `lib:` entries ship host_lib.py
 # and prom_envelope.py beside it.
 from host_lib import WARNING, atomic_write, log, parse_env_file
 from prom_envelope import PromAnswerError, prom_result
+from weekly_window import in_weekly_window
 
 CONFIG = "/etc/claude-triage/config.env"
 # Watchdog always fires by design; shadow and drill alerts page nobody.
@@ -220,11 +220,7 @@ def in_reboot_window(cfg: dict[str, str], now: float) -> bool:
         after = int(cfg.get("REBOOT_GRACE_MIN", "30"))
     except KeyError, ValueError:
         return False
-    t = datetime.fromtimestamp(now, timezone.utc)
-    week_min = ((t.weekday() + 1) % 7) * 1440 + t.hour * 60 + t.minute
-    target = weekday * 1440 + start_min
-    delta = (week_min - target) % (7 * 1440)
-    return delta <= after or delta >= 7 * 1440 - before
+    return in_weekly_window(now, weekday, start_min, before, after)
 
 
 def step(

@@ -1,0 +1,18 @@
+{% import 'templates/claude-triage-pins.j2' as pins with context -%}
+{#- claude_restart.py's settings. The allowlist and the caps are pins, so no inventory value
+reaches them. The mute is the weekly reboot's, from the group vars the Alertmanager mute reads:
+its lead before the cron fires, then the shutdown delay and the recovery after it. -#}
+{{ {
+  'allowlist': pins.restart_allowlist,
+  'workload_cooldown_s': pins.restart_workload_cooldown_s,
+  'daily_cap': pins.restart_daily_cap,
+  'rollout_timeout_s': 600,
+  'state_dir': pins.restart_state_dir,
+  'hold_file': '/etc/claude-restart/hold',
+  'reboot_mute': {
+    'weekday': weekly_reboot_weekday,
+    'minute_of_day': weekly_reboot_hour * 60 + weekly_reboot_minute,
+    'before_min': weekly_reboot_mute_lead_minutes,
+    'after_min': weekly_reboot_shutdown_delay_minutes + weekly_reboot_mute_recovery_minutes,
+  },
+} | to_json }}
