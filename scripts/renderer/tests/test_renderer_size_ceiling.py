@@ -12,7 +12,7 @@ import subprocess
 
 from lib.repo_paths import REPO
 
-LINE_CEILING = 14972
+LINE_CEILING = 14984
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

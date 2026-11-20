@@ -132,8 +132,8 @@ def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_service_list(tmp_pa
     k3s_defaults.write_text(
         yaml.safe_dump(
             {
-                "k3s_longhorn_r2_volumes": "{{ services | tier_backup_claims("
-                "'home-critical', k8s_namespace) }}"
+                "k3s_longhorn_r2_volumes": "{{ services | longhorn_r2_claims("
+                "k8s_namespace) }}"
             }
         )
     )

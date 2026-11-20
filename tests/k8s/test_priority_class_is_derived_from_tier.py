@@ -117,14 +117,12 @@ def test_every_tier_names_a_declared_priority_class():
         ),
         ("tier_priority_class", ([{"name": "a", "tier": "platform"}], "b")),
         ("tier_priority_class", ([{"name": "a"}], "a")),
-        ("tier_backup_claims", ([{"name": "a"}], "no-such-tier", "ns")),
     ],
     ids=[
         "in-tier-missing",
         "in-tier-unknown-tier",
         "class-missing",
         "class-untiered",
-        "claims-unknown-tier",
     ],
 )
 def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
