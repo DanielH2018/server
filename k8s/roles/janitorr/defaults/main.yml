@@ -19,7 +19,7 @@ k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also
 # "would delete" line to wait for.
 #
 # A STRING, not a YAML bool: it is substituted straight into application.yml, and the shared
-# template must render under plain Jinja too (the validate-k8s-manifests hook has no `bool`
+# template must render under plain Jinja too (the validate-render-templates hook has no `bool`
 # filter). Ansible's `| bool` still reads it correctly where verify.yml compares it.
 #
 # Set back to "true" to make janitorr inert again; verify.yml asserts the live file matches.

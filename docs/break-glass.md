@@ -299,6 +299,23 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
   only its host key, `/etc/homelab/age.key`, which step 3 of `hosts/bootstrap-host.sh`
   creates.
 
+## Rebuild a host, never restore a disk image
+
+To bring a lost host back, rebuild it with `hosts/bootstrap-host.sh`. A whole-disk image
+taken before that host's move from Ansible to its package is not a supported restore path.
+
+Such an image brings back the Ansible-era files, and nothing removes them. Reconcile reports
+no drift for them. The files are:
+
+- unit files under `/etc/systemd/system` that shadow the packaged units of the same name;
+- crons and `/etc/cron.d` files that run beside the packaged timers;
+- copies under `/usr/local/bin` that sit ahead of the packaged binaries on PATH, such as
+  `sops`, `uv` and `vale`.
+
+The entries that once removed these paths were deleted in [PR #9495](https://github.com/DanielH2018/server/pull/9495),
+and `git grep 'legacy:' 3221ba11d^ -- hosts/components` lists them in that commit's
+parent tree.
+
 ## What to do first, by scenario
 
 ### Scenario: daniel-box is dead, daniel-server survives

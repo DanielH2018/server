@@ -2,9 +2,10 @@
 
 `scripts/dev/pytest_shard.py --changed-since` picks the modules and
 `scripts/dev/tests/test_pytest_shard_selection.py` covers it. This module holds the workflow
-to the three things the script cannot see: which events hand it a base, that a leg with an
-empty list skips every later step rather than running pytest on nothing, and that the gate
-can read whether the legs ran the whole census.
+to the four things the script cannot see: which events hand it a base, that the matrix
+starts the legs `pytest_plan` planned, that a leg with an empty list skips every later step rather
+than running pytest on nothing, and that the gate can read whether the legs ran the whole
+census.
 
 Run: uv run pytest tests/repo/test_ci_pytest_selects_affected_modules.py
 """
@@ -45,19 +46,13 @@ def _unguarded_after_select(steps: list[dict]) -> list[str]:
     ]
 
 
-def _arguments(tmp_path, event: str, green_base: str = "") -> str:
-    """What the select step hands `uv` on `event`, with `uv` replaced by an echo.
+def _run_step(tmp_path, step: dict, tool: str, event: str, passed: dict) -> str:
+    """What `step` hands `tool` on `event`, with `tool` replaced by an echo.
 
     The step's own `env:` names each variable, so a variable the workflow stops passing is
     unset here too.
     """
-    step = next(s for s in _job()["steps"] if s.get("name") == SELECT)
-    passed = {
-        "${{ matrix.shard }}": "2",
-        "${{ strategy.job-total }}": "6",
-        "${{ needs.prove.outputs.base }}": green_base,
-    }
-    stubs = fake_bin(tmp_path / "bin", uv='echo "$@"\n')
+    stubs = fake_bin(tmp_path / "bin", **{tool: 'echo "$@"\n'})
     done = run(
         ["bash", "-c", step["run"]],
         cwd=tmp_path,
@@ -73,11 +68,26 @@ def _arguments(tmp_path, event: str, green_base: str = "") -> str:
     return done.stdout
 
 
+def _arguments(tmp_path, event: str, green_base: str = "") -> str:
+    """What the select step hands `uv` on `event`."""
+    step = next(s for s in _job()["steps"] if s.get("name") == SELECT)
+    passed = {
+        "${{ matrix.shard }}": "2",
+        "${{ needs.prove.outputs.base }}": green_base,
+    }
+    return _run_step(tmp_path, step, "uv", event, passed)
+
+
+def _plan_step() -> dict:
+    plan = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest_plan"]
+    return next(s for s in plan["steps"] if s.get("id") == "plan")
+
+
 def test_a_pull_request_diffs_against_the_commit_it_was_merged_onto(tmp_path):
     arguments = _arguments(tmp_path, "pull_request")
 
     assert "--changed-since HEAD^1" in arguments
-    assert "--of 6 --shard 2" in arguments
+    assert "--shard 2" in arguments
 
 
 def test_a_push_diffs_against_the_green_base_the_prove_job_named(tmp_path):
@@ -97,6 +107,60 @@ def test_a_push_with_no_base_and_a_dispatch_hand_the_split_no_base(
     arguments = _arguments(tmp_path, event, green_base)
 
     assert "pytest_shard.py" in arguments and "--changed-since" not in arguments
+
+
+def test_the_matrix_starts_the_planned_legs_and_every_leg_without_a_plan():
+    axis = " ".join(_job()["strategy"]["matrix"]["shard"].split())
+
+    assert axis.startswith("${{ fromJSON(needs.pytest_plan.outputs.legs || '[")
+    assert "pytest_plan" in _job()["needs"]
+
+
+@pytest.mark.parametrize(
+    ("event", "green_base", "since"),
+    [("pull_request", "", "HEAD^1"), ("push", "f" * 40, "f" * 40)],
+    ids=["pull-request", "push"],
+)
+def test_the_plan_diffs_against_the_base_its_legs_select_against(
+    tmp_path, event, green_base, since
+):
+    passed = {"scripts": "scripts", "${{ needs.prove.outputs.base }}": green_base}
+    arguments = _run_step(tmp_path, _plan_step(), "python3", event, passed)
+
+    assert arguments.split() == [
+        "scripts/dev/pytest_shard.py",
+        "--plan",
+        "--changed-since",
+        since,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("event", "green_base", "plans"),
+    [
+        ("pull_request", "", True),
+        ("push", "f" * 40, True),
+        # The legs run the whole census, so every leg is needed.
+        ("push", "", False),
+        ("workflow_dispatch", "", False),
+    ],
+    ids=["pull-request", "push-with-a-base", "push-with-no-base", "dispatch"],
+)
+def test_only_a_run_with_a_base_plans(event, green_base, plans):
+    condition = (
+        " ".join(_plan_step()["if"].split())
+        .replace("github.event_name", repr(event))
+        .replace("needs.prove.outputs.base", repr(green_base))
+        .replace("||", " or ")
+    )
+    # The input is ci.yml's own condition, with every name substituted by a literal.
+    assert eval(condition) is plans
+
+
+def test_the_plan_job_publishes_the_plan_steps_legs():
+    plan = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]["pytest_plan"]
+
+    assert plan["outputs"] == {"legs": "${{ steps.plan.outputs.legs }}"}
 
 
 def test_every_step_after_the_selection_skips_on_an_empty_leg():

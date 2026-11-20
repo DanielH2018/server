@@ -539,7 +539,7 @@ _DRAFT_RUN = [
     _run("prek (lint + validate + tests + secrets)", "completed", "skipped"),
     _run("prove the pushed tree was tested", "completed", "skipped"),
     _run(
-        "pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})",
+        "pytest (shard ${{ matrix.shard }})",
         "completed",
         "skipped",
     ),

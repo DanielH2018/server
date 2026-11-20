@@ -57,9 +57,11 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     items,
     name_of,
 )
-from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, K3S_KUBECONFIG, Tools
 from lib.repo_paths import SECRETS
+from secrets_mgmt.rotation_tools import load_registry
+from secrets_mgmt.secrets_lib.registry_model import Registry, RegistryError
+from secrets_mgmt.secrets_lib.secret_registry import is_record
 
 CLUSTER = "prod"
 RUNBOOK = "docs/secret-rotation.md"
@@ -84,16 +86,15 @@ DEPLOYMENT_ARGS = ("-n", WORKLOAD[0], "get", "deployment", WORKLOAD[1], "-o", "j
 # ── the gates, as pure verdicts over what the registry, the cluster and the shell answered ──
 
 
-def not_pinned(registry: Mapping, secret: str = SECRET) -> list[str]:
+def not_pinned(registry: Registry, secret: str = SECRET) -> list[str]:
     """Why the registry row would let a bare `sops set` reach this secret, else nothing."""
-    entry = ((registry or {}).get("entries") or {}).get(secret)
-    if not isinstance(entry, Mapping):
+    entry = registry.entries.get(secret)
+    if entry is None:
         return [f"{secret} is not in the registry — run secret_rotation.py sync first"]
     found = []
-    tier = str(entry.get("tier", ""))
-    if tier != "pinned":
-        found.append(f"{secret} is tier {tier or 'unset'}, not pinned")
-    if entry.get("source") == "record":
+    if entry.tier != "pinned":
+        found.append(f"{secret} is tier {entry.tier}, not pinned")
+    if is_record(registry, secret):
         found.append(
             f"{secret} is a `source: record` key — the app holds the credential"
         )
@@ -211,7 +212,11 @@ class Env:
 
 
 def _gate_registry(env: Env) -> list[str]:
-    return not_pinned(yaml_fast.safe_load(env.registry.read_text()))
+    try:
+        registry = load_registry(env.registry)
+    except RegistryError as exc:
+        return [f"{env.registry.name} does not parse: {exc}"]
+    return not_pinned(registry)
 
 
 def _gate_snapshot(env: Env) -> list[str]:

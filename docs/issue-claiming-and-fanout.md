@@ -363,6 +363,8 @@ takes no `--worktree`. A group differs from a project in three ways:
 
 - It reserves nothing. `reservations` reads only a project, so a plain `next` offers a
   group's issues and any branch claims them.
+- Its issues leave `next --milestone none`, which lists only issues no open milestone holds.
+  `next --milestone "<title>"` lists them.
 - Nothing closes it on its own. The workflow and `reap` close only a milestone a branch
   owns, so a group stays open while it is empty.
 - `status`, `close`, `add` and `remove` name it with `--group "<title>"` in place of
@@ -1210,6 +1212,27 @@ of the user who runs the lander, which is where every coordinator runs.
   skill's restart path left out
   ([#9521](https://github.com/DanielH2018/server/issues/9521)). A crash, a parked batch and
   a landing in flight were not covered.
+- **The `no-coordinator` page was sent once for real, for a drill project and not for a
+  session that died.** On 2026-11-20 a scratch worktree was locked
+  `coordinator: project DRILL for issue 9543 - not a real project, do not restart`, with no
+  session in it. A hand-written run manifest under its branch held one batch on daniel-box
+  whose `report.json` ended on a `parked:` line
+  ([#9543](https://github.com/DanielH2018/server/issues/9543)). Three passes of
+  `homelab-claude-fanout-server-lander.service` read it:
+    - **20:04 UTC, a `sleep` left standing in the worktree.** The pass read the project as
+      live. It logged nothing and wrote no record. A leftover process delays the page for
+      as long as it runs, and the first pass counts from the pass after it exits.
+    - **20:14 UTC, no process in the worktree.** The pass logged `first pass, it pages on
+      the next` and recorded the worktree in `coordinator-pages.json` as not paged.
+    - **20:24 UTC.** The pass logged `paged through
+      fanout-alert@fanout-coordinator-drill-9543-no-coordinator:no-coordinator.service`.
+      Polkit admitted the start from that system unit, which runs as `ubuntu`. The
+      alert unit ended `Result=success` after one attempt and logged the delivery.
+    - **20:34 UTC.** The pass logged nothing for the project and started no second page.
+
+  The drill did not cover a sub-coordinator session that crashed, a batch on daniel-server,
+  or a batch the lander holds as `needs-input`. Both real `parked` batches of that day
+  belonged to live projects, so no live project was stood down.
 - **A project lives as long as its sub-coordinator's branch.** `reap` closes only a
   milestone with nothing open, so a dead sub-coordinator's backlog stays filed, and
   reserved, until the sub-coordinator restarts or the root ends the project with

@@ -14,6 +14,7 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 RESULTS = (
     "HOOKS",
     "PR_GATES",
+    "PYTEST_PLAN",
     "PYTEST",
     "LOCKFILE",
     "FLUX_ROUNDTRIP",

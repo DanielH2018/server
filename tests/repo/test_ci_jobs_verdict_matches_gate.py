@@ -28,10 +28,12 @@ from ci_verdict import (
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
+    CI_PYTEST_LEGS,
     CI_SKIPPED_MATRIX_JOBS,
     CheckRun,
     jobs_verdict,
 )
+from _workflow_rows import axis_values
 from lib import yaml_fast
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
@@ -48,7 +50,9 @@ def _check_run_names(job_id: str, job: dict) -> set[str]:
     if not matrix:
         return {template}
     include = matrix.get("include")
-    axes = {k: v for k, v in matrix.items() if k not in ("include", "exclude")}
+    axes = {
+        k: axis_values(v) for k, v in matrix.items() if k not in ("include", "exclude")
+    }
     if include is not None and not axes:
         legs = [dict(entry) for entry in include]
     else:
@@ -64,7 +68,6 @@ def _check_run_names(job_id: str, job: dict) -> set[str]:
                 lambda m, leg=leg: str(leg[m[1]]),
                 template,
             )
-            name = re.sub(r"\$\{\{\s*strategy\.job-total\s*\}\}", str(len(legs)), name)
         else:
             name = f"{template} ({', '.join(str(v) for v in leg.values())})"
         names.add(name)
@@ -90,7 +93,7 @@ def test_the_readers_job_list_equals_the_gates_needs():
 def test_the_expansion_finds_the_matrix_legs_it_must():
     # The two matrix shapes ci.yml uses: a `name:` template over an axis, and an `include`
     # list on a job with no `name:`. A parse that dropped either would let the list shrink.
-    assert "pytest (shard 6 of 6)" in _gate_dependencies()
+    assert "pytest (shard 6)" in _gate_dependencies()
     assert "host_packages (26.04, 3.14)" in _gate_dependencies()
 
 
@@ -129,6 +132,12 @@ def _all(result: str, **override: str) -> dict[str, str]:
     return {n: override.get(n, result) for n in sorted(CI_GATE_NEEDS_JOBS)}
 
 
+def _planned(results: dict[str, str], legs: int) -> dict[str, str]:
+    """`results` from a run whose plan started only the first `legs` pytest legs."""
+    started = {f"pytest (shard {n})" for n in range(1, legs + 1)}
+    return {n: r for n, r in results.items() if n not in CI_PYTEST_LEGS or n in started}
+
+
 def _gate_exit(
     prove: str,
     proven: str,
@@ -147,7 +156,8 @@ def _gate_exit(
     for var, expr in check["env"].items():
         m = re.search(r"needs\.(\w+)\.result", str(expr))
         if m and m[1] != "prove":
-            legs = [results[n] for n in _check_run_names(m[1], jobs[m[1]])]
+            names = _check_run_names(m[1], jobs[m[1]])
+            legs = [results[n] for n in names if n in results]
             # GitHub reports a matrix job as its worst leg.
             per_job[var] = next(
                 (bad for bad in ("failure", "cancelled", "skipped") if bad in legs),
@@ -176,7 +186,7 @@ def _runs(prove: str, results: dict[str, str]) -> list[CheckRun]:
 
     listed = dict(results)
     for name, legs in CI_SKIPPED_MATRIX_JOBS.items():
-        if all(results[leg] == "skipped" for leg in legs):
+        if all(results.get(leg) == "skipped" for leg in legs):
             for leg in legs:
                 del listed[leg]
             listed[name] = "skipped"
@@ -190,15 +200,16 @@ def _runs(prove: str, results: dict[str, str]) -> list[CheckRun]:
         ("success", "false", _all("success")),
         ("success", "true", _all("skipped")),
         ("skipped", "", _all("skipped")),
-        ("success", "", _all("success", **{"pytest (shard 3 of 6)": "skipped"})),
+        ("success", "", _all("success", **{"pytest (shard 3)": "skipped"})),
         ("success", "true", _all("skipped", host_tools_arm64="failure")),
-        ("skipped", "", _all("success", **{"pytest (shard 3 of 6)": "failure"})),
+        ("skipped", "", _all("success", **{"pytest (shard 3)": "failure"})),
         ("failure", "true", _all("skipped")),
         ("cancelled", "", _all("success")),
         ("cancelled", "true", _all("success")),
         ("cancelled", "true", _all("skipped")),
         ("failure", "", _all("success")),
         ("failure", "true", _all("success")),
+        ("success", "", _planned(_all("success"), 2)),
     ],
 )
 def test_jobs_verdict_agrees_with_the_gates_own_script(prove, proven, results):
@@ -261,3 +272,19 @@ def test_the_gate_fails_a_build_reader_that_did_not_run_for_any_other_reason(
 ):
     results = _all("success", **dict.fromkeys(CI_BUILD_READER_JOBS, reader))
     assert _gate_exit("skipped", "", results, build_said) != 0
+
+
+def test_a_ready_run_with_planned_legs_passes_beside_its_draft_runs_skip():
+    """The draft run's job-level skip names every leg; the ready run started two of them."""
+    ready = _runs("success", _planned(_all("success"), 2))
+    draft_skip = CheckRun("pytest (shard ${{ matrix.shard }})", "completed", "skipped")
+
+    assert jobs_verdict([*ready, draft_skip]) == "pass"
+
+
+def test_a_run_whose_pytest_legs_have_not_started_is_pending():
+    runs = [
+        r for r in _runs("success", _all("success")) if r.name not in CI_PYTEST_LEGS
+    ]
+
+    assert jobs_verdict(runs) == "pending"

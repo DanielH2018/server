@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from host_lib import DISCORD_MAX, clamp_discord
 from pending_logic import PENDING_HEADER
-from renovate_identity import is_renovate
+from renovate_identity import RenovatePR, is_renovate
 
 # Renovate rewrites its Dependency Dashboard issue on every run (~daily on this repo's
 # daily schedule + at-any-time security/lockfile runs). If the dashboard goes stale or
@@ -528,22 +528,24 @@ def find_autoclosed(
     listed = dashboard_branches(body)
     out = []
     for pr in closed_pulls:
+        head = RenovatePR.from_rest(pr)
         title = (pr.get("title") or "").strip()
-        branch = (pr.get("head") or {}).get("ref", "")
         closed_at = pr.get("closed_at") or ""
         if (
-            not is_renovate(pr.get("user"))
+            not head.is_renovate
             or pr.get("merged_at")
             or not title.endswith(AUTOCLOSED_SUFFIX)
             or not closed_at
-            or branch not in listed
-            or branch in open_branches
+            or head.head_ref not in listed
+            or head.head_ref in open_branches
         ):
             continue
         closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
         if (now - closed).total_seconds() > lookback_days * 86400:
             continue
-        out.append(Autoclosed(pr["number"], title, pr.get("html_url", ""), branch))
+        out.append(
+            Autoclosed(head.number, title, pr.get("html_url", ""), head.head_ref)
+        )
     return sorted(out, key=lambda a: a.number)
 
 

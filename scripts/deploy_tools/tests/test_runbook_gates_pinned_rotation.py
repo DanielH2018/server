@@ -5,12 +5,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_pinned_rotation
 """
 
 import io
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from _gates_fakes import fake_tools
 from deploy_tools.runbook_gates_lib import pinned_rotation as gates
-from lib import yaml_fast
+from secrets_mgmt.rotation_tools import load_registry
+from secrets_mgmt.secrets_lib.registry_model import Entry, Registry
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -51,7 +52,7 @@ def _deployment(available: int) -> dict:
 
 VOLUMES = {"items": [_volume(VOLUME, "homelab", "authelia-config")]}
 FRESH = {"items": [_snapshot(VOLUME, NOW - HOUR)]}
-PINNED = {"entries": {gates.SECRET: {"last_rotated": "2025-06-27", "tier": "pinned"}}}
+PINNED = Registry({gates.SECRET: Entry("pinned", date(2025, 6, 27))})
 AVAILABLE = _deployment(1)
 
 
@@ -104,16 +105,23 @@ def test_a_pinned_row_is_clean():
 def test_the_real_registry_still_pins_the_secret():
     # Non-vacuity: the gate reads `secrets/secret_rotation.yml`, and that file must keep
     # carrying the row this script exists for.
-    assert gates.not_pinned(yaml_fast.safe_load(gates.REGISTRY.read_text())) == []
+    assert gates.not_pinned(load_registry(gates.REGISTRY)) == []
 
 
 def test_another_tier_a_record_key_or_a_missing_row_is_flagged():
-    row = {"last_rotated": "2025-06-27", "tier": "auto", "source": "record"}
-    assert gates.not_pinned({"entries": {gates.SECRET: row}}) == [
+    row = Entry("auto", date(2025, 6, 27), "record")
+    assert gates.not_pinned(Registry({gates.SECRET: row})) == [
         f"{gates.SECRET} is tier auto, not pinned",
         f"{gates.SECRET} is a `source: record` key — the app holds the credential",
     ]
-    assert "not in the registry" in gates.not_pinned({"entries": {}})[0]
+    assert "not in the registry" in gates.not_pinned(Registry())[0]
+
+
+def test_a_registry_that_does_not_parse_fails_gate_1(registry, plain_shell):
+    registry.write_text(_registry_yaml("pinned") + "    last_rotated_by: someone\n")
+    code, out = _run(registry, plain_shell)
+    assert code == 1
+    assert "secret_rotation.yml does not parse" in out
 
 
 # ── gate 2: the snapshot ────────────────────────────────────────────────────────────────────

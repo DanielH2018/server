@@ -137,6 +137,52 @@ def test_a_run_with_no_base_never_asks_for_a_selection(tmp_path, monkeypatch):
     assert _outputs(outputs)["scope"] == "full"
 
 
+def test_the_plan_starts_exactly_the_legs_the_selection_fills():
+    census = pytest_shard.census()
+    selection = table.Selection(census[: len(census) // 3], False, "a third")
+
+    plan = pytest_shard.planned_legs(6, selection)
+
+    assert 1 < len(plan) < 6
+    assert plan == list(range(1, len(plan) + 1))
+    assert all(pytest_shard.leg_files(n, 6, selection) for n in plan)
+    assert pytest_shard.leg_files(len(plan) + 1, 6, selection) == []
+
+
+@pytest.mark.parametrize(
+    ("modules", "full", "legs"),
+    [
+        pytest.param([], False, "[1]", id="no-module-still-starts-one-leg"),
+        pytest.param(
+            None, True, "[1,2,3,4,5,6]", id="the-whole-census-starts-every-leg"
+        ),
+    ],
+)
+def test_the_plan_cli_publishes_the_legs_as_json(
+    tmp_path, monkeypatch, capsys, modules, full, legs
+):
+    outputs = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(outputs))
+    chosen = pytest_shard.census() if modules is None else modules
+
+    def select(base):
+        assert base == "HEAD^1"
+        return table.Selection(chosen, full, "why")
+
+    argv = ["--plan", "--changed-since", "HEAD^1"]
+    assert pytest_shard.main(argv, select=select) == 0
+
+    assert _outputs(outputs) == {"legs": legs}
+    assert capsys.readouterr().out == f"legs {legs} of 6: why\n"
+
+
+def test_a_plan_with_no_base_is_refused(capsys):
+    with pytest.raises(SystemExit):
+        pytest_shard.main(["--plan"], select=lambda base: None)
+
+    assert "--plan needs --changed-since" in capsys.readouterr().err
+
+
 def test_the_cron_records_the_modules_with_no_current_row_before_its_slice():
     census = [f"scripts/x/tests/test_{name}.py" for name in "abcdefghijkl"]
     blobs = {module: "a" * 40 for module in census}

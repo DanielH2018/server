@@ -253,9 +253,15 @@ def _run(args: argparse.Namespace, tools: FindingsTools) -> int:
         args.dry_run,
         tools,
     )
+    would = "would " if args.dry_run else ""
     print(
-        f"{'project ' if args.project else ''}milestone `{title}` open for `{branch}`; "
-        f"filed {len(claimed)} claimed issue(s) and {len(prs)} PR(s) under it"
-        + (f"; adopted {adopted}" if adopted else "")
+        f"{'project ' if args.project else ''}milestone `{title}` "
+        f"{'would open' if args.dry_run else 'open'} for `{branch}`; "
+        f"{would}file {len(claimed)} claimed issue(s) and {len(prs)} PR(s) under it"
+        + (
+            f"; {'would adopt' if args.dry_run else 'adopted'} {adopted}"
+            if adopted
+            else ""
+        )
     )
     return 0
