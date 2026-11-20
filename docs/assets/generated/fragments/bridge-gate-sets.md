@@ -2,7 +2,7 @@
 | Gate value | Held by | Members | Checks |
 |---|---|---|---|
 | `b2_reachable` | `b2_reachable` gate, which suppresses them | 1 | `b2_storage` |
-| `wan_reachable` | `wan_reachable` gate, which suppresses them | 5 | `discord`, `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration` |
+| `wan_reachable` | `wan_reachable` gate, which suppresses them | 6 | `discord`, `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration`, `uptime_robot_monitors` |
 | `prometheus` | the exporter-health probe, which suppresses them while an exporter is down | 1 | `host_packages` |
 | `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot | 6 | `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `airflow_scheduler`, `speedtest` |
 | ungated | nothing | 3 | `arr_queue`, `etcd_restore_drill`, `ha_heartbeat` |

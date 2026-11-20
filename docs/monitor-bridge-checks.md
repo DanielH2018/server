@@ -227,6 +227,14 @@ checks each gate suppresses.
   table, the cache and the history of the drift it caught. An undocumented console check is named
   and does not page (the `DECIDED:` in `healthchecks_verdict`). Gate: `wan_reachable`. An empty key
   or expected list disables it, and it stays up.)
+- **`uptime_robot_monitors`** (`checks/uptime_robot.py`, #8593: POSTs Uptime Robot's v2
+  `getMonitors` with the account's read-only key and requires every monitor in
+  `monitor_bridge_uptime_robot_monitors` to exist and not be paused. A monitor that is down is
+  Uptime Robot's own page and passes here. A success is cached for
+  `UPTIME_ROBOT_PROBE_INTERVAL_S` (a day). A missing or paused monitor, a refused request or a
+  partial page is DOWN and re-probed every cycle. `docs/uptime-robot-monitors.md` owns the
+  monitor table and the runbook. Gate: `wan_reachable`. An empty key or monitor list disables
+  it, and it stays up.)
 - **`domain_registration`** (`checks/domain_registration.py`, #8519: reads the domain's RDAP
   record from the .com registry at `DOMAIN_RDAP_URL` and takes its `expiration` event. A
   success is cached for `DOMAIN_REGISTRATION_PROBE_INTERVAL_S` (a day). A failed read or a
@@ -352,7 +360,8 @@ checks each gate suppresses.
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
   Notification Delivery tile, `cloudflare-ip-drift`, the since-deleted Swallowed Push Verdicts
   tile and `gitops_alive` (since removed). It gates the `wan_reachable` rows:
-  `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration`, `discord`.
+  `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration`,
+  `uptime_robot_monitors`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The
   endpoints are checked in order and the first answer stops the probe, so a healthy cycle costs
