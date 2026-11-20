@@ -268,8 +268,8 @@ def test_the_alert_template_pages_with_the_instance_name_and_a_credential(packag
 
 def test_users_are_declared_with_their_live_uids_and_gids(package):
     assert {u["name"]: (u["uid"], u["gid"]) for u in package.users} == {
-        "homelab-builder": (902, 983),
-        "homelab-signer": (903, 982),
+        "homelab-builder": (902, 902),
+        "homelab-signer": (903, 903),
     }
 
 
