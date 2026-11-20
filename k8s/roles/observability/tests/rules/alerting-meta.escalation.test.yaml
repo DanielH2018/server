@@ -102,6 +102,39 @@ tests:
                 "false".
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
 
+  # A unit whose homelab-alert@ hook already paged carries paged_by, and Alertmanager blackholes
+  # its warning. The escalation drops the label, so the blackhole route does not catch it.
+  - interval: 1h
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x50'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="other"}'
+        values: '0x50'
+      - series: 'ALERTS{alertname="SystemdUnitsFailed", alertstate="firing", severity="warning", service="daniel-box", check="systemd-units", origin="daniel-box", unit="homelab-builder.service", paged_by="homelab-alert"}'
+        values: '1x50'
+    alert_rule_test:
+      - eval_time: 49h
+        alertname: WarningUnresolved
+        exp_alerts:
+          - exp_labels:
+              escalated_from: SystemdUnitsFailed
+              escalated_service: daniel-box
+              check: systemd-units
+              origin: daniel-box
+              unit: homelab-builder.service
+              severity: critical
+              service: alert-escalation
+            exp_annotations:
+              summary: >-
+                SystemdUnitsFailed (daniel-box, homelab-builder.service) has fired as a warning for
+                48 hours.
+              description: >-
+                Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the
+                Karma link lists it with its own description and runbook. This page resolves when
+                the warning does. A warning that holds by design takes the rule label escalate:
+                "false".
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#warningunresolved
+
   # A one-hour absence, as across a Prometheus restart, does not restart the age: 30 hours, a
   # gap, then 30 more still escalate. A ten-hour absence does.
   - interval: 1h

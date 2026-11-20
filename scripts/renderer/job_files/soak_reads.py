@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from flux_job_connect import Request, open_url
+from flux_job_parse import parse_prom_result
 
 API = "https://kubernetes.default.svc"
 TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -97,12 +98,19 @@ def live_reads(
     def query(promql: str, at: float | None) -> list:
         params = {"query": promql} | ({} if at is None else {"time": f"{at:.3f}"})
         body = json.loads(get(f"{prometheus}/api/v1/query?{urlencode(params)}", promql))
-        if body.get("status") != "success":
-            raise SoakError(f"{promql}: {body.get('error')}")
-        return body["data"]["result"]
+        try:
+            return parse_prom_result(body)
+        except ValueError as err:
+            raise SoakError(f"{promql}: {err}") from err
 
     def prometheus_start() -> float:
         url = f"{prometheus}/api/v1/status/runtimeinfo"
-        return parse_time(json.loads(get(url, url))["data"]["startTime"])
+        body = json.loads(get(url, url))
+        data = body.get("data") if isinstance(body, dict) else None
+        start = data.get("startTime") if isinstance(data, dict) else None
+        try:
+            return parse_time(start if isinstance(start, str) else "")
+        except ValueError as err:
+            raise SoakError(f"{url}: no ISO data.startTime in {body!r:.80}") from err
 
     return Reads(api, lambda url: get(url, url), query, prometheus_start)

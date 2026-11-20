@@ -165,6 +165,21 @@ def test_parse_metric_empty():
     assert parse_metric({}) == []
 
 
+@pytest.mark.parametrize("parse", [parse_metric, parse_targets, parse_loki])
+@pytest.mark.parametrize(
+    "resp",
+    [
+        {"data": None},
+        {"data": {"result": None, "activeTargets": None}},
+        {"data": {"result": [None], "activeTargets": [None]}},
+    ],
+    ids=["null-data", "null-list", "null-entry"],
+)
+def test_a_null_envelope_raises_rather_than_reading_as_empty(parse, resp):
+    with pytest.raises(ValueError, match="the answer"):
+        parse(resp)
+
+
 def test_parse_targets():
     resp = {
         "data": {

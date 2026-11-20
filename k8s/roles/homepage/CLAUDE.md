@@ -109,8 +109,8 @@ that bite from a config edit alone.
   needs no rename; the Karma tile is one.
 - **The Karma tile links to Karma's LAN name.** Karma is the alert UI, and its route
   matches no public name, so the tile passes `lan=True` to `homepage_href`. Its two blocks
-  read Prometheus, not Karma. They count firing critical and warning alerts without `shadow="true"`
-  or `drill="true"`, the two the routing tree blackholes.
+  read Prometheus, not Karma. They count firing critical and warning alerts without `shadow="true"`,
+  `drill="true"` or `paged_by="homelab-alert"`, the matchers the routing tree blackholes.
 - **The Longhorn widget is configured across TWO files, and the wrong half is silent.**
   `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;
   `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside

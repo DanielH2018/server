@@ -358,6 +358,18 @@ def test_every_route_a_shadow_alert_reaches_is_the_blackhole(name):
     assert not_blackholed(labels) == []
 
 
+def test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole():
+    # fact: k8s/roles/observability/CLAUDE.md#Alert plane
+    failed = {
+        "alertname": "SystemdUnitsFailed",
+        "severity": "warning",
+        "service": "daniel-box",
+        "unit": "homelab-builder.service",
+    }
+    assert not_blackholed({**failed, "paged_by": "homelab-alert"}) == []
+    assert not_blackholed(failed) == ["discord"]
+
+
 def test_a_paging_alert_expected_as_blackhole_is_flagged():
     labels, receivers = PAGING["ingress-probes-missing"]
     assert not_blackholed(labels) == receivers
