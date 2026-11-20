@@ -2,13 +2,15 @@
 
 `test_census_rows_python.py` holds the rows that judge what a module says. A row here judges
 which siblings a module sits beside, so its subject is a group of files rather than one, and
-its selector returns `Family` subjects rather than paths. The other row judges which import
-root a module reaches its siblings through.
+its selector returns `Family` subjects rather than paths. The next row judges which import
+root a module reaches its siblings through. The last judges which module owns the review
+pipeline's `Runner` alias.
 
 Run: uv run pytest tests/repo/test_census_rows_layout.py
 """
 
 import ast
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from functools import cache
@@ -16,7 +18,14 @@ from pathlib import PurePosixPath
 
 import pytest
 from _helpers import REPO
-from _row_table import Census, Subject, check, proof_problems, tracked
+from _row_table import (
+    Census,
+    Subject,
+    check,
+    lines_matching,
+    proof_problems,
+    tracked,
+)
 from lib.script_classify import _has_main_guard
 
 # ── Flat module families ──────────────────────────────────────────────────────────────
@@ -347,6 +356,39 @@ ROWS = (
         ),
         min_matches=450,
         must_find=frozenset({"scripts/dev/fanout.py", "scripts/lib/host_modules.py"}),
+    ),
+    Census(
+        name="review-runner-is-defined-once",
+        reason=(
+            "`Runner` is the contract every fake runner in `scripts/dev/tests/_review_fakes.py` "
+            "meets. Four copies meant a change to the process boundary's shape landed in four "
+            "places. Import it from `dev.fanout_lib.review.processes`, beside `run_process`."
+        ),
+        files=lambda: [
+            rel
+            for rel in tracked("scripts/dev/fanout_lib/review/*.py")
+            if rel != "scripts/dev/fanout_lib/review/processes.py"
+        ],
+        offence=lines_matching(re.compile(r"^Runner\s*=")),
+        red=(
+            Subject(
+                "a.py",
+                "Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]\n",
+            ),
+        ),
+        green=(
+            Subject("a.py", "from dev.fanout_lib.review.processes import Runner\n"),
+            Subject("b.py", "def hardened(run: Runner) -> list[str]:\n"),
+        ),
+        min_matches=10,
+        must_find=frozenset(
+            {
+                "scripts/dev/fanout_lib/review/batch_run.py",
+                "scripts/dev/fanout_lib/review/hardened_runs.py",
+                "scripts/dev/fanout_lib/review/review_ci.py",
+                "scripts/dev/fanout_lib/review/review_land.py",
+            }
+        ),
     ),
 )
 _IDS = [row.name for row in ROWS]
