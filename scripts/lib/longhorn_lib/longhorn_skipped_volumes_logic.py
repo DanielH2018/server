@@ -16,7 +16,7 @@ import datetime as _dt
 import re
 
 # Resolves via longhorn_backup_health.py's own sys.path.insert, as the sibling logic modules do.
-# host_lib.py sits beside this package, not inside it.
+# host_lib.py sits beside `lib/`, which holds this package, not inside it.
 import sys as _sys
 from pathlib import Path as _Path
 

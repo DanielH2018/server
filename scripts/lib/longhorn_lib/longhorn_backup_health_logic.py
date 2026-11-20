@@ -33,8 +33,8 @@ import datetime as _dt
 import re
 
 # host_lib resolves via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which
-# runs before it imports this module. That directory holds this package and host_lib.py, which
-# is shipped there as a sibling (/usr/lib/homelab/longhorn-backup-health/, k3s-host-checks).
+# runs before it imports this module. That directory holds host_lib.py and `lib/`, which holds
+# this package (/usr/lib/homelab/longhorn-backup-health/, k3s-host-checks).
 # In the checkout the insert below stands in for that copy.
 import sys as _sys
 from pathlib import Path as _Path

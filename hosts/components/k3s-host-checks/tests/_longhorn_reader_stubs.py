@@ -21,9 +21,9 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_FILES, REPO
 
 READER = K3S_FILES / "longhorn_backup_health.py"
 # On the host the reader's libraries and host_lib.py sit beside it. In the checkout they are
-# `hosts/lib/host_lib.py` and `scripts/lib/longhorn_lib/`, so the subprocess needs both roots.
+# `hosts/lib/host_lib.py` and `scripts/lib/`, so the subprocess needs `hosts/lib/` and `scripts/`.
 HOST_LIB_DIR = HOST_LIB_FILES
-LONGHORN_LIB_ROOT = REPO / "scripts" / "lib"
+SCRIPTS_ROOT = REPO / "scripts"
 
 # The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health
 # pins. A fixture stamped `time.time() - age` would measure its age across the suite's own
@@ -188,9 +188,7 @@ def _reader_env(tmp_path, **overrides) -> dict:
     test points it at its own stub, so it has no default here.
     """
     env = dict(os.environ)
-    env["PYTHONPATH"] = (
-        f"{HOST_LIB_DIR}:{LONGHORN_LIB_ROOT}:{env.get('PYTHONPATH', '')}"
-    )
+    env["PYTHONPATH"] = f"{HOST_LIB_DIR}:{SCRIPTS_ROOT}:{env.get('PYTHONPATH', '')}"
     # A drill that passed an hour before NOW, and a trim CronJob that started a Job then. A test
     # about either sets the knob to "" (absent) or to its own body.
     env["STUB_DRILL_CM"] = fresh_drill_cm()

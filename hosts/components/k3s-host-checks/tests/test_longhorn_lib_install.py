@@ -1,4 +1,4 @@
-"""The backup-health reader's libraries ship as `longhorn_lib/` in daniel-box's package.
+"""The backup-health reader's libraries ship as `lib/` in daniel-box's package.
 
 The package sits in `scripts/lib/longhorn_lib/` since H7.2e, so the reapers and `probe.py` import
 the same modules from the checkout. A module added there and left off the component's `shared:`
@@ -26,7 +26,7 @@ def package() -> host_mode.Package:
 
 
 def _shipped(package) -> set[str]:
-    prefix = f"{INSTALL_DIR}/longhorn_lib/"
+    prefix = f"{INSTALL_DIR}/lib/longhorn_lib/"
     return {p.removeprefix(prefix) for p in package.files if p.startswith(prefix)}
 
 
@@ -41,6 +41,7 @@ def test_every_lib_module_ships_beside_the_reader(package):
     assert _missing(package, lib_modules) == set()
     assert f"{INSTALL_DIR}/longhorn_backup_health.py" in package.files
     assert f"{INSTALL_DIR}/host_lib.py" in package.files
+    assert f"{INSTALL_DIR}/lib/k8s_objects.py" in package.files
 
 
 def test_a_module_left_off_the_package_is_flagged(package):
@@ -52,14 +53,18 @@ def test_the_reader_imports_from_the_installed_layout(package, tmp_path):
         if not path.startswith(f"{INSTALL_DIR}/"):
             continue
         target = tmp_path / path.removeprefix(f"{INSTALL_DIR}/")
-        target.parent.mkdir(exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(body if isinstance(body, bytes) else body.encode())
+    # -S skips the venv's .pth, which would merge the checkout's scripts/lib/ into `lib`.
     result = subprocess.run(
         [
             sys.executable,
+            "-S",
             "-c",
             f"import sys; sys.path.insert(0, {str(tmp_path)!r}); "
-            "import host_lib; from longhorn_lib import longhorn_backups",
+            "import host_lib; from lib import k8s_objects; "
+            "from lib.longhorn_lib import longhorn_cluster_state; "
+            "print(k8s_objects.__file__)",
         ],
         capture_output=True,
         text=True,
@@ -67,3 +72,4 @@ def test_the_reader_imports_from_the_installed_layout(package, tmp_path):
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(tmp_path / "lib" / "k8s_objects.py")

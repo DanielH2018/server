@@ -26,12 +26,12 @@ import re
 from typing import NamedTuple
 
 # Resolves via longhorn_backup_health.py's own sys.path.insert, exactly as the sibling logic
-# module's does: host_lib.py sits beside this package, not inside it.
+# module's does: host_lib.py sits beside `lib/`, which holds this package, not inside it.
 import sys as _sys
 from pathlib import Path as _Path
 
 # In the checkout, `hosts/lib` holds host_lib.py and `scripts/lib` holds this package. On a
-# host both sit beside the reader, whose directory is already on sys.path, so these inserts
+# host both sit under the reader's directory, which is already on sys.path, so these inserts
 # name directories that do not exist there and change nothing.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
 
