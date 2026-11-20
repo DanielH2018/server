@@ -53,6 +53,7 @@ def test_a_volume_keeps_the_last_group_label_and_an_unknown_state_reads_unknown(
             "status": {"state": "faulted"},
         }
     )
+    assert volume.groups == ("default", "weekly-backup-d3")
     assert volume.group == "weekly-backup-d3"
     assert volume.state is VolumeState.UNKNOWN
 

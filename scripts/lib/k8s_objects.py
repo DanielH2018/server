@@ -126,30 +126,33 @@ class LonghornVolume:
     Attributes:
         name: `.metadata.name`, which is also the PV's name.
         labels: `.metadata.labels`.
-        group: the RecurringJob group a `<GROUP_LABEL_PREFIX><group>` label names, or None when
-            the volume carries no group label. A volume with more than one keeps the last in
-            label order. kubectl emits keys sorted, so that is the greatest name.
+        groups: every RecurringJob group a `<GROUP_LABEL_PREFIX><group>` label names, in label
+            order. kubectl emits keys sorted.
         state: `.status.state`.
     """
 
     name: str
     labels: Mapping[str, str]
-    group: str | None
+    groups: tuple[str, ...]
     state: VolumeState
+
+    @property
+    def group(self) -> str | None:
+        """The last of `groups`, which is the greatest name; None when there is none."""
+        return self.groups[-1] if self.groups else None
 
     @classmethod
     def from_item(cls, item: Mapping) -> LonghornVolume:
         """One entry of `kubectl get volumes.longhorn.io -o json`'s `.items`, or a single read."""
         obj = K8sObject.from_item(item)
-        groups = [
-            key.removeprefix(GROUP_LABEL_PREFIX)
-            for key in obj.labels
-            if key.startswith(GROUP_LABEL_PREFIX)
-        ]
         return cls(
             name=obj.name,
             labels=obj.labels,
-            group=groups[-1] if groups else None,
+            groups=tuple(
+                key.removeprefix(GROUP_LABEL_PREFIX)
+                for key in obj.labels
+                if key.startswith(GROUP_LABEL_PREFIX)
+            ),
             state=VolumeState(obj.status.get("state")),
         )
 

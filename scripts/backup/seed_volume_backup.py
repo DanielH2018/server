@@ -12,8 +12,8 @@ WHAT IT COSTS. One full backup of the used blocks, against `k3s_longhorn_daily_b
 Seed one volume at a time, and read the budget line in
 `journalctl -t longhorn-backup-health` before seeding more than a few.
 
-WHAT IT REFUSES. An unbound claim. A volume in no backup tier, because no job's retain would
-ever prune the backup. A disarmed or unavailable target, because the Backup could never
+WHAT IT REFUSES. An unbound claim. A volume with more than one group label, whose tier is
+ambiguous. A volume in no backup tier, because no job's retain would ever prune the backup. A disarmed or unavailable target, because the Backup could never
 complete. A volume that already has a backup, unless --allow-existing says its recurring run
 was missed. A group no RecurringJob selects.
 
@@ -179,7 +179,14 @@ class Seed:
                 "nothing to snapshot."
             )
         volume = self._get("volumes.longhorn.io", pv)
-        group = LonghornVolume.from_item(volume).group
+        groups = LonghornVolume.from_item(volume).groups
+        if len(groups) > 1:
+            raise SeedRefused(
+                f"{claim} carries {len(groups)} recurring-job group labels "
+                f"({', '.join(groups)}), so its tier is ambiguous. The longhorn-reconcile "
+                "CronJob gives a volume exactly one."
+            )
+        group = groups[0] if groups else ""
         if not group or group == NO_BACKUP_GROUP:
             raise SeedRefused(
                 f"{claim} is in recurring-job group '{group or '(none)'}', so nothing would "
