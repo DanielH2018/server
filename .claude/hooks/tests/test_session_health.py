@@ -24,7 +24,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, write_exec
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -269,7 +269,7 @@ def test_stale_worktree_lines_reports_removable():
     brief = (
         "WARN: 1 merged worktree(s) can be removed:\n"
         "  old-thing — worktree-old-thing merged, clean, unlocked\n"
-        "  → uv run python scripts/dev/prune_worktrees.py --prune\n"
+        "  → ~/.claude/hooks/prune-worktrees.py --prune\n"
     )
     lines = _mod.stale_worktree_lines(lambda *a, **k: _result(brief))
     assert any("old-thing" in line for line in lines)
@@ -281,9 +281,37 @@ def test_stale_worktree_lines_silent_when_clean():
 
 def test_stale_worktree_lines_swallows_a_timeout():
     def boom(*a, **k):
-        raise subprocess.TimeoutExpired(cmd="prune_worktrees.py", timeout=30)
+        raise subprocess.TimeoutExpired(cmd="prune-worktrees.py", timeout=30)
 
     assert _mod.stale_worktree_lines(boom) == []
+
+
+def test_a_pruner_that_fails_is_named_rather_than_read_as_nothing_to_remove():
+    # Exit 78 is a deployed copy older than this repo needs. An empty banner would say
+    # the checkout has no merged worktrees.
+    def stale(*a, **k):
+        return types.SimpleNamespace(
+            stdout="", stderr="this pruner is interface 1\n", returncode=78
+        )
+
+    assert _mod.stale_worktree_lines(stale) == [
+        "  ⚠ the worktree pruner failed: this pruner is interface 1"
+    ]
+
+
+def test_a_host_with_no_pruner_is_named_rather_than_read_as_nothing_to_remove():
+    def missing(*a, **k):
+        raise FileNotFoundError("prune-worktrees.py")
+
+    [line] = _mod.stale_worktree_lines(missing)
+    assert "no worktree pruner at" in line and "chezmoi apply" in line
+
+
+def test_the_banner_requires_the_interface_the_library_does():
+    from hooklib import worktree_lines
+    from lib._claude_worktree import REQUIRED_INTERFACE
+
+    assert worktree_lines.PRUNER_INTERFACE == REQUIRED_INTERFACE
 
 
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
@@ -353,29 +381,26 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
 # the fail-loud, because a silent [] is what hid the bug.
 @pytest.fixture
 def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
-    """Put a `uv` first on PATH that records `prune_worktrees.py` and passes the rest through.
+    """Stand a recording `prune-worktrees.py` in for the dotfiles pruner the hook runs.
+
+    The hook finds the pruner under the user-level Claude directory, so `CLAUDE_CONFIG_DIR`
+    points it at a scratch one holding the stand-in.
 
     A `systemctl` stub answers the live-session scan's fan-out unit queries `inactive`, the
     state of a collected batch unit, so the host's own fan-out units stay unasked.
 
-    `prune_worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
+    `prune-worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
     the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
     CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
-    That recorded shard weight then tripped CI's over-recorded check. Every other `uv`
-    call, such as `probe.py targets`, still runs for real.
+    That recorded shard weight then tripped CI's over-recorded check.
     """
-    real_uv = shutil.which("uv")
-    assert real_uv, "no `uv` on PATH to pass the hook's other calls through to"
+    write_exec(
+        tmp_path / "claude" / "hooks" / "prune-worktrees.py",
+        '#!/bin/sh\nprintf \'%s\\n\' "prune-worktrees.py $*" >> "$FENCE_CALLS"\n',
+    )
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     stub_dir = fake_bin(
-        tmp_path / "uv-stub",
-        uv=(
-            "#!/bin/sh\n"
-            'case "$*" in *prune_worktrees.py*)\n'
-            '  printf \'%s\\n\' "uv $*" >> "$FENCE_CALLS"; exit 0;;\n'
-            "esac\n"
-            f'exec "{real_uv}" "$@"\n'
-        ),
-        systemctl="#!/bin/sh\necho inactive\n",
+        tmp_path / "systemctl-stub", systemctl="#!/bin/sh\necho inactive\n"
     )
     monkeypatch.setenv("PATH", path_with(stub_dir))
     return fenced_calls
@@ -424,7 +449,7 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     recorded = fenced_calls.read_text()
     for binary in (
         "curl",
-        "uv run python scripts/dev/prune_worktrees.py",
+        "prune-worktrees.py --require",
     ):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"

@@ -335,20 +335,20 @@ ROWS = (
         name="scripts-import-their-siblings-dotted",
         reason=(
             "A run by path puts the script's own directory first on `sys.path`, so a bare "
-            "`import prune_worktrees` beside it resolves there and fails when another module "
+            "`import label_worktree` beside it resolves there and fails when another module "
             "loads it dotted. Both spellings in one process are two module objects. Import "
-            "from the root: `from dev import prune_worktrees`. A test's fixture beside it "
+            "from the root: `from dev import label_worktree`. A test's fixture beside it "
             "(`_land_fakes.py`) is outside the selection, since pytest's prepend of the "
             "test's directory is how it is reached, and `renderer/job_files` ships flat."
         ),
         files=_dotted_modules,
         offence=_bare_sibling_offence,
         red=(
-            Subject("scripts/dev/x.py", "import prune_worktrees\n"),
+            Subject("scripts/dev/x.py", "import label_worktree\n"),
             Subject("scripts/dev/x.py", "def f():\n    from fanout_lib import place\n"),
         ),
         green=(
-            Subject("scripts/dev/x.py", "from dev import prune_worktrees\n"),
+            Subject("scripts/dev/x.py", "from dev import label_worktree\n"),
             Subject(
                 "scripts/lib/longhorn_lib/x.py", "from . import longhorn_backups\n"
             ),

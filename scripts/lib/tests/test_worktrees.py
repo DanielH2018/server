@@ -1,46 +1,34 @@
-"""Tests for `lib.worktrees`: the removal decision and the git calls that act on it.
+"""Tests for `lib.worktrees`: what this repo adds over the dotfiles `claude_worktree` library.
 
-The readers -- the porcelain parser, the lock-liveness check, the cherry and merge-tree
-verdicts -- live in the deployed `claude_worktree` package and are tested in the dotfiles
-repo beside it; `test_claude_worktree_import.py` covers the bootstrap. What is tested here is
-the policy this repo keeps: `classify` takes the facts the git calls produce, `remove` acts on
-the verdict, and `worktree_facts` separates a failed read from an empty one. The CLI that
-drives them is `scripts/dev/tests/test_prune_worktrees.py`'s.
+The library itself (the readers, the landed ladder, the holds, `classify` and `remove`) is
+tested in the dotfiles repo beside it; `test_claude_worktree_import.py` covers the bootstrap
+and `test_fanout_lock.py` the fan-out lock pattern. What is tested here is this repo's glue:
+`classify` and `is_merged` as `findings.py` and `fanout.py` call them, the claim-liveness
+reader `held_by_readable_process`, and `worktree_facts`, which separates a failed read from
+an empty one.
 
 Run: uv run pytest scripts/lib/tests/test_worktrees.py
 """
 
 import os
-import shutil
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
-from lib.worktree_testing import ignore_foreign_slice_holds
-from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
     COORDINATOR_LOCK,
     FOREIGN_UID,
     KEEP,
     REMOVABLE,
-    VERDICT_CACHE,
     Worktree,
     classify,
     has_live_session,
     held_by_readable_process,
+    is_merged,
     lock_is_live,
-    merged_layer,
-    primary_checkout,
-    processes_using,
-    read_verdicts,
-    record_verdict,
-    remove,
-    verdict_cache_path,
-    verdict_key,
     worktree_facts,
 )
-
 
 LIVE_LOCK = "claude session mine (pid {pid} start {start})"
 
@@ -53,139 +41,11 @@ def _live_lock_reason():
     return LIVE_LOCK.format(pid=pid, start=start)
 
 
-def _tree(branch="worktree-x", locked=False):
-    return Worktree(path="/w", head="abc", branch=branch, locked=locked)
-
-
-def test_merged_clean_unlocked_is_removable():
-    verdict, _ = classify(_tree(), merged=True, dirty=False)
-    assert verdict == REMOVABLE
-
-
-def test_a_live_lock_wins_over_a_merged_branch():
-    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
-    # a session may still be working past its own merge; the lock is how it says so
-    tree = _tree(locked=True)
-    tree.lock_reason = _live_lock_reason()
-    verdict, reason = classify(tree, merged=True, dirty=False)
-    assert verdict == KEEP
-    assert "in use" in reason
-
-
-def test_a_stale_lock_does_not_keep_a_merged_worktree():
-    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
-    # Claude Code never releases the lock when a session ends, so obeying every lock
-    # would keep every abandoned worktree forever
-    tree = _tree(locked=True)
-    tree.lock_reason = "claude session gone (pid 1 start 999999999)"
-    verdict, _ = classify(tree, merged=True, dirty=False)
-    assert verdict == REMOVABLE
-
-
-def test_a_stale_lock_still_does_not_override_uncommitted_work():
-    tree = _tree(locked=True)
-    tree.lock_reason = "claude session gone (pid 1 start 999999999)"
-    verdict, reason = classify(tree, merged=True, dirty=True)
-    assert verdict == KEEP
-    assert "uncommitted" in reason
-
-
-def test_uncommitted_changes_are_never_removed():
-    verdict, reason = classify(_tree(), merged=True, dirty=True)
-    assert verdict == KEEP
-    assert "uncommitted" in reason
-
-
-def test_unmerged_branch_is_kept():
-    verdict, reason = classify(_tree(), merged=False, dirty=False)
-    assert verdict == KEEP
-    assert "not merged" in reason
-
-
-def test_detached_head_is_kept_rather_than_guessed_about():
-    verdict, reason = classify(_tree(branch=None), merged=True, dirty=False)
-    assert verdict == KEEP
-    assert "detached" in reason
-
-
-def _init_scratch_repo(path: Path) -> None:
-    init_repo(path)
-    commit(path, "init", **{"a.txt": "one\n"})
-
-
-def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch):
-    # Real git calls rather than mocks, which prove only call order: without the unlock,
-    # `git worktree remove` on a locked tree fails outright and the caller would report success
-    # while removing nothing.
-    #
-    # Scrub GIT_* for remove()'s own git calls: it takes no environment argument. git exports
-    # GIT_DIR and GIT_INDEX_FILE into hook processes and `git -C <path>` does NOT override them,
-    # so under the prek pre-commit hook an unscrubbed remove() unlocks and deletes worktrees of
-    # the live repo.
-    scrub_process_git_env(monkeypatch)
-    ignore_foreign_slice_holds(monkeypatch)
-
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
-
-    ok, err = remove(
-        str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
-    )
-
-    assert ok, err
-    assert not wt.exists()
-
-
-def test_remove_deletes_a_never_locked_worktree_on_disk(tmp_path, monkeypatch):
-    # The unlocked half of the pair above: no lock to release, and the tree still goes.
-    scrub_process_git_env(monkeypatch)
-    ignore_foreign_slice_holds(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-
-    ok, err = remove(
-        str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=False)
-    )
-
-    assert ok, err
-    assert not wt.exists()
-
-
-def test_remove_never_forces_past_an_untracked_file(tmp_path, monkeypatch):
-    # --force is the escape hatch git's own docs suggest for a locked tree; using it would
-    # remove the safety net that makes auto-unlock acceptable. A REMOVABLE tree is only
-    # guaranteed merged AND clean as of the read, so git's own refusal on a file that
-    # appeared since is the backstop -- and this is the one input where it must fire.
-    scrub_process_git_env(monkeypatch)
-    ignore_foreign_slice_holds(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
-    (wt / "scratch.txt").write_text("unlanded\n")
-
-    ok, err = remove(
-        str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
-    )
-
-    assert not ok
-    assert "untracked" in err or "modified" in err, err
-    assert (wt / "scratch.txt").exists()
-
-
 @contextmanager
-def _sleeper(cwd: Path, project_dir: Path | None = None):
-    """A live process with `cwd`, and `CLAUDE_PROJECT_DIR` when given, killed on exit."""
+def _sleeper(cwd: Path):
+    """A live process with `cwd`, killed on exit."""
     env = dict(os.environ)
     env.pop("CLAUDE_PROJECT_DIR", None)
-    if project_dir is not None:
-        env["CLAUDE_PROJECT_DIR"] = str(project_dir)
     proc = subprocess.Popen(["sleep", "60"], cwd=cwd, env=env)
     try:
         yield proc
@@ -194,119 +54,49 @@ def _sleeper(cwd: Path, project_dir: Path | None = None):
         proc.wait()
 
 
-def _locked_paths(repo: Path) -> set[str]:
-    trees = git(repo, "worktree", "list", "--porcelain").stdout.split("\n\n")
-    return {
-        t.splitlines()[0].removeprefix("worktree ") for t in trees if "\nlocked" in t
-    }
+def _tree(branch="worktree-x", locked=False):
+    return Worktree(path="/w", head="abc", branch=branch, locked=locked)
 
 
-def test_remove_refuses_a_tree_a_live_process_has_as_cwd_is_flagged(
-    tmp_path, monkeypatch
-):
-    # fact: .claude/skills/worktree-cleanup/SKILL.md#The pruner
-    # A session deleted out from under itself loses every repo hook. The lock here
-    # names no live owner, so classify() would call the tree REMOVABLE; the process is what
-    # still uses it.
-    scrub_process_git_env(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
-
-    with _sleeper(cwd=wt) as proc:
-        ok, err = remove(
-            str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
-        )
-
-    assert not ok
-    assert f"pid {proc.pid}" in err, err
-    assert wt.exists()
-    # The refusal comes before the unlock, so the prune path leaves the lock as it was.
-    assert str(wt) in _locked_paths(repo)
+def test_a_merged_clean_unlocked_tree_is_removable():
+    assert classify(_tree(), merged=True, dirty=False)[0] == REMOVABLE
 
 
-def test_remove_refuses_a_tree_a_live_session_names_as_project_dir_is_flagged(
-    tmp_path, monkeypatch
-):
-    scrub_process_git_env(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-
-    with _sleeper(cwd=tmp_path, project_dir=wt) as proc:
-        ok, err = remove(
-            str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=False)
-        )
-
-    assert not ok
-    assert f"pid {proc.pid}" in err and "CLAUDE_PROJECT_DIR" in err, err
-    assert wt.exists()
-
-
-def test_a_process_in_a_sibling_tree_does_not_block_removal_is_clean(
-    tmp_path, monkeypatch
-):
-    # `wt2` shares `wt`'s string prefix, so a startswith match would refuse here. The
-    # sleeper's project dir is the repo, the parent of every tree, as the primary
-    # checkout's session's is.
-    scrub_process_git_env(monkeypatch)
-    ignore_foreign_slice_holds(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt, wt2 = tmp_path / "wt", tmp_path / "wt2"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    git(repo, "worktree", "add", "-q", "-b", "other", str(wt2))
-
-    with _sleeper(cwd=wt2, project_dir=repo):
-        ok, err = remove(
-            str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=False)
-        )
-
-    assert ok, err
-    assert not wt.exists()
-
-
-def test_another_uids_process_in_my_login_slice_holds_every_tree_is_flagged(tmp_path):
-    # `sudo -u claude sleep` run from inside a worktree keeps its inherited cwd and
-    # stays in the caller's slice, and the caller cannot read that cwd.
-    me = os.getuid()
-    proc = _unreadable_proc(
-        tmp_path / "proc", 4242, me + 1, f"/user.slice/user-{me}.slice/session-7.scope"
+def test_an_unmerged_tree_is_kept():
+    assert classify(_tree(), merged=False, dirty=False) == (
+        KEEP,
+        "worktree-x not merged",
     )
 
-    assert [pid for pid, _ in processes_using(str(tmp_path), proc=proc)] == [4242]
+
+def test_is_merged_counts_a_squash_landed_branch(tmp_path, monkeypatch):
+    # PRs land here squashed, so the tip is never an ancestor of master and no patch-id
+    # matches. A claim on such a branch must read stale, or `reap` never releases it.
+    scrub_process_git_env(monkeypatch)
+    monkeypatch.setenv("GH_BIN", "false")
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    commit(repo, "init", **{"a.txt": "one\n"})
+    git(repo, "checkout", "-q", "-b", "feature")
+    commit(repo, "first half", **{"b.txt": "two\n"})
+    head = commit(repo, "second half", **{"c.txt": "three\n"})
+    git(repo, "checkout", "-q", "master")
+    commit(repo, "squash of feature", **{"b.txt": "two\n", "c.txt": "three\n"})
+
+    assert is_merged(str(repo), head, "feature", base="master")
 
 
-def test_a_test_that_ignores_foreign_slice_holds_sees_no_holder_is_clean(
-    tmp_path, monkeypatch
-):
-    # The flagged half is the test above: the same process, with the rule left on.
-    me = os.getuid()
-    proc = _unreadable_proc(
-        tmp_path / "proc", 4242, me + 1, f"/user.slice/user-{me}.slice/session-7.scope"
-    )
-    ignore_foreign_slice_holds(monkeypatch)
+def test_is_merged_rejects_a_branch_holding_unlanded_work(tmp_path, monkeypatch):
+    scrub_process_git_env(monkeypatch)
+    monkeypatch.setenv("GH_BIN", "false")
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    commit(repo, "init", **{"a.txt": "one\n"})
+    git(repo, "checkout", "-q", "-b", "feature")
+    head = commit(repo, "open work", **{"b.txt": "two\n"})
+    git(repo, "checkout", "-q", "master")
 
-    assert processes_using(str(tmp_path), proc=proc) == []
-
-
-def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tmp_path):
-    # Each of these is always alive on daniel-box, so counting any would refuse every removal:
-    # the claude agent's resident service, another user's own session, root's daemons and
-    # `sshd [priv]` inside this very slice.
-    me = os.getuid()
-    proc = tmp_path / "proc"
-    _unreadable_proc(proc, 1, me + 1, "/user.slice/claude-rc.service")
-    _unreadable_proc(
-        proc, 2, me + 1, f"/user.slice/user-{me + 1}.slice/session-9.scope"
-    )
-    _unreadable_proc(proc, 3, 0, "/system.slice/cron.service")
-    _unreadable_proc(proc, 4, 0, f"/user.slice/user-{me}.slice/session-7.scope")
-
-    assert processes_using(str(tmp_path), proc=proc) == []
+    assert not is_merged(str(repo), head, "feature", base="master")
 
 
 def test_a_readable_process_in_the_tree_holds_it_is_flagged():
@@ -330,44 +120,6 @@ def test_a_hold_in_the_main_worktree_does_not_hold_it_is_clean(tmp_path):
     ]
 
     assert not held_by_readable_process(str(tmp_path), holds=lambda: holds)
-
-
-def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
-    tmp_path, monkeypatch
-):
-    # The directory is already gone and a live session still points at it.
-    # Deregistering cannot hurt that session further, and fan-out's `_clean_missing_tree`
-    # reaches this through the same remover.
-    scrub_process_git_env(monkeypatch)
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    shutil.rmtree(wt)
-
-    with _sleeper(cwd=tmp_path, project_dir=wt):
-        ok, err = remove(
-            str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=False)
-        )
-
-    assert ok, err
-    assert str(wt) not in git(repo, "worktree", "list", "--porcelain").stdout
-
-
-def test_removable_reason_names_the_dead_lock_owner_not_unlocked():
-    # "unlocked" would be misleading here: at classify() time the tree is still locked —
-    # only remove() unlocks it later. The reason string must say what's actually true.
-    tree = _tree(locked=True)
-    tree.lock_reason = "claude session gone (pid 1 start 999999999)"
-    verdict, reason = classify(tree, merged=True, dirty=False)
-    assert verdict == REMOVABLE
-    assert "lock owner is dead" in reason
-
-
-def test_removable_reason_for_a_never_locked_tree_says_unlocked():
-    verdict, reason = classify(_tree(locked=False), merged=True, dirty=False)
-    assert verdict == REMOVABLE
-    assert reason.endswith("unlocked")
 
 
 def test_worktree_facts_ok_is_false_when_the_git_call_fails(monkeypatch):
@@ -396,126 +148,6 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
     trees, _dirty, _merged, ok = worktree_facts()
     assert ok is True
     assert trees == []
-
-
-def test_primary_checkout_from_a_linked_worktree_is_the_primary_is_clean(tmp_path):
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    assert primary_checkout(str(wt)) == str(repo.resolve())
-
-
-def test_primary_checkout_of_a_separated_git_dir_is_flagged_as_none(tmp_path):
-    # The common dir's parent is the directory holding the git dir, which is not a checkout:
-    # the orphan scan would read `<that>/.claude/worktrees/` and `worktree_facts` would list
-    # worktrees from a directory git does not consider a repo.
-    checkout = tmp_path / "checkout"
-    git(
-        tmp_path,
-        "init",
-        "-q",
-        f"--separate-git-dir={tmp_path / 'store'}",
-        str(checkout),
-    )
-    assert primary_checkout(str(checkout)) is None
-
-
-def _unmerged_branch(tmp_path: Path) -> tuple[Path, str]:
-    """A repo whose `feature` branch holds a commit master lacks, and that commit's SHA."""
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    git(repo, "checkout", "-q", "-b", "feature")
-    head = commit(repo, "feature work", **{"b.txt": "two\n"})
-    git(repo, "checkout", "-q", "master")
-    return repo, head
-
-
-def _never_asked(*_args) -> bool:
-    raise AssertionError("the forge was asked for a verdict the cache holds")
-
-
-def test_a_recorded_verdict_answers_the_next_call_without_recomputing(tmp_path):
-    repo, head = _unmerged_branch(tmp_path)
-    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
-    key = verdict_key(str(repo), head, "master")
-    assert key is not None
-    assert read_verdicts(str(repo))[key] == ""
-    # A value git would never compute for this pair, so the answer can only come from the file.
-    record_verdict(str(repo), key, "content")
-    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "content"
-
-
-def test_a_forge_merged_answer_is_recorded_and_not_asked_again(tmp_path):
-    repo, head = _unmerged_branch(tmp_path)
-    assert (
-        merged_layer(str(repo), head, base="master", forge=lambda *_: True) == "forge"
-    )
-    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "forge"
-
-
-def test_a_forge_not_merged_answer_is_trusted_only_until_it_expires(tmp_path):
-    repo, head = _unmerged_branch(tmp_path)
-    assert merged_layer(str(repo), head, "feature", "master", lambda *_: False) is None
-    assert merged_layer(str(repo), head, "feature", "master", _never_asked) is None
-    # Epoch 0 is far past FORGE_NO_TTL_S, so the forge must be asked again, and now says merged.
-    record_verdict(str(repo), f"forge-no:{head}:feature", "0")
-    assert (
-        merged_layer(str(repo), head, "feature", "master", lambda *_: True) == "forge"
-    )
-
-
-def test_a_corrupt_cache_file_reads_as_empty_and_is_replaced(tmp_path):
-    repo, head = _unmerged_branch(tmp_path)
-    path, key = verdict_cache_path(str(repo)), verdict_key(str(repo), head, "master")
-    assert path is not None and key is not None
-    path.write_text("{not json")
-    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
-    assert read_verdicts(str(repo))[key] == ""
-
-
-def test_the_cache_lives_in_the_git_common_dir_not_a_worktree(tmp_path):
-    repo = tmp_path / "repo"
-    _init_scratch_repo(repo)
-    wt = tmp_path / "wt"
-    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    expected = repo.resolve() / ".git" / VERDICT_CACHE
-    assert verdict_cache_path(str(wt)) == expected
-    assert verdict_cache_path(str(repo)) == expected
-
-
-def _loose_objects(repo: Path) -> set[Path]:
-    return {p for p in (repo / ".git" / "objects").glob("??/*")}
-
-
-def test_the_content_check_writes_nothing_into_the_object_store(tmp_path):
-    """REJECT: an unlanded branch's merge result is computed, then thrown away.
-
-    Every master advance re-asks this for every unlanded worktree, so a result that stayed
-    behind as loose objects filled the primary checkout's store faster than gc could clear it.
-    """
-    repo, head = _unmerged_branch(tmp_path)
-    commit(repo, "master moves on", **{"c.txt": "three\n"})
-    before = _loose_objects(repo)
-
-    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
-
-    assert _loose_objects(repo) == before
-
-
-def test_the_content_check_still_finds_a_squash_merged_branch(tmp_path):
-    """Regression guard: the scratch object store still reads both commits through the real one.
-
-    Master holds the branch's content under a different commit, so only merge-tree sees it.
-    This passes on the unquarantined code too, and cannot be made to fail on it: a contained
-    merge's result is master's own tree, which is already in the store, so it writes nothing.
-    """
-    repo, head = _unmerged_branch(tmp_path)
-    commit(
-        repo, "squash of feature, plus more", **{"b.txt": "two\n", "c.txt": "three\n"}
-    )
-
-    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "content"
 
 
 def _project_tree(path):

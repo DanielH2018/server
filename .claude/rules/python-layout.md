@@ -18,8 +18,8 @@ long form, with the measurements and the incidents behind each rule, is
 the editable install's `.pth` supplies it, and outside one the launcher's `PYTHONPATH` does.
 So every import of a module under `scripts/` is dotted from the root (`from lib.git import
 git`, `from dev.fanout_lib import place`, `from deploy_tools.land_lib import policy`) and needs
-no insert. That holds inside a module's own directory too: `from dev import prune_worktrees`,
-never `import prune_worktrees`. One file imported under two names is two module objects, so a
+no insert. That holds inside a module's own directory too: `from dev import label_worktree`,
+never `import label_worktree`. One file imported under two names is two module objects, so a
 test that patches one leaves the other untouched.
 
 `pythonpath` in `pyproject.toml` is a pytest setting, so pytest resolving a bare import

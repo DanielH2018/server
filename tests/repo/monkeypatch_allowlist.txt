@@ -33,7 +33,6 @@ scripts/deploy_tools/tests/test_await_ci.py 4
 scripts/deploy_tools/tests/test_land_pipeline.py 3
 scripts/deploy_tools/tests/test_land_tags.py 5
 scripts/deploy_tools/tests/test_land_tools.py 1
-scripts/dev/tests/test_prune_worktrees.py 6
 scripts/diagnostics/tests/test_postflight.py 9
 scripts/diagnostics/tests/test_postflight_runner.py 3
 scripts/diagnostics/tests/test_probe.py 6

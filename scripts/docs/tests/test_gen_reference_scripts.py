@@ -245,7 +245,7 @@ def test_a_prose_mention_is_not_an_invocation(tmp_path):
 
 
 def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
-    """deploy.sh prints the prune_worktrees command when the lock is busy."""
+    """A shell wrapper that prints a script's command runs nothing."""
     repo, scripts = _repo(tmp_path)
     _write(
         tmp_path / "k8s" / "hand.sh",
