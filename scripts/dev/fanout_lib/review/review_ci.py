@@ -381,11 +381,13 @@ def ready_for_ci(
     # GitHub starts no `pull_request` run while the PR conflicts with its base, so a
     # conflict, not Actions, is why none started. The PR stays ready: GitHub cannot merge it
     # while it conflicts, and the push that resolves the conflict starts CI with no second
-    # `gh pr ready`.
+    # `gh pr ready`. This unit's implementer phases are over, so `place resume` resolves it.
     if _mergeable(run, pr, repo, sleep) == "CONFLICTING":
         return (
             f"PR #{pr} conflicts with master, so marking it ready started no CI on head "
-            f"{sha[:8]}. Merge or rebase master into the branch and push; the push starts CI"
+            f"{sha[:8]}. Run `fanout.py place resume <run-id> <batch>` once this unit has "
+            "ended: it resumes the implementer to rebase, reviews the resolution and lands "
+            "the PR, and the rebased push starts CI"
         )
     # A ready PR whose only checks are the draft run's skipped ones reads green to GitHub's
     # ruleset and to auto-merge, so the PR goes back to a draft, which GitHub refuses to merge.

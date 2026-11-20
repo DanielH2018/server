@@ -216,14 +216,15 @@ def _file_list(files: Sequence[str]) -> str:
 
 
 def conflict_prompt(pr: str, line: str, files: Sequence[str], base: str) -> str:
-    """The prompt that resumes the implementer after a landing ended `merge-conflict`.
+    """The prompt that resumes the implementer for a PR that conflicts with its base.
 
-    The pipeline ran `land.sh` itself, so this session never saw the conflict. The session
-    only brings the branch up to the base: `conflict_resume` reviews the resolution and runs
-    the landing again.
+    `line` is the `VERDICT:` line of the landing that stopped on the conflict, or the one
+    `place resume` builds for a PR no landing has run on. This session never saw the
+    conflict. It only brings the branch up to the base: `conflict_resume` reviews the
+    resolution and runs the landing.
     """
-    return f"""The pipeline landed {pr} with `land.sh`, and the landing stopped on a conflict
-with master. Nothing merged and nothing deployed:
+    return f"""{pr} conflicts with master, and the pipeline cannot land it until the branch
+is brought up to master. Nothing merged and nothing deployed:
 
 {line}
 
@@ -240,7 +241,7 @@ Bring the branch up to master:
 4. Push with `git push --force-with-lease`.
 
 Do not merge or land. The pipeline has a fresh reviewer read the resolution, then runs the
-same landing again. If a conflict cannot be resolved with both intents kept, abort the
+landing. If a conflict cannot be resolved with both intents kept, abort the
 rebase, push nothing, and say which file and why in one sentence.
 
 End your final message with the PR URL.
