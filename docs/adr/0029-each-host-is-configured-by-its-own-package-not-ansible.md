@@ -107,6 +107,12 @@ is #8651: batching the `dpkg -S` and `systemctl show` reads in reconcile removes
 commands from every reconcile run, and costs 26 source lines. The census holds the raise as
 `RULED_RAISE`, added to the formula above.
 
+On 2026-11-19 the operator raised the ceiling from 1,450 to 1,500 source lines. The reason
+is #9263: reconcile parses its manifest into typed records, so a tagged union of legacy
+entry kinds, not the keys an entry happens to carry, decides what step 4 retires. The
+records cost about 50 source lines. `RULED_RAISE` holds both raises, ruled in #8651 and
+#9333.
+
 ### `homelab-checkout-sync` keeps the CI gate and does not read `DEPLOY_HOLD`
 
 The deployer's timer fast-forwarded the primary checkout on daniel-box. After it retired,

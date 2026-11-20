@@ -381,7 +381,7 @@ def test_red_a_legacy_step_that_retires_the_running_service_is_caught(tmp_path):
         tmp_path,
         running_legacy_service_stays,
         "homelab-reconcile",
-        "if key not in prev_retired and not waiting and running_service(entry, live):",
+        "if key not in prev.retired and not waiting and running_service(entry, live):",
         "if False:",
     )
 

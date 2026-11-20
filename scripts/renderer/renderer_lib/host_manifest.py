@@ -68,7 +68,7 @@ MANIFEST = "/usr/lib/homelab/manifest.json"
 # a host's manifest lists them.
 UPDATER = "homelab-updater"
 POLICIES = frozenset({"manual", "windowed"})
-# Each legacy entry kind, by its key set, as `homelab-reconcile:valid_legacy` reads it.
+# Each legacy entry kind, by its key set, as `homelab-reconcile:parse_legacy` reads it.
 LEGACY_KINDS = (
     frozenset({"path"}),
     frozenset({"cron", "user"}),
@@ -280,7 +280,7 @@ def legacy_entry(
 
 
 def _valid_legacy(entry: dict[str, str]) -> bool:
-    """The value checks `homelab-reconcile:valid_legacy` makes, so a render it refuses fails here."""
+    """The value checks `homelab-reconcile:parse_legacy` makes, so a render it refuses fails here."""
     if "path" in entry:
         path = entry["path"]
         return path.startswith("/") and ".." not in path.split("/")
