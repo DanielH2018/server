@@ -20,17 +20,12 @@ renderer runs. `lib.guard_jinja_env` registers each so a `ValueError` reaches th
 `FilterError` prefixed with the filter's name.
 """
 
-# The tiers an entry's `tier` may name, each with the PriorityClass its pods run at. One tier
-# maps to exactly one class, which is why the house's services split in two: the edge and SSO
-# run at homelab-critical, the automation chain one band below it. `platform` is critical
-# without being home-critical (the registry, the UPS primary). A misspelt tier would silently
-# drop the entry out of every derived set, so an unknown value raises rather than reading as
-# untiered.
-SERVICE_TIERS = {
-    "home-edge": "homelab-critical",
-    "home-automation": "homelab-automation",
-    "platform": "homelab-critical",
-}
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.container_entry import SERVICE_TIERS
 
 # Names that select several tiers at once. `home-critical` is what the house and SSO stop
 # working without, and is the set the daily R2 backup tier derives from.
@@ -53,23 +48,13 @@ def _known():
     return ", ".join([*SERVICE_TIERS, *TIER_GROUPS])
 
 
-def _declared_tier(entry):
-    """The entry's `tier`, or None when it declares none. Raises ValueError on an unknown one."""
-    declared = entry.get("tier")
-    if declared is not None and declared not in SERVICE_TIERS:
-        raise ValueError(
-            f"containers_list entry {entry['name']!r} declares unknown tier {declared!r}; "
-            f"known: {', '.join(SERVICE_TIERS)}"
-        )
-    return declared
-
-
 def tier_entries(containers_list, tier):
-    """The named entries of `containers_list` whose `tier` is in `tier`, in list order.
+    """The entries of `containers_list` whose `tier` is in `tier`, in list order.
 
+    `containers_list` is `parse_containers_list`'s result, so every entry's tier is known.
     `tier` is one of `SERVICE_TIERS` or a group name from `TIER_GROUPS`.
 
-    Raises ValueError when `tier`, or any entry's `tier`, is unknown.
+    Raises ValueError when `tier` is unknown.
     """
     if tier in TIER_GROUPS:
         wanted = TIER_GROUPS[tier]
@@ -77,39 +62,24 @@ def tier_entries(containers_list, tier):
         wanted = (tier,)
     else:
         raise ValueError(f"unknown service tier {tier!r}; known: {_known()}")
-    found = []
-    for entry in containers_list or []:
-        if not isinstance(entry, dict) or not entry.get("name"):
-            continue
-        if _declared_tier(entry) in wanted:
-            found.append(entry)
-    return found
+    return [entry for entry in containers_list or [] if entry.get("tier") in wanted]
 
 
 def shed_entries(containers_list, never_shed=NEVER_SHED):
-    """The named entries of `containers_list` that are in no tier, in list order.
+    """The entries of `containers_list` that are in no tier, in list order.
 
     These are the workloads to scale down when one node is lost, so that every tier in
     `SERVICE_TIERS` fits on the survivor. The set is the complement of the tiers rather than
     a test for a missing key, so a tier added to `SERVICE_TIERS` leaves it on its own. An
     entry named in `never_shed` is dropped as well. Every caller but a test takes the default,
     `NEVER_SHED`, so `probe.py shed-set` and every Python reader of the set read one answer.
-
-    Raises ValueError when any entry's `tier` is unknown: a misspelt tier must not put a
-    critical service on the list of things to switch off.
+    A misspelt tier cannot put a critical service on the list of things to switch off,
+    because `parse_containers_list` refuses it before any reader runs.
     """
-    kept = {
-        entry["name"]
-        for tier in SERVICE_TIERS
-        for entry in tier_entries(containers_list, tier)
-    }
     return [
         entry
         for entry in containers_list or []
-        if isinstance(entry, dict)
-        and entry.get("name")
-        and entry["name"] not in kept
-        and entry["name"] not in never_shed
+        if entry.get("tier") not in SERVICE_TIERS and entry["name"] not in never_shed
     ]
 
 
@@ -134,10 +104,7 @@ def in_service_tier(containers_list, name, tier):
     Raises ValueError when no entry is named `name`: a renamed or removed entry must fail the
     render rather than read as untiered, which would quietly drop its tile off the email tier.
     """
-    if not any(
-        isinstance(entry, dict) and entry.get("name") == name
-        for entry in containers_list or []
-    ):
+    if not any(entry["name"] == name for entry in containers_list or []):
         raise ValueError(f"no containers_list entry named {name!r}")
     return any(entry["name"] == name for entry in tier_entries(containers_list, tier))
 
@@ -149,8 +116,8 @@ def tier_priority_class(containers_list, name):
     that asks has no literal to fall back on, and a pod with no class sits at priority 0.
     """
     for entry in containers_list or []:
-        if isinstance(entry, dict) and entry.get("name") == name:
-            declared = _declared_tier(entry)
+        if entry["name"] == name:
+            declared = entry.get("tier")
             if declared is None:
                 raise ValueError(
                     f"containers_list entry {name!r} declares no tier, so it has no "

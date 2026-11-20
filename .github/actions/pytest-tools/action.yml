@@ -104,7 +104,7 @@ runs:
     - name: Deploy the dotfiles packages the hooks and the pruner import
       shell: bash
       env:
-        DOTFILES_SHA: 769b43e1a5702efd3a858854a015dbdc0d77545c
+        DOTFILES_SHA: 77b0bdab9bba37a7b9e2afd5b7d5a67574c36f83
       run: |
         set -euo pipefail
         src="$RUNNER_TEMP/dotfiles"

@@ -9,8 +9,9 @@ each revision, never a decrypted diff — and holds the departed set to `RENAMED
 
 The synthetic clean/flagged pairs for both checks are in `test_secret_git_dates.py`; this
 file is the one that reads the repository. It depends on the pytest job's `fetch-depth: 0`
-the same way `test_module_length_ratchet.py` does (`test_ci_pytest_job_fetch_depth.py`
-names that dependency): a shallow checkout would hand it a truncated history, which is
+the same way `test_module_length_ratchet.py` does (the
+`ci-pytest-job-checks-out-full-history` row of `tests/repo/_ci_job_rows.py` names that
+dependency): a shallow checkout would hand it a truncated history, which is
 why the non-vacuity assertion below names members the history must contain.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py

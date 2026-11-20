@@ -1,6 +1,6 @@
 # The cAdvisor arms of the `restarts`, `oom` and `cpu` checks. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is M6's batch A2
-# (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
+# (docs/archive/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
 # THE SELECTOR. Every query selects `container!="", container!="POD"`.
 # DECIDED: cAdvisor metrics are never pinned to an `origin`. `origin` is applied by exactly one

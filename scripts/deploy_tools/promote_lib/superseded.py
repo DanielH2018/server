@@ -13,13 +13,9 @@ on. docs/archive/deploy/d7-superseding-promotions.md has the design.
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_superseded.py`
 """
 
-import sys as _sys
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-# `forge` imports bare, from scripts/deploy_tools.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-import forge
+from deploy_tools import forge
 
 
 def moved_past(read_prod: Callable[[], str | None] | None, digest: str) -> str | None:

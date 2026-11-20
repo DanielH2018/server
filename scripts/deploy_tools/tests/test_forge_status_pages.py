@@ -11,7 +11,7 @@ import json
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 
-import forge
+from deploy_tools import forge
 from deploy_tools.promote_lib import verify_promotion as vp
 
 T = "a" * 40

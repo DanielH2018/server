@@ -16,7 +16,7 @@ import pytest
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from renderer.renderer_lib.snapshot import snapshot_files
 
-import promote
+from deploy_tools import promote
 
 
 def files(**footprints: str) -> dict[str, bytes]:

@@ -95,7 +95,8 @@ dependency the module gained, which no selected run is told to run.
   2026-11-16 to 2026-11-18. A stale-row miss can therefore go unseen for more than a day.
 - **It grades no commit.** No job in it carries the name of the `prek` gate, so
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
-  (`tests/repo/test_pytest_sweep_workflow.py::test_a_job_under_the_gates_name_is_flagged`).
+  (the `pytest-sweep-result-cannot-grade-a-commit` row of
+  `tests/repo/test_census_rows_workflows.py`).
 - **It reports through one issue.** `scripts/dev/sweep_report.py` opens an issue titled
   `Nightly pytest sweep is red` that names the failed modules, comments on it while the
   sweep stays red, and closes it on the next green sweep. The issue carries no `claude`

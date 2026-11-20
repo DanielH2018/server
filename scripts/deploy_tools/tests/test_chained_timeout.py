@@ -14,7 +14,7 @@ from _promote_fakes import bundle_files
 from renderer.renderer_lib.bundle import bundle_files as render_bundle
 from test_verify_promotion import CHANGED, PROD, T, Clock, digests, ks, ok, reads
 
-import chained_timeout as ct
+from deploy_tools import chained_timeout as ct
 from deploy_tools.bundle_census import published_tags
 from deploy_tools.promote_lib import verify_promotion as vp
 from lib import yaml_fast

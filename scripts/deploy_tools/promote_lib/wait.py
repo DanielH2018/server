@@ -71,12 +71,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import assert_never
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.progress import OnChange
 from lib.summary import grouped
@@ -84,11 +79,11 @@ from lib.summary import grouped
 from lib import host_modules  # noqa: F401
 from host_lib import deploy_event
 
-import forge
-from chained_timeout import OCI_INTERVAL_S, seconds
+from deploy_tools import forge
+from deploy_tools.chained_timeout import OCI_INTERVAL_S, seconds
 from renderer.renderer_lib.bundle import FLUX_NAMESPACE, SHARED_KINDS
 from renderer.renderer_lib.ordering import split_kind
-from changed_set import (
+from deploy_tools.changed_set import (
     ROOT,
     SOAK,
     ChangedSet,
@@ -103,7 +98,7 @@ from deploy_tools.kustomizations import (
     origin_commit,
 )
 from deploy_tools.promote_lib import reboot_window
-from flux_host import KubectlSetupError
+from deploy_tools.flux_host import KubectlSetupError
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
 # The annotation `flux push artifact --revision` writes on a bundle's manifest. promote.py

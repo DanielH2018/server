@@ -1,6 +1,6 @@
 # Scrape health: every target Prometheus scrapes, read from the `up` series. Plain YAML, never
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
+# docs/archive/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
 #
 # Every series below is read, with no job exempt. `for: 10m` is the bridge's
 # CLUSTER_TARGETS_CONSECUTIVE streak of three 300-second cycles.

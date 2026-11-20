@@ -11,12 +11,14 @@ Run: uv run pytest tests/repo/test_census_rows_roles.py
 import re
 
 import pytest
+from _config_file_rows import CONFIG_FILE_ROWS
 from _extra_rollouts_row import EXTRA_ROLLOUTS_RESTART_AS_DECLARED
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
 from _role_files_rows import DASHBOARDS_IN_EXPORTER_FORM, ROLE_PYTHON_HAS_TESTS
 from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
+from _secrets_config_rows import SECRETS_CONFIG_ROWS
 
 
 def _role_files(*directories: str) -> list[str]:
@@ -370,6 +372,8 @@ ROWS = (
     ROLE_PYTHON_HAS_TESTS,
     DASHBOARDS_IN_EXPORTER_FORM,
     EXTRA_ROLLOUTS_RESTART_AS_DECLARED,
+    *CONFIG_FILE_ROWS,
+    *SECRETS_CONFIG_ROWS,
 )
 
 _IDS = [row.name for row in ROWS]

@@ -9,7 +9,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill.py
 import pytest
 from lib import yaml_fast
 
-import bootstrap_drill as drill
+from deploy_tools import bootstrap_drill as drill
 
 SYNC_DOCS = list(
     yaml_fast.safe_load_all(

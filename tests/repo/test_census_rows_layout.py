@@ -2,7 +2,8 @@
 
 `test_census_rows_python.py` holds the rows that judge what a module says. A row here judges
 which siblings a module sits beside, so its subject is a group of files rather than one, and
-its selector returns `Family` subjects rather than paths.
+its selector returns `Family` subjects rather than paths. The other row judges which import
+root a module reaches its siblings through.
 
 Run: uv run pytest tests/repo/test_census_rows_layout.py
 """
@@ -157,6 +158,34 @@ _TYPE_CHECKING = (
 _ARG_CALLS = 'import sys\n\nfrom foo import main\n\nif __name__ == "__main__":\n    sys.exit(main(sum([1])))\n'
 
 
+# ── A qualified area writes nothing to sys.path ──────────────────────────────────────
+
+_SYS_PATH = {"sys.path", "_sys.path"}
+_LIST_WRITES = {"insert", "append", "extend", "remove", "pop", "clear"}
+
+
+def _writes_sys_path(node: ast.AST) -> bool:
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return (
+            node.func.attr in _LIST_WRITES and ast.unparse(node.func.value) in _SYS_PATH
+        )
+    if isinstance(node, ast.Assign | ast.AugAssign):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        return any(
+            ast.unparse(t.value if isinstance(t, ast.Subscript) else t) in _SYS_PATH
+            for t in targets
+        )
+    return False
+
+
+def _sys_path_offence(subject: Subject) -> list[str]:
+    return [
+        f"line {node.lineno}: {ast.unparse(node)}"
+        for node in ast.walk(ast.parse(subject.text))
+        if isinstance(node, ast.expr | ast.stmt) and _writes_sys_path(node)
+    ]
+
+
 def _fixture(key: str, **members: str) -> Family:
     parent = key.rsplit("/", 1)[0]
     return Family(
@@ -204,6 +233,39 @@ ROWS = (
         ),
         # Four groups; the deployer's `gitops_*` family is not one.
         min_matches=4,
+    ),
+    Census(
+        name="a-qualified-area-writes-nothing-to-sys-path",
+        reason=(
+            "Slice 3 of the scripts packaging milestone qualifies an area's imports from the "
+            "installed `scripts/` root, which the venv's `.pth` and each no-venv launcher "
+            "supply (docs/adr/0039-scripts-is-installed-in-place.md). A module there that "
+            "inserts a directory again brings back a second spelling of its modules, and a "
+            "test that patches one copy misses the other. Import `lib.host_modules` for a "
+            "host or role module; a child process gets its path from `PYTHONPATH`. Each area "
+            "slice 3 finishes joins `files`."
+        ),
+        files=lambda: tracked("scripts/deploy_tools/*.py"),
+        offence=_sys_path_offence,
+        red=(
+            Subject("a.py", "import sys\nsys.path.insert(0, 'scripts')\n"),
+            Subject("b.py", "import sys as _sys\n_sys.path.append(str(DIR))\n"),
+            Subject("c.py", "import sys\nsys.path[:0] = ['scripts']\n"),
+        ),
+        green=(
+            Subject("a.py", "from lib import host_modules\nimport ci_verdict\n"),
+            Subject(
+                "b.py", '"""Reads `sys.path.insert` calls."""\nroots = list(sys.path)\n'
+            ),
+        ),
+        min_matches=200,
+        must_find=frozenset(
+            {
+                "scripts/deploy_tools/forge.py",
+                "scripts/deploy_tools/runbook_gates_lib/gate_runner.py",
+                "scripts/deploy_tools/tests/test_land_own_checkout.py",
+            }
+        ),
     ),
 )
 _IDS = [row.name for row in ROWS]

@@ -35,10 +35,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 # `probe_lib` is a namespace package under `scripts/`, as in health.py.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import alertmanager_api, core
 from diagnostics.probe_lib.obs_api import prom_query_url

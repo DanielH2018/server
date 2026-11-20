@@ -13,13 +13,10 @@ import json
 import subprocess
 from collections.abc import Callable
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import kubectl as _kubectl
 
-from forge import ForgeError
+from deploy_tools.forge import ForgeError
 
 # The namespace every Kustomization `promote` publishes lives in.
 FLUX_NAMESPACE = "flux-system"
