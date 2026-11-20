@@ -13,6 +13,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_objects import K8sObject
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.placeholders import references
@@ -101,7 +102,7 @@ def test_the_deployment_mounts_a_config_map_its_own_render_holds(rendered):
     """The pod named this ConfigMap before the conversion too; what is new is that the
     tag's render holds it, which is all `checksum/restart` can hash."""
     files, _ = rendered
-    template = pod_template(_deployment(files))
+    template = pod_template(K8sObject.from_item(_deployment(files)))
     assert template is not None
     assert ("ConfigMap", CONFIG_MAP) in pod_references(template)
     held = {

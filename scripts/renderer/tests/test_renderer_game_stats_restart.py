@@ -17,6 +17,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_objects import K8sObject
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.restart import (
@@ -71,7 +72,7 @@ def _objects(files: dict[str, str]) -> dict[tuple[str, str], dict]:
 
 
 def _pod(obj: dict) -> dict:
-    template = any_pod_template(obj)
+    template = any_pod_template(K8sObject.from_item(obj))
     assert template is not None, obj["metadata"]["name"]
     return template
 

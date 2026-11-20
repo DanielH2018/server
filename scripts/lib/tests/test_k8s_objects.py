@@ -6,6 +6,7 @@ from lib.k8s_objects import (
     LonghornVolume,
     VolumeState,
     parse_conditions,
+    parse_documents,
 )
 from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
 
@@ -40,6 +41,19 @@ def test_an_object_reads_its_metadata_and_a_missing_field_as_empty():
     )
     assert (obj.kind, obj.name, obj.namespace) == ("Volume", "pvc-a", "longhorn-system")
     assert (obj.labels, obj.annotations, obj.status, obj.conditions) == ({}, {}, {}, {})
+    assert obj.spec == {}
+
+
+def test_an_object_carries_its_spec_unparsed():
+    spec = {"template": {"spec": {"containers": []}}}
+    assert K8sObject.from_item({"kind": "Deployment", "spec": spec}).spec == spec
+
+
+def test_a_yaml_stream_parses_each_mapping_document_beside_itself():
+    stream = "kind: ConfigMap\nmetadata: {name: a}\n---\n---\n- not a mapping\n"
+    ((obj, doc),) = parse_documents([stream])
+    assert (obj.kind, obj.name) == ("ConfigMap", "a")
+    assert doc == {"kind": "ConfigMap", "metadata": {"name": "a"}}
 
 
 def test_a_volume_keeps_the_last_group_label_and_an_unknown_state_reads_unknown():

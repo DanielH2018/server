@@ -29,13 +29,14 @@ from pathlib import Path
 
 import yaml
 
-from lib import yaml_fast
+from lib.k8s_objects import K8sObject, parse_documents
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import KUSTOMIZATION, kustomization_text
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import VERIFY_SUFFIX, cronjob_gates, split_kind
+from renderer.renderer_lib.restart import any_pod_template
 from renderer.renderer_lib.snapshot import role_digest8
 
 # The Job census's annotations (`scripts/renderer/tests/_job_census.py`).
@@ -127,27 +128,26 @@ def is_gate_copy(
         bundle: Each `cluster/` directory of the bundle, mapped to its documents.
     """
     tag, suffix = split_kind(directory)
-    template = (job.get("spec") or {}).get("template") or {}
+    template = any_pod_template(K8sObject.from_item(job)) or {}
     annotations = (template.get("metadata") or {}).get("annotations") or {}
     if suffix != VERIFY_SUFFIX or ROLE_DIGEST8 not in annotations:
         return False
     own = _pod_template(template)
     for doc in bundle.get(tag, []):
-        if doc.get("kind") != "CronJob":
-            continue
-        spec = ((doc.get("spec") or {}).get("jobTemplate") or {}).get("spec") or {}
-        if own == _pod_template(spec.get("template") or {}):
+        cronjob = K8sObject.from_item(doc)
+        if cronjob.kind == "CronJob" and own == _pod_template(
+            any_pod_template(cronjob) or {}
+        ):
             return True
     return False
 
 
 def _cronjobs(files: Mapping[str, str]) -> dict[str, dict]:
-    found = {}
-    for text in files.values():
-        for doc in yaml_fast.safe_load_all(text):
-            if isinstance(doc, dict) and doc.get("kind") == "CronJob":
-                found[str((doc.get("metadata") or {}).get("name"))] = doc
-    return found
+    return {
+        obj.name: doc
+        for obj, doc in parse_documents(files.values())
+        if obj.kind == "CronJob"
+    }
 
 
 def gate_files(

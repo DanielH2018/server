@@ -38,6 +38,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -167,20 +168,59 @@ class Api:
 # ── cluster checks. Each returns its refusals; an empty list is a pass ───────────────────────
 
 
-def _items(doc: dict) -> list[dict]:
+# DECIDED: a host-local view of `scripts/lib/k8s_objects.py:K8sObject`. This script ships alone,
+# stdlib-only, so it cannot import the repo's copy; test_k3s_gates_parity.py holds the two equal.
+@dataclass(frozen=True)
+class _Object:
+    """One API object's fields the checks read, parsed once.
+
+    Attributes:
+        name: `.metadata.name`, or "?" when it is absent, as a refusal names it.
+        namespace: `.metadata.namespace`, or "".
+        generation: `.metadata.generation`, or None when it is not an int.
+        labels: `.metadata.labels`.
+        spec: `.spec`, unparsed.
+        status: `.status`, unparsed.
+        conditions: each `.status.conditions` entry keyed by its `type`. The first entry of a
+            type wins.
+    """
+
+    name: str
+    namespace: str
+    generation: int | None
+    labels: dict
+    spec: dict
+    status: dict
+    conditions: dict[str, dict]
+
+    def condition(self, kind: str) -> object:
+        """The `status` of condition `kind`, unconverted; "Unknown" when it has none."""
+        return self.conditions.get(kind, {}).get("status", "Unknown")
+
+    @classmethod
+    def parse(cls, item: dict) -> _Object:
+        meta = item.get("metadata") or {}
+        status = item.get("status") or {}
+        conditions: dict[str, dict] = {}
+        for raw in status.get("conditions") or []:
+            conditions.setdefault(str(raw.get("type")), raw)
+        generation = meta.get("generation")
+        return cls(
+            name=str(meta.get("name", "?")),
+            namespace=str(meta.get("namespace") or ""),
+            generation=generation if isinstance(generation, int) else None,
+            labels=meta.get("labels") or {},
+            spec=item.get("spec") or {},
+            status=status,
+            conditions=conditions,
+        )
+
+
+def _items(doc: dict) -> list[_Object]:
     items = doc.get("items")
     if not isinstance(items, list):
         raise ReadError("the list has no items array")
-    return [i for i in items if isinstance(i, dict)]
-
-
-def _name(item: dict) -> str:
-    return str((item.get("metadata") or {}).get("name", "?"))
-
-
-def _condition(item: dict, kind: str) -> dict | None:
-    conditions = (item.get("status") or {}).get("conditions") or []
-    return next((c for c in conditions if c.get("type") == kind), None)
+    return [_Object.parse(i) for i in items if isinstance(i, dict)]
 
 
 def check_volumes(get: Getter) -> list[str]:
@@ -190,10 +230,10 @@ def check_volumes(get: Getter) -> list[str]:
         return ["no Longhorn volume is listed"]
     refusals = []
     for item in items:
-        robustness = str((item.get("status") or {}).get("robustness", ""))
+        robustness = str(item.status.get("robustness", ""))
         if robustness not in SAFE_ROBUSTNESS:
             refusals.append(
-                f"volume {_name(item)} is {robustness or 'reporting no robustness'}"
+                f"volume {item.name} is {robustness or 'reporting no robustness'}"
             )
     return refusals
 
@@ -206,20 +246,15 @@ def check_backups(get: Getter) -> list[str]:
     """Refuse on a Backup CR that is not settled, an empty state included."""
     refusals = []
     for item in _items(get(BACKUPS_PATH)):
-        state = str((item.get("status") or {}).get("state") or "")
+        state = str(item.status.get("state") or "")
         if state not in SETTLED_BACKUP:
-            refusals.append(
-                f"backup {_name(item)} is {state or 'in flight (no state)'}"
-            )
+            refusals.append(f"backup {item.name} is {state or 'in flight (no state)'}")
     return refusals
 
 
 def check_nodes(get: Getter, expected: tuple[str, ...] = NODES) -> list[str]:
     """Refuse on an expected node that is absent or whose `Ready` condition is not True."""
-    seen = {}
-    for item in _items(get(NODES_PATH)):
-        ready = _condition(item, "Ready")
-        seen[_name(item)] = str((ready or {}).get("status", "Unknown"))
+    seen = {item.name: str(item.condition("Ready")) for item in _items(get(NODES_PATH))}
     refusals = []
     for name in expected:
         if name not in seen:
@@ -231,21 +266,20 @@ def check_nodes(get: Getter, expected: tuple[str, ...] = NODES) -> list[str]:
 
 def check_coredns(get: Getter) -> list[str]:
     """Refuse until the CoreDNS rollout finished, not merely while `Available` is True."""
-    doc = get(COREDNS_PATH)
-    generation = (doc.get("metadata") or {}).get("generation")
-    status = doc.get("status") or {}
+    coredns = _Object.parse(get(COREDNS_PATH))
+    status = coredns.status
     fields = {
         k: status.get(k) for k in ("replicas", "updatedReplicas", "availableReplicas")
     }
     missing = [k for k, v in fields.items() if not isinstance(v, int)]
-    if not isinstance(generation, int) or not isinstance(
+    if coredns.generation is None or not isinstance(
         status.get("observedGeneration"), int
     ):
         missing.append("generation")
     if missing:
         return [f"coredns reports no {', '.join(missing)}"]
     refusals = []
-    if status["observedGeneration"] != generation:
+    if status["observedGeneration"] != coredns.generation:
         refusals.append("coredns has not observed its latest generation")
     if len(set(fields.values())) != 1:
         refusals.append(f"coredns rollout is unfinished: {fields}")
@@ -273,7 +307,7 @@ def check_server_restart(get: Getter, now: datetime) -> list[str]:
     `kube-system/kube-controller-manager` Lease under a fresh holder identity, which writes a
     new `acquireTime`. The node's `Ready` transition is no signal: a restart never moves it.
     """
-    spec = get(LEASE_PATH).get("spec") or {}
+    spec = _Object.parse(get(LEASE_PATH)).spec
     if not spec.get("holderIdentity"):
         return ["the controller-manager Lease has no holderIdentity"]
     duration = spec.get("leaseDurationSeconds")
@@ -302,30 +336,24 @@ def check_server_plan_done(get: Getter, version: str | None) -> list[str]:
     if not version:
         return ["SYSTEM_UPGRADE_PLAN_LATEST_VERSION is unset"]
     want = _munge(version)
-    plan = get(f"{PLANS_PATH}/{SERVER_PLAN}")
-    status = plan.get("status") or {}
+    plan = _Object.parse(get(f"{PLANS_PATH}/{SERVER_PLAN}"))
+    status = plan.status
     refusals = []
     if status.get("applying"):
         refusals.append(f"plan {SERVER_PLAN} is applying to {status['applying']}")
-    if (_condition(plan, "Complete") or {}).get("status") != "True":
+    if plan.condition("Complete") != "True":
         refusals.append(f"plan {SERVER_PLAN} is not Complete")
     latest = status.get("latestVersion")
     if not isinstance(latest, str) or _munge(latest) != want:
         refusals.append(f"plan {SERVER_PLAN} resolved {latest!r}, not {want}")
-    servers = [
-        n
-        for n in _items(get(NODES_PATH))
-        if CONTROL_PLANE_LABEL in ((n.get("metadata") or {}).get("labels") or {})
-    ]
+    servers = [n for n in _items(get(NODES_PATH)) if CONTROL_PLANE_LABEL in n.labels]
     if not servers:
         refusals.append("no control-plane node is listed")
     for node in servers:
-        running = str(
-            (node.get("status") or {}).get("nodeInfo", {}).get("kubeletVersion", "")
-        )
+        running = str(node.status.get("nodeInfo", {}).get("kubeletVersion", ""))
         if _munge(running) != want:
             refusals.append(
-                f"node {_name(node)} runs {running or 'no version'}, not {want}"
+                f"node {node.name} runs {running or 'no version'}, not {want}"
             )
     return refusals
 
@@ -334,14 +362,14 @@ def check_suc_idle(get: Getter) -> list[str]:
     """Host mode: refuse while a Plan is applying or a SUC Job has not finished."""
     refusals = []
     for plan_name in (SERVER_PLAN, AGENT_PLAN):
-        plan = get(f"{PLANS_PATH}/{plan_name}")
-        applying = (plan.get("status") or {}).get("applying")
+        applying = _Object.parse(get(f"{PLANS_PATH}/{plan_name}")).status.get(
+            "applying"
+        )
         if applying:
             refusals.append(f"plan {plan_name} is applying to {applying}")
     for job in _items(get(JOBS_PATH)):
-        done = [_condition(job, k) for k in ("Complete", "Failed")]
-        if not any(c and c.get("status") == "True" for c in done):
-            refusals.append(f"job {_name(job)} has not finished")
+        if "True" not in (job.condition(k) for k in ("Complete", "Failed")):
+            refusals.append(f"job {job.name} has not finished")
     return refusals
 
 
@@ -353,24 +381,18 @@ def check_flux_settled(get: Getter, notes: list[str]) -> list[str]:
     clause and named in `notes`.
     """
     items = _items(get(KUSTOMIZATIONS_PATH))
-    if ROOT_KUSTOMIZATION not in {_name(i) for i in items}:
+    if ROOT_KUSTOMIZATION not in {i.name for i in items}:
         return [f"Kustomization {ROOT_KUSTOMIZATION} is not listed"]
     refusals: list[str] = []
     revisions: dict[str, object] = {}
     for item in items:
-        name, spec, status = (
-            _name(item),
-            item.get("spec") or {},
-            item.get("status") or {},
-        )
+        name, spec, status = item.name, item.spec, item.status
         if spec.get("suspend") is True:
             notes.append(f"Kustomization {name} is suspended: skipped")
             continue
-        if (_condition(item, "Ready") or {}).get("status") != "True":
+        if item.condition("Ready") != "True":
             refusals.append(f"Kustomization {name} is not Ready")
-        if status.get("observedGeneration") != (item.get("metadata") or {}).get(
-            "generation"
-        ):
+        if status.get("observedGeneration") != item.generation:
             refusals.append(
                 f"Kustomization {name} has not observed its latest generation"
             )
@@ -380,13 +402,12 @@ def check_flux_settled(get: Getter, notes: list[str]) -> list[str]:
             refusals.append(f"Kustomization {name} follows an unknown source kind")
             continue
         path = template.format(
-            ns=ref.get("namespace") or (item.get("metadata") or {}).get("namespace"),
+            ns=ref.get("namespace") or item.namespace,
             name=ref.get("name"),
         )
         if path not in revisions:
-            revisions[path] = (
-                (get(path).get("status") or {}).get("artifact") or {}
-            ).get("revision")
+            artifact = _Object.parse(get(path)).status.get("artifact") or {}
+            revisions[path] = artifact.get("revision")
         if not revisions[path] or status.get("lastAppliedRevision") != revisions[path]:
             refusals.append(
                 f"Kustomization {name} has not applied its source's revision"

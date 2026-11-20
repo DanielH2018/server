@@ -175,7 +175,7 @@ def node_restarted(api: k3s_gates.Api, node: str, since: float) -> bool:
     """True when the node reads Ready=True with a heartbeat at least a second after `since`."""
     try:
         doc = api(f"{k3s_gates.NODES_PATH}/{node}")
-        ready = k3s_gates._condition(doc, "Ready") or {}
+        ready = k3s_gates._Object.parse(doc).conditions.get("Ready", {})
         if ready.get("status") != "True":
             return False
         beat = k3s_gates._utc(ready.get("lastHeartbeatTime"), "lastHeartbeatTime")

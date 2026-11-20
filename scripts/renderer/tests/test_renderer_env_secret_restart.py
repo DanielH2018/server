@@ -17,6 +17,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_objects import K8sObject
 from lib.k8s_roles import k8s_tags
 from render_share import placeholder_renderer
 from renderer import homelab_render
@@ -84,7 +85,7 @@ def env_secret_workloads(out: Path, tags: Iterable[str]) -> dict[tuple[str, str]
         if not any(obj.get("kind") == "Secret" for _, obj in documents):
             continue
         for _, obj in documents:
-            template = pod_template(obj)
+            template = pod_template(K8sObject.from_item(obj))
             if template is None or not _reads_a_secret_through_env(template):
                 continue
             annotations = (template.get("metadata") or {}).get("annotations") or {}
@@ -236,7 +237,7 @@ def test_every_env_secret_a_workload_reads_moves_its_checksum_is_clean(
         targets = restart_targets(tag, tag_context(K8S_ROLES / tag, tag, {}))
         outside = outside_secrets(tag)
         for _, obj in documents:
-            template = pod_template(obj)
+            template = pod_template(K8sObject.from_item(obj))
             if template is None or not _env_secret_names(template):
                 continue
             name = obj["metadata"]["name"]

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_objects import parse_documents
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, select_tags, tag_context
@@ -49,10 +49,10 @@ def _workloads(out: Path, tag: str) -> dict[str, dict]:
     found = {}
     for directory in (tag, tag + DEFERRED_SUFFIX):
         for path in sorted((out / "cluster" / directory).glob("*.yaml")):
-            for obj in yaml_fast.safe_load_all(path.read_text()):
+            for obj, _ in parse_documents([path.read_text()]):
                 template = pod_template(obj)
                 if template is not None:
-                    found[obj["metadata"]["name"]] = template
+                    found[obj.name] = template
     return found
 
 
