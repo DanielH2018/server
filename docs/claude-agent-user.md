@@ -594,7 +594,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 |---|---|---|
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
-| 3 | The `claude-restart@` broker and its allowlist | The broker is built with an empty allowlist, and only root starts it. The first workload, the exclusion in the poller and the caller's polkit rule are planned; see [The restart allowlist](#the-restart-allowlist). |
+| 3 | The `claude-restart@` broker and its allowlist | The broker is built, its allowlist holds `docs`, and only root starts it. The caller's polkit rule and the triage run's request are planned; see [The restart allowlist](#the-restart-allowlist). |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs a visible agent account (#5126). |
 | 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
@@ -796,19 +796,30 @@ The operator ruled on 2026-11-20 that a listed service is unrouted. The poller r
 fall whose `service` is on the allowlist to `none`, so the exclusion holds by construction. A
 listed workload still pages through Alertmanager, where every Deployment alert in
 `k8s-workloads.yaml` pages, and `K8sDeploymentRolloutStalled` and
-`K8sDeploymentReplicasUnavailable` are not routes. It never opens a triage episode. That
-exclusion ships in the poller with the first listed workload.
+`K8sDeploymentReplicasUnavailable` are not routes. It never opens a triage episode. The
+config hands the poller the listed services as `RESTART_SERVICES`, and the exclusion wins over
+any `poll_routes` key. A poll that cannot read that key fails and pages, because an empty list
+would route a listed service again. While any service is listed, a fall whose `service` is
+`unmapped` opens nothing either: a workload alert carries that label while its mapping series
+is missing, so the fall may be the restarted workload's. `WorkloadServiceUnmapped` still pages
+a mapping that stays missing. `hosts/tests/test_claude_restart_allowlist.py` holds each entry to the
+list below, and fails when `poll_routes` names a listed service (#8259).
+
+The allowlist holds `docs`.
 
 An allowlist entry must be:
 
-- a one-replica `RollingUpdate` Deployment whose effective `maxUnavailable` is 0, with a
-  readiness probe on its serving container, so a failed restart causes no outage;
-- digest-pinned, so a restart cannot pull different code;
-- the only Deployment of its role, because the `service` label is the role and listing one
-  Deployment takes the whole role out of triage;
-- outside the alert plane: not `prometheus`, `alertmanager`, `kube-state-metrics`,
-  `blackbox-exporter`, `monitor-bridge` or `coredns`, where a failed restart removes the thing
-  that reports it.
+- a `RollingUpdate` Deployment with at least one replica, not paused, whose effective
+  `maxUnavailable` is 0, with a readiness probe on every container, so a failed restart causes
+  no outage;
+- free of a host port, the host network and a claim, none of which the surge pod could share;
+- digest-pinned in every container and init container, so a restart cannot pull different
+  code;
+- the only workload of its role, of any kind, because the `service` label is the role and
+  listing one Deployment takes the whole role out of triage;
+- outside the alert plane: not the `observability`, `blackbox-exporter`, `monitor-bridge` or
+  `loki-homelab` role, and not `coredns`, where a failed restart removes the thing that
+  reports it. The test keeps that list by hand, so a role that starts sending pages joins it.
 
 ### The restart broker
 
@@ -850,7 +861,16 @@ To run the drill (**operator-only**, because only root starts the unit):
 sudo systemctl start homelab-claude-restart@docs; cat /var/lib/claude-restart/verdict
 ```
 
-While the allowlist is empty, the verdict reads `verdict=refused cause=not-listed`. To hold the
+The first run restarts the `docs` Deployment and reads `verdict=restarted`, with one Discord
+post. A second run inside 24 hours reads `verdict=refused cause=rate`, and a name off the
+allowlist reads `cause=not-listed`. After the first restart, wait one Flux reconcile and count
+the ReplicaSets, which shows whether Flux left the restart alone:
+
+```bash
+kubectl -n homelab get replicasets -l app=docs --sort-by=.metadata.creationTimestamp
+```
+
+To hold the
 broker without a landing, run `sudo touch /etc/claude-restart/hold`, and remove the file to
 release it. To switch the broker off, set `claude_code_restart_enabled: false` and let the
 next package version install. The log stays.

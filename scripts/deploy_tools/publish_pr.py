@@ -98,7 +98,7 @@ from lib import git as git_mod
 # The gate job's check-run name and its `needs`, which the red-PR read below needs to excuse a
 # gate that failed only because its run was cancelled, and the rule that grades one check.
 from lib import host_modules  # noqa: F401
-from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, CheckRun, RunState
+from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, RunState, parse_rollup
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
 # rejection line, short enough for a one-line report.
@@ -363,11 +363,6 @@ def pr_view(number: str, tools: PublishTools) -> dict:
     return view if isinstance(view, dict) else {}
 
 
-def rollup_checks(view: dict) -> list[CheckRun]:
-    """The PR's ``statusCheckRollup``, each node parsed once; a malformed node raises ValueError."""
-    return [CheckRun.from_rollup(node) for node in view.get("statusCheckRollup") or []]
-
-
 def failed_checks(view: dict) -> list[str]:
     """The names of the checks in ``view`` that concluded red, in rollup order.
 
@@ -379,7 +374,7 @@ def failed_checks(view: dict) -> list[str]:
     toward "no verdict", the same side CANCELLED itself takes. A conclusion
     ``CheckRun.state`` grades FAIL, such as ``ACTION_REQUIRED``, counts as red.
     """
-    checks = rollup_checks(view)
+    checks = parse_rollup(view.get("statusCheckRollup"))
     needs = [c for c in checks if c.name in CI_GATE_NEEDS_JOBS]
     cancelled_run = any(c.conclusion == "cancelled" for c in needs) and not any(
         c.state is RunState.FAIL for c in needs
@@ -410,7 +405,7 @@ def merge_if_stalled(number: str, view: dict, tools: PublishTools) -> str:
       lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
       or why the merge was refused.
     """
-    checks = rollup_checks(view)
+    checks = parse_rollup(view.get("statusCheckRollup"))
     # Green needs the CI gate itself: a rollup holding only an app's check, such as
     # GitGuardian's, is a PR whose CI never ran. Every check must pass, not only the gate.
     green = any(c.name == CI_GATE_NAME for c in checks) and all(

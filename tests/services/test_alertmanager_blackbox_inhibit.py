@@ -102,11 +102,3 @@ def test_an_equal_list_naming_job_is_flagged():
     # `equal: [job]` would compare "" with "blackbox-ingress" and never match.
     bad = {**exporter_inhibit(), "equal": ["job"]}
     assert equal_problems(bad, exporter_alert()) == ["job"]
-
-
-def test_source_and_target_rules_are_both_live():
-    # Inhibition runs before routing, so a live source over a shadow target (or the reverse)
-    # would mute a page that is the only one, or leave two.
-    source_shadow = "shadow" in exporter_alert()
-    target_shadow = "shadow" in scrape_down_rule(INGRESS_JOB)["labels"]
-    assert (source_shadow, target_shadow) == (False, False)

@@ -41,12 +41,13 @@ from lib import host_modules  # noqa: F401
 
 from builder_ci_grade import read_check_pages
 from ci_verdict import (
-    _CI_NO_VERDICT_CONCLUSIONS,
     CheckRun,
+    CheckSuite,
     CIVerdict,
     RunState,
     ci_verdict,
     parse_check_runs,
+    parse_check_suites,
 )
 from host_lib import github_get, github_token
 
@@ -153,14 +154,16 @@ def fetch_check_runs(sha: str) -> list[CheckRun]:
     return parse_check_runs(_github_pages(f"commits/{sha}/check-runs", "check_runs"))
 
 
-def fetch_check_suites(sha: str) -> list[dict]:
+def fetch_check_suites(sha: str) -> list[CheckSuite]:
     """Check-suites for one SHA.
 
     One per workflow run, present even when the run was cancelled before any job
     registered a check-run. Fetched only when no required run exists, so it costs
     nothing on the ordinary path.
     """
-    return _github_pages(f"commits/{sha}/check-suites", "check_suites")
+    return parse_check_suites(
+        _github_pages(f"commits/{sha}/check-suites", "check_suites")
+    )
 
 
 def lookup_token() -> str | None:
@@ -295,7 +298,7 @@ def draft_skipped(runs: list[CheckRun], required) -> bool:
 
 
 def _cancelled_before_any_run_registered(
-    runs: list[CheckRun], suites: list[dict], required
+    runs: list[CheckRun], suites: list[CheckSuite], required
 ) -> bool:
     """True when no required run exists and CI already finished with no verdict.
 
@@ -310,12 +313,7 @@ def _cancelled_before_any_run_registered(
     """
     if any(r.name in required for r in runs):
         return False
-    return any(
-        s.get("status") == "completed"
-        and s.get("conclusion") in _CI_NO_VERDICT_CONCLUSIONS
-        and not s.get("latest_check_runs_count")
-        for s in suites
-    )
+    return any(s.ended_without_a_run for s in suites)
 
 
 def _no_verdict_will_ever_arrive(
@@ -347,7 +345,7 @@ def _descendants(sha: str) -> list[str]:
     return out.split()
 
 
-def _push_was_dropped(runs: list[CheckRun], suites: list[dict], required) -> bool:
+def _push_was_dropped(runs: list[CheckRun], suites: list[CheckSuite], required) -> bool:
     """True when GitHub Actions has registered nothing at all for the SHA.
 
     Only an Actions suite counts. Another app's suite (gitguardian, renovate) says nothing
@@ -356,7 +354,7 @@ def _push_was_dropped(runs: list[CheckRun], suites: list[dict], required) -> boo
     """
     if any(r.name in required for r in runs):
         return False
-    return not any((s.get("app") or {}).get("slug") == "github-actions" for s in suites)
+    return not any(s.from_actions for s in suites)
 
 
 def descendant_verdict(

@@ -17,7 +17,16 @@ from deploy_tools.land_lib import merge, stuck_checks
 from deploy_tools.land_lib.outcome import Outcome
 
 _SUITE = 116713431402
-_STUCK = [{"name": "pull + boot changed images", "suite": _SUITE}]
+_STUCK = [
+    {
+        "name": "pull + boot changed images",
+        "status": "queued",
+        "conclusion": None,
+        "check_suite": {"id": _SUITE},
+    }
+]
+_DONE = [{"id": _SUITE, "status": "completed", "conclusion": "failure"}]
+_RUNNING = [{"id": _SUITE, "status": "in_progress", "conclusion": None}]
 
 
 def _refused_green_head(landing, pending_checks, completed_suites):
@@ -47,7 +56,7 @@ def _refused_green_head(landing, pending_checks, completed_suites):
 
 
 def test_a_check_pending_under_a_completed_run_ends_the_wait_with_the_remedy(landing):
-    ln, calls = _refused_green_head(landing, _STUCK, [_SUITE])
+    ln, calls = _refused_green_head(landing, _STUCK, _DONE)
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
@@ -63,10 +72,10 @@ def test_a_check_pending_under_a_completed_run_ends_the_wait_with_the_remedy(lan
 @pytest.mark.parametrize(
     "pending_checks, completed_suites",
     [
-        (_STUCK, []),
-        ([], [_SUITE]),
+        (_STUCK, _RUNNING),
+        ([], _DONE),
         (subprocess.CalledProcessError(1, "gh", stderr="HTTP 404: Not Found"), []),
-        (["not a run"], [_SUITE]),
+        (["not a run"], _DONE),
     ],
     ids=["run-still-in-progress", "nothing-pending", "gh-fails", "not-a-run"],
 )

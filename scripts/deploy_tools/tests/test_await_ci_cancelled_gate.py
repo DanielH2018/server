@@ -9,7 +9,12 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_cancelled_gate.py
 
 from deploy_tools import await_ci
 from lib.exit_codes import CI_PENDING
-from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS, parse_check_runs
+from ci_verdict import (
+    CI_GATE_NAME,
+    CI_GATE_NEEDS_JOBS,
+    parse_check_runs,
+    parse_check_suites,
+)
 
 REQUIRED = frozenset({CI_GATE_NAME})
 # Suite 7's jobs were cancelled and its gate failed on them.
@@ -35,7 +40,9 @@ RUNS = parse_check_runs(
 
 
 def _suites(conclusion):
-    return lambda _s: [{"id": 7, "status": "completed", "conclusion": conclusion}]
+    return lambda _s: parse_check_suites(
+        [{"id": 7, "status": "completed", "conclusion": conclusion}]
+    )
 
 
 def test_a_gate_failed_by_a_cancelled_run_is_pending():

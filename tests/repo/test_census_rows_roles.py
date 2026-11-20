@@ -365,6 +365,36 @@ ROWS = (
             }
         ),
     ),
+    Census(
+        name="ha-config-reads-no-persistent-notification-state",
+        reason=(
+            "Home Assistant has kept persistent notifications out of the state machine since "
+            "release 2023.6, so `states.persistent_notification` is always empty and a template "
+            "that counts it is always false. The arrival flush counted it and delivered no held "
+            "alert for five months (#9598). Keep what a template must read back in an entity, "
+            "as `sensor.bedroom_held_alerts` does."
+        ),
+        files=lambda: tracked("k8s/roles/home-assistant/files/*"),
+        offence=lambda s: [
+            f"line {n} reads states.persistent_notification"
+            for n, code in _code(s)
+            if "states.persistent_notification" in code
+        ],
+        red=(
+            Subject(
+                "alerts.yaml",
+                '      value_template: "{{ states.persistent_notification | list | count > 0 }}"\n',
+            ),
+        ),
+        green=(
+            Subject(
+                "alerts.yaml",
+                "      value_template: \"{{ state_attr('sensor.bedroom_held_alerts', 'held') | count > 0 }}\"\n"
+                "    - service: persistent_notification.dismiss\n",
+            ),
+        ),
+        must_find=frozenset({"k8s/roles/home-assistant/files/automations/alerts.yaml"}),
+    ),
     HOST_SCRIPT_WRITES,
     K8S_ROLES_ARE_REACHABLE,
     ROLE_PYTHON_HAS_TESTS,

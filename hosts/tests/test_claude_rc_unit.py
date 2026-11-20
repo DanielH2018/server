@@ -213,10 +213,12 @@ def test_memory_swap_max_bounds_the_cgroups_swap(unit: str) -> None:
     )
 
 
-def test_alert_unit_is_the_onfailure_target(unit: str) -> None:
-    assert "OnFailure=claude-rc-alert.service" in unit, (
-        "claude-rc.service must page on failure via OnFailure=claude-rc-alert.service"
-    )
+def test_alert_unit_is_the_onfailure_target(unit: str, tmp_path) -> None:
+    """The page must name the alert unit the package ships, not a name no host installs."""
+    package = render_daniel_server_with(tmp_path)
+    shipped = "homelab-claude-rc-alert.service"
+    assert f"/usr/lib/systemd/system/{shipped}" in package.files
+    assert directive(unit, "OnFailure") == [shipped]
 
 
 REAP_ENV = "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP"

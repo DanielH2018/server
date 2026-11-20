@@ -12,7 +12,8 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
-from gh_quota import Ledger, Window, classify, main, render, session_key
+from gh_quota import Ledger, Window, classify, is_write, session_key
+from gh_quota_cli import main, render
 from lib.proc_testing import write_exec
 
 from _gh_quota_fakes import RESET, SESSION, identity_of, make_ledger
@@ -49,6 +50,26 @@ from _gh_quota_fakes import RESET, SESSION, identity_of, make_ledger
 )
 def test_classify_names_the_bucket_and_the_call_class(argv, expected):
     assert classify(argv) == expected
+
+
+@pytest.mark.parametrize(
+    ("argv", "writes"),
+    [
+        (["pr", "create", "--title", "t"], True),
+        (["pr", "ready", "123"], True),
+        (["issue", "comment", "9", "--body", "x"], True),
+        (["api", "repos/o/r/issues/1/comments", "-f", "body=hi"], True),
+        (["api", "graphql", "-f", "query=mutation { a }"], True),
+        (["pr", "view", "123"], False),
+        (["pr", "checkout", "123"], False),
+        (["run", "list"], False),
+        (["api", "repos/o/r/pulls"], False),
+    ],
+)
+def test_a_call_that_creates_content_is_a_write(argv, writes):
+    call = classify(argv)
+    assert call is not None
+    assert is_write(call[1]) is writes
 
 
 def test_a_call_is_counted_against_the_claude_session_before_the_service(
@@ -302,11 +323,11 @@ def test_status_lists_only_the_sessions_over_the_share_until_asked_for_all():
     )
     loud = "  loud  1000 calls  issue list x960, pr view x40"
 
-    assert render([window], failures=0, every=False) == [
+    assert render([window], [], failures=0, every=False) == [
         count + "; --all lists 1 more",
         loud,
     ]
-    assert render([window], failures=0, every=True) == [
+    assert render([window], [], failures=0, every=True) == [
         count,
         loud,
         "  quiet  12 calls  pr view x12",
@@ -316,6 +337,7 @@ def test_status_lists_only_the_sessions_over_the_share_until_asked_for_all():
 def test_the_command_prints_status_as_one_line_of_json(recording, capsys):
     ledger, _clock, _gh = recording
     ledger.record(["pr", "list"])
+    ledger.record(["pr", "ready", "123"])
 
     assert main(["status", "--json"], ledger) == 0
 
@@ -325,10 +347,29 @@ def test_the_command_prints_status_as_one_line_of_json(recording, capsys):
     assert (row["bucket"], row["used"], row["recorded"], row["beyond"]) == (
         "graphql",
         100,
-        1,
-        99,
+        2,
+        98,
     )
-    assert row["sessions"] == {SESSION: {"pr list": 1}}
+    assert row["sessions"] == {SESSION: {"pr list": 1, "pr ready": 1}}
+    assert (row["writes_minute"], row["writes_hour"]) == (1, 1)
+
+
+def test_status_prints_recent_writes_against_the_secondary_limits(recording, capsys):
+    ledger, clock, _gh = recording
+    for _ in range(3):
+        ledger.record(["pr", "create", "--fill"])
+    clock.t += 61
+    ledger.record(["issue", "comment", "9", "--body", "x"])
+    ledger.record(["pr", "view", "123"])
+    clock.t += 3540
+    ledger.record(["pr", "merge", "123"])
+
+    assert main(["status"], ledger) == 0
+
+    identity = identity_of("gho_operator")
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        f"{identity} writes: 1/80 in the last minute, 2/500 in the last hour"
+    )
 
 
 def test_the_command_says_so_when_the_host_does_not_record(tmp_path: Path, capsys):

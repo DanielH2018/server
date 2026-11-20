@@ -59,8 +59,7 @@ claude_code_pipeline_timeline_enabled: true
 # Posts the previous week's triage runs and Renovate ticks every Monday.
 # False removes the timer and its units; the posted-week record stays.
 claude_code_weekly_summary_enabled: true
-# homelab-claude-restart@<name>.service: root restarts one allowlisted Deployment. The allowlist is
-# empty, so every request is refused. False removes the unit, the script and the config.
+# homelab-claude-restart@<name>.service: root restarts one allowlisted Deployment. False removes the unit, the script and the config.
 claude_code_restart_enabled: true
 # The D5 flip pre-merge checks as one sudoers-granted wrapper; daniel-box holds the
 # cluster-admin kubeconfig. False removes the grant, the wrapper, the flux copy and the state dir.

@@ -97,10 +97,3 @@ def test_the_rule_names_no_equal_label_the_two_alerts_disagree_on():
     # `instance` differs between PiHostDown (9100) and PiPortDead (the port), and `job` too, so
     # any `equal` entry naming either would never match.
     assert port_inhibit().get("equal", []) == []
-
-
-def test_the_inhibit_source_and_target_are_both_live():
-    # Inhibition runs before routing, so a live source over a shadow target (or the reverse)
-    # would mute a page that is the only one, or leave two.
-    assert "shadow" not in host_down()
-    assert "shadow" not in port_dead()

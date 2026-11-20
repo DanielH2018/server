@@ -36,9 +36,18 @@ without either pod running privileged
   physical render node, multiplexed across however many pods request it concurrently.
 - `priorityClassName: system-node-critical` — this must not be the pod evicted to make room
   for jellyfin or tdarr, which is exactly backwards from what losing it does to them.
-- **The `dri-admission-reaper` CronJob deletes the pods a reboot rejects** (#6367). After a
-  reboot the kubelet can re-admit a GPU pod before this plugin re-registers. The pod ends
-  `Failed` with `UnexpectedAdmissionError`, its ReplicaSet replaces it, and nothing else
+- **A k3s restart without a reboot leaves the same gap as a reboot** (#9239). The kubelet runs
+  inside the k3s process, and every kubelet start empties `/var/lib/kubelet/device-plugins`,
+  which deletes this plugin's socket. The plugin logs `failed to stat plugin socket ... no such
+  file or directory`, waits 5 seconds and registers again. Until it registers, the kubelet holds
+  no healthy `devic.es/dri` device and rejects a GPU pod with `UnexpectedAdmissionError`. The
+  plugin pod does not restart, so its age and restart count hide the gap; its log shows it. On
+  2026-11-18 k3s on daniel-box exited three times between 21:20 and 21:26 UTC, each after
+  kube-controller-manager logged `leaderelection lost` (#9060), and the tdarr ReplicaSet
+  created three pods before one ran.
+- **The `dri-admission-reaper` CronJob deletes the pods a reboot or a k3s restart rejects**
+  (#6367). After either, the kubelet can admit a GPU pod before this plugin re-registers. The
+  pod ends `Failed` with `UnexpectedAdmissionError`, its ReplicaSet replaces it, and nothing else
   deletes it, because the controller-manager's `terminated-pod-gc-threshold` is 12500 pods.
   Every 15 minutes the job deletes each `Failed` pod a ReplicaSet owns whose reason is
   `UnexpectedAdmissionError` or `OutOf<resource>`, and nothing else; the rule is

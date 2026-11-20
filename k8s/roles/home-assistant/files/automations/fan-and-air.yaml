@@ -320,6 +320,7 @@
                 title: "🪟 Open a window?"
                 message: "Air's stale (CO₂ {{ co2 }} ppm) — it's {{ out_temp }}°F & clean outside. Crack a window."
                 tag: window_advice
+                alert_class: comfort
         - conditions: "{{ verdict == 'cool' }}"
           sequence:
             - service: script.bedroom_notify
@@ -327,6 +328,7 @@
                 title: "🪟 Free cooling"
                 message: "It's {{ out_temp }}°F outside ({{ temp_delta }}° cooler) & clean — open up instead of the fan."
                 tag: window_advice
+                alert_class: comfort
 
 # Close-the-window advisor — the mirror of bedroom_window_advisor above, possible only because the
 # SNZB-04 contact sensor makes "is it actually open?" knowable. Every branch is gated on
@@ -381,6 +383,7 @@
                 title: "🪟 Close the window"
                 message: "Outdoor air went bad (PM2.5 {{ outdoor_pm }}) — shut the window, the purifier can't keep up with it open."
                 tag: window_close_advice
+                alert_class: safety
                 # The only branch that pierces: bringing smoke indoors is the damage-class one, and
                 # it stays actionable at 3am. Rain and cold wait for you to look at your phone.
                 pierce: true
@@ -391,6 +394,8 @@
                 title: "🪟 Rain — window's open"
                 message: "It's {{ states('weather.forecast_home') }} outside and the window is open."
                 tag: window_close_advice
+                # Rain through an open window is water in the room.
+                alert_class: safety
         - conditions: "{{ verdict == 'cold' }}"
           sequence:
             - service: script.bedroom_notify
@@ -398,6 +403,7 @@
                 title: "🪟 Getting cold"
                 message: "Room's down to {{ in_temp }}°F ({{ out_temp }}°F outside) — close the window."
                 tag: window_close_advice
+                alert_class: comfort
 
 # Left-open reminder. Deliberately separate from the close advisor above: that one fires on a
 # CHANGE in conditions and can stay silent all day, this one fires on duration alone and would
@@ -432,6 +438,7 @@
                 title: "🪟 Window still open"
                 message: "The window has been open 15 minutes."
                 tag: window_left_open
+                alert_class: safety
         - conditions:
             # Only dismiss if the reminder could actually have fired — i.e. the window was open for
             # at least the 15 min above. Without this, every brief open/close would send a recovery
@@ -448,4 +455,5 @@
                 title: "🪟 Window closed"
                 message: "Window's shut again."
                 tag: window_left_open
+                alert_class: safety
                 recovery: true

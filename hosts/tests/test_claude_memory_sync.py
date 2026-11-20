@@ -124,7 +124,7 @@ def test_an_empty_source_never_reaches_delete():
         "--delete from an empty or missing store would wipe the far one; the unit must "
         "skip unless the index exists and is non-empty"
     )
-    assert "OnFailure=claude-memory-sync-alert.service" in rendered
+    assert "OnFailure=homelab-alert@%n.service" in rendered
 
 
 def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):

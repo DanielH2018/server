@@ -4,14 +4,14 @@
 GitHub meters API calls per identity, per hour, and every session on a host spends the same
 identity's quota. `record` adds one to a ledger under /var/lib/gh-quota, keyed by session, for each
 `gh` call a wrapper is about to make. About every 30 seconds it also stores what GitHub itself
-counted. `gh-quota status` prints the two side by side, so a spike has a session's name on it.
-docs/github-quota.md holds the design.
+counted. `gh-quota status`, in gh_quota_cli.py, prints the two side by side, so a spike has a
+session's name on it. docs/github-quota.md holds the design.
 
 The callers are the wrappers that already stand in front of GitHub, `scripts/lib/gh.py` and
 `ghread`. Each passes `record` the arguments it is about to hand `gh`.
 
-Installed as /usr/lib/homelab/gh_quota.py, which the wrappers import, and as
-/usr/bin/gh-quota. Without /etc/gh-quota.conf the mode is `off` and `record` returns at
+Installed as /usr/lib/homelab/gh_quota.py, which the wrappers import. It imports nothing from
+beside it, because `ghread` loads it by its file path. Without /etc/gh-quota.conf the mode is `off` and `record` returns at
 once, so a host without the package behaves as if this module were absent.
 
 Typical usage example:
@@ -20,7 +20,6 @@ Typical usage example:
     gh_quota.record(["pr", "list", "--state", "open"])
 """
 
-import argparse
 import hashlib
 import json
 import os
@@ -28,13 +27,11 @@ import re
 import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 from collections import Counter
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 LEDGER_DIR = Path("/var/lib/gh-quota")
@@ -66,6 +63,15 @@ _API_VALUE_FLAGS = frozenset(
 )  # fmt: skip
 _API_BODY_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")
 _SUBCOMMAND = re.compile(r"[a-z][a-z-]*\Z")
+# Porcelain subcommands that send a POST, PATCH, PUT or DELETE.
+_WRITE_SUBCOMMANDS = frozenset(
+    {
+        "add", "archive", "cancel", "close", "comment", "create", "delete", "disable", "edit",
+        "enable", "fork", "lock", "merge", "pin", "ready", "remove", "rename", "reopen",
+        "rerun", "review", "revert", "run", "set", "sync", "transfer", "unarchive", "unlock",
+        "unpin", "update-branch", "upload",
+    }
+)  # fmt: skip
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS spend(
@@ -75,6 +81,7 @@ CREATE TABLE IF NOT EXISTS truth(
     window INTEGER, bucket TEXT, used INTEGER, quota INTEGER, sampled REAL,
     PRIMARY KEY (window, bucket));
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value REAL);
+CREATE TABLE IF NOT EXISTS writes(at REAL, session TEXT);
 CREATE TABLE IF NOT EXISTS sampler(
     window INTEGER, bucket TEXT, session TEXT, gh TEXT, env_names TEXT,
     PRIMARY KEY (window, bucket));
@@ -106,6 +113,14 @@ def classify(args: Sequence[str]) -> tuple[str, str] | None:
         return ("core", "api write" if _api_writes(args) else "api rest")
     sub = words[1] if len(words) > 1 and _SUBCOMMAND.match(words[1]) else ""
     return ("core" if command in _REST else "graphql", f"{command} {sub}".strip())
+
+
+def is_write(argv_class: str) -> bool:
+    """Whether GitHub counts a call of this class against its content-creating limits."""
+    if argv_class in ("api mutation", "api write"):
+        return True
+    command, _, sub = argv_class.partition(" ")
+    return command != "api" and sub in _WRITE_SUBCOMMANDS
 
 
 def _api_path(args: Sequence[str]) -> str:
@@ -192,6 +207,25 @@ class Window:
         )
 
 
+@dataclass(frozen=True)
+class Writes:
+    """One identity's recorded writes in the last minute and the last hour.
+
+    A lower bound on what GitHub counted: a `gh` call that goes around the wrappers is not
+    recorded. It can also exceed it, because a write is recorded before GitHub answers, so a
+    refused write is counted too.
+
+    Attributes:
+        identity: `tok-<fingerprint>` or `uid-<n>`, as in `Window`.
+        minute: the writes recorded in the last 60 seconds.
+        hour: the writes recorded in the last 3600 seconds.
+    """
+
+    identity: str
+    minute: int
+    hour: int
+
+
 @dataclass
 class _Sample:
     """One claimed `GET /rate_limit`, read before any ledger lock is taken.
@@ -274,6 +308,7 @@ class Ledger:
         if call is None:
             return
         bucket, argv_class = call
+        session = session_key(self.env)
         try:
             with closing(self._open()) as db:
                 sample = self._take_sample(db)
@@ -283,13 +318,12 @@ class Ledger:
                         "INSERT INTO spend VALUES (?, ?, ?, ?, 1) "
                         "ON CONFLICT (window, session, bucket, argv_class) "
                         "DO UPDATE SET n = n + 1",
-                        (
-                            self._window(db, bucket),
-                            session_key(self.env),
-                            bucket,
-                            argv_class,
-                        ),
+                        (self._window(db, bucket), session, bucket, argv_class),
                     )
+                    if is_write(argv_class):
+                        db.execute(
+                            "INSERT INTO writes VALUES (?, ?)", (self.now(), session)
+                        )
         except (sqlite3.Error, OSError) as exc:
             self._failed(exc)
 
@@ -301,11 +335,8 @@ class Ledger:
                 self._store_sample(db, sample)
         now = self.now()
         found: dict[tuple[str, str], Window] = {}
-        for path in sorted(self.root.glob("*@*.sqlite")):
-            identity = path.name.split("@", 1)[0]
-            with closing(
-                sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=LOCK_WAIT_S)
-            ) as db:
+        for identity, db in self._read_each():
+            with closing(db):
                 for bucket in BUCKETS:
                     truth = db.execute(
                         "SELECT window, used, quota FROM truth WHERE bucket = ? AND window > ? "
@@ -328,6 +359,35 @@ class Ledger:
                     for session, argv_class, n in rows:
                         window.sessions.setdefault(session, Counter())[argv_class] += n
         return list(found.values())
+
+    def writes(self) -> list[Writes]:
+        """Each identity's recorded writes in the last minute and hour, for those with any."""
+        now = self.now()
+        counts: dict[str, Counter[str]] = {}
+        for identity, db in self._read_each():
+            with closing(db):
+                try:
+                    minute, hour = db.execute(
+                        "SELECT TOTAL(at > ?), COUNT(*) FROM writes WHERE at > ?",
+                        (now - 60, now - 3600),
+                    ).fetchone()
+                except sqlite3.OperationalError:
+                    # A ledger no writer has opened since the table was added has none.
+                    continue
+            counts.setdefault(identity, Counter()).update(minute=int(minute), hour=hour)
+        return [
+            Writes(identity, c["minute"], c["hour"])
+            for identity, c in counts.items()
+            if c["hour"]
+        ]
+
+    def _read_each(self) -> Generator[tuple[str, sqlite3.Connection], None, None]:
+        # Each ledger file's identity and a read-only connection to it, which the caller closes.
+        for path in sorted(self.root.glob("*@*.sqlite")):
+            yield (
+                path.name.split("@", 1)[0],
+                sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=LOCK_WAIT_S),
+            )
 
     def failures(self) -> int:
         """How many times a `record` or a sample failed within `KEEP_S`, across every caller."""
@@ -499,6 +559,7 @@ class Ledger:
         oldest = sample.taken - KEEP_S
         for table in ("spend", "truth", "sampler", "sampler_process"):
             db.execute(f"DELETE FROM {table} WHERE window < ?", (oldest,))
+        db.execute("DELETE FROM writes WHERE at < ?", (sample.taken - 3600,))
 
     def _failed(self, exc: Exception) -> None:
         log = self.root / f"failures.{os.getuid()}"
@@ -527,95 +588,12 @@ def record(
         gh: the program the caller runs as `gh`, when it is not the one on `PATH`. `ghread`
             passes the absolute path it resolved, so no `PATH` chooses the binary.
     """
-    _ledger(os.environ if env is None else env, gh).record(args)
+    ledger_for(os.environ if env is None else env, gh).record(args)
 
 
-def _ledger(env: Mapping[str, str], gh: str = "gh") -> Ledger:
-    # GH_QUOTA_DIR moves the ledger for a test that drives a real wrapper.
+def ledger_for(env: Mapping[str, str], gh: str = "gh") -> Ledger:
+    """The ledger a caller with this environment records in.
+
+    `GH_QUOTA_DIR` in the environment moves it, for a test that drives a real wrapper.
+    """
     return Ledger(root=Path(env.get("GH_QUOTA_DIR") or LEDGER_DIR), env=env, gh=gh)
-
-
-def _count(n: int, noun: str) -> str:
-    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
-
-
-def render(windows: Sequence[Window], failures: int, *, every: bool) -> list[str]:
-    """The lines `gh-quota status` prints: a count line per window, then the sessions to look at."""
-    if not windows:
-        return ["no GitHub call recorded in an open quota window"]
-    lines = []
-    for window in windows:
-        over = window.over()
-        shown = sorted(window.sessions, key=lambda s: -sum(window.sessions[s].values()))
-        shown = shown if every else over
-        hidden = len(window.sessions) - len(shown)
-        reset = datetime.fromtimestamp(window.reset, UTC).strftime("%H:%M")
-        share = round(100 * window.beyond / window.used) if window.used else 0
-        line = (
-            f"{window.identity} {window.bucket}: {window.used}/{window.quota} used, "
-            f"resets {reset} UTC; {_count(len(window.sessions), 'session')} made "
-            f"{_count(window.recorded, 'call')}; "
-            f"{window.beyond} beyond the ledger ({share}%); "
-            f"{len(over)} at or over {round(100 * ATTENTION_SHARE)}%"
-        )
-        lines.append(line + (f"; --all lists {hidden} more" if hidden else ""))
-        for session in shown:
-            calls = window.sessions[session]
-            top = ", ".join(f"{name} x{n}" for name, n in calls.most_common(3))
-            lines.append(
-                f"  {session[:36]}  {_count(sum(calls.values()), 'call')}  {top}"
-            )
-    if failures:
-        lines.append(
-            f"{failures} ledger failures in {KEEP_S // 86400} days; see {LEDGER_DIR}/failures.*"
-        )
-    return lines
-
-
-def main(argv: Sequence[str] | None = None, ledger: Ledger | None = None) -> int:
-    """Run `gh-quota`: `status` reports spend per session, `mode` prints whether the host records."""
-    parser = argparse.ArgumentParser(
-        prog="gh-quota",
-        description="GitHub API spend per session on this host, beside GitHub's own count.",
-    )
-    commands = parser.add_subparsers(dest="command", required=True)
-    status = commands.add_parser(
-        "status", help="spend per session in the open quota windows"
-    )
-    status.add_argument("--all", action="store_true", help="list every session")
-    status.add_argument(
-        "--json", action="store_true", help="print one compact JSON array"
-    )
-    commands.add_parser("mode", help="print `record` or `off`")
-    opts = parser.parse_args(argv)
-
-    ledger = ledger or _ledger(os.environ)
-    if opts.command == "mode":
-        print(ledger.mode())
-        return 0
-    if ledger.mode() == "off":
-        print(f"gh-quota is off on this host: {CONF} does not say mode=record")
-        return 0
-    windows = ledger.windows()
-    if opts.json:
-        rows = [
-            {
-                "identity": w.identity,
-                "bucket": w.bucket,
-                "used": w.used,
-                "quota": w.quota,
-                "reset": w.reset,
-                "recorded": w.recorded,
-                "beyond": w.beyond,
-                "sessions": w.sessions,
-            }
-            for w in windows
-        ]
-        print(json.dumps(rows, separators=(",", ":")))
-        return 0
-    print("\n".join(render(windows, ledger.failures(), every=opts.all)))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

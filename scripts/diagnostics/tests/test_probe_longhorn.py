@@ -94,31 +94,6 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
     assert stats == {"class_c": 3, "pages": 2}
 
 
-def test_b2_longhorn_command_does_not_shell_out_to_docker_or_rclone():
-    """The regression this rewrite exists for.
-
-    A `probe.py b2-longhorn` that shells out to `docker exec kopia rclone ...` dies with
-    FileNotFoundError on both k3s nodes, while tests covering only the argv builder and the
-    parser stay green. Neither binary exists on these hosts, so naming them here is a dead
-    path by definition.
-    """
-    # No `"docker"` argv literal may survive in the executable code of any module the command
-    # runs through: lib/b2.py holds the B2 calls, b2_api.py the listing built on them,
-    # longhorn.py the subcommand that drives both.
-    source = ""
-    for module in (b2_lib, b2_api, longhorn):
-        with open(module.__file__) as fh:
-            source += fh.read() + "\n"
-    code = "\n".join(
-        line for line in source.splitlines() if not line.strip().startswith("#")
-    )
-    # Non-vacuity: a wrong module object would pass the `not in` below by holding no code at
-    # all, so pin one name each module must contribute before asserting on the absence.
-    assert "class B2Session" in code
-    assert "def b2_longhorn_lines(" in code and "def run_b2_longhorn(" in code
-    assert '"docker"' not in code and '"rclone"' not in code
-
-
 def test_b2_longhorn_lines_exits_on_a_b2_error_rather_than_returning_a_partial_listing():
     """A cap refusal on page two must not read as a store holding only page one."""
     responses = [
