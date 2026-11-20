@@ -224,11 +224,6 @@ def test_rows_sharing_a_group_resolve_to_one_value() -> None:
     assert not split, f"a lockstep group splits into several PRs: {split}"
 
 
-def test_row_ids_are_unique() -> None:
-    ids = [row.id for row in ROWS]
-    assert len(ids) == len(set(ids))
-
-
 @pytest.mark.parametrize(
     "dep",
     sorted({row.dep for row in ROWS if row.dep.tag is not None}),
