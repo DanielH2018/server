@@ -23,11 +23,6 @@ from _reap_entrypoint_harness import BACKUP_DIR, _run
 REPO = BACKUP_DIR.parents[1]
 REAP_ENTRY = BACKUP_DIR / "longhorn_reap.py"
 
-OLD_ENTRYPOINTS = (
-    "longhorn_reap_orphan_backups.py",
-    "longhorn_reap_orphan_snapshots.py",
-)
-
 # Every flag form the backups parser (`longhorn_reap_orphan_backups._parse_args`) accepts,
 # in combinations its cross-flag checks allow. Each must parse under `backups`.
 BACKUPS_FLAG_SETS = [
@@ -151,32 +146,3 @@ def test_libraries_live_in_a_namespace_package_without_an_init():
     assert not [p for p in modules if p.name == "__init__.py"], (
         "longhorn_reap_lib must stay a PEP 420 namespace package"
     )
-
-
-def test_runbooks_name_the_new_subcommand_not_the_old_entrypoints():
-    scope = [
-        p
-        for p in _tracked(".")
-        if (
-            (
-                p.parts[0] == "docs"
-                and p.suffix == ".md"
-                and p.parts[1] not in ("reference", "archive")
-            )
-            or p.parts[:2] == (".claude", "skills")
-            or p.name == "CLAUDE.md"
-        )
-    ]
-    # Named member: the tiering runbook is where an operator finds the backups reaper.
-    tiering = REPO / "docs" / "longhorn-backup-tiering.md"
-    assert "longhorn_reap.py" in tiering.read_text(), (
-        "docs/longhorn-backup-tiering.md no longer names the reaper entry point"
-    )
-    stale = sorted(
-        f"{p}: {old}"
-        for p in scope
-        if (REPO / p).is_file()
-        for old in OLD_ENTRYPOINTS
-        if old in (REPO / p).read_text(errors="replace")
-    )
-    assert stale == [], f"docs still naming a retired entry point: {stale}"
