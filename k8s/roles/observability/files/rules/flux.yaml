@@ -1,6 +1,6 @@
 # The Flux controllers and the objects they reconcile. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/deploy/d1-flux-installed.md, "Flux pages through the alert plane".
+# docs/archive/deploy/d1-flux-installed.md, "Flux pages through the alert plane".
 # The controllers' series come from the `flux` scrape job; gotk_resource_info comes from
 # kube-state-metrics' custom-resource-state config (observability_ksm_flux_resource_state).
 # notification-controller's Discord alerts stay as a second channel beside these.
@@ -141,7 +141,7 @@ groups:
       # Every kustomize-controller worker is busy and more work is waiting, so applies queue,
       # the fix for a failing one included. An unchanged Kustomization that is unhealthy holds a
       # worker for its whole `timeout` on every retry, and `verify`'s timeout leaves those out.
-      # The design is docs/target-architecture/deploy/d4-ordering.md, "Saturated reconcile
+      # The design is docs/archive/deploy/d4-ordering.md, "Saturated reconcile
       # workers". The maximum comes from its gauge, because `--concurrent` is configurable. The
       # two worker gauges share one label set, so `==` matches them whole and the alert keeps
       # app, instance and pod; an on() there would drop them. The queue's series also carry

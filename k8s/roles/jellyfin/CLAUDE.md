@@ -21,7 +21,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   Intro Skipper, Webhook, Merge Versions and Media Cleaner. **Raise a plugin and the image together,
   never one alone**, and **each addition TIGHTENS the pin**: the constraint is `max` over the declared
   `targetAbi` values. Do not read the floor off this sentence —
-  `tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py` derives it from
+  the `jellyfin-*` rows of `tests/repo/_config_file_rows.py:CONFIG_FILE_ROWS` derive it from
   `defaults/main.yml` and covers a plugin added without its own guard. **Ask what blocks the next
   Jellyfin line before planning a bump**; the docs page has that survey.
 - **`use_authelia: false` — no forward-auth middleware on a public route**, so **nothing but

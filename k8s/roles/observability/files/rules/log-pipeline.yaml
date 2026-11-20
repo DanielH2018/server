@@ -1,6 +1,6 @@
 # The log and telemetry pipeline's loss, from monitor-bridge's shipper_dropped check
 # arms. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
-# design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
+# design is docs/archive/monitoring/m6-retire-kuma.md, batch A3.
 #
 # Each arm is a rule below. The two boot graces read `node_boot_time_seconds` of daniel-box:
 #

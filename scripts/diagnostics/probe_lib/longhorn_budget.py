@@ -9,18 +9,7 @@ import is the backup group names from `longhorn_backups`, which runs nothing eit
 longhorn.py keeps the `b2-budget` subcommand that drives this.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# `probe_lib` is a namespace package under `scripts/`, so reaching `lib` needs `scripts/` on
-# sys.path. `longhorn_backups` imports host_lib, so both directories go on it too.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
-
-from lib import host_modules  # noqa: F401
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
-from longhorn_lib import longhorn_backups
+from lib.longhorn_lib import longhorn_backups
 
 # B2's free tier allows 2,500 Class C transactions a day. Longhorn's retention delete is the
 # thing that spends them: DeleteDeltaBlockBackup walks the volume's whole block tree with one

@@ -107,13 +107,7 @@ observability's `CertExpiringSoon` rule).
 
 import shlex
 import sys
-from pathlib import Path as _Path
 
-# The subcommand modules live in `probe_lib`, a namespace package under `scripts/`, so
-# reaching them by package name needs `scripts/` on sys.path: a directly-invoked script —
-# which is the ONLY way this file runs in production — gets just its own directory, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 # `core.<name>` for anything the tests monkeypatch — `k8s_namespace` is the one this file
 # still reads. Binding it into this module's globals with a `from core import ...` would take

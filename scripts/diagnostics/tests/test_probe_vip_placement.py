@@ -14,11 +14,6 @@ lists, and a probe over an empty list reports "all zero are fine" — the
 `an-optimisation-can-land-green-and-be-inert` shape.
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from diagnostics.probe_lib import vip_placement as ph
 from lib.exit_codes import PROBE_UNREADABLE
 

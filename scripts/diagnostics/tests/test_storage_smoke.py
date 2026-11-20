@@ -1,12 +1,9 @@
 """The storage smoke test's verdict and its cleanup, against a fake cluster."""
 
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import storage_smoke
+from diagnostics import storage_smoke
 from lib.exit_codes import FAILED, OK
 from lib.operator_kubectl import KubectlFailed
 

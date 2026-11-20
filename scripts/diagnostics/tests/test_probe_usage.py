@@ -1,11 +1,7 @@
 """Tests for `probe.py usage`: route grouping, the memory flags and the PVC projection."""
 
-import os
-import sys
-
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import usage

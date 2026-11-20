@@ -26,7 +26,7 @@ from verdicts.notify import discord_webhook_ok
 def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     """(label, url) pairs for each configured Discord webhook to verify (skips empties).
 
-    The one labelled Kuma is Alertmanager's `discord` receiver, the delivery hop for every
+    The Alertmanager webhook is Alertmanager's `discord` receiver, the delivery hop for every
     alert; CrowdSec's is the independent
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
@@ -39,7 +39,7 @@ def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     return [
         (label, url)
         for label, url in (
-            ("Kuma", cfg.DISCORD_WEBHOOK_URL),
+            ("Alertmanager", cfg.DISCORD_WEBHOOK_URL),
             ("CrowdSec", cfg.DISCORD_CROWDSEC_WEBHOOK_URL),
             ("GitOps/Renovate", cfg.DISCORD_GITOPS_WEBHOOK_URL),
             ("Arr", cfg.DISCORD_ARR_WEBHOOK_URL),
