@@ -30,10 +30,6 @@ HOST_COMPONENTS = "hosts/components"
 ISSUE_MODEL = "scripts/dev/findings_lib/issue_model.py"
 FINDINGS_LIB = "scripts/dev/findings_lib"
 
-_LOCK_IMPORT = re.compile(
-    r"\{%-?\s*from\s+'git-tree-lock\.j2'\s+import\s+take_git_tree_lock"
-)
-_LOCK_CALL = re.compile(r"take_git_tree_lock\(\s*['\"]([^'\"]+)['\"]")
 _UNIT_LOCK = re.compile(
     r"^ExecStart=.*\bflock\b.*\{\{\s*server_git_tree_lock\s*\}\}", re.M
 )
@@ -116,20 +112,15 @@ def _land_verdicts() -> tuple[str, list[str]]:
 def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
     """Every job that takes the git-tree lock, derived from the templates that do.
 
-    A holder is a systemd unit whose `ExecStart` wraps `flock` around `server_git_tree_lock`, a
-    or a cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`. Both
-    are found by
-    pattern, so a new one joins the list without an edit here.
+    A holder is a systemd unit whose `ExecStart` wraps `flock` around `server_git_tree_lock`.
+    Holders are found by pattern, so a new one joins the list without an edit here.
 
     Args:
         repo: the tree root, a parameter so a test can hand in a fixture tree.
 
     Returns:
-        One dict per holder with `job`, `how` and `source` (a path relative to `repo`), units
-        first, then crons by name.
-
-    Raises:
-        ValueError: when a template imports the macro and never calls it with a job name.
+        One dict per holder with `job`, `how` and `source` (a path relative to `repo`), by
+        unit path.
     """
     holders = []
     for unit in sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")):
@@ -139,23 +130,6 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "job": unit.name.removesuffix(".j2"),
                     "how": "`flock` around its whole `ExecStart`",
                     "source": unit.relative_to(repo).as_posix(),
-                }
-            )
-    for template in sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")):
-        text = template.read_text()
-        if not _LOCK_IMPORT.search(text):
-            continue
-        jobs = _LOCK_CALL.findall(text)
-        if not jobs:
-            raise ValueError(
-                f"{template.name} imports take_git_tree_lock and never calls it"
-            )
-        for job in jobs:
-            holders.append(
-                {
-                    "job": job,
-                    "how": "`take_git_tree_lock`, held until the script exits",
-                    "source": template.relative_to(repo).as_posix(),
                 }
             )
     return holders

@@ -66,8 +66,9 @@ take the lock, so a new holder appears in it without an edit. Cadences are in
 
 --8<-- "assets/generated/fragments/tree-lock-holders.md"
 
-The crons take the lock through one Jinja macro, `k8s/templates/git-tree-lock.j2`, which
-owns the wait and the alert a skip raises.
+No cron takes the lock. docs-refresh and eval-run each commit in their own worktree,
+which `k8s/templates/cron-worktree.j2:prepare_tree_function` prepares, so neither writes the
+primary checkout.
 
 ## Checking a k8s change before it merges
 

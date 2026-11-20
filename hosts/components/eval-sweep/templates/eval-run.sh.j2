@@ -16,27 +16,35 @@
 # skill. So it self-gates on an empty key below and reports UP with the reason logged, and a
 # host whose secrets.yml lacks anthropic_api_key runs the cron disarmed rather than red.
 #
-# WHY GRADING RUNS BEFORE THE GIT-TREE LOCK, unlike docs-refresh.sh's generator. Every case
-# embeds its own input inline (evals/README.md) and hermetic mode strips tools (`--tools ""`),
-# so grading reads nothing from the live repo tree -- it only needs $REPO/evals/cases and
-# $REPO/.claude/{agents,skills} to exist, which a stale-by-one-tick checkout still has. Only
-# the commit step below mutates the tree, so only it needs the lock. Holding the lock across
-# a multi-agent LLM sweep (minutes, not seconds) would block every deploy and the other host
-# crons for no reason docs-refresh's generator actually has.
+# IT NEVER TOUCHES THE PRIMARY CHECKOUT. Every step after prepare_tree runs in $TREE, a locked,
+# detached worktree at the primary checkout's HEAD, cleaned of every untracked and ignored file,
+# so the grading, the suite and the commit read exactly the tracked tree CI reads. The primary
+# checkout keeps ignored debris CI never sees (a deleted role's __pycache__, a renamed tree's
+# leftovers), and a filesystem walker in the suite reads it as a role or a root entry git does
+# not have. Working apart also means no git-tree lock and no dirty-tree gate: nothing this
+# script leaves in $TREE parks homelab-checkout-sync, and the next run's prepare_tree discards it.
+# docs-refresh.sh works the same way, and its header has the rest of the reasoning.
 #
-# THE COMMIT SEQUENCE: dirty-tree guard, one-open-PR guard, commit, then scripts/deploy_tools/publish_pr.py (throwaway branch, push, reset master,
-# `gh pr create`, then a detached `land.py --arm-merge --await-merge` that merges the PR once
-# its CI is green). The landing merges directly at the head CI checked rather than arming
-# GitHub's auto-merge. A repository ruleset rejects every direct push to master (see
-# docs-refresh.sh's header), so a PR is the only path that publishes; committing straight to
-# evals/history.json here would be rejected the same way.
+# THE TREE PERSISTS BETWEEN RUNS. The detached landing publish_pr.py starts runs land.py from
+# $TREE and outlives the run by its CI wait, so a tree removed at exit would pull the landing's
+# code out from under it.
 #
-# THE DIRTY-TREE AND UNLANDED-BRANCH GUARDS APPEAR TWICE ON PURPOSE. A cheap, read-only, no-lock copy
-# runs before the sweep as a pre-filter -- unlike docs-refresh's generator this sweep costs
-# real API dollars (evals/README.md), so a tree already dirty or last week's branch still on
-# origin should skip BEFORE paying for a run that would just be thrown away. The copies under
-# the lock below are the authoritative check: state can still change during the sweep, and only
-# they gate the actual commit.
+# THE COMMIT SEQUENCE: unlanded-branch guard, suite, commit, then scripts/deploy_tools/publish_pr.py
+# (throwaway branch, push, reset the tree, `gh pr create`, then a detached
+# `land.py --arm-merge --await-merge` that merges the PR once its CI is green). The landing
+# merges directly at the head CI checked rather than arming GitHub's auto-merge. A repository
+# ruleset rejects every direct push to master (see docs-refresh.sh's header), so a PR is the
+# only path that publishes.
+#
+# THE UNLANDED-BRANCH GUARD RUNS TWICE ON PURPOSE. A cheap copy runs before the sweep as a
+# pre-filter -- unlike docs-refresh's generator this sweep costs real API dollars
+# (evals/README.md), so last week's branch still on origin should skip BEFORE paying for a run
+# that would just be thrown away. The copy after the sweep is the authoritative check: origin
+# can change during the sweep, and only it gates the actual commit.
+#
+# EVERY ARM THAT LEAVES THE COMMIT UNPUBLISHED KEEPS THE SWEEP. The next prepare_tree discards
+# whatever $TREE holds, and a week of paid API calls is not something a rerun reproduces, so a
+# failed suite, commit or push copies evals/history.json to $UNPUBLISHED_HISTORY first.
 #
 # NODE VIA fnm's `default` ALIAS, NOT $PATH. A Claude Code session's node lives on an
 # ephemeral /run/user/1000/fnm_multishells/<pid>_<ts> path that dies with the shell that made
@@ -56,13 +64,15 @@ NODE_BIN="/home/{{ sys_user }}/.local/share/fnm/aliases/default/bin"
 ENGINE="/home/{{ sys_user }}/.local/share/chezmoi/evals/run-evals.mjs"
 PR_BRANCH_PREFIX="evals-history/"
 
-# State this cron keeps ACROSS runs, and it lives OUTSIDE $REPO deliberately -- docs-refresh.sh's
-# header gives the reason in full: an untracked file inside the checkout parks gitops-deploy
-# exactly as a modified one does, so a file whose job is to record a failure must never be a
-# failure itself. The component's tmpfiles.d line creates this subdirectory owned by the cron user.
+# State this cron keeps ACROSS runs. It lives outside $REPO, which it never writes, and outside
+# $TREE, which the next run's prepare_tree cleans. The component's tmpfiles.d line creates this
+# subdirectory owned by the cron user.
 STAMP_DIR="/var/lib/homelab/eval-run.d"
+# Outside $REPO, so the primary checkout never lists it, and outside .claude/worktrees/, which
+# the worktree pruner sweeps.
+TREE="$STAMP_DIR/tree"
 # One log per failing run, pruned to the newest FAILURE_LOGS_KEPT, so a later failure cannot
-# overwrite a traceback. The `failure-` prefix keeps the prune off the files and
+# overwrite a traceback. The `failure-` prefix keeps the prune off the files, the tree and
 # the sweeps/ directory beside it.
 FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
 FAILURE_LOGS_KEPT=5
@@ -163,7 +173,7 @@ say_suite_failure() {
 
 # on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
 # script, so without this copy the cause of a failure is unrecoverable the moment the run ends.
-# Bounded, and outside $REPO for the same reason as the rest of $STAMP_DIR. Each run writes its own
+# Bounded, and outside $TREE for the same reason as the rest of $STAMP_DIR. Each run writes its own
 # FAILURE_LOG; the prune keeps the newest FAILURE_LOGS_KEPT.
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
@@ -180,9 +190,9 @@ keep_failure_log() {
 #
 # CALLED RIGHT AFTER THE SWEEP, NOT FROM on_exit: the suite and the commit below overwrite $LOG
 # with their own output, so by exit time the console lines are gone. Bounded twice -- the console
-# log to its last MiB, the archive to the newest $SWEEPS_KEPT sweeps -- and outside $REPO for the
-# same untracked-file reason as the rest of $STAMP_DIR. A failure here is logged, not fatal: the
-# sweep's numbers still go to evals/history.json without it.
+# log to its last MiB, the archive to the newest $SWEEPS_KEPT sweeps -- and outside $TREE, which
+# the next prepare_tree cleans. A failure here is logged, not fatal: the sweep's numbers still go
+# to evals/history.json without it.
 keep_sweep_output() {
   local dest
   dest="$SWEEP_ARCHIVE/$(date -u +%Y%m%dT%H%M%SZ)"
@@ -199,47 +209,26 @@ keep_sweep_output() {
   logger -t eval-run "per-run output kept at ${dest}"
 }
 
-# Puts the checkout back the way it was before `git add`, and keeps the sweep.
-#
-# `git reset` alone unstages and nothing else, leaving evals/history.json MODIFIED in the
-# primary checkout. homelab-checkout-sync reads any porcelain output as dirty and stops
-# fast-forwarding the checkout, so ONE failed commit here parks it.
-#
-# THE COPY IS NOT OPTIONAL, and it is where this differs from docs-refresh. There the staged file
-# is generator output the next run reproduces, so discarding it costs nothing. Here it is a week
-# of paid API calls that no rerun reproduces, so the sweep is copied outside the checkout BEFORE
-# the tree is put back. Trading a parked checkout for a lost eval sweep is not a fix.
+# Copies the tree's evals/history.json outside the tree, for a run that leaves its commit
+# unpublished. The next prepare_tree discards the tree's copy, and docs-refresh has no
+# counterpart: its staged files are generator output the next run reproduces, where this is a
+# week of paid API calls that no rerun reproduces.
 #
 # KEPT_NOTE says what actually happened, and is not decoration. A silenced `cp` that failed --
 # $STAMP_DIR absent, a full disk, wrong ownership -- would otherwise leave the alert asserting
 # "sweep kept at <path>" with nothing at that path. An alert that reports an outcome it did not
 # confirm is the failure mode the rest of this script exists to keep out.
-restore_history() {
-  local rc=0
+keep_unpublished_history() {
   if mkdir -p "$STAMP_DIR" 2>/dev/null && cp evals/history.json "$UNPUBLISHED_HISTORY" 2>/dev/null
   then
     KEPT_NOTE="sweep kept at ${UNPUBLISHED_HISTORY}"
   else
     KEPT_NOTE="SWEEP LOST - could not write ${UNPUBLISHED_HISTORY}"
   fi
-  git reset >/dev/null 2>&1
-  # A file with no HEAD version needs `rm`, not `git checkout HEAD --`: the checkout fails on it
-  # and leaves it UNTRACKED, which parks homelab-checkout-sync just as surely as a modified one.
-  if git cat-file -e HEAD:evals/history.json 2>/dev/null; then
-    git checkout HEAD -- evals/history.json >/dev/null 2>&1 || rc=1
-  else
-    rm -f -- evals/history.json
-  fi
-  # THE ACTION IS PER-PATH; THE CHECK IS PER-TREE, and the asymmetry is deliberate. A prek hook
-  # can modify a file AFTER `git add` ran, and such a file is absent from the staged path by
-  # construction -- a check scoped to evals/history.json would report "tree restored" over
-  # exactly the leftover that parks homelab-checkout-sync. Everything dirty here arrived during this run:
-  # the pre-sweep gate and the post-lock gate both exit on a tree that was already dirty.
-  # SCOPE (see lib.git.git_dirty): whole tree, untracked counted — the same
-  # scope git_dirty(cwd) defaults to, expressed here in shell since these templates can't import it.
-  [ -z "$(git status --porcelain)" ] || rc=1
-  return "$rc"
 }
+
+{% from 'cron-worktree.j2' import prepare_tree_function with context %}
+{{ prepare_tree_function('eval-run') }}
 
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   alert "eval-run: skipped, no anthropic_api_key secret configured (cron installed disarmed)"
@@ -248,22 +237,15 @@ if [ -z "$ANTHROPIC_API_KEY" ]; then
 fi
 
 cd "$REPO" || { alert "eval-run: $REPO missing"; exit 1; }
+BASE="$(git rev-parse HEAD)" || { alert "eval-run: $REPO has no HEAD"; exit 1; }
+prepare_tree "$BASE" || { alert "eval-run: could not prepare $TREE at $BASE"; exit 1; }
+cd "$TREE" || { alert "eval-run: $TREE missing"; exit 1; }
 
 export PATH="$NODE_BIN:/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-export EVAL_CASE_DIRS="$REPO/evals/cases"
-export EVAL_AGENT_DIRS="$REPO/.claude/agents:$REPO/.claude/skills"
+export EVAL_CASE_DIRS="$TREE/evals/cases"
+export EVAL_AGENT_DIRS="$TREE/.claude/agents:$TREE/.claude/skills"
 
-# Advisory pre-filter, read-only, no lock needed: both conditions are checked again under the
-# lock below, which is authoritative. Checking them here too means a tree already dirty, or
-# last week's PR still open, skips BEFORE the sweep runs rather than after — unlike
-# docs-refresh's generator this sweep costs real API dollars per evals/README.md, so throwing
-# away a paid run on a guard that could have fired for free is worth avoiding, even though the
-# state could still change during the sweep and get caught by the post-lock copies.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  alert "eval-run: working tree dirty; skipped before running the sweep"
-  PUSH_STATUS=up
-  exit 0
-fi
+# The pre-filter copy of the unlanded-branch guard; the header says why it runs twice.
 # Gated on origin rather than the open-PR list: `gh pr create` runs AFTER the push inside the
 # publisher, so a create failure leaves evals-history/<stamp> on origin with no PR and no local
 # trace, and an open-PR check reads that as "nothing pending" and stacks a second branch on it.
@@ -289,7 +271,7 @@ fi
 REPORT_DIR="$(mktemp -d)"
 LOG="$(mktemp)"
 FAILED_AGENTS=""
-for agent_dir in "$REPO"/evals/cases/*/; do
+for agent_dir in "$TREE"/evals/cases/*/; do
   agent="$(basename "$agent_dir")"
   if ! "$NODE_BIN/node" "$ENGINE" --agent "$agent" --json "$REPORT_DIR/$agent.json" >>"$LOG" 2>&1; then
     # A non-zero exit here means a case fell below its threshold, which is the regression
@@ -307,20 +289,6 @@ COMBINED="$(mktemp)"
 if ! jq -s 'add' "$REPORT_DIR"/*.json > "$COMBINED" 2>>"$LOG"; then
   say_failure "eval-run: could not merge per-agent reports" "$LOG"
   exit 1
-fi
-
-# The shared git-tree lock, held for the script's life; git-tree-lock.j2 owns the wait and why.
-# Giving up here throws away a sweep that already cost real API dollars.
-{% from 'git-tree-lock.j2' import take_git_tree_lock with context %}
-{{ take_git_tree_lock('eval-run') }}
-
-# A dirty tree means a human or another job is mid-edit. The sweep already ran and cost real
-# API dollars; recording it against a tree someone else is changing would misattribute the
-# result, so the run is thrown away rather than committed.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  alert "eval-run: working tree dirty; ran the sweep but recorded nothing"
-  PUSH_STATUS=up
-  exit 0
 fi
 
 # One unlanded branch at a time, same guard as docs-refresh.sh: an evals-history/* branch still
@@ -383,21 +351,14 @@ else
 fi
 
 # The suite, run explicitly and BEFORE the commit, because no prek hook runs it, and this cron
-# must not publish a sweep the suite rejects. Run here rather than left to the push because a
-# rejected commit is a state this script can undo -- restore_history -- where a rejected push
-# would leave a commit on the local master for homelab-checkout-sync to trip over. `timeout`
-# because this script holds {{ server_git_tree_lock }} for its whole life.
+# must not publish a sweep the suite rejects. `timeout` so a hung suite fails the run here
+# rather than at the unit's TimeoutStartSec, which would skip the alert and the sweep's copy.
 timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
 SUITE_RC=$?
 if [ "$SUITE_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
-  KEPT_NOTE="sweep unaccounted for"
-  if restore_history; then
-    RESTORE_NOTE="tree restored, ${KEPT_NOTE}"
-  else
-    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned; ${KEPT_NOTE}"
-  fi
-  say_suite_failure "eval-run: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  keep_unpublished_history
+  say_suite_failure "eval-run: the test suite failed (pytest exit ${SUITE_RC}); ${KEPT_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 
@@ -408,21 +369,16 @@ git commit -m "evals: record weekly hermetic eval sweep" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
-  # KEPT_NOTE is set by restore_history and reported on BOTH arms: whether the sweep survived and
-  # whether the tree came back clean are independent, and the alert has to carry both.
-  KEPT_NOTE="sweep unaccounted for"
-  if restore_history; then
-    RESTORE_NOTE="tree restored, ${KEPT_NOTE}"
-  else
-    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned; ${KEPT_NOTE}"
-  fi
-  say_failure "eval-run: commit failed (git exit ${COMMIT_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  keep_unpublished_history
+  say_failure "eval-run: commit failed (git exit ${COMMIT_RC}); ${KEPT_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 
-# Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
-# docs-refresh. Exit 1 means the commit is still local on master, 2 that the
-# branch is on origin without a PR; either way the message says which.
+# Branch, push, reset, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
+# docs-refresh. It runs from $TREE, so the commit, the reset and the landing's working directory
+# are all the tree's. Exit 1 means the commit is still local in $TREE, which the next
+# prepare_tree discards, so that arm keeps the sweep. Exit 2 means the branch is on origin
+# without a PR, and the next run's unlanded guard names it.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "evals: record weekly hermetic eval sweep" \
@@ -433,6 +389,11 @@ PUB_RC=$?
 # pipeline because PUB_RC above already holds the status this branches on. Not bash's
 # `${PUB_MSG: -400}`: a negative offset larger than the string returns the EMPTY string.
 PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
+if [ "$PUB_RC" -eq 1 ]; then
+  keep_unpublished_history
+  alert "eval-run: $PUB_MSG; ${KEPT_NOTE}"
+  exit 1
+fi
 if [ "$PUB_RC" -ne 0 ]; then
   alert "eval-run: $PUB_MSG"
   exit 1

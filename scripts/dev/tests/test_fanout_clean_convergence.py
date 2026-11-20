@@ -12,11 +12,13 @@ import subprocess
 
 from dev.fanout_lib.clean import (
     SWEEP_BUDGET_S,
+    UNIT_ACTIVE,
     read_clean_result,
     remote_clean_command,
     sweep_runs,
 )
 from dev.fanout_lib.manifest import (
+    SWEEP_KEPT_LIMIT,
     Batch,
     Manifest,
     path as manifest_path,
@@ -221,3 +223,71 @@ def test_the_sweep_stops_at_its_budget_newest_run_first(tmp_path):
     )
     assert [host for host, _cmd, _stdin in calls.calls] == ["daniel-server"]
     assert lines[-1].startswith("clean sweep: out of time at run 20260101T000010Z")
+
+
+def _sweep(tools, open_branches, tmp_path):
+    lines = []
+    sweep_runs(tools, frozenset(open_branches), lines.append, root=tmp_path)
+    return lines
+
+
+def test_the_sweep_stops_a_batch_kept_with_the_same_line_and_says_so_once(tmp_path):
+    _manifest(tmp_path, [B2])
+    tools, calls = fake_tools(answers={"daniel-server": ok(UNMERGED)})
+    said = [_sweep(tools, (), tmp_path) for _ in range(SWEEP_KEPT_LIMIT + 2)]
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT
+    stopped = [ln for lines in said for ln in lines if "runs no more legs" in ln]
+    assert stopped == [
+        f"clean 20260101T000010Z: 2 on daniel-server: kept by {SWEEP_KEPT_LIMIT} cleans "
+        "in a row with the same line, so the sweep runs no more legs for it; read its "
+        "unlanded commits, then `fanout.py place abandon 20260101T000010Z 2`"
+    ]
+
+
+def test_a_changed_kept_line_restarts_the_count(tmp_path):
+    _manifest(tmp_path, [B2])
+    tools, calls = fake_tools(answers={"daniel-server": ok(UNMERGED)})
+    for _ in range(SWEEP_KEPT_LIMIT - 1):
+        _sweep(tools, (), tmp_path)
+    calls.answers["daniel-server"] = ok("kept: /w2 — tree has uncommitted changes")
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == (SWEEP_KEPT_LIMIT - 1) + SWEEP_KEPT_LIMIT
+
+
+def test_an_open_pr_restarts_a_stopped_batch_so_its_merge_is_cleaned(tmp_path):
+    manifest = _manifest(tmp_path, [B2])
+    tools, calls = fake_tools(answers={"daniel-server": ok(UNMERGED)})
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT
+    _sweep(tools, {B2.branch}, tmp_path)
+    calls.answers["daniel-server"] = ok("removed: /w2")
+    _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT + 1
+    assert not manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_a_pr_that_opens_and_merges_between_sweeps_restarts_a_stopped_batch(tmp_path):
+    manifest = _manifest(tmp_path, [B2])
+    merged = {B2.branch: "https://github.com/o/r/pull/1"}
+    tools, calls = fake_tools(
+        answers={"daniel-server": ok(UNMERGED)}, merged_prs=merged
+    )
+    for _ in range(SWEEP_KEPT_LIMIT + 1):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT
+    merged[B2.branch] = "https://github.com/o/r/pull/2"
+    calls.answers["daniel-server"] = ok("removed: /w2")
+    _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT + 1
+    assert not manifest_path(manifest.run_id, tmp_path).exists()
+
+
+def test_a_unit_still_active_never_stops_the_sweep(tmp_path):
+    _manifest(tmp_path, [B2])
+    active = ok(f"kept: /w2 — unit fanout-2 {UNIT_ACTIVE}")
+    tools, calls = fake_tools(answers={"daniel-server": active})
+    for _ in range(SWEEP_KEPT_LIMIT + 2):
+        _sweep(tools, (), tmp_path)
+    assert len(calls.calls) == SWEEP_KEPT_LIMIT + 2

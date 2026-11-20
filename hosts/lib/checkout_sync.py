@@ -64,8 +64,8 @@ CHECK = "checkout-sync"
 STATE_DIR = "/var/lib/homelab-checkout-sync"
 TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
 PROM = "checkout_sync.prom"
-# Two hours: twelve 10-minute runs, so an eval sweep holding the tree lock for its commit does
-# not read as a stopped sync.
+# Two hours: twelve 10-minute runs, so a run of skipped or failed ticks short of that does not
+# read as a stopped sync.
 DEADLINE_S = 7200
 REASONS = ("dirty", "branch", "ci", "token", "ancestry")
 # Seconds of grading before the walk stops, under the unit's TimeoutStartSec=150.

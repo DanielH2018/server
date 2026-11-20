@@ -662,6 +662,11 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   minutes (`scripts/dev/fanout_lib/clean.py:sweep_runs`). It runs no leg for a batch whose
   branch heads an open PR. Each leg keeps `clean`'s refusals: an active unit, a dirty tree or
   an unmerged branch keeps the tree. A failed leg logs a line and never changes the exit status.
+  A batch kept by `scripts/dev/fanout_lib/manifest.py:SWEEP_KEPT_LIMIT` cleans in a row with
+  the same line gets no more legs: the sweep logs one line naming `place abandon`, and `place
+  runs` lists the batch as `sweep-stopped`. A changed `kept:` line, an open PR on the branch or
+  a merged PR newer than the one recorded at the stop restarts the count. A unit still active
+  or a process still in the tree clears it, since either ends without anyone acting.
 - **Coordinator check (#9533):** each pass ends with
   `scripts/dev/fanout_lib/coordinators.py:report`. It lists the worktrees locked for a
   coordinator project, and for each one no live process holds, the batches that read `parked`
