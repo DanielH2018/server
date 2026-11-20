@@ -20,6 +20,10 @@ OWN_WALKS = {
     ("scripts/renderer/renderer_lib/suspension.py", "suspends_tag"): (
         "reads the first document's `spec` and parses nothing after it"
     ),
+    ("scripts/renderer/renderer_lib/suspension.py", "suspend_false"): (
+        "skips a bundle file it cannot read, and `K8sObject.from_item` raises on a mapping "
+        "whose `metadata` or `status` is a scalar, which would abort the render instead"
+    ),
     ("scripts/renderer/renderer_lib/sops_entries.py", "sops_manifest_entries"): (
         "counts every non-null document, so a scalar beside the Secret is a problem; "
         "`parse_documents` would drop it"
@@ -94,13 +98,13 @@ RENDERED_OBJECTS_ARE_PARSED = Census(
             "    return [d for d in yaml_fast.safe_load_all(text) if d['kind'] == 'Job']\n",
         ),
         Subject(
-            "scripts/renderer/renderer_lib/suspension.py",
-            "def suspends_tag(text):\n    return yaml_fast.safe_load_all(text)\n"
-            "def suspend_false(text):\n    return yaml_fast.safe_load_all(text)\n",
+            "scripts/renderer/renderer_lib/images.py",
+            "def paths_into_images(text):\n    return yaml_fast.safe_load_all(text)\n"
+            "def check_images(text):\n    return yaml_fast.safe_load_all(text)\n",
         ),
         Subject(
-            "scripts/renderer/renderer_lib/suspension.py",
-            "def suspends_tag(text):\n    return yaml.safe_load(text)\n",
+            "scripts/renderer/renderer_lib/images.py",
+            "def paths_into_images(text):\n    return yaml.safe_load(text)\n",
         ),
     ),
     green=(
@@ -110,8 +114,8 @@ RENDERED_OBJECTS_ARE_PARSED = Census(
             "    return [o for o, _ in parse_documents(files) if o.kind == 'Job']\n",
         ),
         Subject(
-            "scripts/renderer/renderer_lib/suspension.py",
-            "def suspends_tag(text):\n    return yaml_fast.safe_load_all(text)\n",
+            "scripts/renderer/renderer_lib/images.py",
+            "def paths_into_images(text):\n    return yaml_fast.safe_load_all(text)\n",
         ),
     ),
     min_matches=30,
