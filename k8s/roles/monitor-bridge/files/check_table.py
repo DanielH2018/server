@@ -68,6 +68,8 @@ CHECKS: tuple[PushCheck, ...] = (
     # Same cache shape as healthchecks_drift. A monitor that is down is Uptime Robot's own page.
     PushCheck(name="uptime_robot_monitors", fn=uptime_robot.check_uptime_robot_monitors, gate="wan_reachable", runbook="uptime-robot-monitors"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
+    # Reads the bucket's Object Lock (ADR-0041) and holds a verdict a day, either outcome.
+    PushCheck(name="b2_object_lock", fn=b2.check_b2_object_lock, gate="b2_reachable", runbook="longhorn-backup-tiering"),
     # The two reachability gates. A gate has no gate of its own: a gate that cannot go red is
     # not coverage. There is no `prometheus` gate: the Watchdog covers a dead
     # Prometheus, and `host_packages` keeps the value as the label of its exporter suppression.

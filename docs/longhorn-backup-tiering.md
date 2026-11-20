@@ -270,6 +270,111 @@ ones whose `action` is `hide`; a plain `b2_list_file_names` reports the hidden n
 the reclaimed bytes as already saved, which is wrong in both directions. This is the same trap as
 the drain's `b2_list_file_versions` above, one level up.
 
+## Bucket immutability (ADR-0041)
+
+[ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) locks the B2 weekly bucket
+with Object Lock and the R2 etcd snapshots with a bucket lock rule. It leaves the R2 daily
+tier unlocked. monitor-bridge's `b2_object_lock` row reads the B2 setting once a day and fires
+`B2ObjectLockOff`, a warning, until step 2 is done. The R2 rule has no standing reader
+until [#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 3 verifies it
+by hand.
+
+Every step is **operator-only**. A session holds no credential that can change a bucket, a
+key or a cluster object.
+
+### Step 1: run a Longhorn backup and prune against a locked scratch bucket
+
+Longhorn deletes with an S3 `DeleteObject` that names no version. On B2 that call should
+write a hide marker and leave a locked version in place, but Backblaze does not document it.
+Every backup removes its own `locks/*.lck` object seconds after writing it, so if B2 refuses
+that delete, a lock on the real bucket fails every weekly backup. Prove it with Longhorn
+itself before you lock the real bucket.
+
+Create the scratch bucket, give it a one-day lock, and mint a key scoped to it. The commands
+use the B2 command-line tool v4 and the account's master key:
+
+```bash
+b2 bucket create --file-lock-enabled lock-spike-<random> allPrivate
+b2 bucket update --default-retention-mode governance \
+  --default-retention-period "1 days" lock-spike-<random>
+b2 key create --bucket lock-spike-<random> lock-spike \
+  listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions
+```
+
+Give Longhorn a backup target on it, with the key the last command printed:
+
+```bash
+sudo k3s kubectl -n longhorn-system create secret generic lock-spike-b2 \
+  --from-literal=AWS_ACCESS_KEY_ID=<keyID> \
+  --from-literal=AWS_SECRET_ACCESS_KEY=<applicationKey> \
+  --from-literal=AWS_ENDPOINTS=https://s3.us-east-005.backblazeb2.com
+sudo k3s kubectl apply -f - <<'EOF'
+apiVersion: longhorn.io/v1beta2
+kind: BackupTarget
+metadata:
+  name: lock-spike
+  namespace: longhorn-system
+spec:
+  backupTargetURL: s3://lock-spike-<random>@us-east-005/longhorn
+  credentialSecret: lock-spike-b2
+  pollInterval: 0s
+EOF
+```
+
+In the Longhorn UI, create a 1 GiB volume named `lock-spike` and attach it to any node. Point
+it at the scratch target, then take a backup of it from the UI:
+
+```bash
+sudo k3s kubectl -n longhorn-system patch volumes.longhorn.io lock-spike --type merge \
+  -p '{"spec":{"backupTargetName":"lock-spike"}}'
+```
+
+The backup must reach `Completed`, which proves the `.lck` removal works under the lock. Then
+delete the backup from the UI, which runs Longhorn's prune over every block it wrote. The
+backup must disappear, and `longhorn-manager` must log no `failed to delete objects`:
+
+```bash
+sudo k3s kubectl -n longhorn-system logs -l app=longhorn-manager --since=15m \
+  | grep -c 'failed to delete objects'
+b2 ls --versions --recursive b2://lock-spike-<random>/longhorn/
+```
+
+The count must be 0. The listing must show a hide marker beside each block, `.cfg` and `.lck`
+version, because the locked versions stay until their lock expires. If the backup fails or
+the delete logs a refusal, stop: ADR-0041 needs revisiting before step 2. If both pass, mark
+ADR-0041 Accepted.
+
+To remove the scratch objects, delete the `lock-spike` volume in the UI, then run
+`sudo k3s kubectl -n longhorn-system delete backuptarget lock-spike` and
+`sudo k3s kubectl -n longhorn-system delete secret lock-spike-b2`. Delete the key with
+`b2 key delete <keyID>`, and the bucket once its one-day lock expires.
+
+### Step 2: lock the B2 weekly bucket
+
+Run this with the account's master key. Never use the Longhorn key, which the cluster holds.
+
+```bash
+b2 bucket update --file-lock-enabled --default-retention-mode governance \
+  --default-retention-period "7 days" daniel-server-kopia
+```
+
+Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` clears at the
+next daily read. If it reads `key bypasses governance`, the Longhorn key holds
+`bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
+`longhorn_b2_application_key`.
+
+### Step 3: lock the R2 etcd snapshot prefix
+
+```bash
+npx wrangler r2 bucket lock add <r2_bucket> etcd-snapshots-7d etcd-snapshots/ --retention-days 7
+npx wrangler r2 bucket lock list <r2_bucket>
+```
+
+The list must show the one rule over `etcd-snapshots/`, for 7 days, and nothing over
+`longhorn/` or over an empty prefix. A rule there would lock Longhorn's daily blocks, and R2
+refuses a locked delete with a 409, so the daily prune would retry. The rule must stay
+shorter than the 14 days k3s keeps its S3 snapshots, or R2 refuses k3s's prune too.
+
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 
 - ~~**code-server extensions (+VSIX caches)**: kopia excluded them as reinstallable; here
