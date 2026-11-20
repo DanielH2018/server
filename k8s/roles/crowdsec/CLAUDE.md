@@ -81,8 +81,8 @@ renamed route fails there rather than exempting nothing.
 `files/crowdsec_jobs.py` runs in the `crowdsec-jobs` container of the engine pod
 (`k8s/roles/crowdsec/templates/deployment.yaml.j2`) and starts each job on a UTC schedule: the
 remote allowlist every 5 minutes, the AppSec verify every 15, the bouncer prune at minute 17,
-and the home allowlist every 5 minutes from minute 1. No daniel-box cron runs them, and their
-old crons and scripts are `legacy:` entries in `hosts/daniel-box/package.yml`. The operator
+and the home allowlist every 5 minutes from minute 1. No daniel-box cron runs them, and
+`homelab-reconcile` removed their old crons and scripts from it. The operator
 chose the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 
 - **cscli in the sidecar is a copy of the engine's own**, made by the `jobs-cscli` initContainer

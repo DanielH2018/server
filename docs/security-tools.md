@@ -8,7 +8,7 @@ This document covers the security and monitoring tools deployed by the host pack
 
 **What it does:** Scans the system for rootkits, backdoors, and suspicious files. Checks whether system binaries (`ls`, `ps`, `netstat`, etc.) have been replaced by trojaned versions, looks for hidden processes or ports, and checks for files/directories that rootkits commonly create.
 
-**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and writes a verdict textfile that `RkhunterScanFailed` and `RkhunterScanNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
+**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). `homelab-rkhunter-check.timer` runs `/usr/lib/homelab/rkhunter-check`, which writes the warnings to syslog tagged `rkhunter` and writes a verdict textfile that `RkhunterScanFailed` and `RkhunterScanNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
 **What the verdict means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
 
@@ -24,17 +24,17 @@ No verdict for a week and 2 hours also pages, through `RkhunterScanNotReporting`
 
 Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `hosts/components/integrity-scans/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
 
-To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `hosts/components/integrity-scans/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
+To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/lib/homelab/rkhunter-check` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `hosts/components/integrity-scans/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
 
 To prove the alert pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the verdict goes DOWN within seconds:
 
 ```bash
 sudo chmod -x /usr/bin/rkhunter
-sudo /usr/local/bin/rkhunter-check.sh
+sudo /usr/lib/homelab/rkhunter-check
 sudo chmod +x /usr/bin/rkhunter
 ```
 
-The verdict stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/rkhunter-check.sh` again; a scan takes two to three minutes.
+The verdict stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/rkhunter-check` again; a scan takes two to three minutes.
 
 **Check for findings:**
 

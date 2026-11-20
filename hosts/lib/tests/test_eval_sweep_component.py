@@ -110,13 +110,6 @@ def test_the_timer_keeps_the_crons_weekly_slot(package):
     assert re.search(r"^OnCalendar=Sun \*-\*-\* 02:00:00$", timer, re.M)
 
 
-def test_the_package_retires_the_cron_file_the_script_and_the_env_file(package):
-    legacy = [entry for entry in package.legacy if "eval-run" in str(entry)]
-    assert {"cron_file": "eval-run"} in legacy
-    assert {"path": "/usr/local/bin/eval-run.sh"} in legacy
-    assert {"path": "/etc/homelab/eval-run.env"} in legacy
-
-
 def test_the_component_header_carries_the_contract():
     header = "\n".join(
         line for line in COMPONENT.read_text().splitlines() if line.startswith("#")

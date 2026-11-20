@@ -34,10 +34,3 @@ files:
   - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service}
 enable:
   worktree-holders.socket: sockets.target
-# What initial_setup installed. Each host package's legacy list retires the old sudoers rule.
-legacy:
-  - {path: /etc/systemd/system/worktree-holders.socket}
-  - {path: /etc/systemd/system/worktree-holders@.service}
-  - {path: /etc/systemd/system/sockets.target.wants/worktree-holders.socket}
-  - {path: /usr/local/libexec/worktree-holders}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/worktree-holders}

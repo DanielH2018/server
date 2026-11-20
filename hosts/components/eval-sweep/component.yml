@@ -32,10 +32,3 @@ files:
   - {src: units/homelab-eval-sweep.timer, dst: /usr/lib/systemd/system/homelab-eval-sweep.timer}
 enable:
   homelab-eval-sweep.timer: timers.target
-# The earlier install. Reconcile retires each once the timer above has
-# started, so the sweep never runs twice or not at all.
-legacy:
-  - {cron_file: eval-run}
-  - {path: /usr/local/bin/eval-run.sh}
-  - {path: /etc/homelab/eval-run.env}
-  - {path: /var/lib/homelab/setup-render-manifest.d/eval-run}

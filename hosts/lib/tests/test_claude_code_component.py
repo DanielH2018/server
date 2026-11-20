@@ -2,7 +2,7 @@
 
 The component holds the templates, scripts and defaults the claude_code role installed, so
 these tests hold what the package adds: the agent user and its live uid, the packaged unit
-names each unit points at, the units it leaves disabled, and the Ansible-era units it retires.
+names each unit points at, and the units it leaves disabled.
 
 Run: uv run pytest hosts/lib/tests/test_claude_code_component.py
 """
@@ -23,26 +23,6 @@ from secrets_mgmt import host_secrets
 COMPONENT = REPO / "hosts" / "components" / "claude-code"
 # A role a component may name with `role:` that still ships a `files/` script.
 UNITS = "/usr/lib/systemd/system"
-# Every unit the role installed on daniel-server, read from `systemctl list-unit-files 'claude*'`
-# there.
-ANSIBLE_UNITS = {
-    "claude-rc.service",
-    "claude-rc-alert.service",
-    "claude-rc-restart.service",
-    "claude-rc-restart.timer",
-    "claude-bg-resume.service",
-    "claude-cgroup-metrics.service",
-    "claude-cgroup-metrics.timer",
-    "claude-clone-sync.service",
-    "claude-clone-sync.timer",
-    "claude-clone-sync-alert.service",
-    "claude-dotfiles-sync.service",
-    "claude-dotfiles-sync.timer",
-    "claude-dotfiles-sync-alert.service",
-    "claude-stop-alert@.service",
-    "homelab-rootq.socket",
-    "homelab-rootq@.service",
-}
 
 
 @pytest.fixture(scope="module")
@@ -104,11 +84,6 @@ def test_each_packaged_unit_names_its_packaged_sibling(package):
         assert "\nOnFailure=homelab-alert@%n.service\n" in unit
         # Observability's host-checks rules read the textfile by its Ansible-era name.
         assert f"write_check_textfile claude-{sync} 1 " in unit
-
-
-def test_every_ansible_era_unit_is_retired(manifest):
-    retired = {entry["unit"] for entry in manifest["legacy"] if "unit" in entry}
-    assert ANSIBLE_UNITS <= retired
 
 
 def test_the_agents_github_token_is_a_host_secret_and_never_rendered(package):

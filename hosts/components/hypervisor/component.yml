@@ -41,18 +41,3 @@ outputs:
     keys: [r2_access_key_id, r2_secret_access_key, r2_bucket, r2_account_id]
 enable:
   homelab-etcd-restore-drill.timer: {target: timers.target, when: hypervisor_etcd_drill_armed}
-legacy:
-  - {path: /etc/cron.d/etcd-restore-drill-vm}
-  - {path: /usr/local/bin/etcd-restore-drill-vm}
-  - {path: /usr/local/lib/etcd-restore-drill.sh}
-  - {path: /usr/local/lib/etcd-drill-guest-run.sh}
-  - {path: /usr/local/lib/suc_rehearsal.py}
-  - {path: /usr/local/lib/suc-rehearsal-guest-run.sh}
-  - {path: /etc/libvirt/declared-networks/staging.xml}
-  - {path: /etc/libvirt/declared-networks/staging-egress-fence.xml}
-  - {path: /etc/libvirt/declared-networks/etcd-drill.xml}
-  - {path: /etc/libvirt/declared-networks}
-  # libvirt's `default` network would bring up virbr0 and a NAT ruleset on a host that runs flannel's
-  # and kube-router's chains. The libvirt arm never touches an object it did not declare, so the
-  # autostart link libvirt's postinst creates retires here, and etcd-drill-prepare stops the network.
-  - {path: /etc/libvirt/qemu/networks/autostart/default.xml}

@@ -2,8 +2,8 @@
 
 The script's behaviour is run against stubs in `hosts/tests/test_loki_route_witness.py`.
 These tests hold what the move added: the unit that runs it, which loads no credential since
-M6 batch B2's Cutover-2 dropped the Kuma push, the timer and boot-rerun shape of the kuma-check form M6 left, and the legacy entries that retire
-the Ansible-era timer. Both cluster nodes list the component, and the role keeps no witness task.
+M6 batch B2's Cutover-2 dropped the Kuma push, and the timer and boot-rerun shape of the kuma-check form M6 left.
+Both cluster nodes list the component, and the role keeps no witness task.
 
 Run: uv run pytest hosts/lib/tests/test_loki_route_witness_component.py
 """
@@ -64,21 +64,6 @@ def test_the_timer_fires_hourly_at_minute_23_and_the_links_are_enabled(package):
         "homelab-loki-route-witness-boot.service",
     } <= set(package.enable_links())
     assert RETIRED not in package.credentials
-
-
-def test_the_package_retires_the_ansible_era_timer_cron_and_files(package):
-    kept = {
-        e.get("unit") or e.get("cron") or e.get("path")
-        for e in package.legacy
-        if "oki" in str(e)
-    }
-    assert kept >= {
-        "kuma-check-loki-read-route.timer",
-        "kuma-check-loki-read-route-boot.service",
-        "Loki read-route witness",
-        "/usr/local/bin/loki-read-route-health.sh",
-        "/var/lib/kuma-check/loki-route-witness.down",
-    }
 
 
 def test_both_cluster_nodes_witness_and_the_pi_does_not():

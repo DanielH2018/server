@@ -5,7 +5,6 @@ The worktree holder scan's half of the row is `hosts/tests/test_worktree_holders
 Run: uv run pytest hosts/lib/tests/test_box_dev_tooling.py
 """
 
-import json
 import subprocess
 
 import pytest
@@ -39,19 +38,9 @@ def box() -> host_mode.Package:
     return host_mode.render_host(HOST)
 
 
-def _legacy_paths(package: host_mode.Package) -> set[str]:
-    manifest = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])
-    return {entry.get("path") for entry in manifest["legacy"]}
-
-
-def test_vale_reaches_daniel_box_and_retires_the_old_copy(box):
+def test_vale_reaches_daniel_box(box):
     body, mode, *_ = box.files["/usr/bin/vale"]
     assert mode == 0o755 and 'exec /usr/lib/homelab/bin/vale "$@"' in body.decode()
-    assert "/usr/local/bin/vale" in _legacy_paths(box)
-
-
-def test_daniel_box_retires_the_old_uv_copy(box):
-    assert OLD_UV in _legacy_paths(box)
 
 
 def test_every_setup_role_reader_names_the_packaged_uv():

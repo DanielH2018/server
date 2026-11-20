@@ -98,42 +98,20 @@ def slice_caps(package) -> set[str]:
 
 def test_daniel_box_ships_each_slice_one_subject(box):
     assert [path for path in SLICE_ONE if path not in box.files] == []
-    legacy = {entry.get("unit") for entry in box.legacy}
-    assert {"claude-rc.service", "claude-cgroup-metrics.timer"} <= legacy
 
 
-def test_daniel_box_ships_each_slice_two_subject_and_retires_its_ansible_copy(box):
+def test_daniel_box_ships_each_slice_two_subject(box):
     assert [path for path in SLICE_TWO if path not in box.files] == []
     # The packaged units page through homelab-alert@, which the failure-alert component ships.
     assert f"{UNITS}/homelab-alert@.service" in box.files
-    legacy = {entry.get("unit") for entry in box.legacy}
-    assert {
-        "claude-land@.service",
-        "claude-fanout-server-lander.timer",
-        "claude-pipeline-timeline.timer",
-        "claude-memory-sync.timer",
-    } <= legacy
-    retired = {entry.get("path") for entry in box.legacy}
-    assert {
-        "/etc/polkit-1/rules.d/50-claude-land.rules",
-        "/etc/sudoers.d/claude-takeover-check",
-    } <= retired
 
 
 def test_daniel_server_ships_no_slice_two_subject(server):
     assert [path for path in SLICE_TWO if path in server.files] == []
 
 
-def test_daniel_box_ships_each_slice_three_subject_and_retires_its_ansible_copy(box):
+def test_daniel_box_ships_each_slice_three_subject(box):
     assert [path for path in SLICE_THREE if path not in box.files] == []
-    legacy = {entry.get("unit") for entry in box.legacy}
-    assert {
-        "claude-triage-poll.timer",
-        "claude-triage-alert.service",
-        "claude-triage-poll-alert.service",
-    } <= legacy
-    retired = {entry.get("path") for entry in box.legacy}
-    assert "/etc/polkit-1/rules.d/50-claude-triage.rules" in retired
 
 
 def test_daniel_box_ships_each_slice_four_subject(box):
@@ -144,14 +122,10 @@ def test_daniel_server_ships_none_of_the_artifacts_node_timers(server):
     assert [path for path in SLICE_FOUR if path in server.files] == []
 
 
-def test_the_takeover_check_runs_homelab_tools_flux_and_retires_its_own_copy(box):
+def test_the_takeover_check_runs_homelab_tools_flux(box):
     wrapper = box.files["/usr/local/sbin/homelab-takeover-check"][0].decode()
     assert "FLUX=/usr/lib/homelab/bin/flux\n" in wrapper
     assert "homelab-tools" in box.depends
-    # Reconcile only rmdirs a directory, so each file the copy held is retired ahead of it.
-    lib = "/usr/local/lib/homelab-takeover-check"
-    paths = [e["path"] for e in box.legacy if e.get("path", "").startswith(lib)]
-    assert paths == [f"{lib}/flux", f"{lib}/flux.sha256", lib]
 
 
 def test_daniel_server_ships_the_browser_only_to_take_it_back(server):

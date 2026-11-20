@@ -180,17 +180,3 @@ def test_the_logrotate_file_ships_at_optimize_pis_path(package):
     assert mode == 0o644
     assert b"/var/log/pi-health/*.log {" in text
     assert b"create 0644" in text and b"copytruncate" not in text.split(b"{", 1)[1]
-
-
-def test_the_retired_crons_and_scripts_are_legacy_entries(package):
-    user = render_context(None, "daniel-pi", inventory=REPO_INVENTORY)["sys_user"]
-    crons = (
-        "Pi SD-card health heartbeat",
-        "Pi rotated-log integrity sweep",
-        "Pi container-recovery heartbeat",
-    )
-    scripts = ("pi-sd-health", "pi-gz-integrity", "pi-recovery-health")
-    expected = [{"cron": name, "user": user} for name in crons] + [
-        {"path": f"/usr/local/bin/{name}.sh"} for name in scripts
-    ]
-    assert all(entry in package.legacy for entry in expected), package.legacy

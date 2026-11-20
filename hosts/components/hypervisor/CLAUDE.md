@@ -15,7 +15,7 @@ local stamp.
   stamp and log directories. It keeps the operator's `libvirt` and `kvm` groups too. Its failure
   fails the run, and the rule on the drill's textfile pages when the next verdict is overdue.
 - **libvirt's `default` network stays off:** a third firewall-state writer beside flannel and
-  kube-router otherwise. A `legacy:` entry retires its autostart link, and `etcd-drill-prepare`
+  kube-router otherwise. Reconcile removed its autostart link, and `etcd-drill-prepare`
   stops it. The libvirt arm never touches an object it did not declare.
 - **To take it away:** drop the component from `hosts/daniel-server/package.yml`. The arm undefines
   the network and the filter it recorded, and the timer stops. The packages and `/var/lib/libvirt`

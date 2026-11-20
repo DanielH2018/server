@@ -1,7 +1,7 @@
 """daniel-box's package holds the k3s server's host half.
 
 The state moved from `setup/k3s`. These tests hold what the move must keep: each cron
-retires as its timer takes over on the same schedule, the file an installed unit reads exists at
+is replaced by a timer on the same schedule, the file an installed unit reads exists at
 the path it names, the live ufw rules are adopted rather than added, and a change to a netplan
 file never reconfigures the link an SSH session rides on.
 
@@ -79,9 +79,8 @@ def test_the_media_path_copy_equals_the_k8s_roles_default():
 
 
 @pytest.mark.parametrize("cron", sorted(TIMERS))
-def test_each_cron_retires_and_its_timer_keeps_the_schedule(package, manifest, cron):
+def test_each_timer_keeps_its_crons_schedule(package, manifest, cron):
     unit, calendar = TIMERS[cron]
-    assert {"cron_file": cron} in package.legacy
     assert f"{unit}.timer" in manifest["enable_links"]
     assert f"OnCalendar={calendar}\n" in text(package, f"{SYSTEM}{unit}.timer")
     assert "ExecStart=" in text(package, f"{SYSTEM}{unit}.service")
@@ -112,12 +111,9 @@ def test_a_service_logs_under_the_tag_its_readers_match(package, unit, identifie
         "homelab-etcd-token-drift",
     ],
 )
-def test_a_check_imports_the_ping_key_and_the_file_it_read_retires(package, unit):
+def test_a_check_imports_the_ping_key(package, unit):
     assert "ImportCredential=healthchecks_ping_key\n" in text(
         package, f"{SYSTEM}{unit}.service"
-    )
-    assert {"/etc/healthchecks/ping.env", "/etc/healthchecks"} <= _retired_paths(
-        package
     )
 
 
@@ -162,7 +158,6 @@ def test_longhorns_prerequisites_and_multipath_drop_in(package, manifest):
     drop_in = "/etc/multipath/conf.d/50-homelab-longhorn.conf"
     assert 'devnode "^sd[a-z0-9]+"' in text(package, drop_in)
     assert package.activations[drop_in] == "reload:multipathd.service"
-    assert "/etc/rancher/k3s/longhorn-backuptarget-r2.yaml" in _retired_paths(package)
 
 
 def test_the_join_rules_equal_the_role_ports_and_are_kept(manifest):
@@ -191,18 +186,12 @@ def test_each_live_k3s_rule_is_adopted_by_its_legacy_entry(manifest):
         assert legacy[spec]["replaced_by"] == rule_id
 
 
-def test_the_forwarder_runs_the_pinned_binary_and_the_old_tree_retires(
-    package, manifest
-):
+def test_the_forwarder_runs_the_pinned_binary(package, manifest):
     unit = text(package, f"{SYSTEM}coredns-host.service")
     assert (
         "ExecStart=/usr/lib/homelab/bin/coredns -conf /etc/coredns/Corefile\n" in unit
     )
     assert "coredns-host.service" in manifest["enable_links"]
-    assert {
-        "/etc/systemd/system/coredns-host.service",
-        "/usr/local/lib/coredns/1.14.7/coredns",
-    } <= _retired_paths(package)
     pins = yaml_fast.safe_load(TOOLS.read_text())["tools"]["coredns"]
     assert pins["amd64"]["version"] == pins["arm64"]["version"]
     assert pins["amd64"]["member"] == "coredns"

@@ -2,7 +2,7 @@
 
 The scripts' behaviour has its own tests, under each component's `tests/` and in
 `hosts/tests/`. These hold what the move added: the units and timer slots the package
-ships, the secret outputs, the Sonarr pin the package renders literally, the legacy entries, and
+ships, the secret outputs, the Sonarr pin the package renders literally, and
 the agent's setup script run against stubs.
 
 Run: uv run pytest hosts/lib/tests/test_h737_box_components.py
@@ -30,11 +30,6 @@ def package() -> host_mode.Package:
 
 def text(package: host_mode.Package, dst: str) -> str:
     return package.files[dst][0].decode()
-
-
-def legacy(component: str) -> list[dict]:
-    spec = yaml.safe_load((COMPONENTS / component / "component.yml").read_text())
-    return spec["legacy"]
 
 
 @pytest.mark.parametrize(
@@ -128,48 +123,6 @@ def test_the_package_needs_the_media_tools(package):
 def test_the_agent_user_sits_in_the_homelab_uid_band(package):
     [user] = [u for u in package.users if u["name"] == "renovate-agent"]
     assert (user["uid"], user["home"]) == (901, "/var/lib/renovate-agent")
-
-
-@pytest.mark.parametrize(
-    ("component", "entries"),
-    [
-        (
-            "renovate-notify",
-            [
-                {"unit": "renovate-notify.timer"},
-                {"unit": "renovate-notify-alert.service"},
-            ],
-        ),
-        (
-            "renovate-agent",
-            [
-                {"unit": "renovate-agent.timer"},
-                {"path": "/etc/renovate-agent/alert-webhook.env"},
-            ],
-        ),
-        (
-            "fake-remux",
-            [
-                {"cron_file": name}
-                for name in (
-                    "fake-remux-scan",
-                    "fake-remux-reconcile",
-                    "mkv-attachment-repair",
-                    "fake-remux-health",
-                )
-            ],
-        ),
-        (
-            "github-checks",
-            [
-                {"unit": "kuma-check-github-ruleset-drift.timer"},
-                {"unit": "kuma-check-github-interaction-limit.timer"},
-            ],
-        ),
-    ],
-)
-def test_each_component_retires_what_ansible_installed(component, entries):
-    assert [e for e in entries if e not in legacy(component)] == []
 
 
 def _setup_script(tmp_path, stubs):

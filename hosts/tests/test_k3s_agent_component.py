@@ -125,11 +125,6 @@ def test_the_log_file_is_created_with_syslogs_group_at_boot(package):
     assert f"f {log_file()} 0640 root adm -" in text(package, TMPFILES)
 
 
-def test_the_legacy_entry_retires_ansibles_drop_in(package):
-    legacy = {"path": "/etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf"}
-    assert legacy in package.legacy
-
-
 def test_the_join_rules_are_kept_and_match_the_ports_the_server_side_mirrors(package):
     server = "10.0.0.215"
     want = {

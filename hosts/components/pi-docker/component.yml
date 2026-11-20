@@ -110,12 +110,3 @@ lines:
       [plugins.'io.containerd.shim.v1.manager']
         env = ["GOGC=100", "GOMEMLIMIT=off"]
     activate: "manual:containerd.service"
-legacy:
-  # The Go-runtime drop-ins the Ansible role wrote. The package's 50-homelab.conf drop-ins set the same two
-  # variables, so removing these changes no daemon's environment.
-  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
-  - {path: /etc/systemd/system/docker.service.d}
-  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
-  - {path: /etc/systemd/system/containerd.service.d}
-  # The linuxserver Compose v1 wrapper that docker_install removed. The live Pi has none.
-  - {path: /usr/local/bin/docker-compose}

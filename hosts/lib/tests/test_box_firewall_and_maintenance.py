@@ -2,7 +2,7 @@
 
 The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
 tests hold what is specific to this host, the last one to move: the
-crons the role once wrote here are retired and replaced by timers, the firmware update ships
+crons the role once wrote here are replaced by timers, the firmware update ships
 only where fwupd is, the scans read this host's own tokens, and
 reconcile adopts the two SSH rules and the k3s rules, and leaves the rules it already labels alone.
 
@@ -46,14 +46,10 @@ def context() -> dict:
     return render_context(None, HOST, inventory=REPO_INVENTORY)
 
 
-def test_each_cron_the_role_once_wrote_here_is_retired_and_a_timer_replaces_it(
-    package, manifest
-):
-    retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
+def test_each_cron_the_role_once_wrote_here_has_a_timer(package, manifest):
     for name, timer in BOX_TIMERS.items():
         if name == "Clean unused Docker images":
             continue
-        assert retired.get(name) == "root", name
         assert timer in manifest["enable_links"]
         assert f"/usr/lib/systemd/system/{timer}" in package.files
     assert "homelab-docker-prune.timer" not in manifest["enable_links"]
@@ -75,35 +71,6 @@ def test_the_scans_load_no_credential_and_the_package_lists_no_scan_token(packag
         assert "LoadCredential" not in unit and "homelab-secrets" not in unit
         assert f"{scan}_daniel_box_push_token" not in package.credentials
     assert "healthchecks_ping_key" in package.credentials
-
-
-def test_the_maintenance_wrapper_retires(manifest):
-    paths = {e["path"] for e in manifest["legacy"] if "path" in e}
-    assert "/usr/local/bin/host-maintenance.sh" in paths
-
-
-@pytest.mark.parametrize(
-    ("host", "firmware", "key_file"),
-    [
-        ("daniel-box", True, False),
-        ("daniel-server", False, True),
-        ("daniel-pi", False, True),
-    ],
-)
-def test_the_wrapper_and_key_file_stay_with_the_crons_that_use_them(
-    host, firmware, key_file
-):
-    handoff = next(
-        group
-        for group in host_mode.render_host(host).handoffs
-        if {"cron": "Weekly system restart", "user": "root"} in group["legacy"]
-    )
-    assert "homelab-reboot.timer" in handoff["units"]
-    assert {"path": "/usr/local/bin/host-maintenance.sh"} in handoff["legacy"]
-    assert (
-        {"cron": "Weekly firmware update", "user": "root"} in handoff["legacy"]
-    ) == firmware
-    assert ({"path": "/etc/healthchecks"} in handoff["legacy"]) == key_file
 
 
 def test_the_weekly_reboot_pings_this_hosts_check(package, tmp_path, context):

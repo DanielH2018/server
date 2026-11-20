@@ -19,11 +19,10 @@ Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansibl
 retired. Two statements below no longer hold.
 
 - *Decision* says the eight `kuma-check-*` timers keep their names. They did not. Each check
-  moved into a host component that ships its units under the `homelab-` prefix. Every
-  `kuma-check-*` name left under `hosts/` is a `legacy:` entry that `homelab-reconcile`
-  retires, and no host carries a `kuma-check-*` unit file. The down markers of the checks
-  that rerun while red moved with the units, from `/var/lib/kuma-check/` to
-  `/var/lib/homelab/check/`.
+  moved into a host component that ships its units under the `homelab-` prefix.
+  `homelab-reconcile` retired every `kuma-check-*` unit file on every host. The down
+  markers of the checks that rerun while red moved with the units, from
+  `/var/lib/kuma-check/` to `/var/lib/homelab/check/`.
 - *Open questions* leaves the Pi's AutoKuma labels for H5 to drop. The `pi-compose` services
   no longer carry them, so that question is closed.
 

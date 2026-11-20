@@ -1,8 +1,7 @@
 """The artifacts node's peer sync and OTLP-door heartbeat ship in daniel-box's package.
 
 They were the claude_code role's two crons. The package ships each as
-a `homelab-*` timer on `claude_code_artifacts_node` alone, retires the Ansible-era cron file and
-script, and creates the directories the artifacts pod mounts.
+a `homelab-*` timer on `claude_code_artifacts_node` alone and creates the directories the artifacts pod mounts.
 
 The scripts read values the k8s roles also read: the node the artifacts pod pins, the trees it
 mounts, and the OTLP door the collector binds. A shared key in group_vars/all.yml would route as
@@ -16,16 +15,14 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 from lib.render_context import render_context
-from lib.repo_paths import K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
 from _setup_render import CLAUDE_CODE
 
 ARTIFACTS = K8S_ROLES / "artifacts"
 OBSERVABILITY = K8S_ROLES / "observability"
-COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-artifacts.conf"
 
@@ -57,14 +54,6 @@ TIMERS = {
         "claude_code_telemetry_health_minute",
     ),
 }
-# What the role installed, which the component's legacy list retires.
-ANSIBLE_ERA = [
-    {"cron_file": "sync-artifacts"},
-    {"cron_file": "claude-otel-health"},
-    {"path": "/usr/local/bin/sync-artifacts.sh"},
-    {"path": "/usr/local/bin/claude-otel-health.sh"},
-    {"path": "/var/lib/homelab/setup-render-manifest.d/claude-code-node-crons"},
-]
 
 
 def twin_mismatches(claude_code: dict, k8s: dict[Path, dict]) -> list[str]:
@@ -166,9 +155,3 @@ def test_only_the_artifacts_node_ships_them():
     ]
     assert shipped == []
     assert TMPFILES not in server
-
-
-def test_the_ansible_era_crons_and_scripts_are_retired():
-    legacy = yaml.safe_load(COMPONENT.read_text())["legacy"]
-    missing = [entry for entry in ANSIBLE_ERA if entry not in legacy]
-    assert missing == []

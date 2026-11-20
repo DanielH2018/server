@@ -2,7 +2,7 @@
 
 The script's behaviour is run against stubs in `tests/services/test_registry_gc_*.py`.
 These tests hold what the move added: the units that run it, the two Job manifests in host mode,
-the toggle, the copies of the registry role's keys, and the legacy entries.
+the toggle and the copies of the registry role's keys.
 """
 
 import dataclasses
@@ -104,21 +104,6 @@ def test_the_timer_fires_at_the_schedule_the_keys_hold_and_is_enabled(package):
 
 def test_reconcile_never_restarts_a_running_collection(package):
     assert package.policies["homelab-registry-gc.service"] == "manual"
-
-
-def test_the_package_retires_the_cron_and_the_old_script(package):
-    assert {"cron_file": "registry-gc"} in package.legacy
-    assert {"path": "/usr/local/bin/registry-gc.sh"} in package.legacy
-
-
-def test_a_timer_that_fails_to_start_keeps_the_cron_and_the_old_script(package):
-    handoff = next(
-        group
-        for group in package.handoffs
-        if {"cron_file": "registry-gc"} in group["legacy"]
-    )
-    assert "homelab-registry-gc.timer" in handoff["units"]
-    assert {"path": "/usr/local/bin/registry-gc.sh"} in handoff["legacy"]
 
 
 def test_the_toggle_drops_the_files_the_link_and_the_policy(tmp_path):

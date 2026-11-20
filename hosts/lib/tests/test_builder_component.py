@@ -4,8 +4,8 @@ The `homelab_builder` role installed the builder, the signer and the apt reposit
 These tests hold what the move carries: the sandbox lists of the plan's *The builder and the
 repository*, the credential that replaces the token in the settings, the interpreter install and
 the one `ExecStart=` that sets `UV_PYTHON_DOWNLOADS=never`, the fingerprint script, the shared
-alert unit, the declared users and ufw rules, and the legacy entries that hand the Ansible-era
-files to the package.
+alert unit, the declared users and ufw rules, and the ufw legacy entries that hand the Ansible-era
+rules to the package.
 
 Run: uv run pytest hosts/lib/tests/test_builder_component.py
 """
@@ -285,31 +285,6 @@ def test_each_ansible_era_ufw_rule_is_replaced_by_a_declared_rule(package):
         assert declared[entry["replaced_by"]] == entry["spec"]
     # A quote would fail the grammar, which is why the comment sits in its own key.
     assert not any("'" in r["spec"] for r in package.ufw_rules)
-
-
-def test_every_ansible_era_unit_file_and_link_is_a_legacy_path_the_package_ships(
-    package,
-):
-    paths = {e["path"] for e in package.legacy if "path" in e}
-    etc = "/etc/systemd/system"
-    shadowed = {p for p in paths if p.startswith(etc)}
-    assert shadowed == {
-        f"{etc}/homelab-builder.service",
-        f"{etc}/homelab-builder.timer",
-        f"{etc}/homelab-repo-sign.service",
-        f"{etc}/homelab-apt-repo.service",
-        f"{etc}/timers.target.wants/homelab-builder.timer",
-        f"{etc}/multi-user.target.wants/homelab-apt-repo.service",
-    }
-    shipped = {Path(dst).name for dst in package.files} | {
-        Path(dst).name for dst in package.links
-    }
-    assert {Path(p).name for p in shadowed} <= shipped
-    # The package's own links live under /usr/lib, so the handoff cannot touch them.
-    assert not any(dst.startswith(etc) for dst in package.links)
-    units = {e["unit"] for e in package.legacy if "unit" in e}
-    assert units == {"homelab-builder-alert.service", "homelab-repo-sign-alert.service"}
-    assert {"/etc/homelab-builder/alert-webhook.env"} <= paths
 
 
 def test_the_tmpfiles_file_gives_the_directories_the_roles_modes(package):

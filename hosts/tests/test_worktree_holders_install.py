@@ -5,7 +5,7 @@
 the helper the package installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every agent user a host package
-declares. Every host package retires the sudo grant the socket replaced.
+declares.
 
 Both hosts get all of it from the `worktree-holders` component (H7.61, H7.62).
 
@@ -23,14 +23,6 @@ from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
 PACKAGED_HELPER = "/usr/lib/homelab/worktree-holders"
-# What the role wrote on the host, each of which reconcile must retire.
-RETIRED_PATHS = {
-    "/etc/systemd/system/worktree-holders.socket",
-    "/etc/systemd/system/worktree-holders@.service",
-    "/etc/systemd/system/sockets.target.wants/worktree-holders.socket",
-    "/usr/local/libexec/worktree-holders",
-    "/var/lib/homelab/setup-deployed-manifest.d/worktree-holders",
-}
 # A host listing the component that the agent-list copy must cover, so an empty census fails.
 KNOWN_CLAUDE_HOSTS = {"daniel-box", "daniel-server"}
 
@@ -80,30 +72,9 @@ def _package_agent_roots() -> dict[str, dict[str, str]]:
     return out
 
 
-OLD_SUDOERS = "/etc/sudoers.d/20-worktree-holders"
-
-
-def _retires_the_old_sudoers_rule(legacy: list[dict]) -> bool:
-    return {"path": OLD_SUDOERS} in legacy
-
-
-def test_a_package_that_keeps_the_old_sudoers_rule_is_flagged():
-    assert not _retires_the_old_sudoers_rule([{"path": "/usr/local/bin/uv"}])
-
-
 @pytest.fixture(scope="module", params=sorted(KNOWN_CLAUDE_HOSTS))
 def package(request) -> tuple[str, host_mode.Package]:
     return request.param, host_mode.render_host(request.param)
-
-
-def test_every_claude_host_package_retires_the_old_sudoers_rule_is_clean(package):
-    # A host that had the sudo grant keeps a NOPASSWD root rule unless something
-    # deletes it, and no setup task does since H7.60.
-    assert _retires_the_old_sudoers_rule(package[1].legacy)
-
-
-def test_the_pi_package_retires_the_old_sudoers_rule_is_clean():
-    assert _retires_the_old_sudoers_rule(host_mode.render_host("daniel-pi").legacy)
 
 
 def _text(package: host_mode.Package, dst: str) -> str:
@@ -165,10 +136,9 @@ def test_the_packaged_root_map_names_the_operator_and_the_package_agents(package
     }
 
 
-def test_reconcile_retires_what_the_role_installed(package):
+def test_the_package_enables_the_socket_and_depends_on_netcat(package):
     _, rendered = package
     manifest = json.loads(rendered.files["/usr/lib/homelab/manifest.json"][0])
 
-    assert RETIRED_PATHS <= {e.get("path") for e in manifest["legacy"]}
     assert "worktree-holders.socket" in manifest["enable_links"]
     assert "netcat-openbsd" in rendered.depends

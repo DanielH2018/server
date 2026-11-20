@@ -2,8 +2,8 @@
 
 `fail2ban`, `integrity-scans`, `postfix`, `accounting`, `host-maintenance` and `ssh-firewall`, with
 the Pi package's own ufw rules, replace initial_setup's fail2ban group, maintenance crons and ufw
-tasks on daniel-pi. These tests hold what the move must keep: each cron the role once wrote is
-retired and replaced by a timer, the scans read the Pi's own tokens, the weekly reboot refuses
+tasks on daniel-pi. These tests hold what the move must keep: a timer replaces each cron the
+role once wrote, the scans read the Pi's own tokens, the weekly reboot refuses
 after a failed validation, and reconcile adopts the Pi's Ansible-era firewall rules in place.
 
 Run: uv run pytest hosts/lib/tests/test_pi_firewall_and_maintenance.py
@@ -55,14 +55,7 @@ def _text(package: host_mode.Package, dst: str) -> str:
     return package.files[dst][0].decode()
 
 
-def test_each_cron_the_role_once_wrote_is_retired_and_a_timer_replaces_it(
-    package, manifest
-):
-    retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
-    # Every job sat in root's crontab: the live Pi's sys_user crontab holds no Ansible entry,
-    # and the prune's `ansible_facts.user_id` was root under the play's become.
-    jobs = TIMERS | UNSCHEDULED
-    assert {name: retired.get(name) for name in jobs} == dict.fromkeys(jobs, "root")
+def test_a_timer_replaces_each_cron_the_role_once_wrote(package, manifest):
     for timer in TIMERS.values():
         assert timer in manifest["enable_links"]
         assert f"/usr/lib/systemd/system/{timer}" in package.files

@@ -61,7 +61,7 @@ users:
 # the live line until it is deleted by hand.
 lines:
   - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness, kuma-check-dir]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:
@@ -78,86 +78,3 @@ files:
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
     when: claude_code_agent_user_enabled
-# daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
-# the hand-installed github-cli.list names the same repository, so reconcile retires it.
-legacy:
-  - {path: /etc/apt/sources.list.d/github-cli.list}
-  # The enable link the Ansible role left dangling when its unit file went. The package's own
-  # link is in /usr/lib/systemd/system/sockets.target.wants.
-  - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
-  # The binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
-  - {path: /usr/local/bin/sops}
-  # The copies initial_setup installed, which sit ahead of /usr/bin/vale and /usr/bin/uv on PATH.
-  - {path: /usr/local/bin/vale}
-  - {path: /usr/local/bin/uv}
-  # A prek no tracked file writes; the dotfiles repo owns prek, in ~/.local/bin.
-  - {path: /usr/local/bin/prek}
-  # The Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
-  # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has no
-  # Docker, so it fails every day, and no other tree path retires it.
-  - {cron: Update Crowdsec Hub, user: root}
-  # Not Ansible-managed: a test run leaked this textfile; the eval sweep runs on
-  # daniel-box alone, so nothing here overwrites it and HostCheckOverdue holds on it.
-  - {path: /var/lib/node-exporter-textfile/eval-run.prom}
-  # The absent arms of initial_setup's crons.yml that reached this host.
-  - {path: /etc/sudoers.d/20-worktree-holders}
-  - {path: /usr/local/bin/secret-rotation-audit.sh}
-  - {path: /usr/local/bin/secret-rotate.sh}
-  - {path: /etc/homelab/cert-expiry-webhook.env}
-  # The cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
-  # component never lists its two crons here.
-  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
-  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
-  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
-  # docker_install's teardown half, which this host runs because it has no Docker. Each
-  # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
-  - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
-  - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
-  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
-  - {path: /etc/systemd/system/docker.service.d}
-  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
-  - {path: /etc/systemd/system/containerd.service.d}
-  # What gitops_deploy's teardown half removed from this host, which never ran the
-  # deployer. Its three directories are not listed: the teardown removed them, and reconcile
-  # removes a directory only when it is empty.
-  - {unit: gitops-deploy.timer}
-  - {unit: gitops-deploy.service}
-  - {unit: gitops-deploy-alert.service}
-  - {unit: staging-backfill.timer}
-  - {unit: staging-backfill.service}
-  - {unit: staging-backfill-alert.service}
-  - {path: /etc/polkit-1/rules.d/50-gitops-deploy.rules}
-  - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
-  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
-  - {unit: kuma-check-github-ruleset-drift.timer}
-  - {unit: kuma-check-github-ruleset-drift.service}
-  - {unit: kuma-check-github-ruleset-drift-boot.service}
-  - {unit: kuma-check-github-interaction-limit.timer}
-  - {unit: kuma-check-github-interaction-limit.service}
-  - {unit: kuma-check-github-interaction-limit-boot.service}
-  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
-  - {path: /var/lib/kuma-check/github-interaction-limit.down}
-  - {cron_file: github-ruleset-drift}
-  - {cron_file: github-interaction-limit}
-  - {path: /var/lib/node-exporter-textfile/github-ruleset-drift.prom}
-  - {path: /var/lib/node-exporter-textfile/github-interaction-limit.prom}
-  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
-  - {path: /usr/local/bin/github-ruleset-drift.sh}
-  - {path: /usr/local/bin/github-interaction-limit.sh}
-  # The setup-drift check initial_setup installed, the Ansible copy of the host-check
-  # library (check-lib ships /usr/lib/homelab/homelab-check-lib.sh), their stamp fragments, and
-  # the ansible.log cron's absent arm. The timer goes first. The two manifest directories stay:
-  # reconcile removes a directory only when it is empty, and other fragments may remain.
-  - {unit: kuma-check-setup-drift.timer}
-  - {unit: kuma-check-setup-drift.service}
-  - {unit: kuma-check-setup-drift-boot.service}
-  - {path: /usr/local/bin/setup-drift-check.sh}
-  - {path: /var/lib/node-exporter-textfile/setup-drift-check.prom}
-  - {path: /var/lib/kuma-check/setup-drift.down}
-  - {path: /usr/local/lib/setup-drift-lib.sh}
-  - {path: /usr/local/lib/homelab-check-lib.sh}
-  - {path: /var/lib/homelab/setup-render-manifest.d/setup-drift-check}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
-  - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
-  - {cron: "Clear ansible log file", user: root}
