@@ -6,11 +6,14 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean.py
 import dataclasses
 import json
 import re
+import shutil
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from dev.fanout_lib import clean as clean_mod
 from dev.fanout_lib.clean import PARKED_KEPT, clean_one, remote_clean_command
 from dev.fanout_lib.manifest import (
     Batch,
@@ -19,9 +22,12 @@ from dev.fanout_lib.manifest import (
     retired_path,
     save,
 )
-from dev.fanout_lib.target import Target
+from dev.fanout_lib.target import SERVER_CHECKOUT, Target
 from dev.fanout_lib.transport import Tools
 from dev.fanout_lib.place import cmd_clean_one, main
+from lib.git_testing import commit, git, init_repo, scrubbed_env
+from lib.proc_testing import fake_bin, path_with, run
+from lib.worktree_testing import ignore_foreign_slice_holds_env
 from lib.worktrees import Worktree
 from _fanout_fakes import as_operator, fake_tools, ok
 
@@ -192,7 +198,7 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
     assert calls == [("unlock", tree.path), ("lock", tree.path, "fanout-b")]
 
 
-def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_of_the_script():
+def test_the_remote_command_resets_fetches_then_runs_a_snapshot_of_master():
     cmd = as_operator(remote_clean_command(B))
     # The active-unit refusal is the outermost test; everything else is its else.
     assert cmd.startswith(
@@ -202,16 +208,130 @@ def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_
         "systemctl --user reset-failed fanout-b 2>/dev/null; "
         "git -C /home/ubuntu/server fetch --quiet origin master && "
     )
-    # The interpreter leg is the else of the tree-exists test (Ruling 30), and runs from
-    # the primary checkout's cwd against the primary checkout's copy of the script, never the
-    # batch worktree's, which is frozen at launch and cannot carry a later fix.
+    # The interpreter leg is the else of the tree-exists test (Ruling 30). It runs from the
+    # primary checkout's cwd, and the script it runs is the snapshot's.
     assert (
-        "else cd /home/ubuntu/server && PYTHONPATH=/home/ubuntu/server/scripts "
+        'else snap=$(mktemp -d) && { mkdir -p "$snap"/server && '
+        'git -C /home/ubuntu/server archive -o "$snap"/server.tar origin/master scripts && '
+        'tar -xf "$snap"/server.tar -C "$snap"/server && rm "$snap"/server.tar && '
+        "cd /home/ubuntu/server && RUN_HOOK_PROJECT_DIR=/home/ubuntu/server "
+        'PYTHONPATH="$snap"/server/scripts '
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
-        f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {B.worktree} {B.branch}"
-        in cmd
+        f'"$snap"/server/scripts/dev/fanout.py place clean-one {B.worktree} {B.branch}; '
+        'rc=$?; rm -rf "$snap"; (exit $rc); }; ' in cmd
     )
+    assert "python /home/ubuntu/server/scripts" not in cmd
     assert f"{B.worktree}/scripts/dev" not in cmd
+
+
+STALE_SCRIPT = (
+    'import sys\nprint("kept:", sys.argv[-2], "judged by a stale fanout.py")\n'
+)
+SCRIPTS = Path(clean_mod.__file__).resolve().parents[2]
+
+
+def _scratch_with_a_stale_primary(tmp_path):
+    """A primary checkout behind `origin/master`, and a locked batch worktree cut from it.
+
+    `origin/master` holds this suite's `scripts/`. The primary's work tree and the batch
+    worktree both hold the commit before it, whose `fanout.py` keeps every tree. The batch
+    branch holds a change master lacks, so no local layer of `is_merged` calls it landed.
+    """
+    origin = init_repo(tmp_path / "origin.git", bare=True)
+    primary = init_repo(tmp_path / "primary")
+    git(primary, "remote", "add", "origin", str(origin))
+    commit(primary, "stale", **{"scripts/dev/fanout.py": STALE_SCRIPT})
+    worktree = tmp_path / "w"
+    git(primary, "worktree", "add", "-q", "-b", B.branch, str(worktree))
+    commit(worktree, "work", **{"feature.txt": "unlanded\n"})
+    git(primary, "worktree", "lock", "--reason", B.unit, str(worktree))
+    shutil.rmtree(primary / "scripts")
+    shutil.copytree(
+        SCRIPTS,
+        primary / "scripts",
+        ignore=shutil.ignore_patterns("__pycache__", "tests", "*.json"),
+    )
+    commit(primary, "current")
+    git(primary, "push", "-q", "origin", "master")
+    git(primary, "reset", "-q", "--hard", "HEAD~1")
+    return primary, worktree
+
+
+def _clean_for_real(tmp_path, primary, worktree, gh):
+    """Run `place clean` over one batch, executing the chain it builds under bash.
+
+    `gh` is the stub forge. `uv` drops its flags and runs this suite's interpreter, and
+    `systemctl` reports the unit inactive. The slice rule is off in that bash's `clean-one`;
+    see `lib.worktree_testing`.
+
+    Returns:
+        `(manifest, exit status)`.
+    """
+    stub_bin = fake_bin(
+        tmp_path / "bin",
+        systemctl='#!/bin/sh\ncase "$2" in is-active) exit 3 ;; esac\nexit 0\n',
+        gh=gh,
+        uv=(
+            '#!/bin/sh\nwhile [ "$1" != python ]; do shift; done; shift\n'
+            f'exec {sys.executable} "$@"\n'
+        ),
+    )
+    (tmp_path / "tmp").mkdir()
+    env = scrubbed_env(
+        TMPDIR=str(tmp_path / "tmp"), **ignore_foreign_slice_holds_env(tmp_path)
+    )
+    env["PATH"] = path_with(stub_bin, env=env)
+
+    def run_here(_host, command, timeout, stdin=None):
+        command = command.replace(SERVER_CHECKOUT, str(primary))
+        assert SERVER_CHECKOUT not in command  # never aimed at the shared checkout
+        return run(["bash", "-c", command], env=env, timeout=timeout)
+
+    batch = dataclasses.replace(B, worktree=str(worktree))
+    manifest = _manifest(tmp_path / "runs", [batch])
+    tools = dataclasses.replace(fake_tools()[0], run=run_here)
+    code = main(
+        ["clean", manifest.run_id, "--manifest-root", str(tmp_path / "runs")], tools
+    )
+    return manifest, code
+
+
+def test_a_landed_batch_is_removed_by_masters_clean_one_though_the_primary_checkout_is_stale(
+    tmp_path, capsys
+):
+    """daniel-server's case: no job fast-forwards its primary checkout.
+
+    `gh` answers a merged head that is not the local tip and a compare of `ahead`, which is a
+    squash-merged batch `land.sh` merged master into.
+    """
+    primary, worktree = _scratch_with_a_stale_primary(tmp_path)
+    gh = f'#!/bin/sh\ncase "$1" in\n  pr) echo {"f" * 40} ;;\n  api) echo ahead ;;\nesac\n'
+
+    manifest, code = _clean_for_real(tmp_path, primary, worktree, gh)
+
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert f"b on daniel-server: removed: {worktree}" in out
+    assert not worktree.exists()
+    assert B.branch not in git(primary, "branch", "--list").stdout
+    assert not manifest_path(manifest.run_id, tmp_path / "runs").exists()
+    assert list((tmp_path / "tmp").iterdir()) == []
+
+
+def test_an_unmerged_batch_is_kept_by_masters_clean_one(tmp_path, capsys):
+    primary, worktree = _scratch_with_a_stale_primary(tmp_path)
+
+    manifest, code = _clean_for_real(tmp_path, primary, worktree, "#!/bin/sh\n")
+
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert (
+        f"b on daniel-server: kept: {worktree} {B.branch} not merged into origin/master"
+        in out
+    )
+    assert (worktree / "feature.txt").exists()
+    assert B.branch in git(primary, "branch", "--list").stdout
+    assert manifest_path(manifest.run_id, tmp_path / "runs").exists()
 
 
 def _porcelain(*paths: str, locked_reason: str | None = None) -> str:
@@ -390,10 +510,17 @@ def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
     assert (
         "git -C /home/ubuntu/.local/share/chezmoi fetch --quiet origin main && " in cmd
     )
+    # The chain's own fetch is of dotfiles, so the leg fetches this repo's master itself.
     assert (
-        "else cd /home/ubuntu/.local/share/chezmoi && PYTHONPATH=/home/ubuntu/server/scripts "
+        "else snap=$(mktemp -d) && { "
+        "git -C /home/ubuntu/server fetch --quiet origin master && "
+        'mkdir -p "$snap"/server && git -C /home/ubuntu/server archive ' in cmd
+    )
+    assert (
+        "cd /home/ubuntu/.local/share/chezmoi && RUN_HOOK_PROJECT_DIR=/home/ubuntu/server "
+        'PYTHONPATH="$snap"/server/scripts '
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
-        f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {wt} "
-        "worktree-fanout-763 --repo DanielH2018/dotfiles" in cmd
+        f'"$snap"/server/scripts/dev/fanout.py place clean-one {wt} '
+        "worktree-fanout-763 --repo DanielH2018/dotfiles; " in cmd
     )
     assert f"{wt}/scripts/dev" not in cmd

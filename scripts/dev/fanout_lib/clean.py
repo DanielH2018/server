@@ -7,11 +7,6 @@ import dataclasses
 import shlex
 import subprocess
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. Both inserts are
-# relative to THIS file, so `clean-one` imports the `lib.worktrees` sitting beside the copy of
-# fanout.py it was started from (the primary checkout's, see `remote_clean_command`).
-# Never change either to an absolute path.
 from pathlib import Path as _Path
 
 
@@ -21,8 +16,9 @@ from datetime import UTC, datetime
 
 from dev.fanout_lib import manifest as manifest_mod
 from dev.fanout_lib import status as status_mod
+from dev.fanout_lib.launch import archive_command
 from dev.fanout_lib.manifest import Batch, Manifest
-from dev.fanout_lib.target import SERVER_TARGET, Target, resolve
+from dev.fanout_lib.target import PROJECT_DIR_ENV, SERVER_TARGET, Target, resolve
 from dev.fanout_lib.transport import REPO, Tools
 from lib.git import git
 from lib.worktrees import (
@@ -316,11 +312,17 @@ def busy_refusal(wt: str) -> str:
     return f'echo "kept: {wt} — pid $busy still uses it"'
 
 
+# What the `clean-one` leg's snapshot holds. `clean-one` imports across `scripts/dev`,
+# `scripts/lib` and `scripts/deploy_tools`, so the whole import root goes rather than a list
+# of its packages that the next import would outgrow.
+CLEAN_SNAPSHOT_PATHS = ("scripts",)
+
+
 def remote_clean_command(
     b: Batch,
     repo: str | None = None,
     target: Target = SERVER_TARGET,
-    script_root: str | None = None,
+    server: str = REPO,
 ) -> str:
     """The command `clean` runs on `b.host` to clean up one batch.
 
@@ -345,19 +347,35 @@ def remote_clean_command(
     fallback able to say "merged" at all. A failed fetch stops the command (`&&`) rather than
     silently falling through to that stale state.
 
-    The `clean-one` leg runs the PRIMARY checkout's copy of this script
-    (`{REPO}/scripts/dev/fanout.py place`), on every host and for every repo. The
-    batch worktree's own copy would freeze the merge judgement at whatever the batch was
-    launched from: a batch started before `landed` existed would run a `clean-one` that has
-    no `landed`, so every squash-merged batch would read "not merged into origin/master" for
-    as long as it stood. `homelab-checkout-sync` fast-forwards the primary checkout on both hosts,
-    so the primary is the copy that carries the current fix. A host whose primary lacks the
-    script fails loudly (`python: can't open file`, exit 2, reported as `failed`) rather than
-    keeping the tree silently. It runs from the primary checkout's cwd (`cd {REPO}`) so a
+    The `clean-one` leg runs a snapshot of `origin/master`'s `scripts/`, on every host and
+    for every repo. The chain archives it from this repo's object store on `b.host` into a
+    temporary directory, runs `scripts/dev/fanout.py place` from there, and removes the
+    directory whatever the leg's exit status, which the chain then returns. `git archive`
+    reads the object store, so no checkout's work tree changes. Two other copies of the script
+    are on the host, and neither is current:
+
+    - The batch worktree's copy would freeze the merge judgement at whatever the batch was
+      launched from. A batch started before `landed` existed would run a `clean-one` that has
+      no `landed`, so every squash-merged batch would read "not merged into origin/master"
+      for as long as it stood.
+    - The primary checkout's work tree tracks master on daniel-box only, where
+      `homelab-checkout-sync` fast-forwards it. daniel-server has no such job, and its
+      checkout stood 584 commits behind on 2026-11-19.
+
+    The snapshot is as current as the fetch the chain has already run. For a batch of this
+    repo that fetch is the one above. For a batch of another repo the chain fetches this
+    repo's master as well, in the same call.
+
+    A copy of the code outside any checkout cannot find the checkout from its own path, so
+    the leg names it in `RUN_HOOK_PROJECT_DIR`, which `target.server_checkout` reads. The
+    session that builds this chain may be older than the snapshot it runs, so `clean-one`
+    keeps accepting the arguments this chain passes. A failed archive stops the leg before
+    the interpreter starts and reads `failed`, naming git's or tar's first line, rather than
+    keeping the tree silently. The leg runs from the checkout's cwd (`cd {repo}`) so a
     relative path elsewhere in the command still resolves there, and under the same pinned,
-    project-free interpreter as `fanout_lib.session_banner.HEALTH_CMD` (`--no-project --no-python-downloads --python
-    3.15.2`) — every import in `clean-one`'s own chain is stdlib, so a stale primary whose
-    lock file fails to sync with the worktree's `uv.lock` can't take the clean down with it.
+    project-free interpreter as `fanout_lib.session_banner.HEALTH_CMD` (`--no-project
+    --no-python-downloads --python 3.15.2`): every import in `clean-one`'s own chain is
+    stdlib, so the leg needs no venv and no lock file.
 
     The absent-tree case is answered in shell BEFORE the interpreter is needed (Ruling 30).
     The first pass deletes the worktree's own script, so an interpreter leg running it on the
@@ -423,10 +441,8 @@ def remote_clean_command(
     batch's own launch lock, which `remove` otherwise refuses on.
 
     A batch in another repo differs in three places. The chain acts on that repo's checkout,
-    fetches its own default branch, and runs THIS repo's primary copy of the script with
-    `--repo`, since the batch's worktree carries no copy at all. That primary copy is current
-    enough: `launch` pins such a batch to the host it runs on, which is the deploy host,
-    whose checkout `homelab-checkout-sync` keeps at `origin/master`.
+    fetches its own default branch, and passes `--repo` to the snapshot's script, since the
+    batch's worktree carries no copy at all.
 
     Args:
         b: the batch to clean, as recorded in the run manifest.
@@ -435,17 +451,30 @@ def remote_clean_command(
             repo instead of the shared primary checkout, where `branch -D` and `worktree
             remove` would hit whatever every other live session is doing.
         target: the repo the batch works, which names its default branch.
-        script_root: the checkout whose `fanout.py` the `clean-one` leg runs, defaulting
-            to `REPO`. A seam for the same reason as `repo`: a test that executes the chain
-            points it at a scratch checkout.
+        server: this repo's checkout on `b.host`, whose `origin/master` the leg's snapshot
+            is archived from. A seam for the same reason as `repo`: a test that executes the
+            chain points it at a scratch checkout.
     """
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
-    # DECIDED: the `clean-one` leg runs the PRIMARY checkout's `fanout.py place`, not the batch
-    # worktree's own copy, which is frozen at the batch's launch. Full reasoning in this function's docstring.
+    snapshot = '"$snap"/server'
+    # DECIDED: the `clean-one` leg runs a snapshot of `origin/master`'s `scripts/` that this
+    # chain archives on the batch's host. Not the batch worktree's copy, which is frozen at the
+    # batch's launch, and not the primary checkout's work tree, which only daniel-box keeps at
+    # master. Full reasoning in this function's docstring.
     clean_one_leg = (
-        f"python {script_root or REPO}/scripts/dev/fanout.py place clean-one {wt} {branch}"
+        "snap=$(mktemp -d) && { "
+        + (
+            ""
+            if server == repo
+            else f"git -C {server} fetch --quiet origin {SERVER_TARGET.base_branch} && "
+        )
+        + f"{archive_command(server, snapshot, CLEAN_SNAPSHOT_PATHS)} && "
+        f"cd {repo} && {PROJECT_DIR_ENV}={server} PYTHONPATH={snapshot}/scripts "
+        f"uv run --no-project --no-python-downloads --python 3.15.2 "
+        f"python {snapshot}/scripts/dev/fanout.py place clean-one {wt} {branch}"
         + ("" if target.is_server else f" --repo {target.repo}")
+        + '; rc=$?; rm -rf "$snap"; (exit $rc); }'
     )
     gone_branch = f'echo "removed: {wt} (already gone)"'
     # DECIDED: the gone-tree leg keeps its own `gh pr list` merged check in shell rather than
@@ -487,9 +516,7 @@ def remote_clean_command(
         f"fi; "
         f"fi; "
         f"fi; "
-        f"else cd {repo} && PYTHONPATH={script_root or REPO}/scripts "
-        f"uv run --no-project --no-python-downloads --python 3.15.2 "
-        f"{clean_one_leg}; "
+        f"else {clean_one_leg}; "
         f"fi; "
         f"fi"
     )
