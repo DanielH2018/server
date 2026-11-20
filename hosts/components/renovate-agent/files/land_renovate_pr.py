@@ -58,7 +58,7 @@ from renovate_floor import (
     read_floor,
     soak_problem,
 )
-from renovate_identity import BRANCH_PREFIX, GH_AUTHOR, RenovatePR
+from renovate_identity import BRANCH_PREFIX, GH_AUTHOR, PayloadError, RenovatePR
 
 # The login whose approval of the head lets land.sh land a PR the floor check flags.
 APPROVER = "DanielH2018"
@@ -117,8 +117,11 @@ def denied_roles(output: str) -> frozenset[str] | None:
 
 def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
     """Every reason `pr` may not be landed unattended. An empty list means land it."""
+    try:
+        renovate = RenovatePR.from_gh(pr)
+    except PayloadError as exc:
+        return [f"GitHub's answer does not parse as a PR: {exc}"]
     reasons = []
-    renovate = RenovatePR.from_gh(pr)
     if not renovate.is_renovate:
         reasons.append(f"its author is not {GH_AUTHOR}")
     if pr.get("isCrossRepository") is not False:

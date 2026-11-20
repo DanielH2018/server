@@ -31,6 +31,10 @@ def is_renovate(account: dict | None) -> bool:
     return login(account) in _LOGINS
 
 
+class PayloadError(ValueError):
+    """A PR payload that names no integer number or no head branch."""
+
+
 @dataclass(frozen=True)
 class RenovatePR:
     """A pull request reduced to what says whether Renovate opened it.
@@ -46,22 +50,31 @@ class RenovatePR:
     head_ref: str
 
     @classmethod
+    def _parse(cls, number: object, author: object, head_ref: object) -> "RenovatePR":
+        if type(number) is not int or not isinstance(head_ref, str):
+            raise PayloadError(f"number {number!r} or head branch {head_ref!r}")
+        name = login(author if isinstance(author, dict) else None)
+        return cls(number, name if isinstance(name, str) else None, head_ref)
+
+    @classmethod
     def from_gh(cls, pr: dict) -> "RenovatePR":
         """One `gh pr list|view --json number,author,headRefName` object.
 
         Raises:
-          KeyError: the payload lacks `number` or `headRefName`.
+          PayloadError: `number` is not an integer or `headRefName` is not a string.
         """
-        return cls(int(pr["number"]), login(pr.get("author")), pr["headRefName"])
+        return cls._parse(pr.get("number"), pr.get("author"), pr.get("headRefName"))
 
     @classmethod
     def from_rest(cls, pr: dict) -> "RenovatePR":
         """One REST `pulls` object.
 
         Raises:
-          KeyError: the payload lacks `number` or `head.ref`.
+          PayloadError: `number` is not an integer or `head.ref` is not a string.
         """
-        return cls(int(pr["number"]), login(pr.get("user")), pr["head"]["ref"])
+        head = pr.get("head")
+        ref = head.get("ref") if isinstance(head, dict) else None
+        return cls._parse(pr.get("number"), pr.get("user"), ref)
 
     @property
     def is_renovate(self) -> bool:

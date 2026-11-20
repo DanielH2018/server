@@ -41,3 +41,15 @@ def test_a_renovate_branch_pushed_by_anyone_else_is_not_renovate():
         {"number": 8, "user": {"login": "renovate-fan"}, "head": {"ref": "renovate/a"}}
     )
     assert pr.on_renovate_branch and not pr.is_renovate
+
+
+@pytest.mark.parametrize(
+    "pr",
+    [
+        {"user": {"login": "renovate[bot]"}, "head": {"ref": "renovate/a"}},
+        {"number": 9},
+    ],
+)
+def test_a_payload_with_no_number_or_no_head_branch_is_refused(pr):
+    with pytest.raises(renovate_identity.PayloadError):
+        renovate_identity.RenovatePR.from_rest(pr)
