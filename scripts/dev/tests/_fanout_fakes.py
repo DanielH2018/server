@@ -103,8 +103,8 @@ def fake_tools(
             reads as in the real thing.
         branch_prs: branch -> the PR urls GitHub holds for it, newest first, as `branch_prs`
             answers. A branch absent from it has none; an entry of None is a read that failed.
-        open_prs: the head branches of the repo's open PRs, as `open_pr_branches` answers;
-            None is a read that failed.
+        open_prs: the head branches of the repo's open PRs, or a mapping of each to the
+            files its PR changes, as `open_pr_files` answers; None is a read that failed.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
             in the FakeRun's `calls` under the pseudo-host `findings`.
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
@@ -149,6 +149,12 @@ def fake_tools(
             )
         return subprocess.CompletedProcess(argv, findings_exit, stdout="", stderr="")
 
+    def open_pr_files(repo: str, complete=()):
+        if open_prs is None:
+            return None
+        edited = open_prs if isinstance(open_prs, dict) else dict.fromkeys(open_prs, ())
+        return {branch: frozenset(files) for branch, files in edited.items()}
+
     def head_branch() -> str:
         if isinstance(head, BaseException):
             raise head
@@ -164,7 +170,7 @@ def fake_tools(
         merged_pr=merged_pr,
         branch_prs=branch_pr_urls,
         earlier_prs=lambda *_: [],
-        open_pr_branches=lambda repo: None if open_prs is None else frozenset(open_prs),
+        open_pr_files=open_pr_files,
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,

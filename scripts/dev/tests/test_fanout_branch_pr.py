@@ -9,11 +9,13 @@ Run: uv run pytest scripts/dev/tests/test_fanout_branch_pr.py
 
 import dataclasses
 import json
+import subprocess
 
 from _review_fakes import BRANCH, _finding, _pipeline, _report
 from dev.fanout_lib.branch_pr import own_pr, parse_branch_prs, parse_merged_before
 from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.status import parse_status, with_own_pr
+from dev.fanout_lib.transport import open_pr_files
 
 FOREIGN = "https://github.com/DanielH2018/server/pull/6449"
 OWN = "https://github.com/DanielH2018/server/pull/6523"
@@ -192,3 +194,39 @@ def test_status_does_not_ask_the_forge_for_a_batch_without_a_pr_url():
         raise AssertionError("asked the forge")
 
     assert with_own_pr(parsed, B.branch, refuse, "o/r") is parsed
+
+
+def _gh_listing_one_file_of_150(rest):
+    """A `gh` whose `pr list` shows 1 of the 150 files BRANCH's PR changes, then `rest`."""
+    listed = [
+        {
+            "headRefName": BRANCH,
+            "number": 7,
+            "changedFiles": 150,
+            "files": [{"path": "docs/a.md"}],
+        }
+    ]
+    calls = []
+
+    def gh(*args, **_):
+        calls.append(args[0])
+        if args[0] == "pr":
+            return subprocess.CompletedProcess(args, 0, json.dumps(listed), "")
+        return rest
+
+    return gh, calls
+
+
+def test_a_pr_past_the_listed_files_is_read_whole_only_for_a_named_branch():
+    rest = subprocess.CompletedProcess([], 0, "docs/a.md\nscripts/b.py\n", "")
+    gh, calls = _gh_listing_one_file_of_150(rest)
+    assert open_pr_files("o/r", run=gh) == {BRANCH: frozenset({"docs/a.md"})}
+    assert calls == ["pr"]
+    assert open_pr_files("o/r", {BRANCH}, run=gh) == {
+        BRANCH: frozenset({"docs/a.md", "scripts/b.py"})
+    }
+
+
+def test_a_pr_whose_remaining_files_cannot_be_read_makes_the_open_prs_unreadable():
+    gh, _ = _gh_listing_one_file_of_150(subprocess.CompletedProcess([], 1, "", "502"))
+    assert open_pr_files("o/r", {BRANCH}, run=gh) is None
