@@ -1082,9 +1082,13 @@ git reports the tree as already locked.
   real `DEPLOY_HOLD`.** Tests cover both. In the first two-project run one launch waited
   for the launch lock, and two PRs parked behind a serial landing and re-landed (*The
   first two-project run*).
-- **A stop-and-resume of a sub-coordinator has not been run.** The skill's resume reads
-  were each run once against a branch with no project, and neither sub-coordinator of the
-  first two-project run restarted.
+- **The restart drill covered one case: a cooperative stop while a batch was running.** It
+  passed on 2026-11-20 for project `Coordinator tooling leftovers` (milestone 23, run
+  `20261120T161457Z`). The root messaged the sub-coordinator to stand down, and a
+  replacement in the same worktree recovered the project. The drill found five steps the
+  skill's restart path left out
+  ([#9521](https://github.com/DanielH2018/server/issues/9521)). A crash, a parked batch and
+  a landing in flight were not covered.
 - **A milestone wait does not end when `milestone add` files an older issue**
   ([#9218](https://github.com/DanielH2018/server/issues/9218)). The root messages the
   sub-coordinator when it has an issue added to a project.

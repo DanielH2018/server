@@ -51,7 +51,17 @@ To add an issue to a running project, message its sub-coordinator with the numbe
 milestone wait does not wake for an older issue that `milestone add` files.
 
 **A sub-coordinator that died is restarted, not cleaned up.** Start a session in the same
-worktree with the same milestone title; *Resume* rebuilds its state. Only when the operator
+worktree with the same milestone title; *Resume* rebuilds its state. The app starts a
+session only on a turn the operator typed, and takes a named folder only on a start the
+operator asked for. A recap or a peer message is no such turn, so ask the operator for one
+that names the restart, and start the replacement on it.
+
+**A sub-coordinator that is alive is stood down by message before its replacement
+starts.** Message it to stop its background wait and do nothing further. Stopping the
+session only interrupts its turn, so the next recap wakes it again. Never archive it before
+the project ends: archiving cleans the worktree its replacement uses.
+
+Only when the operator
 ends the project does the root take over its runs: list them with `fanout.py place runs
 --orchestrator <its branch>`, then follow *Ending a project* from the primary checkout,
 naming that branch and that worktree's path. Never clean a run whose sub-coordinator is
@@ -195,23 +205,34 @@ characters.
 ## Resume
 
 A restarted sub-coordinator reuses the same worktree and branch, because the claims and the
-milestone belong to that branch. Rebuild the state from four reads before doing anything:
+milestone belong to that branch. `<branch>` is that branch, which `git branch
+--show-current` prints. Rebuild the state from these reads before doing anything:
 
 ```bash
 git worktree list --porcelain
 uv run python scripts/dev/findings.py milestone status --worktree <branch>
 uv run python scripts/dev/fanout.py place runs --orchestrator <branch>
+uv run python scripts/dev/fanout.py place status <run-id>
 uv run python scripts/dev/findings.py claims --worktree <branch>
 ```
 
 The first shows whether the lock still carries the project's reason; lock again when it
-does not. The `parked` rows of `place runs` are the list to re-land. Then read `next
---milestone "<title>"` for what is left. Finish landing and re-landing what earlier runs
-launched without asking. Before a new launch, ask the operator to approve again, unless
-your brief quotes the approved grouping rules.
+does not. `place runs` gives the run ids, and no batch's state: a batch that is running,
+done or landed reads `standing` there alike (`scripts/dev/fanout_lib/status_view.py:runs_lines`).
+Run `place status <run-id>` once for each run id it lists. That read tells a `running`
+batch from a `parked` one.
 
-Done when: every standing batch of the branch's runs has a state you have read, and the
-recap states it.
+- **A run with a `running` batch is watched again.** The wait the dead session held died
+  with it. Start `cc-wait fanout <run-id> [<run-id> …]` over those runs, the way
+  `issue-fanout` step 3 describes.
+- **A `parked` batch is re-landed**, as *Landing* describes.
+
+Then read `next --milestone "<title>"` for what is left. Finish landing and re-landing what
+earlier runs launched without asking. Before a new launch, ask the operator to approve
+again, unless your brief quotes the approved grouping rules.
+
+Done when: every standing batch of the branch's runs has a state `place status` printed,
+a wait covers every run with a `running` batch, and the recap states both.
 
 ## Ending a project
 
