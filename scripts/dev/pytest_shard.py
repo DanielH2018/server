@@ -136,7 +136,7 @@ from dev.shard_weight_gate import (
 
 # How many legs CI's `pytest` matrix splits a full census across. ci.yml's matrix falls back
 # to every one of them when `pytest_plan` published no plan.
-# DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
+# DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14; kept 2026-11-20)
 CI_LEGS = 6
 
 # pytest's default `python_files`, both forms — the same pair
