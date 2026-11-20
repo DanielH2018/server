@@ -313,7 +313,8 @@ no drift for them. The files are:
   `sops`, `uv` and `vale`.
 
 The entries that once removed these paths were deleted in [PR #9495](https://github.com/DanielH2018/server/pull/9495),
-and `git show 3221ba11d^` lists them at that commit's parent.
+and `git grep 'legacy:' 3221ba11d^ -- hosts/components` lists them in that commit's
+parent tree.
 
 ## What to do first, by scenario
 
