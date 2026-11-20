@@ -55,16 +55,17 @@ def test_the_reader_imports_from_the_installed_layout(package, tmp_path):
         target = tmp_path / path.removeprefix(f"{INSTALL_DIR}/")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(body if isinstance(body, bytes) else body.encode())
-    # -S skips the venv's .pth, which would merge the checkout's scripts/lib/ into `lib`.
+    # -S and -I keep the venv's .pth and PYTHONPATH from merging scripts/lib/ into `lib`.
     result = subprocess.run(
         [
             sys.executable,
             "-S",
+            "-I",
             "-c",
             f"import sys; sys.path.insert(0, {str(tmp_path)!r}); "
             "import host_lib; from lib import k8s_objects; "
             "from lib.longhorn_lib import longhorn_cluster_state; "
-            "print(k8s_objects.__file__)",
+            "print(k8s_objects.__file__); print(longhorn_cluster_state.__file__)",
         ],
         capture_output=True,
         text=True,
@@ -72,4 +73,7 @@ def test_the_reader_imports_from_the_installed_layout(package, tmp_path):
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(tmp_path / "lib" / "k8s_objects.py")
+    assert result.stdout.split() == [
+        str(tmp_path / "lib" / "k8s_objects.py"),
+        str(tmp_path / "lib" / "longhorn_lib" / "longhorn_cluster_state.py"),
+    ]
