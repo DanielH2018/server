@@ -273,6 +273,11 @@ truth, with a reason beside each entry. It holds:
 - `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
   the packages `uv run` syncs before `land.py` starts
 - `.github/`
+- the code two CI jobs run while a step holds the job's write-scoped token: `prek` in `ci.yml`
+  runs `scripts/dev/tested_tree.py`, and `images` in `promote.yml` runs
+  `scripts/deploy_tools/ci_images.py`. The list names each script and every module it imports.
+  `hosts/tests/test_ci_token_code_needs_approval.py::test_code_run_with_a_write_token_is_listed`
+  derives the set from the two jobs. The operator added them on 2026-11-20.
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
 - `secrets/.sops.yaml` and `secrets/secrets.yml`
