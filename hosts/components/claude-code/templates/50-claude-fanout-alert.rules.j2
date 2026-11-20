@@ -4,8 +4,9 @@
 // nothing else. A batch runs as a user unit, which cannot read the root-only webhook, so it
 // asks for the page by starting fanout-alert@<unit>:<state>.service, which holds the webhook.
 // The instance must be a fan-out unit name and one of the states that page, the
-// list scripts/dev/fanout_lib/notify.py:PAGED_STATES holds, so the most a session can post is
-// a page in that fixed shape.
+// list scripts/dev/fanout_lib/notify.py:ALERT_STATES holds, so the most a session can post is
+// a page in that fixed shape. The server lander starts the no-coordinator one, named for a
+// coordinator project's worktree (scripts/dev/fanout_lib/coordinators.py).
 polkit.addRule(function (action, subject) {
     if (action.id !== "org.freedesktop.systemd1.manage-units") {
         return undefined;
@@ -13,7 +14,7 @@ polkit.addRule(function (action, subject) {
     if ({{ ([sys_user] + claude_code_agents_present) | unique | list | to_json }}.indexOf(subject.user) < 0) {
         return undefined;
     }
-    if (!/^fanout-alert@fanout(-[A-Za-z0-9_.]+)+:(failed|needs-input|no-pr|no-verdict|no-report)\.service$/.test(action.lookup("unit"))) {
+    if (!/^fanout-alert@fanout(-[A-Za-z0-9_.]+)+:(failed|needs-input|no-pr|no-verdict|no-report|no-coordinator)\.service$/.test(action.lookup("unit"))) {
         return undefined;
     }
     if (action.lookup("verb") !== "start") {

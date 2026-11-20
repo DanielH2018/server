@@ -10,7 +10,7 @@ prints one SessionStart JSON object to stdout, or nothing when everything is gre
 exits 0. A bug that escapes the per-probe guards raises and exits 1, which `run-hook.sh` turns
 into one `[session-health] failed: <cause>` line while still exiting 0. `-h` or `--help` prints this text and exits 0. `--sessions` prints every other live
 session in this repo with the paths it changed, which the banner lists only where they overlap
-this branch.
+this branch, and then each coordinator project that no live session holds.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
@@ -343,7 +343,7 @@ def other_live_sessions(
     try:
         from lib.worktree_label import with_label
         from lib.fanout_lock import process_unit_state
-        from lib.worktrees import lock_is_live, parse_worktree_list
+        from lib.worktrees import has_live_session, parse_worktree_list
 
         if git_dirty is None:
             from lib.git import git_dirty
@@ -387,9 +387,11 @@ def other_live_sessions(
     # One `systemctl --user show` per fan-out tree: 1.5s in turn over 177 trees on
     # daniel-server. A tree another user owns, as `ubuntu` fan-out trees are to a `claude`
     # session, is judged from /proc, because that user's manager answers only its owner.
+    # A coordinator project's lock outlives its session, so that tree is judged by the
+    # processes inside it; `dead_project_lines` names the ones this drops.
     live = keep_where(
         locked,
-        functools.partial(lock_is_live, foreign=process_unit_state()),
+        functools.partial(has_live_session, foreign=process_unit_state()),
         LOCK_CHECK_DEADLINE_S,
     )
     try:
@@ -607,9 +609,29 @@ def print_hook_output(context, operator):
     sys.stdout.flush()
 
 
-def print_all_sessions():
-    """Print every other live session with its changed paths, for `--sessions`."""
+def dead_project_lines(projects=None):
+    """A line per coordinator project with no live session, naming the batches that wait on it.
+
+    `scripts/dev/fanout_lib/coordinators.py:projects` is the read, and the server lander
+    pages from the same one. `projects` is that function; a test passes a fake.
+    """
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    try:
+        from dev.fanout_lib import coordinators
+
+        return coordinators.dead_lines((projects or coordinators.projects)())
+    except Exception as exc:
+        return [f"  ⚠ coordinator-project detection is broken: {exc}"]
+
+
+def print_all_sessions(dead_project_lines=dead_project_lines):
+    """Print every other live session with its changed paths, for `--sessions`.
+
+    Then the coordinator projects no session holds, which the list above leaves out.
+    """
     for line in other_live_sessions(os.getcwd(), show_all=True):
+        print(line)
+    for line in dead_project_lines():
         print(line)
     return 0
 
