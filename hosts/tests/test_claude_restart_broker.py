@@ -48,11 +48,8 @@ def test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap() -> None:
         "restart_workload_cooldown_s": 1,
     }
     moved = config(raised)
-    assert (moved["allowlist"], moved["daily_cap"], moved["workload_cooldown_s"]) == (
-        {},
-        3,
-        86400,
-    )
+    assert (moved["daily_cap"], moved["workload_cooldown_s"]) == (3, 86400)
+    assert moved == config()
 
 
 def test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule() -> None:
