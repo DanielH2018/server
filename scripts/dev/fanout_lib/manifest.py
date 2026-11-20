@@ -21,6 +21,12 @@ RETIRED = "retired"
 # The manifest key that counts a batch's conflict resumes; `fanout_lib.resume.MAX_RESUMES`
 # bounds it.
 CONFLICT_RESUMES = "conflict_resumes"
+# The manifest key holding the `kept:` line a clean last read for a batch, and how many cleans
+# in a row read it.
+SWEEP_KEPT = "sweep_kept"
+# How many cleans in a row may read the same `kept:` line before the worktree sweep stops
+# running that batch's leg. At the lander's six-hour `CLEAN_INTERVAL_S`, four is one day.
+SWEEP_KEPT_LIMIT = 4
 
 
 @dataclass(frozen=True)
@@ -53,7 +59,7 @@ class Batch:
         extra: the keys of the manifest entry that are not fields here, which a newer
             build wrote. `to_json` writes them back, so a rewrite by this build loses
             nothing the newer build recorded. Not part of equality. It also holds
-            `CONFLICT_RESUMES`, which only a resumed batch's entry carries, so every other
+            `CONFLICT_RESUMES` and `SWEEP_KEPT`, which only some entries carry, so every other
             entry stays readable by a build that constructs a batch from its keys.
     """
 
@@ -99,6 +105,30 @@ class Batch:
         """This batch with one more conflict resume counted."""
         counted = {**self.extra, CONFLICT_RESUMES: self.conflict_resumes + 1}
         return dataclasses.replace(self, extra=counted)
+
+    @property
+    def sweep_kept(self) -> tuple[str, int]:
+        """The `kept:` line a clean last read for the batch, and how many cleans in a row read it."""
+        rec = self.extra.get(SWEEP_KEPT) or {}
+        return str(rec.get("line") or ""), int(rec.get("passes") or 0)
+
+    @property
+    def sweep_stopped(self) -> bool:
+        """Whether `SWEEP_KEPT_LIMIT` cleans in a row kept the batch with the same line."""
+        return self.sweep_kept[1] >= SWEEP_KEPT_LIMIT
+
+    def kept_by_clean(self, line: str) -> Batch:
+        """This batch with a clean's `kept:` line counted: one more pass if it repeats, else one."""
+        last, passes = self.sweep_kept
+        passes = passes + 1 if line == last else 1
+        return dataclasses.replace(
+            self, extra={**self.extra, SWEEP_KEPT: {"line": line, "passes": passes}}
+        )
+
+    def kept_streak_cleared(self) -> Batch:
+        """This batch with no `kept:` streak recorded."""
+        extra = {k: v for k, v in self.extra.items() if k != SWEEP_KEPT}
+        return dataclasses.replace(self, extra=extra)
 
     def to_json(self) -> dict:
         """The manifest entry for this batch: its fields, then `extra`'s keys beside them.

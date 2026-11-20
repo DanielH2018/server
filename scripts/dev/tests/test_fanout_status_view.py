@@ -7,7 +7,7 @@ import json
 import re
 
 from dev.findings_lib.issue_model import Issue, IssueState
-from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.manifest import SWEEP_KEPT_LIMIT, Batch, Manifest, save
 from dev.fanout_lib.place import main
 from dev.fanout_lib.status_view import runs_lines, status_lines
 from _fanout_fakes import HOST_KEY, fake_tools, ok
@@ -133,6 +133,18 @@ def test_runs_all_lists_every_run_and_batch():
     lines = runs_lines(_runs(), show_all=True)
     assert "20260102T000010Z  orchestrator worktree-b" in lines
     assert "  2 on daniel-box: b2 #2 cleaned 2026-10-09" in lines
+
+
+def test_runs_names_a_batch_the_sweep_stopped_on_with_its_kept_line():
+    stopped = Batch("3", "daniel-server", "/w3", "worktree-fanout-3", "u3", [3], "t")
+    for _ in range(SWEEP_KEPT_LIMIT):
+        stopped = stopped.kept_by_clean("kept: /w3 not merged")
+    lines = runs_lines([Manifest("20260103T000010Z", "c", [stopped])], show_all=False)
+    assert lines == [
+        "1 sweep-stopped",
+        "20260103T000010Z  orchestrator c",
+        "  3 on daniel-server: worktree-fanout-3 #3 sweep-stopped: kept: /w3 not merged",
+    ]
 
 
 def test_launch_prints_one_line_with_the_run_id_and_each_batchs_host_and_rung(
