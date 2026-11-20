@@ -81,7 +81,6 @@ from renderer.renderer_lib.ordering import (
     VERIFY_TEMPLATES_DIR,
     Ordering,
     precheck_files,
-    verify_after,
     verify_files,
 )
 from renderer.renderer_lib.suspension import SYNC_SUSPEND_KEY, sync_suspend_refusal
@@ -222,12 +221,10 @@ def bundle_ordering(
     Raises:
         ValueError: A role's `flux_suspend`, `flux_prune`,
             `manifests_rollout_timeout` or `flux_verify_after` is not a literal
-            (`role_defaults`, `ordering.verify_after`).
+            (`role_defaults`).
     """
     tags = k8s_tags(services)
     defaults, problems = role_defaults(tags, roles)
-    after, after_problems = verify_after(tags, roles)
-    problems += after_problems
     if problems:
         raise ValueError("; ".join(problems))
     k8s = k8s_services(services)
@@ -240,7 +237,11 @@ def bundle_ordering(
         },
         suspended=frozenset(tag for tag, own in defaults.items() if own.suspend),
         workload_namespace=str(group["k8s_namespace"]),
-        verify_after=after,
+        verify_after={
+            tag: list(own.verify_after)
+            for tag, own in defaults.items()
+            if own.verify_after
+        },
     )
 
 

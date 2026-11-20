@@ -1464,7 +1464,7 @@ snapshot is taken. `<tag>-prepull` does the same beside it, never after it (*The
 below). `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the
 tag has one, `<tag>` otherwise. It also depends on the last Kustomization of each tag the role
 names in `flux_verify_after`, so its Jobs probe that tag's rolled pod; `crowdsec` names `traefik`
-(`ordering.verify_after`, #5999). A `K8S_APPLIES_LAST` tag waits on no other tag's
+(`RoleDefaults.verify_after`, #5999). A `K8S_APPLIES_LAST` tag waits on no other tag's
 `-snapshot` or `-verify`. A published tag whose role declares `k8s_autodeploy_snapshot_pvcs`
 renders `<tag>-snapshot` (*The snapshot Job* below). A published tag whose role ships
 `templates/verify/*.yaml.j2` renders `<tag>-verify`; sonarr and radarr were the first, in D5.20.

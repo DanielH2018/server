@@ -7,7 +7,7 @@ Consumed by `test_k8s_autodeploy_batch_gates.py` and by `_autodeploy_rollout.py`
 
 from pathlib import Path
 
-from renderer.renderer_lib.ordering import cronjob_gates
+from lib.k8s_roles import role_defaults
 
 
 def flux_gated_names(role: Path) -> set[str]:
@@ -18,5 +18,6 @@ def flux_gated_names(role: Path) -> set[str]:
     `<tag>-verify`, which Flux runs once per role revision
     (`scripts/renderer/renderer_lib/cronjob_gate.py`).
     """
-    found, _problems = cronjob_gates([role.name], roles=role.parent)
-    return set(found.get(role.name, {}))
+    found, _problems = role_defaults([role.name], roles=role.parent)
+    own = found.get(role.name)
+    return set(own.cronjob_gates) if own else set()
