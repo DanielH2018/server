@@ -4,7 +4,7 @@
   "groupLabels": {"alertname": "HostReconcileFailed", "service": "daniel-server"},
   "commonLabels": {"alertname": "HostReconcileFailed", "service": "daniel-server", "severity": "critical"},
   "commonAnnotations": {
-    "summary": "daniel-server's homelab package reconcile failed, so it installs no newer package.",
+    "summary": "daniel-server: the homelab package reconcile failed, so it installs no newer package.",
     "description": "homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server.",
     "runbook_url": "https://docs.local.example.com/host-packages/"
   },
@@ -14,7 +14,7 @@
       "status": "firing",
       "labels": {"alertname": "HostReconcileFailed", "service": "daniel-server", "severity": "critical"},
       "annotations": {
-        "summary": "daniel-server's homelab package reconcile failed, so it installs no newer package.",
+        "summary": "daniel-server: the homelab package reconcile failed, so it installs no newer package.",
         "description": "homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `journalctl -u homelab-updater -u homelab-reconcile` on daniel-server.",
         "runbook_url": "https://docs.local.example.com/host-packages/"
       },

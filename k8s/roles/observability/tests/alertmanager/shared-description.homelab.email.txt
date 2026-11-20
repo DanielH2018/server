@@ -1,7 +1,7 @@
-WARNING: daniel-box publishes no coretemp temperature sensors.
+WARNING: daniel-box: no coretemp temperature sensors published.
 Started 2026-10-24 09:00 UTC
 
-WARNING: daniel-box publishes no nvme temperature sensors.
+WARNING: daniel-box: no nvme temperature sensors published.
 Started 2026-10-24 09:00 UTC
 
 node_exporter publishes no temperature series, so nothing watches the host's temperature. Read `ls /sys/class/hwmon` on the host.

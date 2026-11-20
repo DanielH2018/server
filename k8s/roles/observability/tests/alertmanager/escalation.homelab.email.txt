@@ -1,14 +1,14 @@
-CRITICAL: SystemdUnitsFailed (daniel-box, nut-monitor.service) has fired as a warning for 48 hours.
+CRITICAL: daniel-box: SystemdUnitsFailed (nut-monitor.service) has fired as a warning for 48 hours.
 Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
 Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
 
-CRITICAL: SystemdUnitsFailed (daniel-box, homelab-claude-pipeline-timeline.service) has fired as a warning for 48 hours.
+CRITICAL: daniel-box: SystemdUnitsFailed (homelab-claude-pipeline-timeline.service) has fired as a warning for 48 hours.
 Fix the warning SystemdUnitsFailed for daniel-box, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
 Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
 
-CRITICAL: SystemdUnitsFailed (daniel-server, nut-monitor.service) has fired as a warning for 48 hours.
+CRITICAL: daniel-server: SystemdUnitsFailed (nut-monitor.service) has fired as a warning for 48 hours.
 Fix the warning SystemdUnitsFailed for daniel-server, which has fired for 48 hours; the Karma link lists it with its own description and runbook. This page resolves when the warning does. A warning that holds by design takes the rule label escalate: "false".
 Started 2026-11-17 09:00 UTC
 Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
