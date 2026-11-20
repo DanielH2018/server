@@ -93,7 +93,7 @@ def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
         in cmd
     )
     # Inside the gone-tree branch — not on the path that still has a tree for `clean-one`.
-    assert cmd.index("worktree remove") < cmd.index("else cd /home/ubuntu/server")
+    assert cmd.index("worktree remove") < cmd.index("else snap=$(mktemp -d)")
     # BEFORE the branch is touched: git refuses `branch -D` while a registration holds it,
     # so deleting the branch first prints `kept: … not deleted` for every merged gone-tree batch.
     assert cmd.index("worktree remove") < cmd.index("branch -D worktree-fanout-1")
