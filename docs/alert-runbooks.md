@@ -302,9 +302,10 @@ alert fires once per failed unit.
 - A unit that names `OnFailure=homelab-alert@%n.service` pages Discord through that hook
   first. Once the hook delivers, the check labels the unit's series
   `paged_by="homelab-alert"`, and Alertmanager sends this alert to its `blackhole` receiver,
-  which notifies nobody. The alert stays visible in Karma. A hook that is still retrying
-  leaves the label off, so this alert pages while the hook cannot. After 48 hours the alert
-  still escalates to `WarningUnresolved`, which pages.
+  which notifies nobody. The alert stays visible in Karma. The check's first run after the
+  failure decides the label, and the label holds until the unit recovers. If the hook has
+  not delivered by that run, the label stays off and this alert pages. After 48 hours the
+  alert still escalates to `WarningUnresolved`, which pages.
 
 ### `TextfileCollectorError`
 

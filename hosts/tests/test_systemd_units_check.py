@@ -50,10 +50,10 @@ def _run(tmp_path, listed: str, rc: int = 0, shown: dict[str, str] | None = None
     """
     script = write_exec(tmp_path / "systemd-units-check.sh", SCRIPT.read_text())
     textfile = tmp_path / "textfile"
-    textfile.mkdir()
+    textfile.mkdir(exist_ok=True)
     (tmp_path / "listed").write_text(listed)
     show_dir = tmp_path / "show"
-    show_dir.mkdir()
+    show_dir.mkdir(exist_ok=True)
     for unit, props in (shown or {}).items():
         (show_dir / unit).write_text(props)
     stubs = fake_bin(
@@ -175,6 +175,33 @@ def test_a_unit_without_a_delivered_hook_page_carries_no_paged_by(tmp_path, show
     _run(tmp_path, f"{HOOKED} loaded failed failed builder\n", shown=shown)
     assert _unit_series(tmp_path) == [
         f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"}} 1'
+    ]
+
+
+RETRYING = _hook("activating", "exit-code", 0)
+DELIVERED = _hook("inactive", "success", FAILED_AT + 1)
+
+
+@pytest.mark.parametrize(
+    ("first", "then", "paged_by"),
+    [
+        pytest.param(RETRYING, DELIVERED, "", id="late-delivery-adds-no-label"),
+        pytest.param(
+            DELIVERED,
+            RETRYING,
+            ',paged_by="homelab-alert"',
+            id="label-outlives-a-retry",
+        ),
+    ],
+)
+def test_a_unit_still_failed_keeps_the_label_set_of_the_run_that_found_it(
+    tmp_path, first, then, paged_by
+):
+    listed = f"{HOOKED} loaded failed failed builder\n"
+    _run(tmp_path, listed, shown={HOOKED: _hooked_unit(), HOOK: first})
+    _run(tmp_path, listed, shown={HOOKED: _hooked_unit(), HOOK: then})
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"{paged_by}}} 1'
     ]
 
 

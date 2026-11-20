@@ -7,6 +7,8 @@
 # plus homelab_systemd_failed_units with the count and one homelab_systemd_unit_failed series
 # per failed unit, labelled with the unit's name. A unit whose OnFailure=homelab-alert@ instance
 # has delivered its Discord page since the unit failed also carries paged_by="homelab-alert".
+# The run that first finds a unit failed decides the label, and later runs copy it from the
+# previous file while the unit stays failed.
 # It exits non-zero only when systemctl cannot list the units or the textfile write fails.
 # Running it by hand is safe and does what the timer does.
 #
@@ -14,8 +16,10 @@
 # unit with no OnFailure= hook and no textfile verdict of its own would fail silently. The
 # SystemdUnits* rules in k8s/roles/observability/files/rules/host-checks.yaml read the file this
 # writes. Alertmanager sends a paged_by alert to its blackhole, so a unit whose hook delivered
-# pages once. A hook that is still retrying, or that never ran, leaves the label off, and
-# Alertmanager pages for the unit.
+# pages once. A hook that is still retrying, or that never ran, when the unit is first found
+# leaves the label off for the whole failure, and Alertmanager pages for the unit. The label
+# never changes mid-failure, because a changed label set resolves the firing alert, and
+# Discord would receive a RESOLVED notice for a unit that is still failed.
 #
 # System units only: a user manager's units belong to that user's session, and a failed one
 # says nothing about the host.
@@ -74,6 +78,7 @@ hook_delivered() {
 # names carry systemd's \x2d escapes, and node_exporter rejects the whole file on a label value
 # with a backslash or quote the text format does not escape.
 PER_UNIT=()
+PREVIOUS=$(grep '^homelab_systemd_unit_failed{' "${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}/systemd-units.prom" 2>/dev/null)
 if ((COUNT > 0)); then
   PER_UNIT+=(
     "# HELP homelab_systemd_unit_failed 1 for each system unit in the failed state at the check's last run."
@@ -82,9 +87,14 @@ if ((COUNT > 0)); then
   while IFS= read -r unit; do
     escaped=${unit//\\/\\\\}
     escaped=${escaped//\"/\\\"}
-    paged_by=""
-    hook_delivered "$unit" && paged_by=',paged_by="homelab-alert"'
-    PER_UNIT+=("homelab_systemd_unit_failed{check=\"systemd-units\",unit=\"${escaped}\"${paged_by}} 1")
+    series="homelab_systemd_unit_failed{check=\"systemd-units\",unit=\"${escaped}\""
+    if line=$(grep -m1 -F -e "${series}} 1" -e "${series},paged_by=\"homelab-alert\"} 1" <<<"$PREVIOUS"); then
+      PER_UNIT+=("$line")
+    elif hook_delivered "$unit"; then
+      PER_UNIT+=("${series},paged_by=\"homelab-alert\"} 1")
+    else
+      PER_UNIT+=("${series}} 1")
+    fi
   done <<<"$UNITS"
 fi
 
