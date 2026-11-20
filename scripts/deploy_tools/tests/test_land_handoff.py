@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-import land
+from deploy_tools import land
 from deploy_tools.land_lib import handoff
 from deploy_tools.land_lib.options import HANDOFF_ENV, PRIMARY_ENV
 from deploy_tools.land_lib.outcome import VERDICTS

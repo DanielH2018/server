@@ -291,16 +291,14 @@ groups:
             docs/host-packages.md has the fix for each reason.
             Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN host_packages '`.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-      # THE STARTUP-GRACE FAMILY: the six rows whose `gate` column reads `startup_grace` and
-      # whose rule lives here. Each rule is `for: 10m`, two bridge cycles.
-      # `bridge.streaks.apply_startup_grace` holds a row `up` through its first down cycle and
-      # pushes `down` on the second, and the exporter writes the gauge before that hold
-      # (m6-retire-kuma.md, "Gates and grace"). A gauge that reads 0 for one 300s cycle spans
-      # five or six 1-minute samples, so `for: 5m` fires on a one-cycle blip or not by scrape
-      # alignment. `for: 10m` needs two consecutive down cycles, as the bridge does. `n8n` and
-      # `speedtest` keep their in-body streaks, on which the grace already stacks. No row here
-      # has a gate, so no rule carries `requires` and no inhibit rule reaches them. A row with
-      # no series stays quiet here: BridgeCheckStale owns a missing row.
+      # THE STARTUP-GRACE FAMILY: the rows whose `gate` column reads `startup_grace`. The bridge
+      # holds nothing for them, so each rule's `for: 10m` is the whole grace, and it rides out
+      # the weekly reboot. A gauge that reads 0 for one 300s cycle spans five or six 1-minute
+      # samples, so `for: 5m` fires on a one-cycle blip or not by scrape alignment. `for: 10m`
+      # needs two consecutive down cycles. `n8n` and `speedtest` keep their in-body streaks,
+      # on which the `for:` stacks. No row here has a gate, so no rule carries `requires` and
+      # no inhibit rule reaches them. A row with no series stays quiet here: BridgeCheckStale
+      # owns a missing row.
       - alert: N8nWorkflowsFailing
         expr: homelab_check_success{job="monitor-bridge", check="n8n"} == 0
         for: 10m
@@ -369,3 +367,15 @@ groups:
           description: >-
             The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
             under 100 Mbps. Open the speedtest UI and check its scheduler and last result.
+      - alert: AirflowSchedulerDown
+        expr: homelab_check_success{job="monitor-bridge", check="airflow_scheduler"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: airflow
+        annotations:
+          summary: Airflow's scheduler is not running, so no warehouse rollup starts.
+          description: >-
+            The scheduler's own health server answers 503, or does not answer at all. Read the
+            airflow-scheduler pod's state and log in the homelab namespace.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN airflow_scheduler '`.

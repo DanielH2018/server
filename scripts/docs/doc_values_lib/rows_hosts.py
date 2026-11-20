@@ -1,15 +1,7 @@
 """The value rows whose docs are a host component's `CLAUDE.md`, a rule or a skill."""
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
-from fragment_readers import module_constant
-from doc_values_lib.readers import (
+from docs.fragment_readers import module_constant
+from docs.doc_values_lib.readers import (
     CARDINALS,
     ORDINALS,
     cardinal,

@@ -19,7 +19,7 @@ import yaml
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from renderer.renderer_lib.bundle import tag_kustomization
 
-import promote
+from deploy_tools import promote
 from deploy_tools.promote_lib import verify_handoff
 from deploy_tools.promote_lib import verify_promotion as vp
 
@@ -336,7 +336,7 @@ def test_the_status_read_maps_each_context_to_its_newest_state(world):
 
 
 def test_a_status_read_that_answers_500_is_a_forge_error(world):
-    import forge
+    from deploy_tools import forge
 
     t = world.commits[-1]
     world.transport.api_forced[f"/repos/DanielH2018/server/commits/{t}/status"] = 500

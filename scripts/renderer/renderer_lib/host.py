@@ -61,6 +61,7 @@ from pathlib import Path, PurePosixPath
 import jinja2
 
 from lib import yaml_fast
+from lib.container_entry import ContainerEntryError
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
@@ -205,18 +206,13 @@ def render_package(
         if any(dst == tool_path(tool) for tool in package.tools):
             raise RenderRefused(f"{name}: two files install {dst}")
     # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
-    if package.legacy:
-        raise RenderRefused(
-            f"{name}: a shared package lists no legacy entry; its host package does"
-        )
-    if package.links:
-        raise RenderRefused(
-            f"{name}: a shared package lists no enable link; its host package does"
-        )
-    if has_arms(package):
-        raise RenderRefused(
-            f"{name}: a shared package declares no ufw, libvirt, users or lines"
-        )
+    for present, refusal in (
+        (package.legacy, "lists no legacy entry; its host package does"),
+        (package.links, "lists no enable link; its host package does"),
+        (has_arms(package), "declares no ufw, libvirt, users or lines"),
+    ):
+        if present:
+            raise RenderRefused(f"{name}: a shared package {refusal}")
     return package
 
 
@@ -502,6 +498,9 @@ def host_context(
     `placeholders` is not withheld: it reads as its sentinel (`placeholders.sentinel`), which
     a declared output or a compose file turns into `${<key>}`. The sentinel is an override, so
     an inventory value that aliases the secret expands to it too.
+
+    Raises:
+        RenderRefused: A service list the context carries is malformed.
     """
 
     def resolve(strict: bool) -> dict:
@@ -528,6 +527,8 @@ def host_context(
     }
     try:
         ctx = resolve(strict=True)
+    except ContainerEntryError as exc:
+        raise RenderRefused(str(exc)) from exc
     except UnresolvedVarsError as exc:
         # Not raised: group_vars may hold values only a play can expand, and a render fails
         # only for a template that reads one.

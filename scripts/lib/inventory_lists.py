@@ -1,14 +1,10 @@
-"""The one reading of the service lists and the host list every script under ``scripts/`` shares.
+"""The host list and the Pi's service list, read with no YAML or Jinja import.
 
-WHY A MODULE WITH NO IMPORTS. ``render_guard.containers_entries_in`` was meant to be the one
-rule for which ``containers_list`` entries count, but importing ``render_guard`` costs a
-``jinja2`` and a ``yaml`` import. So eight readers wrote their own filter, and they disagreed
-about an entry with an empty ``name`` or none at all, and host names were copied by
-hand into two tuples. This module imports only the standard library and ``repo_paths``, the same reason
-``repo_paths`` was split out of ``render_guard``.
-
-``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
-loader and its own error handling. ``render_guard`` re-exports it.
+WHY A MODULE WITH NO IMPORTS. Importing ``render_guard`` costs a ``jinja2`` and a ``yaml``
+import, so a script that needs only a host name or the Pi's service list reads it here. This
+module imports only the standard library and ``repo_paths``, the same reason ``repo_paths``
+was split out of ``render_guard``. ``containers_list`` is parsed by
+``lib.container_entry.parse_containers_list``, which ``render_guard.k8s_services`` calls.
 
 Three host roles a script must name without parsing YAML: ``LANDING_HOST``, ``PI_HOST``
 and ``K8S_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
@@ -45,17 +41,6 @@ def host_vars_file(host: str, host_vars: Path = HOST_VARS) -> Path:
 PI_HOST_VARS = host_vars_file(PI_HOST)
 
 
-def containers_entries_in(data: dict | None) -> list[dict]:
-    """The named ``containers_list`` entries in an already-parsed ``cluster/services.yml``.
-
-    Entries with no ``name`` are dropped rather than raising: ``render_guard.entry_tags``
-    derives a service's tags from its name, so an unnamed entry selects nothing. A non-mapping entry
-    is dropped for the same reason, because it cannot answer ``.get("name")``.
-    """
-    entries = (data or {}).get("containers_list") or []
-    return [e for e in entries if isinstance(e, dict) and e.get("name")]
-
-
 # The key that lists the Pi's services, which the `homelab-daniel-pi` package deploys (H5).
 PI_LIST_KEY = "compose_services"
 
@@ -63,7 +48,8 @@ PI_LIST_KEY = "compose_services"
 def pi_entries_in(data: dict | None) -> list[dict]:
     """The named entries of the Pi's `compose_services` in an already-parsed host_vars mapping.
 
-    Entries are filtered as ``containers_entries_in`` filters, and a null list reads as empty.
+    An entry that is not a mapping or has no ``name`` is dropped, because the package names
+    each service by it, and a null list reads as empty.
     A mapping that lacks the key raises, so a reader of the Pi's services cannot read an
     inventory that lost it as a Pi with no services.
 

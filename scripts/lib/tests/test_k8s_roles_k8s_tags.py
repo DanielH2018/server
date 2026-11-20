@@ -16,7 +16,7 @@ containers_list:
 
 def test_k8s_tags_names_every_tag_of_every_k8s_entry(tmp_path):
     services = tmp_path / "services.yml"
-    services.write_text(SERVICES + "  - port: 1\n")
+    services.write_text(SERVICES)
     assert k8s_tags(services) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
 
 

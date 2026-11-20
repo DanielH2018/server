@@ -21,7 +21,7 @@ from test_promote_reconcile import CONTEXT, _run
 from test_promote_settle import REPO_URL, WORKFLOW, _step
 from test_promote_stateful_hold import SONARR_SNAP, _bundle
 
-import promote
+from deploy_tools import promote
 
 STEP = "Apply the lost run's verdict"
 NEEDS = re.compile(r"^\$\{\{\s*needs\.promote\.outputs\.(\w+)\s*\}\}$")

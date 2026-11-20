@@ -24,7 +24,7 @@ def ingress_probe_targets(containers_list):
     """
     targets = []
     for entry in containers_list or []:
-        if not isinstance(entry, dict) or not entry.get("hostname"):
+        if not entry.get("hostname"):
             continue
         if "probe" in entry:
             if entry["probe"] is False:

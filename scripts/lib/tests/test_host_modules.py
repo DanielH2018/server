@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 
-from lib.repo_paths import SCRIPTS
+from lib.repo_paths import ROLE_MODULES, SCRIPTS
 
 
 def _imports(code: str) -> subprocess.CompletedProcess:
@@ -31,6 +31,12 @@ def test_the_host_modules_import_after_it_is_clean():
         "import host_lib, ci_verdict, builder_ci_grade, gh_quota\n"
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def test_every_listed_role_module_imports_after_it():
+    names = [name for names in ROLE_MODULES.values() for name in names]
+    proc = _imports(f"from lib import host_modules\nimport {', '.join(names)}\n")
+    assert names and proc.returncode == 0, proc.stderr
 
 
 def test_a_host_module_without_it_is_flagged():

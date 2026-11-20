@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-import publish_pr
+from deploy_tools import publish_pr
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 from _publish_pr_fakes import TIMEOUT, Recorder, cp
 

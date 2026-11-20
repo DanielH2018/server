@@ -14,19 +14,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `artifact_retention` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import removes_object
 from lib.git import git
 from validate import cluster_pins
 from validate.cluster_pins import Pin
 
-import forge
-from artifact_retention import LAST_GOOD_TAG, PROD_TAG
+from deploy_tools import forge
+from deploy_tools.artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from deploy_tools.promote_lib import forward_only, reboot_window, wait
 from deploy_tools.promote_lib.ci_contexts import CI_CONTEXTS_SOURCE, read_ci_contexts
 from deploy_tools.promote_lib.prune import ReadError

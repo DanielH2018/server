@@ -13,13 +13,8 @@ fail2ban jail template from `configparser`.
 
 import ast
 import configparser
-import sys as _sys
+from collections.abc import Sequence
 from pathlib import Path as _Path
-
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.estate import Estate
@@ -97,7 +92,7 @@ def parse_jails(conf: str) -> list[dict[str, str]]:
     return jails
 
 
-def container_udp_port(entries: list[dict], name: str) -> str:
+def container_udp_port(entries: Sequence[dict], name: str) -> str:
     entries = [c for c in entries if c["name"] == name]
     assert len(entries) == 1, (
         f"expected one {name!r} in the host's service entries, found {len(entries)}"

@@ -15,8 +15,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-# `promote_lib` imports as `deploy_tools.promote_lib`, from scripts/.
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from deploy_tools.promote_lib import forward_only, reboot_window, stateful
 from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError

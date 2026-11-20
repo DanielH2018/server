@@ -676,7 +676,7 @@ tests:
 
   # THE STARTUP-GRACE FAMILY. Every gauge is 0 from the first sample. Each rule is
   # `for: 10m`, two bridge cycles: one minute short of the hold
-  # nothing fires, and at the hold all six do. No rule carries `requires`, since no row here has
+  # nothing fires, and at the hold every one does. No rule carries `requires`, since no row here has
   # a gate.
   - interval: 1m
     input_series:
@@ -689,6 +689,8 @@ tests:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny"}
         values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
+        values: "0x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="airflow_scheduler"}
         values: "0x12"
     alert_rule_test:
       - eval_time: 9m
@@ -705,6 +707,9 @@ tests:
         exp_alerts: []
       - eval_time: 9m
         alertname: SpeedtestDegraded
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: AirflowSchedulerDown
         exp_alerts: []
       - eval_time: 10m
         alertname: N8nWorkflowsFailing
@@ -784,6 +789,22 @@ tests:
             exp_annotations:
               summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
+      - eval_time: 10m
+        alertname: AirflowSchedulerDown
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: airflow_scheduler
+              severity: warning
+              service: airflow
+            exp_annotations:
+              summary: "Airflow's scheduler is not running, so no warehouse rollup starts."
+              description: >-
+                The scheduler's own health server answers 503, or does not answer at
+                all. Read the airflow-scheduler pod's state and log in the homelab
+                namespace. Its DOWN line: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN airflow_scheduler '`.
 
   # The members a down row names. Each row exports one homelab_check_detail series per
   # failing member, and the summary lists them sorted, scoped to its own `check`: the bazarr

@@ -17,7 +17,7 @@ import tomllib
 from collections.abc import Callable
 from pathlib import Path
 
-import gen_role_glance as g
+from docs import gen_role_glance as g
 import pytest
 import yaml
 from _helpers import REPO

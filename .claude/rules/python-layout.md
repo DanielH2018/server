@@ -25,9 +25,10 @@ the scripts packaging milestone qualifies its area. `pythonpath` in `pyproject.t
 pytest setting, so pytest resolving it proves nothing about the cron or hook that runs it.
 `scripts/tests/test_script_bootstraps_present.py` flags a missing insert.
 
-A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade` or `gh_quota` by bare name
-imports `lib.host_modules` first (`from lib import host_modules  # noqa: F401`). It is the one
-module under `scripts/` that adds to `sys.path`. A module a host package copies (`shared:`)
+A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade`, `gh_quota` or a role module
+`scripts/lib/repo_paths.py:ROLE_MODULES` lists by bare name imports `lib.host_modules` first
+(`from lib import host_modules  # noqa: F401`). It is the one module under `scripts/` that
+adds to `sys.path`. A module a host package copies (`shared:`)
 keeps its own insert of `hosts/lib/`, because no `lib` ships beside it.
 
 A module under a `tests/` directory carries none of this: pytest is its only invoker, and

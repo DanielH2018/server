@@ -5,20 +5,14 @@ actually running, and ``infra_map.model`` reconciles the two.
 """
 
 import re
-import sys as _sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from pathlib import Path as _Path
 from collections.abc import Sequence
 from typing import Any
 
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.inventory_lists import K8S_HOST, PI_HOST, pi_entries_in
+from lib.container_entry import ContainerEntry
 from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
@@ -139,7 +133,7 @@ def resolve_vars[T](value: T, variables: dict[str, Any], _depth: int = 0) -> T |
 
 def load_inventory(
     repo_root: Path = REPO_ROOT,
-) -> tuple[dict[str, Any], dict[str, dict], list[dict]]:
+) -> tuple[dict[str, Any], dict[str, dict], tuple[ContainerEntry, ...]]:
     """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
     inventory = repo_root / "inventory"
     global_vars = (

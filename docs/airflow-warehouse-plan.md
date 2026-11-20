@@ -56,8 +56,9 @@ role as built.
   temperature per host. Done when `land.sh` reads healthy, the backfill fills every day
   Prometheus holds, a cleared day reloads to the same row counts, and the idle footprint is in
   the role's `CLAUDE.md`.
-- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the api-server's
-  `/api/v2/monitor/health`, and its alert rule, so a dead scheduler pages.
+- **Slice 0b, the scheduler deadman.** A monitor-bridge check on the scheduler's health,
+  and its alert rule, so a dead scheduler pages. Done: the `airflow_scheduler` row reads the
+  scheduler's own health server, and `AirflowSchedulerDown` pages it.
 - **Slice 1, long-term metrics (idea 1).** Volume usage and growth per claim, node load and
   memory, GPU busy and UPS battery, as `prom_series_rollup` into `prom.series_daily`, plus a
   "Homelab history" board. Volume usage reads kubelet's filesystem figures, because
@@ -65,8 +66,10 @@ role as built.
   Longhorn logs them, so they live in `loki-homelab`, not Prometheus.
 - **Slice 2, Claude Code telemetry history (idea 2).** Daily spend, tokens, cache hit rate,
   tool errors and permission decisions, with the four counting traps as tested code.
-- **Slice 3, Home Assistant history (idea 3).** State history for a declared entity list. The
-  source keeps seven days, so a longer DAG outage loses data.
+- **Slice 3, Home Assistant history (idea 3).** Daily min, time-weighted mean, max and
+  unavailable time for a declared sensor list, and each energy counter's daily increase, as
+  `ha_daily_rollup` into `ha.sensor_daily`. The source keeps seven days, so a longer DAG
+  outage loses data. Built before slice 2 for that reason: Claude telemetry keeps about 30.
 - **Slice 4, SMART history (idea 4).** Scrutiny's stored history, by ClusterIP.
 - **Slice 5, repo engineering metrics (idea 5).** PRs, CI runs and findings issues,
   incremental by `updated_at`. All of one user's tokens share one GitHub quota, so each run is

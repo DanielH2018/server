@@ -8,10 +8,7 @@ Deployment to Available before a bad liveness probe starts killing it. It is ask
 
 from typing import NoReturn
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import promotion
 from deploy_tools.land_lib.landing import BRANCH, Landing
