@@ -692,6 +692,8 @@ containers_list:
     # prometheus scrapes this port and browsers arrive through traefik; the baseline admits
     # both. probe.py's `ha` subcommands run on a node, so the baseline's cni0 /32s cover them.
     netpol_from:
+      - airflow-task    # HA_URL (airflow/files/dags/homelab_warehouse/ha_rollup.py), the
+                        # nightly sensor-history rollup
       - homelab-mcp     # HA_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's read tools
       - monitor-bridge  # HA_URL (monitor-bridge/templates/config/env.yaml.j2), the
                         # scheduler-stuck check the container healthcheck cannot see
