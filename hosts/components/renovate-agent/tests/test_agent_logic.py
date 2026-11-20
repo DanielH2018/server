@@ -245,6 +245,7 @@ class _FakeHost:
                         "title": f"Update dep {n}",
                         "url": f"u/{n}",
                         "author": {"login": "app/renovate"},
+                        "headRefName": "renovate/dep",
                     }
                     for n in self.prs
                 ]
@@ -300,17 +301,20 @@ _LISTING = json.dumps(
             "title": "r",
             "updatedAt": "2026-09-30T06:00:00Z",
             "author": {"login": "app/renovate"},
+            "headRefName": "renovate/dep",
         },
         {
             "number": 50,
             "title": "t",
             "updatedAt": "2026-09-30T06:10:00Z",
             "author": {"login": "me"},
+            "headRefName": "renovate/dep",
         },
         {
             "number": 40,
             "title": "o",
             "author": {"login": "someone"},
+            "headRefName": "renovate/dep",
         },
     ]
 )

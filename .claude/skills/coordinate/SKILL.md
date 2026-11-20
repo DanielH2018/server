@@ -30,7 +30,8 @@ The root runs in the primary checkout and stays thin. It does seven things:
   milestone title, with the issue numbers when the operator named them. The app starts a
   session only on a turn the operator typed, so start sub-coordinators on that turn.
   `uv run python scripts/dev/findings.py next --milestone none` lists the issues no open
-  milestone holds, which is the pool a project is picked from.
+  milestone holds, which is the pool a project is picked from. An issue in a group is held
+  by that group's milestone, so read it with `next --milestone "<title>"`.
 - **Carry the operator's launch approval in the brief, and never originate one.** When the
   operator told you to start the project, quote the words that named it, exactly as typed,
   and state the grouping rules (*Approval*). For a project you chose yourself, or grouping
@@ -123,7 +124,8 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
 
 3. **File the backlog.** Add the issues your brief or the root names with `milestone add
    <n...> --worktree <branch>`. When the brief names none, list `next --milestone none
-   --json`, pick the issues the title covers, and put that list in the approval ask in
+   --json` (it omits issues already in a group; read those with `next --milestone
+   "<group title>"`), pick the issues the title covers, and put that list in the approval ask in
    place of adding it. A list you picked always goes to the gate, whatever the brief
    quotes.
 
