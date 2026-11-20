@@ -24,15 +24,10 @@ docs/archive/deploy/d7-superseding-promotions.md has the design and the cases.
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py`
 """
 
-import sys as _sys
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `changed_set` and `artifact_retention` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
-from artifact_retention import SUPERSEDING_TAG
-from changed_set import ROOT, SOAK, ChangedSet, changed_set
+from deploy_tools.artifact_retention import SUPERSEDING_TAG
+from deploy_tools.changed_set import ROOT, SOAK, ChangedSet, changed_set
 from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.flux_status import FAILED_STATES, flux_states
 from deploy_tools.promote_lib.reads import Reads

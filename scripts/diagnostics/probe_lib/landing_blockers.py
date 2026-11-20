@@ -45,27 +45,24 @@ named in `errors` and leaves its own field `null`; it never fails the whole read
 Exit code: 0 when nothing blocks a landing, 1 when something does.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
-
 import functools
 import json
 import re
 import socket
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
+from deploy_tools.land_lib.detach import (
+    _VERDICT_LINE,
+    default_log_dir,
+    error_in,
+    verdict_in,
+)
 from lib.inventory_lists import LANDING_HOST, host_vars_file
 from lib.repo_paths import REPO
 
@@ -218,7 +215,7 @@ def _run(argv: list[str]) -> str:
     ).stdout
 
 
-def _last_verdict(log_dir: _Path | None = None) -> dict | None:
+def _last_verdict(log_dir: Path | None = None) -> dict | None:
     """The newest `land*.log` in this session's landing-log directory, with its verdict.
 
     A stop that names no verdict (a landing-policy refusal) reports its `land:` line instead.
@@ -325,7 +322,7 @@ def collect(
     def read_sessions():
         trees = parse_worktrees(run(["git", "worktree", "list", "--porcelain"]))
         claims = json.loads(
-            run([_sys.executable, "scripts/dev/findings.py", "claims", "--json"])
+            run([sys.executable, "scripts/dev/findings.py", "claims", "--json"])
         )
         snap["worktrees"] = [
             {**t, "claims": worktree_claims(t, claims)}

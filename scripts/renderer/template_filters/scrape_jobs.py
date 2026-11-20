@@ -44,20 +44,20 @@ def _items(entry):
     items = entry.get("metrics") or []
     if not isinstance(items, list):
         raise ValueError(
-            f"containers_list entry {entry.get('name')!r}: `metrics` must be a list of "
+            f"containers_list entry {entry['name']!r}: `metrics` must be a list of "
             f"mappings, got {type(items).__name__}"
         )
     for item in items:
         if not isinstance(item, dict):
             raise ValueError(
-                f"containers_list entry {entry.get('name')!r}: a `metrics` item must be a "
+                f"containers_list entry {entry['name']!r}: a `metrics` item must be a "
                 f"mapping, got {item!r}"
             )
         missing = [k for k in _REQUIRED if k not in item]
         unknown = sorted(set(item) - set(_REQUIRED) - set(_OPTIONAL))
         if missing or unknown:
             raise ValueError(
-                f"containers_list entry {entry.get('name')!r}: `metrics` item {item!r} "
+                f"containers_list entry {entry['name']!r}: `metrics` item {item!r} "
                 f"lacks {missing} or carries unknown keys {unknown}; known: "
                 f"{', '.join(_REQUIRED + _OPTIONAL)}. A job needing anything else stays "
                 "hand-written in prometheus.yaml.j2"
@@ -68,7 +68,7 @@ def _items(entry):
             for values in params.values()
         ):
             raise ValueError(
-                f"containers_list entry {entry.get('name')!r}: `metrics` job "
+                f"containers_list entry {entry['name']!r}: `metrics` job "
                 f"{item['job']!r} has `params` {params!r}; it must map each parameter "
                 "name to a list of strings, the shape Prometheus reads"
             )
@@ -79,7 +79,7 @@ def _port(entry, item):
     port = item.get("port", entry.get("port"))
     if port is None:
         raise ValueError(
-            f"containers_list entry {entry.get('name')!r}: `metrics` job {item['job']!r} "
+            f"containers_list entry {entry['name']!r}: `metrics` job {item['job']!r} "
             "names no `port` and the entry has none to default to"
         )
     return int(port)
@@ -95,17 +95,15 @@ def scrape_jobs(containers_list, namespace):
     """
     jobs, seen = [], {}
     for entry in containers_list or []:
-        if not isinstance(entry, dict):
-            continue
         for item in _items(entry):
             name = item["job"]
             if name in seen:
                 raise ValueError(
                     f"scrape job {name!r} is declared by both {seen[name]!r} and "
-                    f"{entry.get('name')!r}"
+                    f"{entry['name']!r}"
                 )
-            seen[name] = entry.get("name")
-            service = item.get("service", entry.get("name"))
+            seen[name] = entry["name"]
+            service = item.get("service", entry["name"])
             job = {
                 "job": name,
                 "target": f"{service}.{namespace}.svc:{_port(entry, item)}",
@@ -126,8 +124,6 @@ def metrics_port(containers_list, job):
     Raises ValueError when no entry declares `job`.
     """
     for entry in containers_list or []:
-        if not isinstance(entry, dict):
-            continue
         for item in _items(entry):
             if item["job"] == job:
                 return _port(entry, item)
@@ -144,7 +140,7 @@ def entry_port(containers_list, name):
     Raises ValueError when no entry is named `name`, or when that entry has no `port`.
     """
     for entry in containers_list or []:
-        if isinstance(entry, dict) and entry.get("name") == name:
+        if entry["name"] == name:
             if entry.get("port") is None:
                 raise ValueError(f"containers_list entry {name!r} has no `port`")
             return int(entry["port"])

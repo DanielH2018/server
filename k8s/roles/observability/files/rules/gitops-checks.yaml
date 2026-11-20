@@ -1,8 +1,8 @@
-# The B3 host checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B3): the
+# The B3 host checks of M6 (docs/archive/monitoring/m6-retire-kuma.md, batch B3): the
 # GitHub ruleset drift check and the GitHub interaction-limit re-arm, both timers of the
 # gitops_deploy role on daniel-box. Each producer writes a `homelab_check_*` textfile to the `node`
 # scrape job, so these rules read the metric contract of
-# docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
+# docs/archive/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # THE FOUR GITHUB RULES are `warning`, so Discord alone. Each pair is `<Check>Failed` and

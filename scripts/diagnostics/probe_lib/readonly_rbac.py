@@ -12,14 +12,6 @@ control: prove the tool works before reading anything into what it refuses, the 
 control-first pattern the netpol probe Jobs use.
 """
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 # `core.<name>` for anything the tests monkeypatch — binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core

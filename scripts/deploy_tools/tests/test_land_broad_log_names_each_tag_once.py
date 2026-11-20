@@ -53,7 +53,7 @@ def _probe(argv, unhealthy: frozenset[str]):
 @pytest.fixture
 def broad_landing(monkeypatch, capsys, tmp_path):
     """Land a PR whose changed set names every BROAD tag; (rc, stdout, verdict file text)."""
-    import land
+    from deploy_tools import land
 
     def run(unhealthy: bool = False):
         old = digests(**{t.replace("-", "_"): "1" for t in BROAD})

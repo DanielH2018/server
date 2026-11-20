@@ -7,7 +7,7 @@ import email.message
 import io
 import urllib.error
 
-import await_ci
+from deploy_tools import await_ci
 import pytest
 from ci_verdict import CheckRun
 

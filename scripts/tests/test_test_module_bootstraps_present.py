@@ -11,7 +11,8 @@ because some other module — collected earlier in the same session — already 
 directory. `scripts/diagnostics/tests/test_ui_login.py` imported `ui_login` that way for as long
 as `test_probe_vip_placement.py` (which carries the insert) happened to be collected first;
 sharding the suite broke the accident and turned it into `ModuleNotFoundError: No module named
-'ui_login'` on one leg.
+'ui_login'` on one leg. The diagnostics tests import their package dotted from `scripts/`
+(`from diagnostics import ui_login`), which needs no insert at all.
 
 The rule: for a bare-name import in a test module, the name must be importable from the
 module's own directory or from a `pythonpath` entry. If it is not, and the name resolves to a
@@ -27,8 +28,8 @@ The inverse holds too: a test module must NOT carry an insert `pythonpath` alrea
 insert of one of those directories, or of the module's own directory, is dead weight copied from
 a sibling. Guard 2 mandates the bootstrap for a directly-invoked script; this guard's
 `find_redundant_test_bootstraps` refuses it where pytest is the only invoker. The rule is
-redundancy, not absence: an insert of `scripts/diagnostics` in `test_ui_login.py` still resolves
-a directory `pythonpath` deliberately omits, and passes on that merit rather than by exclusion.
+redundancy, not absence: an insert of a directory `pythonpath` omits still resolves a name, and
+passes on that merit rather than by exclusion.
 
 This stays a file rather than a census row for the reason Guard 2 gives: it judges
 each import through Guard 2's evaluator against an index of the tree, and its accept/reject
@@ -278,9 +279,9 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     """Non-vacuity: name the members, not a count.
 
     A census that globs for its own subject returns an empty set the moment those files move,
-    and an `all(...)` over nothing passes. Four of these are the modules the guard was
-    written for — `test_ui_login.py` is the one that breaks, and three siblings carry the
-    insert it borrows. The next two pin two other census shapes: a `scripts/tests` guard, and
+    and an `all(...)` over nothing passes. The first three are the modules the guard was
+    written for: `test_ui_login.py` broke when sharding separated it from the two siblings
+    whose insert it borrowed. The next two pin two other census shapes: a `scripts/tests` guard, and
     a `conftest.py` outside `scripts/`. The last two are fixture modules, one under
     `scripts/` and one under `tests/` — a shape a census narrowed back to `test_*.py`
     would drop without moving the count past 200.
@@ -301,18 +302,6 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     )
     assert required <= census, sorted(required - census)
     assert len(census) > 200, len(census)
-
-
-def test_the_diagnostics_inserts_are_load_bearing_not_redundant():
-    """`scripts/diagnostics` is deliberately absent from `pythonpath` (pyproject.toml), so the
-    insert `test_ui_login.py` carries is the one thing that resolves `import ui_login`. A rule
-    that flagged it would be "no insert at all", not "no redundant insert" — pin the
-    difference on a real member, so the rule cannot silently invert."""
-    ui_login = REPO / "scripts/diagnostics/tests/test_ui_login.py"
-    assert ui_login in collect_test_modules()
-    inserts = _sys_path_insert_calls(_parsed(ui_login))
-    assert inserts, "test_ui_login.py lost the insert #1333 is about"
-    assert find_redundant_test_bootstraps([ui_login], PYTHONPATH_DIRS) == []
 
 
 def _write(path: Path, body: str) -> Path:

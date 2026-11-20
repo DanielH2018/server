@@ -234,8 +234,9 @@ def test_the_runbook_calls_the_script_and_it_runs():
     """`docs/k3s-upgrade.md` must name this entry point, and the entry point must import.
 
     `test_documented_paths_exist.py` only sees a `file:line` citation, so a bare path in the
-    runbook is invisible to it. Running the script with a bad flag exercises its own
-    `sys.path` bootstrap, which the in-process import above cannot.
+    runbook is invisible to it. Running the script with a bad flag exercises its imports
+    from the installed root, with nothing of pytest's `pythonpath`, which the in-process
+    import above cannot.
     """
     script = "scripts/deploy_tools/runbook_gates.py"
     assert f"{script} k3s-upgrade" in _RUNBOOK.read_text()

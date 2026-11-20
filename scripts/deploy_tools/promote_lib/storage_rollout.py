@@ -35,15 +35,10 @@ only a hand clear lifts. More hops without provisional failures would not change
 Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promotion_storage_rollout.py`
 """
 
-import sys as _sys
 from collections.abc import Iterable, Mapping
-from pathlib import Path as _Path
 
-# `chained_timeout` imports bare, from scripts/deploy_tools.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from chained_timeout import largest_retry_s, seconds
+from deploy_tools.chained_timeout import largest_retry_s, seconds
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.promote_lib.flux_status import STATUS_PREFIX, StatusState
 
 

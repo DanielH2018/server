@@ -10,14 +10,8 @@ Exit code: 1 when `<pr>` names a PR with no record, and 0 otherwise.
 """
 
 import json
-import sys as _sys
-from pathlib import Path as _Path
 
-# `land_lib` sits under `scripts/deploy_tools/`, which a directly-invoked probe.py does not
-# have on sys.path. This has to sit ABOVE the import below.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
-
-from land_lib import verdict_log
+from deploy_tools.land_lib import verdict_log
 
 
 VERDICTS_HELP = (

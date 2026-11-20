@@ -10,13 +10,10 @@ import argparse
 import copy
 from collections import Counter
 import json
-import os
-import sys
 
 import pytest
 from typing import Any
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import takeover as tk
 from diagnostics.probe_lib.core import Unreadable

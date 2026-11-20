@@ -55,10 +55,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.compose_wait import compose_settled, touches_compose
 from deploy_tools.land_lib.host_published import unbuilt_hosts
 from deploy_tools.land_lib.host_schedule import (  # noqa: F401

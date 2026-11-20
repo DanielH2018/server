@@ -95,7 +95,7 @@ def _land(
     monkeypatch, capsys, f: Fakes, healthy_everywhere: frozenset[str] = frozenset()
 ):
     """`land.main` over `f`, its gate the real one over `_probe`; (rc, stdout)."""
-    import land
+    from deploy_tools import land
 
     tools, calls = build_tools(f)
     notify_tools = _probe(f, healthy_everywhere)

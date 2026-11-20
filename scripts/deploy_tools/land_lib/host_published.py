@@ -19,11 +19,8 @@ Typical usage example (`host_wait.py`'s, before it ends a landing `deferred`):
     unbuilt = unbuilt_hosts(["daniel-pi"], merge, primary, reads, covers, query, green_at)
 """
 
-import sys as _sys
 from pathlib import Path
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.outcome import say
 from diagnostics.probe_lib.builder import HEALTHY
 

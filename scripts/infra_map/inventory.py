@@ -12,6 +12,7 @@ from typing import Any
 
 from lib import yaml_fast
 from lib.inventory_lists import K8S_HOST, PI_HOST, pi_entries_in
+from lib.container_entry import ContainerEntry
 from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
@@ -132,7 +133,7 @@ def resolve_vars[T](value: T, variables: dict[str, Any], _depth: int = 0) -> T |
 
 def load_inventory(
     repo_root: Path = REPO_ROOT,
-) -> tuple[dict[str, Any], dict[str, dict], list[dict]]:
+) -> tuple[dict[str, Any], dict[str, dict], tuple[ContainerEntry, ...]]:
     """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
     inventory = repo_root / "inventory"
     global_vars = (

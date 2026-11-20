@@ -2,9 +2,7 @@
 
 Every step these sections describe needs `sudo k3s kubectl` or the `DEPLOY_HOLD` variable, so
 no test can run them, and each rule reads its section as text (D5 step 29, ADR-0020). Each
-rule is a mistake that leaves the cluster worse than the failure the runbook answers. The
-offline hold order in docs/break-glass.md's shed scenario is a pinned sentence with a case
-table, which no row can hold; it stays in `tests/longhorn/test_volume_revert_runbook_text.py`.
+rule is a mistake that leaves the cluster worse than the failure the runbook answers.
 
 Run: uv run pytest tests/repo/test_runbook_rules.py
 """
@@ -14,6 +12,7 @@ from dataclasses import replace
 
 import pytest
 from _runbook_rule import (
+    BLOCKS,
     COMMANDS,
     ITEMS,
     LINES,
@@ -108,6 +107,23 @@ _COLD_START_REASON = (
 def _deploy_step_added(text: str) -> str:
     """The section with a step naming the retired script appended, its link left in place."""
     return text + "\n9. Deploy: `./scripts/deploy.sh`.\n"
+
+
+# The shed scenario's one statement of the offline order, and the token `_offline_order`
+# folds it to, so that `forbid` reads only the bullet's other sentences.
+_OFFLINE_ORDER = (
+    "Once the WAN returns, run this step's `gh variable set DEPLOY_HOLD` first, before any "
+    "resume and before step 4, because a queued `promote` run can start as soon as GitHub "
+    "answers."
+)
+_PINNED = "<the pinned offline order>"
+# The last line of the bullet in the document, which the nested-item and continuation reds extend.
+_OFFLINE_ORDER_LINE = "      before step 4, because a queued `promote` run can start as soon as GitHub answers."
+
+
+def _offline_order(text: str) -> list[str]:
+    """Each list item and what hangs from it, the pinned offline-order sentence folded to a token."""
+    return [item.replace(_OFFLINE_ORDER, _PINNED) for item in BLOCKS(text)]
 
 
 def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
@@ -277,6 +293,60 @@ ROWS = (
         select=re.compile(r"gh variable set DEPLOY_HOLD --body none"),
         precede=re.compile(r"gh variable get DEPLOY_HOLD"),
         red=(edit("`gh variable get DEPLOY_HOLD -R DanielH2018/server`", "nothing"),),
+    ),
+    RunbookRule(
+        name="shed-offline-branch-sets-the-hold-before-any-resume",
+        reason=(
+            "When GitHub cannot be reached, the shed scenario sets DEPLOY_HOLD before any "
+            "resume, because a queued `promote` run can start as soon as GitHub answers. A "
+            "rule that parsed the ordering words opened a new bypass with each fix, so this "
+            "row pins the one sentence. It refuses any second statement of the order beside "
+            "it: a resume, a clear, another `gh variable set` or a mention of step 4. To "
+            "reword the bullet, reword `_OFFLINE_ORDER` in the same commit."
+        ),
+        doc=BREAK_GLASS,
+        heading=(SHED,),
+        unit=_offline_order,
+        select=re.compile(r"^- \*\*When GitHub cannot be reached\*\*"),
+        require=(_PINNED,),
+        forbid=re.compile(
+            r'\bresum\w*|--body none|"suspend":false|\bgh variable set\b|\bstep 4\b'
+            rf"|{re.escape(_PINNED)}.*{re.escape(_PINNED)}",
+            re.IGNORECASE,
+        ),
+        red=tuple(
+            edit_words(_OFFLINE_ORDER, sentence)
+            for sentence in (
+                "Once the WAN returns, before step 4 resume each suspended tag, then run "
+                "this step's `gh variable set DEPLOY_HOLD`.",
+                "Once the WAN returns, resume each suspended tag, then after that run "
+                "`gh variable set DEPLOY_HOLD`, before step 4.",
+                "Once the WAN returns, run this step's `gh variable set DEPLOY_HOLD`. "
+                "Before that, resume each suspended tag.",
+                "Once the WAN returns, resume each suspended tag first, then run this "
+                "step's `gh variable set DEPLOY_HOLD`, before step 4, because a queued "
+                "`promote` run can start as soon as GitHub answers.",
+                _OFFLINE_ORDER.replace("DEPLOY_HOLD", "SOMETHING_ELSE"),
+                _OFFLINE_ORDER.replace("DEPLOY_HOLD", "DEPLOY_HOLD --body none"),
+                f"{_OFFLINE_ORDER} Before step 4 and before that set, resume each "
+                "suspended tag.",
+                f"Resume each suspended tag. {_OFFLINE_ORDER}",
+                f"{_OFFLINE_ORDER} Then run `gh variable set DEPLOY_HOLD --body none`.",
+                f"{_OFFLINE_ORDER} Then run `gh variable set SOMETHING_ELSE --body x`.",
+                f"{_OFFLINE_ORDER} Then go to step 4.",
+                f"{_OFFLINE_ORDER} {_OFFLINE_ORDER}",
+            )
+        )
+        + (
+            edit(
+                _OFFLINE_ORDER_LINE,
+                f"{_OFFLINE_ORDER_LINE}\n        - Resume each suspended tag before the hold.",
+            ),
+            edit(
+                _OFFLINE_ORDER_LINE,
+                f"{_OFFLINE_ORDER_LINE}\n\n      Resume each suspended tag first.",
+            ),
+        ),
     ),
     RunbookRule(
         name="branch-1-holds-no-revert-command",

@@ -1,6 +1,6 @@
 # The deploy tag of every workload, as the C7 `service` label a per-workload alert joins to.
 # Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m2-first-bridge-family.md, "The workload-service mapping".
+# docs/archive/monitoring/m2-first-bridge-family.md, "The workload-service mapping".
 #
 # Each rule emits exactly one series per workload, with value 1. Its domain is the family a
 # census alert counts, so every workload an alert can see has a series here. Each resolution
