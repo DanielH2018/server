@@ -23,9 +23,11 @@ other than a module path reaches the report.
 
 Usage:
     uv run python scripts/dev/ci_failures.py --since 2026-10-30 --until 2026-11-06
+    uv run python scripts/dev/ci_failures.py --since 2026-11-13 --workflow ci.yml
 
-`--until` includes the named day and defaults to today (UTC). Run it with the sandbox off, like
-`gh`.
+`--until` includes the named day and defaults to today (UTC). `--workflow` surveys one workflow
+file's runs. A week of every workflow's runs costs several times the API calls a week of `ci.yml`
+alone does, so a flake survey of one workflow passes it. Run it with the sandbox off, like `gh`.
 
 Exit codes: 0 the report printed, even when a log had expired, and the report counts those; 1 a
 `gh` call that lists runs, attempts or jobs failed, and stderr carries the last line of `gh`'s
@@ -76,17 +78,13 @@ def _stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def runs_between(
-    start: datetime, end: datetime, branch: str | None = None
-) -> list[dict[str, Any]]:
-    """List the runs created from `start` to `end`, both inclusive, splitting past the cap.
+def runs_between(start: datetime, end: datetime, listing: str) -> list[dict[str, Any]]:
+    """List the runs `listing` returns created from `start` to `end`, splitting past the cap.
 
-    A `branch` keeps only the runs of that head branch.
+    `listing` is a runs endpoint whose query already holds its filters. Both bounds are
+    inclusive.
     """
-    query = f"created={_stamp(start)}..{_stamp(end)}&per_page=100"
-    if branch:
-        query += f"&branch={branch}"
-    pages = _api_pages(f"{ACTIONS}/runs?{query}")
+    pages = _api_pages(f"{listing}&created={_stamp(start)}..{_stamp(end)}")
     if pages[0]["total_count"] < SEARCH_CAP:
         return [run for page in pages for run in page["workflow_runs"]]
     if end - start <= ONE_SECOND:
@@ -95,21 +93,27 @@ def runs_between(
         )
         return [run for page in pages for run in page["workflow_runs"]]
     middle = (start + (end - start) / 2).replace(microsecond=0)
-    return runs_between(start, middle, branch) + runs_between(
-        middle + ONE_SECOND, end, branch
+    return runs_between(start, middle, listing) + runs_between(
+        middle + ONE_SECOND, end, listing
     )
 
 
 def runs_in_range(
-    since: date, until: date, branch: str | None = None
+    since: date, until: date, branch: str | None = None, workflow: str | None = None
 ) -> list[dict[str, Any]]:
-    """List every run created from the start of `since` to the end of `until`."""
+    """List every run created from the start of `since` to the end of `until`.
+
+    A `branch` keeps only the runs of that head branch, and a `workflow` file name, such as
+    `ci.yml`, only the runs of that workflow.
+    """
+    listing = f"{ACTIONS}/workflows/{workflow}/runs" if workflow else f"{ACTIONS}/runs"
+    listing += "?per_page=100" + (f"&branch={branch}" if branch else "")
     start = datetime.combine(since, time.min, UTC)
     last = datetime.combine(until, time.max, UTC).replace(microsecond=0)
     runs: dict[int, dict[str, Any]] = {}
     while start <= last:
         end = min(start + START_WINDOW - ONE_SECOND, last)
-        runs.update((run["id"], run) for run in runs_between(start, end, branch))
+        runs.update((run["id"], run) for run in runs_between(start, end, listing))
         start = end + ONE_SECOND
     return list(runs.values())
 
@@ -323,7 +327,7 @@ def gh_failure(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -
 
 
 def survey(
-    since: date, until: date, branch: str | None = None
+    since: date, until: date, branch: str | None = None, workflow: str | None = None
 ) -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
@@ -331,12 +335,13 @@ def survey(
 ]:
     """Return the runs in the range, their red attempts, and each attempt's rows and readability.
 
-    A `branch` keeps only the runs of that head branch.
+    A `branch` keeps only the runs of that head branch, and a `workflow` file name only the runs
+    of that workflow.
 
     Raises `CalledProcessError` or `TimeoutExpired` when a `gh` call that lists runs, attempts
     or jobs fails.
     """
-    runs = runs_in_range(since, until, branch)
+    runs = runs_in_range(since, until, branch, workflow)
     needing_a_read = [r for r in runs if r["run_attempt"] > 1 or r["conclusion"] in RED]
     with ThreadPoolExecutor(READERS) as pool:
         attempts = [
@@ -372,9 +377,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--all", action="store_true", help="also list each red attempt and its rows"
     )
+    parser.add_argument(
+        "--workflow",
+        help="survey only this workflow's runs, by file name, such as ci.yml",
+    )
     args = parser.parse_args(argv)
     try:
-        runs, attempts, read = survey(args.since, args.until)
+        runs, attempts, read = survey(args.since, args.until, workflow=args.workflow)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(gh_failure(exc), file=sys.stderr)
         return FAILED
