@@ -396,10 +396,6 @@ ROWS = (
                 "a join of the alert rules against the docs pages and headings they link, "
                 "the inventory hosts, the group vars' domain and the promtool cases"
             ),
-            "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
-                "a join of the rules files and rule tables against the rule-literal tests "
-                "and the Alertmanager routing table"
-            ),
             "tests/services/test_storage_rule_literals.py": (
                 "a join of storage.yaml against the Longhorn robustness allow-list, the "
                 "roles' snapshot caps and transients, and the host checks' disk floor"
