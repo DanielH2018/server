@@ -211,8 +211,8 @@ jobs:
       # vale_<version>_Linux_64-bit.tar.gz, equal to the amd64 `vale` pin in
       # hosts/packages/homelab-tools/package.yml (tests/repo/test_vale_matches_the_ci_pin.py).
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
-      VALE_VERSION: v3.26.0
-      VALE_SHA256: 22aa69a556558e4a9dfc63c17030777383d8d3c48dcdfad655fa98e839d666ed
+      VALE_VERSION: v3.27.0
+      VALE_SHA256: c80d62f6bce87b81843ac5b512a26e63213927b957adba0a64fc594570da2000
     steps:
       - uses: actions/checkout@v7.0.1
         with:
