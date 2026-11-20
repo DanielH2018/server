@@ -12,11 +12,14 @@ import pytest
 
 from diagnostics.probe_lib import lander as probe_lander
 from dev.fanout_lib import autoland, operator_waits, wait_probe
+from dev.fanout_lib.branch_pr import BranchPrs
 from dev.fanout_lib.brief import LANDS
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from dev.fanout_lib.place import main
 from dev.fanout_lib.status import (
+    AWAIT_LANDER_S,
     AWAITING_LANDER,
+    LANDER_LOG,
     LANDER_LOGS,
     LANDER_UNIT,
     NEEDS_INPUT,
@@ -77,17 +80,19 @@ def test_a_server_lander_batch_shows_the_landers_verdict(lander, state, shown):
     assert run.host_calls[1][0] == LANDS
 
 
-def _pass(tmp_path, ran_as="newest", unit="inactive", **pr) -> str:
+def _pass(tmp_path, ran_as="newest", unit="inactive", record=None, **pr) -> str:
     """The lander's reply for PR 1500 with no landing log: what a real pass printed about it.
 
     Args:
         tmp_path: the pass's scratch state.
         ran_as: the invocation id the pass's lines carry; the unit's own is `newest`.
         unit: the lander unit's ActiveState.
+        record: what the batch's review record differs in from one the lander accepts.
         **pr: what the PR differs in from one the lander would land.
     """
     landings = _Landings(
-        [_record(1500, batch="b")], [_pr(1500, headRefName=B.branch, **pr)]
+        [_record(1500, batch="b", **(record or {}))],
+        [_pr(1500, headRefName=B.branch, **pr)],
     )
     landings.run(tmp_path, dry_run=True)
     entries = "\n".join(
@@ -105,10 +110,23 @@ HELD = (
 )
 
 
-def _collect(*lander: str) -> tuple[dict, int]:
-    tools, run = fake_tools(branch_prs={B.branch: [PR]})
-    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok("".join(lander))]
-    (row,), tier = collect(Manifest("r", "o", [B]), tools, one_line)
+ENDED_AT = 1_000_000
+
+
+def _collect(*lander: str, held=None, age: float = 0) -> tuple[dict, int]:
+    """The batch's row and tier, read `age` seconds after it stopped at its PR.
+
+    Args:
+        *lander: the lander's reply on daniel-box, joined.
+        held: the PRs GitHub holds for the branch; the open PR by default.
+        age: how long ago the batch's report was written.
+    """
+    tools, run = fake_tools(branch_prs={B.branch: held or [PR]})
+    batch = f"{STOPPED_AT_ITS_PR}--- ended\n{ENDED_AT}\n"
+    run.answers_by_call = [ok(batch), ok("".join(lander))]
+    (row,), tier = collect(
+        Manifest("r", "o", [B]), tools, one_line, lambda: ENDED_AT + age
+    )
     return row, tier
 
 
@@ -124,6 +142,52 @@ def test_a_ruling_the_lander_clears_itself_still_reads_as_awaiting(tmp_path):
     row, tier = _collect(_pass(tmp_path, isDraft=True))
     assert (row["state"], tier) == ("done", FANOUT_PLACE_OK)
     assert f"done ({AWAITING_LANDER}: the PR is a draft)" in row["line"]
+    assert row["awaiting_lander"] is True
+
+
+@pytest.mark.parametrize(
+    ("ruled", "step"),
+    [
+        ({"headRefOid": "b" * 40}, "read the commits pushed since the review"),
+        ({"record": {"ci_gate": "failed: pytest"}}, "read its PR's checks"),
+        ({"record": {"review_error": "timed out"}}, "review its diff"),
+    ],
+    ids=["the-head-moved", "the-ci-gate-did-not-pass", "the-review-did-not-complete"],
+)
+def test_a_ruling_the_lander_repeats_every_pass_reads_as_the_coordinators(
+    tmp_path, ruled, step
+):
+    row, tier = _collect(_pass(tmp_path, **ruled))
+    assert (row["state"], tier) == (NEEDS_INPUT, FANOUT_PLACE_FAILED)
+    assert f"the server lander will not land #1500; {step}" in row["line"]
+    assert row["awaiting_lander"] is False
+
+
+@pytest.mark.parametrize(
+    "lander",
+    ["=== 1500\n", ""],
+    ids=["the-lander-has-no-log-of-it", "this-user-reads-no-lander-logs"],
+)
+def test_a_pr_merged_by_a_hand_run_landing_reads_landed(lander):
+    row, tier = _collect(lander, held=BranchPrs(merged=(PR,)), age=AWAIT_LANDER_S + 1)
+    assert (row["state"], tier) == ("landed", FANOUT_PLACE_OK)
+    assert row["line"] == f"b on daniel-server: landed {PR}"
+
+
+@pytest.mark.parametrize(
+    ("age", "lander", "state"),
+    [
+        (AWAIT_LANDER_S - 1, "=== 1500\n", "done"),
+        (AWAIT_LANDER_S + 1, "=== 1500\n", NEEDS_INPUT),
+        (AWAIT_LANDER_S + 1, f"=== 1500\n{LANDER_LOG} land1500-1.log\n", "done"),
+    ],
+    ids=["inside-the-bound", "past-the-bound", "past-it-with-a-landing-running"],
+)
+def test_a_batch_awaits_the_lander_only_until_the_bound(age, lander, state):
+    row, _tier = _collect(lander, age=age)
+    assert (row["state"], row["awaiting_lander"]) == (state, state == "done")
+    if state == NEEDS_INPUT:
+        assert "the server lander has not taken #1500 in 30 minutes" in row["line"]
 
 
 def test_a_landing_log_outranks_the_ruling(tmp_path):
@@ -159,6 +223,23 @@ def test_the_wait_probe_wakes_on_a_pr_the_lander_holds(tmp_path):
     assert HELD in reading["detail"]
 
 
+def test_the_wait_probe_stays_open_while_the_runs_last_batch_awaits_the_lander(
+    tmp_path,
+):
+    save(Manifest("20260101T000010Z", "o", [B]), root=tmp_path / "runs")
+    tools, run = fake_tools(branch_prs={B.branch: [PR]})
+    run.answers_by_call = [ok(STOPPED_AT_ITS_PR), ok("=== 1500\n")]
+
+    def status(run_id):
+        root = ["--manifest-root", str(tmp_path / "runs")]
+        return wait_probe.read_status(run_id, lambda argv: main([*argv, *root], tools))
+
+    assert wait_probe.read(["20260101T000010Z"], status) == {
+        "state": "running",
+        "detail": "0 running; 0 finished; 1 awaiting the server lander",
+    }
+
+
 def test_runs_shows_a_pr_the_lander_holds_in_place_of_standing(tmp_path, capsys):
     save(Manifest("20260101T000010Z", "o", [B]), root=tmp_path / "runs")
     tools, run = fake_tools()
@@ -170,7 +251,10 @@ def test_runs_shows_a_pr_the_lander_holds_in_place_of_standing(tmp_path, capsys)
 
 
 def test_every_reason_the_lander_holds_a_pr_for_names_a_next_step():
-    assert set(NEXT_STEP) == set(operator_waits.REASONS)
+    assert set(NEXT_STEP) == {
+        *operator_waits.REASONS,
+        *operator_waits.COORDINATOR_REASONS,
+    }
 
 
 def test_status_reads_the_directory_and_the_unit_the_server_lander_writes_to():

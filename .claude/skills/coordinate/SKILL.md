@@ -128,8 +128,11 @@ from you. `place status` names the ones that do.
   *Who lands a daniel-server batch's PR*).
 - **A PR the lander's rule held** reads `needs-input: the server lander will not land #N`
   in `place status`, with the next step and the lander's ruling. An operator step goes
-  under `asks:`. A PR held for the lander's own surface is yours to land, by the step the
-  line names. `done (awaiting the server lander: <ruling>)` is the lander's to clear.
+  under `asks:`. Every other such PR is yours to land, by the step the line names: one held
+  for the lander's own surface, one whose head moved since the review, one whose CI gate did
+  not pass, and one whose review did not complete. `done (awaiting the server lander:
+  <ruling>)` is the lander's to clear. After 30 minutes with no landing started, it reads
+  `needs-input: the server lander has not taken #N`, and the PR is yours.
 - **Re-land each `parked` PR.** Run `cc-wait landing-clear`, then the `land.sh` command the
   park line names. A park line that opens `another landing has it` is the exception: run
   the `cc-wait land` command it quotes and read that landing's verdict. A park line ending

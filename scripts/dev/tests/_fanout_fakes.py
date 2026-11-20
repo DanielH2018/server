@@ -3,6 +3,7 @@
 import subprocess
 from dataclasses import dataclass, field
 
+from dev.fanout_lib.branch_pr import BranchPrs
 from dev.fanout_lib.target import SERVER_CHECKOUT
 from dev.fanout_lib.transport import Tools
 from dev.findings_lib.issue_model import Issue, IssueState
@@ -101,8 +102,9 @@ def fake_tools(
         merged_prs: branch -> merged PR url, the forge answer `merged_pr` gives. A branch
             absent from it reads as "no merged PR", which is also what a failed `gh` call
             reads as in the real thing.
-        branch_prs: branch -> the PR urls GitHub holds for it, newest first, as `branch_prs`
-            answers. A branch absent from it has none; an entry of None is a read that failed.
+        branch_prs: branch -> the open PR urls GitHub holds for it, newest first, or a
+            `BranchPrs` to name merged ones. A branch absent from it has none; an entry of
+            None is a read that failed.
         open_prs: the head branches of the repo's open PRs, or a mapping of each to the
             files its PR changes, as `open_pr_files` answers; None is a read that failed.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
@@ -137,7 +139,8 @@ def fake_tools(
     held = branch_prs or {}
 
     def branch_pr_urls(branch: str, repo: str = "DanielH2018/server"):
-        return held.get(branch, [])
+        prs = held.get(branch, [])
+        return BranchPrs(open=tuple(prs)) if isinstance(prs, list) else prs
 
     def findings(argv: list[str]) -> subprocess.CompletedProcess:
         # Recorded among the host calls, under the pseudo-host `findings`, so a test reads

@@ -92,19 +92,27 @@ def test_every_waiting_reason_is_named_by_the_text_problems_returns():
         "operator-step": (_record(), _pr(body="## Before merge\n- [ ] run the diff\n")),
         "findings-remain": (_record(remaining=2), _pr()),
         "needs-input": (_record(outcome="needs-input"), _pr()),
+        "head-moved": (_record(), _pr(headRefOid="b" * 40)),
+        "ci-gate": (_record(ci_gate="failed: pytest"), _pr()),
+        "review-incomplete": (_record(review_error="timed out"), _pr()),
     }
+    assert set(cases) == {*operator_waits.REASONS, *operator_waits.COORDINATOR_REASONS}
     for reason, (rec, pr) in cases.items():
         assert operator_waits.reason_of(autoland.problems(rec, pr)) == reason, reason
 
 
 def test_a_reason_that_waits_on_the_pipeline_is_not_counted():
     for rec, pr in (
-        (_record(), _pr(headRefOid="b" * 40)),
         (_record(), _pr(isDraft=True)),
         (_record(head=""), _pr()),
         (_record(), _pr()),
     ):
         assert operator_waits.reason_of(autoland.problems(rec, pr)) == ""
+
+
+def test_a_reason_the_coordinator_owns_is_left_out_of_the_gauge(tmp_path):
+    gauge, _ = _gauge(tmp_path, [_record()], [_pr(headRefOid="b" * 40)])
+    assert all(_count(gauge.read_text(), r) == 0 for r in operator_waits.REASONS)
 
 
 def test_a_held_server_pr_counts_with_its_age_from_the_record(tmp_path):

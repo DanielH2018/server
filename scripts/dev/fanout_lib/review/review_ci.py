@@ -56,7 +56,6 @@ check with no job log, such as an external app's, is named with an empty tail.
 import json
 import math
 import re
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -65,6 +64,7 @@ from dataclasses import dataclass, field
 
 
 from dev.fanout_lib.review.batch_run import BatchRun
+from dev.fanout_lib.review.processes import Runner
 from dev.fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
     LAND_MARGIN_S,
@@ -114,8 +114,6 @@ FAILED = "failed"
 NO_VERDICT = "no-verdict"
 WAIT_LINE = re.compile(r"(?m)^WAIT: (\S+)(.*)$")
 JOB_ID = re.compile(r"/job/(\d+)")
-
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 @dataclass
