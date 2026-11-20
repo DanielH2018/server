@@ -37,8 +37,10 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 
 ## Notable
 - **Prowlarr keeps its own copy of each app's API key.** Settings → Apps stores the Sonarr,
-  Radarr and Lidarr keys in Prowlarr's database, and nothing in the repo writes them. A stale
-  copy fails every indexer push with a 401 while RSS through Prowlarr keeps working.
+  Radarr and Lidarr keys in Prowlarr's database. Nothing in the repo writes them: a seed Job
+  that writes the SOPS keys there is #9564. Until it lands, a key rotation or a
+  `prowlarr-config` revert leaves Prowlarr's copy stale. A stale copy fails every indexer push
+  with a 401 while RSS through Prowlarr keeps working.
   `ProwlarrAppSyncFailing` in `k8s/roles/observability/files/rules/arr-apps.yaml` pages once
   Prowlarr's `ApplicationLongTermStatusCheck` has reported an app for 6 hours, read from the
   exportarr sidecar's `prowlarr_system_health_issues` series. To repair it, paste the app's
