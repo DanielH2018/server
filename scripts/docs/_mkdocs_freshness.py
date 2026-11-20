@@ -58,7 +58,7 @@ def on_config(config):
     return config
 
 
-def on_page_markdown(markdown, page, config, files):
+def on_page_markdown(markdown, page, **_kwargs):
     rel = f"docs/{page.file.src_uri}"
     if not is_hand_written(rel, markdown):
         return markdown

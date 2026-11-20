@@ -124,11 +124,11 @@ def hash_text(value, hashtype: str = "sha1") -> str:
     return hashlib.new(hashtype, _bytes(value)).hexdigest()
 
 
-def mandatory(value, msg: str | None = None) -> object:
+def mandatory(value, _msg: str | None = None) -> object:
     """`value` unchanged.
 
     A render guard's tracking Undefined judges an undefined name by itself, and the strict
-    Undefined raises where a template uses the value. `msg` is for Ansible's own run.
+    Undefined raises where a template uses the value. `_msg` is for Ansible's own run.
     """
     return value
 

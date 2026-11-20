@@ -97,7 +97,7 @@ except (ImportError, SyntaxError) as exc:
 
     # One after another, with no deadline: the banner is what this file must keep, and a
     # serial run that the harness may kill still prints whatever finished first.
-    def run_sections(probes, deadline):
+    def run_sections(probes, _deadline):
         out = []
         for _name, probe in probes:
             try:
@@ -106,7 +106,7 @@ except (ImportError, SyntaxError) as exc:
                 out.append([])
         return out
 
-    def keep_where(items, check, deadline):
+    def keep_where(items, check, _deadline):
         return [item for item in items if check(item)]
 
 

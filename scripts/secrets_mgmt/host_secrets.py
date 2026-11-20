@@ -140,9 +140,7 @@ def _descends(tools: RotationTools, ancestor: str, commit: str) -> bool:
     return True
 
 
-def _freshness_problems(
-    root: Path, files: dict[str, Path], tools: RotationTools
-) -> list[str]:
+def _freshness_problems(files: dict[str, Path], tools: RotationTools) -> list[str]:
     """Why a host file's copy of a key is older than `secrets.yml`'s value, or unknowable."""
     if tools.git("rev-parse", "--is-shallow-repository").strip() == "true":
         return [
@@ -192,7 +190,7 @@ def check(root: Path, tools: RotationTools) -> list[str]:
         problems += _key_problems(host, carried, named)
         problems += _plaintext_problems(host, files[host])
     if files:
-        problems += _freshness_problems(root, files, tools)
+        problems += _freshness_problems(files, tools)
     return problems
 
 

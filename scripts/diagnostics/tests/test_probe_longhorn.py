@@ -220,7 +220,7 @@ def test_stranded_counts_backups_the_current_tier_does_not_own():
     vols = {"pvc-moved": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-moved": {"daily-backup": 4, "weekly-backup-d2": 1}}
     text, _ = longhorn_budget.format_backup_budget(
-        vols, {"pvc-moved": "weekly-backup-d2"}, retain=2, owners=owners
+        vols, {"pvc-moved": "weekly-backup-d2"}, owners=owners
     )
     assert "4 stranded backup(s)" in text, text
 
@@ -230,7 +230,7 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
     vols = {"pvc-busy": {"prune": 10, "blocks": 100, "backups": 5}}
     owners = {"pvc-busy": {"weekly-backup-d2": 5}}
     text, _ = longhorn_budget.format_backup_budget(
-        vols, {"pvc-busy": "weekly-backup-d2"}, retain=2, owners=owners
+        vols, {"pvc-busy": "weekly-backup-d2"}, owners=owners
     )
     assert "stranded" not in text, text
 
@@ -238,9 +238,7 @@ def test_backups_the_current_tier_owns_are_not_stranded_even_past_retain():
 def test_stranded_falls_back_to_zero_without_ownership_data():
     """No owners map means nothing is PROVEN stranded — never guess high and prompt a delete."""
     vols = {"pvc-x": {"prune": 10, "blocks": 100, "backups": 5}}
-    text, _ = longhorn_budget.format_backup_budget(
-        vols, {"pvc-x": "weekly-backup-d2"}, retain=2
-    )
+    text, _ = longhorn_budget.format_backup_budget(vols, {"pvc-x": "weekly-backup-d2"})
     assert "stranded" not in text, text
 
 
@@ -258,7 +256,7 @@ def test_format_backup_budget_reports_stranded_backups_not_pending_deletes():
     vols = {"pvc-a": {"prune": 100, "blocks": 50, "backups": 11}}
     owners = {"pvc-a": {"daily-backup": 9, "weekly-backup-d5": 2}}
     text, code = longhorn_budget.format_backup_budget(
-        vols, {"pvc-a": "weekly-backup-d5"}, retain=4, owners=owners
+        vols, {"pvc-a": "weekly-backup-d5"}, owners=owners
     )
     assert code == 0
     assert "9 stranded backup(s)" in text and "reaper" in text
@@ -340,90 +338,6 @@ def test_backup_target_url_is_empty_when_disarmed_or_unreadable():
     assert longhorn_cluster.backup_target_url(_run=_target_run(0, "null")) == ""
     blank = json.dumps({"spec": {"backupTargetURL": "  "}})
     assert longhorn_cluster.backup_target_url(_run=_target_run(0, blank)) == ""
-
-
-# ── b2-budget reads the live weekly retain (H1.7a) ──────────────────────────────────────────
-
-
-def _recurring_jobs(retains: dict[str, object]):
-    """A `kubectl get recurringjobs.longhorn.io -o json` answer, one item per (name, retain)."""
-    body = json.dumps(
-        {
-            "items": [
-                {"metadata": {"name": name}, "spec": {"retain": retain}}
-                for name, retain in retains.items()
-            ]
-        }
-    )
-    return _target_run(0, body)
-
-
-WEEKLY_JOBS = {f"weekly-backup-d{day}": 3 for day in range(7)}
-
-
-def test_weekly_retain_is_the_retain_of_the_weekly_jobs_not_the_daily_one():
-    run = _recurring_jobs({"daily-backup": 14, **WEEKLY_JOBS})
-    assert longhorn_cluster.weekly_retain(_run=run) == 3
-
-
-def test_weekly_retain_is_the_largest_while_an_apply_is_half_done():
-    run = _recurring_jobs({**WEEKLY_JOBS, "weekly-backup-d6": 2})
-    assert longhorn_cluster.weekly_retain(_run=run) == 3
-
-
-@pytest.mark.parametrize(
-    "run",
-    [
-        _target_run(1, ""),
-        _target_run(0, "not json"),
-        _recurring_jobs({"daily-backup": 14}),
-        _recurring_jobs({"weekly-backup-d0": "3"}),
-    ],
-    ids=["kubectl-failed", "not-json", "no-weekly-job", "retain-not-an-integer"],
-)
-def test_weekly_retain_fails_rather_than_guess(run):
-    with pytest.raises(SystemExit) as stopped:
-        longhorn_cluster.weekly_retain(_run=run)
-    assert stopped.value.code not in (0, None)
-
-
-def test_b2_budget_without_retain_uses_the_live_weekly_retain():
-    run = _recurring_jobs({"daily-backup": 14, **WEEKLY_JOBS})
-    assert longhorn_cluster.resolve_retain(None, _run=run) == 3
-
-
-def test_b2_budget_keeps_a_hand_given_retain_and_does_not_ask_the_cluster():
-    def refuse(*args):
-        raise AssertionError("the cluster is not asked when --retain is given")
-
-    assert longhorn_cluster.resolve_retain(5, _run=refuse) == 5
-
-
-def test_b2_budget_exits_nonzero_on_a_failed_retain_read_not_with_the_default_of_2():
-    with pytest.raises(SystemExit) as stopped:
-        longhorn_cluster.resolve_retain(None, _run=_target_run(1, ""))
-    assert stopped.value.code not in (0, None)
-
-
-def test_the_b2_budget_parser_default_is_none_so_the_live_read_decides():
-    from diagnostics.probe_lib import cli_parser
-
-    args = cli_parser._build_parser().parse_args(["b2-budget"])
-    assert args.retain is None
-    assert (
-        cli_parser._build_parser().parse_args(["b2-budget", "--retain", "4"]).retain
-        == 4
-    )
-
-
-def test_the_b2_budget_timer_passes_no_retain():
-    """The unit bakes no weekly retain, so the key can stay out of the host checks' defaults."""
-    from lib.repo_paths import K3S_HOST_CHECKS
-
-    unit = K3S_HOST_CHECKS / "units" / "homelab-b2-budget-listing.service.j2"
-    text = unit.read_text()
-    assert "scripts/diagnostics/probe.py b2-budget\n" in text
-    assert "--retain" not in text
 
 
 # ── the bucket name is read from inventory, not SOPS ────────────────────────────────

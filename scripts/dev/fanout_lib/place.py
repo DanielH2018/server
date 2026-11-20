@@ -139,7 +139,7 @@ def _readings(tools: Tools, hosts, root=None):
     return good, bad
 
 
-def cmd_read(args, tools: Tools) -> int:
+def cmd_read(_args, tools: Tools) -> int:
     good, bad = _readings(tools, HOSTS)
     # `signing=` makes the launch gate's verdict readable before a launch spends an agent on
     # it. `unknown` means the registered-key read itself failed, which `launch` refuses on.
@@ -426,7 +426,7 @@ def cmd_runs(args, tools: Tools) -> int:
 
 def cmd_clean_one(
     args,
-    tools: Tools,
+    _tools: Tools,
     list_worktrees=None,
     ask=None,
     dirty=None,

@@ -30,6 +30,7 @@ and nothing else.
 """
 
 import copy
+from typing import override
 
 import yaml
 
@@ -39,6 +40,7 @@ from renderer.template_filters.role_label import _Dumper, _Loader
 class _IndentedDumper(_Dumper):
     """role_label's dumper, with each block sequence indented two columns under its key."""
 
+    @override
     def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
         return super().increase_indent(flow, False)
 

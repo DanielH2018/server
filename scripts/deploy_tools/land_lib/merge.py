@@ -352,7 +352,7 @@ def _mark_ready(ln: Landing) -> None:
     say(f"PR #{ln.opts.pr} was a draft; marked it ready")
 
 
-def _no_turn(draft: str) -> tuple[bool, int]:
+def _no_turn(_draft: str) -> tuple[bool, int]:
     """`await_merge`'s `take_turn` for a caller that has no landing turn to offer."""
     return False, 0
 
