@@ -417,7 +417,9 @@ def test_the_digests_file_is_read_out_of_the_bundle_layer():
 def test_a_bundle_without_the_digests_file_is_a_read_error():
     transport = BlobTransport(_bundle({"flux/kustomization.yaml": b""}))
     f = forge.Forge(
-        forge.Registry(transport, None), forge.GitHub(transport, None), forge.Cosign()
+        forge.Registry(transport, None),
+        forge.GitHub(transport, lambda: None),
+        forge.Cosign(),
     )
     with pytest.raises(promote_wait.WaitReadError, match=r"holds no digests\.json"):
         wait_reads._bundle_digests(f, M)

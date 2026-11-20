@@ -97,7 +97,7 @@ class GitHub:
     def __init__(
         self,
         transport: Transport,
-        token: str | None,
+        token: Callable[[], str | None],
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
         repository: str = REPOSITORY,
         versions_per_page: int = VERSIONS_PER_PAGE,
@@ -107,16 +107,19 @@ class GitHub:
 
         Args:
             transport: sends each REST request.
-            token: the bearer token for REST calls; with None, each REST call raises
-                `ForgeError` before it is sent. The variable read does not use it, because
-                `gh` reads `GH_TOKEN` from its own environment.
+            token: looks up the bearer token for REST calls, or returns None when there is
+                none. It is asked again before each REST call until it answers, so one
+                failed lookup fails only that call; the call raises `ForgeError` before
+                it is sent. The variable read does not use it, because `gh` reads
+                `GH_TOKEN` from its own environment.
             run: starts the `gh` subprocess.
             repository: the `owner/name` slug.
             versions_per_page: the page size of the package listing.
             sleep: waits DELETE_PAUSE_S before each delete.
         """
         self._transport = transport
-        self._token = token
+        self._lookup_token = token
+        self._token: str | None = None
         self._run = run
         self.repository = repository
         self._versions_per_page = versions_per_page
@@ -392,6 +395,7 @@ class GitHub:
         )
 
     def _rest_headers(self) -> dict[str, str]:
+        self._token = self._token or self._lookup_token()
         if not self._token:
             raise ForgeError(
                 "no GitHub token, and a REST read never goes out anonymous: "
@@ -477,6 +481,6 @@ def connect(
     token = env.get("GITHUB_TOKEN") or None
     return Forge(
         registry=Registry(transport, token),
-        github=GitHub(transport, token or github_token(env, run), run=run),
+        github=GitHub(transport, lambda: token or github_token(env, run), run=run),
         cosign=Cosign(run=run),
     )

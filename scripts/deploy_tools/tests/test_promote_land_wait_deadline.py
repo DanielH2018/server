@@ -181,7 +181,9 @@ def _prod_transport(prod: str, last_good: str, revision: str | None) -> FakeTran
 
 def _forge(transport: FakeTransport) -> forge.Forge:
     return forge.Forge(
-        forge.Registry(transport, None), forge.GitHub(transport, None), forge.Cosign()
+        forge.Registry(transport, None),
+        forge.GitHub(transport, lambda: None),
+        forge.Cosign(),
     )
 
 
