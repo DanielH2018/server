@@ -132,6 +132,66 @@ minutes. The operator accepted the 30 minutes on 2026-10-12
 ([#4693](https://github.com/DanielH2018/server/issues/4693)). The
 [M1 slice plan](archive/monitoring/m1-alertmanager.md) has the sizing.
 
+### When Alertmanager fails to start: a corrupt state file
+
+Alertmanager keeps two state files on the `alertmanager-data` claim: `nflog`, the log of
+notifications it already sent, and `silences`. When the claim's Longhorn volume faults,
+writes to `/alertmanager` fail with `input/output error`, and either file can be left
+corrupt. After the volume is salvaged, Alertmanager exits at startup and the pod
+crash-loops. The log names the file:
+
+- `error creating notification log: invalid state` means `nflog` is corrupt.
+- `error creating silence: invalid state` means `silences` is corrupt.
+
+Alertmanager stops at the first corrupt file, so a fix that deletes only that one meets
+the second error on the next start. Delete both files in one pass. Losing `nflog` costs at
+most one repeat of each notification for an alert still firing. Losing `silences` loses
+every silence, but a corrupt file has already lost them, so recreate any you still need in
+Karma.
+
+These steps write to the cluster, so they need the admin kubeconfig. The session's
+kubeconfig is the read-only `homelab-readonly` ServiceAccount, which refuses the patch and
+the scale. `/etc/rancher/k3s/k3s.yaml` is readable by root only, and `sudo flux` fails with
+`command not found` because `flux` is not on sudo's `PATH`, so call it by its full path.
+
+1. To stop Flux from scaling Alertmanager back up while you work, suspend its
+   Kustomization:
+
+    ```bash
+    sudo "$(command -v flux)" --kubeconfig /etc/rancher/k3s/k3s.yaml \
+      suspend kustomization observability
+    ```
+
+1. Scale Alertmanager to zero:
+
+    ```bash
+    sudo k3s kubectl -n observability scale deploy/alertmanager --replicas=0
+    ```
+
+1. Wait for the volume to read `detached` in the Longhorn UI. The claim is ReadWriteOnce,
+   so the next pod cannot mount it until then.
+1. Delete both state files and their temporary copies from a one-off pod:
+
+    ```bash
+    sudo k3s kubectl -n observability run am-state-fix --rm -it --restart=Never \
+      --image=busybox:1.37 \
+      --overrides='{"spec":{"containers":[{"name":"fix","image":"busybox:1.37","command":["sh","-c","rm -f /alertmanager/nflog /alertmanager/nflog.* /alertmanager/silences /alertmanager/silences.*; ls -la /alertmanager"],"volumeMounts":[{"name":"d","mountPath":"/alertmanager"}]}],"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"alertmanager-data"}}]}}'
+    ```
+
+1. Scale Alertmanager back up, then resume the Kustomization:
+
+    ```bash
+    sudo k3s kubectl -n observability scale deploy/alertmanager --replicas=1
+    ```
+
+    ```bash
+    sudo "$(command -v flux)" --kubeconfig /etc/rancher/k3s/k3s.yaml \
+      resume kustomization observability
+    ```
+
+The pod is healthy once its log reads `Listening on` for port 9093 and it stays Running.
+`alertmanager-watchdog` resumes at the next Watchdog ping.
+
 ## What leaves the house
 
 Healthchecks.io stores the ping body (first 100 kB per ping), so the body is the disclosure
