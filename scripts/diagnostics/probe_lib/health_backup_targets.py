@@ -22,6 +22,7 @@ import sys as _sys
 
 from diagnostics.probe_lib import core
 from lib.exit_codes import PROBE_UNREADABLE
+from lib.k8s_objects import BackupTarget, K8sObject
 
 BACKUP_ROLE = "longhorn-backup"
 DEFAULT_TARGET = "default"
@@ -49,30 +50,23 @@ def target_verdicts(items: list[dict]) -> tuple[list[str], list[str], list[str]]
     problems: list[str] = []
     names = set()
     for item in items:
-        meta, spec, status = (
-            item.get("metadata") or {},
-            item.get("spec") or {},
-            item.get("status") or {},
-        )
-        name = meta.get("name", "")
-        names.add(name)
-        if (meta.get("annotations") or {}).get(RECONCILE_ANNOTATION) == (
+        target = BackupTarget.from_item(item)
+        names.add(target.name)
+        if K8sObject.from_item(item).annotations.get(RECONCILE_ANNOTATION) == (
             RECONCILE_DISABLED
         ):
             problems.append(
-                f"backup target {name} carries {RECONCILE_ANNOTATION}={RECONCILE_DISABLED}: "
-                "a break-glass is in force and Flux is not enforcing it"
+                f"backup target {target.name} carries {RECONCILE_ANNOTATION}="
+                f"{RECONCILE_DISABLED}: a break-glass is in force and Flux is not enforcing it"
             )
-        if not str(spec.get("backupTargetURL") or "").strip():
-            disarmed.append(name)
-        elif status.get("available") is True:
-            available.append(name)
+        if target.url is None:
+            disarmed.append(target.name)
+        elif target.available:
+            available.append(target.name)
         else:
-            conditions = status.get("conditions") or []
-            message = (conditions[0] or {}).get("message", "") if conditions else ""
             problems.append(
-                f"backup target {name} is armed and not available"
-                + (f": {message[:160]}" if message else "")
+                f"backup target {target.name} is armed and not available"
+                + (f": {target.message[:160]}" if target.message else "")
             )
     if DEFAULT_TARGET not in names:
         problems.append(f"no backup target named {DEFAULT_TARGET} in longhorn-system")

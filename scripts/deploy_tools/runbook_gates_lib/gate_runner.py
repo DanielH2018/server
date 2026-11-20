@@ -30,6 +30,7 @@ from pathlib import Path as _Path
 
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
+from lib.k8s_objects import BackupTarget
 from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
 
 # The robustness allow-list is monitor-bridge's, shared rather than restated.
@@ -83,17 +84,15 @@ def unreachable_targets(doc, required: Sequence[str]) -> list[str]:
     """
     if doc is None:
         return ["<could not list backuptargets.longhorn.io>"]
-    seen: dict[str, dict] = {name_of(item): item for item in items(doc)}
+    seen = {t.name: t for t in map(BackupTarget.from_item, items(doc))}
     found = [f"{name} (no such backup target)" for name in required if name not in seen]
-    for name, item in sorted(seen.items()):
-        url = str((item.get("spec") or {}).get("backupTargetURL") or "")
-        available = (item.get("status") or {}).get("available")
-        if not url:
+    for name, target in sorted(seen.items()):
+        if target.url is None:
             if name in required:
                 found.append(f"{name} (disarmed: backupTargetURL is empty)")
             continue
-        if available is not True:
-            found.append(f"{name} (armed, available={available})")
+        if not target.available:
+            found.append(f"{name} (armed, available=False)")
     return found
 
 

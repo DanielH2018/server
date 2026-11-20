@@ -15,11 +15,11 @@ subcommand ahead of the test's own arguments, so a suite names the reaper once r
 every argv.
 
 Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.py`,
-`test_longhorn_reap_backups_modes_cli.py`, `test_longhorn_reap_snapshots_cli.py`. The `_volume`,
-`_backup` and `_snapshot` builders are also the only copies the in-process suites use:
-`test_longhorn_reap_logic.py`, `test_longhorn_reap_selectors.py` and
-`tests/longhorn/test_longhorn_reap_guard.py`, which reaches this module through
-`pyproject.toml`'s `pythonpath`.
+`test_longhorn_reap_backups_modes_cli.py`, `test_longhorn_reap_snapshots_cli.py`. The
+`_backup` and `_snapshot` builders, and `_lh_volume` (the `_volume` dict parsed as the reapers
+parse it), are also the only copies the in-process suites use: `test_longhorn_reap_logic.py`,
+`test_longhorn_reap_selectors.py` and `tests/longhorn/test_longhorn_reap_guard.py`, which
+reaches this module through `pyproject.toml`'s `pythonpath`.
 """
 
 import json
@@ -28,6 +28,7 @@ import pathlib
 import subprocess
 import sys
 
+from lib.k8s_objects import LonghornVolume
 from lib.proc_testing import fake_bin, path_with
 
 BACKUP_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -89,6 +90,11 @@ def _volume(name, group=None, state="attached"):
     if group is not None:
         labels["recurring-job-group.longhorn.io/%s" % group] = "enabled"
     return {"metadata": {"name": name, "labels": labels}, "status": {"state": state}}
+
+
+def _lh_volume(name, group=None, state="attached"):
+    """`_volume` parsed, as each reaper parses its volume list before classifying."""
+    return LonghornVolume.from_item(_volume(name, group, state))
 
 
 def _backup(name, vol, created, job, state="Completed", pvc=None):
