@@ -120,8 +120,10 @@ weekly reconciliation checks.
   the loss to one day, which backfill restores.
 - **A DAG outage longer than a source's retention loses days.** The quality check fails on a
   gap, and slice 0b pages on a dead scheduler.
-- **Task logs reach Loki only when the pod outlives Alloy's tail.** A sub-second task often
-  leaves no line there, so task state is read from Airflow. A remote log handler is #9202.
+- **Task logs live in `loki-homelab`, not in an object store.** Each task pod writes its log
+  to stdout and lingers 15 seconds after the task, so Alloy reads the file before the
+  scheduler deletes the pod. Task state is still read from Airflow.
+  `k8s/roles/airflow/CLAUDE.md` has the query that reads one task's log.
 - **Airflow upgrades are schema migrations.** The base is pinned by digest with
   `k8s_autodeploy: false`, and the scheduler's init container migrates before anything else
   starts.
