@@ -13,6 +13,7 @@ import atexit
 import contextlib
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
@@ -95,6 +96,8 @@ class Fakes:
     fresh_rc: int = 0
     # Why `tools.fresh_landing` could not start that landing; "" starts it.
     fresh_fails: str = ""
+    # Runs while that landing does, with the landing that started it still waiting on it.
+    during_fresh: Callable[[], None] | None = None
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
     hostname: str = "daniel-box"
@@ -417,7 +420,14 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("fresh_landing", (primary, argv), {"turn_fd": turn_fd}))
         if f.fresh_fails:
             raise fresh.CheckoutFailed(f.fresh_fails)
+        if f.during_fresh:
+            f.during_fresh()
         return f.fresh_rc
+
+    def fork(log, landing, scope_prefix, keep):
+        calls.append(("fork", (log,), {}))
+        landing()
+        return 4242
 
     line_seq = _seq(f.line, calls, "line")
 
@@ -443,6 +453,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         flux=FluxReads(land_wait, pins, k8s_tags_at),
         stale_code=lambda base: f.stale_code,
         fresh_landing=fresh_landing,
+        fork=fork,
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),

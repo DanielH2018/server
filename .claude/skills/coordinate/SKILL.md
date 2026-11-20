@@ -124,9 +124,6 @@ Land and re-land **only the PRs of your own runs**, without asking, inside `CLAU
 *When to wait*. A review batch lands its own draft on either host, so most PRs need nothing
 from you. `place status` names the ones that do.
 
-- **Pass `--fresh` to every `land.sh` you run, from the first attempt.** Your locked
-  worktree never follows master, so a landing from it ends `refused` for landing code
-  older than master's (`land-after-merge`, *The invocation*).
 - **Never land a PR the server lander qualifies** (`docs/issue-claiming-and-fanout.md`,
   *Who lands a daniel-server batch's PR*).
 - **A PR the lander's rule held** reads `needs-input: the server lander will not land #N`
@@ -145,7 +142,7 @@ from you. `place status` names the ones that do.
   this session, then `cc-wait fanout <run-id>`. It restarts the batch's implementer to
   rebase, has a fresh reviewer read the resolution, and lands the PR again. A PR the
   lander's rule holds ends `needs-input: the conflict resolution of <PR> passed its
-  review`: land it with the `land.sh` command that line names, with `--fresh`. A refusal
+  review`: land it with the `land.sh` command that line names. A refusal
   names its reason and the command that fits. Past
   `scripts/dev/fanout_lib/resume.py:MAX_RESUMES` resumes of one batch it names the
   conflicting files: put the PR under `asks:` (`docs/issue-claiming-and-fanout.md`, *A
