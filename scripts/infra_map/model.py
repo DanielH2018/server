@@ -5,14 +5,6 @@ found running, and produces the single model dict ``infra_map.render`` draws.
 Pure functions over both inputs — nothing here touches the cluster or the repo.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from infra_map.constants import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
 from infra_map.inventory import RoleIndex, declared_services
 from collections.abc import Sequence

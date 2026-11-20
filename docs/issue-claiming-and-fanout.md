@@ -229,7 +229,8 @@ Four design rules hold across the subcommands, and no docstring states them:
   so does a branch git never locks, such as `master`.
 - **No view hides a row.** `list` marks manual, deferred and claimed issues instead of dropping
   them, and `next` names each deferred issue after the free rows. A hidden row is how an issue
-  like #1132 stops being visible to anyone, including the operator who reserved it.
+  like #1132 stops being visible to anyone, including the operator who reserved it. An issue
+  that an open project reserves is counted by `next` and marked by `list` for the same reason.
 - **Every path that closes or reopens an issue releases its claim.** `claims`, `reap` and
   `next` read only open issues, so a claim stranded on a closed issue leaves every view at once.
   A PR body's `Closes #<n>` posts no release, and the next re-observation that reopens the issue
@@ -253,14 +254,17 @@ A project milestone is a session milestone that also holds a backlog.
 `milestone start --project "<title>" --worktree <branch>` opens one, and its description
 says `project` where a session milestone's says `session`. One sub-coordinator session owns
 one project: the project is that session's milestone, and the session runs `issue-fanout`
-over the project's backlog. A project differs from a session milestone in four ways:
+over the project's backlog. A project differs from a session milestone in five ways:
 
 - `milestone add <n...>` files unclaimed issues in the backlog. It refuses a closed issue,
   a claimed issue, and an issue that another milestone holds.
 - `release`, `reap` and `manual` leave the issue in the project. A batch that fails and
   releases its issue returns that issue to the backlog.
-- A claim by another branch leaves the issue in the project. A hand-steered worker that has
-  a session milestone of its own does not take the issue out of the backlog.
+- An open project reserves its backlog for its branch. *An open project reserves its
+  backlog* has the rule.
+- A claim by another branch leaves the issue in the project. Such a claim exists only when
+  it predates the issue's filing in the project, or when the project had closed. The
+  claimer's own session milestone does not take the issue out of the backlog.
 - `next --milestone "<title>"` lists the project's free issues, and `list` and `new-issues`
   take the same flag. `--milestone none` selects the issues that no open milestone holds,
   which is the pool a root session assigns from. A title that no milestone has exits 64
@@ -271,10 +275,55 @@ over the project's backlog. A project differs from a session milestone in four w
 Claim filing, PR joining, the close at zero open items and `reap` treat both forms alike. A
 project with issues in its backlog has open items, so it stays open while its backlog lasts.
 
+### An open project reserves its backlog
+
+An issue filed in branch X's open project milestone is offered to branch X's runs only, and
+only they can claim it. `findings_lib/milestone.py:reservations` is the one place that
+decides who may take an issue. `next`, `list`, `new-issues` and `claim` all read it, and a
+fan-out batch claims through `claim`.
+
+- `next` without `--milestone` does not offer a reserved issue. It counts the reserved
+  issues that are otherwise free on one line, by project:
+
+    ```text
+    2 reserved by a project (2 in `Alert noise`); --milestone "<title>" to list
+    ```
+
+    With `--json` the line goes to stderr, so the array stays the free set.
+  `next --milestone "<title>"` lists the project's own backlog as before. `new-issues`
+  reads the same free set, so a plain `cc-wait findings` does not end on a project's issue.
+- `list` marks a reserved issue `[project:<title>]`.
+- `claim --worktree <branch>` refuses a reserved issue with exit 3, and names the project
+  and its branch. The project's own branch claims it. So does each of that branch's fan-out
+  batches, because `fanout.py place launch` claims every batch under the orchestrator's
+  branch. A batch from any other orchestrator is dropped from its launch with
+  `dropped #<n>: claim refused (3): #<n> refused: reserved by project ...`.
+- `claim` does not reap a stale claim on a reserved issue, because the reap would free
+  nothing for the claimer. A claim that a branch already holds stands, and re-running it
+  writes nothing.
+- A closed project reserves nothing. A session milestone reserves nothing either: it holds
+  only what its branch already claimed.
+
+The way out is `milestone remove <n> --worktree <the project's branch>`, which the refusal
+names. It takes the issue out of the backlog, and any branch can then claim it. `claim` has
+no flag that overrides the reservation: the operator lifts it where it is recorded, as
+`manual <n> --clear` lifts a `manual` label.
+
+gh's issue JSON carries a milestone's title and description but not its state. So
+`reservations` reads the open milestones, and only when an issue sits in another branch's
+project. A register with no project costs no extra read.
+
+The first two-project run showed why the rule exists. On 2026-11-19 the project "Validate
+and CI cleanup" filed #9314 in its backlog at about 21:20 UTC. At 22:02 UTC an orchestrator
+outside the tree ran a plain `next`, was offered #9314 and claimed it. The sub-coordinator's
+own claim was then refused, and the milestone still listed an issue another session was
+working.
+
 Each way in has a way out:
 
 - `milestone add` is reversed by `milestone remove <n...>`, which refuses a claimed issue.
-  To take a claimed issue out, `release` it first.
+  To take a claimed issue out, `release` it first. `milestone add` is also what reserves an
+  issue, so `milestone remove` is what frees it for other branches.
 - `milestone start` is reversed by `milestone close`, and `start` with the same title
   reopens the closed milestone. `milestone status` prints the form and the counts.
 - No command converts a milestone between the two forms. `start` refuses a title the branch
@@ -489,6 +538,38 @@ reading a host whose report file went with the worktree. Once every batch is rem
 manifest moves into `~/.claude/fanout/retired/`, out of every listing, and `status` still
 reads the run as cleaned (#4907).
 
+### A batch whose landing conflicts with master
+
+A review batch's landing ends `VERDICT: merge-conflict` when master moved under its PR. That
+landing merged and deployed nothing. The pipeline then resumes the implementer once, as the
+`conflict` phase (`scripts/dev/fanout_lib/review/conflict_resume.py:land_resolving`). It
+decides on the verdict token, never on the sentence after it.
+
+- **The resume.** The prompt names the conflicting files, which the pipeline reads with
+  `git merge-tree` after a fetch of the base. The implementer rebases the branch onto
+  `origin/master`, resolves each conflict with both changes' intent kept, runs its tests and
+  pushes with `--force-with-lease`. It does not land.
+- **The review of the resolution.** The rebase moves the head past the commit the reviewer
+  read, and a resolution is code nobody reviewed. A fresh reviewer therefore reads what the
+  rebase changed in the PR's own commits (`git range-diff`) before anything lands. The
+  record's reviewed head moves to the rebased head only once that review has read it. A
+  finding of medium severity or worse at confidence 0.8 or more holds the PR, as one left
+  after the fix round does, and so does a review that fails.
+- **The re-land.** The pipeline runs the same landing again from a fresh checkout of the
+  base. On daniel-server the rebased head first passes
+  `scripts/dev/fanout_lib/review/review_ci.py:server_lands` again.
+
+The resume is bounded. A batch gets one, and only with
+`scripts/dev/fanout_lib/review/review_land.py:LAND_MARGIN_S` of the unit's run time left,
+checked before the resume and again before the re-land. A second conflict, too little run
+time, or a resume that pushed no new head ends the batch `needs input: the landing of <PR>
+stopped short on a merge conflict`, and the line names the conflicting files.
+
+A daniel-box batch and a daniel-server batch that lands its own draft behave the same. A
+daniel-server PR that the server lander lands is out of scope: that landing runs outside
+the batch's unit, the unit has ended by then, and a conflict there is the sub-coordinator's
+to hand to a person or a session.
+
 ### A parked batch
 
 A review batch lands its own PR with `land.sh`. Another PR's failed promotion sets
@@ -526,9 +607,29 @@ reason, as a batch that needs attention (exit tier 1). The unit's stop does not 
 A daniel-server batch that stops at its PR is landed by the server lander, whose logs are on
 daniel-box in `~/.local/state/fanout-server-lander/logs`. `status` reads the newest
 `land<pr>-*.log` there and reports the batch `landed`, `parked` by the same rule, or
-`needs-input` naming the verdict. With no result yet the batch stays `done (awaiting the
-server lander)`. That directory belongs to the user the lander runs as, so a session of
-another user reads none and reports `done`.
+`needs-input` naming the verdict. That directory belongs to the user the lander runs as, so a
+session of another user reads none and reports `done`.
+
+With no result yet, `status` reads the ruling the lander made on the PR from the lander unit's
+journal, in the same call to daniel-box. Each lander pass prints one line per candidate PR,
+and `scripts/dev/fanout_lib/status.py:lander_rulings` takes the newest pass's line.
+
+- A ruling that waits on a person reads `needs-input: the server lander will not land #N`,
+  followed by the next step and the ruling. `scripts/dev/fanout_lib/operator_waits.py:reason_of`
+  decides which rulings those are: the surface the lander itself runs from, an operator step in the PR body,
+  findings left after the fix round, and a batch that ended `needs-input`. `place runs` lists
+  the batch the same way, and `cc-wait fanout` names it as a batch that needs a hand.
+- Any other ruling, such as a draft or a head that moved since the review, stays `done
+  (awaiting the server lander: <ruling>)`.
+- A PR the newest pass did not name has merged, closed or aged out of the review records the lander reads,
+  and reads `done (awaiting the server lander)`.
+
+DECIDED: `status` reads the ruling the lander recorded and does not evaluate
+`autoland.problems` itself. That function needs the review record and the PR's file list
+from GitHub, which is one more GitHub call on every `status` and every `cc-wait fanout`
+poll. The journal read adds no ssh connection and no GitHub call. Its cost is age: a ruling
+is as old as the newest pass, ten minutes at most, so a batch reads `awaiting` until the
+first pass after its PR opens.
 
 **`clean` keeps a parked batch whose PR has not merged.** A claim expires with its worktree,
 and the open PR still holds the edits, so removing the tree would free the issues for a
@@ -593,7 +694,9 @@ Three rules give the tree that shape:
   manifests like any other, so the launch lock and the cross-run file gate cover it.
 - **A project is the sub-coordinator's project milestone** (*Session milestones and project
   milestones*). The claims and the milestone both belong to the sub-coordinator's branch,
-  so a restarted sub-coordinator reuses the same worktree and branch.
+  so a restarted sub-coordinator reuses the same worktree and branch. While the project is
+  open, its backlog is reserved for that branch (*An open project reserves its backlog*):
+  an orchestrator outside the tree is not offered a project's issue and cannot claim one.
 
 Four changes on master carry the tree. Launches are serialised and gated across runs
 (*One launch at a time, and files held across runs*,
@@ -642,6 +745,9 @@ sub-coordinator started one worker. It answered three questions:
 - **2026-11-15: build the serial turnstile, and defer a root status command.** The
   turnstile landed as a wait in the landing turn. The root reads recaps until a real run
   shows that it needs more.
+- **2026-11-19: an open project reserves its backlog.** The first two-project run lost
+  #9314 to an orchestrator outside the tree, 42 minutes after its project filed it. The
+  way out is `milestone remove`, not a `claim` flag.
 - **2026-11-19: a batch holds its files while its unit is active or its PR is open.** An
   earlier draft held them until `clean`, which the 21 standing batches of that day would
   have turned into refusals on files nobody was editing.
@@ -658,14 +764,17 @@ at its PR, and a review batch whose PR the rule holds.
 | Server batch outcome | Who acts |
 |---|---|
 | A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
-| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. The sub-coordinator reads the reason and lands the PR, or passes an operator step to the operator. |
+| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, or passes an operator step to the operator. |
+| A PR the lander rules ineligible for a reason it clears itself (a draft, a head that moved) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`. |
 | A `--no-review` batch that qualifies for the server lander | The server lander. The sub-coordinator never lands it. |
 | A server lander landing refused before merge | The server lander, which starts the PR again once the rule clears (`scripts/dev/fanout_lib/autoland.py:refused_for_now`). |
 | A server lander landing that merged, then ended `deploy-failed` on another project's hold | The sub-coordinator, after `cc-wait landing-clear`. The server lander leaves every other ended landing for a person. |
 
-Before a sub-coordinator runs `land.sh` on any server batch's PR, it runs `probe.py
-lander`, which shows what the server lander did with the PR and how that landing ended.
-The table above then says whose the PR is. The probe is not a guard against a second
+`place status` says whose the PR is: a `needs-input` line that names the server lander is
+the sub-coordinator's, and `awaiting the server lander` is not. Before a sub-coordinator
+runs `land.sh` on any server batch's PR, it still runs `probe.py lander`, which shows
+whether a landing of the PR started since that ruling and how it ended. The probe is not a
+guard against a second
 landing: `land.sh` refuses one while a landing of the PR is live (`docs/landing.md`, *One
 landing of a PR at a time*).
 
@@ -704,8 +813,12 @@ git reports the tree as already locked.
   ([#9218](https://github.com/DanielH2018/server/issues/9218)). The root messages the
   sub-coordinator when it has an issue added to a project.
 - **A project lives as long as its sub-coordinator's branch.** `reap` closes only a
-  milestone with nothing open, so a dead sub-coordinator's backlog stays filed until the
-  sub-coordinator restarts or the root ends the project.
+  milestone with nothing open, so a dead sub-coordinator's backlog stays filed, and
+  reserved, until the sub-coordinator restarts or the root ends the project with
+  `milestone close --worktree <branch>`.
+- **A claim that predates the reservation stands.** An issue another branch claimed before
+  the project filed it, or before this rule landed, stays with that branch until it
+  releases.
 - **A project's backlog cannot include an issue another open milestone holds**, until the
   session that holds it releases the issue.
 - **The cap of 2 running batches and the refill pause under `DEPLOY_HOLD` are skill

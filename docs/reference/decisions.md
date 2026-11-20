@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-19 22:39 UTC
-generated_sha: f1939c91b
+generated_at: 2026-11-20 00:20 UTC
+generated_sha: 97727c54d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f1939c91b
 
 # Decisions
 
-624 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+628 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -540,6 +540,7 @@ generated_sha: f1939c91b
 | `manual` issues are not counted. | `scripts/dev/fanout_lib/operator_waits.py` | 2026-10-18 |
 | on by default (#3675, operator 2026-10-09). for a batch whose review would cost more than it can catch. | `scripts/dev/fanout_lib/place.py` | 2026-10-11 |
 | 2.0 GiB per agent (#5667, 2026-10-29). on the per-batch series (`claude_fanout_batch_memory_bytes{kind="anon"}`, 30s samples) peaked at 1781 MiB of anon on daniel-server and 1544 MiB on daniel-box. Whole-suite runs peak at 2473 MiB and are refused inside a batch. 2.0 GiB sits 267 MiB above the largest batch, and the margin is there because 30s sampling understates a short pytest spike. Raise it if a week of that query passes 2 GiB. The `peak` kind counts page cache and is not what this reserves. The reservation rarely binds: headroom subtracts the whole cgroup's memory.current, page cache included, so the cache binds first, and daniel-server's live cap binds before either. Do not read a launch refusal on daniel-box as a reservation problem. | `scripts/dev/fanout_lib/placement.py` | 2026-10-29 |
+| the conflict resume rebases, and the pipeline lands again only after a delta review. | `scripts/dev/fanout_lib/review/conflict_resume.py` | 2026-11-19 |
 | pin settings rather than snapshot and restore the config file. | `scripts/dev/fanout_lib/review/hardened_runs.py` | 2026-10-10 |
 | in this repo's batch, every phase that starts after the implementer ran (review, fix, | `scripts/dev/fanout_lib/review/held_hooks.py` | 2026-10-09 |
 | the implement phase keeps the project source. | `scripts/dev/fanout_lib/review/held_hooks.py` | 2026-11-19 |
@@ -598,6 +599,7 @@ generated_sha: f1939c91b
 | lazy, not registered with `register_ansible_filters` at the top of this module. heavy tier imports every template filter, and this module stays light for `probe.py monitors`. A wrapper here costs nothing until a default calls the filter, and then the call builds the heavy environment once. | `scripts/lib/k8s_context.py` | 2026-10-22 |
 | a lookup into a DECLARED role is an edge too (authelia and traefik -> crowdsec), rather than filtered out. Filtering would need the walked tree's host_vars, which the throwaway tree a test walks does not have. The landing, the broad narrowing and the `--tags` expansion stop at a declared role, so they never read such an edge. `releases_consumers._closure` does not stop, and it reads the edge only for a census role whose closure passes through crowdsec or monitor-bridge. | `scripts/lib/k8s_role_callers.py` | 2026-11-05 |
 | `stage` stays after daniel-stage was retired (#2941). on a staging cluster existing: a `--cluster stage` request against this prod kubectl has to REFUSE rather than answer a healthy prod verdict for the wrong cluster. Drop the entry and that request becomes an unknown-cluster ValueError instead, and `cluster_of` degenerates to a one-entry lookup that can never disagree with itself. `daniel-stage` is therefore the one name here that is deliberately not an inventory host — the exemption is named in scripts/lib/tests/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory. The operator ruled that a staging cluster may come back, so the entry and its callers stay as they are rather than being re-derived later. | `scripts/lib/kubectl.py` | 2026-09-29 |
+| a shared module keeps its own insert of `hosts/lib`. not exist and host_lib sits beside the reader; `lib.host_modules` is not shipped. (ADR-0039) | `scripts/lib/longhorn_lib/longhorn_backup_health_logic.py` | 2026-11-19 |
 | only weekly-tier volumes are checked. chance the following night, inside check 4's daily limit, so flagging it would hold the check DOWN for a day after every cold start over a gap that closes on its own. A weekly volume waits seven days for its next run and up to 198 h for check 4 to notice. | `scripts/lib/longhorn_lib/longhorn_skipped_volumes_logic.py` | 2026-10-09 |
 | secret values render as stubs, so a rendered-manifest guard must key on field names and assert a non-empty denominator, never on credential-shaped values. | `scripts/lib/render_guard.py` | 2026-09-30 |
 | a separate module despite one production importer (`lib.script_classify`). Its interface is two functions over ~200 lines of import resolution, so it is deep rather than a pass-through seam, and folding it in would push `script_classify` past 650 lines. | `scripts/lib/script_imports.py` | 2026-10-09 |
@@ -641,7 +643,7 @@ generated_sha: f1939c91b
 | the census pass leaves `--durations`, as the k8s render does in `tests/conftest.py`. Both `test_census_rows_test_*.py` files share one per-process pass over about 1600 modules, and the first to run paid 8-11s of it while its sibling paid 0.05s. The serial `pytest_shard.py --record` charged it to one file and CI measured it on the other, which failed the shard-weight gate. `pytest_shard.py` packs it per shard. | `scripts/tests/conftest.py` | 2026-11-11 |
 | both sides run under the PR's interpreter, not each commit's own `uv run --frozen` environment. A dependency bump that changes the render is then invisible to the gate, but no plane orders on a lockfile, and a second environment per run costs a sync. D4 Open question 12 leaves a shared layout with D6.1 to D6. | `scripts/validate/render_diff_gates.py` | 2026-10-16 |
 | every file under hosts/, so a compose-template-only commit runs units too. family renders every host package, and the daniel-pi package renders the compose trees under the host renderer's own secret rules, which the compose family does not apply. A package unit may also be a static file. | `scripts/validate/render_templates.py` | 2026-11-19 |
-| redirect_stderr/redirect_stdout, not capsys. pytest refuses to inject it into a module-scoped fixture; main() writes with print(file=sys.stderr), which redirect_stderr captures because it rebinds sys.stderr at call time. | `scripts/validate/tests/test_validate_k8s_manifests.py` | 2026-09-01 |
+| redirect_stderr/redirect_stdout, not capsys. pytest refuses to inject it into a module-scoped fixture; run() writes with print(file=sys.stderr), which redirect_stderr captures because it rebinds sys.stderr at call time. | `scripts/validate/tests/test_render_k8s.py` | 2026-09-01 |
 | every online case seeds k3s, so no case exercises install.sh's own binary download or its check of that binary. One unseeded case fails the run whenever a GitHub release outage outlasts `retry`'s window, and install.sh still writes the unit that unit_problems reads. The `k3s-download` case below covers that download, in the `continue-on-error` step of ci.yml's `host_packages` job. | `scripts/validate/validate_lib/bootstrap_plan.py` | 2026-11-09 |
 
 ## docs
@@ -651,6 +653,7 @@ generated_sha: f1939c91b
 | 8 chars, not 12 — minimum-not-width, and the assert fires before the scale-down. (ADR-0011) | `docs/adr/template.md` | 2026-08-24 |
 | the `slice-` prefix in `k3s-migration/` stays, against the rule above. | `docs/archive/README.md` | 2026-09-02 |
 | 8 chars, not 12 — minimum-not-width, and the assert fires before the scale-down. | `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md` | 2026-08-24 |
+| `status` reads the ruling the lander recorded and does not evaluate | `docs/issue-claiming-and-fanout.md` | 2026-11-19 |
 
 ## other
 
@@ -727,6 +730,7 @@ generated_sha: f1939c91b
 | the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this so that a generator's prose is gated in CI and not only by a hand `vale docs` run. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml` | 2026-09-30 |
 | no `compile-bytecode` here. then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit syncs pass `--compile-bytecode` instead (checkout_sync.py, claude-clone-sync.sh, CI's setup action), so a root importer of daniel-box's checkout or the agent clone still finds bytecode the syncing user wrote. A session worktree's venv goes uncompiled. | `pyproject.toml` | 2026-11-10 |
 | Markdown stays out of ruff's scope. blocks inside .md, which pulled every prose file in the repo into a gate whose stated job is first-party Python — and its output mangles the plan docs, exploding readable two-element dict keys across four lines. Excluding *.md holds the gate to the same Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so don't restate one here. | `pyproject.toml` | 2026-08-23 |
+| BLE001 and ARG005 stay off. blind excepts outside tests sit at boundaries built not to crash, which are the hooks, the monitor-bridge checks and the byte-pinned karakeep script, and S110 and S112 already cover the swallowing forms. (ADR-0040) | `pyproject.toml` | 2026-11-19 |
 | `git ls-files`, not `rglob`. | `tests/_helpers.py` | 2026-08-27 |
 | shared docs, not deep copies. a doc, and copying 323 dicts per call would spend a slice of what the cache saves. A test that needs to mutate one must copy it itself — mutating in place corrupts every later test in the same worker. | `tests/_k8s_render.py` | 2026-08-23 |
 | an entry has to MATCH its file, not merely bound it. | `tests/_ratchet.py` | 2026-09-05 |

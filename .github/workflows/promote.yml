@@ -753,26 +753,12 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - name: Cache the cosign release
-        uses: actions/cache@v6.1.0
-        with:
-          path: ${{ runner.temp }}/pinned/cosign
-          key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
-
       - name: Fetch the pinned cosign and check its sha256
-        run: |
-          set -euo pipefail
-          cosign="$RUNNER_TEMP/pinned/cosign/cosign"
-          if [[ -f "$cosign" ]]; then
-            echo "cosign $COSIGN_VERSION: cached"
-          else
-            mkdir -p "$RUNNER_TEMP/pinned/cosign"
-            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$cosign" \
-              "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-amd64"
-          fi
-          echo "$COSIGN_SHA256  $cosign" | sha256sum -c --strict
-          sudo install -m 0755 "$cosign" /usr/local/bin/cosign
-          cosign version
+        uses: $/.github/actions/pinned-tool
+        with:
+          tool: cosign
+          version: ${{ env.COSIGN_VERSION }}
+          sha256: ${{ env.COSIGN_SHA256 }}
 
       # `cosign verify` inside `decide` passes no credentials of its own and reads the docker
       # config, and the package is private until the operator makes it public.

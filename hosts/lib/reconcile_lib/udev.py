@@ -1,6 +1,6 @@
 """Step 5's udev arm (H4.3b1): reload and trigger `udev` when a shipped rule is new or has changed.
 
-The design is docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*, udev.
+The design is docs/archive/host/h4-secrets-unit.md, *NUT on daniel-server*, udev.
 A package ships a rule as /usr/lib/udev/rules.d/NN-homelab-*.rules. The manifest names none: the
 arm hashes the files on disk and compares them with `udev` in applied.json, a map of rule path to
 sha256.

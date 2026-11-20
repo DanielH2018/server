@@ -71,7 +71,7 @@ design (#8980).
   `k8s_namespace` or `hosts[...]`. Literal vars files would mean copying values into each file,
   where they drift, or moving each role's derived values into one central builder.
 - A template is still text, so a wrong indent or a misplaced key surfaces at render time or
-  in the OpenAPI validation of `scripts/validate/k8s_manifests.py`, not at authoring time.
+  in the OpenAPI validation of `scripts/validate/render_lib/k8s.py`, not at authoring time.
   A typed language would have caught that earlier, and this decision gives that up.
 - Reversing this decision means a full shadow render of every role against a second engine.
   Python builders are the cheapest route if one is ever needed. A new kind of workload whose

@@ -502,9 +502,8 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
         )
 
     landing = landed()
-    if landing.verdict != PR_CI_RED:
-        return landing, None
-    if not pipe.session:
+    # `conflict_resume` lands a second time, with the one resume for a red run spent.
+    if landing.verdict != PR_CI_RED or record.ci_resumed or not pipe.session:
         return landing, None
     _ci_fix(pipe, landing.line, failing_checks(pipe.run, pr, repo))
     if pipe.time_left() < LAND_MARGIN_S:

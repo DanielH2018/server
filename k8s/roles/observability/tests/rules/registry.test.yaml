@@ -21,7 +21,8 @@ tests:
               severity: warning
             exp_annotations: &annotations
               summary: The ghcr-mirror Deployment has wanted zero replicas for 2 hours.
-              description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls ghcr.io images straight from GHCR and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1`."
+              description: "homelab/ghcr-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/ghcr-mirror --replicas=1`."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorscaledtozero
 
   # A GC run holds the mirror at zero for 25 minutes and restores it: nothing fires.
   - interval: 1m
@@ -90,7 +91,8 @@ tests:
               severity: warning
             exp_annotations:
               summary: daniel-server cannot pull nut's manifest through its ghcr.io mirror endpoint.
-              description: "The ghcr-mirror-pull check on daniel-server has failed for 45 minutes. A GET of nut's manifest through the node's ghcr.io mirror endpoint was refused, timed out or answered an error, or the nut-ghcr-mirror-probe ConfigMap names no tag. containerd still pulls ghcr.io images straight from GHCR, so nothing breaks until a WAN outage, when nut cannot cold-start. Read the `ghcr-mirror-pull` container log of the node-exporter pod on daniel-server, then the ghcr-mirror pod, its NetworkPolicy and the node's registries.yaml."
+              description: "The ghcr-mirror-pull check on daniel-server has failed for 45 minutes: nut's manifest GET via the node's ghcr.io mirror failed, or the probe ConfigMap has no tag. Read the `ghcr-mirror-pull` log of the node-exporter pod on daniel-server, then the ghcr-mirror pod and registries.yaml."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ghcrmirrorpullfailed
       - eval_time: 46m
         alertname: GhcrMirrorPullNotReporting
         exp_alerts: []
@@ -192,7 +194,8 @@ tests:
               severity: warning
             exp_annotations:
               summary: daniel-box cannot pull a manifest through its docker.io mirror endpoint.
-              description: "The dockerhub-mirror-pull check on daniel-box has failed for 45 minutes. A GET of node-exporter's own manifest, by digest, through the node's docker.io mirror endpoint was refused, timed out or answered an error. containerd still pulls docker.io images straight from Docker Hub, so nothing breaks until a WAN outage, when a pod whose image is not on its node cannot start. Read the `dockerhub-mirror-pull` container log of the node-exporter pod on daniel-box, then the dockerhub-mirror pod, its NetworkPolicy and the node's registries.yaml."
+              description: "The dockerhub-mirror-pull check on daniel-box has failed for 45 minutes: a manifest GET via the node's docker.io mirror failed. Read the `dockerhub-mirror-pull` log of the node-exporter pod on daniel-box, then the dockerhub-mirror pod and registries.yaml."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorpullfailed
       - eval_time: 46m
         alertname: GhcrMirrorPullFailed
         exp_alerts: []
@@ -279,7 +282,8 @@ tests:
               severity: warning
             exp_annotations:
               summary: The dockerhub-mirror Deployment has wanted zero replicas for 2 hours.
-              description: "homelab/dockerhub-mirror has been scaled to zero for 2 hours, or Prometheus has no kube-state-metrics scrape job. registry-gc.sh holds it at zero for at most about 25 minutes, so a run probably died before its restore. Until the mirror serves again, containerd pulls docker.io images straight from Docker Hub and a WAN outage leaves no source to pull them from. Check `journalctl -t registry-gc` on daniel-box and that no registry-gc.sh is running, then `kubectl -n homelab scale deploy/dockerhub-mirror --replicas=1`."
+              description: "homelab/dockerhub-mirror has been scaled to zero for 2 hours, or kube-state-metrics is unscraped. A registry-gc.sh run probably died before its restore. Check `journalctl -t registry-gc` on daniel-box and that no run is active, then `kubectl -n homelab scale deploy/dockerhub-mirror --replicas=1`."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#dockerhubmirrorscaledtozero
 
   # A GC phase holds the dockerhub-mirror at zero for 25 minutes and restores it: nothing fires.
   - interval: 1m
@@ -314,4 +318,4 @@ tests:
               severity: warning
             exp_annotations:
               summary: The weekly registry garbage collection did not complete.
-              description: "registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another run held the lock. Run `journalctl -t registry-gc` on daniel-box, then read the registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror Deployments."
+              description: "registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another run held the lock. Run `journalctl -t registry-gc` on daniel-box, then read the registry-gc-* Job logs and the two mirror Deployments."

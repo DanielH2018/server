@@ -416,8 +416,8 @@ def cmd_runs(args, tools: Tools) -> int:
         print(f"no fan-out runs{whose} under {args.manifest_root}")
         return 0
     standing = [b for r in runs for b in r.batches if not b.removed_at]
-    parked = status_mod.parked_batches(standing, tools)
-    print("\n".join(runs_lines(runs, args.all, parked, one_line)))
+    held = status_mod.landing_holds(standing, tools)
+    print("\n".join(runs_lines(runs, args.all, held, one_line)))
     return 0
 
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Remove an Ansible-era container that a service of the `homelab` project is about to replace
-# (H5, docs/target-architecture/host/h5-pi-compose.md, *compose-adopt*). Usage: compose-adopt PROJECT_FILE
+# (H5, docs/archive/host/h5-pi-compose.md, *compose-adopt*). Usage: compose-adopt PROJECT_FILE
 #
 # Every container_name equals its service key, so each name `config --services` prints is also a
 # container name. A container of that name whose com.docker.compose.project label is not `homelab`

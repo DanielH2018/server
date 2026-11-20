@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bootstrap-drill-guest-run.sh — the in-guest half of the drill orchestrator's bootstrap drill
-# (docs/target-architecture/host/h7-delete-ansible.md, *The proofs*). Copied
+# (docs/archive/host/h7-delete-ansible.md, *The proofs*). Copied
 # into the throwaway guest by etcd-restore-drill-vm --rehearse-bootstrap, which calls one
 # subcommand per ssh session and runs the long ones detached.
 #

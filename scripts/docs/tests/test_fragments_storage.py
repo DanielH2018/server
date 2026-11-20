@@ -7,8 +7,8 @@ the members it must. The include wiring is `test_gen_doc_fragments.py`'s job.
 
 import pytest
 
-from fragments_lib import fragments_storage as s
-from gen_doc_fragments import FRAGMENTS
+from docs.fragments_lib import fragments_storage as s
+from docs.gen_doc_fragments import FRAGMENTS
 
 
 def _role(roles_dir, name, defaults=None):

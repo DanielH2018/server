@@ -46,7 +46,7 @@ grafana_panel_report = _load_by_path(
     "grafana_panel_report", "diagnostics/grafana_panel_report.py"
 )
 
-# The validators are not loaded by path: a flat name `validate_k8s_manifests` reachable from two
+# The validators are not loaded by path: a flat name `render_templates` reachable from two
 # pythonpath entries would create a second copy.
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared helpers for the render-guard scripts and other Ansible-inventory readers.
 
-Used by ``validate/render_lib/compose.py``, ``validate/k8s_manifests.py``, and
+Used by ``validate/render_lib/compose.py``, ``validate/render_lib/k8s.py``, and
 ``validate/render_lib/shell.py``, plus the other scripts that read the same Ansible
 inventory.
 
@@ -31,7 +31,6 @@ from pathlib import Path
 
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git

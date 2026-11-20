@@ -5,11 +5,6 @@ change grew the tree while it can still shrink it. Every count is net of what th
 removes, so a move or a replacement counts as nothing.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import ast
 import re
 from collections.abc import Iterator

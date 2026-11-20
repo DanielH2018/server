@@ -20,6 +20,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
+from lib.k8s_roles import k8s_entries
 from _helpers import K8S_ROLES, load_defaults
 from _k8s_render import pod_spec, rendered_docs
 from _property_table import Property
@@ -27,7 +28,6 @@ from render_share import shared_value
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.ordering import Ordering, prepull_timeouts
-from validate.k8s_manifests import k8s_entries
 
 _WORKLOADS = frozenset({"Deployment", "StatefulSet"})
 _HOSTNAME = "kubernetes.io/hostname"

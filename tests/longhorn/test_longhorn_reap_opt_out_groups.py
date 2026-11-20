@@ -18,7 +18,7 @@ import json
 from lib import yaml_fast
 from _k8s_render import render_role_template, rendered_docs
 
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 
 
 # The classes this sweep must find. Named rather than counted: the sweep reads empty the day the
