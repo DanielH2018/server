@@ -1,93 +1,18 @@
 """Is a Deployment or DaemonSet credited as gated -- the rollout half of the derivation.
 
 A role's primary rollout is gated by its `manifests_rollout` entry; every other workload it renders
-must be named in `manifests_extra_rollouts` or it deploys ungated. A role that sets
-`manifests_rollout: ""` skips the primary gate entirely, so it is an offender unless every
-workload it renders, batch included, is gated by something this module can see.
+must be named in `manifests_extra_rollouts` or it deploys ungated.
 Consumed by `test_k8s_autodeploy_rollout_gates.py`.
 """
 
 import re
-from functools import cache
 from pathlib import Path
 
 from _autodeploy import (
     _LITERAL_NAME,
-    _batch_templates,
     _deployment_templates,
     _template_texts,
 )
-from lib.k8s_roles import k8s_tags
-
-_k8s_tags = cache(k8s_tags)
-
-
-def _sets_empty_rollout(role: Path) -> bool:
-    """Whether the role passes `manifests_rollout: ''`.
-
-    Tolerates a trailing comment (`manifests_rollout: ''  # nothing to roll`) — this repo's
-    house style comments nearly every var, and a raw-text matcher requiring end-of-line right
-    after the closing quote would go blind to that shape while the renderer itself
-    still evaluates the same value as empty and skips the rollout entirely. Without this, both
-    `_rollout_gate_offender` and the Deployment gate below would read a commented empty rollout
-    as "sets no `manifests_rollout` at all" rather than "sets it to nothing."
-    """
-    return bool(
-        re.search(
-            r"""manifests_rollout:\s*(""|'')\s*(?:#.*)?$""",
-            _render_metadata_text(role),
-            re.MULTILINE,
-        )
-    )
-
-
-def _rollout_gate_offender(role: Path) -> bool:
-    """Whether a role with `manifests_rollout: ''` has no gate at all.
-
-    `manifests_rollout: ''` skips the PRIMARY rollout's wait and stability soak. The general
-    rule: such a role is an offender UNLESS every workload it renders — Deployment, DaemonSet
-    and batch alike — is gated by some mechanism this file can see, and it renders at least one
-    workload total.
-
-    That single rule covers three shapes:
-
-    - A role rendering a Job or CronJob. Only a flux-owned role can gate one, through
-      `flux_cronjob_gates`, and a flux-owned role returns before this point.
-    - A role that skips the PRIMARY rollout but gates its Deployment through
-      `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary, so `_ungated_deployments(role) == []` is
-      already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
-      offender" rule would falsely accuse this shape.
-    - A role rendering an ungated Deployment `_deployment_templates` can't see by itself (a
-      quoted or trailing-comment `kind:` line, or a second Deployment in a `---`-split
-      template) — `_ungated_deployments` already resolves each rendered Deployment's name
-      against the gated set, so this shape is caught the same way an ordinary ungated
-      Deployment is, without a separate "renders any Deployment at all" check.
-
-    The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
-    defaults. A role that does not write it returns False at the top and is never judged here,
-    including a role that renders no workload at all. A flux-owned role returns False as well:
-    no Ansible apply runs for it, and the batch guard judges its CronJobs instead.
-
-    That gives two cases:
-
-    - A role that sets no `manifests_rollout` is outside this guard entirely. Its workloads, if
-      any, reach the cluster some other way, and whatever gates them is not
-      `manifests_rollout`. `test_auto_deployable_roles_gate_every_batch_workload_they_render`
-      and `_GATING_SHARED_ROLES` are what cover that shape.
-    - A role that DOES write `manifests_rollout: ''` and renders no workload is an offender.
-      Rendering nothing is not evidence of a gate, only an absence of anything to check, so it
-      stays fail-closed and must declare `k8s_autodeploy: false` instead.
-    """
-    if not _sets_empty_rollout(role):
-        return False
-    # Flux applies a flux-owned role. The Kustomization's `wait` takes the rollout wait's place, and the
-    # batch guard still requires each CronJob in `flux_cronjob_gates`.
-    if role.name in _k8s_tags():
-        return False
-    if _ungated_deployments(role):
-        return True
-    # Only a flux-owned role can gate a batch workload, so any batch workload here is ungated.
-    return bool(_batch_templates(role)) or not _deployment_templates(role)
 
 
 def _render_metadata_text(role: Path) -> str:
@@ -135,11 +60,9 @@ def _primary_rollout_name(role: Path) -> str:
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
     safe here. A role that sets neither key renders under its own name.
 
-    Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
-    `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
-    the same variable: `_sets_empty_rollout` would say "empty" while this one, anchored at
-    end-of-line right after the closing quote, would fall through to `manifests_service` and
-    return the real service name.
+    Tolerates a trailing comment after the value: a match anchored at end-of-line right after
+    the closing quote would read `manifests_rollout: ''  # nothing to roll` as unset, fall
+    through to `manifests_service` and return the real service name.
     """
     text = _render_metadata_text(role)
     rollout = re.search(

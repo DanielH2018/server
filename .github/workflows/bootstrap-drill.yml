@@ -122,8 +122,8 @@ jobs:
           kind create cluster --name drill --image "$node_image" --wait 120s
           docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
 
-      # The render of the Flux role at this commit, in placeholder mode. `flux` is still
-      # Ansible-owned here, so `cluster/flux-deferred/` comes from the role directly.
+      # The render of the Flux role at this commit, in placeholder mode. The bundle below
+      # reads its `cluster/flux-deferred/sync.yaml`.
       - name: Render the Flux role
         run: uv run python scripts/renderer/homelab_render.py cluster --out "$RUNNER_TEMP/out" --role flux
 

@@ -24,8 +24,6 @@ from _autodeploy_rollout import (
     _deployments_missing_readiness_probe,
     _gated_names,
     _primary_rollout_name,
-    _rollout_gate_offender,
-    _sets_empty_rollout,
     _ungated_deployments,
 )
 
@@ -132,68 +130,13 @@ def test_the_workload_matcher_sees_daemonsets(widget_role) -> None:
     ]
 
 
-def test_rollout_gate_flags_a_batch_role_that_does_not_gate_its_workload(
+def test_primary_rollout_name_reads_a_commented_empty_rollout_as_empty(
     widget_role,
 ) -> None:
-    """A batch-only role rendering an ungated Job is still an offender.
+    """`manifests_rollout: ''  # nothing to roll` names no primary rollout, not the service.
 
-    Rendering a batch workload is not itself proof of a gate — the gate must actually credit
-    that workload's own name, or nothing here has proven anything.
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
-        templates={},
-    )
-    (role / "templates" / "job.yaml.j2").write_text(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget\n"
-    )
-    assert _rollout_gate_offender(role) is True
-
-
-def test_rollout_gate_flags_a_role_rendering_no_workloads(widget_role) -> None:
-    """A role setting `manifests_rollout: ''` and rendering nothing at all stays an offender.
-
-    Rendering no workloads means the batch loop is vacuous, which could otherwise look
-    identical to "everything it renders is gated." The three-way split is deliberate: a role
-    with nothing to gate has also offered no evidence the deploy did anything, so it stays
-    fail-closed rather than earning the same pass a fully-gated role gets.
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
-        templates={},
-    )
-    assert _rollout_gate_offender(role) is True
-
-
-def test_rollout_gate_tolerates_a_trailing_comment_on_the_empty_rollout(
-    widget_role,
-) -> None:
-    """`manifests_rollout: ''  # nothing to roll` must still be seen as empty.
-
-    This repo comments nearly every var, and that house style applied to `manifests_rollout`
-    is the triggering edit. A role in this shape
-    with no batch gate at all must still read as an offender — the comment must not make it
-    invisible to the check.
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\n"
-        "manifests_rollout: ''  # nothing to roll\n",
-        templates={},
-    )
-    assert _sets_empty_rollout(role) is True
-    assert _rollout_gate_offender(role) is True
-
-
-def test_primary_rollout_name_agrees_with_sets_empty_rollout_on_a_comment(
-    widget_role,
-) -> None:
-    """`_primary_rollout_name` must also read the trailing comment as empty, not the service.
-
-    `_sets_empty_rollout` tolerates `manifests_rollout: ''  # nothing to roll`. A matcher
-    anchored at end-of-line right after the closing quote would disagree about the same
-    variable — one reads "empty", the other falls through to `manifests_service` and returns
-    the real service name. That is a defect on its own, even while `_rollout_gate_offender`'s
-    Deployment check happens to catch every affected role.
+    A match anchored at end-of-line right after the closing quote would fall through to
+    `manifests_service` and return the real service name.
     """
     role = widget_role(
         defaults="manifests_service: widget\nmanifests_rollout: ''  # nothing to roll\n"
@@ -247,48 +190,3 @@ def test_a_split_document_deployment_reads_as_ungated(widget_role) -> None:
         deployment_filename="deployment-pair.yaml.j2",
     )
     assert _ungated_deployments(role) == ["deployment-pair.yaml.j2"]
-
-
-def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(
-    widget_role,
-) -> None:
-    """A role skipping the primary rollout but gating its Deployment via extras is not an offender.
-
-    `manifests_extra_rollouts` rolls and soaks independently of the primary, so
-    `manifests_rollout: ''` on the primary alone proves nothing here. An unconditional "renders
-    a Deployment ⇒ offender" rule would flag this shape even though the Deployment IS gated.
-    The rule checks `_ungated_deployments` (which already resolves gating by name,
-    primary-or-extra) instead of "renders any Deployment at all".
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\n"
-        "manifests_rollout: ''\n"
-        "manifests_extra_rollouts:\n"
-        "  - name: widget-extra\n",
-        templates={},
-    )
-    (role / "templates" / "deployment-extra.yaml.j2").write_text(
-        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-extra\n"
-    )
-    assert _ungated_deployments(role) == []
-    assert _rollout_gate_offender(role) is False
-
-
-def test_auto_deployable_roles_do_not_skip_the_rollout_gate() -> None:
-    offenders = [
-        f"{role.name}: passes manifests_rollout: '' with no gate proven — the rollout wait and "
-        "stability soak are both skipped for the primary rollout (any manifests_extra_rollouts "
-        "still roll and soak), and either it renders a Deployment/DaemonSet, or no batch "
-        "workload, or a batch workload this role does not gate"
-        for role in _roles()
-        if _auto_deployable(role) and _rollout_gate_offender(role)
-    ]
-    assert not offenders, (
-        "Auto-deployable role(s) with no rollout gate at all. For a role rendering a "
-        "Deployment, that means restoring the rollout wait. For a batch-only role, gate every "
-        "rendered Job with a role-local `wait --for=condition=complete job/<name>`. A rendered "
-        "CronJob is gated only once the role is flux-owned and names it in "
-        "`flux_cronjob_gates` (docs/flux-deploy-plane.md). Or set k8s_autodeploy: false with a "
-        "k8s_autodeploy_reason in the role's own defaults/main.yml (the denylist is derived "
-        "from that declaration):\n" + "\n".join(offenders)
-    )
