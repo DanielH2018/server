@@ -153,6 +153,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 6. `healthchecks_api_read_only_key`: the Healthchecks.io project's **read-only** API key (project
    Settings → API Access), tier `assisted`. The `healthchecks_drift` check only reads the console,
    so it must never hold the full key, which can edit and delete checks.
+7. `uptimerobot_api_key`: Uptime Robot's **read-only** API key (Dashboard → Integrations & API
+   → API), tier `assisted`. The `uptime_robot_monitors` check only lists the monitors, so it
+   must never hold the main key, which can edit and delete them.
 
 ## The module table
 
@@ -166,7 +169,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 | `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row, `homelab_check_rows` for the table and `homelab_domain_registration_expiry_days`. `check.run_once` records each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Checkout-only: it does not ship in the pod, and `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports it from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `host_packages`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `domain_registration`, `wan`. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `host_packages`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `domain_registration`, `uptime_robot`, `wan`. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, IoConfig)`, `load_config(env)`; one builder per domain |
 | `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, and `loki_count`. Every helper that reads a URL takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `get_json`, `get_bytes`, `post_json`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |

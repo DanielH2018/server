@@ -212,6 +212,7 @@ def test_each_gate_value_holds_the_rows_its_rules_were_placed_for():
             "cloudflare_ips_drift",
             "healthchecks_drift",
             "domain_registration",
+            "uptime_robot_monitors",
         },
         "b2_reachable": {"b2_storage"},
         GRACE: {

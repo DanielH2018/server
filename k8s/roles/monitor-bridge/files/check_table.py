@@ -31,6 +31,7 @@ from checks import (
     notify,
     r2,
     service,
+    uptime_robot,
     wan,
 )
 
@@ -64,6 +65,8 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="healthchecks_drift", fn=healthchecks.check_healthchecks_drift, gate="wan_reachable", runbook="healthchecks-io-deadman"),
     # Down only when RDAP cannot be read; the days-left gauge carries the expiry thresholds.
     PushCheck(name="domain_registration", fn=domain_registration.check_domain_registration, gate="wan_reachable"),
+    # Same cache shape as healthchecks_drift. A monitor that is down is Uptime Robot's own page.
+    PushCheck(name="uptime_robot_monitors", fn=uptime_robot.check_uptime_robot_monitors, gate="wan_reachable", runbook="uptime-robot-monitors"),
     PushCheck(name="b2_storage", fn=b2.check_b2_storage, gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering"),
     # The two reachability gates. A gate has no gate of its own: a gate that cannot go red is
     # not coverage. There is no `prometheus` gate: the Watchdog covers a dead

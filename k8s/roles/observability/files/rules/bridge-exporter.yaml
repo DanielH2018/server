@@ -16,7 +16,7 @@ groups:
       # monitor-bridge" points the operator at the wrong component. No route or inhibit matches
       # `service`; Alertmanager groups by [alertname, service], and alertname already separates
       # these rules.
-      # THE WAN FAMILY: the gate row and the five rows behind it. Each rule reads one row's
+      # THE WAN FAMILY: the gate row and the six rows behind it. Each rule reads one row's
       # `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict is
       # down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as
       # the gate, so source and targets reach Alertmanager in one batch. No rule has a `for:`:
@@ -107,6 +107,24 @@ groups:
             together and redeploy monitor-bridge.
             Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN healthchecks_drift '`.
           runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
+      - alert: UptimeRobotMonitorMissing
+        expr: homelab_check_success{job="monitor-bridge", check="uptime_robot_monitors"} == 0
+        labels:
+          severity: warning
+          service: uptime-robot
+          requires: wan
+        annotations:
+          summary: >-
+            uptime-robot: {{ with query
+            "homelab_check_detail{job='monitor-bridge',check='uptime_robot_monitors'}" }}missing,
+            paused or unreadable in the console: {{ range $i, $s := . | sortByLabel "detail" }}{{
+            if $i }}, {{ end }}{{ $s.Labels.detail }}{{ end }}.{{ else }}a documented monitor is
+            missing or paused, or the console could not be read.{{ end }}
+          description: >-
+            The Uptime Robot console no longer runs a monitor the doc names. Restore it there,
+            or change the doc and monitor-bridge's list together.
+            Its DOWN line: `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN uptime_robot_monitors '`.
+          runbook_url: https://docs.local.daniel-hunter.com/uptime-robot-monitors/
       - alert: DomainRegistrationUnreadable
         expr: homelab_check_success{job="monitor-bridge", check="domain_registration"} == 0
         labels:

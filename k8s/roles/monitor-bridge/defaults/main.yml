@@ -58,6 +58,7 @@ monitor_bridge_modules:
   - checks/cloudflare_ips.py
   - checks/healthchecks.py
   - checks/domain_registration.py
+  - checks/uptime_robot.py
   - checks/wan.py
   - bridge/common.py
   - bridge/parsing.py
@@ -114,6 +115,13 @@ monitor_bridge_healthchecks_expected:
   # Its task retries three times five minutes apart, inside the hour's grace.
   - {slug: airflow-warehouse-fresh, kind: cron, schedule: "0 6 * * *", tz: UTC, grace: 3600}
 
+# The Uptime Robot monitors checks/uptime_robot.py requires to exist and not be paused. `id` is
+# a string, as the doc's table writes it. The table in docs/uptime-robot-monitors.md is the
+# record; k8s/roles/monitor-bridge/tests/test_check_uptime_robot.py holds this list to it.
+monitor_bridge_uptime_robot_monitors:
+  - {id: "803868101", name: Auth Health}
+  - {id: "803868270", name: Jellyfin Health}
+
 manifests_rollout: monitor-bridge
 
 # Each entry renders k8s/templates/secret-default.yaml.j2 as secret-<name>.yaml:
@@ -134,6 +142,8 @@ render_secrets:
       # The Healthchecks.io project's read-only API key:
       # check settings and ping history, never ping URLs.
       healthchecks_api_read_only_key: healthchecks_api_read_only_key
+      # Uptime Robot's read-only API key: it serves every `get*` method and changes nothing.
+      uptimerobot_api_key: uptimerobot_api_key # gitleaks:allow — a SOPS key NAME, not a value
   # The bridge's API keys, webhooks and SMTP login, consumed by `envFrom`, so every key
   # becomes an env var. A credential that must stay out of the environment goes in
   # monitor-bridge-credentials. Every other setting is a plain `env:` value from

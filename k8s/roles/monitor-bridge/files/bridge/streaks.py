@@ -81,6 +81,7 @@ class State:
       healthchecks_probe: The Healthchecks.io console drift cache (`checks.healthchecks`).
       domain_registration_probe: The RDAP registration-expiry cache
         (`checks.domain_registration`).
+      uptime_robot_probe: The Uptime Robot console cache (`checks.uptime_robot`).
     """
 
     down_streaks: dict[str, int] = field(default_factory=dict)
@@ -102,6 +103,7 @@ class State:
     )
     cloudflare_ips_probe: ProbeCache = field(default_factory=_never_probed)
     healthchecks_probe: ProbeCache = field(default_factory=_never_probed)
+    uptime_robot_probe: ProbeCache = field(default_factory=_never_probed)
     domain_registration_probe: RegistrationCache = field(
         default_factory=lambda: {"ts": None, "ok": False, "expiry": None}
     )

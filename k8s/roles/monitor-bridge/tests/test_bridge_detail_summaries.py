@@ -31,6 +31,7 @@ DETAIL_ROWS = frozenset(
         "r2_usage",
         "scrutiny",
         "speedtest",
+        "uptime_robot_monitors",
     }
 )
 QUERIED = re.compile(

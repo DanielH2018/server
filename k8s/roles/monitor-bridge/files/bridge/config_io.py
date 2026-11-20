@@ -54,6 +54,10 @@ class IoConfig:
     HEALTHCHECKS_API_KEY: str = field(repr=False)
     HEALTHCHECKS_EXPECTED: tuple[dict, ...]
     HEALTHCHECKS_PROBE_INTERVAL_S: float
+    UPTIME_ROBOT_API_URL: str
+    UPTIME_ROBOT_API_KEY: str = field(repr=False)
+    UPTIME_ROBOT_MONITORS: tuple[dict, ...]
+    UPTIME_ROBOT_PROBE_INTERVAL_S: float
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -93,6 +97,27 @@ def io_config(
         except ValueError as e:
             problems.append(
                 "HEALTHCHECKS_EXPECTED is malformed (%s); the console drift check is off"
+                % e
+            )
+            return ()
+        return tuple(parsed)
+
+    def _uptime_robot_monitors(raw: str) -> tuple[dict, ...]:
+        """UPTIME_ROBOT_MONITORS's JSON list. Malformed is a config problem, never a raise."""
+        if not raw.strip():
+            return ()
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list) or not all(
+                isinstance(m, dict)
+                and isinstance(m.get("id"), str)
+                and isinstance(m.get("name"), str)
+                for m in parsed
+            ):
+                raise ValueError("not a list of {id, name} objects with string values")
+        except ValueError as e:
+            problems.append(
+                "UPTIME_ROBOT_MONITORS is malformed (%s); the Uptime Robot check is off"
                 % e
             )
             return ()
@@ -233,6 +258,17 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
+        # The Uptime Robot console against docs/uptime-robot-monitors.md. The key is the
+        # account's READ-ONLY API key, file-mounted; the monitor list is
+        # monitor_bridge_uptime_robot_monitors rendered as JSON. Either empty disables the
+        # check. Successes cached a day, failures re-probed every cycle
+        # (checks/uptime_robot.py).
+        UPTIME_ROBOT_API_URL=_env(
+            "UPTIME_ROBOT_API_URL", "https://api.uptimerobot.com/v2/getMonitors"
+        ),
+        UPTIME_ROBOT_API_KEY=_env_file("UPTIME_ROBOT_API_KEY"),
+        UPTIME_ROBOT_MONITORS=_uptime_robot_monitors(_env("UPTIME_ROBOT_MONITORS")),
+        UPTIME_ROBOT_PROBE_INTERVAL_S=_num("UPTIME_ROBOT_PROBE_INTERVAL_S"),
         # Discord delivery: Alertmanager's `discord` receiver POSTs every alert to this webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every alert
         # firing while Discord goes silent — the one link in the alert chain no other

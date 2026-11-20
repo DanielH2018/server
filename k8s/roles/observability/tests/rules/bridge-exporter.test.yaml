@@ -11,9 +11,9 @@ rule_files:
   - ../../files/rules/bridge-exporter.yaml
 evaluation_interval: 1m
 tests:
-  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its five
+  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its six
   # dependents all fire at once, with no `for:`. promtool does not run Alertmanager's inhibit
-  # rule, so all six reach exp_alerts; monitor-bridge's tests/test_bridge_row_rules.py holds the
+  # rule, so all seven reach exp_alerts; monitor-bridge's tests/test_bridge_row_rules.py holds the
   # inhibit against the rule labels. Each dependent carries `requires: wan`, the gate does not.
   - interval: 1m
     input_series:
@@ -28,6 +28,8 @@ tests:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="healthchecks_drift"}
         values: "0x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="domain_registration"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="uptime_robot_monitors"}
         values: "0x5"
     alert_rule_test:
       - eval_time: 1m
@@ -119,6 +121,26 @@ tests:
                 monitor-bridge. Its DOWN line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN healthchecks_drift '`.
               runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
+      - eval_time: 1m
+        alertname: UptimeRobotMonitorMissing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: uptime_robot_monitors
+              severity: warning
+              service: uptime-robot
+              requires: wan
+            exp_annotations:
+              summary: >-
+                uptime-robot: a documented monitor is missing or paused, or the console could not
+                be read.
+              description: >-
+                The Uptime Robot console no longer runs a monitor the doc names. Restore it
+                there, or change the doc and monitor-bridge's list together. Its DOWN line:
+                `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
+                uptime_robot_monitors '`.
+              runbook_url: https://docs.local.daniel-hunter.com/uptime-robot-monitors/
       - eval_time: 1m
         alertname: DomainRegistrationUnreadable
         exp_alerts:
@@ -1056,3 +1078,30 @@ tests:
       - eval_time: 5m
         alertname: HostPackageBuilderStalled
         exp_alerts: []
+
+  # The Uptime Robot row names the monitors the console no longer runs.
+  - interval: 1m
+    input_series:
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="uptime_robot_monitors"}
+        values: "0x5"
+      - series: homelab_check_detail{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="uptime_robot_monitors",detail="Auth Health"}
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: UptimeRobotMonitorMissing
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: uptime_robot_monitors
+              severity: warning
+              service: uptime-robot
+              requires: wan
+            exp_annotations:
+              summary: 'uptime-robot: missing, paused or unreadable in the console: Auth Health.'
+              description: >-
+                The Uptime Robot console no longer runs a monitor the doc names. Restore it
+                there, or change the doc and monitor-bridge's list together. Its DOWN line:
+                `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN
+                uptime_robot_monitors '`.
+              runbook_url: https://docs.local.daniel-hunter.com/uptime-robot-monitors/

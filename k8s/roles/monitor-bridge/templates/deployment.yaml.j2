@@ -118,6 +118,8 @@ spec:
                 path: speedtest_api_token
               - key: healthchecks_api_read_only_key # gitleaks:allow — a Secret item NAME, not a value
                 path: healthchecks_api_read_only_key
+              - key: uptimerobot_api_key # gitleaks:allow — a Secret item NAME, not a value
+                path: uptimerobot_api_key
         - name: monitor-bridge-tmp
           emptyDir: {}
         # The etcd restore drill's stamp dir on daniel-box, the node this pod is pinned to.
