@@ -18,8 +18,8 @@ from _promote_fakes import NOW, REBOOT_YAML, World, bundle_files
 from lib import yaml_fast
 from lib.repo_paths import REPO
 
-import promote
-from chained_timeout import VERIFY_CAP_S
+from deploy_tools import promote
+from deploy_tools.chained_timeout import VERIFY_CAP_S
 from deploy_tools.promote_lib import reboot_window
 from deploy_tools.promote_lib import verify_handoff
 from deploy_tools.promote_lib import verify_promotion as vp

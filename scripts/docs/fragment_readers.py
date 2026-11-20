@@ -13,6 +13,7 @@ fail2ban jail template from `configparser`.
 
 import ast
 import configparser
+from collections.abc import Sequence
 from pathlib import Path as _Path
 
 from lib import yaml_fast
@@ -91,7 +92,7 @@ def parse_jails(conf: str) -> list[dict[str, str]]:
     return jails
 
 
-def container_udp_port(entries: list[dict], name: str) -> str:
+def container_udp_port(entries: Sequence[dict], name: str) -> str:
     entries = [c for c in entries if c["name"] == name]
     assert len(entries) == 1, (
         f"expected one {name!r} in the host's service entries, found {len(entries)}"

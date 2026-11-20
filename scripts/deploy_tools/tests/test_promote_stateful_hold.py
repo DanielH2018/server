@@ -10,8 +10,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_stateful_hold.py
 
 import json
 
-import forge
-import promote
+from deploy_tools import forge
+from deploy_tools import promote
 import pytest
 from _promote_fakes import NOW, World, bundle_files, digest_of
 from deploy_tools.promote_lib import stateful

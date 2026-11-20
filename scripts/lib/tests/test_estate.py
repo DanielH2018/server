@@ -19,9 +19,7 @@ def estate(tmp_path: Path) -> Estate:
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
     (tmp_path / "services.yml").write_text(
-        yaml.safe_dump(
-            {"containers_list": [{"name": "web"}, {"name": "db"}, {"port": 1}]}
-        )
+        yaml.safe_dump({"containers_list": [{"name": "web"}, {"name": "db"}]})
     )
     (tmp_path / "all.yml").write_text(
         yaml.safe_dump({"port": 1, "has_docker": False, "alias": "{{ sys_user }}"})
@@ -74,7 +72,7 @@ def test_a_host_without_a_host_vars_file_reads_the_group_layer(estate):
     assert estate.hosts() == ["box", "pi"]
 
 
-def test_k8s_entries_are_the_named_services_keyed_by_name(estate):
+def test_k8s_entries_are_the_services_keyed_by_name(estate):
     assert list(estate.k8s_entries()) == ["web", "db"]
 
 

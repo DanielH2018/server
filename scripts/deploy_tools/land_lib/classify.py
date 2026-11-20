@@ -6,11 +6,8 @@ A host package applies a setup-plane change, and `host_wait` waits for that host
 """
 
 import shlex
-import sys as _sys
 from collections.abc import Callable
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
 from deploy_tools.land_lib.fresh import FRESH_FLAG, GradeFresh, grading_argv
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT

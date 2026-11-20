@@ -10,12 +10,9 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_chained_timeo
 """
 
 import re
-import sys as _sys
 from collections.abc import Iterable
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from changed_set import ROOT, SOAK
+from deploy_tools.changed_set import ROOT, SOAK
 from deploy_tools.kustomizations import kustomization_graph
 
 # The values of the two objects the bundle does not carry, from

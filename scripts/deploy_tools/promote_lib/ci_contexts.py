@@ -10,17 +10,12 @@ from pathlib import Path
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` imports bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK
 
-import forge
+from deploy_tools import forge
 from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 
 # ci_verdict imports nothing first-party, so this pulls in no other host module.

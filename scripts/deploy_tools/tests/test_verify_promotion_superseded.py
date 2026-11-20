@@ -7,7 +7,7 @@ read after `homelab` moved past R. ADR-0020 records the supersession rule.
 Run: uv run pytest scripts/deploy_tools/tests/test_verify_promotion_superseded.py
 """
 
-import forge
+from deploy_tools import forge
 from _land_wait_fakes import D, M, at
 from deploy_tools.promote_lib import verify_promotion as vp
 from test_promote_land_wait import _soak_sim

@@ -32,9 +32,7 @@ from collections.abc import Callable, Generator, Sequence
 from pathlib import Path
 from typing import NoReturn
 
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import live_limit, pin_gate, turn
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say

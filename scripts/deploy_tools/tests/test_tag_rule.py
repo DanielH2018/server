@@ -9,8 +9,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_tag_rule.py
 
 import pytest
 
-import promote
-import tag_rule
+from deploy_tools import promote
+from deploy_tools import tag_rule
 from _bundle_fixtures import bundle
 from _promote_fakes import World, digest_of
 from lib.exit_codes import FAILED, OK, RENDER_OK

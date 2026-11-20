@@ -70,7 +70,7 @@ def test_a_checkout_git_could_not_make_lands_nothing(tmp_path):
 
 
 def test_land_fresh_reports_a_checkout_it_could_not_make(capsys):
-    import land
+    from deploy_tools import land
 
     tools, _ = build_tools(Fakes(fresh_fails="git fetch: offline"))
     rc = land.main(["--pr", "999", "--fresh"], tools=tools)
@@ -89,7 +89,7 @@ def test_the_child_argv_keeps_a_since_the_caller_gave():
 
 
 def test_land_hands_a_fresh_landing_to_the_checkout_and_annotates_nothing():
-    import land
+    from deploy_tools import land
 
     tools, calls = build_tools(Fakes())
     handed: list = []
@@ -110,7 +110,7 @@ def test_land_hands_a_fresh_landing_to_the_checkout_and_annotates_nothing():
 def test_land_runs_a_handed_over_turn_from_a_fresh_checkout_and_annotates_nothing(
     tmp_path,
 ):
-    import land
+    from deploy_tools import land
     from deploy_tools.land_lib import turn
 
     held = turn.try_take(tmp_path / "turn.lock")

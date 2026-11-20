@@ -11,8 +11,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-import forge
-from flux_host import FluxHost
+from deploy_tools import forge
+from deploy_tools.flux_host import FluxHost
 from lib.repo_paths import REPO
 from deploy_tools.promote_lib import reboot_window
 from deploy_tools.promote_lib import verify_promotion as vp
