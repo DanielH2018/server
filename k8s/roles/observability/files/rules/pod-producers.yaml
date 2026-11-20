@@ -1,6 +1,6 @@
 # The five check producers that run in pods: the crowdsec-jobs sidecar's three jobs, and the
 # configarr-health and janitorr-health CronJobs. Plain YAML, never Jinja: prometheus-rules.yaml.j2
-# carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
+# carries this file verbatim. The design is docs/archive/monitoring/m6-retire-kuma.md,
 # batch B6b. A pod exports its verdict through a metrics endpoint rather than a textfile or a
 # Pushgateway.
 #

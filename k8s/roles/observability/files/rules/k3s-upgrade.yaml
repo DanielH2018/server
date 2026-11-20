@@ -1,4 +1,4 @@
-# The k3s upgrade Jobs (target slice H6, docs/target-architecture/host/h6-k3s-suc.md, *Alerts*).
+# The k3s upgrade Jobs (target slice H6, docs/archive/host/h6-k3s-suc.md, *Alerts*).
 # Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # kube-state-metrics collects Jobs (`jobs` in --resources and in its ClusterRole), and SUC runs
@@ -62,7 +62,7 @@ groups:
       #
       # `failed` is 1 after an attempt that did not bring k3s back, and after an attempt a kill
       # interrupted. The unit makes one attempt per hash, so this page stands until the operator
-      # recovers the node and removes failed.sha256 (docs/target-architecture/host/h6-k3s-suc.md,
+      # recovers the node and removes failed.sha256 (docs/archive/host/h6-k3s-suc.md,
       # *Rollback*).
       - alert: K3sConfigRestartFailed
         expr: homelab_k3s_restart_failed{host="daniel-box"} == 1
