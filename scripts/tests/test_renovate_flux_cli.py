@@ -10,9 +10,10 @@ manager reads each pin from the `# renovate:` comment on the line above it; Reno
 held against `scripts/validate/renovate_expected_deps.tsv` in CI, proves it reads version and
 digest in one match.
 
-These tests hold two things. Every pin is in the table with its digest and equals the role's
-`flux_version` and homelab-tools' amd64 digest. And each pin and `flux_version` resolve to the
-one manual flux group, so a bump opens as one PR.
+This module holds every pin in the table with its digest and equal to the role's
+`flux_version` and homelab-tools' amd64 digest. The `flux-` rows of
+_renovate_rule_rows.py hold each pin and `flux_version` in the one manual flux group,
+so a bump opens as one PR.
 
 Run: uv run pytest scripts/tests/test_renovate_flux_cli.py
 """
@@ -26,7 +27,6 @@ from _renovate import (
     _CONFIG_MANAGERS,
     _PACKAGE_RULES,
     _REPO,
-    _resolve_setting,
     expected_deps,
     workflow_env_pins,
 )
@@ -49,20 +49,6 @@ FETCH = re.compile(
     r"fluxcd/flux2/releases/download/\$FLUX_VERSION/|^\s+tool: flux$", re.M
 )
 
-# The deps named `fluxcd/flux2` other than the workflow pin, as the extract reports each:
-# (file, datasource, manager, depType). `_dep` derives the workflow pin from its manager.
-DEPS = {
-    "flux_version": (FLUX_DEFAULTS, "github-releases", "custom.regex", "annotated-pin"),
-    "the homelab-tools pin": (
-        HOMELAB_TOOLS,
-        "github-release-attachments",
-        "custom.regex",
-        None,
-    ),
-}
-
-UPDATE_TYPES = ("major", "minor", "patch", "digest", "pinDigest")
-
 
 def _manager() -> dict:
     (manager,) = [
@@ -74,25 +60,6 @@ def _manager() -> dict:
         )
     ]
     return manager
-
-
-def _dep(dep: str) -> tuple[str, str, str, str, str | None]:
-    """The dep as (depName, file, datasource, manager, depType).
-
-    A workflow pin's name and datasource come from the manager's own templates, so this walk
-    tests what the manager emits rather than a constant that matched the flux rule before the
-    manager existed.
-    """
-    if dep == "the workflow pin":
-        manager = _manager()
-        return (
-            manager.get("depNameTemplate", ""),
-            WORKFLOW,
-            manager.get("datasourceTemplate", ""),
-            "custom.regex",
-            None,
-        )
-    return (DEP_NAME, *DEPS[dep])
 
 
 def _flux_version() -> str:
@@ -131,25 +98,3 @@ def test_the_workflow_pin_moves_its_digest_in_the_flux_group() -> None:
     datasource = _manager()["datasourceTemplate"]
     assert datasource == "github-release-attachments"
     assert datasource in rule["matchDatasources"]
-
-
-@pytest.mark.parametrize("dep", sorted([*DEPS, "the workflow pin"]))
-@pytest.mark.parametrize("update_type", UPDATE_TYPES)
-def test_every_flux_dep_lands_in_the_manual_flux_group(
-    dep: str, update_type: str
-) -> None:
-    dep_name, rel_path, datasource, manager, dep_type = _dep(dep)
-
-    def resolve(field: str):
-        return _resolve_setting(
-            field,
-            dep_name,
-            rel_path,
-            update_type,
-            datasource,
-            dep_type=dep_type,
-            manager=manager,
-        )
-
-    assert (resolve("groupName") or "").startswith("flux (manual")
-    assert resolve("automerge") is False

@@ -25,7 +25,7 @@ Dependency Dashboard's **Pending Status Checks** section (issue #3), and they ar
 leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one
 (`hosts/components/renovate-notify/files/pending_logic.py:DIGEST_SOAK_DAYS`, `hosts/components/renovate-notify/files/pending_logic.py:VERSION_SOAK_DAYS`). The
 one exception is the nginx alpine digests (`nginx`, `nginxinc/nginx-unprivileged`), which soak
-1 day (`scripts/tests/test_renovate_nginx_digest_soak.py::test_a_nginx_alpine_digest_soaks_one_day`): upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
+1 day (the `nginx-` rows of `scripts/tests/test_renovate_package_rules.py::test_each_row_resolves_as_the_table_says`): upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
 re-push left an automerge window the daily Renovate run usually missed (#2886). `renovate-notify`
 measures those two rows against the 1-day soak (`hosts/components/renovate-notify/files/pending_logic.py:FAST_DIGEST_SOAK_DAYS`), so their stuck
 threshold is 8 days, not 10.
@@ -33,11 +33,11 @@ A digest with no release timestamp skips the soak entirely (#3368). Only Docker 
 timestamp, and only for a tag that names a version. So a GHCR or lscr.io digest, or a digest on
 `latest`, `alpine` or `jvm-stable`, has none. The k8s digest rule sets
 `minimumReleaseAgeBehaviour: timestamp-optional`, so Renovate raises those at once
-(`scripts/tests/test_renovate_digest_soak_without_timestamp.py::test_a_digest_with_no_timestamp_is_raised_without_an_age_check`). Without it
+(the `no-timestamp-` digest rows of `scripts/tests/test_renovate_package_rules.py::test_each_row_resolves_as_the_table_says`). Without it
 they sat in Pending Status Checks indefinitely. A version bump on GHCR, lscr.io or gcr.io has
 no timestamp either, so the k8s version rule sets the same behaviour for `docker` minor and
 patch bumps (#3370,
-`scripts/tests/test_renovate_digest_soak_without_timestamp.py::test_a_version_bump_with_no_timestamp_is_raised_without_an_age_check`). Such a bump raises on its first run with no soak; a Docker Hub version
+the `no-timestamp-` version rows of `scripts/tests/test_renovate_package_rules.py::test_each_row_resolves_as_the_table_says`). Such a bump raises on its first run with no soak; a Docker Hub version
 bump keeps its 7 days.
 
 **HISTORY —** Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day

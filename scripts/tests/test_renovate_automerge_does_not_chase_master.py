@@ -6,12 +6,10 @@ then rebased each automerge branch onto every master move and re-ran its full CI
 the before-6am window master moves faster than one CI run. Both automerge rules set `rebaseWhen: "conflicted"`, so a green PR that is
 behind merges as it stands.
 
-Two things can undo it silently, so each gets an assertion:
-
-- A later rule that matches these pins and sets `rebaseWhen` back. `_resolve_setting` walks
-  the rules in order, so the resolved value, not the rule's own body, is asserted.
-- A new rule that turns automerge on without the key. The census over `automerge: true`
-  rules catches it before any pin resolves through it.
+A new rule that turns automerge on without the key would undo it silently, so the census
+over `automerge: true` rules catches it before any pin resolves through it. The `chased-` rows of
+test_renovate_package_rules.py hold the pins that chased master to `conflicted`, and a later rule
+that sets `rebaseWhen` back is their red half.
 
 `conflicted` merges a PR that is behind only because master's ruleset does not require
 up-to-date branches. That is GitHub state, not repo state, so no test here reads it.
@@ -19,55 +17,9 @@ up-to-date branches. That is GitHub state, not repo state, so no test here reads
 Run: uv run pytest scripts/tests/test_renovate_automerge_does_not_chase_master.py
 """
 
-import pytest
-from _renovate import _PACKAGE_RULES, _REPO, _resolve_setting
-
-# The branches that chased master, as package -> (file carrying the pin, the update type the
-# branch carried). Named rather than derived, so a moved pin fails as a missing member instead
-# of resolving against a path no rule was written for.
-CHASED = {
-    "nginxinc/nginx-unprivileged": (
-        "k8s/roles/docs/defaults/main.yml",
-        "digest",
-    ),
-    "lscr.io/linuxserver/radarr": (
-        "k8s/roles/radarr/defaults/main.yml",
-        "patch",
-    ),
-    "ghcr.io/headlamp-k8s/headlamp": (
-        "k8s/roles/headlamp/defaults/main.yml",
-        "minor",
-    ),
-}
+from _renovate import _PACKAGE_RULES
 
 CONFLICTED = "conflicted"
-
-
-def _resolve(field: str, package: str, rules=_PACKAGE_RULES):
-    rel_path, update_type = CHASED[package]
-    return _resolve_setting(
-        field, package, rel_path, update_type, "docker", rules=rules
-    )
-
-
-@pytest.mark.parametrize("package", sorted(CHASED))
-def test_each_chased_pin_still_sits_where_the_rule_looks(package: str) -> None:
-    rel_path, _ = CHASED[package]
-    assert f"_image: {package}:" in (_REPO / rel_path).read_text(), (
-        f"{rel_path} no longer pins {package} — pick another automerge pin, or this test "
-        "proves nothing about the automerge rules"
-    )
-
-
-@pytest.mark.parametrize("package", sorted(CHASED))
-def test_chased_pin_automerges_without_rebasing_onto_master(package: str) -> None:
-    assert _resolve("automerge", package) is True, (
-        f"{package} no longer automerges, so it no longer exercises the rebase setting"
-    )
-    assert _resolve("rebaseWhen", package) == CONFLICTED, (
-        f"{package} automerges with rebaseWhen={_resolve('rebaseWhen', package)!r}: Renovate "
-        "rebases it onto every master move and re-runs its CI until master goes quiet"
-    )
 
 
 def _automerge_rules_missing_conflicted(rules: list[dict]) -> list[str]:
@@ -76,11 +28,6 @@ def _automerge_rules_missing_conflicted(rules: list[dict]) -> list[str]:
         for r in rules
         if r.get("automerge") is True and r.get("rebaseWhen") != CONFLICTED
     ]
-
-
-def test_later_rule_resetting_rebase_when_is_flagged() -> None:
-    rules = [*_PACKAGE_RULES, {"matchManagers": ["custom.regex"], "rebaseWhen": "auto"}]
-    assert _resolve("rebaseWhen", "lscr.io/linuxserver/radarr", rules=rules) == "auto"
 
 
 def test_automerge_rule_without_rebase_when_is_flagged() -> None:
