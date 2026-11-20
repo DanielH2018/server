@@ -1,5 +1,5 @@
 {#
-  The server's Python files live in files/, not templates/: validate/k8s_manifests.py renders
+  The server's Python files live in files/, not templates/: scripts/validate/render_lib/k8s.py renders
   every *.j2 under templates/ and parses it as YAML, and a Python script is not a manifest.
   Carrying them via lookup('file') also means this rendered ConfigMap changes whenever any of
   them does, so the renderer's `checksum/restart` picks the change up — no
