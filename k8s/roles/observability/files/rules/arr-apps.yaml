@@ -15,14 +15,19 @@ groups:
       # `max by (source)` drops `instance`, which moves with each Prowlarr pod, and `message`,
       # which lists the failing apps and changes as one recovers. Either would resolve the alert
       # and fire it again under a new label set.
-      # The absent() arm fires when exportarr serves no Prowlarr health at all, so the check
-      # above cannot be read. A failed scrape pages through ScrapeTargetDown instead; this arm
-      # covers a pod with no exportarr sidecar or a collector that stops exporting the family.
+      # The absent() arms fire when the check above cannot be read: no Prowlarr exportarr target
+      # at all, or a scrape that succeeds and serves no health family. The family's arm is
+      # conjoined with up == 1, so a failed scrape pages once, through ScrapeTargetDown.
+      # When every app fails, Prowlarr's message is "All applications are unavailable ..." with
+      # no list, so the summary names every app instead.
       - alert: ProwlarrAppSyncFailing
         expr: >-
           max by (source) (prowlarr_system_health_issues{job="exportarr", source="ApplicationLongTermStatusCheck"}) > 0
           or
-          absent(prowlarr_system_health_issues{job="exportarr"})
+          absent(up{job="exportarr", arr="prowlarr"})
+          or
+          (absent(prowlarr_system_health_issues{job="exportarr", arr="prowlarr"})
+          and on() (up{job="exportarr", arr="prowlarr"} == 1))
         for: 30m
         labels:
           severity: warning
@@ -30,7 +35,8 @@ groups:
         annotations:
           summary: >-
             prowlarr: {{ with query "prowlarr_system_health_issues{job='exportarr',source='ApplicationLongTermStatusCheck'} > 0"
-            }}indexer sync has failed for 6 hours to {{ reReplaceAll ".*: " "" (index . 0).Labels.message
+            }}indexer sync has failed for 6 hours to {{ $m := (index . 0).Labels.message }}{{ if
+            match "^All " $m }}every app{{ else }}{{ reReplaceAll ".*: " "" $m }}{{ end
             }}.{{ else }}exportarr serves no Prowlarr health, so a failing app sync is unseen.{{ end }}
           description: >-
             Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr serves no

@@ -2,9 +2,10 @@
 # `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
 # hook runs it on every commit that touches the rules.
 #
-# ProwlarrAppSyncFailing has the family's zero-series case, a long-term application failure
-# that fires it, one that keeps firing across a pod change and a recovering app, and two that
-# keep it silent: a healthy Prowlarr, and a short-term application failure alone.
+# ProwlarrAppSyncFailing has the family's zero-series case, a scrape that serves no health
+# family, a long-term application failure that keeps firing across a pod change and a
+# recovering app, and a failure of every app. Three keep it silent: a healthy Prowlarr, a
+# short-term application failure alone, and a failed scrape, which ScrapeTargetDown pages.
 rule_files:
   - ../../files/rules/arr-apps.yaml
 evaluation_interval: 1m
@@ -23,6 +24,7 @@ tests:
               severity: warning
               service: prowlarr
               job: exportarr
+              arr: prowlarr
             exp_annotations:
               summary: >-
                 prowlarr: exportarr serves no Prowlarr health, so a failing app sync is unseen.
@@ -34,6 +36,8 @@ tests:
   # A healthy Prowlarr: the issues it carries are not application failures.
   - interval: 1m
     input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '1x80'
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="AllowedHostsCheck", type="warning", message="Allowed Hosts is not configured"}'
         values: '1x60'
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="IndexerStatusCheck", type="warning", message="Indexers unavailable due to failures: YTS"}'
@@ -46,6 +50,8 @@ tests:
   # The short-term check alone stays quiet: every Sonarr or Radarr rollout trips it.
   - interval: 1m
     input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '1x80'
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="ApplicationStatusCheck", type="warning", message="Applications unavailable due to failures: Sonarr"}'
         values: '1x60'
     alert_rule_test:
@@ -57,6 +63,8 @@ tests:
   # and Radarr recovers at 50m, which changes `instance` and `message`; the alert keeps firing.
   - interval: 1m
     input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '1x80'
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.104:9707", source="ApplicationLongTermStatusCheck", type="warning", message="Applications unavailable due to failures for more than 6 hours: Sonarr, Radarr"}'
         values: '1x40'
       - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="ApplicationLongTermStatusCheck", type="warning", message="Applications unavailable due to failures for more than 6 hours: Sonarr, Radarr"}'
@@ -93,3 +101,57 @@ tests:
                 Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr
                 serves no Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the
                 app's API key into Prowlarr's Settings, Apps, then click Sync App Indexers.
+
+  # Every app failing: Prowlarr's message carries no list, so the summary names every app.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '1x40'
+      - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="ApplicationLongTermStatusCheck", type="warning", message="All applications are unavailable due to failures for more than 6 hours"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ProwlarrAppSyncFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: prowlarr
+              source: ApplicationLongTermStatusCheck
+            exp_annotations:
+              summary: 'prowlarr: indexer sync has failed for 6 hours to every app.'
+              description: >-
+                Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr
+                serves no Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the
+                app's API key into Prowlarr's Settings, Apps, then click Sync App Indexers.
+
+  # A scrape that succeeds and serves no health family: the check cannot be read.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ProwlarrAppSyncFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: prowlarr
+              job: exportarr
+              arr: prowlarr
+            exp_annotations:
+              summary: >-
+                prowlarr: exportarr serves no Prowlarr health, so a failing app sync is unseen.
+              description: >-
+                Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr
+                serves no Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the
+                app's API key into Prowlarr's Settings, Apps, then click Sync App Indexers.
+
+  # A failed scrape stays quiet here: ScrapeTargetDown pages it once.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: ProwlarrAppSyncFailing
+        exp_alerts: []
