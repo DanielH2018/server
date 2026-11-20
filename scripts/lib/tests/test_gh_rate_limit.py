@@ -99,6 +99,49 @@ def test_a_refusal_in_primary_words_with_quota_left_waits_as_a_secondary_limit()
     )
 
 
+def _quota_over_time(*answers):
+    """A clock that `sleep` advances, and a `gh api rate_limit` giving `answers` in turn.
+
+    Each answer is `(remaining, reset)`; the last one repeats. Returns the seconds slept, in
+    a list, then `sleep`, `run` and `now` for `wait_out`.
+    """
+    clock = [NOW]
+    slept: list[float] = []
+    queue = list(answers)
+
+    def sleep(seconds):
+        slept.append(seconds)
+        clock[0] += seconds
+
+    def run(argv, **_kwargs):
+        remaining, reset = queue.pop(0) if len(queue) > 1 else queue[0]
+        quota = json.dumps({"remaining": remaining, "reset": reset})
+        return subprocess.CompletedProcess(argv, 0, quota + "\n", "")
+
+    return slept, sleep, run, lambda: clock[0]
+
+
+def test_a_wait_for_a_spent_quota_ends_at_a_reset_sooner_than_the_first():
+    slept, sleep, run, now = _quota_over_time((0, int(NOW) + 2689), (0, int(NOW) + 600))
+    lines: list[str] = []
+    gh_rate_limit.wait_out(PRIMARY, sleep, lines.append, run, now)
+    assert lines == [
+        "hit the GitHub rate limit; waiting 2691s",
+        "stopped waiting after 600s: the core quota has reset",
+    ]
+    assert sum(slept) == 600
+
+
+def test_a_wait_for_a_spent_quota_ends_once_the_quota_has_calls_again():
+    slept, sleep, run, now = _quota_over_time(
+        (0, int(NOW) + 2689), (0, int(NOW) + 2689), (5000, int(NOW) + 3600)
+    )
+    lines: list[str] = []
+    gh_rate_limit.wait_out(GRAPHQL, sleep, lines.append, run, now)
+    assert sum(slept) == 2 * gh_rate_limit.RECHECK_S
+    assert lines[-1] == "stopped waiting after 120s: the graphql quota has reset"
+
+
 def _quota(remaining, reset=int(NOW) + 600):
     return lambda _name: {"remaining": remaining, "reset": reset}
 

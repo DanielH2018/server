@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import Fakes
-from _land_turn_fakes import MERGED, OPEN, START_VIEW, call_order
+from _land_turn_fakes import HEAD, MERGED, OPEN, START_VIEW, UPDATED, call_order
 from deploy_tools.land_lib import batch, serial_lock, slots, turn
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
@@ -120,6 +120,8 @@ _K8S = ["k8s/roles/sonarr/defaults/main.yml"]
 _SERIAL = ["k8s/roles/longhorn/defaults/main.yml"]
 _SERVICES = ["cluster/services.yml"]
 _DOCS = ["docs/landing.md"]
+# The record of `Landing.changed_paths` reading the PR's file list.
+_FILES = "gh:files,headRefOid"
 
 
 def _merging(landing, paths, draft=False, **fakes):
@@ -127,7 +129,7 @@ def _merging(landing, paths, draft=False, **fakes):
     views = {
         "state,mergeable,headRefOid": [OPEN, MERGED],
         START_VIEW: {"isDraft": draft, **OPEN},
-        "files": {"files": [{"path": p} for p in paths]},
+        "files,headRefOid": {"files": [{"path": p} for p in paths], "headRefOid": HEAD},
     }
     ln, calls = landing(Fakes(gh_views=views, **fakes))
     ln.direct_merge_subject = "Take turns"
@@ -196,7 +198,7 @@ def test_a_serial_pr_the_drain_cannot_clear_is_refused_without_waiting(
 ):
     ln, calls = _merging(landing, _SERIAL, **fakes)
     with pytest.raises(Outcome) as stop:
-        slots.refuse_before_merge(ln, in_turn)
+        slots.refuse_before_merge(ln, HEAD, in_turn)
     assert stop.value.rc == 75
     assert "sleep" not in _names(calls)
 
@@ -219,12 +221,30 @@ def test_a_pr_no_rule_bars_merges(landing, paths, draft, fakes):
 def test_a_serial_landing_keeps_the_serial_lock_past_its_checks(landing):
     ln, _ = _merging(landing, _SERIAL)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln, in_turn=True)
+    slots.refuse_before_merge(ln, HEAD, in_turn=True)
     serial = Path(os.environ[turn.TURN_DIR_ENV]) / slots.SERIAL_NAME
     assert slots.try_take([serial], 1) is None
     assert serial.with_name(serial_lock.HOLDER_NAME).read_text() == ln.opts.pr
     assert ln.serial_lock
     ln.serial_lock()
+
+
+@pytest.mark.parametrize("draft", [True, False], ids=["a-draft", "a-ready-head"])
+def test_the_prs_files_are_read_before_the_turn_and_not_inside_it(landing, draft):
+    ln, calls = _merging(landing, _K8S, draft)
+    _land(ln)
+    names = _names(calls)
+    assert names.count(_FILES) == 1
+    assert names.index(_FILES) < names.index("try_turn")
+    assert "merge" in call_order(calls)
+
+
+def test_the_files_are_read_again_for_a_head_they_were_not_read_at(landing):
+    ln, calls = _merging(landing, _K8S)
+    ln.changed_paths(HEAD)
+    ln.changed_paths(HEAD)
+    ln.changed_paths(UPDATED)
+    assert _names(calls).count(_FILES) == 2
 
 
 def test_a_draft_a_rule_bars_spends_no_run(landing):
@@ -238,7 +258,7 @@ def test_a_draft_a_rule_bars_spends_no_run(landing):
 def test_the_checks_leave_the_lock_files_free(landing):
     ln, _ = _merging(landing, _K8S, in_window=True)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln, in_turn=True)
+    slots.refuse_before_merge(ln, HEAD, in_turn=True)
     moved = Path(os.environ[turn.TURN_DIR_ENV])
     names = [*slots.SLOT_NAMES, slots.SERIAL_NAME]
     release = slots.try_take([moved / n for n in names], 1)

@@ -105,13 +105,11 @@ def _api(ln: Landing, method: str, path: str, *fields: str, jq: str = "") -> Jso
     return ln.tools.gh_json(*args, *(["--jq", jq] if jq else []))
 
 
-def _alone(ln: Landing, pr: str, reads: live_limit.Reads) -> str:
-    """Why `pr` must land alone, by the files it changes; "" when it may be stacked."""
+def _alone(ln: Landing, head: str) -> str:
+    """Why `ln`'s PR must land alone, by the files it changes at `head`; "" when it may stack."""
     try:
-        paths = gh_read.read(
-            lambda: reads.pr_paths(pr), ln.tools.sleep, f"gh pr view #{pr} files"
-        )
-    except (gh_read.GhReadFailed, ValueError, KeyError) as exc:
+        paths = ln.changed_paths(head)
+    except (gh_read.GhReadFailed, ValueError) as exc:
         return f"its files could not be read ({exc})"
     if live_limit.kind(paths) == live_limit.SERIAL:
         return f"it changes {live_limit.SERIAL_WHAT}"
@@ -136,13 +134,17 @@ def _unfit(member: Landing, head: str) -> str:
     return ""
 
 
-def _admit(ln: Landing, pr: str, head: str, reads: live_limit.Reads) -> Member | None:
+def _admit(ln: Landing, pr: str, head: str) -> Member | None:
     """The draft `pr` as a member, or None, with the reason said, when it lands alone."""
     opts = replace(ln.opts, pr=pr, subject="", merge_timeout=MEMBER_TIMEOUT_S)
     member = Landing(opts, ln.tools, ln.classifier)
     say(f"checking PR #{pr} from the line, as this landing checked its own PR")
     try:
-        why = _alone(ln, pr, reads) or _unfit(member, head) or slots.bar_member(member)
+        why = (
+            _alone(member, head)
+            or _unfit(member, head)
+            or slots.bar_member(member, head)
+        )
         if not why:
             merge.arm_merge(member)
         if not why and member.pinned_head not in ("", head):
@@ -157,8 +159,8 @@ def _admit(ln: Landing, pr: str, head: str, reads: live_limit.Reads) -> Member |
     return Member(member, head)
 
 
-def _members(ln: Landing) -> list[Member]:
-    """The drafts in the line this landing may stack behind its own, in line order."""
+def _members(ln: Landing, head: str) -> list[Member]:
+    """The drafts in the line this landing may stack behind its own `head`, in line order."""
     try:
         rows = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
     except OSError as exc:
@@ -170,11 +172,10 @@ def _members(ln: Landing) -> list[Member]:
     # `_merge_members` merges a member only inside this landing's two merge budgets.
     if not waiting or ln.opts.merge_timeout < MEMBER_TIMEOUT_S:
         return []
-    reads = live_limit.github_reads(ln.tools.gh_json)
     # DECIDED: the landing's code is compared with master here, once, and not again before a
     # member's merge. Until the last member merges, master moves only by this batch's own
     # merges, so a member merges under the code and the policy that admitted it.
-    why = _alone(ln, ln.opts.pr, reads)
+    why = _alone(ln, head)
     if not why:
         why = classify.code_lags_master(ln)
         if why and ln.hand_over_turn:
@@ -187,10 +188,10 @@ def _members(ln: Landing) -> list[Member]:
         say(f"no batch: PR #{ln.opts.pr} lands alone, because {why}")
         return []
     members: list[Member] = []
-    for pr, head in waiting:
+    for pr, member_head in waiting:
         if len(members) == MAX_STACKED - 1:
             break
-        member = _admit(ln, pr, head, reads)
+        member = _admit(ln, pr, member_head)
         if member:
             members.append(member)
     return members
@@ -333,7 +334,7 @@ def form(ln: Landing, head: str) -> int:
         The seconds the batch's run took; 0 when no run was started.
     """
     pr = ln.opts.pr
-    members = _members(ln)
+    members = _members(ln, head)
     if not members:
         return 0
     branch = f"queue/{pr}"
@@ -470,7 +471,7 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
         in_turn, waited = take_turn(draft)
         if in_turn and draft:
             # Before the draft's run, so a PR its merge would be refused spends no run.
-            slots.refuse_before_run(ln)
+            slots.refuse_before_run(ln, draft)
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)

@@ -2,7 +2,7 @@
 
 A rate-limit 403 is not an answer about the request. The shared token spends 5000 core calls an
 hour, and a landing that refused on the 403 was relaunched by hand, which spent more. A caller
-that reads through `gh` asks `wait_s` for the pause and retries after it; one that reads the
+that reads through `gh` sleeps through `wait_out` and retries after it; one that reads the
 REST API itself asks `http_wait_s`. A caller that reports a refused write asks `remedy` for
 the next step.
 
@@ -35,6 +35,8 @@ SECONDARY_WAIT_S = 60
 UNKNOWN_RESET_WAIT_S = 300
 # No wait exceeds one quota window.
 MAX_WAIT_S = 3600
+# How long `wait_out` sleeps for a spent quota before it reads the quota again.
+RECHECK_S = 60
 _SLACK_S = 2
 
 
@@ -61,6 +63,47 @@ def wait_s(
         return UNKNOWN_RESET_WAIT_S
     _name, remaining, reset = quota
     return SECONDARY_WAIT_S if remaining > 0 else _until(reset, now())
+
+
+def wait_out(
+    why: str,
+    sleep: Callable[[float], None],
+    say: Callable[[str], None] = lambda _line: None,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    now: Callable[[], float] = time.time,
+) -> None:
+    """Sleep until a call that failed with `why` is worth repeating.
+
+    The wait starts as `wait_s`. One longer than `RECHECK_S` sleeps in pieces of that length
+    and reads the quota `why` names between them, because GitHub can reset a quota before the
+    time it first reported. The wait ends once the quota has calls again, or at the reset the
+    newest read names, and never later than the first wait.
+
+    Args:
+        why: gh's stderr for the refused call.
+        sleep: sleeps for the seconds it is given.
+        say: gets a line as the wait starts, and another when it ends early. Each line reads
+          after the name of the refused call.
+        run: runs `gh api rate_limit`.
+        now: the epoch time a reset is measured from.
+    """
+    total = wait_s(why, run, now)
+    say(f"hit the GitHub rate limit; waiting {total}s")
+    slept = 0
+    while slept < total:
+        piece = min(RECHECK_S, total - slept)
+        sleep(piece)
+        slept += piece
+        if slept >= total:
+            return
+        quota = _quota(why, _reader(run))
+        if quota is None:
+            continue
+        name, remaining, reset = quota
+        if remaining > 0 or reset <= now():
+            say(f"stopped waiting after {slept}s: the {name} quota has reset")
+            return
+        total = min(total, slept + _until(reset, now()))
 
 
 def remedy(why: str, read: Callable[[str], object] | None = None) -> str | None:

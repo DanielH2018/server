@@ -6,7 +6,8 @@ reads as a policy refusal rather than a network blip. `read` therefore retries a
 fails at once.
 
 A rate-limit 403 is the exception to that: it says nothing about the request, so `read` waits
-until the quota resets (`lib.gh_rate_limit`) and asks again, up to `RATE_LIMIT_WAITS` times.
+until the quota resets and asks again, up to `RATE_LIMIT_WAITS` times. The wait reads the
+quota as it goes, so it ends at the reset (`lib.gh_rate_limit.wait_out`).
 """
 
 import re
@@ -64,9 +65,7 @@ def read(call: Callable[[], T], sleep: Callable[[float], None], label: str) -> T
             ):
                 break
             rate_limit_waits += 1
-            pause = gh_rate_limit.wait_s(why)
-            say(f"{label} hit the GitHub rate limit; waiting {pause}s")
-            sleep(pause)
+            gh_rate_limit.wait_out(why, sleep, lambda line: say(f"{label} {line}"))
         if wait is None or not is_transient(why):
             raise GhReadFailed(why, attempt)
         say(f"{label} failed transiently ({why}); retrying in {wait}s")

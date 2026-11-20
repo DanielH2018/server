@@ -191,5 +191,5 @@ def test_a_read_refused_by_the_spent_graphql_quota_waits_and_continues(
     _reads(ln, [GRAPHQL_RATE_LIMITED, ANSWER])
     assert _view_or_fail(ln) == ANSWER
     pause = gh_rate_limit.UNKNOWN_RESET_WAIT_S
-    assert _sleeps(calls) == [pause]
+    assert sum(_sleeps(calls)) == pause
     assert f"hit the GitHub rate limit; waiting {pause}s" in capsys.readouterr().out

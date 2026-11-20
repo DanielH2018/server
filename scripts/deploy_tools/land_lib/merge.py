@@ -56,6 +56,7 @@ again on the updated head and pins that.
 with one branch update at most (`stale_base.py`).
 """
 
+import contextlib
 import re
 import subprocess
 from collections.abc import Callable
@@ -358,7 +359,7 @@ def _no_turn(draft: str) -> tuple[bool, int]:
 
 
 def _start_run(
-    ln: Landing, take_turn: TakeTurn, rejoined: bool = False
+    ln: Landing, ask: Callable[[str, bool], tuple[bool, int]], rejoined: bool = False
 ) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
@@ -397,7 +398,7 @@ def _start_run(
         untested = rejoined or not _ready_run_on(ln, head)
         if not untested or in_turn or queued:
             break
-        in_turn, queued = take_turn(head if view.get("isDraft") is True else "")
+        in_turn, queued = ask(head, view.get("isDraft") is True)
         if not queued:
             break
     draft = view.get("isDraft") is True
@@ -470,6 +471,10 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     together stay inside the two merge budgets LAND_DEADLINE counts.
     Without --arm-merge this only polls, for a PR merged some other way.
 
+    Before each ask for the turn, the PR's file list is read for the head about to ask
+    (`Landing.changed_paths`), so a rate-limit wait on that read holds no turn. The rules the
+    turn runs reuse the read while the head stays the same.
+
     A green head that has not asked for the turn, and whose run tested a master that has
     moved since, goes back in the line instead of asking (`stale_base.rejoin_line`). Once
     GitHub has moved the head, `_start_run` stands it in the line as a draft, and that update
@@ -514,11 +519,15 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     # Whether this landing made the PR a draft, so a refusal inside the turn marks it ready.
     drafted = False
 
-    def ask(draft: str) -> tuple[bool, int]:
+    def ask(head: str, draft: bool) -> tuple[bool, int]:
+        """Take the turn for `head`, reading what the turn's rules need from GitHub first."""
         nonlocal asked
         asked = True
+        # A failed read stores nothing, so the rule inside the turn reads again.
+        with contextlib.suppress(gh_read.GhReadFailed, ValueError):
+            ln.changed_paths(head)
         try:
-            return take_turn(draft)
+            return take_turn(head if draft else "")
         except Outcome:
             if drafted:
                 stale_base.ready_again(ln)
@@ -641,7 +650,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     updated_from, rejoined, drafted = head, True, True
                     wait_ends_at = min(waited + o.merge_timeout, wait_cap)
                     continue
-                in_turn, in_line = ask("")
+                in_turn, in_line = ask(head, False)
                 if in_line:
                     # The PR may have moved while this landing stood in line, so read it again.
                     queued += in_line
@@ -663,7 +672,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                         updated_from, rejoined, drafted = head, True, True
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
-                slots.refuse_before_merge(ln, in_turn)
+                slots.refuse_before_merge(ln, head, in_turn)
                 if not (updated_from or stale_base.batch_tested(ln, head)):
                     stale_base.refuse_stale_approved(
                         ln, head, view.get("mergeable") == "CONFLICTING"

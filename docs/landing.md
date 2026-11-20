@@ -288,6 +288,12 @@ run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 quota frees, not one merge poll. The pause counts toward `merge_timeout`, and the wait
 never sleeps past it (#8147).
 
+**A landing reads its PR's file list before it asks for the landing turn.** The turn's rules
+reuse that read, and read the list again only for a head that moved after it, so a rate-limit
+wait on the read holds no turn. A rate-limit wait on any landing read re-reads the quota every
+`RECHECK_S` and ends at the reset, not at the wait it computed when the call failed
+(`scripts/lib/gh_rate_limit.py:wait_out`).
+
 **A landing takes the landing turn before it merges.** One landing at a time holds the turn,
 across both hosts. A PR that has had no CI run gets its one run inside the turn, so the run
 tests the master the merge lands on, and master's own run proves the tree and skips its
