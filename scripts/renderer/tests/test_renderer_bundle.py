@@ -11,7 +11,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_bundle.py
 import json
 import pytest
 
-from changed_set import changed_set
+from deploy_tools.changed_set import changed_set
 from lib import yaml_fast
 from lib.exit_codes import RENDER_BAD_ARGS, RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render

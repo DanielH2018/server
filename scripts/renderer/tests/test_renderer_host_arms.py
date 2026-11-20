@@ -50,7 +50,7 @@ def test_an_activate_field_reaches_the_manifest_and_reconcile_accepts_it(hosts):
     manifest = _manifest(package)
 
     assert manifest["activations"] == {SSHD: "reload:ssh.service"}
-    assert _reconcile().parse_manifest(json.dumps(manifest))["activations"] == {
+    assert _reconcile().parse_manifest(json.dumps(manifest)).activations == {
         SSHD: "reload:ssh.service"
     }
 
@@ -88,7 +88,7 @@ REFUSED = [
 def test_every_action_the_renderer_accepts_reconcile_accepts(hosts, action):
     manifest = _manifest(_render(hosts, _entry(action)))
 
-    assert _reconcile().parse_manifest(json.dumps(manifest))["activations"] == {
+    assert _reconcile().parse_manifest(json.dumps(manifest)).activations == {
         SSHD: action
     }
 
@@ -107,7 +107,7 @@ def test_a_tmpfiles_d_file_gets_the_tmpfiles_action_without_naming_one(hosts):
     manifest = _manifest(_render(hosts, {"files": [{"src": "u", "dst": TMPFILES}]}))
 
     assert manifest["activations"] == {TMPFILES: "tmpfiles"}
-    assert _reconcile().parse_manifest(json.dumps(manifest))["activations"] == {
+    assert _reconcile().parse_manifest(json.dumps(manifest)).activations == {
         TMPFILES: "tmpfiles"
     }
 
@@ -177,9 +177,7 @@ def test_ufw_rules_render_with_the_host_context_and_reconcile_accepts_the_sectio
     ]
     reconcile = _reconcile()
     assert reconcile.ufw.valid(manifest["ufw"])
-    assert (
-        reconcile.parse_manifest(json.dumps(manifest))["arms"]["ufw"] == manifest["ufw"]
-    )
+    assert reconcile.parse_manifest(json.dumps(manifest)).arms["ufw"] == manifest["ufw"]
 
 
 def _with(**changes) -> dict:

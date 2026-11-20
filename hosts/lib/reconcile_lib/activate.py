@@ -134,7 +134,7 @@ def perform(
     verb = kind
     if kind == "modules-load":
         unit, verb = MODULES_UNIT, "restart"
-    elif kind == "manual" or policies.get(unit, {}).get("policy"):
+    elif kind == "manual" or policies.get(unit):
         pending[unit] = invocation(unit)
         log(f"{unit} is pending: a change owed to it goes live at its next restart")
         return True
@@ -163,7 +163,7 @@ def refresh_pending(pending: dict, activations: dict) -> dict:
 def activate(
     activations: dict,
     prev_files: dict,
-    policies: dict,
+    policies: dict[str, str | None],
     called: dict[str, bool],
     pending: dict,
 ) -> tuple[bool, dict]:

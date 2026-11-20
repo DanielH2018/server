@@ -5,11 +5,6 @@ default its entry earns, or a vendored manifest. `render_targets` keeps a tag Fl
 because the bundle publishes it.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 from pathlib import Path
 
 from lib.k8s_roles import MANIFEST_TEMPLATE_GLOB, SHARED_DEFAULT_TRIGGERS

@@ -156,7 +156,7 @@ def test_a_warning_pushes_down_naming_the_first(tmp_path):
     assert pushed[0] == "down", pushed
     assert "1 warnings, 0 suspect files, 0 possible rootkits (exit 1" in pushed[1]
     assert "User 'claude' has been added to the passwd file." in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
     assert (
         "rkhunter: Warning: User 'claude' has been added to the passwd file." in logged
     )
@@ -176,6 +176,15 @@ def test_each_verdict_is_written_to_the_textfile_with_the_tiles_deadline(tmp_pat
         assert series["homelab_check_deadline_seconds"] == "612000"
 
 
+def test_a_verdict_it_cannot_write_exits_non_zero(tmp_path):
+    """A DOWN exits 0, so the unit's failed state is left to say that no verdict was written."""
+    (tmp_path / "textfile").mkdir(mode=0o500)
+    code, pushed, logged, _ = _run_check(tmp_path, "", rc=0, log=_log())
+    assert pushed[0] == "up", pushed
+    assert any("textfile write failed" in line for line in logged), logged
+    assert code == 1
+
+
 def test_a_suspect_file_pushes_down(tmp_path):
     _, pushed, _, _ = _run_check(tmp_path, "", rc=1, log=_log(suspect="1"))
     assert pushed[0] == "down", pushed
@@ -187,7 +196,7 @@ def test_an_error_exit_that_writes_no_log_pushes_down(tmp_path):
     assert pushed[0] == "down", pushed
     assert "rkhunter exited 1" in pushed[1]
     assert "Invalid option specified: --bogus" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
     # The durable record of the verdict, which Loki keeps.
     assert any(line.startswith("rkhunter-check: status=down ") for line in logged), (
         logged
@@ -201,7 +210,7 @@ def test_last_weeks_log_does_not_pass_for_this_run(tmp_path):
     )
     assert pushed[0] == "down", pushed
     assert "wrote no summary" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
 
 
 def test_a_possible_rootkit_pushes_down(tmp_path):
@@ -210,7 +219,7 @@ def test_a_possible_rootkit_pushes_down(tmp_path):
     )
     assert pushed[0] == "down", pushed
     assert "possible rootkit found" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
 
 
 def test_a_summary_missing_a_count_pushes_down(tmp_path):

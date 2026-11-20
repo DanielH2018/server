@@ -36,11 +36,6 @@ neither Ansible nor Jinja. The plan is docs/archive/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
