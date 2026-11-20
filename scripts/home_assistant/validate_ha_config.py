@@ -41,9 +41,6 @@ import yaml
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
@@ -474,7 +471,7 @@ def validate(role_dir: Path = ROLE_DIR) -> list[str]:
         errors += macro_bool_coercion_errors(trees, dest / "custom_templates")
         # State-model guardrails (freshness, entity-resolution, override tripwire, structural).
         try:
-            import ha_state_checks
+            from home_assistant import ha_state_checks
 
             errors += ha_state_checks.check_errors(role_dir)
         except Exception as exc:  # never let the state-model check mask a config error

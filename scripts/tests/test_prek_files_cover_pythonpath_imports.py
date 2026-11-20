@@ -54,7 +54,7 @@ def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
             "static-ratchet-tests-lander",
             "scripts/renderer/template_filters/service_tier.py",
         ),
-        ("static-ratchet-tests-checksum", "scripts/validate/k8s_manifests.py"),
+        ("static-ratchet-tests-checksum", "scripts/lib/k8s_roles.py"),
         (
             "static-ratchet-tests-shell",
             "scripts/renderer/template_filters/scrape_jobs.py",

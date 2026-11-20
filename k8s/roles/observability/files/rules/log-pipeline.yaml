@@ -64,8 +64,8 @@ groups:
           description: >-
             Loki discarded more than 3000 entries in an hour for the reason {{ $labels.reason }}.
             too_far_behind means entries arrived outside Loki's accept window, a clock or
-            backfill problem. rate_limited, stream_limited and line_too_long are throughput or
-            limit problems. Read loki_discarded_samples_total by reason.
+            backfill problem. rate_limited, stream_limited and line_too_long are limit problems.
+            Read loki_discarded_samples_total by reason.
       # The same, for the telemetry Loki that the OTel collector exports to.
       - alert: LokiDiscardingEntries
         expr: >-

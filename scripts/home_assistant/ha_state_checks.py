@@ -24,10 +24,6 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-# A directly-invoked script gets only its own directory on sys.path, and pyproject's
-# `pythonpath` is a pytest setting — so the cross-directory import below needs the
-# scripts/ root here, the same way its siblings reach it.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 
@@ -35,7 +31,7 @@ from lib import yaml_fast
 # the model, so this edge is the real dependency, not an artifact of split order. The reverse
 # edge (ha_state_model.py:520, `main()`'s `check` subcommand calling check_errors) is the
 # deferred one; see the DECIDED marker there for why it isn't worth a third module.
-from ha_state_model import (
+from home_assistant.ha_state_model import (
     DERIVED_YAML,
     EXTERNAL_SERVICES_YAML,
     EXTERNAL_YAML,

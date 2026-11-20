@@ -18,7 +18,6 @@ Typical usage example:
 """
 
 import json
-import sys as _sys
 import time
 import urllib.request
 from collections import Counter
@@ -30,7 +29,6 @@ from urllib.parse import urljoin, urlsplit
 
 from lxml import etree, html
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 

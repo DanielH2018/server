@@ -48,7 +48,7 @@ reads as `/app/config` (`k8s/roles/homepage/templates/deployment.yaml.j2`):
 
 - `templates/config/{settings,bookmarks,widgets,services,docker,kubernetes}.yaml.j2` +
   `custom.css.j2` — every app config file, one level down because
-  `scripts/validate/k8s_manifests.py` parses every `templates/*.j2` as a manifest and fails a
+  `scripts/validate/render_lib/k8s.py` parses every `templates/*.j2` as a manifest and fails a
   `lookup('template')` that names one outside `config/`
   (`scripts/validate/tests/test_skip_roles_classes_hold.py::test_a_lookup_into_templates_top_level_is_flagged`).
   `services.yaml` is the tile list; edit it here and nowhere else.

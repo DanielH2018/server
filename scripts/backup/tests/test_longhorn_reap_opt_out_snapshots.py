@@ -19,7 +19,7 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_opt_out_snapshots.py
 
 import pytest
 
-from longhorn_reap_lib import logic
+from backup.longhorn_reap_lib import logic
 
 from test_longhorn_reap_logic import _NOW, _recurringjob, _snapshot, _volume
 

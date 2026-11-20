@@ -216,7 +216,7 @@ else
 fi
 
 # The textfile, before the ping: the verdict must not wait on the network. The producer metric
-# contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
+# contract is docs/archive/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
 # writes the file atomically. A failed write logs and the run goes on to its ping.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1

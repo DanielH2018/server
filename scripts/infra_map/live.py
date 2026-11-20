@@ -7,13 +7,6 @@ the declared skeleton this is overlaid onto.
 
 import json
 import subprocess
-import sys as _sys
-from pathlib import Path as _Path
-
-# `infra_map` is a namespace package under `scripts/`, so reaching a sibling by package
-# name needs `scripts/` on sys.path: a directly-invoked script gets only its own directory,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.constants import HOST_PLANE, LOCAL_TIMEOUT, SSH_TIMEOUT
 

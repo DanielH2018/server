@@ -26,9 +26,7 @@ import pytest
 
 from lib import yaml_fast
 
-from validate.k8s_manifests import (
-    K8S_ROLES,
-)
+from lib.repo_paths import K8S_ROLES
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
 

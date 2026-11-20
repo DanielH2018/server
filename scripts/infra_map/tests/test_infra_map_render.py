@@ -12,8 +12,7 @@ import inspect
 import re
 from pathlib import Path
 
-
-import gen_infra_map as g
+from infra_map import gen_infra_map as g
 from infra_map import diagram, groups, html_views, render, style
 
 from _infra_map import (

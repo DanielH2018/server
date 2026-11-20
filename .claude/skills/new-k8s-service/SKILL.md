@@ -92,7 +92,7 @@ never `config` — so a mount reads unambiguously in a diff or a `kubectl descri
 `tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
 (a `volumeMounts` entry with no matching volume) that no schema check can see.
 
-`templates/` is for **manifests only**: `validate/k8s_manifests.py` renders every `*.j2` there
+`templates/` is for **manifests only**: `validate/render_lib/k8s.py` renders every `*.j2` there
 and parses it as YAML. App config a manifest embeds via `lookup()` goes in `templates/config/`,
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 
@@ -146,7 +146,7 @@ with `depends_on: [<name>]` on the entry rather than moving it in the list.
 
 `use_authelia: true` needs `auth_tier: one_factor | two_factor` beside it — the Authelia
 policy for the service's LAN name, which the authelia role renders into its access_control
-rules. An entry that attaches the middleware without a tier fails `validate/k8s_manifests.py`
+rules. An entry that attaches the middleware without a tier fails `validate/render_lib/k8s.py`
 and the deploy. Pick `two_factor` for anything that acts on a stolen password alone (a shell,
 a deploy trigger, a volume delete) and say why in the comment above the entry.
 

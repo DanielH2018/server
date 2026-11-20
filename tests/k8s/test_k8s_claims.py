@@ -2,7 +2,7 @@
 
 A role declares `k8s_claims: [{name, size, storage_class, access_modes?, namespace?}]`, and each
 entry renders from `k8s/templates/claim-default.yaml.j2` to `claim-<name>.yaml`. The offline
-harnesses (`_k8s_render`, `validate/k8s_manifests.py`) reach the claims through
+harnesses (`_k8s_render`, `validate/render_lib/k8s.py`) reach the claims through
 `lib.k8s_roles.claim_contexts`. These tests name the claims they must find and refuse a claim
 with two creators.
 

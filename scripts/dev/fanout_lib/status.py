@@ -23,6 +23,7 @@ from lib.exit_codes import (
     FANOUT_PLACE_UNREAD,
 )
 from deploy_tools.land_lib.detach import result_fields
+from fanout_lib import operator_waits
 from fanout_lib.branch_pr import PR_URL, own_pr
 from fanout_lib.brief import LANDS, lands
 from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
@@ -59,6 +60,22 @@ PARKED_LINE = re.compile(r"(?im)^parked:")
 # it: `autoland.STATE_DIR / "logs"`, spelled for a shell.
 LANDER_LOGS = "$HOME/.local/state/fanout-server-lander/logs"
 AWAITING_LANDER = "awaiting the server lander"
+# The unit whose journal holds the lander's ruling on each candidate PR, one line a pass
+# (`autoland.run`). `probe_lib/lander.py:UNIT` names the same unit.
+LANDER_UNIT = "homelab-claude-fanout-server-lander.service"
+RULINGS = "lander-rulings"
+# Journal lines read back. A pass prints one per open candidate PR, and two passes are needed.
+RULING_LINES = 200
+_RULING = re.compile(r"^#(\d+) batch \S+: (.+)$")
+INELIGIBLE = "ineligible, "
+# What the batch's coordinator does about a PR the lander holds, by the reason
+# `operator_waits.reason_of` gives the lander's ruling.
+NEXT_STEP = {
+    "lander-surface": "land it with land.sh after probe.py lander",
+    "operator-step": "pass its operator step to the operator",
+    "findings-remain": "read the findings in its review comment",
+    "needs-input": "read the batch's final message",
+}
 
 
 @dataclass(frozen=True)
@@ -443,19 +460,28 @@ def _pr_number(url: str) -> str:
 def lander_command(prs: Sequence[str]) -> str:
     """Print the `LAND-RESULT:` and `VERDICT:` lines of each PR's newest server-lander log.
 
-    One block per PR, opened by `=== <pr>`, empty while that landing has no result. No
-    output at all means this user has no lander log directory.
+    One block per PR, opened by `=== <pr>`, empty while that landing has no result. A last
+    block, `=== lander-rulings`, holds the lander unit's state and invocation id, then the
+    journal lines the lander printed about these PRs, as JSON. No output at all means this
+    user has no lander log directory.
     """
     reads = "; ".join(
         f"echo '=== {pr}'; f=$(ls {LANDER_LOGS}/land{pr}-*.log 2>/dev/null | tail -n 1); "
         f'[ -z "$f" ] || grep -h \'^LAND-RESULT:\\|^VERDICT:\' "$f"'
         for pr in prs
     )
-    return f"if [ -d {LANDER_LOGS} ]; then {reads}; fi"
+    rulings = (
+        f"echo '=== {RULINGS}'; "
+        f"systemctl show -p ActiveState -p InvocationID {LANDER_UNIT}; "
+        f"journalctl -u {LANDER_UNIT} -o json -n {RULING_LINES} --no-pager "
+        "--output-fields=MESSAGE,_SYSTEMD_INVOCATION_ID 2>/dev/null "
+        f'| grep -E \'"MESSAGE":"#({"|".join(prs)}) \''
+    )
+    return f"if [ -d {LANDER_LOGS} ]; then {reads}; {rulings}; fi"
 
 
 def lander_logs(stdout: str) -> dict[str, str]:
-    """`lander_command`'s reply as PR number -> the lines its newest log printed."""
+    """`lander_command`'s reply as block name -> its lines: each PR number, and `RULINGS`."""
     logs = {}
     for chunk in re.split(r"(?m)^=== ", stdout)[1:]:
         pr, _, lines = chunk.partition("\n")
@@ -463,22 +489,69 @@ def lander_logs(stdout: str) -> dict[str, str]:
     return logs
 
 
-def with_lander_verdict(s: BatchStatus, log: str) -> BatchStatus:
+def lander_rulings(block: str) -> dict[str, str]:
+    """PR number -> why the lander's newest pass ruled that PR ineligible.
+
+    Args:
+        block: the `RULINGS` block of `lander_command`'s reply.
+
+    Returns:
+        The reason from the newest line about each PR, for a PR that line rules ineligible.
+        A PR the newest pass did not name has left the lander's candidates and has no entry,
+        unless that pass still runs and may not have reached it.
+    """
+    props, newest = {}, {}
+    for line in block.splitlines():
+        if not line.startswith("{"):
+            name, _, value = line.partition("=")
+            props[name] = value
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        found = _RULING.match(str(entry.get("MESSAGE") or ""))
+        if found:
+            newest[found.group(1)] = (
+                entry.get("_SYSTEMD_INVOCATION_ID"),
+                found.group(2),
+            )
+    running = props.get("ActiveState") in ("active", "activating")
+    return {
+        pr: ruling.removeprefix(INELIGIBLE)
+        for pr, (invocation, ruling) in newest.items()
+        if ruling.startswith(INELIGIBLE)
+        and (running or invocation == props.get("InvocationID"))
+    }
+
+
+def with_lander_verdict(s: BatchStatus, log: str, ruling: str = "") -> BatchStatus:
     """A `done` batch the server lander lands, read with that landing's result.
 
     Args:
         s: the status of a batch that stopped at its PR.
         log: the result and verdict lines of the lander's newest log for that PR, empty
             when the lander has started no landing of it or that landing still runs.
+        ruling: why the lander's newest pass ruled the PR ineligible, or "".
 
     Returns:
         `landed` for a finished landing, `parked` for one `land_result.park_line` parks, and
-        `needs-input` naming the verdict for any other that ended. A landing not started or
-        still running stays `done`, noted as awaiting the lander.
+        `needs-input` naming the verdict for any other that ended. With no result, a ruling
+        that waits on a person (`operator_waits.reason_of`) is `needs-input` naming the next
+        step. Any other stays `done`, noted as awaiting the lander with the ruling.
     """
     result = result_fields(log)
     if result is None:
-        return dataclasses.replace(s, note=AWAITING_LANDER)
+        reason = operator_waits.reason_of(ruling)
+        if not reason:
+            note = f"{AWAITING_LANDER}: {ruling}" if ruling else AWAITING_LANDER
+            return dataclasses.replace(s, note=note)
+        # The next step comes first: a surface ruling lists every file, and the line is cut.
+        text = (
+            f"needs input: the server lander will not land #{_pr_number(s.pr_url)}; "
+            f"{NEXT_STEP[reason]}. Its ruling: {ruling}\n{s.pr_url}"
+        )
+        return dataclasses.replace(s, state=NEEDS_INPUT, final_text=text)
     verdict = VERDICT_LINE.search(log)
     line = verdict.group(0) if verdict else ""
     parked = park_line(result, line)
@@ -523,27 +596,33 @@ def with_lander_verdicts(
     except subprocess.TimeoutExpired:
         return list(pairs)
     logs = lander_logs(proc.stdout)
-    return [
-        (b, with_lander_verdict(s, logs[_pr_number(s.pr_url)]))
-        if s is not None and _lander_lands(b, s) and _pr_number(s.pr_url) in logs
-        else (b, s)
-        for b, s in pairs
-    ]
+    rulings = lander_rulings(logs.get(RULINGS, ""))
+    out = []
+    for b, s in pairs:
+        pr = _pr_number(s.pr_url) if s is not None and _lander_lands(b, s) else ""
+        if s is not None and pr in logs:
+            s = with_lander_verdict(s, logs[pr], rulings.get(pr, ""))
+        out.append((b, s))
+    return out
 
 
-def parked_batches(
+def landing_holds(
     batches: Sequence[Batch], tools: Tools
-) -> dict[tuple[str, str], str]:
-    """`(host, batch id)` -> the final text of each of `batches` that is parked.
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """`(host, batch id)` -> (state, final text) of each batch whose landing needs a hand.
 
-    It asks the hosts and never the forge, so `place runs` can call it over every run.
+    That is a `parked` batch, and a batch that stopped at its PR and reads `needs-input`
+    from the server lander's log or ruling. It asks the hosts and never the forge, so
+    `place runs` can call it over every run.
     """
-    read = with_lander_verdicts(host_statuses(batches, tools), tools)
-    return {
-        (b.host, b.batch): s.final_text
-        for b, s in read
-        if s is not None and s.state == PARKED
-    }
+    own = host_statuses(batches, tools)
+    held = {}
+    for (b, before), (_, s) in zip(own, with_lander_verdicts(own, tools), strict=True):
+        if s is None or before is None:
+            continue
+        if s.state == PARKED or (s.state == NEEDS_INPUT and before.state == "done"):
+            held[(b.host, b.batch)] = (s.state, s.final_text)
+    return held
 
 
 def collect(

@@ -148,7 +148,7 @@ def test_releasing_keeps_the_issue_in_a_project_milestone():
     assert [p[:2] for p in plans] == [["issue", "comment"]]
 
 
-def test_claiming_from_another_branch_project_leaves_the_issue_in_it():
+def test_claiming_from_another_branch_closed_project_leaves_the_issue_in_it():
     plans = plan_claim(
         _issue(milestone=PROJECT_MILESTONE),
         worktree=WT,

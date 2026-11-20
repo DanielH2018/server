@@ -14,12 +14,6 @@ import datetime as dt
 import hashlib
 from collections.abc import Mapping
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from secrets_mgmt.secrets_lib.secret_classify import classify
 from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS

@@ -17,6 +17,7 @@ from _findings_fakes import (
 )
 
 from dev.findings import main
+from dev.findings_lib.milestone import description_for
 from dev.findings_lib.solo_only import solo_only_reasons, fanout_tooling_paths
 from dev.findings_lib.issue_model import (
     claim_comment,
@@ -454,3 +455,31 @@ def test_next_milestone_refuses_a_title_no_milestone_has(capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "no milestone is titled `Backup`" in captured.err
+
+
+LEAD = "worktree-backup-lead"
+PROJECT = {**BACKUPS, "description": description_for(LEAD, project=True)}
+
+
+def _next_beside(held_in, capsys, *argv):
+    """`next` over issue 1, which the milestone ``held_in`` holds, and the loose issue 3."""
+    issues = [{**make_issue(1), "milestone": held_in}, make_issue(3)]
+    tools, _ = build_tools(
+        Fakes(issues=issues, worktree_facts=facts(), api={MILESTONES: [[held_in]]})
+    )
+    assert main(["next", *argv], tools) == 0
+    return capsys.readouterr()
+
+
+def test_next_withholds_and_counts_an_issue_an_open_project_reserves(capsys):
+    out = _next_beside(PROJECT, capsys).out.splitlines()
+    assert out[0] == (
+        '1 reserved by a project (1 in `Backups`); --milestone "<title>" to list'
+    )
+    assert [line.split()[0] for line in out[1:]] == ["#3"]
+
+
+def test_next_milestone_lists_the_backlog_of_the_project_it_names(capsys):
+    captured = _next_beside(PROJECT, capsys, "--json", "--milestone", "Backups")
+    assert [r["number"] for r in json.loads(captured.out)] == [1]
+    assert captured.err == ""

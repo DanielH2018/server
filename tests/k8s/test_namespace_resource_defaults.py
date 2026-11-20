@@ -37,7 +37,7 @@ from _helpers import ALL_VARS, load_yaml
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.cluster import vendored_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
-from validate.k8s_manifests import SKIP_ROLES, k8s_entries
+from lib.k8s_roles import SKIP_ROLES, k8s_entries
 
 
 _POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "Job", "CronJob"}

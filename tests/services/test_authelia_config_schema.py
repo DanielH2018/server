@@ -3,7 +3,7 @@
 Authelia refuses to START on an unrecognised configuration key — it does not warn and carry on
 — and the portal rolls under `Recreate` in front of most public routes, so the old pod is
 already gone when the new one exits. Nothing but this guard sees that between the editor and
-the SSO gate. `validate/k8s_manifests.py` renders the Secret and parses it as YAML, where a bad
+the SSO gate. `validate/render_lib/k8s.py` renders the Secret and parses it as YAML, where a bad
 key parses fine. `--dry-run` hands the Secret to the API server, which validates the Secret and
 never looks inside `stringData`. `prek` runs the same render. A hand-written frozenset of legal
 keys per area, such as `disable_startup_check` under `notifier.smtp` or the `webauthn` key set,
