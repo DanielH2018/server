@@ -594,7 +594,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 |---|---|---|
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
-| 3 | The `claude-restart@` broker and its allowlist | Planned. The allowlist excludes every workload a routed alert covers; see [The restart allowlist](#the-restart-allowlist). |
+| 3 | The `claude-restart@` broker and its allowlist | The broker is built with an empty allowlist, and only root starts it. The first workload, the exclusion in the poller and the caller's polkit rule are planned; see [The restart allowlist](#the-restart-allowlist). |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs a visible agent account (#5126). |
 | 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
@@ -784,6 +784,76 @@ table narrows the allowlist. A key routed to `none`, such as `ExtraProbeFailed:w
 nothing. `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` fire for any
 Deployment and any container. While the table routes them, slice 3 has to show which
 workloads a restart cannot drive into either alert before it lists any workload.
+
+**No workload passes that test for `K8sContainerCrashLooping`.** A new pod that fails to start
+restarts more than three times within minutes, whatever the Deployment's strategy. A
+one-replica `RollingUpdate` Deployment at the default 25% does pass it for
+`K8sDeploymentZeroAvailable` and the probe alerts: 25% of one replica rounds to zero
+unavailable, so the old pod serves until the new one is Ready. A `Recreate` Deployment passes
+neither, because its pod stops first.
+
+The operator ruled on 2026-11-20 that a listed service is unrouted. The poller routes every
+fall whose `service` is on the allowlist to `none`, so the exclusion holds by construction. A
+listed workload still pages through Alertmanager, where every Deployment alert in
+`k8s-workloads.yaml` pages, and `K8sDeploymentRolloutStalled` and
+`K8sDeploymentReplicasUnavailable` are not routes. It never opens a triage episode. That
+exclusion ships in the poller with the first listed workload.
+
+An allowlist entry must be:
+
+- a one-replica `RollingUpdate` Deployment whose effective `maxUnavailable` is 0, with a
+  readiness probe on its serving container, so a failed restart causes no outage;
+- digest-pinned, so a restart cannot pull different code;
+- the only Deployment of its role, because the `service` label is the role and listing one
+  Deployment takes the whole role out of triage;
+- outside the alert plane: not `prometheus`, `alertmanager`, `kube-state-metrics`,
+  `blackbox-exporter`, `monitor-bridge` or `coredns`, where a failed restart removes the thing
+  that reports it.
+
+### The restart broker
+
+The broker the rulings call `claude-restart@` ships as `homelab-claude-restart@<name>.service`,
+because reconcile stops and retires only `homelab-*` units. It runs `files/claude_restart.py`
+as root on daniel-box, behind `claude_code_restart_enabled`. The instance is its only input, a key of `restart_allowlist` in
+`templates/claude-triage-pins.j2`. The script takes the namespace and the Deployment from that
+entry and refuses, in order:
+
+- `hold`: `/etc/claude-restart/hold` exists;
+- `not-listed`: the name is not on the allowlist;
+- `muted`: the mute around the weekly reboot is open, so a failed restart would page nobody;
+- `rate`: the workload was restarted in the last 24 hours, or three restarts ran this UTC day;
+- `busy`: the Deployment is mid-rollout, or its Flux Kustomization is not Ready.
+
+Otherwise it runs `kubectl rollout restart --field-manager=claude-restart`, waits up to 10
+minutes for the rollout, and compares the Deployment's generation before and after.
+Flux's `kustomize-controller` takes over the fields of every manager whose name starts with `kubectl`
+(`docs/flux-deploy-plane.md`, *What a takeover strips*), so a restart under kubectl's own
+manager would be undone at the next apply and roll the pod a second time.
+
+Every run ends in one `RESTART-RESULT:` line, in the journal under `claude-restart` and in
+`/var/lib/claude-restart/verdict`. A restart, done or failed, is a line in
+`/var/lib/claude-restart/log.jsonl` and one Discord post, and a failed one pages through
+`homelab-alert@`. A refusal exits 0 and posts nothing, so asking for a refused name cannot
+page Discord.
+
+No polkit rule ships, so only root starts the unit. Which user may start it is the operator's
+open decision. The 2026-10-15 ruling names the agent, and the 2026-11-12 rulings made restarts
+a T2 right and took every start right from `claude`.
+
+A caller of the broker can restart each listed Deployment once a day, and three a day in
+all. It cannot name a namespace, a kind or a flag, scale or delete anything, change an image,
+add an entry, read the admin kubeconfig or mute a page.
+
+To run the drill (**operator-only**, because only root starts the unit):
+
+```bash
+sudo systemctl start homelab-claude-restart@docs; cat /var/lib/claude-restart/verdict
+```
+
+While the allowlist is empty, the verdict reads `verdict=refused cause=not-listed`. To hold the
+broker without a landing, run `sudo touch /etc/claude-restart/hold`, and remove the file to
+release it. To switch the broker off, set `claude_code_restart_enabled: false` and let the
+next package version install. The log stays.
 
 ## The operator's dotfiles
 

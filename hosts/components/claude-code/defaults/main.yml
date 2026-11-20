@@ -442,6 +442,12 @@ claude_code_triage_poll_streak: 2
 # More keys than this falling in one poll make one storm episode instead of one per key.
 claude_code_triage_poll_storm_size: 3
 
+# homelab-claude-restart@<name>.service restarts one Deployment on the allowlist pinned in
+# templates/claude-triage-pins.j2, as root. docs/claude-agent-user.md, "The restart allowlist",
+# has the design. True only in daniel-box's host_vars, which holds the k3s admin kubeconfig.
+# False removes the unit, the script and the config, and keeps /var/lib/claude-restart.
+claude_code_restart_enabled: false
+
 # A daniel-server fan-out batch stops at its PR. This timer runs
 # `fanout.py land-server` on daniel-box, which lands the PRs whose review record and PR both
 # pass scripts/dev/fanout_lib/autoland.py:problems. True only in daniel-box's host_vars. False
