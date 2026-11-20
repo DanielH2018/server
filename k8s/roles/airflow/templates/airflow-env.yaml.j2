@@ -7,8 +7,9 @@
   airflow_env(platform)  The env list at container depth (10 spaces). `platform=true` adds the
                          metadata database, as the `airflow` superuser, and the JWT secret,
                          which the api-server, scheduler and dag-processor need. `false` adds
-                         the `warehouse` connection, as `warehouse_writer`, for a task pod,
-                         which holds neither: Airflow 3 runs a task through the execution API.
+                         the `warehouse` connection, as `warehouse_writer`, and each source's
+                         credential, for a task pod, which holds neither of the platform's:
+                         Airflow 3 runs a task through the execution API.
 #}
 {% macro airflow_env(platform) %}
             - name: AIRFLOW__CORE__EXECUTOR
@@ -64,6 +65,11 @@
                   key: WAREHOUSE_WRITER_PASSWORD
             - name: AIRFLOW_CONN_WAREHOUSE
               value: "postgresql://warehouse_writer:$(WAREHOUSE_WRITER_PASSWORD)@airflow-postgres.{{ k8s_namespace }}.svc.cluster.local:5432/warehouse"
+            - name: HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: airflow
+                  key: HA_TOKEN
 {% endif %}
 {%- endmacro %}
 
