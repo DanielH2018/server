@@ -77,5 +77,5 @@ against a red parent would leave out what the parent broke.
 ## Governs
 
 No single line enforces this. `docs/ci-throughput.md` describes the mechanism, and
-`tests/repo/test_ci_skip_proven_master.py` and `tests/repo/test_pytest_sweep_workflow.py`
-hold it.
+`tests/repo/test_ci_skip_proven_master.py` and the `pytest-sweep-*` rows of
+`tests/repo/test_census_rows_workflows.py` hold it.

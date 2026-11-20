@@ -45,8 +45,9 @@ on:
   # the `pytest` job's select step is the one exception, and a dispatch takes its full arm;
   # the PR-only steps (the facts notice, the cross-plane gate, the type-proof scope) are skipped
   # on a dispatch. `renovate-config` runs on `!= 'push'`. ENFORCED by
-  # tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
-  # key on `push` would leave a dispatch fast, green and checking nothing.
+  # the ci-dispatch-runs-every-job row of tests/repo/_ci_sweep_workflow_rows.py, because a job
+  # condition rewritten to key on `push` would leave a dispatch fast, green and checking
+  # nothing.
   workflow_dispatch:
   push:
     branches: [master]
@@ -1199,7 +1200,8 @@ jobs:
       # The two scans read the head render's package roots alone, so they sit here, after
       # the render and ahead of every step that stands down when the tree is unchanged. Neither
       # step has an `if:`: a PR that changes only .gitleaks.toml or the gitleaks pin renders no
-      # package differently, and it still runs them (test_host_package_scans_run_on_every_pr.py).
+      # package differently, and it still runs them (the host-package-scans-run-on-every-pr
+      # row of tests/repo/_ci_sweep_workflow_rows.py).
       # The scan runs the gitleaks release that prek.toml pins, checked against the release's own
       # checksums file, so the version has one home and Renovate's prek.toml manager moves it.
       # `prove-scan` runs first: it shows the binary exempts a token at a package's ciphertext
@@ -1476,7 +1478,8 @@ jobs:
       # stale. A Dockerfile PR has no published image, so it builds. A build reaches the
       # runner's CA bundle, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
-      # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
+      # step (the ci-dispatch-takes-the-full-sweep-not-the-scoped-path row) and a dispatch of
+      # master must stay green.
       - name: Build the test image for this release
         env:
           RELEASE: ${{ matrix.release }}

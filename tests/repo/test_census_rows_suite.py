@@ -103,9 +103,9 @@ RUNS_CODE = re.compile(
 )
 TEST_FUNCTION = re.compile(r"^(?:async )?def test_", re.MULTILINE)
 BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-# A module with this many test functions or fewer is a selector, a predicate and its red
-# proof: a row's shape.
-ROW_SIZED = 3
+# A module with this many test functions or fewer reads like a selector and a few
+# predicates with their red proofs: the shape of one row or of a handful of rows.
+ROW_SIZED = 8
 
 
 def _standalone_check_offence(subject: Subject) -> list[str]:
@@ -246,9 +246,81 @@ ROWS = (
         min_matches=100,
         must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
         allow={
-            "tests/repo/test_shed_offline_hold_order.py": (
-                "a pinned sentence with a must-refuse case table, which no RunbookRule "
-                "field holds"
+            "tests/repo/test_ci_release_downloads_are_cached.py": (
+                "one of the per-tool cache checks that #9025 folds into one composite "
+                "action, which leaves it no file to judge"
+            ),
+            "tests/repo/test_ci_lint_group.py": (
+                "a join of pyproject.toml's lint group and default groups against every "
+                "workflow that installs the project"
+            ),
+            "tests/repo/test_claude_md_paragraphs_have_one_home.py": (
+                "a join of each long CLAUDE.md paragraph against every other operator doc"
+            ),
+            "tests/repo/test_doc_values_hook.py": (
+                "a join of the prek hook's `files` pattern against the paths the doc_values "
+                "rows name and the paths the docs-refresh cron stages"
+            ),
+            "tests/repo/test_failure_class_detectors.py": (
+                "a join of docs/failure-classes.md against the detector tests it cites"
+            ),
+            "tests/repo/test_host_package_case_inputs_census.py": (
+                "a join of the render step's CASE_INPUTS against the modules the cases "
+                "script imports and the tracked tree"
+            ),
+            "tests/repo/test_kind_node_image_follows_k3s.py": (
+                "a join of CI's kind node image against the k3s version in the "
+                "system-upgrade role's defaults"
+            ),
+            "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": (
+                "a join of ci.yml and renovate-config-canary.yml, which run the one "
+                "retrying validator script"
+            ),
+            "tests/repo/test_vale_matches_the_ci_pin.py": (
+                "a join of the Vale version and sha256 CI installs against the "
+                "homelab-tools package pin"
+            ),
+            "tests/services/test_alertmanager_autofix_inhibit.py": (
+                "a render of the Alertmanager config, run against the labels of the pods "
+                "and scrape-target rule files"
+            ),
+            "tests/services/test_alertmanager_blackbox_inhibit.py": (
+                "a render of the Alertmanager config, run against the labels of the "
+                "blackbox-ingress rules"
+            ),
+            "tests/services/test_alertmanager_flux_inhibit.py": (
+                "a render of the Alertmanager config, run against the labels of the flux "
+                "and scrape-target rule files"
+            ),
+            "tests/services/test_alertmanager_grouping.py": (
+                "a render of the Alertmanager routing tree, joined against the rule files "
+                "and the inventory's hosts"
+            ),
+            "tests/services/test_alertmanager_pi_inhibit.py": (
+                "a render of the Alertmanager config, run against the labels of the Pi "
+                "rules in extra-probes.yaml"
+            ),
+            "tests/services/test_alertmanager_scan_unit_inhibit.py": (
+                "a render of the Alertmanager config, run against the labels of the "
+                "host-check rule file"
+            ),
+            "tests/services/test_anisync_pin_matches_server.py": (
+                "a render of the jellyfin Deployment, joined against the role's defaults"
+            ),
+            "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
+                "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
+                "Cloudflare ranges in the group vars"
+            ),
+            "tests/services/test_homepage_tool_tile_favicons.py": (
+                "a join of each homepage tile's icon colour against the favicon of the UI "
+                "it opens and mkdocs.yml's favicon"
+            ),
+            "tests/services/test_scrape_target_flap_rule.py": (
+                "a join of the flap rules against the promtool cases that exercise them"
+            ),
+            "tests/services/test_warning_escalation_exemptions.py": (
+                "a render of the Alertmanager config, joined against every warning rule "
+                "and the rendered notification bodies"
             ),
             "tests/services/test_host_check_rule_literals.py": (
                 "a join of the rule file against the inventory, which #9019 rewrites"
