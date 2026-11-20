@@ -26,6 +26,17 @@ LANDING_LIVE = "landing-live"
 PARKED = "parked:"
 
 
+def reland_command(pr: str) -> str:
+    """The command that lands PR number `pr` again and waits for its verdict."""
+    return f"land.sh --pr {pr} --arm-merge --await-merge --detach && cc-wait land {pr}"
+
+
+def last_verdict(text: str) -> tuple[str, str]:
+    """The token and the whole of a landing log's last `VERDICT:` line; "" twice for none."""
+    matches = list(VERDICT_LINE.finditer(text))
+    return (matches[-1].group(1), matches[-1].group(0)) if matches else ("", "")
+
+
 def another_has_it(result: Mapping[str, str]) -> bool:
     """Whether `land.sh` started no landing because another landing of the PR is live."""
     return result.get("cause") == LANDING_LIVE
@@ -61,8 +72,7 @@ def park_line(result: Mapping[str, str], verdict_line: str = "") -> str:
     if result.get("verdict") == "refused" and result.get("exit") == _GAVE_UP:
         why = detail.group(1) if detail else "a landing rule"
         return (
-            f"{PARKED} refused before merge ({why}); re-land with land.sh --pr {pr} "
-            f"--arm-merge --await-merge --detach && cc-wait land {pr}"
+            f"{PARKED} refused before merge ({why}); re-land with {reland_command(pr)}"
         )
     owner = result.get("hold_owner")
     if result.get("cause") != PROMOTE_HELD or owner == HOLD_OWN:

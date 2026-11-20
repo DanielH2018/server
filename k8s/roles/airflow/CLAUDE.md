@@ -127,6 +127,17 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `check` fails a day with fewer than
   `k8s/roles/airflow/files/dags/homelab_warehouse/edge_counts.py:MIN_DAILY_REQUESTS` Traefik
   requests or no bouncer requests, since both run all day.
+- **`backup_spend_rollup`** loads `longhorn.backup_daily`: per volume and day, the backups
+  Longhorn ran, the blocks each walked and the blocks it uploaded. Each walked block is one
+  HeadObject, so `class_b` is the backup's Class B transaction count. The lines come from
+  loki-homelab, which task pods reach through netpol-baseline's `loki-homelab` fence, and the
+  catchup reaches back 30 days. A volume's claim and backup target come from its Longhorn
+  Volume object, read when the day loads, so a volume moved between tiers counts wholly
+  under its new target. B2's target is named `default`.
+- **Only `backup_spend_rollup`'s `load` task holds a Kubernetes token.** Its
+  `executor_config` runs it as `airflow-longhorn-reader`, whose one grant is `list` on
+  Longhorn volumes (`k8s/roles/airflow/templates/rbac.yaml.j2`). Every other task pod runs as
+  `airflow-task`, which mounts no token.
 - **Grafana's "Homelab history" board**
   (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads every
   DAG's tables through the `Warehouse` datasource.

@@ -16,6 +16,7 @@ from dev.fanout_lib import launch_lock
 from dev.findings_lib.issue_model import Issue, IssueState
 from dev.fanout_lib.manifest import Batch, Manifest, save
 from dev.fanout_lib.place import main
+from dev.fanout_lib.unit_state import MARKER
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 # Roomy on both planes and holding a registered key, so a refusal here comes from a gate
@@ -386,3 +387,86 @@ def test_an_excused_file_is_recorded_on_the_batch_that_was_let_through(tmp_path)
     new_run = max(tmp_path.glob("*.json"))
     (batch,) = json.loads(new_run.read_text())["batches"]
     assert (batch["cited_paths"], batch["excused_paths"]) == ([ALERTS], [ALERTS])
+
+
+def _ended_batch(tmp_path, host="daniel-box"):
+    """Batch 7 of run 20260101T000020Z, whose PR `place resume` is asked to bring up to master."""
+    ended = Batch("7", host, "/w/fanout-7", "worktree-fanout-7", "fanout-7", [7], "t")
+    save(Manifest("20260101T000020Z", "worktree-orch", [ended]), root=tmp_path)
+    return ["resume", "20260101T000020Z", "7", "--manifest-root", str(tmp_path)]
+
+
+def test_a_resume_that_cannot_take_the_launch_lock_exits_8_having_read_nothing(
+    tmp_path, capsys
+):
+    argv = _ended_batch(tmp_path)
+    tools, run = fake_tools()
+    with launch_lock.held(tmp_path, lambda: "20260101T000010Z"):
+        code = main([*argv, "--lock-wait", "0.05"], tools)
+    assert code == 8
+    holder = f"launch lock held by pid {os.getpid()} (run 20260101T000010Z)"
+    assert holder in capsys.readouterr().err
+    assert not run.calls
+
+
+def test_a_resume_holds_the_launch_lock_from_its_first_read_to_its_units_start(
+    tmp_path,
+):
+    argv = _ended_batch(tmp_path)
+    logs = tmp_path / "landings"
+    logs.mkdir()
+    (logs / "land4000-20261120-100000.log").write_text(
+        "LAND-RESULT: verdict=merge-conflict\nVERDICT: merge-conflict (x)\n"
+    )
+    tools, _ = fake_tools(
+        branch_prs={"worktree-fanout-7": ["https://github.com/o/r/pull/4000"]},
+        open_prs=("worktree-fanout-7",),
+    )
+    held_at_each_call = []
+
+    def answer(host, command, timeout, stdin=None):
+        held_at_each_call.append(launch_lock.holder(tmp_path) is not None)
+        if "merge-tree" in command:
+            return ok(
+                "=== 7\nActiveState=inactive\n--- tree\nstanding\n--- landing\n"
+                "--- conflicts\ntree0\nexit=0\n"
+            )
+        return ok("free\n" if "/proc/locks" in command else HEADROOM)
+
+    tools = dataclasses.replace(tools, run=answer)
+    assert main([*argv, "--log-dir", str(logs)], tools) == 0
+    assert held_at_each_call and all(held_at_each_call)
+    assert launch_lock.holder(tmp_path) is None
+
+
+def test_a_resume_counts_against_the_hosts_live_batch_cap_without_itself(
+    tmp_path, capsys
+):
+    remote = _another_host()
+    argv = _ended_batch(tmp_path, host=remote)
+    others = [
+        Batch(f"{n}", remote, "/w", "b", f"fanout-{n}", [n], "t") for n in range(91, 97)
+    ]
+    save(Manifest("20260101T000010Z", "o", others), root=tmp_path)
+    logs = tmp_path / "landings"
+    logs.mkdir()
+    (logs / "land4000-20261120-100000.log").write_text(
+        "LAND-RESULT: verdict=merge-conflict\nVERDICT: merge-conflict (x)\n"
+    )
+    tools, run = fake_tools(
+        branch_prs={"worktree-fanout-7": ["https://github.com/o/r/pull/4000"]},
+        open_prs=("worktree-fanout-7",),
+    )
+    # Six batches run on the host, and the one to resume has stopped.
+    states = "".join(f"=== {b.batch}\nActiveState=active\n" for b in others)
+    states += "=== 7\nActiveState=inactive\nResult=success\nExecMainStatus=0\n"
+    run.answers_by_call = [
+        ok(
+            "=== 7\nActiveState=inactive\n--- tree\nstanding\n--- landing\n--- conflicts\n"
+        ),
+        ok("free\n"),
+        ok(f"{HEADROOM}{MARKER}\n{states}"),
+    ]
+    assert main([*argv, "--log-dir", str(logs)], tools) == 3
+    assert f"{remote} already holds 6 live batch(es)" in capsys.readouterr().err
+    assert not any("systemd-run" in command for _, command, _ in run.calls)

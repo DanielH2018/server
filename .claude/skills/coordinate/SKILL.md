@@ -137,10 +137,16 @@ from you. `place status` names the ones that do.
   park line names. A park line that opens `another landing has it` is the exception: run
   the `cc-wait land` command it quotes and read that landing's verdict. A park line ending
   `unattributed` also goes under `asks:` for the root.
-- **A batch that still ends on a merge conflict is a spawned agent's to rebase.** The
-  batch already spent its one resume, or had no run time for it, and its `needs-input`
-  line names the conflicting files. Hand those files to one agent that rebases the
-  branch onto `origin/master` and pushes, then land the PR.
+- **A landing that ends `merge-conflict` is `place resume`'s to resolve. Spawn no agent
+  for it.** Run `uv run python scripts/dev/fanout.py place resume <run-id> <batch>` from
+  this session, then `cc-wait fanout <run-id>`. It restarts the batch's implementer to
+  rebase, has a fresh reviewer read the resolution, and lands the PR again. A PR the
+  lander's rule holds ends `needs-input: the conflict resolution of <PR> passed its
+  review`: land it with the `land.sh` command that line names, with `--fresh`. A refusal
+  names its reason and the command that fits. Past
+  `scripts/dev/fanout_lib/resume.py:MAX_RESUMES` resumes of one batch it names the
+  conflicting files: put the PR under `asks:` (`docs/issue-claiming-and-fanout.md`, *A
+  conflict found after the batch has ended*).
 - **A re-land of a merged PR starts no promotion, and neither does clearing the hold.** The
   re-land settles only if master took a later merge. Otherwise it ends `deferred`, cause
   `promote-timeout`, unless the operator dispatched `promote` for the tip. When nothing

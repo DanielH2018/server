@@ -31,7 +31,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from deploy_tools.land_lib.detach import result_fields, result_in
-from dev.fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
+from dev.fanout_lib.land_result import (
+    FINISHED_VERDICTS,
+    VERDICT_LINE,
+    last_verdict,
+    park_line,
+)
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 # The verdicts after which an apply is owed or the deploy needs a look. The landing is
@@ -182,12 +187,11 @@ def land(
         waited = run(login(wait), None)
     log = _newest_log(log_dir, pr)
     text = log.read_text(errors="replace") if log else ""
-    matches = list(VERDICT_LINE.finditer(text))
-    found = matches[-1] if matches else None
+    verdict, line = last_verdict(text)
     landing = Landing(
         waited.returncode,
-        verdict=found.group(1) if found else "",
-        line=found.group(0) if found else "",
+        verdict=verdict,
+        line=line,
         tail=_tail(text or waited.stdout + waited.stderr),
         wait=" ".join(wait) if waited.returncode == STILL_WAITING else "",
         result=(result_in(log) if log else None) or {},

@@ -92,9 +92,11 @@ role as built.
   Prometheus's counters, not `loki-homelab`: Alloy drops routine Traefik access lines before
   they reach it (`k8s/roles/loki-homelab/templates/config/config.alloy.j2`). Authelia exports
   no metrics, so its counts wait for a source.
-- **Slice 7b, B2 Class-B history.** Daily Class-B counts from Longhorn's log in
-  `loki-homelab`, which `probe.py b2-spend` already sums. Task pods need a grant in
-  the `loki-homelab` fence first.
+- **Slice 7b, B2 Class-B history.** Daily backups, Class B transactions and uploaded blocks
+  per volume from Longhorn's log in `loki-homelab`, as `backup_spend_rollup` into
+  `longhorn.backup_daily`. The log line names no backup target, so the load task reads each
+  volume's `spec.backupTargetName` through the Kubernetes API, as a ServiceAccount whose one
+  grant is `list` on Longhorn volumes.
 - **Slice 8, DNS history (idea 8).** Both Pi-hole instances' query counts per client and
   domain.
 

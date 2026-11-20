@@ -375,8 +375,14 @@ and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`)
 resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing. A batch whose landing
 conflicted with master a second time, or with too little run time left for its one resume,
-reads `needs-input` with the conflicting files named: rebase the branch onto
-`origin/master`, push, and land the PR again.
+reads `needs-input` with the conflicting files named. Run
+`fanout.py place resume <run-id> <batch>`, which restarts the batch's implementer to
+rebase, reviews the resolution and lands the PR again. Run the same command when your own
+`land.sh` on a finished batch's PR ends `merge-conflict`. Do not rebase or merge the branch
+by hand: nobody reviews that resolution. A batch that ends `needs-input: the conflict
+resolution of <PR> passed its review` is one the pipeline does not land: land it with the
+`land.sh` command its line names (`docs/issue-claiming-and-fanout.md`, *A conflict found
+after the batch has ended*).
 
 **`parked` is a batch whose landing another PR's `DEPLOY_HOLD`, or a merge rule, stopped.**
 Its line starts `parked:` and names the re-land. Run `cc-wait landing-clear`, then the

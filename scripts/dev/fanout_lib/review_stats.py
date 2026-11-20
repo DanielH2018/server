@@ -56,10 +56,12 @@ def summarize(rows: list[dict]) -> dict:
         if f.get("category") == "test"
         and float(f.get("confidence") or 0) >= CONFIDENCE_FLOOR
     )
+    # A `place resume` unit saves a record of its own for a batch already counted.
+    batches = [r for r in rows if not r.get("resumed")]
     return {
-        "batches": len(rows),
-        "outcomes": dict(Counter(r.get("outcome") or "unknown" for r in rows)),
-        "mean_cost": round(spend / len(rows), 2) if rows else 0.0,
+        "batches": len(batches),
+        "outcomes": dict(Counter(r.get("outcome") or "unknown" for r in batches)),
+        "mean_cost": round(spend / len(batches), 2) if batches else 0.0,
         "base": {
             "batches": sum(1 for r in rows if r.get("base_tests")),
             "new": sum(r.get("base_tests") or 0 for r in rows),
