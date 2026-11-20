@@ -15,7 +15,8 @@ landing's process, so a landing that dies gives the turn up.
 
 A landing asks for the turn when it is ready to use it (`merge.await_merge`): before the one
 run of a head that has had none, and otherwise once its head is green. It never holds the
-turn while a run that started before it finishes.
+turn while a run that started before it finishes, nor through a rate-limit wait: it gives the
+turn back first (`Landing.leave_turn`) and asks again before it merges.
 
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
@@ -379,6 +380,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         up to `merge_timeout` and returns whether this landing holds the turn and the seconds
         that call waited. It asks once: a later call answers at once with what the first one
         got, until `ln.give_back_turn` gives the turn up and the next call asks again.
+        `ln.give_back_turn` is set only while this landing holds the turn.
 
     Raises:
         HandOver: from `ln.hand_over_turn`, which leaves the turn locked for the caller.
@@ -392,6 +394,7 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
             return release is not None, 0
         asked = True
         release, waited = _wait(ln, draft)
+        ln.give_back_turn = give_back if release else None
         return release is not None, waited
 
     def give_back() -> None:
@@ -399,13 +402,14 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         if release:
             release()
         release, asked = None, False
+        ln.give_back_turn = None
 
     def hand_over(why: str) -> None:
         if adopted or ln.opts.policy_active or not isinstance(release, LocalTurn):
             return
         raise HandOver(release.fd, why)
 
-    ln.give_back_turn = give_back
+    ln.give_back_turn = give_back if adopted else None
     ln.hand_over_turn = hand_over
     try:
         yield take

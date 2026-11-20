@@ -179,19 +179,14 @@ def test_a_read_still_rate_limited_after_its_waits_refuses(landing):
 FILES = {"files": [{"path": "docs/a.md"}], "headRefOid": "a" * 40}
 
 
-def test_a_file_read_inside_the_turn_fails_at_once_on_a_rate_limit(landing):
+def test_a_read_inside_the_turn_gives_the_turn_back_before_it_waits(landing):
     ln, calls = landing()
     _reads(ln, [RATE_LIMITED, FILES])
-    with pytest.raises(gh_read.GhReadFailed):
-        ln.changed_paths("a" * 40)
-    assert _sleeps(calls) == []
-
-
-def test_the_file_read_before_the_turn_waits_out_a_rate_limit(landing):
-    ln, calls = landing()
-    _reads(ln, [RATE_LIMITED, FILES])
-    assert ln.changed_paths("a" * 40, before_turn=True) == ["docs/a.md"]
-    assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S]
+    ln.give_back_turn = lambda: calls.append(("give_back_turn", (), {}))
+    assert ln.changed_paths("a" * 40) == ["docs/a.md"]
+    order = [c[0] for c in calls if c[0] in ("give_back_turn", "sleep")]
+    assert order == ["give_back_turn", "sleep"]
+    assert ln.gave_turn_back
 
 
 GRAPHQL_RATE_LIMITED = subprocess.CalledProcessError(

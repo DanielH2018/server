@@ -143,19 +143,20 @@ def refusal_reason(stderr: str) -> str:
     return "; ".join(reasons)
 
 
-def _merge_directly(ln: Landing, head: str) -> str:
+def _merge_directly(ln: Landing, head: str, commits: list[CommitMessage]) -> str:
     """Squash-merge the PR at `head` through the REST endpoint; '' on success, else why not.
 
     `sha` makes GitHub refuse if the head moved since await_ci read it green.
     `{owner}/{repo}` resolves from the checkout, as every `gh pr view` here does.
-    A PR whose commits carry a `Removes-Object:` line also sends the body `squash_body` writes.
+    When the PR's `commits` carry a `Removes-Object:` line, the merge also sends the body
+    `squash_body` writes.
     """
     fields = [
         "merge_method=squash",
         f"sha={head}",
         f"commit_title={ln.direct_merge_subject}",
     ]
-    body = squash_body(ln.view("commits").get("commits", []))
+    body = squash_body(commits)
     if body:
         fields.append(f"commit_message={body}")
     try:
@@ -208,7 +209,7 @@ def _refuse_private_repo(ln: Landing) -> None:
         return as_object(got or {}, "gh api repos")
 
     try:
-        repo = gh_read.read(call, ln.tools.sleep, "gh api repos")
+        repo = ln.read(call, "gh api repos")
     except gh_read.GhReadFailed as exc:
         ln.die(f"could not read the repo's visibility: {exc}", 1)
     except ValueError as exc:
@@ -297,7 +298,7 @@ def _ready_run_on(ln: Landing, head: str) -> str:
         return as_list(got, "gh api ci.yml runs")
 
     try:
-        runs = gh_read.read(call, ln.tools.sleep, "gh api ci.yml runs")
+        runs = ln.read(call, "gh api ci.yml runs")
     except (gh_read.GhReadFailed, ValueError) as exc:
         return f"its CI runs could not be read ({exc})"
     for run in runs:
@@ -498,6 +499,12 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     A CI read GitHub refuses for its rate sleeps until the quota frees rather than one merge
     poll, counted as waited and cut short at `merge_timeout`. The sleep re-reads the quota and
     ends at its reset (`gh_rate_limit.sleep_until_reset`).
+
+    A landing that holds the turn gives it back before any rate-limit wait, its CI read's or
+    a gh read's (`Landing.leave_turn`), so the landings behind it do not wait out the same
+    limit. It then merges only after it has asked for the turn again, on a later green poll,
+    as a landing that has not asked yet: a head master moved past while it waited rejoins the
+    line instead (`stale_base.rejoin_line`).
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -526,7 +533,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
         asked = True
         # A failed read stores nothing, so the rule inside the turn reads again.
         with contextlib.suppress(gh_read.GhReadFailed, ValueError):
-            ln.changed_paths(head, before_turn=True)
+            ln.changed_paths(head)
         try:
             return take_turn(head if draft else "")
         except Outcome:
@@ -684,7 +691,12 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     gated_head = head
                 else:
                     pin_gate.recheck_before_merge(ln, gated_pins)
-                refusal = _merge_directly(ln, head)
+                commits = ln.view("commits").get("commits", [])
+                # The next poll asks for the turn as one that has not asked yet.
+                if ln.gave_turn_back:
+                    ln.gave_turn_back = in_turn = asked = False
+                    continue
+                refusal = _merge_directly(ln, head, commits)
                 if not refusal:
                     continue
                 refused(f"merge refused at {head[:8]}: {refusal}; waiting")
@@ -721,6 +733,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             )
         step = o.merge_poll
         if pause:
+            ln.leave_turn()
             step = gh_rate_limit.sleep_until_reset(
                 spent,
                 max(step, min(pause, wait_ends_at - waited)),

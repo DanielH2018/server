@@ -290,8 +290,14 @@ never sleeps past it (#8147).
 
 **A landing reads its PR's file list before it asks for the landing turn.** That read waits
 out a rate limit while the landing holds no turn. The turn's rules reuse it, and read the list
-again only for a head that moved after it. A read they make inside the turn does not wait out a
-rate limit: the serial rule then bars nothing, and the PR forms no batch.
+again only for a head that moved after it.
+
+**A landing gives the landing turn back before it waits out a rate limit**, so the landings
+behind it do not wait out the same limit
+(`scripts/deploy_tools/land_lib/landing.py:Landing.leave_turn`). Its log prints `gave the
+landing turn back to wait out GitHub's rate limit`. It then forms no batch, and it merges only
+after it has asked for the turn again. A head that master moved past during the wait rejoins
+the line as a draft first. A batch member's reads still wait with the holder's turn held.
 
 **A rate-limit wait ends at the quota's reset**, not at the wait computed when the call
 failed. It re-reads the quota every `RECHECK_S`

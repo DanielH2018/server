@@ -19,7 +19,7 @@ from typing import Any, NoReturn
 
 from deploy_tools.land_lib.ledger import Ledger
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.outcome import Outcome, say
 from deploy_tools.land_lib.pr_json import PrView, parse_view, rest_filter
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
@@ -113,9 +113,12 @@ class Landing:
         # Frees the serial lock a landing of a serial PR keeps (`slots.py`). Held here, so the
         # lock and its ssh session last until the landing's process ends.
         self.serial_lock: Callable[[], None] | None = None
-        # Gives the landing turn up so the next ask waits for it again (`turn.held`); None
-        # outside the merge wait, and for a batch member, which the holder merges.
+        # Gives the landing turn up so the next ask waits for it again (`turn.held`). Set only
+        # while this landing holds the turn, so never for a batch member, which the holder merges.
         self.give_back_turn: Callable[[], None] | None = None
+        # Set when `leave_turn` gave the turn back; the merge wait clears it and asks again
+        # before it merges.
+        self.gave_turn_back = False
         # Raises `turn.HandOver` when this landing can pass its turn to a fresh checkout's
         # landing, and returns when it cannot; None outside the merge wait.
         self.hand_over_turn: Callable[[str], None] | None = None
@@ -158,6 +161,25 @@ class Landing:
 
     # -- shared reads -------------------------------------------------------------------
 
+    def read[T](self, call: Callable[[], T], label: str) -> T:
+        """`call()`, a gh read retried and waited out as `gh_read.read` does.
+
+        Before a rate-limit wait, a landing that holds the landing turn gives it back, so no
+        landing behind it waits out the same limit. The merge wait asks for the turn again
+        before it merges (`merge.await_merge`).
+
+        Raises:
+            gh_read.GhReadFailed: GitHub did not answer, after `gh_read`'s retries and waits.
+        """
+        return gh_read.read(call, self.tools.sleep, label, self.leave_turn)
+
+    def leave_turn(self) -> None:
+        """Give the landing turn back before a rate-limit wait; a no-op when not holding it."""
+        if self.give_back_turn:
+            self.give_back_turn()
+            self.gave_turn_back = True
+            say("gave the landing turn back to wait out GitHub's rate limit")
+
     def view(self, fields: str) -> PrView:
         """This PR's `fields`, in the shape `gh pr view --json <fields>` gives, or die.
 
@@ -186,21 +208,19 @@ class Landing:
             return parse_view(as_object(got or {}, label))
 
         try:
-            return gh_read.read(call, self.tools.sleep, label)
+            return self.read(call, label)
         except gh_read.GhReadFailed as exc:
             self.die(f"could not read PR #{pr}: {exc}", 1)
         except ValueError as exc:
             # json.JSONDecodeError is a ValueError subclass.
             self.die(f"could not read PR #{pr}: unparseable gh output: {exc}", 1)
 
-    def changed_paths(self, head: str, before_turn: bool = False) -> list[str]:
+    def changed_paths(self, head: str) -> list[str]:
         """The paths the PR changes, as `gh pr view` lists them with the PR at `head`.
 
         The list is read from GitHub once per head: a call for the head the last read found
         returns that read. The merge wait reads it before it asks for the landing turn
         (`merge.await_merge`), so a rule the turn runs finds it here without a read of its own.
-        Only that read, `before_turn`, waits out a rate limit; a read inside the turn fails
-        at once rather than hold the turn through the wait.
 
         Raises:
             gh_read.GhReadFailed: GitHub did not answer, after `gh_read`'s retries and waits.
@@ -215,8 +235,7 @@ class Landing:
             got = self.tools.gh_json("pr", "view", pr, "--json", "files,headRefOid")
             return parse_view(as_object(got, label))
 
-        waits = gh_read.RATE_LIMIT_WAITS if before_turn else 0
-        view = gh_read.read(call, self.tools.sleep, label, waits)
+        view = self.read(call, label)
         paths = tuple(f["path"] for f in view.get("files", []))
         self._changed = (view.get("headRefOid", ""), paths)
         return list(paths)

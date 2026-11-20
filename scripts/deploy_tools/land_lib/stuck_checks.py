@@ -42,10 +42,10 @@ def find(ln: Landing, head: str) -> list[str]:
         return [s for s in suites if s.completed]
 
     try:
-        runs = gh_read.read(pending, ln.tools.sleep, "gh api check-runs")
+        runs = ln.read(pending, "gh api check-runs")
         if not runs:
             return []
-        suites = gh_read.read(completed, ln.tools.sleep, "gh api check-suites")
+        suites = ln.read(completed, "gh api check-suites")
     except gh_read.GhReadFailed, ValueError:
         return []
     done = {s.id for s in suites if s.id is not None}

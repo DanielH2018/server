@@ -56,7 +56,7 @@ def batch_tested(ln: Landing, head: str) -> bool:
         why = f"its head is {head[:8]}, not the {ln.tested_head[:8]} the batch stacked"
     else:
         try:
-            tip = gh_read.read(call, ln.tools.sleep, "gh api git/ref")
+            tip = ln.read(call, "gh api git/ref")
         except (gh_read.GhReadFailed, ValueError) as exc:
             tip = f"unreadable ({exc})"
         if tip == ln.tested_on:
@@ -97,7 +97,7 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
         return as_list(got, "gh api compare")
 
     try:
-        paths = gh_read.read(call, ln.tools.sleep, "gh api compare")
+        paths = ln.read(call, "gh api compare")
     except gh_read.GhReadFailed as exc:
         ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc}", 1)
     except ValueError as exc:
@@ -122,7 +122,7 @@ def _pr_paths(ln: Landing) -> set[str] | None:
         return [parse_file(e) for p in pages for e in as_object_list(p, "files page")]
 
     try:
-        files = gh_read.read(call, ln.tools.sleep, "gh api pulls/files")
+        files = ln.read(call, "gh api pulls/files")
     except (gh_read.GhReadFailed, ValueError) as exc:
         ln.die(f"could not list PR #{ln.opts.pr}'s files: {exc}", 1)
     if len(files) >= policy.FILE_CAP:
