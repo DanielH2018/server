@@ -5,12 +5,8 @@ cleaned reads the same on every poll. The default view counts those and lists th
 rest. `--all` restores one line per batch.
 """
 
-import sys as _sys
 from collections.abc import Callable, Iterable, Mapping
-from pathlib import Path as _Path
 
-# Reach `lib` (scripts/): a directly-invoked script gets only its own directory on sys.path.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.progress import count_line
 

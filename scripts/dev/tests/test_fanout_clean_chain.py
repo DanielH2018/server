@@ -29,9 +29,9 @@ from unittest import mock
 
 import pytest
 
-from fanout_lib import clean
-from fanout_lib.clean import live_process_scan, remote_clean_command
-from fanout_lib.manifest import Batch
+from dev.fanout_lib import clean
+from dev.fanout_lib.clean import live_process_scan, remote_clean_command
+from dev.fanout_lib.manifest import Batch
 from lib.worktrees import escape_holder
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run

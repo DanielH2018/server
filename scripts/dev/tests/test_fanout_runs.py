@@ -6,8 +6,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_runs.py
 import dataclasses
 import json
 
-from fanout_lib.manifest import Batch, Manifest, all_runs, load, path, save
-from fanout_lib.place import main
+from dev.fanout_lib.manifest import Batch, Manifest, all_runs, load, path, save
+from dev.fanout_lib.place import main
 from _fanout_fakes import fake_tools, ok
 
 

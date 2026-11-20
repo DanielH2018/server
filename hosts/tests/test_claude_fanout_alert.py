@@ -13,7 +13,7 @@ import re
 import pytest
 from _helpers import REPO
 from _setup_render import render_component_text
-from fanout_lib.notify import PAGED_STATES, alert_unit
+from dev.fanout_lib.notify import PAGED_STATES, alert_unit
 from lib import yaml_fast
 
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"

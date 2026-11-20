@@ -5,7 +5,7 @@ The lines are strace 6.8's own, cut down to the fields the parser reads.
 Run: uv run pytest scripts/dev/tests/test_affected_trace.py
 """
 
-from affected_lib import trace
+from dev.affected_lib import trace
 
 REPO = "/repo"
 

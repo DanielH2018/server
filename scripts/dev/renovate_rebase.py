@@ -49,9 +49,6 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path as _Path
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
 from lib.exit_codes import (

@@ -32,21 +32,18 @@ from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.delta_confirm import split_confirmed
-from fanout_lib.review.review_ci import awaits_ci, land_draft, pr_head, server_lands
-from fanout_lib.review.review_land import (
+from dev.fanout_lib.review.delta_confirm import split_confirmed
+from dev.fanout_lib.review.review_ci import awaits_ci, land_draft, pr_head, server_lands
+from dev.fanout_lib.review.review_land import (
     LAND_MARGIN_S,
     MERGE_CONFLICT,
     Landing,
     out_of_time,
 )
-from fanout_lib.review.review_prompts import conflict_prompt, conflict_review_prompt
-from fanout_lib.review.review_record import (
+from dev.fanout_lib.review.review_prompts import conflict_prompt, conflict_review_prompt
+from dev.fanout_lib.review.review_record import (
     actionable,
     findings_of,
     held_for_findings,
@@ -54,7 +51,7 @@ from fanout_lib.review.review_record import (
 )
 
 if TYPE_CHECKING:
-    from fanout_lib.review.review import Pipeline
+    from dev.fanout_lib.review.review import Pipeline
 
 # The most conflicting files a report or a prompt names; the rest are counted.
 MAX_NAMED = 20

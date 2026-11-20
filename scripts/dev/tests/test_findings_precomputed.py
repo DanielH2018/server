@@ -5,9 +5,9 @@ roles. The test mapping runs against a scratch tree.
 """
 
 from _findings_fakes import Fakes, build_tools, make_issue
-from fanout_lib.brief import render_brief
-from fanout_lib.target import Target
-from findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.brief import render_brief
+from dev.fanout_lib.target import Target
+from dev.findings_lib.issue_model import Issue, IssueState
 
 from dev.findings import main
 from dev.findings_lib.precomputed import deploy_line, covering_tests

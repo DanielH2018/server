@@ -11,17 +11,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from fanout_lib.clean import PARKED_KEPT, clean_one, remote_clean_command
-from fanout_lib.manifest import (
+from dev.fanout_lib.clean import PARKED_KEPT, clean_one, remote_clean_command
+from dev.fanout_lib.manifest import (
     Batch,
     Manifest,
     path as manifest_path,
     retired_path,
     save,
 )
-from fanout_lib.target import Target
-from fanout_lib.transport import Tools
-from fanout_lib.place import cmd_clean_one, main
+from dev.fanout_lib.target import Target
+from dev.fanout_lib.transport import Tools
+from dev.fanout_lib.place import cmd_clean_one, main
 from lib.worktrees import Worktree
 from _fanout_fakes import as_operator, fake_tools, ok
 
@@ -243,7 +243,7 @@ def test_cmd_clean_one_default_ask_merges_into_the_targets_base():
     once rebound the name holding the Target, and every real `clean` died on
     `'PosixPath' object has no attribute 'base'` with this file green.
     """
-    from fanout_lib.target import resolve
+    from dev.fanout_lib.target import resolve
 
     seen = {}
 

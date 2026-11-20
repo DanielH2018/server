@@ -8,11 +8,6 @@ its only change is to `testpaths`, which reads the PR's diff from GitHub.
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import copy
 import functools
@@ -21,7 +16,7 @@ import subprocess
 import tomllib
 from collections.abc import Callable
 
-from fanout_lib.target import SERVER
+from dev.fanout_lib.target import SERVER
 from lib.gh import gh
 
 # The branch a server batch's PR lands onto, and the `gh` timeout.

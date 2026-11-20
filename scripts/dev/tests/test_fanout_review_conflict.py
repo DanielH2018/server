@@ -9,8 +9,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_conflict.py
 import pytest
 
 from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.launch import REVIEW_RUNTIME_MAX_S
-from fanout_lib.review.review_land import LAND_MARGIN_S
+from dev.fanout_lib.launch import REVIEW_RUNTIME_MAX_S
+from dev.fanout_lib.review.review_land import LAND_MARGIN_S
 
 CONFLICT = (
     "VERDICT: merge-conflict (PR #4000 conflicts with master — rebase it, push, "

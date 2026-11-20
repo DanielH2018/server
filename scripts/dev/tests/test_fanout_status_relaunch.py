@@ -8,9 +8,9 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status_relaunch.py
 import dataclasses
 import json
 
-from fanout_lib.branch_pr import parse_merged_before
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main
+from dev.fanout_lib.branch_pr import parse_merged_before
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main
 from _fanout_fakes import fake_tools, ok
 
 B = Batch(

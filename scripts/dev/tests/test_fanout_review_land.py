@@ -16,7 +16,7 @@ from deploy_tools.land_lib.ledger import Ledger, result_line
 from deploy_tools.land_lib import pr_lock
 from deploy_tools.land_lib.outcome import VERDICTS, Cause, Outcome
 from deploy_tools.promote_lib.wait import hold_owner
-from fanout_lib.review.review_land import (
+from dev.fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
     MERGE_CONFLICT,
     PR_CI_RED,

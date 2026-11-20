@@ -3,8 +3,8 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_review_default.py
 """
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.place import main
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 # Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.

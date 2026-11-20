@@ -14,9 +14,9 @@ from _fanout_fakes import fake_tools
 from _findings_fakes import operator_comment
 from test_fanout_autoland import _pr, _record
 
-from fanout_lib import autoland, operator_waits
-from fanout_lib.autoland import Boundaries
-from findings_lib.issue_model import claim_comment, parse_issue
+from dev.fanout_lib import autoland, operator_waits
+from dev.fanout_lib.autoland import Boundaries
+from dev.findings_lib.issue_model import claim_comment, parse_issue
 
 # 2026-10-18T01:00:00Z, the stamp `_record` puts in every record's file name.
 SAVED = 1792285200.0

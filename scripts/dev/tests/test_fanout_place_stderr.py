@@ -13,9 +13,9 @@ import subprocess
 
 import pytest
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 PREFIXES = ("fanout.py: error: ", "fanout.py: warning: ")

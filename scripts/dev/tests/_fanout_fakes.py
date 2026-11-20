@@ -3,9 +3,9 @@
 import subprocess
 from dataclasses import dataclass, field
 
-from fanout_lib.target import SERVER_CHECKOUT
-from fanout_lib.transport import Tools
-from findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.target import SERVER_CHECKOUT
+from dev.fanout_lib.transport import Tools
+from dev.findings_lib.issue_model import Issue, IssueState
 
 OPERATOR_CHECKOUT = "/home/ubuntu/server"
 

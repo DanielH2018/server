@@ -10,11 +10,11 @@ Run: uv run pytest scripts/dev/tests/test_fanout_effort.py
 
 import pytest
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.launch import systemd_run_command
-from fanout_lib import review_unit
-from fanout_lib.place import main
-from fanout_lib.sizing import LADDER, by_name, size
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.launch import systemd_run_command
+from dev.fanout_lib import review_unit
+from dev.fanout_lib.place import main
+from dev.fanout_lib.sizing import LADDER, by_name, size
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 from _review_fakes import _pipeline
 

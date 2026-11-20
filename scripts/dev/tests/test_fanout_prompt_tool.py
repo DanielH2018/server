@@ -10,9 +10,9 @@ import json
 import shlex
 
 from _review_fakes import _pipeline
-from fanout_lib.launch import systemd_run_command
-from fanout_lib.prompt_tool import PROMPT_TOOL, shim_guarded
-from fanout_lib.target import Target
+from dev.fanout_lib.launch import systemd_run_command
+from dev.fanout_lib.prompt_tool import PROMPT_TOOL, shim_guarded
+from dev.fanout_lib.target import Target
 from lib.proc_testing import run, write_exec
 
 

@@ -16,17 +16,13 @@ according to those too, which the block says.
 """
 
 import re
-import sys as _sys
 from collections.abc import Iterable
 from pathlib import Path as _Path
 
-_SCRIPTS = _Path(__file__).resolve().parents[2]
-_sys.path.insert(0, str(_SCRIPTS))
+from deploy_tools.land_lib import land_tags
+from lib.repo_paths import REPO
+from lib.role_paths import role_for
 
-from deploy_tools.land_lib import land_tags  # noqa: E402
-from lib.role_paths import role_for  # noqa: E402
-
-REPO = _SCRIPTS.parent
 # The shared trees every k8s role renders through.
 _SHARED_RENDER_INPUTS = ("k8s/templates/", "inventory/")
 

@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 
 from diagnostics.probe_lib import lander as probe_lander
-from fanout_lib import autoland, operator_waits, wait_probe
-from fanout_lib.brief import LANDS
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main
-from fanout_lib.status import (
+from dev.fanout_lib import autoland, operator_waits, wait_probe
+from dev.fanout_lib.brief import LANDS
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main
+from dev.fanout_lib.status import (
     AWAITING_LANDER,
     LANDER_LOGS,
     LANDER_UNIT,
@@ -25,7 +25,7 @@ from fanout_lib.status import (
     RULINGS,
     collect,
 )
-from fanout_lib.status_view import one_line
+from dev.fanout_lib.status_view import one_line
 from lib.exit_codes import FANOUT_PLACE_FAILED, FANOUT_PLACE_OK
 from _fanout_fakes import fake_tools, ok
 from test_fanout_autoland import _Landings, _pr, _record

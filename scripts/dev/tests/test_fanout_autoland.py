@@ -17,8 +17,8 @@ from _review_fakes import PR, _finding, _pipeline, _report
 from deploy_tools.land_lib import pr_lock
 from deploy_tools.land_lib.ledger import Ledger, result_line
 from deploy_tools.land_lib.outcome import Cause, Outcome, Verdict
-from fanout_lib import autoland, own_surface
-from fanout_lib.autoland import Boundaries
+from dev.fanout_lib import autoland, own_surface
+from dev.fanout_lib.autoland import Boundaries
 
 HEAD = "a" * 40
 CLEAN_BODY = (
@@ -466,9 +466,9 @@ def test_the_newest_record_of_a_pr_decides(tmp_path):
 
 def test_the_timer_command_is_a_fanout_subcommand():
     assert Path(autoland.__file__).name == "autoland.py"
-    from fanout import COMMANDS
+    from dev.fanout import COMMANDS
 
-    assert COMMANDS["land-server"] == "fanout_lib.autoland"
+    assert COMMANDS["land-server"] == "dev.fanout_lib.autoland"
 
 
 def test_the_record_names_the_head_the_last_reviewer_read(tmp_path):

@@ -12,7 +12,7 @@ import shutil
 
 import pytest
 
-import gen_host_rules as g
+from dev import gen_host_rules as g
 from lib import yaml_fast
 
 # Non-vacuity: the hosts the inventory must keep declaring for the host table to mean much.

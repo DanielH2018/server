@@ -11,17 +11,12 @@ import subprocess
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-# `scripts/lib` sits two levels up, for `lib.cli_help`.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import WORKED_BY
-from fanout_lib.target import Target
+from dev.fanout_lib.brief import WORKED_BY
+from dev.fanout_lib.target import Target
 from lib.cli_help import error, warn
-from fanout_lib.transport import Tools, error_text
+from dev.fanout_lib.transport import Tools, error_text
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
 

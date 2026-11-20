@@ -13,7 +13,7 @@ before "apps"), so a census that stopped at it would never reach the Deployment.
 import copy
 import json
 
-import takeover_census as tc
+from dev import takeover_census as tc
 
 RESTARTED_AT = "spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
 SECRET = "Secret metallb-system/metallb-webhook-cert"

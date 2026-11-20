@@ -21,7 +21,7 @@ import subprocess
 
 import pytest
 from _helpers import REPO
-import tested_tree
+from dev import tested_tree
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with
 

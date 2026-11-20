@@ -14,25 +14,20 @@ from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-# `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
-# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib import signing
-from fanout_lib.branch_pr import (
+from dev.fanout_lib import signing
+from dev.fanout_lib.branch_pr import (
     branch_pr_argv,
     parse_branch_prs,
     parse_merged_before,
 )
-from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
-from fanout_lib.manifest import Batch
-from fanout_lib.target import SERVER, SERVER_CHECKOUT
-from fanout_lib.unit_state import appended_command, split_reply
-from findings_lib.issue_model import Issue, parse_issue
+from dev.fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.target import SERVER, SERVER_CHECKOUT
+from dev.fanout_lib.unit_state import appended_command, split_reply
+from dev.findings_lib.issue_model import Issue, parse_issue
 from lib.gh import gh
 
 HOSTS = ("daniel-box", "daniel-server")

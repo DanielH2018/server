@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from fact_status import _USAGE, main
+from dev.fact_status import _USAGE, main
 from lib.git_testing import git, init_repo
 
 

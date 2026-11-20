@@ -3,7 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_review_metrics.py
 """
 
-import review_metrics as rm
+from dev import review_metrics as rm
 
 
 def test_false_positive_rate_computes_from_complete_counts():
@@ -149,6 +149,6 @@ def test_every_committed_coverage_ledger_validates():
 def test_review_domains_match_findings_domain_choices():
     # The ledger's domain names are findings.py --domain's choices minus home-assistant, which
     # /ha-review owns; a rename on either side fails here by name.
-    from findings_lib.issue_model import DOMAINS
+    from dev.findings_lib.issue_model import DOMAINS
 
     assert rm.REVIEW_DOMAINS == frozenset(DOMAINS) - {"home-assistant"}

@@ -114,6 +114,55 @@ ALLOWED_CYCLES = frozenset(
         # makes every bundle render `soak`. Why: `# DECIDED: deferred, a documented cycle` in
         # bundle.py's `bundle_files`.
         frozenset({"renderer.renderer_lib.bundle", "renderer.renderer_lib.soak"}),
+        # The fan-out tooling's cycles, which the graph saw only once dev's imports were dotted.
+        # TODO: https://github.com/DanielH2018/server/issues/9487 - break each or mark it DECIDED.
+        *(
+            frozenset(f"dev.{name}" for name in cycle)
+            for cycle in (
+                {
+                    "fanout_lib.batch_holds",
+                    "fanout_lib.target",
+                    "findings_lib.boundaries",
+                },
+                {"fanout_lib.manifest", "fanout_lib.target", "findings_lib.boundaries"},
+                {
+                    "fanout_lib.batch_holds",
+                    "fanout_lib.manifest",
+                    "fanout_lib.target",
+                    "findings_lib.boundaries",
+                },
+                {
+                    "fanout_lib.batch_holds",
+                    "fanout_lib.target",
+                    "fanout_lib.transport",
+                    "findings_lib.boundaries",
+                },
+                {
+                    "fanout_lib.batch_holds",
+                    "fanout_lib.manifest",
+                    "fanout_lib.target",
+                    "fanout_lib.transport",
+                    "findings_lib.boundaries",
+                },
+                {
+                    "fanout_lib.batch_holds",
+                    "fanout_lib.manifest",
+                    "fanout_lib.target",
+                    "fanout_lib.transport",
+                    "fanout_lib.unit_state",
+                    "findings_lib.boundaries",
+                },
+                {"fanout_lib.review.conflict_resume", "fanout_lib.review.review"},
+                {
+                    "fanout_lib.review.conflict_resume",
+                    "fanout_lib.review.review",
+                    "fanout_lib.review.review_ci",
+                },
+                {"fanout_lib.review.fix_round", "fanout_lib.review.review"},
+                {"fanout_lib.review.review_ci", "fanout_lib.review.review_prompts"},
+                {"fanout_lib.review.review_prompts", "fanout_lib.review.review_record"},
+            )
+        ),
     }
 )
 

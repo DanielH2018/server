@@ -20,8 +20,8 @@ Run: uv run pytest scripts/dev/tests/test_pytest_shard_durations.py
 import sys
 
 import pytest
-import pytest_shard
-import shard_weight_gate
+from dev import pytest_shard
+from dev import shard_weight_gate
 from lib.proc_testing import run
 
 # A report in the shape pytest prints: seconds, phase, nodeid. `setup` and `teardown` count

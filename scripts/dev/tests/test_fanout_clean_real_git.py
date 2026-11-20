@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from fanout_lib.clean import clean_one
+from dev.fanout_lib.clean import clean_one
 from lib.git_testing import git, init_repo, scrub_process_git_env
 from lib.worktree_testing import ignore_foreign_slice_holds
 from lib.repo_paths import REPO as REPO_ROOT

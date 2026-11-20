@@ -17,24 +17,19 @@ coordinators: each groups its own project and neither reads the other's grouping
 """
 
 import subprocess
-import sys
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from pathlib import Path
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import REQUIRED_LABEL
-from fanout_lib.manifest import Batch, Manifest, live_batches, standing_batches
-from findings_lib.issue_model import Issue
-from fanout_lib.placement import HostReading
-from fanout_lib.status import BatchStatus, parse_status
-from fanout_lib.target import SERVER
-from fanout_lib.transport import Tools, error_text, read_host
-from findings_lib.issue_model import cited_paths
-from findings_lib.solo_only import solo_only_reasons
+from dev.fanout_lib.brief import REQUIRED_LABEL
+from dev.fanout_lib.manifest import Batch, Manifest, live_batches, standing_batches
+from dev.findings_lib.issue_model import Issue
+from dev.fanout_lib.placement import HostReading
+from dev.fanout_lib.status import BatchStatus, parse_status
+from dev.fanout_lib.target import SERVER
+from dev.fanout_lib.transport import Tools, error_text, read_host
+from dev.findings_lib.issue_model import cited_paths
+from dev.findings_lib.solo_only import solo_only_reasons
 from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
 from lib.role_paths import CLUSTER_VARS_PREFIX, SECRETS_FILE

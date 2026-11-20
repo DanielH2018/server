@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from renovate_rebase import (
+from dev.renovate_rebase import (
     SOAK_CONTEXT,
     TICKED,
     UNTICKED,

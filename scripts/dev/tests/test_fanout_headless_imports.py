@@ -4,11 +4,13 @@
 `fanout.py place clean-one`, both through `uv run --no-project`, which installs nothing. A
 module-level import of PyYAML anywhere under them killed every review unit and every remote
 clean at import, behind a green suite whose venv has PyYAML (#4167). `python -S` skips
-site-packages, which is the same interpreter with no third-party package on the path.
+site-packages, which is the same interpreter with no third-party package on the path. Each
+launcher sets `PYTHONPATH` to its checkout's `scripts/`, so the run here does too.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_headless_imports.py
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -34,5 +36,6 @@ def test_a_headless_entry_point_imports_without_site_packages(argv):
         text=True,
         timeout=60,
         check=False,
+        env={**os.environ, "PYTHONPATH": str(DEV.parent)},
     )
     assert done.returncode == 0, done.stderr[-2000:]

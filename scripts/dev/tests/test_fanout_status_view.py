@@ -6,10 +6,10 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status_view.py
 import json
 import re
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main
-from fanout_lib.status_view import runs_lines, status_lines
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main
+from dev.fanout_lib.status_view import runs_lines, status_lines
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 PR = "https://github.com/o/r/pull/9"

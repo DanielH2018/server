@@ -10,10 +10,10 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.review.base_check import BaseCheck
-from fanout_lib.review.review import Pipeline, actionable
-from fanout_lib.review.review_prompts import system_prompt
-from fanout_lib.target import SERVER_TARGET, Target
+from dev.fanout_lib.review.base_check import BaseCheck
+from dev.fanout_lib.review.review import Pipeline, actionable
+from dev.fanout_lib.review.review_prompts import system_prompt
+from dev.fanout_lib.target import SERVER_TARGET, Target
 
 
 def test_an_implementer_with_no_pr_ends_the_run_before_any_review(tmp_path):
@@ -489,7 +489,7 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
 def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path):
     """systemd opens the file without truncating it, and status reads its last result line,
     so a line an agent planted past the report's end would otherwise win."""
-    from fanout_lib.review_unit import write_report
+    from dev.fanout_lib.review_unit import write_report
 
     planted = json.dumps(_report(f"Opened {PR}")) + "\n"
     report = tmp_path / "report.json"
@@ -501,7 +501,7 @@ def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path)
 
 
 def test_the_review_unit_exits_1_when_its_report_is_an_error():
-    from fanout_lib.review_unit import exit_code
+    from dev.fanout_lib.review_unit import exit_code
 
     assert exit_code(_report("failed: no PR", is_error=True)) == 1
     assert exit_code(_report(f"Opened {PR}")) == 0

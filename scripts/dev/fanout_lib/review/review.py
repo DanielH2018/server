@@ -76,13 +76,11 @@ from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
-from fanout_lib.brief import lands
-from fanout_lib.review.held_hooks import (
+from dev.fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
+from dev.fanout_lib.brief import lands
+from dev.fanout_lib.review.held_hooks import (
     labelled,
     pointed_settings,
     read_hooks,
@@ -91,7 +89,7 @@ from fanout_lib.review.held_hooks import (
     with_batch_env,
     write_hooks,
 )
-from fanout_lib.review.review_prompts import (
+from dev.fanout_lib.review.review_prompts import (
     FINDINGS_SCHEMA,
     anti_patterns,
     file_prompt,
@@ -100,23 +98,23 @@ from fanout_lib.review.review_prompts import (
     review_prompt,
     system_prompt,
 )
-from fanout_lib.review.fix_round import fix_rounds
-from fanout_lib.review.base_check import BaseCheck, unproven_tests
-from fanout_lib.review.processes import otel_attributes, reaping, run_process
-from fanout_lib.review.review_ci import (
+from dev.fanout_lib.review.fix_round import fix_rounds
+from dev.fanout_lib.review.base_check import BaseCheck, unproven_tests
+from dev.fanout_lib.review.processes import otel_attributes, reaping, run_process
+from dev.fanout_lib.review.review_ci import (
     awaits_ci,
     ci_gate,
     ready_gate,
     server_lands,
 )
-from fanout_lib.review.conflict_resume import land_resolving
-from fanout_lib.review.review_land import (
+from dev.fanout_lib.review.conflict_resume import land_resolving
+from dev.fanout_lib.review.review_land import (
     LAND_MARGIN_S,
     out_of_time,
     release,
 )
-from fanout_lib.review.review_land import report as landing_report
-from fanout_lib.review.review_record import (
+from dev.fanout_lib.review.review_land import report as landing_report
+from dev.fanout_lib.review.review_record import (
     Phase,
     Record,
     actionable,
@@ -125,14 +123,14 @@ from fanout_lib.review.review_record import (
     held_for_findings,
     issues_section,
 )
-from fanout_lib.launch import (
+from dev.fanout_lib.launch import (
     REVIEW_RUNTIME_MAX_S,
     SYSTEM_PROMPT_FILE,
     stop_hook_settings,
 )
-from fanout_lib.prompt_tool import prompt_tool_args
-from fanout_lib.sizing import REVIEWER
-from fanout_lib.target import Target
+from dev.fanout_lib.prompt_tool import prompt_tool_args
+from dev.fanout_lib.sizing import REVIEWER
+from dev.fanout_lib.target import Target
 
 # The checkout this module was loaded from: the batch worktree for this repo, the batch's
 # `.fanout/server` snapshot for another repo. Both are trees the implementer can write.

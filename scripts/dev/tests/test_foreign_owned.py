@@ -8,7 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_foreign_owned.py
 import os
 from pathlib import Path
 
-from foreign_owned import foreign_owned_advice, foreign_owned_paths
+from dev.foreign_owned import foreign_owned_advice, foreign_owned_paths
 
 
 def _venv_with_pycache(root: Path) -> tuple[Path, Path]:

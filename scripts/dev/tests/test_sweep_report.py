@@ -1,5 +1,5 @@
 import pytest
-from sweep_report import TITLE, report
+from dev.sweep_report import TITLE, report
 
 REPO = "o/r"
 RUN = "https://github.com/o/r/actions/runs/1"

@@ -12,8 +12,8 @@ import subprocess
 import pytest
 
 from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
-from fanout_lib.review.review_ci import (
+from dev.fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
+from dev.fanout_lib.review.review_ci import (
     CI_RECHECK_S,
     CI_SLICE_S,
     CI_WAIT_MAX_S,
@@ -22,9 +22,9 @@ from fanout_lib.review.review_ci import (
     READY_POLL_S,
     READY_WAIT_S,
 )
-from fanout_lib.review.review_land import LAND_MARGIN_S, WAIT_MARGIN_S
-from fanout_lib.status import BLOCKER, PR_URL
-from fanout_lib.target import Target
+from dev.fanout_lib.review.review_land import LAND_MARGIN_S, WAIT_MARGIN_S
+from dev.fanout_lib.status import BLOCKER, PR_URL
+from dev.fanout_lib.target import Target
 
 PASSED = (0, "WAIT: passed abcd1234: 20 check runs passed\n")
 FAILED = (1, "WAIT: failed abcd1234: 1 failed: pytest\n")

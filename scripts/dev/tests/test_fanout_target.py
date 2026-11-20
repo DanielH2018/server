@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from fanout_lib.launch import (
+from dev.fanout_lib.launch import (
     SYSTEM_PROMPT_FILE,
     LaunchError,
     create_worktree_command,
@@ -23,7 +23,7 @@ from fanout_lib.launch import (
     systemd_run_command,
     unit_name,
 )
-from fanout_lib.target import SERVER_TARGET, Target, resolve, server_checkout
+from dev.fanout_lib.target import SERVER_TARGET, Target, resolve, server_checkout
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.proc_testing import run as proc_run
 from lib.repo_paths import PRIMARY_CHECKOUT, REPO as REPO_ROOT

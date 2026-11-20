@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime
 
-from fanout_lib.stops import load_stops, stop_lines
+from dev.fanout_lib.stops import load_stops, stop_lines
 
 
 def test_stops_list_each_stopped_batch_in_the_window_with_its_blocker(tmp_path):

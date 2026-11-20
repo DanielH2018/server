@@ -11,18 +11,16 @@ from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import APPLY_OWED, DESIGN_HEADING, DESIGN_RULES, fence_for
-from fanout_lib.review.review_land import LAND_SH
+from dev.fanout_lib.brief import APPLY_OWED, DESIGN_HEADING, DESIGN_RULES, fence_for
+from dev.fanout_lib.review.review_land import LAND_SH
 
 if TYPE_CHECKING:
-    from fanout_lib.review.review_ci import Failure
-    from fanout_lib.review.review_land import Landing
-    from fanout_lib.review.review_record import Record
+    from dev.fanout_lib.review.review_ci import Failure
+    from dev.fanout_lib.review.review_land import Landing
+    from dev.fanout_lib.review.review_record import Record
 
 HYGIENE_SKILL = (
     Path.home() / ".claude" / "skills" / "test-scenario-hygiene" / "SKILL.md"

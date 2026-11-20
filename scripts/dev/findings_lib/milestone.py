@@ -43,10 +43,7 @@ from collections.abc import Callable, Mapping
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import Issue
 from lib.gh import gh as real_gh, gh_json as real_gh_json

@@ -2,9 +2,9 @@
 
 import socket
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.launch_gates import refuse_shared_files, shared_files
-from fanout_lib.place import main
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.launch_gates import refuse_shared_files, shared_files
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"

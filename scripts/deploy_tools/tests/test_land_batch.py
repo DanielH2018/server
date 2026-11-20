@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import pytest
 
-import tested_tree
+from dev import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
 from deploy_tools.land_lib import batch, line, live_limit, turn

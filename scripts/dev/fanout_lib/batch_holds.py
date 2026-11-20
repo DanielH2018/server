@@ -20,13 +20,11 @@ from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.manifest import MANIFEST_DIR, Batch, all_runs
-from fanout_lib.target import SERVER
-from fanout_lib.transport import run_command
+from dev.fanout_lib.manifest import MANIFEST_DIR, Batch, all_runs
+from dev.fanout_lib.target import SERVER
+from dev.fanout_lib.transport import run_command
 
 # Measured 2026-10-12 from daniel-box: `systemctl --user is-active` answers in 0.28-0.52s over
 # ssh to daniel-server and in 0.01-0.02s locally. The ssh leg's own ConnectTimeout is 8s, so

@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.launch import (
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.launch import (
     REVIEW_RUNTIME_MAX_S,
     RUNTIME_MAX_S,
     SYSTEM_PROMPT_FILE,
@@ -28,7 +28,7 @@ from fanout_lib.launch import (
     worktree_path,
     write_brief_command,
 )
-from fanout_lib.manifest import (
+from dev.fanout_lib.manifest import (
     Batch,
     Manifest,
     load,
@@ -36,8 +36,8 @@ from fanout_lib.manifest import (
     save,
     unused_run_id,
 )
-from fanout_lib.sizing import DEFAULT
-from fanout_lib.transport import REPO
+from dev.fanout_lib.sizing import DEFAULT
+from dev.fanout_lib.transport import REPO
 from _fanout_fakes import as_operator, fake_tools, ok
 
 from lib.proc_testing import fake_bin
@@ -59,7 +59,7 @@ def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
     # Assert on the pure argv builder rather than driving run_command through a real ssh
     # call: leakguard shims `ssh` on PATH and fails the test at teardown the moment it's
     # invoked — stubbed or not — for having "reached outside the test process".
-    from fanout_lib.transport import SSH_OPTS, _argv
+    from dev.fanout_lib.transport import SSH_OPTS, _argv
 
     assert _argv("daniel-server", "echo hi", "daniel-box") == [
         "ssh",
@@ -73,7 +73,7 @@ def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
 def test_the_local_leg_pins_the_user_bus_when_the_shell_has_none():
     """FLAGGED half: an interactive session's shell exports neither variable, and
     `systemd-run --user` then dies with "Failed to connect to bus: No medium found"."""
-    from fanout_lib.transport import local_env
+    from dev.fanout_lib.transport import local_env
 
     env = local_env({"PATH": "/usr/bin"}, 1000)
     assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
@@ -84,7 +84,7 @@ def test_the_local_leg_pins_the_user_bus_when_the_shell_has_none():
 def test_the_local_leg_keeps_a_bus_the_shell_already_named():
     """CLEAN half: a shell that set its own runtime dir gets a bus derived from THAT, and a
     bus it named outright is left alone."""
-    from fanout_lib.transport import local_env
+    from dev.fanout_lib.transport import local_env
 
     derived = local_env({"XDG_RUNTIME_DIR": "/run/user/7"}, 1000)
     assert derived["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/7/bus"
@@ -99,7 +99,7 @@ def test_run_command_hands_the_pinned_bus_to_the_local_child(monkeypatch):
     so leakguard has nothing to object to."""
     import os
 
-    from fanout_lib.transport import run_command
+    from dev.fanout_lib.transport import run_command
 
     monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
     monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)

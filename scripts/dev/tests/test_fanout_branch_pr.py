@@ -11,9 +11,9 @@ import dataclasses
 import json
 
 from _review_fakes import BRANCH, _finding, _pipeline, _report
-from fanout_lib.branch_pr import own_pr, parse_branch_prs, parse_merged_before
-from fanout_lib.manifest import Batch
-from fanout_lib.status import parse_status, with_own_pr
+from dev.fanout_lib.branch_pr import own_pr, parse_branch_prs, parse_merged_before
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.status import parse_status, with_own_pr
 
 FOREIGN = "https://github.com/DanielH2018/server/pull/6449"
 OWN = "https://github.com/DanielH2018/server/pull/6523"

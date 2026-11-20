@@ -30,7 +30,7 @@ from lib.k8s_yaml import make_lookup
 from lib.render_guard import BASE_CONTEXT, load_yaml, render_or_error
 from lib.repo_paths import ALL_VARS, K8S_ROLES
 
-import new_k8s_service as scaffold
+from dev import new_k8s_service as scaffold
 
 
 @pytest.fixture

@@ -13,17 +13,12 @@ too, at the end, for the same reason, with the fetch of CI's pytest leg logs tha
 the table and `leg_spread` read.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 import json
 import re
 import statistics
 from pathlib import Path
 
-import tested_tree
+from dev import tested_tree
 from lib import gh as gh_mod
 from lib.repo_paths import REPO
 

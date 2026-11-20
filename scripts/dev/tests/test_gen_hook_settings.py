@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-import gen_hook_settings as g
+from dev import gen_hook_settings as g
 from lib.proc_testing import run
 
 # Named members of the live census. A registered `.py` runs through `run-hook.sh`; a library

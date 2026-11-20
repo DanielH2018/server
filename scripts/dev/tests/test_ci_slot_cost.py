@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from ci_slot_cost import (
+from dev.ci_slot_cost import (
     empty_leg_line,
     head_line,
     main,

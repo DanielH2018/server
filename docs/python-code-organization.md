@@ -135,20 +135,13 @@ A directly run script gets only its own directory as `sys.path[0]` ([sys.path
 initialization][syspath]). `python -m scripts.dir.name` would put the current directory
 first instead, but that requires every cron and every hook to start from the repo root, and
 the role-shipped programs have no repo root at all. `scripts/` itself is the installed import
-root ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so a dotted import such as
-`from lib.repo_paths import REPO` needs no insert. A module that imports a sibling in another
-directory by bare name still carries its own insert of that directory, until its area is
-qualified:
+root ([ADR-0039](adr/0039-scripts-is-installed-in-place.md)), so every module under it
+imports dotted, as `from lib.repo_paths import REPO` or `from dev.fanout_lib import place`
+does, and carries no insert. Slice 3 of the scripts packaging milestone qualified every area.
+The inserts that remain reach a directory outside the root: `lib.host_modules` for
+`hosts/lib`, a module a host package copies, and the few that reach the repo's `tests/`.
 
-```python
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "dev"))
-import fanout_lib
-```
-
-The bootstrap goes on the module that needs it, never on a shared module, because a single
+Such an insert goes on the module that needs it, never on a shared module, because a single
 insert in an imported module only works for whoever imports it first.
 `scripts/tests/test_script_bootstraps_present.py` resolves the AST of every `scripts/**`
 module outside a `tests/` directory and evaluates what each insert actually puts on the
