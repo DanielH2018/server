@@ -573,9 +573,20 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   namespace and the Deployment come from the entry, never from the instance
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_listed_workload_is_restarted_by_the_entrys_names_and_reported`).
   The allowlist is `restart_allowlist` in
-  `hosts/components/claude-code/templates/claude-triage-pins.j2`, and it is empty, so every
-  request is refused
+  `hosts/components/claude-code/templates/claude-triage-pins.j2`, and it lists `docs`. A name
+  off it is refused
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_an_empty_allowlist_refuses_every_name_and_posts_nothing`).
+  Each entry is a one-replica rolling Deployment that a failed restart leaves serving, alone
+  in its role and outside the alert plane
+  (`hosts/tests/test_claude_restart_allowlist.py::test_every_listed_workload_is_clean`,
+  `hosts/tests/test_claude_restart_allowlist.py::test_a_deployment_a_restart_could_take_down_is_flagged`).
+  The poller routes every fall of a listed service nowhere, and every fall labelled
+  `unmapped` while a service is listed, so a restart opens no triage episode
+  (`hosts/components/claude-code/tests/test_claude_triage_poll_restartable.py::test_a_fall_of_a_restartable_service_opens_nothing_whatever_the_table_says`).
+  A poll that cannot read the listed services fails and pages rather than route them
+  (`hosts/components/claude-code/tests/test_claude_triage_poll_restartable.py::test_a_poll_that_cannot_read_the_restartable_services_fails`),
+  and a `poll_routes` key that names a listed service fails
+  `hosts/tests/test_claude_restart_allowlist.py::test_a_route_naming_a_listed_service_is_flagged`.
 - **Identity:** root, because only root reads the k3s admin kubeconfig. No polkit rule ships,
   so only root starts the unit
   (`hosts/tests/test_claude_restart_broker.py::test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule`).
@@ -605,9 +616,9 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   failed, because kubectl prints success for an identity that cannot write
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_restart_that_changed_no_generation_fails_and_still_counts`).
   A refusal exits 0 and posts nothing.
-- **Next-run review:** before the first workload is listed, run the drill in
-  `docs/claude-agent-user.md` and read the verdict. After the first real restart, wait one Flux
-  reconcile and check that the Deployment holds one new ReplicaSet, not two.
+- **Next-run review:** after the first real restart, wait one Flux reconcile and check that
+  the Deployment holds one new ReplicaSet, not two. Before listing another workload, read
+  `log.jsonl` for what the restarts of `docs` did.
 
 Applying it: a new version of daniel-box's host package, which its updater installs.
 

@@ -19,6 +19,9 @@ table does not route opens no run. The poller logs it as skipped, and in shadow 
 to `shadow.jsonl` with `"skipped": "unrouted"`, so the week of records the operator reads before
 arming shows what the table dropped. An unreadable table routes nothing.
 
+`RESTART_SERVICES` is a JSON list of the services on the restart broker's allowlist. A fall of
+one is unrouted whatever the table says, so a restart cannot open the next episode.
+
 The first poll after a state file is created is a baseline. It records what is already firing
 and starts nothing, so arming never fires on every known alert at once.
 
@@ -63,6 +66,8 @@ HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63
 # The POLL_ROUTES profile that opens nothing.
 NO_PROFILE = "none"
+# The `service` a workload alert carries when workload-service.yaml cannot name its role.
+UNMAPPED = "unmapped"
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage-poll"
 
@@ -204,9 +209,38 @@ def parse_routes(text: str) -> dict[str, str]:
     return routes
 
 
-def route(entry: dict, routes: dict[str, str]) -> str | None:
-    """The profile a down key's fall opens, or None when the table does not route it."""
+def parse_services(cfg: dict[str, str]) -> frozenset[str]:
+    """The services RESTART_SERVICES lists.
+
+    Raises:
+        ValueError: the key is missing or is not a JSON list of strings. The poll fails rather
+            than route a restartable service, which an empty set would do.
+    """
+    text = cfg.get("RESTART_SERVICES")
+    try:
+        services = json.loads(text or "")
+    except ValueError:
+        services = None
+    if not isinstance(services, list) or not all(isinstance(s, str) for s in services):
+        raise ValueError(f"RESTART_SERVICES is not a JSON list of services: {text!r}")
+    return frozenset(services)
+
+
+def route(
+    entry: dict, routes: dict[str, str], restartable: frozenset[str] = frozenset()
+) -> str | None:
+    """The profile a down key's fall opens, or None when nothing routes it.
+
+    A service in `restartable` is on the restart broker's allowlist, and no fall of it opens
+    an episode, whatever the table says: a restart must not be able to open the next episode.
+    While any service is restartable, a fall with the service `unmapped` opens nothing either.
+    A workload alert carries that label while its mapping series is missing, so the fall may
+    be a restarted workload's.
+    """
     monitor = entry.get("monitor", "")
+    service = entry.get("service", "")
+    if service in restartable or (restartable and service == UNMAPPED):
+        return None
     profile = routes.get(f"{monitor}:{entry.get('service', '')}", routes.get(monitor))
     return None if profile == NO_PROFILE else profile
 
@@ -233,6 +267,7 @@ def step(
     storm_size: int,
     routes: dict[str, str],
     unknown: set[str] | frozenset[str] = frozenset(),
+    restartable: frozenset[str] = frozenset(),
 ) -> tuple[dict, list[dict]]:
     """Advance the per-key state by one poll; return (new state, episodes to open).
 
@@ -271,7 +306,7 @@ def step(
     if ready and not (hold or muted):
         by_profile: dict[str, list[str]] = {}
         for k in sorted(ready):
-            profile = route(down[k], routes)
+            profile = route(down[k], routes, restartable)
             if profile is None:
                 episodes.append(
                     {"id": episode_id(k, now), "skipped": "unrouted", **down[k]}
@@ -400,6 +435,7 @@ def main(
         int(cfg.get("POLL_STORM_SIZE", "3")),
         parse_routes(cfg.get("POLL_ROUTES", "{}")),
         unknown,
+        parse_services(cfg),
     )
     for episode in episodes:
         detail = json.dumps(episode, sort_keys=True)
