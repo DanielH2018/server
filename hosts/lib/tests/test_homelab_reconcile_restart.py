@@ -352,6 +352,24 @@ def test_a_secrets_json_reconcile_cannot_read_fails_the_run_and_keeps_the_legacy
     assert node.applied()["retired"] == []
 
 
+@pytest.mark.parametrize("destination", ["../outside.conf", "/etc/passwd"])
+def test_an_output_outside_its_root_is_refused_though_a_file_exists_there(
+    node, destination
+):
+    node.secrets(
+        outputs=[{"destination": destination, "persist": True, "dependents": [NUT]}]
+    )
+    (node.root / "var/lib/outside.conf").write_text("rendered\n")
+    node.state["effects"] = {}
+    node.manifest["legacy"].append({"path": "/usr/local/bin/old"})
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "secrets.json is unusable" in result.stderr
+    assert node.applied()["retired"] == []
+
+
 # A package without `secrets-unit`.
 
 

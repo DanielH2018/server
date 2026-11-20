@@ -37,11 +37,6 @@ renders it. `PlaceholderRender.sops_manifests` keeps each dropped file's sentine
 `docs/archive/render/r2-secret-placeholders.md` the plan.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import enum
 import json
 import re

@@ -53,6 +53,17 @@ def test_every_shipped_render_is_clean(tmp_path):
     assert host_packages.lint([tmp_path]) == []
 
 
+def test_a_tree_renders_with_its_own_scripts_root(tmp_path):
+    tree = tmp_path / "tree"
+    (tree / "hosts" / "fixture-host").mkdir(parents=True)
+    (tree / "hosts" / "fixture-host" / "package.yml").write_text("")
+    renderer = tree / "scripts" / "renderer" / "homelab_render.py"
+    renderer.parent.mkdir(parents=True)
+    (tree / "scripts" / "fixture_only_in_tree.py").write_text("")
+    renderer.write_text("import fixture_only_in_tree\n")
+    assert host_packages.render(tree, tmp_path / "out") == 0
+
+
 def test_a_tree_without_hosts_renders_no_package(tmp_path):
     assert host_packages.render(tmp_path, tmp_path / "out") == 0
     assert not (tmp_path / "out").exists()

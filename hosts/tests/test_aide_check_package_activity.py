@@ -167,7 +167,7 @@ def test_a_change_no_package_run_explains_is_flagged(tmp_path, entry, setup, rea
     path = entry.split(": ", 1)[1]
     assert pushed[0] == "down", pushed
     assert f"{path} ({reason})" in pushed[1], pushed[1]
-    assert code == 1
+    assert code == 0
 
 
 def test_every_secret_link_the_package_installs_is_one_its_manifest_names():

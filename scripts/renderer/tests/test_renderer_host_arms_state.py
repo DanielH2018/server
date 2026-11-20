@@ -72,7 +72,7 @@ def test_a_network_renders_with_the_host_context_and_reconcile_accepts_the_secti
     }
     assert manifest["reconcilers"] == ["libvirt"]
     parsed = _reconcile().parse_manifest(json.dumps(manifest))
-    assert parsed["arms"]["libvirt"] == manifest["libvirt"]
+    assert parsed.arms["libvirt"] == manifest["libvirt"]
 
 
 @pytest.mark.parametrize(
@@ -171,7 +171,7 @@ def test_lines_render_with_the_host_context_and_their_activation_joins_the_manif
     assert manifest["reconcilers"] == ["lines"]
     reconcile = _reconcile()
     assert reconcile.lines.valid(manifest["lines"])
-    assert reconcile.parse_manifest(json.dumps(manifest))["activations"]
+    assert reconcile.parse_manifest(json.dumps(manifest)).activations
 
 
 @pytest.mark.parametrize(
