@@ -37,7 +37,8 @@ groups:
           service: loki-homelab
         annotations:
           summary: >-
-            The log shippers dropped {{ $value | printf "%.0f" }} entries in the last hour.
+            loki-homelab: the log shippers dropped {{ $value | printf "%.0f" }} entries in the last
+            hour.
           description: >-
             Alloy gave up on more than 3000 log entries in an hour, so those lines never reached
             Loki. Read loki_write_dropped_entries_total by reason and instance, then the Alloy
@@ -60,7 +61,8 @@ groups:
           service: loki-homelab
         annotations:
           summary: >-
-            The homelab Loki discarded {{ $value | printf "%.0f" }} entries as {{ $labels.reason }} in the last hour.
+            loki-homelab: discarded {{ $value | printf "%.0f" }} entries as {{ $labels.reason }} in
+            the last hour.
           description: >-
             Loki discarded more than 3000 entries in an hour for the reason {{ $labels.reason }}.
             too_far_behind means entries arrived outside Loki's accept window, a clock or
@@ -83,7 +85,8 @@ groups:
           service: observability
         annotations:
           summary: >-
-            The telemetry Loki discarded {{ $value | printf "%.0f" }} entries as {{ $labels.reason }} in the last hour.
+            observability: the telemetry Loki discarded {{ $value | printf "%.0f" }} entries as {{
+            $labels.reason }} in the last hour.
           description: >-
             The telemetry Loki discarded more than 3000 entries in an hour for the reason
             {{ $labels.reason }}, so Claude Code's logs are being lost. Read
@@ -103,7 +106,10 @@ groups:
           service: observability
         annotations:
           summary: >-
-            The OTel collector failed to export through {{ range $i, $s := query "sum by (exporter) (increase({__name__=~'otelcol_exporter_send_failed_.*'}[15m])) > 0" | sortByLabel "exporter" }}{{ if $i }}, {{ end }}{{ $s.Labels.exporter }}{{ else }}an unnamed exporter{{ end }}.
+            observability: the OTel collector failed to export through {{ range $i, $s := query "sum
+            by (exporter) (increase({__name__=~'otelcol_exporter_send_failed_.*'}[15m])) > 0" |
+            sortByLabel "exporter" }}{{ if $i }}, {{ end }}{{ $s.Labels.exporter }}{{ else }}an
+            unnamed exporter{{ end }}.
           description: >-
             The collector gave up on exporting telemetry in the last 15 minutes, so the data
             reaches neither Loki, Prometheus nor Tempo and no other counter records the loss.
@@ -117,7 +123,7 @@ groups:
           severity: warning
           service: observability
         annotations:
-          summary: Tempo's blocklist poll failed.
+          summary: "observability: Tempo's blocklist poll failed."
           description: >-
             Tempo's blocklist poll failed in the last 15 minutes, so stored traces are
             unsearchable and retention deletes nothing. Read the Tempo pod's log for the poll
@@ -132,7 +138,7 @@ groups:
           severity: warning
           service: loki-homelab
         annotations:
-          summary: Prometheus has lost the log shipper's dropped-entries counter.
+          summary: "loki-homelab: Prometheus has lost the log shipper's dropped-entries counter."
           description: >-
             No loki_write_dropped_entries_total series exists for the alloy job, so the job is
             gone from prometheus.yml or Alloy renamed the counter. LogShipperDroppingEntries
