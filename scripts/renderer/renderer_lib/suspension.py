@@ -17,6 +17,7 @@ from collections.abc import Mapping
 import yaml
 
 from lib import yaml_fast
+from renderer.renderer_lib.documents import parse_documents
 
 # The flux role's old lever over its sync objects, refused when true (D5 step 29).
 SYNC_SUSPEND_KEY = "flux_sync_suspend"
@@ -51,21 +52,16 @@ def suspend_false(files: Mapping[str, str]) -> list[str]:
         if not path.endswith((".yaml", ".yml")):
             continue
         try:
-            docs = list(yaml_fast.safe_load_all(files[path]))
+            docs = parse_documents([files[path]])
         except yaml.YAMLError:
             continue
-        for doc in docs:
-            if not isinstance(doc, dict):
-                continue
+        for obj, doc in docs:
             group = str(doc.get("apiVersion", "")).split("/")[0]
-            spec = doc.get("spec")
             if (
                 group.endswith(FLUX_API_GROUP_SUFFIX)
-                and isinstance(spec, dict)
-                and spec.get("suspend") is False
+                and obj.spec.get("suspend") is False
             ):
-                name = (doc.get("metadata") or {}).get("name", "?")
-                found.append(f"{path} {doc.get('kind')}/{name}")
+                found.append(f"{path} {obj.kind}/{obj.name or '?'}")
     return found
 
 
