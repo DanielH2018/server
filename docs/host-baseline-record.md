@@ -306,11 +306,16 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
   `$CREDENTIALS_DIRECTORY`, so reading the script never prints the key (#4607).
 - **The authoritative source is the chezmoi eval engine's own grading**
   (`~/.local/share/chezmoi/evals/run-evals.mjs`) — never a cached or hand-edited report.
-- **Its abort valves** are the shared git-tree lock (a dirty tree or another in-flight commit
-  means the sweep's result is thrown away rather than recorded against a tree it did not grade)
-  and the unlanded-branch guard: an `evals-history/*` branch still on origin skips the run
-  rather than stacking a second one, and it reads origin rather than the open-PR list because a
-  failed `gh pr create` leaves a branch with no PR.
+- **It works in its own worktree**, `/var/lib/homelab/eval-run.d/tree`, checked out at the
+  primary checkout's HEAD and cleaned of every untracked and ignored file, so it grades, tests
+  and commits the tracked tree CI reads and never writes the primary checkout. It takes no
+  git-tree lock.
+- **Its abort valve** is the unlanded-branch guard: an `evals-history/*` branch still on origin
+  skips the run rather than stacking a second one, and it reads origin rather than the open-PR
+  list because a failed `gh pr create` leaves a branch with no PR.
+- **A sweep it could not publish is kept** at
+  `/var/lib/homelab/eval-run.d/unpublished-history.json`, on a failed suite, commit or push,
+  because the next run's tree cleaning discards the tree's copy.
 - **Each sweep's per-run output is kept** under `/var/lib/homelab/eval-run.d/sweeps/<UTC
   stamp>/`: every agent's `--json` report (agent text, assertion failures, judge reason) and the
   last MiB of the console log. The newest 8 sweeps stay. Read these before editing a case that
