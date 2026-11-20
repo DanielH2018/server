@@ -110,8 +110,8 @@ commands from every reconcile run, and costs 26 source lines. The census holds t
 On 2026-11-19 the operator raised the ceiling from 1,450 to 1,500 source lines. The reason
 is #9263: reconcile parses its manifest into typed records, so a tagged union of legacy
 entry kinds, not the keys an entry happens to carry, decides what step 4 retires. The
-records cost about 50 source lines. `RULED_RAISE` holds both raises, ruled in #8651 and
-#9333.
+records cost about 50 source lines. The ruling is #9333, and `RULED_RAISE` holds both
+raises.
 
 ### `homelab-checkout-sync` keeps the CI gate and does not read `DEPLOY_HOLD`
 
