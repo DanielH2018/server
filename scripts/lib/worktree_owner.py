@@ -8,6 +8,9 @@ leaves it unset, and its branches carry no `+` prefix.
 
 `findings.py` reads this before judging a claim (#4103), and `fanout.py place` reads the
 same variable to name a batch branch, so the two cannot disagree on whose branch is whose.
+
+The desktop app names a session branch `claude/<slug>` instead. That form carries no user
+prefix, so it reads as the operator's. `SESSION_BRANCH_PREFIXES` lists both forms.
 """
 
 import os
@@ -15,6 +18,9 @@ import re
 from collections.abc import Mapping
 
 WORKTREE_PREFIX_ENV = "CLAUDE_WORKTREE_PREFIX"
+
+# The branch forms a session worktree is created on: EnterWorktree's, then the desktop app's.
+SESSION_BRANCH_PREFIXES = ("worktree-", "claude/")
 
 _PREFIXED = re.compile(r"^worktree-([^+/]+)\+")
 
