@@ -26,7 +26,7 @@ method, so it changes nothing even with a token that could. A read that fails, a
 that does not exist, export no series for the gauges they feed rather than a 0, and
 DeployPipelineExporterAbsent pages a gauge that stays missing.
 
-Design: docs/target-architecture/deploy/d2-first-leaf.md, *The deploy-pipeline exporter and its
+Design: docs/archive/deploy/d2-first-leaf.md, *The deploy-pipeline exporter and its
 alerts*.
 """
 

@@ -18,7 +18,7 @@ job as three gauges per row, labelled `check="<row>"`, and one gauge for the who
   expires, from the `domain_registration` row's RDAP read. It is absent until a read succeeds.
 
 The value is the end state's verdict, taken before suppression
-(docs/target-architecture/monitoring/m6-retire-kuma.md, *The bridge as an exporter*). A row whose
+(docs/archive/monitoring/m6-retire-kuma.md, *The bridge as an exporter*). A row whose
 gate reads down exports 0 with a fresh timestamp and its body is not called.
 
 It reuses `deploy_pipeline.Exposition`'s listener, on its own port so each scrape job sees only
