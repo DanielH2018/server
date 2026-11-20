@@ -7,4 +7,6 @@ Type=oneshot
 SyslogLevel=notice
 SyslogIdentifier=systemd-units
 Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+# Holds paged-by, the check's paged_by decision for each failure it has seen.
+StateDirectory=homelab-systemd-units
 ExecStart=/usr/lib/homelab/systemd-units-check

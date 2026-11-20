@@ -7,8 +7,9 @@
 # plus homelab_systemd_failed_units with the count and one homelab_systemd_unit_failed series
 # per failed unit, labelled with the unit's name. A unit whose OnFailure=homelab-alert@ instance
 # has delivered its Discord page since the unit failed also carries paged_by="homelab-alert".
-# The run that first finds a unit failed decides the label, and later runs copy it from the
-# previous file while the unit stays failed.
+# The run that first finds a failure decides the label. It records the decision in
+# $STATE_DIRECTORY/paged-by, keyed by the boot ID and the unit's InactiveEnterTimestampMonotonic,
+# so later runs copy it for that same failure and decide again for a new one.
 # It exits non-zero only when systemctl cannot list the units or the textfile write fails.
 # Running it by hand is safe and does what the timer does.
 #
@@ -16,10 +17,11 @@
 # unit with no OnFailure= hook and no textfile verdict of its own would fail silently. The
 # SystemdUnits* rules in k8s/roles/observability/files/rules/host-checks.yaml read the file this
 # writes. Alertmanager sends a paged_by alert to its blackhole, so a unit whose hook delivered
-# pages once. A hook that is still retrying, or that never ran, when the unit is first found
+# pages once. A hook that is still retrying, or that never ran, when the failure is first found
 # leaves the label off for the whole failure, and Alertmanager pages for the unit. The label
 # never changes mid-failure, because a changed label set resolves the firing alert, and
-# Discord would receive a RESOLVED notice for a unit that is still failed.
+# Discord would receive a RESOLVED notice for a unit that is still failed. A unit that fails
+# again, or fails after a reboot, is a new failure and gets a new decision.
 #
 # System units only: a user manager's units belong to that user's session, and a failed one
 # says nothing about the host.
@@ -60,42 +62,60 @@ SUCCESS=$((COUNT == 0))
 # Prints the value of property $1 from the `systemctl show` output on stdin.
 prop() { awk -v key="$1" 'index($0, key "=") == 1 { print substr($0, length(key) + 2); exit }'; }
 
-# Succeeds when unit $1 names a homelab-alert@ instance in OnFailure= and that instance has
-# delivered since the unit last failed: inactive with Result=success, and inactive since a time
-# after the unit's own failure. A hook still retrying, or one that never ran, fails this.
+# Succeeds when the `systemctl show -p OnFailure -p InactiveEnterTimestampMonotonic` output in $1
+# names a homelab-alert@ instance that has delivered since the unit failed: inactive with
+# Result=success, and inactive since a time after the unit's own failure. A hook still retrying,
+# or one that never ran, fails this.
 hook_delivered() {
-  local props hook failed_at delivered_at
-  props=$(systemctl show -p OnFailure -p InactiveEnterTimestampMonotonic "$1") || return 1
-  hook=$(prop OnFailure <<<"$props" | tr ' ' '\n' | grep -m1 '^homelab-alert@') || return 1
-  failed_at=$(prop InactiveEnterTimestampMonotonic <<<"$props")
+  local hook failed_at props delivered_at
+  hook=$(prop OnFailure <<<"$1" | tr ' ' '\n' | grep -m1 '^homelab-alert@') || return 1
+  failed_at=$(prop InactiveEnterTimestampMonotonic <<<"$1")
   props=$(systemctl show -p ActiveState -p Result -p InactiveEnterTimestampMonotonic "$hook") || return 1
   delivered_at=$(prop InactiveEnterTimestampMonotonic <<<"$props")
   [[ $(prop ActiveState <<<"$props") == inactive && $(prop Result <<<"$props") == success ]] &&
     ((${delivered_at:-0} > ${failed_at:-0}))
 }
 
+# One line per failed unit: "<boot ID>:<InactiveEnterTimestampMonotonic> <paged|unpaged> <unit>".
+# The packaged unit's StateDirectory= sets STATE_DIRECTORY.
+STATE_FILE="${STATE_DIRECTORY:-/var/lib/homelab-systemd-units}/paged-by"
+PREVIOUS_STATE=$(cat "$STATE_FILE" 2>/dev/null)
+BOOT_ID=$(cat /proc/sys/kernel/random/boot_id)
+STATE=()
+
 # One series per failed unit, so SystemdUnitsFailed can name each unit in its summary. Unit
 # names carry systemd's \x2d escapes, and node_exporter rejects the whole file on a label value
 # with a backslash or quote the text format does not escape.
 PER_UNIT=()
-PREVIOUS=$(grep '^homelab_systemd_unit_failed{' "${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}/systemd-units.prom" 2>/dev/null)
 if ((COUNT > 0)); then
   PER_UNIT+=(
     "# HELP homelab_systemd_unit_failed 1 for each system unit in the failed state at the check's last run."
     "# TYPE homelab_systemd_unit_failed gauge"
   )
   while IFS= read -r unit; do
+    props=$(systemctl show -p OnFailure -p InactiveEnterTimestampMonotonic "$unit")
+    failure="${BOOT_ID}:$(prop InactiveEnterTimestampMonotonic <<<"$props")"
+    decision=$(F="$failure" U="$unit" awk '$1 == ENVIRON["F"] && $3 == ENVIRON["U"] { print $2; exit }' <<<"$PREVIOUS_STATE")
+    if [[ -z $decision ]]; then
+      decision=unpaged
+      hook_delivered "$props" && decision=paged
+    fi
+    STATE+=("$failure $decision $unit")
     escaped=${unit//\\/\\\\}
     escaped=${escaped//\"/\\\"}
-    series="homelab_systemd_unit_failed{check=\"systemd-units\",unit=\"${escaped}\""
-    if line=$(grep -m1 -F -e "${series}} 1" -e "${series},paged_by=\"homelab-alert\"} 1" <<<"$PREVIOUS"); then
-      PER_UNIT+=("$line")
-    elif hook_delivered "$unit"; then
-      PER_UNIT+=("${series},paged_by=\"homelab-alert\"} 1")
-    else
-      PER_UNIT+=("${series}} 1")
-    fi
+    paged_by=""
+    [[ $decision == paged ]] && paged_by=',paged_by="homelab-alert"'
+    PER_UNIT+=("homelab_systemd_unit_failed{check=\"systemd-units\",unit=\"${escaped}\"${paged_by}} 1")
   done <<<"$UNITS"
+fi
+
+# Without the state file every run decides afresh, as if each failure were new.
+if ! {
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX" 2>/dev/null) &&
+    { ((${#STATE[@]} == 0)) || printf '%s\n' "${STATE[@]}"; } >"$tmp" &&
+    mv "$tmp" "$STATE_FILE"
+}; then
+  logger -t systemd-units "cannot write ${STATE_FILE}"
 fi
 
 # A failed unit is the verdict, not this unit's failure: exiting 1 for it would list the checker

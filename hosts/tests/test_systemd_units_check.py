@@ -54,6 +54,7 @@ def _run(tmp_path, listed: str, rc: int = 0, shown: dict[str, str] | None = None
     (tmp_path / "listed").write_text(listed)
     show_dir = tmp_path / "show"
     show_dir.mkdir(exist_ok=True)
+    (tmp_path / "state").mkdir(exist_ok=True)
     for unit, props in (shown or {}).items():
         (show_dir / unit).write_text(props)
     stubs = fake_bin(
@@ -70,6 +71,7 @@ def _run(tmp_path, listed: str, rc: int = 0, shown: dict[str, str] | None = None
             **os.environ,
             "HOMELAB_LIB_DIR": str(CHECK_LIB.parent),
             "TEXTFILE_DIR": str(textfile),
+            "STATE_DIRECTORY": str(tmp_path / "state"),
             "LOGGER_OUT": str(tmp_path / "logged"),
         },
         stub_bin=stubs,
@@ -128,8 +130,8 @@ HOOK = f"homelab-alert@{HOOKED}.service"
 FAILED_AT = 5_000_000
 
 
-def _hooked_unit(on_failure: str = HOOK) -> str:
-    return f"OnFailure={on_failure}\nInactiveEnterTimestampMonotonic={FAILED_AT}\n"
+def _hooked_unit(on_failure: str = HOOK, failed_at: int = FAILED_AT) -> str:
+    return f"OnFailure={on_failure}\nInactiveEnterTimestampMonotonic={failed_at}\n"
 
 
 def _hook(state: str, result: str, inactive_since: int) -> str:
@@ -202,6 +204,36 @@ def test_a_unit_still_failed_keeps_the_label_set_of_the_run_that_found_it(
     _run(tmp_path, listed, shown={HOOKED: _hooked_unit(), HOOK: then})
     assert _unit_series(tmp_path) == [
         f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"{paged_by}}} 1'
+    ]
+
+
+def test_a_unit_that_fails_again_gets_a_new_decision(tmp_path):
+    listed = f"{HOOKED} loaded failed failed builder\n"
+    _run(tmp_path, listed, shown={HOOKED: _hooked_unit(), HOOK: DELIVERED})
+    refailed = _hooked_unit(failed_at=FAILED_AT + 10)
+    _run(tmp_path, listed, shown={HOOKED: refailed, HOOK: DELIVERED})
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"}} 1'
+    ]
+
+
+def test_a_decision_from_another_boot_is_not_copied(tmp_path):
+    for name, text in [
+        ("state/paged-by", f"another-boot:{FAILED_AT} paged {HOOKED}\n"),
+        (
+            "textfile/systemd-units.prom",
+            f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}",paged_by="homelab-alert"}} 1\n',
+        ),
+    ]:
+        (tmp_path / name).parent.mkdir()
+        (tmp_path / name).write_text(text)
+    _run(
+        tmp_path,
+        f"{HOOKED} loaded failed failed builder\n",
+        shown={HOOKED: _hooked_unit(), HOOK: RETRYING},
+    )
+    assert _unit_series(tmp_path) == [
+        f'homelab_systemd_unit_failed{{check="systemd-units",unit="{HOOKED}"}} 1'
     ]
 
 
