@@ -14,7 +14,12 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.sdk import Asset, dag, task
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import github_history as gh
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 from kubernetes.client import models as k8s
 
 WAREHOUSE_CONN = "warehouse"
@@ -87,8 +92,12 @@ def github_daily_rollup():
         finally:
             conn.close()
         problems = gh.quality_problems(day, rows)
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "github_daily_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 

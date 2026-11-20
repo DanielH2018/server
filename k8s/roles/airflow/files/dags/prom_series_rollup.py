@@ -14,7 +14,12 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import prom_rollup as pr
 from homelab_warehouse import prom_series as ps
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 
 WAREHOUSE_CONN = "warehouse"
 PROM_SERIES = Asset("warehouse://prom/series_daily")
@@ -69,8 +74,12 @@ def prom_series_rollup():
         finally:
             conn.close()
         problems = ps.series_problems(day, rows)
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "prom_series_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 

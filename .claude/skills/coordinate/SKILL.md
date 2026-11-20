@@ -153,10 +153,12 @@ from you. `place status` names the ones that do.
   park line names. A park line that opens `another landing has it` is the exception: run
   the `cc-wait land` command it quotes and read that landing's verdict. A park line ending
   `unattributed` also goes under `asks:` for the root.
-- **A landing that ends `merge-conflict` is `place resume`'s to resolve. Spawn no agent
-  for it.** Run `uv run python scripts/dev/fanout.py place resume <run-id> <batch>` from
+- **A PR that conflicts with master is `place resume`'s to resolve. Spawn no agent for
+  it.** That covers a landing that ends `merge-conflict` and a batch that ends
+  `needs-input: PR #N conflicts with master`, whose PR conflicted before CI ran and has no
+  landing. Run `uv run python scripts/dev/fanout.py place resume <run-id> <batch>` from
   this session, then `cc-wait fanout <run-id>`. It restarts the batch's implementer to
-  rebase, has a fresh reviewer read the resolution, and lands the PR again. A PR the
+  rebase, has a fresh reviewer read the resolution, and lands the PR. A PR the
   lander's rule holds ends `needs-input: the conflict resolution of <PR> passed its
   review`: land it with the `land.sh` command that line names. A refusal
   names its reason and the command that fits. Past

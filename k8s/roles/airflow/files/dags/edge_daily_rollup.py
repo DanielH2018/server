@@ -14,7 +14,12 @@ from airflow.sdk.exceptions import AirflowSkipException
 from airflow.timetables.interval import CronDataIntervalTimetable
 from homelab_warehouse import edge_counts as ec
 from homelab_warehouse import prom_rollup as pr
-from homelab_warehouse.warehouse import ensure_schema, read_partition, replace_partition
+from homelab_warehouse.warehouse import (
+    ensure_schema,
+    finish_check,
+    read_partition,
+    replace_partition,
+)
 
 WAREHOUSE_CONN = "warehouse"
 EDGE_COUNTS_DAILY = Asset("warehouse://edge/counts_daily")
@@ -83,8 +88,12 @@ def edge_daily_rollup():
         finally:
             conn.close()
         problems = ec.quality_problems(day, rows)
-        if problems:
-            raise ValueError("quality check failed:\n" + "\n".join(problems))
+        finish_check(
+            PostgresHook(postgres_conn_id=WAREHOUSE_CONN).get_conn,
+            "edge_daily_rollup",
+            day,
+            problems,
+        )
 
     load() >> check()
 

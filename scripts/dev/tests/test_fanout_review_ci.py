@@ -479,7 +479,11 @@ def test_a_conflicting_pr_that_starts_no_ci_is_blamed_on_the_conflict_not_action
     pipeline, run, _, _ = _mergeable_batch(tmp_path, ["CONFLICTING"])
     final = pipeline.run_all()["result"]
     assert final.startswith("needs input: PR #4000 conflicts with master")
-    assert "Merge or rebase master into the branch and push" in final
+    assert (
+        "Run `fanout.py place resume <run-id> <batch>` once this unit has ended"
+        in final
+    )
+    assert "Merge or rebase" not in final
     assert "gh pr ready" not in final and "Actions" not in final
     # The PR stays ready: it cannot merge while it conflicts, and the push starts CI.
     assert ("undo",) not in run.log and run.ci_calls == []
