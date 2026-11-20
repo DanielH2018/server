@@ -1361,6 +1361,165 @@
       ],
       "title": "DNS queries per client per day",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Pull requests merged into this repo per day, by author.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 113
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, key AS metric, n AS value FROM github.counts_daily WHERE metric = 'prs_merged' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "PRs merged per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Wall-clock time the repo's Actions runs took per day, by workflow, for the eight busiest workflows over the time range.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 113
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH r AS (SELECT day, key, sum(seconds) AS s FROM github.counts_daily WHERE metric = 'ci_runs' AND $__timeFilter(day) GROUP BY 1, 2), top AS (SELECT key FROM r GROUP BY key ORDER BY sum(s) DESC LIMIT 8) SELECT day::timestamptz AS time, key AS metric, s AS value FROM r WHERE key IN (SELECT key FROM top) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Actions run time per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "The day's Claude Code spend divided by the PRs merged that day, Renovate's excluded. Telemetry names no branch per session, so this is a daily ratio, not a cost per PR.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 121
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH c AS (SELECT day, sum(value) AS usd FROM claude.usage_daily WHERE metric = 'cost_usd' GROUP BY day), p AS (SELECT day, sum(n) AS prs FROM github.counts_daily WHERE metric = 'prs_merged' AND key NOT LIKE '%[bot]' GROUP BY day) SELECT c.day::timestamptz AS time, 'USD per merged PR' AS metric, c.usd / p.prs AS value FROM c JOIN p USING (day) WHERE p.prs > 0 AND $__timeFilter(c.day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code spend per merged PR",
+      "type": "timeseries"
     }
   ],
   "refresh": "",

@@ -150,6 +150,14 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   fence. Pi-hole v6 has no read-only credential, so only the `load` task holds the admin
   password, read from `pihole-env` by its `executor_config`, and every session it opens is
   logged out, because Pi-hole caps open sessions.
+- **`github_daily_rollup`** loads `github.counts_daily`: merged PRs per author with their
+  time to merge, Actions runs per workflow and conclusion with their run time, and findings
+  issues opened and closed. The Actions API returns at most 1,000 runs for one filtered
+  query, so runs are read an hour at a time and a fuller window is halved. Every token of one
+  user shares one quota, so the DAG runs one day at a time at 02:00, and `load` raises to retry
+  later when fewer than
+  `k8s/roles/airflow/files/dags/homelab_warehouse/github_history.py:MIN_REMAINING` calls are
+  left. Only `load` holds `airflow_github_token`, through its `executor_config`.
 - **Only `backup_spend_rollup`'s `load` task holds a Kubernetes token.** Its
   `executor_config` runs it as `airflow-longhorn-reader`, whose one grant is `list` on
   Longhorn volumes (`k8s/roles/airflow/templates/rbac.yaml.j2`). Every other task pod runs as
@@ -178,6 +186,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   operator makes a new one in HA's UI under their profile's Security tab, sets it with
   `sops set`, runs `cluster_vars.py write`, and deletes the old token in HA once the new one
   deploys.
+- **`airflow_github_token` is a fine-grained GitHub token** with read-only access to this
+  repo's Actions, issues, metadata and pull requests. It expires; to rotate it, the operator
+  makes a new one with the same access, sets it with `sops set`, runs `cluster_vars.py write`,
+  and deletes the old one on GitHub once the new one deploys.
 - **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
   row reads the scheduler's own health server every cycle, and goes down on a 503 or when the
   server does not answer (`k8s/roles/monitor-bridge/files/checks/service.py:check_airflow_scheduler`).
