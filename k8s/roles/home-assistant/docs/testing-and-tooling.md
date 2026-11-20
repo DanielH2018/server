@@ -114,7 +114,7 @@ refs ∪ `state/external_entities.yml`. That file is a snapshot, rewritten only 
 never existed — and is structurally blind to a **disappearance** — a name that stopped
 existing. Both read as "reference resolves".
 
-Found 2026-08-16: `sensor.pixel_9_pro_do_not_disturb_sensor` and
+**HISTORY —** found 2026-08-16: `sensor.pixel_9_pro_do_not_disturb_sensor` and
 `sensor.pixel_9_pro_sleep_duration` no longer existed on any device, yet stayed listed in the
 snapshot. Validation passed clean while three features were inert. `bedroom_notify`'s `quiet`
 collapsed, so routine alerts pushed at `default` instead of `low`; the short-night wake knee

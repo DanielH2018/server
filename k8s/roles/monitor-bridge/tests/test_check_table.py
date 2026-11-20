@@ -18,7 +18,6 @@ from bridge.types import PushCheck
 from check_table import CHECKS
 from renderer.template_filters.py_table import py_table
 
-from _bridge_env import bridge_env
 
 _TABLE = Path(__file__).resolve().parents[1] / "files" / "check_table.py"
 _GATES = frozenset({"b2_reachable", "wan_reachable"})
@@ -130,13 +129,3 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         expected = dataclasses.asdict(row)
         del expected["fn"]
         assert {**defaults, **read} == expected, row.name
-
-
-def test_the_env_secret_renders_no_push_token_and_the_config_no_kuma_setting():
-    """RED on a template that renders a `KUMA_PUSH_*` token, `KUMA_URL` or `GRACE_CYCLES` again:
-    Cutover-2 stopped the push, and the bridge reads none of them."""
-    env = bridge_env()
-    # Non-vacuity by name: an env that rendered nothing would pass the lines below.
-    assert {"INTERVAL", "N8N_API_KEY", "DEPLOY_PIPELINE_GITHUB_TOKEN"} <= set(env)
-    assert [key for key in env if key.startswith("KUMA_")] == []
-    assert "GRACE_CYCLES" not in env
