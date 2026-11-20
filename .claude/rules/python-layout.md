@@ -30,14 +30,15 @@ row of `tests/repo/test_census_rows_layout.py` flags one.
 A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade`, `gh_quota` or a role module
 `scripts/lib/repo_paths.py:ROLE_MODULES` lists by bare name imports `lib.host_modules` first
 (`from lib import host_modules  # noqa: F401`). A module a host package copies (`shared:`)
-keeps its own insert of `hosts/lib/`, because no `lib` ships beside it. The
+ships under the same `lib/` path it has in the checkout and imports dotted, but keeps its own
+insert of `hosts/lib/`, because the package does not ship `lib/host_modules.py`. The
 `no-sys-path-change-under-scripts` row refuses every other `sys.path` change under `scripts/`,
 test modules included; its `SYS_PATH_WRITERS` allow-list names each one that remains.
 
 A test under `scripts/` imports the module it covers dotted (`from diagnostics import probe`).
 A fixture beside it (`_land_fakes.py`) resolves by bare name, because pytest prepends the
-test's own directory. A file a Job or a host package stages beside its siblings keeps the
-staged layout's bare import, and the tests bind that name: `scripts/renderer/tests/conftest.py`
+test's own directory. A file a Job stages beside its siblings keeps the staged layout's bare
+import, and the tests bind that name: `scripts/renderer/tests/conftest.py`
 binds `changed_set` for `flux_soak.py`. Outside `scripts/`,
 `scripts/tests/test_test_module_bootstraps_present.py` refuses a test module's insert that
 `pythonpath` already supplies.
