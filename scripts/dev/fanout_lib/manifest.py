@@ -45,6 +45,7 @@ class KeptStreak(NamedTuple):
     passes: int = 0
     merged_pr: str | None = None
 
+
 # A value a shell reads as itself wherever a command names it: as a bare word, inside single
 # or double quotes, and inside a systemd `Exec` line. No leading `-`, which ssh and git read
 # as an option.
