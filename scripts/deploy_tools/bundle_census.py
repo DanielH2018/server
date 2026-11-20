@@ -81,9 +81,7 @@ from renderer.renderer_lib.ordering import (
     SNAPSHOT_SUFFIX,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
-    cronjob_gates,
     precheck_files,
-    prepull_timeouts,
     verify_files,
 )
 from renderer.renderer_lib.task_inputs import include_vars
@@ -154,11 +152,11 @@ def prepull_tags(
 ) -> tuple[frozenset[str], list[str]]:
     """The published tags whose role sets `flux_prepull_timeout`, and one line per problem.
 
-    That default alone calls for `<tag>-prepull`. It reads `prepull_timeouts`, the
+    That default alone calls for `<tag>-prepull`. It reads `role_defaults`, the
     reader the renderer reads too.
     """
-    timeouts, problems = prepull_timeouts(published, roles)
-    return frozenset(timeouts), problems
+    defaults, problems = role_defaults(published, roles)
+    return frozenset(t for t, own in defaults.items() if own.prepull_timeout), problems
 
 
 def gating_tags(
@@ -167,10 +165,10 @@ def gating_tags(
     """The published tags whose role sets `flux_cronjob_gates`, and one line per problem.
 
     That default calls for `<tag>-verify`, which holds the gate Jobs (`cronjob_gate.py`). It
-    reads `cronjob_gates`, the reader the renderer reads too.
+    reads `role_defaults`, the reader the renderer reads too.
     """
-    gates, problems = cronjob_gates(published, roles)
-    return frozenset(gates), problems
+    defaults, problems = role_defaults(published, roles)
+    return frozenset(t for t, own in defaults.items() if own.cronjob_gates), problems
 
 
 def prechecking_tags(

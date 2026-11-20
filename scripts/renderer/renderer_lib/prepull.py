@@ -48,7 +48,7 @@ cordoned between the two still pays a cold pull. Every image must carry `sh`, wh
 script.
 
 A role that also sets `flux_prepull_workloads` pulls for the Deployments and StatefulSets it
-names and no others (`ordering.prepull_workloads`). Only those must name a node and
+names and no others (`RoleDefaults.prepull_workloads`). Only those must name a node and
 carry `sh`. observability names Grafana alone: its 482 MB image is the one large pull, and
 loki, tempo and kube-state-metrics pin no node and ship no shell.
 
@@ -78,7 +78,7 @@ from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.documents import parse_documents
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import prepull_timeouts, prepull_workloads
+from lib.k8s_roles import role_defaults
 
 HOSTNAME = "kubernetes.io/hostname"
 WORKLOADS = frozenset({"Deployment", "StatefulSet"})
@@ -300,16 +300,15 @@ def attach_prepulls(
             no workload, lacks a named one, or holds one to pull for that names no node.
     """
     tags = set(published) & {t.tag for t in rendered}
-    timeouts, problems = prepull_timeouts(tags, roles)
-    scopes, scope_problems = prepull_workloads(tags, roles)
-    problems += scope_problems
+    defaults, problems = role_defaults(tags, roles)
     if problems:
         raise RenderError("; ".join(problems))
     attached = []
     for tag in rendered:
-        if tag.tag not in timeouts:
+        own = defaults.get(tag.tag)
+        if own is None or not own.prepull_timeout:
             attached.append(tag)
             continue
-        pulls = targets(tag.tag, tag.files, scopes.get(tag.tag))
+        pulls = targets(tag.tag, tag.files, own.prepull_workloads)
         attached.append(replace(tag, prepull=prepull_files(tag.tag, pulls)))
     return attached

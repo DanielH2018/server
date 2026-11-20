@@ -526,6 +526,17 @@ class RoleDefaults:
         health_check_exprs: `flux_health_check_exprs`, each string rendered as Jinja against
             the role's own defaults, so an expression follows the pin it compares with.
             Written as `spec.healthCheckExprs` on `<tag>` alone (H6.1b).
+        prepull_timeout: `flux_prepull_timeout`, which alone calls for `<tag>-prepull` and
+            is that Kustomization's `timeout`; None renders no pre-pull.
+        prepull_workloads: `flux_prepull_workloads`, the workloads `<tag>-prepull` pulls
+            for; None pulls for all. A role sets it only beside `flux_prepull_timeout`.
+        cronjob_gates: `flux_cronjob_gates`, each CronJob the role renders mapped to its
+            gate's class, `{kind: verify}` or `{kind: mutation, rerun_safe:
+            <path>::<function>}`. A gate calls for `<tag>-verify`, which holds the gate Job
+            `cronjob_gate.py` copies from the CronJob.
+        verify_after: `flux_verify_after`, sorted: the other tags whose rolled workload the
+            role's verify Jobs probe, so `<tag>-verify` waits on each one's last
+            Kustomization too. crowdsec names `traefik`, because its ban proof reads the edge.
     """
 
     prune: bool = True
@@ -533,13 +544,24 @@ class RoleDefaults:
     timeout: str | None = None
     snapshot_pvcs: tuple[str, ...] = ()
     health_check_exprs: tuple[dict, ...] = ()
+    prepull_timeout: str | None = None
+    prepull_workloads: tuple[str, ...] | None = None
+    cronjob_gates: dict[str, dict] = dataclasses.field(default_factory=dict)
+    verify_after: tuple[str, ...] = ()
 
 
 # A Go duration as Flux parses `spec.timeout`, such as `600s` or `1h30m`.
 _DURATION = re.compile(r"(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+")
 
 
+# A duration of whole hours, minutes and seconds, the form `chained_timeout.seconds` reads.
+WHOLE_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+
+
 _CHECK_KEYS = frozenset({"apiVersion", "kind", "inProgress", "failed", "current"})
+
+
+_GATE_KINDS = frozenset({"verify", "mutation"})
 
 
 def _bool(defaults: dict, key: str, default: bool) -> bool:
@@ -549,10 +571,12 @@ def _bool(defaults: dict, key: str, default: bool) -> bool:
     return value
 
 
-def _duration(defaults: dict, key: str, example: str) -> str | None:
+def _duration(
+    defaults: dict, key: str, example: str, grammar: re.Pattern = _DURATION
+) -> str | None:
     value = defaults.get(key)
     if value is not None and not (
-        isinstance(value, str) and _DURATION.fullmatch(value)
+        isinstance(value, str) and value and grammar.fullmatch(value)
     ):
         raise RoleDefaultsError(
             f"{key} is {value!r}, not a literal duration such as {example}, so its "
@@ -600,6 +624,83 @@ def _health_check_exprs(defaults: dict) -> tuple[dict, ...]:
     return tuple(rendered)
 
 
+def _prepull_workloads(defaults: dict) -> tuple[str, ...] | None:
+    value = defaults.get("flux_prepull_workloads")
+    if value is None:
+        return None
+    if not (
+        isinstance(value, list)
+        and value
+        and all(isinstance(name, str) and name for name in value)
+    ):
+        raise RoleDefaultsError(
+            f"flux_prepull_workloads is {value!r}, not a non-empty list of workload names, "
+            "so its pre-pull cannot be scoped"
+        )
+    if "flux_prepull_timeout" not in defaults:
+        raise RoleDefaultsError(
+            "flux_prepull_workloads is set with no flux_prepull_timeout, so no pre-pull "
+            "renders for the names to scope"
+        )
+    return tuple(value)
+
+
+def _gate_problems(value: object) -> list[str]:
+    """Why `value` is not a literal `flux_cronjob_gates` mapping, empty when it is one."""
+    if not isinstance(value, dict) or not value:
+        return [
+            f"{value!r} is not a non-empty mapping of CronJob names to gate classes"
+        ]
+    problems = []
+    for name, gate in value.items():
+        if not isinstance(gate, dict) or gate.get("kind") not in _GATE_KINDS:
+            problems.append(f"{name}: {gate!r} names no kind of {sorted(_GATE_KINDS)}")
+            continue
+        extra = set(gate) - {"kind", "rerun_safe"}
+        rerun = gate.get("rerun_safe")
+        if extra:
+            problems.append(f"{name}: unknown keys {sorted(extra)}")
+        elif gate["kind"] == "mutation" and not (
+            isinstance(rerun, str) and "::" in rerun
+        ):
+            problems.append(
+                f"{name}: a mutation gate names its rerun_safe test as <path>::<function>"
+            )
+        elif gate["kind"] == "verify" and rerun is not None:
+            problems.append(
+                f"{name}: a verify gate never re-runs, so takes no rerun_safe"
+            )
+    return problems
+
+
+def _cronjob_gates(defaults: dict) -> dict[str, dict]:
+    value = defaults.get("flux_cronjob_gates")
+    if value is None:
+        return {}
+    wrong = _gate_problems(value)
+    if wrong:
+        raise RoleDefaultsError(
+            "; ".join(f"flux_cronjob_gates: {line}" for line in wrong)
+        )
+    return {str(name): dict(gate) for name, gate in value.items()}
+
+
+def _verify_after(defaults: dict, tag: str) -> tuple[str, ...]:
+    value = defaults.get("flux_verify_after")
+    if value is None:
+        return ()
+    if not (
+        isinstance(value, list)
+        and value
+        and all(isinstance(name, str) and name and name != tag for name in value)
+    ):
+        raise RoleDefaultsError(
+            f"flux_verify_after is {value!r}, not a literal non-empty list of other "
+            "tags' names"
+        )
+    return tuple(sorted(set(value)))
+
+
 @functools.cache
 def _role_defaults(roles: Path, tag: str) -> RoleDefaults:
     """`tag`'s `RoleDefaults`, loaded once per role tree; a role with no file sets none.
@@ -622,6 +723,12 @@ def _role_defaults(roles: Path, tag: str) -> RoleDefaults:
         timeout=own_timeout or rollout_timeout,
         snapshot_pvcs=_snapshot_pvcs(defaults),
         health_check_exprs=_health_check_exprs(defaults),
+        prepull_timeout=_duration(
+            defaults, "flux_prepull_timeout", "3600s", WHOLE_DURATION
+        ),
+        prepull_workloads=_prepull_workloads(defaults),
+        cronjob_gates=_cronjob_gates(defaults),
+        verify_after=_verify_after(defaults, tag),
     )
 
 
@@ -631,8 +738,10 @@ def role_defaults(
     """Each tag's `RoleDefaults`, and one line per tag whose defaults cannot be read.
 
     A value must be a literal: a bool for `flux_prune` and `flux_suspend`, a Go duration
-    for either timeout, a list for `k8s_autodeploy_snapshot_pvcs`, and a list of
-    CustomHealthCheck mappings for `flux_health_check_exprs`. A Jinja expression is a
+    for either timeout and a whole h/m/s one for `flux_prepull_timeout`, a list for
+    `k8s_autodeploy_snapshot_pvcs`, a list of CustomHealthCheck mappings for
+    `flux_health_check_exprs`, a non-empty list of names for `flux_prepull_workloads` and
+    `flux_verify_after`, and a mapping of gate classes for `flux_cronjob_gates`. A Jinja expression is a
     problem rather than a guess, and its tag is left out of the mapping.
 
     Returns:

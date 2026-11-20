@@ -74,7 +74,6 @@ from renderer.renderer_lib.ordering import (
     Ordering,
     dependency_cycle,
     kustomization_edges,
-    prepull_timeouts,
     split_kind,
     substitution,
     verify_timeout,
@@ -347,8 +346,8 @@ def flux_files(
             alone, `timeout` for `<tag>` and `<tag>-deferred`, `suspend` for all. A tag it
             does not map takes the class defaults.
         waits: The `timeout` of each `<tag>-prepull`, `<tag>-verify` and `<tag>-precheck`
-            Kustomization that sets its own, by Kustomization name (`prepull_timeouts`,
-            `verify_timeout`).
+            Kustomization that sets its own, by Kustomization name
+            (`RoleDefaults.prepull_timeout`, `verify_timeout`).
         contents: Each tag's `own` digest, stamped on `<tag>` alone.
     """
     decrypting = frozenset(decrypting)
@@ -551,9 +550,11 @@ def bundle_files(
     """
     tags = sorted(set(tags))
     defaults, problems = role_defaults(tags, roles)
-    pulls, unread = prepull_timeouts(tags, roles)
-    problems += unread
-    waits = {tag + PREPULL_SUFFIX: value for tag, value in pulls.items()}
+    waits = {
+        tag + PREPULL_SUFFIX: own.prepull_timeout
+        for tag, own in defaults.items()
+        if own.prepull_timeout
+    }
     for tag in tags:
         for suffix in (VERIFY_SUFFIX, PRECHECK_SUFFIX):
             if tag + suffix in directories:

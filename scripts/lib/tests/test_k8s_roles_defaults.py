@@ -16,7 +16,10 @@ def _role(roles: Path, tag: str, body: str) -> Path:
 
 def test_a_tags_defaults_are_loaded_once_however_often_they_are_read(tmp_path):
     path = _role(
-        tmp_path, "sonarr", "flux_suspend: true\nk8s_autodeploy_snapshot_pvcs: [b, a]\n"
+        tmp_path,
+        "sonarr",
+        "flux_suspend: true\nk8s_autodeploy_snapshot_pvcs: [b, a]\n"
+        "flux_prepull_timeout: 600s\n",
     )
     first, _ = role_defaults(["sonarr"], tmp_path)
     path.write_text("flux_suspend: 'not read again'\n")
@@ -26,6 +29,7 @@ def test_a_tags_defaults_are_loaded_once_however_often_they_are_read(tmp_path):
     assert first["sonarr"].suspend is True
     assert first["sonarr"].snapshot_pvcs == ("a", "b")
     assert bundle_census.snapshot_tags(["sonarr"], tmp_path) == ({"sonarr"}, [])
+    assert bundle_census.prepull_tags(["sonarr"], tmp_path) == ({"sonarr"}, [])
 
 
 def test_a_wrong_typed_field_fails_every_reader_of_the_tag(tmp_path):
