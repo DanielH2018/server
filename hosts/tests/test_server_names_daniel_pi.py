@@ -47,6 +47,23 @@ def _ssh_dropin_names(pkg) -> dict[str, str]:
     return names
 
 
+def test_daniel_server_pins_the_pi_host_key_under_every_name_it_gives_the_pi() -> None:
+    """ssh looks a host key up under the name it connects to, so a pin under the address alone
+    leaves `ssh daniel-pi` at "Host key verification failed"."""
+    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    pkg = package("daniel-server")
+    body, _mode = pkg.files["/etc/ssh/ssh_known_hosts"]
+    pinned: dict[str, str] = {}
+    for row in body.decode().splitlines():
+        if row.strip() and not row.startswith("#"):
+            names, key = row.split(None, 1)
+            pinned.update(dict.fromkeys(names.split(","), key))
+    reachable_as = {pi["server_ip"], *_etc_hosts_names(pkg), *_ssh_dropin_names(pkg)}
+    assert {name: pinned.get(name) for name in reachable_as} == dict.fromkeys(
+        reachable_as, pi["ssh_host_ed25519_key"]
+    )
+
+
 def test_daniel_server_names_daniel_pi_at_the_pi_address() -> None:
     pi_ip = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())["server_ip"]
     pkg = package("daniel-server")

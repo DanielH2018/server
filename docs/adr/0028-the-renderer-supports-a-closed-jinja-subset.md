@@ -129,7 +129,7 @@ A value resolves after the layers merge, so a default that names a variable read
 layer's value.
 
 `hosts` holds one entry per `host_vars` file, with that host's literal `server_ip`,
-`compose_services` and `claude_agent_ssh_login_enabled`. `services` holds every entry of
+`compose_services`, `claude_agent_ssh_login_enabled` and `ssh_host_ed25519_key`. `services` holds every entry of
 `cluster/services.yml`.
 
 An undefined variable fails the render and the error names it. `default` is the way to read a

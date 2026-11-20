@@ -34,7 +34,8 @@ both blocks and why a lookup failure leaves the other two arms quiet.
 A fifth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
 outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886). It measures dwell, so
 it needs state: `/var/lib/renovate-notify/pending_seen.json` holds two first-seen epochs per
-item, written every run. That state is the arm's single point of failure, failing silently two
+item, written on every run that finds the dashboard. A run that misses it keeps the file,
+because a rewrite from zero parsed items would restart every clock (#9437). That state is the arm's single point of failure, failing silently two
 ways: **a renamed marker empties the parse**, and **a lost `pending_seen.json` restarts every
 clock at zero** and reads exactly like the intended bootstrap. `pending_state_lost` tells the
 two apart using `last_run`.

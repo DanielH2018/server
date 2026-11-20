@@ -620,15 +620,11 @@ include = [
 import-not-found = "ignore"
 
 [[tool.ty.overrides]]
-# Two files run from a staged copy whose layout no search path reproduces: the host package
-# copies longhorn_backup_health.py beside the `longhorn_lib` modules, and the soak Job mounts
-# flux_soak.py beside `changed_set.py`. Each imports its staged sibling by bare name, while the
-# checkout keeps that sibling under `scripts/lib/` or `scripts/deploy_tools/`. The same
-# per-file collateral as the block above applies; their own tests cover those imports.
-include = [
-  "hosts/components/k3s-host-checks/files/longhorn_backup_health.py",
-  "scripts/renderer/job_files/flux_soak.py",
-]
+# One file runs from a staged copy whose layout no search path reproduces: the soak Job mounts
+# flux_soak.py beside `changed_set.py`. It imports that staged sibling by bare name, while the
+# checkout keeps it under `scripts/deploy_tools/`. The same per-file collateral as the block
+# above applies; its own tests cover that import.
+include = ["scripts/renderer/job_files/flux_soak.py"]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
 

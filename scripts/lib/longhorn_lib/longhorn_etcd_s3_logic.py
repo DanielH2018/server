@@ -16,7 +16,7 @@ import re
 from collections.abc import Callable
 
 # Resolves through the same sys.path setup as the sibling logic modules: host_lib.py sits beside
-# this package on a host, and under `hosts/lib` in the checkout.
+# `lib/`, which holds this package, on a host, and under `hosts/lib` in the checkout.
 import sys as _sys
 from pathlib import Path as _Path
 

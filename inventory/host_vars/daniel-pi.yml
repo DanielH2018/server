@@ -1,6 +1,11 @@
 ---
 server_ip: 10.0.0.139
 # The Pi's one address literal. group_vars' k8s_pi_client_ip reads it through hosts.
+# The Pi's sshd host key, a public key, which daniel-server's package pins. A reflash changes
+# it, and trusting the changed key is the operator's decision: on the Pi,
+# `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the fingerprint to compare,
+# SHA256:JARYzuFmM51svNv21q3ZEasx7UaI6F1883tdwAQ2YkQ for this value.
+ssh_host_ed25519_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKldKcWhT3hMsOEZ3PSHSVU1yzQA8ucgl5vQjdr5lYPi
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `domain` is inherited from group_vars/all.yml (daniel-hunter.com), exactly like every other
 # host — the Pi carries no host-specific override. It is a plain variable, not a secret
