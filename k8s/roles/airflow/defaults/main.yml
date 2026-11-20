@@ -89,6 +89,8 @@ image_builder_builds:
       "{{ role_file('files/dags/prom_series_rollup.py') }}": prom_series_rollup.py
       "{{ role_file('files/dags/ha_daily_rollup.py') }}": ha_daily_rollup.py
       "{{ role_file('files/dags/homelab_warehouse/ha_rollup.py') }}": ha_rollup.py
+      "{{ role_file('files/dags/claude_usage_rollup.py') }}": claude_usage_rollup.py
+      "{{ role_file('files/dags/homelab_warehouse/claude_usage.py') }}": claude_usage.py
       "{{ role_file('files/dags/.airflowignore') }}": airflowignore
       "{{ role_file('files/check_dags.py') }}": check_dags.py
 
