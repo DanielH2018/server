@@ -11,7 +11,7 @@ import dataclasses
 
 import pytest
 
-import promote
+from deploy_tools import promote
 from deploy_tools.promote_lib import verify_promotion as verify
 from _promote_fakes import CONTEXT, World, digest_of
 

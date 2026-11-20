@@ -18,16 +18,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `promote_lib/wait.py` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from deploy_tools.land_lib.pin_reads import PinReads
 from lib.k8s_roles import k8s_tags_in
 
-import forge
+from deploy_tools import forge
 from deploy_tools.promote_lib.wait import WaitResult, land_wait
 from deploy_tools.promote_lib.wait_reads import live_wait_reads
 

@@ -18,16 +18,11 @@ import sys
 from collections.abc import Callable
 from datetime import datetime
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `forge` and `artifact_retention` import bare, from scripts/deploy_tools.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, OK
 
-import forge
-from artifact_retention import (
+from deploy_tools import forge
+from deploy_tools.artifact_retention import (
     LAST_GOOD_TAG,
     PROD_TAG,
     Failed,

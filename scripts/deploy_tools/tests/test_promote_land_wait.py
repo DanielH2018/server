@@ -14,12 +14,12 @@ from dataclasses import replace
 
 import pytest
 
-import forge
-from changed_set import changed_set
+from deploy_tools import forge
+from deploy_tools.changed_set import changed_set
 from deploy_tools.promote_lib import wait as promote_wait
 from deploy_tools.promote_lib import wait_reads
-import flux_host
-from flux_host import FluxHost
+from deploy_tools import flux_host
+from deploy_tools.flux_host import FluxHost
 from _land_wait_fakes import D, M, P, Sim, at, digests, kustomization
 from _promote_fakes import FakeTransport, digest_of
 from lib import kubectl as lib_kubectl

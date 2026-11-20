@@ -16,7 +16,7 @@ import sys
 
 import pytest
 
-import land  # noqa: F401  # inserts the lander's sys.path roots, which the rules read
+from deploy_tools import land  # noqa: F401  # inserts the lander's sys.path roots, which the rules read
 from _land_fakes import Fakes
 from deploy_tools.land_lib import merge, policy
 from deploy_tools.land_lib.outcome import Outcome

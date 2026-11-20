@@ -21,9 +21,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git
 
 # The checkout land.sh cds to and runs land.py from.

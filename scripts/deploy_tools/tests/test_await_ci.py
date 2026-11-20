@@ -8,7 +8,7 @@ proceeds -- so each case that must pass has a sibling that must fail.
 Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 """
 
-import await_ci
+from deploy_tools import await_ci
 import pytest
 from ci_verdict import CheckRun
 

@@ -8,3 +8,8 @@
 # The callers are `netpol_from` on this role's containers_list entry, and `netpol_role_owned:
 # true` there keeps netpol-baseline's callers loop from rendering a second copy.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}
+---
+# The scheduler's health server, on its `netpol_fences` item's port. Its one caller is
+# monitor-bridge's airflow_scheduler row.
+{% set health = container_item.netpol_fences | selectattr('app', 'equalto', 'airflow-scheduler') | first %}
+{{ networkpolicy(health.app, health.port, health['from']) }}

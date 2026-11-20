@@ -21,6 +21,9 @@ steps, and this page describes each piece once its PR has merged.
   rules (*The file rules*), and renders every k8s render target of daniel-box.
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see,
   and `renderer_lib/cluster.py` renders each tag and writes its directories.
+- `scripts/lib/container_entry.py:parse_containers_list` parses `cluster/services.yml`'s
+  entries once, before any template reads `services`. It refuses a malformed entry, so a
+  template filter never sees one.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
   metadata from its `defaults/main.yml` (*Where render metadata lives*).
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag

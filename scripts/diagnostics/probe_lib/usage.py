@@ -15,13 +15,6 @@ A report, not a verdict: it exits 0 once every query answered, and 75 when one d
 
 import re
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path; pyproject's `pythonpath` is a pytest setting. This has to sit
-# ABOVE the imports below.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.health_alerts import prom_query

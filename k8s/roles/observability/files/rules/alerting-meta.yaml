@@ -2,7 +2,7 @@
 # delivers and is still visible to Prometheus. Plain YAML, never Jinja: prometheus-rules.yaml.j2
 # carries this file verbatim, so the Go templates in the annotations reach Prometheus intact.
 # The conventions every rule file here follows are in
-# docs/target-architecture/monitoring/m1-alertmanager.md.
+# docs/archive/monitoring/m1-alertmanager.md.
 groups:
   - name: alerting-meta
     rules:

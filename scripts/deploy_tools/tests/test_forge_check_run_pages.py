@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-import forge
+from deploy_tools import forge
 from ci_verdict import CheckRun, ci_verdict
 
 T = "a" * 40

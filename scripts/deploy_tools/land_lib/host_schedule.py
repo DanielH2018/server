@@ -7,10 +7,7 @@ these names.
 
 from datetime import UTC, datetime
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.systemd_timer import DAY_S, calendar_fires, span_s
 
 DEADLINE_SLACK_S = 10 * 60

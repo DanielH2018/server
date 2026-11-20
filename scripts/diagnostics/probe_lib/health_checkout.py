@@ -19,10 +19,8 @@ probe from a checkout at or after the merge.
 """
 
 import subprocess
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.git import git
 from lib.repo_paths import K8S_ROLES, REPO

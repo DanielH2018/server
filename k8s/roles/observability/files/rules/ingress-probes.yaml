@@ -1,7 +1,7 @@
 # The ingress probes: blackbox_exporter's probe of every routed ingress URL, read from the
 # `blackbox-ingress` scrape job. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m4-blackbox-ingress.md, "The rules".
+# docs/archive/monitoring/m4-blackbox-ingress.md, "The rules".
 #
 # The two per-target rules carry no literal `service`. Each series takes it from the scrape
 # target that `prometheus.yaml.j2` renders per tile, and scripts/validate/alert_rules.py

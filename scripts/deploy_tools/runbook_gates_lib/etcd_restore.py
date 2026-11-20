@@ -58,9 +58,6 @@ import sys
 import time
 from pathlib import Path as _Path
 
-# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from deploy_tools.runbook_gates_lib import gate_runner
 from deploy_tools.runbook_gates_lib.gate_runner import (

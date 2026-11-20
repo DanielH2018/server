@@ -34,7 +34,10 @@ uv's build backend can install the directory where it stands. With `module-root 
 and `namespace = true`, the editable install writes a `.pth` that names `scripts/`, and every
 interpreter in the venv then imports `lib.x`, `dev.x` or `renderer.x` with no insert. A run
 outside a venv (`uv run --no-project`) gets no `.pth`, so each of its launchers sets
-`PYTHONPATH` to its own checkout's `scripts/` (#9271).
+`PYTHONPATH` to its own checkout's `scripts/` (#9271). A GitHub Actions step that runs a
+script with the runner's bare `python3` is such a launcher too, and sets `PYTHONPATH: scripts`.
+`scripts/lib/stdlib_only.py` reads those steps, and a script reached from one that sets no
+root fails `scripts/lib/tests/test_stdlib_only.py::test_every_member_of_the_set_imports_outside_the_venv`.
 
 The install has one effect the re-plan did not foresee, found when slice 1 ran on the real
 tree. Several mechanisms run one tree's code under another tree's venv:
@@ -78,6 +81,11 @@ venv per tree.
 - `lib.host_modules` is the one module under `scripts/` that puts a directory on `sys.path`:
   `hosts/lib` and the gh-quota component's `files/`, whose modules ship to the hosts as flat
   files and import by bare name. A caller imports it before those bare imports.
+- `lib.host_modules` also appends each role directory `repo_paths.ROLE_MODULES` lists, such as
+  monitor-bridge's `files/` for `longhorn_robustness`. Appending keeps a role's modules from
+  shadowing anything else. `deploy_tools/forge.py` imports `lib.host_modules`, so a landing
+  counts that role directory among its import roots. The landing gate therefore reads more
+  paths as gate code, never fewer.
 - A module a host package copies (a `shared:` entry, such as `scripts/lib/longhorn_lib/`) is
   the exception. No `lib` ships beside it, so it cannot import `lib.host_modules`. It keeps its
   own insert of `hosts/lib`, which names a directory that does not exist on the host, and

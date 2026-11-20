@@ -18,13 +18,7 @@ import argparse
 import json
 import socket
 import sys
-from pathlib import Path as _Path
 
-# `probe_lib` is a namespace package under `scripts/`, so reaching it by package name needs
-# `scripts/` on sys.path: a directly-invoked script — which is how this one runs — gets only
-# its own directory, and pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE
-# the imports below.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import arr

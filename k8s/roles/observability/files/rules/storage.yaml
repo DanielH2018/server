@@ -3,7 +3,7 @@
 # snapshot space against a declared cap, each node's Longhorn disk against the replica scheduling
 # floor, the CSI mounts and etcd's database size. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
+# docs/archive/monitoring/m6-retire-kuma.md, batch A5.
 #
 # All eleven are critical, so Discord and email.
 #

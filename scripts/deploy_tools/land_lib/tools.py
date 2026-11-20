@@ -28,14 +28,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
 
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `land_flux` imports `forge` bare from scripts/deploy_tools. The shim puts it at sys.path[0]
-# and pytest's pythonpath lists it; this covers an interpreter import.
-_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
-from chained_timeout import VERIFY_CAP_S
+from deploy_tools.chained_timeout import VERIFY_CAP_S
 from deploy_tools import await_ci
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import fresh, own_checkout, verdict_log

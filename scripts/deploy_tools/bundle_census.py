@@ -56,17 +56,14 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
 from lib.k8s_roles import k8s_tags, snapshot_claims
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
-import bundle_gates
+from deploy_tools import bundle_gates
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     DIGESTS,

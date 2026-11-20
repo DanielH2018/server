@@ -49,7 +49,7 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     injected into `tools`; the primary override is repeated here for the same reason the
     fixture carries it -- Options defaults to a checkout that exists only on the deploy host.
     """
-    import land
+    from deploy_tools import land
     from deploy_tools.land_lib.options import Options
 
     monkeypatch.setattr(
@@ -66,7 +66,7 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
 
 def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, capsys):
     """Direct, it reads as it does through the handoff unit: `refused`, naming the raise."""
-    import land
+    from deploy_tools import land
     from deploy_tools.land_lib.options import Options
 
     verdict_file = tmp_path / "7.verdict"
@@ -109,7 +109,7 @@ def test_a_usage_error_does_not_annotate(argv):
     real parser first and only replaces `primary` afterwards, so an unrecognized flag still
     raises a usage-error SystemExit through it same as here.
     """
-    import land
+    from deploy_tools import land
     from _land_fakes import build_tools
     from lib.exit_codes import LAND_BAD_ARGS
 
@@ -123,7 +123,7 @@ def test_a_usage_error_does_not_annotate(argv):
 def test_help_does_not_annotate():
     """`--help` (exit 0) is deliberately NOT reproduced: bash's trap logged a junk
     `verdict=aborted exit=0` line for it, which this port correctly drops."""
-    import land
+    from deploy_tools import land
     from _land_fakes import build_tools
 
     tools, calls = build_tools(Fakes())
@@ -359,7 +359,7 @@ def test_prepare_stdio_line_buffers_a_real_file_stream(tmp_path, monkeypatch):
     `sys.stdout.line_buffering` after a captured run would pass whether or not the call is
     there.
     """
-    import land
+    from deploy_tools import land
 
     with (tmp_path / "land.log").open("w") as fh:
         assert fh.line_buffering is False
@@ -371,7 +371,7 @@ def test_prepare_stdio_line_buffers_a_real_file_stream(tmp_path, monkeypatch):
 def test_prepare_stdio_tolerates_a_stdout_that_cannot_reconfigure(monkeypatch):
     """capsys replaces sys.stdout with an object that has no `reconfigure`, and so does any
     session that redirects it in-process. Failing there would break every captured test."""
-    import land
+    from deploy_tools import land
 
     class _Plain:
         def write(self, s):

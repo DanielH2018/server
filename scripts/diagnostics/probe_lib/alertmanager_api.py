@@ -14,9 +14,7 @@ from urllib.parse import urlencode
 
 # `probe_lib` is a namespace package under `scripts/`, as in health_alerts.py.
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch.
 from diagnostics.probe_lib import core

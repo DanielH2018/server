@@ -5,13 +5,9 @@ filter here returns only the values its template renders, never an entry.
 """
 
 
-def _entries(containers_list):
-    return [e for e in containers_list or [] if isinstance(e, dict)]
-
-
 def entry_names(containers_list):
     """Each entry's `name`, in list order."""
-    return [entry["name"] for entry in _entries(containers_list)]
+    return [entry["name"] for entry in containers_list or []]
 
 
 def published_ports(containers_list):
@@ -21,7 +17,7 @@ def published_ports(containers_list):
     """
     return [
         f"{entry['name']}:{entry['port']}"
-        for entry in _entries(containers_list)
+        for entry in containers_list or []
         if "port" in entry
     ]
 
@@ -33,7 +29,7 @@ def lan_hostnames(containers_list):
     The names are bare: the template appends `.local.<domain>`.
     """
     names = []
-    for entry in _entries(containers_list):
+    for entry in containers_list or []:
         if "hostname" in entry:
             names.append(entry["hostname"])
         names.extend(entry.get("extra_hostnames", []))

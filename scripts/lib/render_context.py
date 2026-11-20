@@ -27,6 +27,8 @@ from pathlib import Path
 # The layers and where they live are lib.estate's, which the docs generators read through too,
 # so a template render and a docs page cannot disagree about which value wins.
 from lib.cli_help import warn
+from lib.container_entry import parse_containers_list
+from lib.inventory_lists import PI_LIST_KEY
 from lib.estate import (
     PLANE_HOSTS,
     REPO_INVENTORY,
@@ -175,7 +177,9 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
 
     ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way, and
     observability's ``alloy-pi`` scrape job and artifacts' service index read the Pi's
-    ``compose_services``, so a strict render needs both. A value goes in only while
+    ``compose_services``, so a strict render needs both. ``compose_services`` goes in
+    parsed by ``parse_containers_list``, because those templates pass it to the same
+    filters as ``services``, which re-check no entry. A value goes in only while
     it holds no Jinja: here it would resolve against the rendered host's context, so a Pi value
     such as ``"{{ server_ip }}"`` would come out as daniel-box's address. A caller needing more
     passes its own ``hosts``.
@@ -188,6 +192,10 @@ def _hosts(inventory: Inventory) -> dict[str, dict]:
             for key in _HOSTS_KEYS
             if key in layer and not _holds_jinja(layer[key])
         }
+        if PI_LIST_KEY in literal:
+            literal[PI_LIST_KEY] = parse_containers_list(
+                literal[PI_LIST_KEY], key=PI_LIST_KEY
+            )
         if literal:
             found[path.stem] = literal
     return found

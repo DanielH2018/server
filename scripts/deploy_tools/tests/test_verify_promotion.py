@@ -20,7 +20,7 @@ from renderer.renderer_lib.bundle import (
     tag_kustomization,
 )
 
-import forge
+from deploy_tools import forge
 from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib.flux_status import StatusState, flux_states
 

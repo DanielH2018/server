@@ -45,8 +45,9 @@ on:
   # the `pytest` job's select step is the one exception, and a dispatch takes its full arm;
   # the PR-only steps (the facts notice, the cross-plane gate, the type-proof scope) are skipped
   # on a dispatch. `renovate-config` runs on `!= 'push'`. ENFORCED by
-  # tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
-  # key on `push` would leave a dispatch fast, green and checking nothing.
+  # the ci-dispatch-runs-every-job row of tests/repo/_ci_sweep_workflow_rows.py, because a job
+  # condition rewritten to key on `push` would leave a dispatch fast, green and checking
+  # nothing.
   workflow_dispatch:
   push:
     branches: [master]
@@ -164,6 +165,7 @@ jobs:
       - name: Compare the pushed tree with the tree a green PR run recorded
         id: prove
         env:
+          PYTHONPATH: scripts
           GITHUB_TOKEN: ${{ github.token }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -518,9 +520,8 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
-  # The pytest suite, invoked as the prek `pytest` hook invokes it (`uv run python -m pytest`,
-  # addopts from pyproject.toml), so a local `prek run --all-files` and this job cannot disagree
-  # about what a test run is. A dispatch runs every module, and so does a push with no green
+  # The pytest suite, run as `uv run python -m pytest` with the addopts from pyproject.toml, so a
+  # local `uv run pytest` and this job agree about what a test run is. A dispatch runs every module, and so does a push with no green
   # ancestor in reach. A push that has one runs the modules the diff from it can affect, and a
   # pull request the modules its own diff can affect; the `Select` step below has the rule.
   #
@@ -1200,7 +1201,8 @@ jobs:
       # The two scans read the head render's package roots alone, so they sit here, after
       # the render and ahead of every step that stands down when the tree is unchanged. Neither
       # step has an `if:`: a PR that changes only .gitleaks.toml or the gitleaks pin renders no
-      # package differently, and it still runs them (test_host_package_scans_run_on_every_pr.py).
+      # package differently, and it still runs them (the host-package-scans-run-on-every-pr
+      # row of tests/repo/_ci_sweep_workflow_rows.py).
       # The scan runs the gitleaks release that prek.toml pins, checked against the release's own
       # checksums file, so the version has one home and Renovate's prek.toml manager moves it.
       # `prove-scan` runs first: it shows the binary exempts a token at a package's ciphertext
@@ -1465,34 +1467,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
-      # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
-      # that a rerun cleared; every red one followed a build that never uploaded.
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      # The tarball unpacks to the paths the build job wrote: `$RUNNER_TEMP/render` and
-      # `$RUNNER_TEMP/debs`.
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/bin/nfpm" --version
-
-      # The bootstrap cases seed from the pins the build job fetched and saved under this key, so
-      # a pin is downloaded once per run. Restore-only: a leg never saves what its cases fetched
-      # under the build's key. A miss, such as a lost save race, makes the cases download instead.
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
       # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
@@ -1500,7 +1479,8 @@ jobs:
       # stale. A Dockerfile PR has no published image, so it builds. A build reaches the
       # runner's CA bundle, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
-      # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
+      # step (the ci-dispatch-takes-the-full-sweep-not-the-scoped-path row) and a dispatch of
+      # master must stay green.
       - name: Build the test image for this release
         env:
           RELEASE: ${{ matrix.release }}
@@ -1527,7 +1507,7 @@ jobs:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
@@ -1595,26 +1575,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/bin/nfpm" --version
-
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       - name: Build the test image for this release
         env:
@@ -1636,7 +1601,7 @@ jobs:
           PYTHON: ${{ matrix.python }}
           SHARD: ${{ matrix.shard }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no image was built; the bootstrap cases do not run."
@@ -1690,25 +1655,11 @@ jobs:
 
       - uses: $/.github/actions/setup
 
-      - name: Download the hand-off from the build job
-        uses: actions/download-artifact@v8.0.2
+      - name: Restore the hand-off from the build job
+        id: handoff
+        uses: $/.github/actions/host-packages-handoff
         with:
-          name: host-packages-build
-          path: ${{ runner.temp }}/handoff
-
-      - name: Unpack the render, the debs and nfpm
-        run: |
-          set -euo pipefail
-          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-
-      - name: Restore the build job's homelab-tools cache
-        id: tools-cache
-        if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@v6.1.0
-        with:
-          path: ${{ runner.temp }}/tools-cache
-          key: ${{ needs.host_packages_build.outputs.tools-key }}
+          tools-key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       - name: Build the test image
         continue-on-error: true
@@ -1728,7 +1679,7 @@ jobs:
         continue-on-error: true
         env:
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
-          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+          TOOLS_CACHE_HIT: ${{ steps.handoff.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no image was built; the k3s download case does not run."
@@ -1965,6 +1916,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 2
         env:
+          PYTHONPATH: scripts
           GITHUB_TOKEN: ${{ github.token }}
           BATCH_BODY: ${{ github.event.pull_request.body }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -2013,6 +1965,7 @@ jobs:
         id: scope
         if: github.event_name == 'pull_request'
         env:
+          PYTHONPATH: scripts
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
           FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
         run: |

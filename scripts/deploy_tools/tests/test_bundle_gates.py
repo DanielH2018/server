@@ -12,7 +12,7 @@ from collections.abc import Mapping
 import pytest
 from _bundle_fixtures import bundle, route
 
-import bundle_gates
+from deploy_tools import bundle_gates
 from renderer.renderer_lib.bundle import write_bundle
 
 DOMAIN = "example.test"

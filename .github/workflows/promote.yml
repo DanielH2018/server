@@ -423,6 +423,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # ci_images.py runs on the runner's python3, with no venv `.pth` to supply the import root.
+    env:
+      PYTHONPATH: scripts
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -430,8 +433,8 @@ jobs:
           persist-credentials: false
 
       # DECIDED: the download-artifact steps run once, unlike the curl and gh calls. Over
-      # 2026-10-13..11-12 no promote download failed at all; ci.yml's host_packages
-      # job carries the full measurement.
+      # 2026-10-13..11-12 no promote download failed at all; the host-packages-handoff
+      # action carries the full measurement.
       - uses: actions/download-artifact@v8.0.2
         with:
           name: bundle

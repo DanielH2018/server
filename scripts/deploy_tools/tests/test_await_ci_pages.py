@@ -10,7 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci_pages.py
 import json
 import urllib.request
 
-import await_ci
+from deploy_tools import await_ci
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
