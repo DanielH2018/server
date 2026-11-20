@@ -5,8 +5,7 @@ with defaults, so a test states only the field it is about. Nothing here needs a
 a cluster, or ssh.
 """
 
-import gen_infra_map as g
-
+from infra_map import gen_infra_map as g
 
 REPO_ROOT = g.REPO_ROOT
 

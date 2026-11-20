@@ -21,8 +21,10 @@ A PROJECT is a session milestone that also holds a backlog. `milestone start --p
 writes the second description form, and `is_project` reads it. `milestone add` files
 unclaimed issues under a project and `milestone remove` takes them out. `release`, `reap` and
 `manual` leave an issue in a project, so a batch that fails returns its issue to the
-backlog, and a claim by another branch does not move it. Everything else above holds for both
-forms. `held_issues` is the `--milestone` filter of `next`, `list` and `new-issues`.
+backlog. An open project reserves its backlog for its branch: `reservations` is the one
+answer to who may take an issue, which `next`, `list`, `new-issues` and `claim` read.
+Everything else above holds for both forms. `held_issues` is the `--milestone` filter of
+`next`, `list` and `new-issues`.
 
 The tools own only a milestone whose description `branch_of` can parse. An operator's own
 milestone is never reopened, closed or emptied.
@@ -37,7 +39,7 @@ Typical usage example:
 
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -260,6 +262,50 @@ def held_issues(
     ):
         raise UnknownMilestone(f"no milestone is titled `{title}`")
     return [i for i in issues if i.milestone_title == title]
+
+
+def reservations(
+    issues: list[Issue],
+    repo: str,
+    *,
+    branch: str | None = None,
+    title: str | None = None,
+    gh_json: GhJson = real_gh_json,
+) -> dict[int, Mapping[str, object]]:
+    """The open project milestone that reserves each of ``issues``, by issue number.
+
+    An open project's backlog belongs to the project's branch: only that branch, and a
+    fan-out batch claiming under it, may take an issue from it. This is the one answer to
+    "who may take this issue" that `next`, `list`, `new-issues` and `claim` read. A closed
+    project reserves nothing, and neither does a session milestone, which holds only what
+    its branch already claimed.
+
+    Args:
+        issues: register issues, each with its `milestone` object or None.
+        repo: OWNER/NAME.
+        branch: the branch asking. Its own project reserves nothing against it.
+        title: the `--milestone` a view reads. That project reserves nothing against it.
+        gh_json: the read boundary, for tests. It is called only when an issue sits in
+            another branch's project, because gh's issue JSON omits a milestone's state.
+
+    Returns:
+        ``issue.milestone`` for each reserved issue; an issue free to the asker is absent.
+    """
+    theirs = [
+        i
+        for i in issues
+        if is_project(i.milestone)
+        and branch_of(i.milestone) != branch
+        and i.milestone_title != title
+    ]
+    if not theirs:
+        return {}
+    open_now = {m["number"] for m in _milestones(repo, "open", gh_json)}
+    return {
+        i.number: i.milestone
+        for i in theirs
+        if i.milestone and i.milestone.get("number") in open_now
+    }
 
 
 def close(

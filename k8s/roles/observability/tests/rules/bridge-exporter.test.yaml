@@ -110,9 +110,8 @@ tests:
             exp_annotations:
               summary: A Healthchecks.io dead-man check differs from the documented schedule.
               description: >-
-                The monitor-bridge log names each slug and field that differs, or a
-                check missing from the console. Fix the console, or change
-                docs/healthchecks-io-deadman.md and
+                The monitor-bridge log names each differing or missing slug. Fix the
+                console, or change docs/healthchecks-io-deadman.md and
                 monitor_bridge_healthchecks_expected together and redeploy
                 monitor-bridge. Its DOWN line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN healthchecks_drift '`.
@@ -132,8 +131,8 @@ tests:
               description: >-
                 The registry's RDAP record did not answer or carries no expiration
                 event, so the days-left gauge holds its last read, or is absent
-                after a restart. The monitor-bridge log names the error. A failed
-                read is retried every cycle. Its DOWN line: `kubectl -n homelab logs
+                after a restart. The monitor-bridge log names the error. Its DOWN
+                line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN domain_registration '`.
 
   # The registration's days left. 60 days fires nothing; 30 fires the warning alone; 10
@@ -588,8 +587,8 @@ tests:
             exp_annotations:
               summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
               description: >-
-                A queue item is in warning, importBlocked, or importPending with a status message,
-                which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
+                A queue item is in warning, importBlocked, or importPending with a status message.
+                An arr API that stays
                 unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
                 log in the homelab namespace names the release and the app.
       - eval_time: 1m
@@ -649,8 +648,8 @@ tests:
             exp_annotations:
               summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
               description: >-
-                A queue item is in warning, importBlocked, or importPending with a status message,
-                which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
+                A queue item is in warning, importBlocked, or importPending with a status message.
+                An arr API that stays
                 unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
                 log in the homelab namespace names the release and the app.
       - eval_time: 5m
@@ -677,7 +676,7 @@ tests:
 
   # THE STARTUP-GRACE FAMILY. Every gauge is 0 from the first sample. Each rule is
   # `for: 10m`, two bridge cycles: one minute short of the hold
-  # nothing fires, and at the hold all six do. No rule carries `requires`, since no row here has
+  # nothing fires, and at the hold every one does. No rule carries `requires`, since no row here has
   # a gate.
   - interval: 1m
     input_series:
@@ -690,6 +689,8 @@ tests:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="scrutiny"}
         values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
+        values: "0x12"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="airflow_scheduler"}
         values: "0x12"
     alert_rule_test:
       - eval_time: 9m
@@ -706,6 +707,9 @@ tests:
         exp_alerts: []
       - eval_time: 9m
         alertname: SpeedtestDegraded
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: AirflowSchedulerDown
         exp_alerts: []
       - eval_time: 10m
         alertname: N8nWorkflowsFailing
@@ -735,8 +739,8 @@ tests:
             exp_annotations:
               summary: "Bazarr rejects its sonarr or radarr API key, or reports a health issue."
               description: >-
-                Bazarr's own copy of the sonarr or radarr API key is rejected (an
-                empty peer version field), or Bazarr reports a health issue. Bazarr
+                Bazarr's own copy of the sonarr or radarr API key is rejected, or
+                Bazarr reports a health issue. Bazarr
                 holds those keys in its UI, so a key rotation misses it. The
                 monitor-bridge log names which. Its DOWN line: `kubectl -n homelab
                 logs deploy/monitor-bridge | grep 'DOWN bazarr '`.
@@ -753,9 +757,8 @@ tests:
               summary: "A Prowlarr indexer has been failing for a week or more."
               description: >-
                 Prowlarr's own initialFailure puts an indexer at a week or more of
-                failures. The Pirate Bay and 1337x are ignored as chronic flappers,
-                and short outages never page. The monitor-bridge log names the
-                indexer. Its DOWN line: `kubectl -n homelab logs
+                failures. The Pirate Bay and 1337x are ignored as chronic flappers.
+                The monitor-bridge log names the indexer. Its DOWN line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN prowlarr_indexers '`.
       - eval_time: 10m
         alertname: SmartHealthFailing
@@ -786,6 +789,22 @@ tests:
             exp_annotations:
               summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
+      - eval_time: 10m
+        alertname: AirflowSchedulerDown
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: airflow_scheduler
+              severity: warning
+              service: airflow
+            exp_annotations:
+              summary: "Airflow's scheduler is not running, so no warehouse rollup starts."
+              description: >-
+                The scheduler's own health server answers 503, or does not answer at
+                all. Read the airflow-scheduler pod's state and log in the homelab
+                namespace. Its DOWN line: `kubectl -n homelab logs
+                deploy/monitor-bridge | grep 'DOWN airflow_scheduler '`.
 
   # The members a down row names. Each row exports one homelab_check_detail series per
   # failing member, and the summary lists them sorted, scoped to its own `check`: the bazarr
@@ -881,9 +900,8 @@ tests:
               summary: "Prowlarr indexers failing for a week or more: EZTV, YTS."
               description: >-
                 Prowlarr's own initialFailure puts an indexer at a week or more of
-                failures. The Pirate Bay and 1337x are ignored as chronic flappers,
-                and short outages never page. The monitor-bridge log names the
-                indexer. Its DOWN line: `kubectl -n homelab logs
+                failures. The Pirate Bay and 1337x are ignored as chronic flappers.
+                The monitor-bridge log names the indexer. Its DOWN line: `kubectl -n homelab logs
                 deploy/monitor-bridge | grep 'DOWN prowlarr_indexers '`.
       - eval_time: 10m
         alertname: SmartHealthFailing
@@ -983,11 +1001,10 @@ tests:
             exp_annotations:
               summary: "The host-package builder has stopped fetching master or has left a commit unbuilt."
               description: >-
-                The builder's last good fetch of master is older than 30 minutes or
-                its series is absent, or a commit of master has waited more than
-                7200 seconds to be built. The monitor-bridge log names the builder's
-                reason and sha, and the builder's pages in docs/host-packages.md
-                have the fix for each reason. Its DOWN line: `kubectl -n homelab
+                The builder fetched master over 30 minutes ago, or a commit has
+                waited over 7200 seconds to be built. The monitor-bridge log names
+                the reason and sha, and docs/host-packages.md has the fix for each
+                reason. Its DOWN line: `kubectl -n homelab
                 logs deploy/monitor-bridge | grep 'DOWN host_packages '`.
               runbook_url: https://docs.local.daniel-hunter.com/host-packages/
 

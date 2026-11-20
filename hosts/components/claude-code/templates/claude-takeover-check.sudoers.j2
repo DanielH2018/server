@@ -1,6 +1,6 @@
 # Shipped by the homelab host package (hosts/components/claude-code). Do not edit.
 # One command, no arguments listed: the wrapper validates its own arguments and only runs
-# dry-run checks. docs/target-architecture/deploy/d5-bulk-move.md.
+# dry-run checks. docs/archive/deploy/d5-bulk-move.md.
 {% for user in claude_code_takeover_check_users %}
 {{ user }} ALL=(root) NOPASSWD: {{ claude_code_takeover_check_wrapper }}
 {% endfor %}

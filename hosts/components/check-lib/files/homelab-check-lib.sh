@@ -3,7 +3,7 @@
 # ship it as /usr/lib/homelab/homelab-check-lib.sh; sourced, not executed directly.
 #
 # Consumers source it with `|| exit 1`, so a host that misses it fails its check loudly instead of
-# reporting green. docs/target-architecture/monitoring/m6-retire-kuma.md (*B0, B5, B7 and B8*) gives the plan.
+# reporting green. docs/archive/monitoring/m6-retire-kuma.md (*B0, B5, B7 and B8*) gives the plan.
 
 # boot_grace_active GRACE_S TAG
 # True (exit 0) when the host booted less than GRACE_S ago, so the caller skips this run.
@@ -52,7 +52,7 @@ reachout_verdict() {
 }
 
 # write_check_textfile CHECK SUCCESS VERDICT_TS DEADLINE_S [LINE...]
-# M3's producer metric contract (docs/target-architecture/monitoring/m3-textfile-timer.md): writes
+# M3's producer metric contract (docs/archive/monitoring/m3-textfile-timer.md): writes
 # $TEXTFILE_DIR/CHECK.prom with the four homelab_check_* series, then each LINE verbatim as a
 # detail series. TEXTFILE_DIR defaults to the real path, so a test needs no root.
 # homelab_check_duration_seconds is CHECK_DURATION_S when the caller sets it, else bash's $SECONDS,

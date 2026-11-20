@@ -2,7 +2,7 @@
 """Re-download the vendored JSON schemas this repo checks rendered config against.
 
 Three sets, refreshed together because they age the same way and are reviewed the same way:
-Kubernetes' own OpenAPI v3 schemas for the core kinds ``validate/k8s_manifests.py`` checks
+Kubernetes' own OpenAPI v3 schemas for the core kinds ``validate/render_lib/k8s.py`` checks
 manifests against, the CRD schemas it checks custom resources against, and Authelia's own
 configuration schema that ``tests/services/test_authelia_config_schema.py`` checks the
 rendered portal config against.
@@ -15,7 +15,7 @@ this script once k3s ships it. Each file is cut to its
 5.5 MB to about 330 KB, and ``SOURCE.json`` beside them records the tag and the sha256 of each
 file as upstream served it.
 
-WHY THESE ARE VENDORED RATHER THAN FETCHED. `validate/k8s_manifests.py` runs as a prek hook, on
+WHY THESE ARE VENDORED RATHER THAN FETCHED. `validate/render_lib/k8s.py` runs as a prek hook, on
 every commit that touches a manifest template. A hook that resolves DNS is a hook that fails
 when DNS is down — and this repo *is* the DNS: Pi-hole, unbound and the host resolver all live
 here, and a session fixing a broken resolver must still be able to commit. So the schemas are a

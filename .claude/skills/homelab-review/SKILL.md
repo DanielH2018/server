@@ -440,7 +440,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   deleted 62, while the service count held near 50. Delete a check when either of two things is
   true — **its subject is gone** (the code, rule or failure shape it watches no longer exists), or
   **a census or schema check already covers it** (`_k8s_render`'s censuses, and
-  `validate-k8s-manifests`' strict OpenAPI validation, are the usual coverers here). Drop the
+  the strict OpenAPI validation of `validate-render-templates`' k8s family, are the usual coverers here). Drop the
   check's `ENFORCED` citation in the prose in the same PR, or
   `tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
   dangling node id. Say in the PR body which of the two conditions applied and where the coverage

@@ -379,7 +379,7 @@ ROWS = (
         # The live index decides, so the red subject is a second home for a real module.
         red=(
             Subject("scripts/lib/registry.py", ""),
-            Subject("hosts/lib/k8s_manifests.py", ""),
+            Subject("hosts/lib/render_templates.py", ""),
         ),
         green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
         min_matches=100,
@@ -394,7 +394,7 @@ ROWS = (
                 "k8s/roles/homelab-mcp/files/safe_reads.py",
                 "scripts/lib/cli_registry.py",
                 "scripts/lib/repo_paths.py",
-                "scripts/validate/k8s_manifests.py",
+                "scripts/validate/render_templates.py",
                 "scripts/diagnostics/probe.py",
             }
         ),

@@ -109,10 +109,14 @@ class FakeRunner:
         self.attempts = [2]
         # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
         self.log = []
-        # The PR fields `own_surface.pr_problems` reads, and the ones after a `ci-fix`
-        # resume when it changes them. Empty, a daniel-server PR fails that rule.
+        # The PR fields `own_surface.pr_problems` reads, and the ones after a `ci-fix` or
+        # `conflict` resume when it changes them. Empty, a daniel-server PR fails that rule.
         self.pr_fields = {}
         self.pr_fields_fixed = None
+        # The files `git merge-tree` names as conflicting with the base; none merges clean.
+        self.conflicts = []
+        # Whether the `conflict` resume pushed the head it left in the worktree.
+        self.resolution_pushed = True
 
     def __call__(self, argv, stdin):
         argv = unprefixed(argv)
@@ -125,6 +129,11 @@ class FakeRunner:
                         argv, 128, "", "fatal: no such path"
                     )
                 return subprocess.CompletedProcess(argv, 0, self.tree[path], "")
+            if argv[3] == "merge-tree":
+                names = "".join(f"{name}\n" for name in self.conflicts)
+                return subprocess.CompletedProcess(
+                    argv, 1 if self.conflicts else 0, f"tree0\n{names}", ""
+                )
             if "diff" in argv and "--name-only" in argv:
                 out = "\0".join(self.changed_paths)
             elif "merge-base" in argv:
@@ -141,15 +150,21 @@ class FakeRunner:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.branch_prs), "")
         if argv[:3] == ["gh", "pr", "view"]:
             fixed = any(phase == "ci-fix" for *_, phase in self.claude)
+            # A `conflict` resume pushes the head `git rev-parse HEAD` answers after it.
+            rebased = any(phase == "conflict" for *_, phase in self.claude)
             fields = self.pr_fields
-            if fixed and self.pr_fields_fixed is not None:
+            if (fixed or rebased) and self.pr_fields_fixed is not None:
                 fields = self.pr_fields_fixed
             out = json.dumps(
                 {
                     **fields,
                     "statusCheckRollup": self.rollup,
                     "isDraft": self.draft,
-                    "headRefOid": "ccc" if self.fix_pushes and fixed else "bbb",
+                    "headRefOid": "ccc"
+                    if self.fix_pushes and fixed
+                    else (
+                        self.heads[-1] if rebased and self.resolution_pushed else "bbb"
+                    ),
                 }
             )
             return subprocess.CompletedProcess(argv, 0, out, "")

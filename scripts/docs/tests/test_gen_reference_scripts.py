@@ -294,7 +294,6 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "build_docs.py": "scheduled",
         "gen_infra_map.py": "scheduled",
         "secret_rotation.py": "scheduled",
-        "k8s_manifests.py": "gate",
         "render_templates.py": "gate",
         "validate_ha_config.py": "gate",
         "grafana_dashboard_uids.py": "gate",

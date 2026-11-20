@@ -12,7 +12,7 @@ clean, so this check reads the container.
 Nothing else enforces this: the cluster has no PodSecurity admission labels on any namespace,
 so an absent container securityContext is simply honoured.
 
-Rendering goes through validate.k8s_manifests' own machinery rather than a second stub set, so
+Rendering goes through validate.render_lib.k8s' own machinery rather than a second stub set, so
 this cannot drift from what that validator considers a renderable manifest.
 """
 
@@ -43,7 +43,7 @@ _PRIVILEGED = {
 # Roles this guard's corpus does NOT contain, each with the reason it is out.
 #
 # THE BLIND SPOT THIS PINS: rendered_docs() filters on
-# validate.k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
+# validate.render_lib.k8s.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
 # manifest validator can render standalone. Coverage of this security guard is therefore a side
 # effect of someone else's list: a role on it that renders a pod spec is never examined, and
 # every assertion in this file passes anyway. Pinning the exempt set turns a role

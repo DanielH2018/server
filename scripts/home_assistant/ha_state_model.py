@@ -17,24 +17,11 @@ from pathlib import Path
 
 import yaml
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to sit
-# ABOVE every import below, `home_assistant.validate_ha_config` included — that one read
-# `from validate_ha_config import ...` and sat above this insert, so it resolved from
-# sys.path[0] for a direct invocation and raised ModuleNotFoundError for `probe.py ha-state`,
-# which reaches this module as `from home_assistant import ha_state_model`.
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-
 from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 
 from home_assistant.validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
-# One insert is enough: the `probe_lib` modules import each other by package name, so
-# `scripts/` alone resolves them.
 
 _TEMPLATE_MARKERS = ("{{", "{%")
 
@@ -524,7 +511,7 @@ def main(argv=None) -> int:
     # (generate/refresh) never touches ha_state_checks at all. Moving the CLI dispatch itself
     # into a third module would break the cycle but turns a working two-module split into three
     # for one subcommand; pinned in ALLOWED_CYCLES instead.
-    from ha_state_checks import check_errors
+    from home_assistant.ha_state_checks import check_errors
 
     errs = check_errors()
     if errs:
