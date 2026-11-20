@@ -92,9 +92,7 @@ system that no longer runs; what survives out of them is the libvirt substrate i
 `hosts/components/hypervisor`, which the monthly etcd restore drill uses.
 
 The docs-guard slices stay live under `docs/target-architecture/docs-guard/`, because G7 and
-G11 are in progress. Beside them, `docs/target-architecture/` holds one stub for each archived
-plan that a rendered comment still cites: a `#` line in a template or a shipped file renders
-into a manifest or a host package, so repointing it restarts the workload or rebuilds the
-package. [#9170](https://github.com/DanielH2018/server/issues/9170) repoints those comments one
-role group at a time, and each slice deletes the stubs it leaves uncited. The last slice,
-[#9378](https://github.com/DanielH2018/server/issues/9378), deletes the rest.
+G11 are in progress. Nothing else is left under `docs/target-architecture/`. A comment that
+cites an archived plan cites its path under `docs/archive/`, and a `#` line in a template or
+a shipped file renders into a manifest or a host package, so editing that citation restarts
+the workload or rebuilds the package.

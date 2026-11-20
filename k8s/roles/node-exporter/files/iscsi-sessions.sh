@@ -12,7 +12,7 @@
 # It runs as the `iscsi-sessions` sidecar of the node-exporter DaemonSet, whose template
 # inlines this file. It reads sysfs, which every uid may read, and writes into the emptyDir the
 # exporter reads as a second textfile directory. The file follows the check-file half of M3's
-# producer metric contract (docs/target-architecture/monitoring/m3-textfile-timer.md).
+# producer metric contract (docs/archive/monitoring/m3-textfile-timer.md).
 #
 # Environment, all optional: SYSFS (default /host/sys), TEXTFILE_DIR (default /iscsi-textfile),
 # INTERVAL_S (default 60) and ONCE (set to 1 to write one file and exit, for the test).
