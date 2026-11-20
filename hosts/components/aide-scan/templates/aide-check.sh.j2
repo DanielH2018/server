@@ -43,7 +43,11 @@
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged. A
 #   conffile the host package's lines arm adds a block to is the package's copy while removing
-#   that block, once, between its markers and as declared, leaves the digest dpkg records.
+#   that block, once, between its markers and as declared, leaves the digest dpkg records. One it
+#   only makes line edits to is the package's copy while replaying those edits on the kept copy
+#   of the installed version's file gives it, the lines they append in any order (aide-originals).
+#   Each run first keeps the copies it lacks, fetched from the configured archive. That is the
+#   run's only network call, and a copy it cannot keep names the file "original unavailable".
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,
 #   PAM, cron, the user and group databases, the loader and module config, shell startup files,
 #   apt hooks, sources and keys, udev rules, systemd units and drop-ins, rc.local, init scripts,
@@ -108,6 +112,9 @@ SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
 HOST_MANIFEST=/usr/lib/homelab/manifest.json
 # homelab-reconcile's record, read under FS_ROOT for the users its users arm expired.
 RECONCILE_RECORD=/var/lib/homelab-reconcile/applied.json
+# Keeps and judges the package copy of each conffile the lines arm makes line edits to.
+AIDE_ORIGINALS=/usr/lib/homelab/aide-originals
+ORIGINALS=/var/lib/homelab-aide-originals
 
 # Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
 # awk through ENVIRON, because -v would read each backslash as an escape.
@@ -446,13 +453,21 @@ unblocked_digest() {
   echo "${digest%% *}"
 }
 
+# Prints each path whose every edit in the host package's lines arm is a line edit, one per line.
+# A path with a block edit is unblocked_digest's, and one with both is explained by neither.
+line_edit_paths() {
+  jq -r '.lines.edits | group_by(.path)[] | select(all(.line != null)) | .[0].path' \
+    "$FS_ROOT$HOST_MANIFEST" 2>/dev/null
+}
+
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
-  local kind type pug scope path digest target dangling rule unblocked block_paths
+  local kind type pug scope path digest target dangling rule unblocked replayed block_paths line_paths
   block_paths=" $(jq -r '.lines.edits[] | select(.block != null) | .path' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null | tr '\n' ' ') "
+  line_paths=" $(line_edit_paths | tr '\n' ' ') "
   paged_entries | while IFS=$'\t' read -r kind type pug scope path; do
-    digest=- target=- dangling=- rule=- unblocked=-
+    digest=- target=- dangling=- rule=- unblocked=- replayed=-
     if [[ "$kind" != removed ]]; then
       if [[ -L "$FS_ROOT$path" ]]; then
         # -m, not -f: a link into a directory that is missing still has a target to judge, and
@@ -470,10 +485,13 @@ unexplained_entries() {
         if [[ "$block_paths" == *" $path "* ]]; then
           unblocked=$(unblocked_digest "$path")
           [[ -n "$unblocked" ]] || unblocked=-
+        elif [[ "$line_paths" == *" $path "* ]]; then
+          replayed=$(jq -c --arg p "$path" '[.lines.edits[] | select(.path == $p)]' "$FS_ROOT$HOST_MANIFEST" \
+            | "$AIDE_ORIGINALS" judge "$ORIGINALS" "$DPKG_DIR/status" "$path" "$FS_ROOT$path") || replayed=differs
         fi
       fi
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule" "$unblocked"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling" "$rule" "$unblocked" "$replayed"
   done | SNAPS_REVISED="$(snaps_revised)" SNAPD_UDEV="$SNAPD_UDEV" \
     ROLE_WRITTEN="$ROLE_WRITTEN" USRMERGE="$USRMERGE" BOOT_LINKS="$BOOT_LINKS" \
     BOOT_LINK_TARGET="$BOOT_LINK_TARGET" BOOT_ENV="$BOOT_ENV" DERIVED_KERNEL="$DERIVED_KERNEL" \
@@ -570,7 +588,11 @@ unexplained_entries() {
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
       # $10 is the digest with the lines arm block removed, set only for a path a block edit names.
-      else if (d != "") { if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0)) why = "differs from its package copy" }
+      # $11 is aide-originals judge, set only for a path the arm makes line edits to alone.
+      else if (d != "") {
+        if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0) && $11 != "explained")
+          why = ($11 == "original unavailable") ? "differs from its package copy; original unavailable" : "differs from its package copy"
+      }
       # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
       # Every installed package on daniel-server records md5sums, so an owned regular
       # file with no digest was a link or a directory in its package.
@@ -598,6 +620,7 @@ unexplained_entries() {
 # from a run nobody accepted goes first, so the database moved is always this run's.
 rm -f "$AIDE_DIR/aide.db.new"
 copy_accounts
+line_edit_paths | "$AIDE_ORIGINALS" seed "$ORIGINALS" "$DPKG_DIR/status" 2>&1 | logger -p daemon.notice -t aide-check
 START=$SECONDS
 REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1)
 RC=$?
