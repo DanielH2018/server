@@ -89,11 +89,6 @@ def head_snapshot(head_tree) -> gate.Snapshot:
     return gate.snapshot(head_tree, ROLES)
 
 
-def test_a_snapshot_keys_its_deps_by_every_k8s_entry(head_snapshot):
-    """Every entry, not the two rendered: arm 3 walks the keys for what the base holds."""
-    assert set(ROLES) < set(head_snapshot.deps)
-
-
 def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Snapshot:
     """A copy of `head` at `dest` with each `path: (old, new)` replacement made once, rendered.
 

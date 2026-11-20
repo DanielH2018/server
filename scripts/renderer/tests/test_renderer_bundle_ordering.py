@@ -136,6 +136,22 @@ def test_the_render_refuses_a_cycle_and_writes_nothing(tmp_path, capsys):
     assert not out.exists() or list(out.iterdir()) == []
 
 
+def test_the_render_refuses_an_edge_to_no_k8s_tag_and_writes_nothing(tmp_path, capsys):
+    cluster_file = tmp_path / CLUSTER_VARS_FILE
+    cluster_file.write_text(DOTENV)
+    out = tmp_path / "out"
+    code = homelab_render.cluster(
+        out,
+        ["bento-pdf"],
+        None,
+        cluster_file=cluster_file,
+        ordering=lambda: Ordering(deps={"bento-pdf": ["gone"]}),
+    )
+    assert code == RENDER_REFUSED
+    assert "names no k8s tag" in capsys.readouterr().err
+    assert not out.exists() or list(out.iterdir()) == []
+
+
 def test_the_live_ordering_reads_the_dep_map_and_its_rules():
     """bento-pdf is routed behind Authelia, so the dependency map gives it both edges."""
     ordering = cluster_mod.bundle_ordering()
