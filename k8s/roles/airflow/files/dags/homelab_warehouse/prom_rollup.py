@@ -195,6 +195,26 @@ def fetch_range(
     return get_json(f"{base_url}/api/v1/query_range?{params}", opener, sleep)["result"]
 
 
+def series_identity(series: Mapping) -> frozenset:
+    """A result series' full label set, as a key that matches it across queries."""
+    return frozenset(series["metric"].items())
+
+
+def baselines_by_series(result: list[dict]) -> dict[frozenset, float]:
+    """An instant query's result as each series' value, keyed by `series_identity`."""
+    return {series_identity(series): float(series["value"][1]) for series in result}
+
+
+def series_increase(series: Mapping, baseline: float) -> float:
+    """A counter series' rise over a range result from `baseline`, counting a reset from zero."""
+    previous = baseline
+    rise = 0.0
+    for _, value in sorted((int(float(t)), float(v)) for t, v in series["values"]):
+        rise += value - previous if value >= previous else value
+        previous = value
+    return rise
+
+
 def _points(series: Mapping) -> dict[int, float]:
     return {int(float(ts)): float(value) for ts, value in series["values"]}
 

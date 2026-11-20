@@ -116,6 +116,17 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `k8s/roles/airflow/tests/test_claude_decisions.py::test_the_backfill_window_stays_a_day_inside_lokis_retention`
   holds `LOKI_KEEP_DAYS` to `observability_loki_retention`. The query keeps only the fields
   the classification reads, so no command, prompt or session id leaves Loki.
+- **`edge_daily_rollup`** loads `edge.counts_daily`: Traefik's requests per entrypoint and
+  per route by status code, CrowdSec's scenario overflows, AppSec requests and blocks and the
+  bouncer's LAPI requests, and the day's highest active-decision count per origin. Each counter
+  series counts its rise from its last value in the day before, and a drop counts as a
+  restart (`k8s/roles/airflow/files/dags/homelab_warehouse/prom_rollup.py:series_increase`).
+  Every label stays in the series' identity: the CrowdSec agent runs inside the Traefik pod,
+  so each Traefik restart starts its counters under a new `instance`. The step is one minute,
+  because a restart loses the rise between the last sample before it and the reset.
+  `check` fails a day with fewer than
+  `k8s/roles/airflow/files/dags/homelab_warehouse/edge_counts.py:MIN_DAILY_REQUESTS` Traefik
+  requests or no bouncer requests, since both run all day.
 - **Grafana's "Homelab history" board**
   (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads every
   DAG's tables through the `Warehouse` datasource.

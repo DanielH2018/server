@@ -30,7 +30,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from .prom_rollup import DayWindow
+from .prom_rollup import DayWindow, series_identity, series_increase
 
 SCHEMA = "claude"
 USAGE_TABLE = f"{SCHEMA}.usage_daily"
@@ -107,25 +107,6 @@ def baseline_query(metric: UsageMetric, window: DayWindow) -> str:
     )
 
 
-def _identity(series: Mapping) -> frozenset:
-    return frozenset(series["metric"].items())
-
-
-def baselines_by_series(result: list[dict]) -> dict[frozenset, float]:
-    """`baseline_query`'s instant result, keyed by each series' label set."""
-    return {_identity(series): float(series["value"][1]) for series in result}
-
-
-def series_increase(series: Mapping, baseline: float) -> float:
-    """One session counter's rise over the day from `baseline`, counting a restart from zero."""
-    previous = baseline
-    rise = 0.0
-    for _, value in sorted((int(float(t)), float(v)) for t, v in series["values"]):
-        rise += value - previous if value >= previous else value
-        previous = value
-    return rise
-
-
 def usage_rows(
     metric: UsageMetric,
     window: DayWindow,
@@ -150,7 +131,7 @@ def usage_rows(
             labels.get("model", ""),
             labels.get(metric.kind_label, "") if metric.kind_label else "",
         )
-        rise = series_increase(series, baselines.get(_identity(series), 0.0))
+        rise = series_increase(series, baselines.get(series_identity(series), 0.0))
         sums[key] = sums.get(key, 0.0) + rise
     return [
         (window.day, metric.metric, *key, round(value, 6))

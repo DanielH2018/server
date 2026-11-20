@@ -55,7 +55,7 @@ def claude_usage_rollup():
                 step_s=cu.STEP_S,
                 through_midnight=True,
             )
-            baselines = cu.baselines_by_series(
+            baselines = pr.baselines_by_series(
                 pr.fetch_instant(pr.PROM_URL, cu.baseline_query(metric, window))
             )
             rows += cu.usage_rows(metric, window, result, baselines)
