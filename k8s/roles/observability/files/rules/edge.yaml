@@ -1,6 +1,6 @@
 # The Traefik edge, read from the `traefik-k8s` scrape job: the certificates it serves and the
 # request counters. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file
-# verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch A4.
+# verbatim. The design is docs/archive/monitoring/m6-retire-kuma.md, batch A4.
 #
 # The scrape job sets no `service`, and Traefik's own `service` label names a backend, so every
 # rule sets `service: traefik` as a literal. A rule that groups by Traefik's backend copies it to

@@ -1,6 +1,6 @@
 # The homelab Loki's health and its ruler's, read from its Prometheus scrape job. Plain YAML,
 # never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m5-loki-ruler.md, "The rules".
+# docs/archive/monitoring/m5-loki-ruler.md, "The rules".
 #
 # The ruler's series exist only once a rule group loads. Their labels are user="fake" and a
 # rule_group that embeds the ruler's rule_path. A renamed group or a moved rule_path changes that value, and

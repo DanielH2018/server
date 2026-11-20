@@ -1,6 +1,6 @@
 # The B7 pod producers: autofix-bridge, the two cloudflare-ddns Deployments and the pi-peer-backup
 # CronJob. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The
-# design is docs/target-architecture/monitoring/m6-retire-kuma.md, batch B7. A pod exports its
+# design is docs/archive/monitoring/m6-retire-kuma.md, batch B7. A pod exports its
 # verdict through a metrics endpoint rather than a textfile or a Pushgateway.
 # pod-producers.yaml holds B6b's, which this file's CronJob half copies.
 #
