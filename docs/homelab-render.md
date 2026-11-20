@@ -195,8 +195,8 @@ A role's templates render with these variables, resolved for daniel-box:
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
 - `hosts`, one entry per `inventory/host_vars/` file, holding that host's literal
-  `server_ip`, `compose_services` and `claude_agent_ssh_login_enabled`
-  (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
+  `server_ip`, `compose_services`, `claude_agent_ssh_login_enabled` and
+  `ssh_host_ed25519_key` (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
   `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
