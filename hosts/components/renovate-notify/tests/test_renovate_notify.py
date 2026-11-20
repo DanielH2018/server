@@ -46,22 +46,26 @@ def test_discord_post_sends_user_agent(monkeypatch):
     )
 
 
-def test_the_dashboard_is_found_past_the_first_page_of_issues(monkeypatch):
+def test_the_dashboard_is_read_from_one_request_filtered_to_renovate(monkeypatch):
     dashboard = {
         "title": "Dependency Dashboard",
         "user": {"login": "renovate[bot]"},
         "body": "## Pending Status Checks\n",
     }
     filler = [{"title": "issue %d" % n, "user": {"login": "x"}} for n in range(100)]
-    pages = {"1": filler, "2": [dashboard]}
+    urls = []
 
     def fake_urlopen(req, timeout=None):
-        page = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)["page"]
-        return _FakeJson(pages[page[0]])
+        urls.append(req.full_url)
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)
+        return _FakeJson(
+            [dashboard] if query.get("creator") == ["renovate[bot]"] else filler
+        )
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    issues = rn.get_open("o/r", "issues", until_dashboard=True)
+    issues = rn.renovate_issues("o/r")
     assert notify_logic.dashboard_body(issues) == dashboard["body"]
+    assert len(urls) == 1
 
 
 def test_every_page_of_open_pulls_is_read(monkeypatch):
