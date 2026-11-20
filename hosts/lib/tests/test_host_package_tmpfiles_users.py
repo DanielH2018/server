@@ -119,6 +119,30 @@ def test_every_declared_uid_sits_below_the_range_ubuntu_allocates_from_999_down(
     } == set()
 
 
+def gids_off_their_uid(files: Files) -> set[str]:
+    """The `u` lines of sysusers.d whose gid differs from the uid, each as `name uid:gid`."""
+    sysusers = files.get(SYSUSERS, (b"", 0))[0].decode()
+    return {
+        f"{fields[1]} {fields[2]}"
+        for fields in (line.split() for line in sysusers.splitlines())
+        if fields[0] == "u" and len(set(fields[2].split(":"))) != 1
+    }
+
+
+def test_every_declared_gid_is_its_users_uid(packages):
+    # A gid outside the band is one a Depends' own group can take before step 5 runs.
+    assert {host: gids_off_their_uid(files) for host, files in packages.items()} == {
+        host: set() for host in HOSTS
+    }
+
+
+def test_a_declared_gid_that_differs_from_the_uid_is_reported(packages):
+    planted = b'g planted 985\nu planted 910:985 "Planted" /nonexistent /bin/false\n'
+    files = {**packages["daniel-pi"], SYSUSERS: (planted, 0o644)}
+
+    assert gids_off_their_uid(files) == {"planted 910:985"}
+
+
 def test_every_parent_under_the_operators_home_is_declared_and_owned_by_the_operator(
     packages,
 ):

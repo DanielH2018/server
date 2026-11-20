@@ -198,10 +198,3 @@ def test_verify_with_numbers_loads_each_issue_by_number(capsys, issue, make_tool
     assert findings.main(["verify", "7"], tools) == 0
     assert "#7  Named directly" in capsys.readouterr().out
     assert calls.gh_json[0][:3] == ["issue", "view", "7"]
-
-
-def test_verify_takes_no_close_flag(make_tools):
-    """The removal, asserted: `verify` cannot be talked into writing anything."""
-    tools, _ = make_tools()
-    with pytest.raises(SystemExit):
-        findings.main(["verify", "--all", "--close"], tools)

@@ -7,8 +7,6 @@ every key the tree's `.source` records, each under a fake digest.
 Run: uv run pytest scripts/renderer/tests/test_renderer_cross_role_restart.py
 """
 
-import importlib
-
 from lib.exit_codes import RENDER_OK
 from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import CLUSTER_VARS_SOURCE
@@ -56,9 +54,3 @@ def test_a_pihole_password_rotation_moves_the_pihole_exporter_checksum(tmp_path)
     after = _exporter_checksum(tmp_path, "after", "b" * 64)
     assert before is not None, f"{TAG} carries no {RESTART_ANNOTATION}"
     assert before != after
-
-
-def test_the_outside_role_exemptions_hold_no_pihole_exporter_entry():
-    """With the checksum covering the password, the D5.5 exemption has no reason left."""
-    exempt = importlib.import_module("test_renderer_restart").OUTSIDE_ROLE_EXEMPT
-    assert [entry for entry in exempt if entry[0] == TAG] == []

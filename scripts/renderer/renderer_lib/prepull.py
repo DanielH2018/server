@@ -68,7 +68,6 @@ import json
 
 import yaml
 
-from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import (
     FLUX_NAMESPACE,
@@ -77,6 +76,7 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
+from renderer.renderer_lib.documents import parse_documents
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import prepull_timeouts, prepull_workloads
 
@@ -94,14 +94,11 @@ BACKOFF_LIMIT = 3
 
 
 def _pod_specs(files: Mapping[str, str]) -> list[tuple[str, dict]]:
-    specs = []
-    for text in files.values():
-        for doc in yaml_fast.safe_load_all(text):
-            if isinstance(doc, dict) and doc.get("kind") in WORKLOADS:
-                name = str((doc.get("metadata") or {}).get("name", ""))
-                template = (doc.get("spec") or {}).get("template") or {}
-                specs.append((name, template.get("spec") or {}))
-    return specs
+    return [
+        (obj.name, (obj.spec.get("template") or {}).get("spec") or {})
+        for obj, _ in parse_documents(files.values())
+        if obj.kind in WORKLOADS
+    ]
 
 
 def _hostnames(terms: Iterable[Mapping]) -> list[str]:

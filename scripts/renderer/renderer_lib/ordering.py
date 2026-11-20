@@ -45,6 +45,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib.documents import parse_documents
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 # The suffix of a tag's deferred apply: its directory under `cluster/` and its Kustomization.
@@ -360,12 +361,9 @@ def verify_timeout(files: Mapping[str, str], default: str) -> str:
         ValueError: `default` is not a Go duration of whole hours, minutes and seconds.
     """
     deadlines = [
-        int(doc["spec"]["activeDeadlineSeconds"])
-        for text in files.values()
-        for doc in yaml_fast.safe_load_all(text)
-        if isinstance(doc, dict)
-        and doc.get("kind") == "Job"
-        and (doc.get("spec") or {}).get("activeDeadlineSeconds") is not None
+        int(obj.spec["activeDeadlineSeconds"])
+        for obj, _ in parse_documents(files.values())
+        if obj.kind == "Job" and obj.spec.get("activeDeadlineSeconds") is not None
     ]
     if not deadlines:
         return default
@@ -427,14 +425,9 @@ def _namespaces(files: Mapping[str, str]) -> set[str]:
 
     A `kustomization.yaml` names none, since its `namespace` is a top-level field.
     """
-    found = set()
-    for text in files.values():
-        for doc in yaml_fast.safe_load_all(text):
-            if isinstance(doc, dict):
-                namespace = (doc.get("metadata") or {}).get("namespace")
-                if namespace:
-                    found.add(str(namespace))
-    return found
+    return {
+        obj.namespace for obj, _ in parse_documents(files.values()) if obj.namespace
+    }
 
 
 def kustomization_edges(

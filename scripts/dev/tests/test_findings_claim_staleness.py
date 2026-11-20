@@ -4,15 +4,14 @@ The pairing matters: a rule that calls everything stale and a rule that calls no
 stale are indistinguishable from the passing side of a single test.
 """
 
-import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 
 from _findings_fakes import foreign_comment, make_issue, operator_comment, typed
 
 from dev.findings_lib.claim import claim_is_live, claim_states
 from dev.findings_lib.issue_model import claim_comment, release_comment
+from lib.proc_testing import live_session_lock
 from lib.worktrees import Worktree, memoised_merged
 
 WT = "worktree-issue-1132"
@@ -49,12 +48,6 @@ def _tree(locked=True, reason="claude session x (pid 1 start 1)", branch=WT):
     return Worktree(
         path=PATH, head="abc1234", branch=branch, locked=locked, lock_reason=reason
     )
-
-
-def _own_start():
-    """This process's start time from /proc, the field `session_is_alive` compares."""
-    stat_line = Path(f"/proc/{os.getpid()}/stat").read_text()
-    return stat_line.rsplit(")", 1)[1].split()[19]
 
 
 def _never(_arg):
@@ -98,7 +91,7 @@ def test_claim_is_live_while_a_session_still_holds_the_worktree_lock():
     # The live-session-lock condition. An orchestrator worktree is clean and at master's
     # tip, so `merged` says True — only the live lock keeps its claim alive for the
     # duration of the fan-out it is running.
-    alive = _tree(reason=f"claude session x (pid {os.getpid()} start {_own_start()})")
+    alive = _tree(reason=live_session_lock())
     live, reason = claim_is_live(WT, [alive], dirty=_never, merged=_always)
     assert live is True
     assert "in use" in reason

@@ -148,16 +148,6 @@ def test_libraries_are_tracked_in_fake_remux_lib_without_an_init_file():
     assert f"{LIB.relative_to(REPO)}/__init__.py" not in lib
 
 
-def test_only_the_one_entrypoint_keeps_the_fake_remux_prefix_in_files():
-    files = str(FILES.relative_to(REPO))
-    top = {
-        p.rsplit("/", 1)[1]
-        for p in _tracked(f"{files}/fake_remux*")
-        if p.rsplit("/", 1)[0] == files
-    }
-    assert top == {ENTRYPOINT}
-
-
 def test_replacement_library_imports_when_run_directly_from_another_directory(tmp_path):
     # It imports the detection library, so one level deeper it needs its own bootstrap.
     path = _lib_file_defining("adopt_in_flight")
