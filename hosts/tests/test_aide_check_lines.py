@@ -151,6 +151,21 @@ def test_a_line_edited_conffile_with_no_usable_original_is_flagged(tmp_path, ori
     ), logged
 
 
+def test_a_judge_that_fails_is_named_apart_from_a_content_difference(tmp_path):
+    unparsable = [{**e, "regexp": "("} if e["path"] == DEFS else e for e in LINE_EDITS]
+    _, pushed, logged, _ = _run_check(
+        tmp_path,
+        _report(f"{CHANGED_CONTENT}: {DEFS}"),
+        rc=4,
+        rewrite={DEFS: DEFS_EDITED, HOST_MANIFEST: _manifest(unparsable)},
+    )
+    assert pushed[0] == "down", pushed
+    assert (
+        f"aide-check: unexplained: {DEFS} ({REASON}; aide-originals judge failed, so the "
+        "edits were not replayed; journalctl -t aide-check has its error)" in logged
+    ), logged
+
+
 def test_a_run_tries_to_keep_each_missing_copy_before_it_scans(tmp_path):
     _, _, logged, _ = _run_check(
         tmp_path, _report(f"{CHANGED_CONTENT}: {DEFS}"), rc=4, originals={}

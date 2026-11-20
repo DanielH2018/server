@@ -487,7 +487,8 @@ unexplained_entries() {
           [[ -n "$unblocked" ]] || unblocked=-
         elif [[ "$line_paths" == *" $path "* ]]; then
           replayed=$(jq -c --arg p "$path" '[.lines.edits[] | select(.path == $p)]' "$FS_ROOT$HOST_MANIFEST" \
-            | "$AIDE_ORIGINALS" judge "$ORIGINALS" "$DPKG_DIR/status" "$path" "$FS_ROOT$path") || replayed=differs
+            | "$AIDE_ORIGINALS" judge "$ORIGINALS" "$DPKG_DIR/status" "$path" "$FS_ROOT$path") \
+            && [[ "$replayed" =~ ^(explained|original\ unavailable|differs)$ ]] || replayed="judge failed"
         fi
       fi
     fi
@@ -590,8 +591,11 @@ unexplained_entries() {
       # $10 is the digest with the lines arm block removed, set only for a path a block edit names.
       # $11 is aide-originals judge, set only for a path the arm makes line edits to alone.
       else if (d != "") {
-        if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0) && $11 != "explained")
-          why = ($11 == "original unavailable") ? "differs from its package copy; original unavailable" : "differs from its package copy"
+        if (index(d " ", " " $6 " ") == 0 && ($10 == "-" || index(d " ", " " $10 " ") == 0) && $11 != "explained") {
+          why = "differs from its package copy"
+          if ($11 == "original unavailable") why = why "; original unavailable"
+          else if ($11 == "judge failed") why = why "; aide-originals judge failed, so the edits were not replayed; journalctl -t aide-check has its error"
+        }
       }
       # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
       # Every installed package on daniel-server records md5sums, so an owned regular
