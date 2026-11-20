@@ -227,7 +227,6 @@ def test_a_placeholder_render_writes_the_vendored_files(tmp_path, vendoring):
         out,
         ["littlelink"],
         None,
-        flux_owned=lambda: {"littlelink"},
         cluster_file=cluster_file,
         vendored=vendoring,
     )

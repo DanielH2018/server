@@ -18,7 +18,7 @@ from renderer.renderer_lib.prune_label import label
 TIMEOUT = "600s"
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 CONFIGMAP = "kind: ConfigMap\nmetadata:\n  name: x\n  namespace: {namespace}\n"
-HOMELAB = Ordering(flux_owned=None, workload_namespace="homelab")
+HOMELAB = Ordering(workload_namespace="homelab")
 
 
 def _depends(ordering: Ordering, tags: list[str], directories: dict) -> dict:
@@ -62,7 +62,7 @@ def test_an_ordering_without_the_namespace_generates_no_edge():
 
 
 def test_the_bundle_ordering_names_k8s_namespace():
-    assert cluster_mod.bundle_ordering(set()).workload_namespace == "homelab"
+    assert cluster_mod.bundle_ordering().workload_namespace == "homelab"
 
 
 def test_the_namespace_carries_the_prune_exemption_prune_label_stamps():

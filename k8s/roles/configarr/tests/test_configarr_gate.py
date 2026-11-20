@@ -103,9 +103,8 @@ def rendered(tmp_path_factory):
         out,
         [TAG],
         None,
-        flux_owned=lambda: {TAG},
         cluster_file=cluster_file,
-        ordering=lambda o: Ordering(flux_owned=frozenset(o)),
+        ordering=Ordering,
         vendored=K8S_ROLES,
     )
     assert code == RENDER_OK

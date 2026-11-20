@@ -70,9 +70,8 @@ def _render(tmp_path, roles):
         out,
         [TAG],
         None,
-        flux_owned=lambda: {TAG},
         cluster_file=cluster_file,
-        ordering=lambda o: Ordering(flux_owned=frozenset(o)),
+        ordering=Ordering,
         vendored=roles,
     )
     assert code == RENDER_OK

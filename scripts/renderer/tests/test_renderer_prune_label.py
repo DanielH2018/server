@@ -92,13 +92,11 @@ def test_a_document_labelled_with_another_value_is_flagged():
         label(text, "t/f.yaml")
 
 
-def test_only_a_flux_owned_tags_directories_are_labelled():
-    owned = RenderedTag("a", {"claim.yaml": CLAIM}, {"ns.yaml": NAMESPACE})
-    other = RenderedTag("b", {"claim.yaml": CLAIM})
-    a, b = label_tags([owned, other], {"a"})
+def test_every_directory_of_a_tag_is_labelled():
+    tag = RenderedTag("a", {"claim.yaml": CLAIM}, {"ns.yaml": NAMESPACE})
+    (a,) = label_tags([tag])
     assert _labels(a.files["claim.yaml"])[0][PRUNE_LABEL] == PRUNE_DISABLED
     assert _labels(a.deferred["ns.yaml"])[0][PRUNE_LABEL] == PRUNE_DISABLED
-    assert b == other
 
 
 @pytest.mark.parametrize("mode", ["placeholder", "stub"])
@@ -113,9 +111,7 @@ def test_every_claim_and_namespace_of_a_live_flux_owned_render_carries_the_label
         stubs.write_text(stub_file_text())
     tags = ["observability", "sonarr"]
     out = tmp_path / "out"
-    code = homelab_render.cluster(
-        out, tags, stubs, flux_owned=lambda: set(tags), cluster_file=cluster_file
-    )
+    code = homelab_render.cluster(out, tags, stubs, cluster_file=cluster_file)
     assert code == RENDER_OK
     exempt = {}
     for path in sorted((out / "cluster").glob("*/*.yaml")):
