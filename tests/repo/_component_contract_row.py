@@ -15,6 +15,8 @@ _FIELDS = {
     "Abort valves": r"abort valves?\b",
     "Evidence": r"(required )?evidence\b",
 }
+# A contract heading written as a manifest comment, which a pointer sentence never opens with.
+_COMMENT_CONTRACT = re.compile(rf"^#\s*{HEADING}", re.MULTILINE)
 # A bullet's label, in a `- **Scope:**` or a plain `- Scope:` doc line.
 _FIELD_LABEL = re.compile(r"^\s*- \*{0,2}([^:*,(\n]+)[:*,(]", re.MULTILINE)
 
@@ -52,6 +54,10 @@ def _uncontracted_timers(subject: Subject) -> list[str]:
     timers = _timers(subject)
     if not timers:
         return []
+    if _COMMENT_CONTRACT.search(subject.text):
+        return [
+            f"states its {HEADING} in a component.yml comment, not in its CLAUDE.md"
+        ]
     path = (REPO / subject.rel).parent / "CLAUDE.md"
     gaps = doc_gaps(path.read_text()) if path.is_file() else None
     if gaps is None:
@@ -69,13 +75,20 @@ COMPONENT_TIMERS_CARRY_A_CONTRACT = Census(
         "A host component's timer acts with no human in the loop, so every "
         "`## Autonomous-role contract` section of the component's `CLAUDE.md` states a "
         "`- <field>` bullet each for the scope, mode, abort valves and evidence. Naming the "
-        "phrase alone does not count, and neither does a contract in a `component.yml` "
-        "comment. A timer that changes no state goes in `allow` with that reason."
+        "phrase alone does not count. A `# Autonomous-role contract` comment in "
+        "`component.yml` is flagged even beside a `CLAUDE.md` contract, because the two copies "
+        "drift. A timer that changes no state goes in `allow` with that reason."
     ),
     files=lambda: tracked("hosts/components/*/component.yml"),
     offence=_uncontracted_timers,
     count=lambda subject: 1 if _timers(subject) else 0,
-    red=(Subject("hosts/components/fixture/component.yml", _TIMER_FILE),),
+    red=(
+        Subject("hosts/components/fixture/component.yml", _TIMER_FILE),
+        Subject(
+            "hosts/components/board-sync/component.yml",
+            f"# {HEADING} (a).\n# - Scope: one file.\n{_TIMER_FILE}",
+        ),
+    ),
     green=(
         Subject("hosts/components/board-sync/component.yml", _TIMER_FILE),
         Subject(
