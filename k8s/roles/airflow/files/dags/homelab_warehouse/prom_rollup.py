@@ -116,13 +116,23 @@ def oldest_sample(
     Raises:
       RuntimeError: Prometheus did not answer with exactly one sample.
     """
-    params = urllib.parse.urlencode({"query": OLDEST_SAMPLE_QUERY})
-    result = _get(f"{base_url}/api/v1/query?{params}", opener, sleep)["result"]
+    result = fetch_instant(base_url, OLDEST_SAMPLE_QUERY, opener, sleep)
     if len(result) != 1:
         raise RuntimeError(
             f"{OLDEST_SAMPLE_QUERY} returned {len(result)} series, not 1"
         )
     return datetime.fromtimestamp(float(result[0]["value"][1]), timezone.utc)
+
+
+def fetch_instant(
+    base_url: str,
+    query: str,
+    opener: Callable = urllib.request.urlopen,
+    sleep: Callable[[float], None] = time.sleep,
+) -> list[dict]:
+    """Run a Prometheus instant query and return its `result` list, retried as `fetch_range`."""
+    params = urllib.parse.urlencode({"query": query})
+    return _get(f"{base_url}/api/v1/query?{params}", opener, sleep)["result"]
 
 
 def _get(url: str, opener: Callable, sleep: Callable[[float], None]) -> dict:
@@ -148,18 +158,26 @@ def fetch_range(
     window: DayWindow,
     opener: Callable = urllib.request.urlopen,
     sleep: Callable[[float], None] = time.sleep,
+    step_s: int = STEP_S,
+    through_midnight: bool = False,
 ) -> list[dict]:
     """Run a Prometheus range query over `window` and return its `result` list.
 
     Retries a refused or unreachable connection `CONNECT_ATTEMPTS` times. An HTTP error or a
     non-success body is not retried: the query, not the network, is wrong.
 
+    Args:
+      step_s: The query's step.
+      through_midnight: End at the next day's 00:00 rather than the day's last minute, for a
+        counter whose value at the day's end is what a row needs.
+
     Raises:
       RuntimeError: Prometheus answered with a non-success status.
       urllib.error.URLError: The connection failed on every attempt.
     """
+    end = window.start + 86400 if through_midnight else window.end
     params = urllib.parse.urlencode(
-        {"query": query, "start": window.start, "end": window.end, "step": STEP_S}
+        {"query": query, "start": window.start, "end": end, "step": step_s}
     )
     return _get(f"{base_url}/api/v1/query_range?{params}", opener, sleep)["result"]
 

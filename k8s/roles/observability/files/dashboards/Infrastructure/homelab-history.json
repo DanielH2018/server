@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Daily rollups from the Warehouse datasource, which Airflow loads each night from Prometheus and Home Assistant (k8s/roles/airflow/CLAUDE.md). Prometheus keeps about three weeks and Home Assistant one; these panels keep every day since each DAG began. Volume figures are filesystem usage of mounted claims, from kubelet, not Longhorn's actual size.",
+  "description": "Daily rollups from the Warehouse datasource, which Airflow loads each night from Prometheus, Home Assistant and Claude Code's telemetry (k8s/roles/airflow/CLAUDE.md). Prometheus keeps about three weeks and Home Assistant one; these panels keep every day since each DAG began. Volume figures are filesystem usage of mounted claims, from kubelet, not Longhorn's actual size.",
   "editable": true,
   "id": null,
   "panels": [
@@ -555,6 +555,166 @@
       ],
       "title": "Plug energy per day",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Notional API-priced spend each day, by entrypoint: cli, claude-desktop, or sdk-cli for remote control and fan-out batches.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, entrypoint AS metric, sum(value) AS value FROM claude.usage_daily WHERE metric = 'cost_usd' AND $__timeFilter(day) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code spend per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Tokens each day by type. Cache reads dominate a long session.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "normal",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, kind AS metric, sum(value) AS value FROM claude.usage_daily WHERE metric = 'tokens' AND $__timeFilter(day) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code tokens per day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Sessions started and hours of active use each day, across every host and entrypoint.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 57
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "stacking": "none",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, 'sessions' AS metric, sum(value) AS value FROM claude.usage_daily WHERE metric = 'sessions' AND $__timeFilter(day) GROUP BY 1 UNION ALL SELECT day::timestamptz, 'active hours', sum(value) / 3600 FROM claude.usage_daily WHERE metric = 'active_time_s' AND $__timeFilter(day) GROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Claude Code sessions and active hours",
+      "type": "timeseries"
     }
   ],
   "refresh": "",
