@@ -19,6 +19,7 @@ from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
+from _kuma_push_row import NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _role_python_paths_row import ROLE_FILES_CITE_REAL_PYTHON_PATHS
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
@@ -416,6 +417,7 @@ ROWS += (
     RESET_PATHS,
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
+    NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA,
     AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,
     PREK_FILES_PATHS_RESOLVE,
