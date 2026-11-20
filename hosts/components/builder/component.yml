@@ -7,10 +7,9 @@
 #
 # ENFORCED: hosts/lib/tests/test_builder_component.py.
 users:
-  # The uids sit in the homelab band 900-949, below the ones Ubuntu hands out from 999 down. The
-  # gids are the live groups' from before the band, which a rebuilt host gets too.
-  - {name: homelab-builder, uid: 902, gid: 983, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
-  - {name: homelab-signer, uid: 903, gid: 982, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
+  # The ids sit in the homelab band 900-949, below the ones Ubuntu hands out from 999 down.
+  - {name: homelab-builder, uid: 902, gid: 902, home: /var/lib/homelab-builder, shell: /usr/sbin/nologin, comment: Homelab package builder}
+  - {name: homelab-signer, uid: 903, gid: 903, home: /var/lib/homelab-signer, shell: /usr/sbin/nologin, comment: Homelab repository signer}
 defaults:
   builder_repo_port: 8791
   builder_github_repo: DanielH2018/server
