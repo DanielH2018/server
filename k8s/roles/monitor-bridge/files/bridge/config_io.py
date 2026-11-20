@@ -226,8 +226,8 @@ def io_config(
         # Cloudflare's pricing page decides them, not this deployment — so they live in
         # verdicts/storage.py beside r2_classify_operations, their only reader.
         R2_PROBE_INTERVAL_S=_num("R2_PROBE_INTERVAL_S", "1800"),
-        # How long the two bucket-lock rows (checks/b2.py:b2_object_lock,
-        # checks/r2.py:r2_etcd_lock) hold a verdict, either outcome. A lock setting changes only
+        # How long the two bucket-lock rows (checks/b2.py:check_b2_object_lock,
+        # checks/r2.py:check_r2_etcd_lock) hold a verdict, either outcome. A lock setting changes only
         # by the operator's hand, and the B2 read costs two Class C calls.
         BUCKET_LOCK_PROBE_INTERVAL_S=_num("BUCKET_LOCK_PROBE_INTERVAL_S"),
         # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env

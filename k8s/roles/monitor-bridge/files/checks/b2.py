@@ -265,7 +265,7 @@ def check_b2_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
     return b2_reachable(cfg, src)
 
 
-def b2_object_lock(
+def check_b2_object_lock(
     cfg: Config, src: Sources, now: float | None = None
 ) -> tuple[bool, str]:
     """Daily read of the Object Lock setting on the bucket the B2 key is scoped to. (ok, msg).
@@ -321,7 +321,3 @@ def b2_object_lock(
     cache["ts"] = now
     cache["ok"], cache["msg"] = result
     return result
-
-
-def check_b2_object_lock(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return b2_object_lock(cfg, src)

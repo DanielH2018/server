@@ -291,52 +291,56 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     )
 
 
+# Where k3s uploads the etcd snapshots (`etcd-s3-folder` in longhorn-backup's
+# k3s-etcd-snapshot-s3-secret.yaml.j2) and where Longhorn's R2 target writes
+# (`k3s_longhorn_r2_backup_prefix`). Policy, like the action lists above: no env var names them,
+# and test_check_bucket_locks.py holds both to their sources.
+R2_ETCD_PREFIX = "etcd-snapshots/"
+R2_LONGHORN_PREFIX = "longhorn/"
+
+
 def _covers(rule_prefix: str, path_prefix: str) -> bool:
     """Whether a rule on `rule_prefix` locks any object under `path_prefix`."""
     return path_prefix.startswith(rule_prefix) or rule_prefix.startswith(path_prefix)
 
 
-def r2_lock_verdict(
-    rules: list[dict], locked_prefix: str, unlocked_prefix: str
-) -> tuple[bool, str]:
+def r2_lock_verdict(rules: list[dict]) -> tuple[bool, str]:
     """(ok, msg) for the R2 bucket lock rules ADR-0041 requires.
 
-    An enabled `Age` rule must cover every object under `locked_prefix`, the etcd snapshots. No
-    enabled rule may lock anything under `unlocked_prefix`, Longhorn's daily tier: R2 keeps no
-    versions, so a locked block fails Longhorn's prune, and a failing prune retries.
+    An enabled `Age` rule must cover every object under `R2_ETCD_PREFIX`. No enabled rule may
+    lock anything under `R2_LONGHORN_PREFIX`: R2 keeps no versions, so a locked block fails
+    Longhorn's prune, and a failing prune retries.
 
     Args:
       rules: The `rules` list of the bucket's lock configuration.
-      locked_prefix: The key prefix the etcd snapshots upload under, with its trailing slash.
-      unlocked_prefix: The key prefix Longhorn's R2 target writes under, with its trailing slash.
     """
     enabled = [r for r in rules if r.get("enabled") is True]
     over_longhorn = sorted(
         str(r.get("id"))
         for r in enabled
-        if _covers(str(r.get("prefix") or ""), unlocked_prefix)
+        if _covers(str(r.get("prefix") or ""), R2_LONGHORN_PREFIX)
     )
     if over_longhorn:
         return CheckResult(
             False,
             "R2 lock rule %s covers %s, whose prune cannot delete a locked block"
-            % (", ".join(over_longhorn), unlocked_prefix),
+            % (", ".join(over_longhorn), R2_LONGHORN_PREFIX),
             ["lock over the Longhorn tier"],
         )
     for rule in enabled:
         condition = rule.get("condition") or {}
         if (
-            locked_prefix.startswith(str(rule.get("prefix") or ""))
+            R2_ETCD_PREFIX.startswith(str(rule.get("prefix") or ""))
             and condition.get("type") == "Age"
             and (condition.get("maxAgeSeconds") or 0) > 0
         ):
             return True, "R2 lock rule %s holds %s for %.0f days" % (
                 rule.get("id"),
-                locked_prefix,
+                R2_ETCD_PREFIX,
                 condition["maxAgeSeconds"] / 86400,
             )
     return CheckResult(
         False,
-        "no enabled Age lock rule covers %s" % locked_prefix,
+        "no enabled Age lock rule covers %s" % R2_ETCD_PREFIX,
         ["etcd snapshots unlocked"],
     )

@@ -30,10 +30,6 @@ from verdicts.storage import (
 )
 
 CF_API_URL = "https://api.cloudflare.com/client/v4"
-# `etcd-s3-folder` in longhorn-backup's k3s-etcd-snapshot-s3-secret.yaml.j2, and that role's
-# `k3s_longhorn_r2_backup_prefix`; test_check_r2_lock.py holds both to their sources.
-R2_ETCD_PREFIX = "etcd-snapshots/"
-R2_LONGHORN_PREFIX = "longhorn/"
 
 
 R2_QUERY = """query {
@@ -186,7 +182,7 @@ def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:
     return r2_usage(cfg, src)
 
 
-def r2_etcd_lock(
+def check_r2_etcd_lock(
     cfg: Config, src: Sources, now: float | None = None
 ) -> tuple[bool, str]:
     """Daily read of the R2 bucket's lock rules. (ok, msg).
@@ -222,11 +218,7 @@ def r2_etcd_lock(
         )
     result_body = optional_object(body.get("result"), "R2 bucket lock result") or {}
     rules = as_object_list(result_body.get("rules") or [], "R2 bucket lock rules")
-    result = CheckResult.of(r2_lock_verdict(rules, R2_ETCD_PREFIX, R2_LONGHORN_PREFIX))
+    result = CheckResult.of(r2_lock_verdict(rules))
     cache["ts"] = now
     cache["ok"], cache["msg"] = result
     return result
-
-
-def check_r2_etcd_lock(cfg: Config, src: Sources) -> tuple[bool, str]:
-    return r2_etcd_lock(cfg, src)

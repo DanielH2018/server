@@ -303,13 +303,13 @@ b2 rm --versions b2://lock-spike-<random>/backupstore/spike.blk
 
 The `delete-object` must succeed, and the listing must show a hide marker beside the
 version. The `rm --versions` must be refused for the locked version. If the `delete-object`
-is refused instead, stop: Longhorn's prune would fail on every locked block, and ADR-0041
-needs revisiting before step 2. Delete the scratch bucket once its one-day lock expires.
+is refused instead, stop. Every backup removes its own `locks/*.lck` object seconds after
+writing it, so a lock on the real bucket would fail every weekly backup, not only the prune.
+ADR-0041 needs revisiting before step 2. Delete the scratch bucket once its one-day lock expires.
 
 ### Step 2: lock the B2 weekly bucket
 
-Run this with the account's master key. The Longhorn key cannot change a bucket's
-retention and must not.
+Run this with the account's master key. Never use the Longhorn key, which the cluster holds.
 
 ```bash
 b2 bucket update --file-lock-enabled --default-retention-mode governance \

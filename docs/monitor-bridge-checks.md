@@ -182,7 +182,7 @@ checks each gate suppresses.
   failure is more often a 5xx. Empty credentials disable the check. **Behind `b2_reachable`**: a
   transaction cap fails this check and B2 Reachable together, and one root cause must not light
   two tiles. Runbook: `longhorn-backup-tiering`.)
-- **`b2_object_lock`** (`files/checks/b2.py:b2_object_lock`. One `b2_authorize_account` and one
+- **`b2_object_lock`** (`files/checks/b2.py:check_b2_object_lock`. One `b2_authorize_account` and one
   `b2_list_buckets` for the bucket the `B2_PROBE_*` key is scoped to, two Class C calls. `down`
   when the bucket's Object Lock is off, has no default retention, or cannot be read because the
   key lacks `readBucketRetentions`. `down` too when the retention is governance mode and the
@@ -222,7 +222,7 @@ checks each gate suppresses.
   which point drop the `bucketName` filter rather than raising the thresholds.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
-- **`r2_etcd_lock`** (`files/checks/r2.py:r2_etcd_lock`. Reads the R2 bucket's lock rules from
+- **`r2_etcd_lock`** (`files/checks/r2.py:check_r2_etcd_lock`. Reads the R2 bucket's lock rules from
   Cloudflare's REST API, `GET /accounts/<id>/r2/buckets/<bucket>/lock`, with
   `CF_ANALYTICS_TOKEN`, which needs Workers R2 Storage: Read for it. `down` unless an enabled
   `Age` rule covers `etcd-snapshots/`, and `down` when any enabled rule covers `longhorn/`, the

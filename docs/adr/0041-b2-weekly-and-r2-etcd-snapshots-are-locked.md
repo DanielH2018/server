@@ -14,7 +14,8 @@ Accepted. The operator ruled on 2026-11-20, on
 [#8511](https://github.com/DanielH2018/server/issues/8511). The bucket settings themselves
 are operator steps, because no session holds a credential that can change a bucket. The
 steps and the live half of the prune spike are in
-[Bucket immutability](../longhorn-backup-tiering.md#bucket-immutability-adr-0041).
+[Bucket immutability](../longhorn-backup-tiering.md#bucket-immutability-adr-0041), and
+[#9699](https://github.com/DanielH2018/server/issues/9699) tracks them.
 
 ## Context
 
@@ -44,13 +45,21 @@ removal. The two stores differ in what that call does to a locked object:
   a hide marker and leaves the version in place. Under S3 Object Lock semantics a hide is
   allowed while the version is locked. Backblaze's own pages do not state the B2 behaviour,
   so this half is unconfirmed until the live spike runs.
+
+The stake is larger than the prune. Every backup writes a `locks/*.lck` object and removes
+it when the backup ends (`lock.go`, `Lock` and `Unlock`), seconds after the upload, so the
+removal always meets a locked version. If B2 refused a version-less delete of a locked
+version, every weekly backup would fail, not only the prune.
 - **R2 keeps no versions.** Cloudflare documents that a delete blocked by a lock rule fails
   with HTTP 409 `ObjectLockedByBucketPolicy`. A locked Longhorn block on R2 therefore fails
   the prune, and the prune retries.
 
 k3s prunes its S3 snapshots by count (`etcd-snapshot-retention` in
 `hosts/components/k3s-server/component.yml`), and deletes only the snapshots past that
-count. A lock shorter than the age those snapshots reach never meets a k3s delete.
+count. The scheduled snapshots alone reach about 14 days before a prune, so a 7-day lock
+never meets a scheduled prune. An on-demand `k3s etcd-snapshot save --etcd-s3` counts toward
+the same retention. More than 14 of them in a week would bring a prune inside the lock, and
+R2 would refuse that delete until the lock expires.
 
 ## Decision
 
@@ -68,8 +77,8 @@ No bucket uses a writer key without delete rights. Longhorn's prune would fail o
 delete and retry.
 
 monitor-bridge reads both settings once a day: `b2_object_lock`
-(`k8s/roles/monitor-bridge/files/checks/b2.py:b2_object_lock`) and `r2_etcd_lock`
-(`k8s/roles/monitor-bridge/files/checks/r2.py:r2_etcd_lock`). Each pages a warning when
+(`k8s/roles/monitor-bridge/files/checks/b2.py:check_b2_object_lock`) and `r2_etcd_lock`
+(`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`). Each pages a warning when
 its bucket departs from this record.
 
 ## Consequences

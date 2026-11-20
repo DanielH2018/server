@@ -12,7 +12,12 @@ from _fake_sources import FakeSources
 from bridge.types import CheckResult
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
-from verdicts.storage import b2_lock_verdict, r2_lock_verdict
+from verdicts.storage import (
+    R2_ETCD_PREFIX,
+    R2_LONGHORN_PREFIX,
+    b2_lock_verdict,
+    r2_lock_verdict,
+)
 
 SEVEN_DAYS = {"mode": "governance", "period": {"duration": 7, "unit": "days"}}
 
@@ -88,7 +93,7 @@ def test_a_bucket_that_does_not_bind_the_writer_is_flagged(
 
 
 def test_an_age_rule_over_the_etcd_prefix_alone_is_clean():
-    ok, msg = r2_lock_verdict([ETCD_RULE], "etcd-snapshots/", "longhorn/")
+    ok, msg = r2_lock_verdict([ETCD_RULE])
     assert ok
     assert "7 days" in msg
 
@@ -115,7 +120,7 @@ def test_an_age_rule_over_the_etcd_prefix_alone_is_clean():
     ],
 )
 def test_a_lock_that_misses_etcd_or_reaches_longhorn_is_flagged(rules, detail):
-    result = CheckResult.of(r2_lock_verdict(rules, "etcd-snapshots/", "longhorn/"))
+    result = CheckResult.of(r2_lock_verdict(rules))
     assert not result.ok
     assert result.details == (detail,)
 
@@ -130,14 +135,14 @@ def test_the_b2_row_lists_the_keys_bucket_and_holds_the_verdict_a_day(b2_cfg):
         get_json=lambda url, headers: AUTH,
         post_json=lambda url, payload, headers: {"buckets": [GOVERNED]},
     )
-    ok, _ = checks.b2.b2_object_lock(b2_cfg, src, now=1000.0)
+    ok, _ = checks.b2.check_b2_object_lock(b2_cfg, src, now=1000.0)
     assert ok
     assert src.calls[1][1][:2] == (
         "https://api/b2api/v3/b2_list_buckets",
         {"accountId": "acct", "bucketId": "b1"},
     )
     later = FakeSources(state=src.state)
-    ok, msg = checks.b2.b2_object_lock(b2_cfg, later, now=1000.0 + 86399)
+    ok, msg = checks.b2.check_b2_object_lock(b2_cfg, later, now=1000.0 + 86399)
     assert ok
     assert "checked" in msg
     assert later.calls == []
@@ -152,11 +157,11 @@ def test_a_b2_refusal_is_cached_because_b2_billed_it(b2_cfg):
         raise err
 
     src = FakeSources(get_json=lambda url, headers: AUTH, post_json=refuse)
-    ok, msg = checks.b2.b2_object_lock(b2_cfg, src, now=1000.0)
+    ok, msg = checks.b2.check_b2_object_lock(b2_cfg, src, now=1000.0)
     assert not ok
     assert "refused" in msg
     later = FakeSources(state=src.state)
-    assert not checks.b2.b2_object_lock(b2_cfg, later, now=1060.0)[0]
+    assert not checks.b2.check_b2_object_lock(b2_cfg, later, now=1060.0)[0]
     assert later.calls == []
 
 
@@ -172,7 +177,7 @@ def test_the_r2_row_reads_the_buckets_lock_rules(r2_cfg):
             "result": {"rules": [ETCD_RULE]},
         }
     )
-    ok, _ = checks.r2.r2_etcd_lock(r2_cfg, src, now=1000.0)
+    ok, _ = checks.r2.check_r2_etcd_lock(r2_cfg, src, now=1000.0)
     assert ok
     assert src.queries("get_json") == [
         "https://api.cloudflare.com/client/v4/accounts/acct/r2/buckets/bkt/lock"
@@ -184,15 +189,13 @@ def test_an_r2_read_cloudflare_refuses_raises_rather_than_reading_as_unlocked(r2
         get_json=lambda url, headers: {"success": False, "errors": [{"code": 10000}]}
     )
     with pytest.raises(RuntimeError, match="refused"):
-        checks.r2.r2_etcd_lock(r2_cfg, src, now=1000.0)
+        checks.r2.check_r2_etcd_lock(r2_cfg, src, now=1000.0)
     assert src.state.r2_lock_probe["ts"] is None
 
 
 def test_the_r2_prefixes_are_the_ones_k3s_and_longhorn_write_under():
     role = K8S_ROLES / "longhorn-backup"
     defaults = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())
-    assert (
-        checks.r2.R2_LONGHORN_PREFIX == defaults["k3s_longhorn_r2_backup_prefix"] + "/"
-    )
+    assert R2_LONGHORN_PREFIX == defaults["k3s_longhorn_r2_backup_prefix"] + "/"
     secret = (role / "templates" / "k3s-etcd-snapshot-s3-secret.yaml.j2").read_text()
-    assert f"etcd-s3-folder: {checks.r2.R2_ETCD_PREFIX.rstrip('/')}\n" in secret
+    assert f"etcd-s3-folder: {R2_ETCD_PREFIX.rstrip('/')}\n" in secret
