@@ -28,7 +28,7 @@ import argparse
 import json
 import re
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -323,8 +323,11 @@ def add_resume_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def cmd_resume(args, tools: Tools) -> int:
+def cmd_resume(args, tools: Tools, readings: Callable, placement: Callable) -> int:
     """Restart one finished batch for the merge conflict its PR's newest landing ended on.
+
+    `readings` and `placement` are `place.candidate_readings` and `place.placement`, the
+    gates a launch passes, handed in because `place` imports this module.
 
     It holds the launch lock from its first manifest read to its manifest save, as `launch`
     does, so the live-batch cap counts this unit against a launch that runs beside it.
@@ -332,7 +335,7 @@ def cmd_resume(args, tools: Tools) -> int:
     wait_s = args.lock_wait
     try:
         with launch_lock.held(args.manifest_root, lambda: args.run_id, wait_s):
-            return _resume_locked(args, tools)
+            return _resume_locked(args, tools, readings, placement)
     except launch_lock.LockTimeout as exc:
         error(
             f"{exc} after a {wait_s:g} s wait — nothing was read or started; "
@@ -341,11 +344,8 @@ def cmd_resume(args, tools: Tools) -> int:
         return FANOUT_PLACE_LOCK_TIMEOUT
 
 
-def _resume_locked(args, tools: Tools) -> int:
+def _resume_locked(args, tools: Tools, readings: Callable, placement: Callable) -> int:
     """Check, gate and start the resume; the caller holds the launch lock."""
-    # `place` imports this module inside its own `cmd_resume`, so it is loaded by now.
-    from dev.fanout_lib.place import candidate_readings, placement
-
     root = args.manifest_root
     run = manifest_mod.load(args.run_id, root=root)
     index = next((i for i, b in enumerate(run.batches) if b.batch == args.batch), None)
@@ -363,7 +363,7 @@ def _resume_locked(args, tools: Tools) -> int:
     if isinstance(registered, str):
         error(f"{registered} — refusing to resume")
         return FANOUT_PLACE_NO_SIGNING_HOST
-    good = candidate_readings(tools, registered, [b.host], root)
+    good = readings(tools, registered, [b.host], root)
     if isinstance(good, int):
         return good
     if placement([b.batch], good, b.host, root, tools.multiplexed()) is None:

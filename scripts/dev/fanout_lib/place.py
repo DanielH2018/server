@@ -74,6 +74,7 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 
 import argparse
 import dataclasses
+from functools import partial
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -593,7 +594,10 @@ def main(argv=None, tools: Tools | None = None) -> int:
         ("stop", cmd_stop),
         ("clean", cmd_clean),
         ("abandon", cmd_abandon),
-        ("resume", cmd_resume),
+        (
+            "resume",
+            partial(cmd_resume, readings=candidate_readings, placement=placement),
+        ),
     ):
         run_parsers[name] = sub.add_parser(name)
         run_parsers[name].add_argument("run_id")
