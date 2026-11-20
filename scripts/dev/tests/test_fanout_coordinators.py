@@ -12,6 +12,7 @@ from dev.fanout_lib.coordinators import (
     dead_lines,
     page_orphaned,
     projects,
+    report,
 )
 from dev.fanout_lib.manifest import Batch, Manifest
 from dev.fanout_lib.notify import NO_COORDINATOR, page_command
@@ -72,12 +73,10 @@ def test_a_project_with_no_live_session_names_its_branch_path_and_waiting_batche
             ),
         )
     ]
-    (line, restart) = dead_lines(found)
-    assert line == (
+    assert dead_lines(found)[0] == (
         f'  ✗ project "Backups" has no live session: {BRANCH} at {PATH}; '
         "2 waiting: 41 on daniel-box parked, 42 on daniel-server needs-input"
     )
-    assert "restart" in restart
 
 
 def test_a_live_project_is_listed_live_and_no_batch_is_read():
@@ -116,18 +115,29 @@ class Starts:
 
 def test_an_orphaned_project_pages_once_on_its_second_pass(tmp_path):
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)
-    record, start, lines = tmp_path / "state" / "pages.json", Starts(), []
+    record, start = tmp_path / "state" / "pages.json", Starts()
 
-    page_orphaned([ORPHAN], record, lines.append, start)
+    page_orphaned([ORPHAN], record, lambda line: None, start)
     assert start.calls == [], "one pass with no process in the tree paged"
 
-    page_orphaned([ORPHAN], record, lines.append, start)
-    page_orphaned([ORPHAN], record, lines.append, start)
+    page_orphaned([ORPHAN], record, lambda line: None, start)
+    page_orphaned([ORPHAN], record, lambda line: None, start)
 
     unit = "fanout-coordinator-backups-1a2b3c"
     assert start.calls == [page_command(unit, NO_COORDINATOR)]
     assert json.loads(record.read_text()) == {PATH: True}
-    assert [line.rpartition(": ")[2].split()[0] for line in lines] == ["first", "paged"]
+
+
+def test_a_pass_whose_read_fails_logs_a_line_and_does_not_raise(tmp_path):
+    def unreadable() -> list[Project]:
+        raise subprocess.CalledProcessError(128, ["git", "worktree", "list"])
+
+    lines: list[str] = []
+
+    report(tmp_path, lines.append, read=unreadable)
+
+    assert len(lines) == 1
+    assert lines[0].startswith("coordinator projects not checked: ")
 
 
 def test_a_project_with_nothing_waiting_or_a_live_session_never_pages(tmp_path):

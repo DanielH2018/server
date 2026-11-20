@@ -27,7 +27,6 @@ from lib.worktrees import (
     VERDICT_CACHE,
     Worktree,
     classify,
-    coordinator_project,
     has_live_session,
     held_by_readable_process,
     lock_is_live,
@@ -550,4 +549,3 @@ def test_any_other_lock_is_judged_by_its_own_reason(tmp_path):
 
     assert has_live_session(held, in_use=lambda path: [])
     assert not has_live_session(gone, in_use=lambda path: [(1, "cwd")])
-    assert coordinator_project(held) == ""
