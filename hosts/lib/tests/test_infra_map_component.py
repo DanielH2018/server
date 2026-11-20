@@ -10,15 +10,13 @@ Run: uv run pytest hosts/lib/tests/test_infra_map_component.py
 import pytest
 from _checkout_package import render_daniel_box
 
+from _component_contract import component_contract
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "infra-map" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 CONTRACT_PARTS = (
-    "Autonomous-role contract",
     "Scope / exclusions:",
     "Mode (explicit and reversible):",
     "Authoritative sources:",
@@ -67,12 +65,10 @@ def test_the_timer_fires_every_15_minutes_and_is_linked(package):
     assert "homelab-infra-map.timer" in package.enable_links()
 
 
-def test_the_component_header_carries_the_contract():
-    header = "\n".join(
-        line for line in COMPONENT.read_text().splitlines() if line.startswith("#")
-    )
-    assert [part for part in CONTRACT_PARTS if part not in header] == []
-    reject = header.replace("Next-run review:", "")
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("infra-map")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []
+    reject = contract.replace("Next-run review:", "")
     assert [part for part in CONTRACT_PARTS if part not in reject] == [
         "Next-run review:"
     ]

@@ -1,8 +1,8 @@
 # Kernel and login hardening, applied with in-place edits.
 #
-# - Every `ansible.posix.sysctl` key of initial_setup stays in /etc/sysctl.conf, one line-arm edit
-#   per key, with `activate: sysctl`. The regexp is `^\s*<key>\s*=`, which matches the
-#   `<key>=<value>` line the module wrote, so the first reconcile adopts that line. No homelab
+# - Each hardening sysctl key stays in /etc/sysctl.conf, one line-arm edit per key, with
+#   `activate: sysctl`. The regexp is `^\s*<key>\s*=`, so reconcile adopts a `<key>=<value>`
+#   line already in the file. No homelab
 #   sysctl.d file may declare one of these keys, because /etc/sysctl.conf is read last and would
 #   override it. The Pi's vm.swappiness and vm.page-cluster are pi-tuning's.
 # - /etc/ufw/sysctl.conf is ufw's conffile. Ubuntu ships `log_martians=0` uncommented there, and

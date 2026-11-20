@@ -13,12 +13,11 @@ import re
 
 import pytest
 
+from _component_contract import component_contract
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "crowdsec-probe" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/crowdsec-edge-probe"
 # Every unit that declares LogsDirectory=pi-health in the Pi package: the five heartbeats of
@@ -35,7 +34,6 @@ LOGS_DIRECTORY_UNITS = frozenset(
     )
 )
 CONTRACT_PARTS = (
-    "Autonomous-role contract",
     "Scope / exclusions:",
     "Mode (explicit and reversible):",
     "Authoritative sources:",
@@ -123,8 +121,6 @@ def test_a_probe_unit_running_as_another_user_is_flagged(package):
     assert problem.startswith("the units name different users")
 
 
-def test_the_component_header_carries_the_contract():
-    header = "\n".join(
-        line for line in COMPONENT.read_text().splitlines() if line.startswith("#")
-    )
-    assert [part for part in CONTRACT_PARTS if part not in header] == []
+def test_the_claude_md_carries_the_contract():
+    contract = component_contract("crowdsec-probe")
+    assert [part for part in CONTRACT_PARTS if part not in contract] == []

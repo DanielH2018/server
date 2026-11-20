@@ -203,7 +203,7 @@ Two lessons from it still apply to any host check:
 `/usr/lib/homelab/loki-read-route-health` runs hourly on both prod cluster nodes and writes that
 host's own `loki-read-route-health.prom` verdict, which `LokiReadRouteFailed` and
 `LokiReadRouteNotReporting` read per host. Each node's package lists the `loki-route-witness`
-component, and `hosts/components/loki-route-witness/component.yml` carries the contract.
+component, and `hosts/components/loki-route-witness/CLAUDE.md` carries the contract.
 `daniel-pi` is not in the route's ClientIP set, so it never lists the component.
 
 **It is a systemd timer, `homelab-loki-route-witness.timer`.** Its service is

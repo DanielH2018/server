@@ -11,8 +11,7 @@
 # renderer gives the tmpfiles.d file the `tmpfiles` action, which never touches k3s.
 #
 # FORWARD-ONLY for registries.yaml. Reverting the PR that added a file deletes it, and an agent
-# that starts without registries.yaml pulls every in-cluster image over HTTPS and fails. Return a
-# file to Ansible with the attended procedure in the k3s SUC plan's *Rollback*.
+# that starts without registries.yaml pulls every in-cluster image over HTTPS and fails.
 #
 # The rest of the agent's host half: the Longhorn packages, the multipath drop-in, the
 # inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. The
@@ -42,17 +41,6 @@
 # homelab-kubelet-shutdown-lock runs files/kubelet-shutdown-lock-check.sh every 5 minutes. It
 # writes the `kubelet-shutdown-lock` textfile the KubeletShutdownLockMissing and
 # KubeletShutdownLockNotReporting rules read, so a fixed node clears its alert by itself.
-#
-# Autonomous-role contract (the lock check runs with no human in the loop).
-#
-# - Scope / exclusions: it reads logind's lock list and writes one textfile. It changes nothing.
-# - Mode (explicit and reversible): the timer's enable link arms it; dropping the component stops
-#   the timer on the install that drops it.
-# - Authoritative source: `systemd-inhibit --list`.
-# - Abort valves: none needed, since a run only reads.
-# - Required evidence, every run: the `kubelet-shutdown-lock` textfile.
-#
-# ENFORCED: hosts/tests/test_k3s_agent_component.py, hosts/tests/test_kubelet_shutdown_lock_check.py.
 component: k3s-server
 depends:
   - open-iscsi
@@ -146,8 +134,8 @@ files:
   - {src: units/homelab-kubelet-shutdown-lock.timer, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
-  # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote
-  # in the owned /etc/multipath.conf stays as a harmless duplicate.
+  # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The older block in the
+  # owned /etc/multipath.conf stays as a harmless duplicate.
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
   - {src: "component:templates/netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
@@ -185,7 +173,7 @@ enable:
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Emptying a link is the way back from the pin: the next package drops the file and this retires
-  # the path Ansible wrote. The link's live value stays until the next reboot, which is harmless.
+  # any copy left in place. The link's live value stays until the next reboot, which is harmless.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
   - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
   # Both copies of the wifi credentials.

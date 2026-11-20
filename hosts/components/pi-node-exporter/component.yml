@@ -18,8 +18,7 @@
 # - The users arm declares node_exporter in the homelab band 900-949, below the uids Ubuntu hands
 #   out from 999 down. Its gid is the live group's 986, which predates the band, so the arm and
 #   the AIDE account rule hold it fixed until the group moves.
-# - The LAN's 9100 ufw rule is the Pi package's `node-exporter` rule (hosts/daniel-pi/package.yml)
-#   which adopted the Ansible rule (`optimize_pi: node_exporter`) in place.
+# - The LAN's 9100 ufw rule is the Pi package's `node-exporter` rule (hosts/daniel-pi/package.yml).
 # - Retired on the live Pi, and left to the next rebuild: /opt/node_exporter-<version>.linux-arm64
 #   and /usr/local/src/node_exporter-<version>.linux-arm64.tar.gz hold about 40 MB of the old
 #   download. Legacy entries remove files, not directories, so the operator removes both by hand.
