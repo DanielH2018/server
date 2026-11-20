@@ -24,9 +24,9 @@ from _setup_render import CLAUDE_CODE
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 SCRIPT = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
 
-# claude-rc.service sits under the fleet's shared parent, user.slice, and
-# claude_code_fleet_caps_enabled: false puts it back in system.slice. The script resolves
-# between the two, so both paths are exercised below.
+# claude-rc.service sits under the fleet's shared parent, user.slice, once its Slice= line has
+# taken effect, and in system.slice before. The script resolves between the two, so both paths
+# are exercised below.
 RC_UNDER_FLEET_PARENT = "user.slice/claude-rc.service"
 RC_UNDER_SYSTEM_SLICE = "system.slice/claude-rc.service"
 
@@ -169,9 +169,8 @@ def test_claude_rc_is_found_under_the_fleet_parent_slice(tmp_path: Path) -> None
 
 
 def test_claude_rc_is_still_found_under_system_slice(tmp_path: Path) -> None:
-    """The rejecting half, and the rollback direction: claude_code_fleet_caps_enabled: false
-    returns the unit to system.slice, so resolving only the user.slice path would lose the plane
-    exactly when the shared parent has been turned off."""
+    """The rejecting half: a unit started before its Slice= line took effect sits in
+    system.slice, so resolving only the user.slice path would lose the plane there."""
     cgroot = tmp_path / "cgroup"
     _write_cgroup_fixture(cgroot, RC_UNDER_SYSTEM_SLICE)
     textfile_dir = tmp_path / "textfile"

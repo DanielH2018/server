@@ -15,12 +15,12 @@ Run: uv run pytest hosts/tests/test_worktree_holders_install.py
 import json
 
 import pytest
-from _helpers import HOST_VARS, REPO
+from _helpers import REPO
+from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "worktree-holders" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 PACKAGED_HELPER = "/usr/lib/homelab/worktree-holders"
 # What the role wrote on the host, each of which reconcile must retire.
@@ -31,7 +31,7 @@ RETIRED_PATHS = {
     "/usr/local/libexec/worktree-holders",
     "/var/lib/homelab/setup-deployed-manifest.d/worktree-holders",
 }
-# A has_claude_code host the agent-list copy must cover, so an empty host census fails.
+# A host listing the component that the agent-list copy must cover, so an empty census fails.
 KNOWN_CLAUDE_HOSTS = {"daniel-box", "daniel-server"}
 
 
@@ -66,17 +66,13 @@ def _only_the_group_may_connect(socket: dict) -> bool:
 
 
 def _package_agent_roots() -> dict[str, dict[str, str]]:
-    """Each has_claude_code host mapped to {agent user: its worktree root}, from its package."""
+    """Each host listing worktree-holders mapped to {agent user: its worktree root}."""
     out = {}
-    for host_vars in sorted(HOST_VARS.glob("*.yml")):
-        if not (yaml_fast.safe_load(host_vars.read_text()) or {}).get(
-            "has_claude_code"
-        ):
-            continue
-        package = REPO / "hosts" / host_vars.stem / "package.yml"
+    for host in hosts_listing_component("worktree-holders"):
+        package = REPO / "hosts" / host / "package.yml"
         users = (yaml_fast.safe_load(package.read_text()) or {}).get("users", [])
         # A service user such as triage's controller has no login shell and runs no session.
-        out[host_vars.stem] = {
+        out[host] = {
             u["name"]: f"{u['home']}/server/.claude/worktrees"
             for u in users
             if u.get("shell") != "/usr/sbin/nologin"
@@ -176,7 +172,3 @@ def test_reconcile_retires_what_the_role_installed(package):
     assert RETIRED_PATHS <= {e.get("path") for e in manifest["legacy"]}
     assert "worktree-holders.socket" in manifest["enable_links"]
     assert "netcat-openbsd" in rendered.depends
-    # The way out: every installed path follows the flag the role's teardown read.
-    spec = yaml_fast.safe_load(COMPONENT.read_text())
-    assert {f.get("when") for f in spec["files"]} == {"has_claude_code"}
-    assert spec["enable"]["worktree-holders.socket"]["when"] == "has_claude_code"

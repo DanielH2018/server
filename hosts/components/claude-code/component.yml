@@ -33,9 +33,10 @@
 # syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles'
 # claude-guard allowlist name those paths.
 #
-# Each file, output and enable link carries the `when:` of its role toggle, so a toggle set false
-# in a host's host_vars still takes its subject back. The host's `users:` entry takes no
-# `when:`: to switch the agent off, delete it, and the users arm expires the user.
+# A subject a host can switch off carries the `when:` of its toggle, so the toggle set false in
+# the host's host_vars takes the subject back; a subject every host ships carries none. The
+# host's `users:` entry takes no `when:`: to switch the agent off, delete it, and the users arm
+# expires the user.
 #
 # The agent's peer login: daniel-box's agent logs in here as `claude`. The package cannot read
 # the key, so the host carries its public half as `claude_agent_peer_public_key` (in `defaults:`
@@ -64,8 +65,8 @@ defaults:
   # needs one fixed Node, and the operator's fnm lives in their home. The sha256 is the tarball's,
   # from the release's SHASUMS256.txt; a bump finishes with
   # `uv run python scripts/validate/asset_pins.py --refresh node`. x64 is literal because
-  # asset_pins.py renders the URL from these defaults alone, and every has_claude_code host is
-  # x86_64.
+  # asset_pins.py renders the URL from these defaults alone, and every host listing this
+  # component is x86_64.
   # renovate: datasource=node-version depName=node
   claude_code_agent_node_version: "24.21.0"
   claude_code_agent_node_url: >-
@@ -117,8 +118,8 @@ files:
   - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
   - {src: templates/claude-rc-restart.service.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
   - {src: templates/claude-rc-restart.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
-  - {src: files/bg_session_resume.py, dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py, when: "claude_code_bg_resume_enabled"}
-  - {src: templates/claude-bg-resume.service.j2, dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service, when: "claude_code_bg_resume_enabled"}
+  - {src: files/bg_session_resume.py, dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py}
+  - {src: templates/claude-bg-resume.service.j2, dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service}
   - {src: files/claude-cgroup-metrics.sh, dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
   - {src: templates/claude-cgroup-metrics.service.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
   - {src: templates/claude-cgroup-metrics.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
@@ -160,21 +161,21 @@ files:
   # The caps. These drop-ins sort after any claude-*.conf copy in /etc, so their values govern
   # while one remains. The login caps cover the operator while claude_code_login_uids names uid
   # 1000; each host's package.yml caps its agent's uid.
-  - {src: templates/fleet-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
-  - {src: templates/login-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and 1000 in claude_code_login_uids"}
+  - {src: templates/fleet-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf}
+  - {src: templates/login-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "1000 in claude_code_login_uids"}
   # Every user manager on the host reads it.
-  - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
-  - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service, when: "claude_code_stop_alert_enabled"}
-  - {src: templates/50-claude-stop-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules, when: "claude_code_stop_alert_enabled"}
-  - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service, when: "claude_code_fanout_alert_enabled"}
-  - {src: templates/50-claude-fanout-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules, when: "claude_code_fanout_alert_enabled"}
-  - {src: files/homelab_rootq.py, dst: /usr/local/sbin/homelab-rootq, mode: "0755", when: "claude_code_rootq_enabled"}
-  - {src: files/rootq.sh, dst: /usr/local/bin/rootq, mode: "0755", when: "claude_code_rootq_enabled"}
-  - {src: templates/claude-rootq.sudoers.j2, dst: /etc/sudoers.d/homelab-rootq, mode: "0440", when: "claude_code_rootq_enabled"}
-  - {src: files/homelab_rootq_socket.py, dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700", when: "claude_code_rootq_socket_armed"}
-  - {src: files/rootq_socket.py, dst: /usr/local/bin/rootq-socket, mode: "0755", when: "claude_code_rootq_socket_armed"}
-  - {src: templates/homelab-rootq.socket.j2, dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
-  - {src: templates/homelab-rootq@.service.j2, dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
+  - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf}
+  - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service}
+  - {src: templates/50-claude-stop-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules}
+  - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service}
+  - {src: templates/50-claude-fanout-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules}
+  - {src: files/homelab_rootq.py, dst: /usr/local/sbin/homelab-rootq, mode: "0755"}
+  - {src: files/rootq.sh, dst: /usr/local/bin/rootq, mode: "0755"}
+  - {src: templates/claude-rootq.sudoers.j2, dst: /etc/sudoers.d/homelab-rootq, mode: "0440"}
+  - {src: files/homelab_rootq_socket.py, dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700"}
+  - {src: files/rootq_socket.py, dst: /usr/local/bin/rootq-socket, mode: "0755"}
+  - {src: templates/homelab-rootq.socket.j2, dst: /usr/lib/systemd/system/homelab-rootq.socket}
+  - {src: templates/homelab-rootq@.service.j2, dst: /usr/lib/systemd/system/homelab-rootq@.service}
   # The agent's lander. Its name and settings are pinned in templates/claude-land-pins.j2, so
   # no inventory value reaches them. An /etc copy of the rule shadows the one under /usr/share
   # until reconcile retires it.
@@ -233,7 +234,7 @@ units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}
   # Its job is the next boot; a restart would respawn sessions the operator stopped.
-  homelab-claude-bg-resume.service: {policy: manual, when: claude_code_bg_resume_enabled}
+  homelab-claude-bg-resume.service: {policy: manual}
   # Started by claude-triage@ for one episode's session; a package install never starts it.
   homelab-claude-triage-session.service:
     policy: manual
@@ -243,7 +244,7 @@ enable:
   homelab-claude-agent-browser.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-rc.service: {target: multi-user.target, when: claude_code_rc_enabled}
   homelab-claude-rc-restart.timer: {target: timers.target, when: claude_code_rc_enabled}
-  homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
+  homelab-claude-bg-resume.service: multi-user.target
   homelab-claude-cgroup-metrics.timer: timers.target
   homelab-claude-guardrail-audit.timer: timers.target
   homelab-claude-guardrail-ack.timer: {target: timers.target, when: claude_code_guardrail_ack_enabled}
@@ -254,7 +255,7 @@ enable:
   homelab-claude-dotfiles-sync.timer:
     target: timers.target
     when: claude_code_agent_user_enabled and claude_code_agent_dotfiles
-  homelab-rootq.socket: {target: sockets.target, when: claude_code_rootq_socket_armed}
+  homelab-rootq.socket: sockets.target
   homelab-claude-fanout-server-lander.timer:
     target: timers.target
     when: claude_code_fanout_server_lander_enabled

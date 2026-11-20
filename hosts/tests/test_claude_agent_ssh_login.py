@@ -60,11 +60,8 @@ def test_the_agent_user_lingers_after_it_exists(tmp_path) -> None:
     assert setup.index("usermod --groups") < setup.index("loginctl enable-linger")
 
 
-def test_daniel_server_switches_the_agent_and_its_login_on_and_the_default_is_off() -> (
-    None
-):
+def test_daniel_server_switches_the_agent_login_on_and_the_default_is_off() -> None:
     server = vars_of(HOST_VARS / "daniel-server.yml")
-    assert server["claude_code_agent_user_enabled"] is True
     assert server["claude_agent_ssh_login_enabled"] is True
     assert vars_of(ALL_VARS)["claude_agent_ssh_login_enabled"] is False
     assert "claude_agent_ssh_login_enabled" not in vars_of(HOST_VARS / "daniel-box.yml")

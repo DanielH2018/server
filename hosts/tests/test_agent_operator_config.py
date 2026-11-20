@@ -19,7 +19,9 @@ def test_the_template_imports_the_copied_file_only_while_the_switch_is_true() ->
     # Claude Code resolves a relative @import against the importing file's directory.
     on = render_component_text("claude-code", "agent-user-claude-md.j2", {SWITCH: True})
     off = render_component_text(
-        "claude-code", "agent-user-claude-md.j2", {SWITCH: False}
+        "claude-code",
+        "agent-user-claude-md.j2",
+        {SWITCH: False, "claude_code_agent_dotfiles": False},
     )
     assert re.findall(r"^@\S+$", on, re.M) == ["@operator/CLAUDE.md"]
     assert "operator/CLAUDE.md" not in off and not re.search(r"^@", off, re.M)

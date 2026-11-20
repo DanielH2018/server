@@ -10,6 +10,7 @@ Run: uv run pytest hosts/tests/test_claude_code_on_daniel_server.py
 from _agent_package import agent_setup_script
 from _helpers import HOST_VARS, load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text
+from docs.fragment_readers import hosts_listing_component
 from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
 
 ROLE = CLAUDE_CODE
@@ -40,7 +41,7 @@ def _render(template: str, host_vars: dict) -> str:
 
 
 def test_daniel_server_opts_in_without_the_remote_control_unit():
-    assert SERVER["has_claude_code"] is True
+    assert "daniel-server" in hosts_listing_component("claude-code")
     assert SERVER["claude_code_rc_enabled"] is False
     # daniel-box keeps the role default (true); the RC host stays single.
     assert "claude_code_rc_enabled" not in BOX

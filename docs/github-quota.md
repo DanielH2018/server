@@ -443,7 +443,7 @@ every session at once.
 ```diff
  hosts/components/
 +  gh-quota/
-+    component.yml          ships the files below where has_claude_code is true;
++    component.yml          ships the files below on each host that lists it;
 +                           its default is gh_quota_mode: record
 +    files/gh_quota.py      -> /usr/lib/homelab/gh_quota.py, the module, and
 +                           -> /usr/bin/gh-quota, the same file as a command

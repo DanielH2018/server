@@ -20,7 +20,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `registry-gc` | `hosts/components/registry-gc/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `k8s/roles/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `k8s/roles/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `hosts/components/host-maintenance/component.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
-| `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
+| `<host>-docker-prune` | `homelab-docker-prune.timer` (the `pi-docker` component), one slug per host whose package lists it: daniel-pi | never: it pings only after the prune succeeds, and silence is the failure |
 | `<host>-worktree-sweep` | `homelab-worktree-sweep.timer` (the `worktree-sweep` component), one slug per host whose package lists it: daniel-box and daniel-server | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
 
 The cron behind each slug, read from the variables that set it:

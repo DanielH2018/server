@@ -101,9 +101,9 @@ monitor_bridge_healthchecks_expected:
   # Two hours covers registry-gc.sh's worst case of two mirror phases, about 6000s.
   # tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives it.
   - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 7200}
-  # initial_setup's three pinging crons: the weekly reboot pings one slug per host, the Docker
-  # prune one per has_docker host, and the worktree sweep one per host whose package lists the
-  # worktree-sweep component.
+  # initial_setup's three pinging crons: the weekly reboot pings one slug per host, and the Docker
+  # prune and the worktree sweep one per host whose package lists the pi-docker or worktree-sweep
+  # component.
   - {slug: weekly-reboot-daniel-box, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-server, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
   - {slug: weekly-reboot-daniel-pi, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}

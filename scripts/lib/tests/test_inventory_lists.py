@@ -16,6 +16,7 @@ from lib.inventory_lists import (
     host_names,
     pi_entries_in,
 )
+from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
 from lib.proc_testing import run
 from lib.repo_paths import ALL_VARS, HOST_VARS, SCRIPTS
@@ -33,24 +34,9 @@ def test_the_real_inventory_declares_the_three_hosts():
     assert set(host_names()) >= {"daniel-box", "daniel-server", "daniel-pi"}
 
 
-def hosts_arming(key: str, host_vars: Path = HOST_VARS) -> tuple[str, ...]:
-    """The inventory hosts whose host_vars set top-level ``<key>: true``.
-
-    group_vars defaults ``has_docker`` to false, so an explicit true is the only way a host
-    takes the role.
-    """
-    armed = re.compile(rf"^{key}:\s*true\s*(#.*)?$", re.MULTILINE)
-    return tuple(
-        name
-        for name in host_names(host_vars)
-        if (host_vars / f"{name}.yml").is_file()
-        and armed.search((host_vars / f"{name}.yml").read_text())
-    )
-
-
 def test_role_host_constants_name_the_host_the_inventory_arms():
-    """The literals stand in for an inventory read; this keeps them equal to it."""
-    assert hosts_arming("has_docker") == (PI_HOST,)
+    """The literal stands in for a package read; this keeps it equal to it."""
+    assert hosts_listing_component("pi-docker") == [PI_HOST]
 
 
 def hosts_declaring_k8s(host_vars: Path = HOST_VARS) -> tuple[str, ...]:
@@ -74,14 +60,6 @@ def test_a_host_vars_file_declaring_a_containers_list_breaks_the_pin(tmp_path):
     (tmp_path / "daniel-box.yml").write_text("containers_list:\n  - name: a\n")
     (tmp_path / "daniel-pi.yml").write_text("containers_list:\n  - name: b\n")
     assert hosts_declaring_k8s(tmp_path) == ("daniel-box", "daniel-pi")
-
-
-def test_a_second_armed_host_breaks_the_pin(tmp_path):
-    """Red proof: a second host taking the role no longer reads as the one constant."""
-    (tmp_path / "daniel-box.yml").write_text("has_docker: true\n")
-    (tmp_path / "daniel-new.yml").write_text("x: 1\nhas_docker: true  # armed\n")
-    (tmp_path / "daniel-off.yml").write_text("has_docker: false\n  has_docker: true\n")
-    assert hosts_arming("has_docker", tmp_path) == ("daniel-box", "daniel-new")
 
 
 def test_pi_entries_in_reads_compose_services_alone():

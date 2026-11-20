@@ -11,6 +11,7 @@ because every shipped source is one more index its updater must fetch.
 import hashlib
 import re
 
+from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, HOST_VARS
 from renderer.renderer_lib import host as host_mode
@@ -99,7 +100,7 @@ def test_the_use_table_agrees_with_the_inventory():
             **yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()),
         }
         flags[host] = merged
-    assert {h for h, v in flags.items() if v["has_docker"]} <= USES["docker"]
+    assert set(hosts_listing_component("pi-docker")) <= USES["docker"]
     assert {h for h, v in flags.items() if v["has_github_cli"]} <= USES["github-cli"]
     assert group["optimize_pi_host"] in USES["azlux"]
 

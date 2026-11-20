@@ -14,7 +14,6 @@ from lib import yaml_fast
 from lib.git_testing import init_repo, scrubbed_env
 from lib.proc_testing import run as run_proc
 from lib.proc_testing import write_exec
-from lib.repo_paths import HOST_VARS
 
 ROLE = CLAUDE_CODE
 SCRIPT = "/usr/local/sbin/homelab-rootq"
@@ -137,22 +136,12 @@ def test_matches_refuses_a_repo_file_it_cannot_vouch_for(
     assert argv is None
 
 
-def test_the_defaults_leave_the_inspector_off_and_name_its_script_and_shim() -> None:
+def test_the_defaults_name_the_inspectors_script_and_shim() -> None:
     defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    assert defaults["claude_code_rootq_enabled"] is False
     assert defaults["claude_code_rootq_script"] == SCRIPT
     assert defaults["claude_code_rootq_shim"] == "/usr/local/bin/rootq"
     # The operator's account only: the agent user's sudo grant became a socket.
     assert defaults["claude_code_rootq_users"] == ["{{ sys_user }}"]
-
-
-def test_daniel_box_and_daniel_server_enable_the_inspector() -> None:
-    enabled = {
-        p.stem
-        for p in HOST_VARS.glob("*.yml")
-        if (yaml_fast.safe_load(p.read_text()) or {}).get("claude_code_rootq_enabled")
-    }
-    assert enabled == {"daniel-box", "daniel-server"}
 
 
 # ── The agent user's socket ───────────────────────────────────────────────────────
@@ -210,16 +199,6 @@ def test_the_helper_runs_the_script_the_sudo_grant_names() -> None:
     assert defaults()["claude_code_rootq_script"] == SCRIPT
 
 
-def test_the_agent_brief_names_the_socket_client_only_while_the_socket_is_armed() -> (
-    None
-):
-    def brief(armed: bool) -> str:
-        return render_component_text(
-            "claude-code",
-            "agent-user-claude-md.j2",
-            {"claude_code_rootq_socket_armed": armed},
-        )
-
-    assert "`rootq-socket`" in brief(True)
-    assert "rootq-socket" not in brief(False)
-    assert "ask the operator to run `rootq`" in brief(False)
+def test_the_agent_brief_names_the_socket_client() -> None:
+    brief = render_component_text("claude-code", "agent-user-claude-md.j2", {})
+    assert "`rootq-socket`" in brief

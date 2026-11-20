@@ -43,10 +43,10 @@ declare -A CGROUPS=(
   [user-1000-slice]=user.slice/user-1000.slice
 )
 
-# claude-rc.service sits under the fleet's shared parent, and claude_code_fleet_caps_enabled:
-# false moves it back to system.slice — so resolve the path instead of hardcoding either one, or
-# this label goes silently absent on whichever side of that toggle the host is not, leaving a
-# green scrape with one plane missing.
+# claude-rc.service sits under user.slice, the fleet's shared parent, from the start after its
+# Slice= line landed, and under system.slice until then, so resolve the path instead of
+# hardcoding either one, or this label goes silently absent, leaving a green scrape with one
+# plane missing.
 # homelab-claude-rc.service is the same host under its packaged name; the label stays
 # claude-rc so the dashboards read one series across hosts.
 for candidate in user.slice/claude-rc.service system.slice/claude-rc.service \

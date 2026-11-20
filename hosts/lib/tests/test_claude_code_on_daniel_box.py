@@ -14,7 +14,7 @@ import shutil
 import pytest
 import yaml
 
-from lib.estate import Inventory
+from lib.estate import Estate, Inventory
 from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -200,8 +200,9 @@ def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_o
 ):
     # The package ships no copy of the operator config subset: the role runs it only for an
     # agent without the dotfiles. A host that turned them off would lose its subset silently.
-    host_vars = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())
-    assert host_vars["claude_code_agent_dotfiles"] is True
+    assert (
+        Estate().role_vars(COMPONENT.parent, host)["claude_code_agent_dotfiles"] is True
+    )
 
 
 def test_the_key_host_names_each_peer_whose_login_is_on(box):
@@ -274,9 +275,11 @@ def test_each_host_caps_its_own_agents_slice_and_the_operator_only_where_listed(
 def test_each_hosts_users_entry_names_its_uid_and_follows_the_agent_toggle(host):
     # The users arm takes no `when:`, so switching the agent off means deleting the entry.
     spec = yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())
-    host_vars = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())
+    enabled = Estate().role_vars(COMPONENT.parent, host)[
+        "claude_code_agent_user_enabled"
+    ]
     declared = {u["name"]: u["uid"] for u in spec.get("users") or []}
-    assert host_vars["claude_code_agent_user_enabled"] == ("claude" in declared)
+    assert enabled == ("claude" in declared)
     assert declared.get("claude") == AGENT_UID[host]
     assert "users" not in yaml.safe_load(COMPONENT.read_text())
 

@@ -41,8 +41,8 @@ only, where `claude_code_takeover_check_enabled` is true.
 `rootq` reads root-only host state for a session that has no general sudo. It runs
 `/usr/local/sbin/homelab-rootq` (`hosts/components/claude-code/files/homelab_rootq.py`) as root, behind one `NOPASSWD`
 line in `/etc/sudoers.d/homelab-rootq` (issue #6323), which the host package ships. The operator approved the shape on
-2026-10-25 and reviews the grant before it lands. It exists where `claude_code_rootq_enabled`
-is true: daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
+2026-10-25 and reviews the grant before it lands. It ships with the claude-code component,
+on daniel-box and daniel-server. `claude_code_rootq_users` grants the operator's account
 only, where fan-out batches and the operator's sessions run. The agent user stays without
 sudo: the operator replaced its one sudo grant with a socket on 2026-10-10 (#4297), and
 `NoNewPrivileges=yes` in `claude-rc.service` stops sudo there anyway. The agent reaches the
@@ -94,8 +94,9 @@ a need appears.
   admit. A new tier-2 source also needs a structural argument, written at `CAT` or `COMMANDS`,
   for why the filter redacts its grammar cleanly, with must-pass and must-redact cases in
   `hosts/components/claude-code/tests/test_rootq_redaction.py`.
-- **To take it back:** set `claude_code_rootq_enabled: false` in the host's host_vars. The next
-  package version drops the socket, the sudoers file, the shim and the script.
+- **To take it back:** remove the rootq and socket entries from
+  `hosts/components/claude-code/component.yml`. The next package version drops the socket, the
+  sudoers file, the shim and the script.
 
 ### The agent's socket
 
@@ -130,9 +131,9 @@ uid.
   entries to cover it, and they cover only the script. The helper, the client and the two unit
   templates are listed in `hosts/components/claude-code/templates/claude-land-approval-paths.j2` and in `FLOOR` in
   `hosts/tests/test_claude_lander.py`.
-- **To take it back:** set `claude_code_rootq_socket_enabled: false`, or
-  `claude_code_rootq_enabled: false`, in the host's host_vars. The next package version drops
-  the socket, its units, the helper and the client, and `claude-agent-setup` drops the agent
-  from the group. The operator's sudo path is untouched. The setting is
-  `claude_code_rootq_socket_enabled` in the host's `host_vars`.
+- **To take it back:** remove the four socket entries from
+  `hosts/components/claude-code/component.yml`, and the socket group from the `groups=` line of
+  `hosts/components/claude-code/templates/claude-agent-setup.sh.j2`. The next package version
+  drops the socket, its units, the helper and the client, and `claude-agent-setup` drops the
+  agent from the group. The operator's sudo path is untouched.
 - **How to apply it:** a new version of the host's package, which the host's updater installs.

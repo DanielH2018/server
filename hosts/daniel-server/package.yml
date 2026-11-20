@@ -77,7 +77,7 @@ files:
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
-    when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
+    when: claude_code_agent_user_enabled
 # daniel-server installs `gh` by hand. The apt-github-cli component ships the source, and
 # the hand-installed github-cli.list names the same repository, so reconcile retires it.
 legacy:
