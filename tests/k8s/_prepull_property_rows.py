@@ -20,14 +20,14 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from lib.k8s_roles import k8s_entries
+from lib.k8s_roles import k8s_entries, role_defaults
 from _helpers import K8S_ROLES, load_defaults
 from _k8s_render import pod_spec, rendered_docs
 from _property_table import Property
 from render_share import shared_value
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
-from renderer.renderer_lib.ordering import Ordering, prepull_timeouts
+from renderer.renderer_lib.ordering import Ordering
 
 _WORKLOADS = frozenset({"Deployment", "StatefulSet"})
 _HOSTNAME = "kubernetes.io/hostname"
@@ -65,7 +65,8 @@ def _bundle(out: Path, tag: str) -> dict:
 
 
 def _render() -> tuple[tuple[str, str, dict], ...]:
-    tags = sorted(prepull_timeouts(k8s_entries())[0])
+    found, _problems = role_defaults(k8s_entries())
+    tags = sorted(tag for tag, own in found.items() if own.prepull_timeout)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         cluster_file = root / CLUSTER_VARS_FILE

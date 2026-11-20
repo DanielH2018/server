@@ -128,7 +128,7 @@ flux_cronjob_gates:
 # crowdsec, so without the edge the Job races traefik's `Recreate` roll and can pass against the
 # old Traefik pod. A bouncer-key rotation rolls both pods and renames the Job, because
 # `config-secret.yaml.j2` reads the key; with the edge it then runs only once the rolled Traefik
-# pod is Ready. Only Flux reads it (`ordering.verify_after`).
+# pod is Ready. Only Flux reads it (`RoleDefaults.verify_after`).
 flux_verify_after:
   - traefik
 # Three CronJob periods: the sidecar's home allowlist pushes down once the ConfigMap's lookup

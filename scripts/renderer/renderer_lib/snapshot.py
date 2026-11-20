@@ -1,6 +1,6 @@
 """The `<tag>-snapshot` directory: one Job that snapshots a role's claims before `<tag>` applies.
 
-For each published tag whose role declares `k8s_autodeploy_snapshot_pvcs` (`snapshot_claims`),
+For each published tag whose role declares `k8s_autodeploy_snapshot_pvcs` (`role_defaults`),
 the render writes `DIR/cluster/<tag>-snapshot/` (target slice D5, *Snapshots as a Job per role
 revision (D5.2a)*). It holds:
 
@@ -31,7 +31,7 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
-from lib.k8s_roles import snapshot_claims
+from lib.k8s_roles import role_defaults
 from lib.repo_paths import JOB_FILES, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -353,11 +353,10 @@ def attach_snapshots(
             name too long, or the deadline margin leaves no time.
     """
     published = set(published)
-    claims, problems = snapshot_claims(
-        sorted(published & {t.tag for t in rendered}), roles
-    )
+    defaults, problems = role_defaults(published & {t.tag for t in rendered}, roles)
     if problems:
         raise RenderError("; ".join(problems))
+    claims = {tag: own.snapshot_pvcs for tag, own in defaults.items()}
     if not any(claims.values()):
         return rendered
     deadline = seconds(timeout) - DEADLINE_MARGIN_S
