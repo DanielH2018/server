@@ -23,7 +23,7 @@ repository (daniel-box)* holds the design.
   `StateDirectoryMode=0711`: the signer traverses the builder's directory to reach `staged/`, as
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
-  `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`,
+  `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`, `prom_envelope.py`,
   `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the CI contexts the builder grades a
@@ -174,7 +174,10 @@ Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info`
 holds the pinned ClusterIP alone. Nothing serves Prometheus on daniel-box's loopback, so a
 loopback entry only logged a refused connection on every run. The gate closes when the applied
 SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
-unreadable file or an unreachable Prometheus leaves the gate open. When Prometheus answers and
+unreadable file or an unreachable Prometheus leaves the gate open. An answer that is not an
+instant vector, such as `"data": null`, also leaves it open:
+`hosts/lib/builder_rollout_gate.py:parse_vector` raises a `PromAnswerError` that the builder
+logs with the address. When Prometheus answers and
 the gate stays open, the builder logs the SHA and the `reconcile_ok` the canary reports beside
 the gate's commit. After the gate closes, a run
 that finds no green commit above the last built one rebuilds the deferred packages at the last
