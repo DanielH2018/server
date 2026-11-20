@@ -245,8 +245,8 @@ jobs:
       # so it runs once per version bump and a release outage fails only the bump's run.
       # The cache holds the download, never the installed binary, and each run checks its digest
       # where it has one. A pinned binary with a sha256 comes through .github/actions/pinned-tool.
-      # ENFORCED by tests/repo/test_ci_release_downloads_are_cached.py and
-      # tests/repo/test_release_fetches_use_pinned_tool.py.
+      # ENFORCED by tests/repo/test_release_fetches_use_pinned_tool.py and the
+      # a-downloading-script-runs-after-its-cache row of tests/repo/test_census_rows_workflows.py.
       - name: Fetch the pinned Vale and check its sha256
         uses: $/.github/actions/pinned-tool
         with:
