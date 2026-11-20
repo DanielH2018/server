@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from dags.homelab_warehouse import ha_rollup as ha
+from dags.homelab_warehouse import prom_rollup as pr
 
 DAY = date(2026, 11, 18)
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -139,7 +140,7 @@ def test_a_refused_connection_is_retried_and_each_request_carries_the_token():
 
     assert history == []
     assert len(requests) == 2
-    assert sleeps == [ha.CONNECT_BACKOFF_S]
+    assert sleeps == [pr.CONNECT_BACKOFF_S]
     assert requests[1].get_header("Authorization") == "Bearer secret-token"
 
 

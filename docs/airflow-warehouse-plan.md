@@ -13,7 +13,7 @@ role as built.
 | Prometheus | 30d or 7GB, and the size cap binds first: 22 days on 2026-11-19 | 0, 1 |
 | Claude Code OTEL telemetry | ~30d | 2 |
 | Home Assistant recorder | 7 days (`configuration.yaml:145`) | 3 |
-| Scrutiny SMART history | forever, on `scrutiny-influxdb-data`, which is not backed up | 4 |
+| Scrutiny SMART history | daily for about six days, then sparser; on `scrutiny-influxdb-data`, which is not backed up | 4 |
 | GitHub PRs and CI runs | kept by GitHub, but costly to query live | 5, 6 |
 | Traefik and CrowdSec counters | Prometheus, as above | 7a |
 | Longhorn's backup log | `loki-homelab`, 31 days | 7b |
@@ -80,7 +80,10 @@ role as built.
   unavailable time for a declared sensor list, and each energy counter's daily increase, as
   `ha_daily_rollup` into `ha.sensor_daily`. The source keeps seven days, so a longer DAG
   outage loses data. Built before slice 2 for that reason: Claude telemetry keeps about 30.
-- **Slice 4, SMART history (idea 4).** Scrutiny's stored history, by ClusterIP.
+- **Slice 4, SMART history (idea 4).** Each disk's daily SMART readings from Scrutiny's API
+  by ClusterIP, as `smart_daily_rollup` into `smart.attribute_daily`. Scrutiny keeps a
+  reading for every day only for about six days, then keeps sparser points, so the warehouse holds
+  the only daily record.
 - **Slice 5, repo engineering metrics (idea 5).** PRs, CI runs and findings issues,
   incremental by `updated_at`. All of one user's tokens share one GitHub quota, so each run is
   budgeted and scheduled in quiet hours.

@@ -941,6 +941,8 @@ containers_list:
                             # `scrutiny` check behind SmartHealthFailing
       - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
                             # disk-health read tool
+      - airflow-task        # SCRUTINY_URL (airflow/files/dags/homelab_warehouse/smart_history.py),
+                            # the warehouse's daily SMART rollup
     # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
     # This key adds homepage to the callers above and is its only grant.
     homepage_widget: true

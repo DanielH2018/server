@@ -1149,6 +1149,108 @@
       ],
       "title": "B2 Class B per claim per day",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "NVMe percentage_used per disk: the share of its rated write endurance spent. Days Scrutiny no longer held a reading for are joined across.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": true
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 97
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT day::timestamptz AS time, model AS metric, value FROM smart.attribute_daily WHERE attribute = 'percentage_used' AND $__timeFilter(day) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Disk wear",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "description": "Bytes each disk wrote between consecutive readings, divided by the days between them. NVMe counts a data unit as 512,000 bytes.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": true
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 97
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time, metric, value FROM (SELECT day::timestamptz AS time, model AS metric, (value - lag(value) OVER w) * 512000 / NULLIF(day - lag(day) OVER w, 0) AS value FROM smart.attribute_daily WHERE attribute = 'data_units_written' WINDOW w AS (PARTITION BY wwn ORDER BY day)) t WHERE value IS NOT NULL AND $__timeFilter(time) ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Disk data written per day",
+      "type": "timeseries"
     }
   ],
   "refresh": "",
