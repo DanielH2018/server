@@ -228,7 +228,7 @@ def _prune(world: World, capsys) -> tuple[int, list[str], str]:
     clients = world.clients()
     github = forge.GitHub(  # two a page, and a pause list rather than a real sleep
         world.transport,
-        "job-token",
+        lambda: "job-token",
         run=world.run,
         versions_per_page=2,
         sleep=world.pauses.append,
