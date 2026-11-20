@@ -1,8 +1,8 @@
 """A snapshot role's `<tag>-snapshot`: its Job, its edges and its names (D5.2a).
 
 The fixture renders speedtest, a real role that declares one snapshot claim, through the real
-CLI as if the inventory marked it `owner: flux`, with a fixture ordering that gives it one
-flux-owned upstream, so the cases hold whatever the live inventory publishes. code-server is the
+CLI, with a fixture ordering that gives it one upstream outside the render, so the cases
+hold whatever edges the live inventory gives it. code-server is the
 first live tag that renders `<tag>-snapshot`, since D5.16. ADR-0020 records the snapshot Job.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_snapshot.py
@@ -34,7 +34,7 @@ TAG = "speedtest"
 UPSTREAM = "bento-pdf"
 
 
-def _render(tmp_path, owned: set[str]):
+def _render(tmp_path):
     cluster_file = tmp_path / CLUSTER_VARS_FILE
     cluster_file.write_text(DOTENV)
     out = tmp_path / "out"
@@ -42,9 +42,8 @@ def _render(tmp_path, owned: set[str]):
         out,
         [TAG],
         None,
-        flux_owned=lambda: owned,
         cluster_file=cluster_file,
-        ordering=lambda o: Ordering(deps={TAG: [UPSTREAM]}, flux_owned=frozenset(o)),
+        ordering=lambda: Ordering(deps={TAG: [UPSTREAM], UPSTREAM: []}),
     )
     assert code == RENDER_OK
     return out
@@ -52,7 +51,7 @@ def _render(tmp_path, owned: set[str]):
 
 @pytest.fixture(scope="module")
 def rendered(tmp_path_factory):
-    return _render(tmp_path_factory.mktemp("snapshot"), {TAG, UPSTREAM})
+    return _render(tmp_path_factory.mktemp("snapshot"))
 
 
 def _kustomizations(out) -> dict[str, dict]:
@@ -99,11 +98,6 @@ def test_the_snapshot_directory_passes_the_job_census_and_check_bundle(rendered)
     # `promote.py check-bundle`'s whole report: the census and the source, host and no-stub
     # gates, over a bundle holding the snapshot Job, its ClusterRole and its Roles.
     assert report(rendered, [TAG]) == OK
-
-
-def test_an_unpublished_snapshot_role_renders_no_snapshot_directory(tmp_path):
-    out = _render(tmp_path, set())
-    assert sorted(p.name for p in (out / "cluster").iterdir()) == [TAG]
 
 
 def _files(digest8: str = "0a1b2c3d", script: str = "print('a')\n", **claims) -> dict:

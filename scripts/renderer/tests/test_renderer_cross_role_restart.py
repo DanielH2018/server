@@ -35,7 +35,6 @@ def _exporter_checksum(tmp_path, name: str, password_digest: str) -> str | None:
         out,
         [TAG],
         None,
-        flux_owned=lambda: {TAG},
         cluster_file=cluster,
         source_file=source,
     )

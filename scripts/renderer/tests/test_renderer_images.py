@@ -1,8 +1,7 @@
 """D5.4a1: `homelab-render cluster` writes each image context and `DIR/images/tags.json`.
 
-One placeholder render of every builder role, plus littlelink as a flux-owned tag so a bundle
-is written too, backs most checks. It marks ical-proxy flux-owned as well: no live flux-owned
-tag consumes a built image yet, so ical-proxy is the fixture role for D5.4b's GHCR refs. Each tag in `tags.json` is recomputed
+One placeholder render of every builder role, plus littlelink, backs most checks. ical-proxy
+is the consumer the checks of D5.4b's GHCR refs read. Each tag in `tags.json` is recomputed
 over the files as written, with image-builder's own template and expression, so a
 file written from anything but the hashed `data` fails here. Each check has a red half.
 
@@ -43,7 +42,7 @@ BUILT_IMAGES = frozenset(
         "valheim",
     }
 )
-# The builder role the fixture render marks flux-owned.
+# The builder role whose consumer the GHCR ref checks read.
 OWNED = "ical-proxy"
 NO_POLICY = re.compile(r"\n *imagePullPolicy: Always")
 
@@ -57,7 +56,6 @@ def out(tmp_path_factory):
         root / "out",
         [*images.builder_roles(), "littlelink"],
         None,
-        flux_owned=lambda: {"littlelink", OWNED},
         cluster_file=dotenv,
     )
     assert code == RENDER_OK
@@ -88,10 +86,10 @@ def _directories(out) -> dict[str, dict[str, str]]:
     }
 
 
-def _nut_on_ghcr(out) -> str:
-    """nut's rendered Deployment with its ref moved to GHCR and its `Always` kept."""
+def _nut_pulling_always(out) -> str:
+    """nut's rendered Deployment, on GHCR, with its pull policy set back to `Always`."""
     text = (out / "cluster" / "nut" / "deployment.yaml").read_text()
-    return text.replace("localhost:5000/nut:", "ghcr.io/danielh2018/nut:")
+    return text.replace("imagePullPolicy: IfNotPresent", "imagePullPolicy: Always")
 
 
 def _oracle_tag(context, name: str) -> str:
@@ -333,20 +331,12 @@ def test_a_flux_owned_consumer_pulls_its_ghcr_tag_if_not_present(out):
     assert container["imagePullPolicy"] == "IfNotPresent"
 
 
-def test_an_ansible_owned_consumer_keeps_the_in_cluster_registry(out):
-    container = _container(out / "cluster" / "nut" / "deployment.yaml", "nut")
-    assert container["image"] == f"localhost:5000/nut:{_tags(out)['nut']}"
-    assert container["imagePullPolicy"] == "Always"
-
-
 def test_a_stub_render_points_a_flux_owned_consumer_at_ghcr_as_placeholder_mode_does(
     out, tmp_path
 ):
     stubs = tmp_path / "stubs.yml"
     stubs.write_text(stub_file_text())
-    code = homelab_render.cluster(
-        tmp_path / "out", [OWNED], stubs, flux_owned=lambda: {OWNED}
-    )
+    code = homelab_render.cluster(tmp_path / "out", [OWNED], stubs)
     assert code == RENDER_OK
     path = f"cluster/{OWNED}/deployment.yaml"
     container = _container(tmp_path / "out" / path, OWNED)
@@ -372,8 +362,8 @@ def test_no_ghcr_ref_in_the_render_pulls_always(out):
     [(lambda text: text, "Always"), (lambda text: NO_POLICY.sub("", text), "unset")],
 )
 def test_a_ghcr_ref_that_pulls_always_or_sets_no_policy_is_flagged(out, edit, policy):
-    """The red half: nut's Deployment on GHCR with the in-cluster registry's `Always`."""
-    files = {"nut": {"deployment.yaml": edit(_nut_on_ghcr(out))}}
+    """The red half: nut's Deployment on GHCR with `Always`, or with no policy at all."""
+    files = {"nut": {"deployment.yaml": edit(_nut_pulling_always(out))}}
     (problem,) = images.pull_policy_offences(files)
     assert "ghcr.io/danielh2018/nut:sha-" in problem
     assert f"imagePullPolicy {policy}," in problem

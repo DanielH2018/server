@@ -51,6 +51,7 @@ from lib.k8s_roles import (
     SECRET_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
     declared_secret_file,
+    k8s_tags,
     resolved_manifest_files,
     role_fields,
 )
@@ -206,7 +207,6 @@ def select_tags(
 
 
 def bundle_ordering(
-    owned: set[str],
     services: Path = K8S_SERVICES,
     group_vars: Path = GROUP_VARS,
     roles: Path = K8S_ROLES,
@@ -215,15 +215,16 @@ def bundle_ordering(
 
     The map is `build_k8s_dep_map` over every k8s service, the same
     map `template_context` sorts with, never a `--role` subset, so a tag's edges do not depend on what else renders.
-    The suspended tags are read over every flux-owned role for the same reason (D5.1b).
+    The suspended tags are read over every k8s role for the same reason (D5.1b).
 
     Raises:
-        ValueError: A flux-owned role's `flux_suspend`, `flux_prune`,
+        ValueError: A role's `flux_suspend`, `flux_prune`,
             `manifests_rollout_timeout` or `flux_verify_after` is not a literal
             (`role_fields`, `ordering.verify_after`).
     """
-    fields, problems = role_fields(owned, roles)
-    after, after_problems = verify_after(owned, roles)
+    tags = k8s_tags(services)
+    fields, problems = role_fields(tags, roles)
+    after, after_problems = verify_after(tags, roles)
     problems += after_problems
     if problems:
         raise ValueError("; ".join(problems))
@@ -235,7 +236,6 @@ def bundle_ordering(
         namespace_roles={
             str(group[var]): role for var, role in NAMESPACE_ROLE_VARS.items()
         },
-        flux_owned=frozenset(owned),
         suspended=frozenset(tag for tag, own in fields.items() if own.get("suspend")),
         workload_namespace=str(group["k8s_namespace"]),
         verify_after=after,

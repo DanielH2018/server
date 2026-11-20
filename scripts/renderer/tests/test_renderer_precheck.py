@@ -33,7 +33,6 @@ from renderer.renderer_lib.bundle import (
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.ordering import (
     TAG_KIND_SUFFIXES,
-    UNRENDERED_DEPS,
     Ordering,
     kustomization_edges,
     split_kind,
@@ -125,7 +124,6 @@ def test_a_rendered_precheck_directory_applies_before_its_tag_and_passes_check_b
         out,
         [TAG],
         None,
-        flux_owned=lambda: {TAG},
         cluster_file=cluster_file,
         render=lambda tags, keys: render_placeholders(tags, keys, roles=roles),
         vendored=roles,
@@ -171,10 +169,6 @@ def _depends(doc: dict) -> list[str]:
     return [edge["name"] for edge in doc["spec"].get("dependsOn", [])]
 
 
-def _unrendered(doc: dict) -> str | None:
-    return (doc["metadata"].get("annotations") or {}).get(UNRENDERED_DEPS)
-
-
 def _every_kind() -> dict:
     """Directories for `pihole` with every per-tag kind but the precheck, and a `bento-pdf`."""
     files = {"x.yaml": CONFIGMAP}
@@ -210,14 +204,13 @@ def _seconds(duration: str) -> int:
 
 
 def test_a_precheck_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
-    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
+    ordering = Ordering(deps={"pihole": ["bento-pdf"]})
     docs = _docs(ordering, ["bento-pdf", "pihole"], _prechecking())
     assert PIHOLE_PRECHECK in _depends(docs["pihole"])
     assert "bento-pdf" in _depends(docs["pihole"])
     precheck = docs.get(PIHOLE_PRECHECK)
     assert precheck is not None, "flux/pihole.yaml holds no pihole-precheck"
     assert _depends(precheck) == ["bento-pdf"]
-    assert _unrendered(precheck) == "traefik"
 
 
 def test_a_precheck_kind_follows_its_tag_in_suffix_order():
@@ -262,14 +255,14 @@ def test_the_precheck_timeout_outlasts_its_guard_jobs_deadline():
 def test_a_precheck_document_in_a_role_created_namespace_waits_on_that_role():
     """The kind applies before `<tag>`, so its namespace must come from somewhere else."""
     directories = _prechecking(namespace="observability")
-    ordering = Ordering(
-        namespace_roles={"observability": "observability"},
-        flux_owned=frozenset({"pihole", "observability"}),
-    )
+    roles = {"observability": "observability"}
+    ordering = Ordering(deps={"observability": []}, namespace_roles=roles)
     edges = kustomization_edges(["pihole"], directories, ordering)
     precheck = edges.get(PIHOLE_PRECHECK)
     assert precheck is not None, "the renderer writes no edges for pihole-precheck"
     assert "observability" in precheck.kept
+    with pytest.raises(ValueError, match=r"pihole-precheck -> observability$"):
+        kustomization_edges(["pihole"], directories, Ordering(namespace_roles=roles))
 
 
 def test_a_precheck_in_a_namespace_its_own_tag_creates_fails_the_render():

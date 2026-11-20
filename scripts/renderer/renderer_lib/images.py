@@ -15,9 +15,8 @@ one computation. `ref_mismatches` holds them equal, and `paths_into_images` hold
 Kustomization reaches `DIR/images/`.
 
 No Kustomization applies these files. D5.4a2's `images` job builds and pushes them to GHCR.
-`ghcr_refs` points each flux-owned tag's refs to a built image at that push, with
-`imagePullPolicy: IfNotPresent` beside each (D5.4b). An Ansible-owned tag keeps the in-cluster
-registry and its `Always`. `pull_policy_offences` refuses a GHCR content-tag ref whose policy is
+`ghcr_refs` points each tag's refs to a built image at that push, with
+`imagePullPolicy: IfNotPresent` beside each (D5.4b). `pull_policy_offences` refuses a GHCR content-tag ref whose policy is
 `Always` or unset. The plan is docs/archive/deploy/d5-bulk-move.md, *Images built
 by CI (D5.4)*.
 """
@@ -209,26 +208,22 @@ def ghcr_text(text: str, tags: Mapping[str, str], where: str) -> str:
 
 
 def ghcr_refs(
-    rendered: list[RenderedTag], owned: Iterable[str], images: Mapping[str, BuiltImage]
+    rendered: list[RenderedTag], images: Mapping[str, BuiltImage]
 ) -> list[RenderedTag]:
-    """`rendered` with each flux-owned tag's built-image refs pointed at GHCR (D5.4b).
+    """`rendered` with each tag's built-image refs pointed at GHCR (D5.4b).
 
-    DECIDED: a pass over the rendered text, not a role variable. A tag moves to GHCR, and to
-    `IfNotPresent`, in the render of the PR that marks it `owner: flux`, and no role's
-    defaults or templates change, so Ansible keeps the in-cluster registry and `Always` for
-    every tag it still owns. Only a ref to a `tags.json` image moves, so any other image of a
-    flux-owned tag keeps its host, as registry's self-test probe does.
+    DECIDED: a pass over the rendered text, not a role variable, so no role's defaults or
+    templates name GHCR. Only a ref to a `tags.json` image moves, so any other image of a
+    tag keeps its host, as registry's self-test probe does.
 
     Args:
         rendered: The tags to edit.
-        owned: The flux-owned tags.
         images: Every built image, as `tags.json` names them.
     """
-    owned = set(owned)
     tags = {name: image.tag for name, image in images.items()}
     pointed = []
     for tag in rendered:
-        if tag.tag not in owned or not tags:
+        if not tags:
             pointed.append(tag)
             continue
         dirs = {

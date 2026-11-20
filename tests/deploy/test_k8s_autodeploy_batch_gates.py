@@ -94,17 +94,9 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
 _GATED_CRONJOB_DEFAULTS = "flux_cronjob_gates:\n  widget-sync: {kind: verify}\n"
 
 
-def test_a_flux_owned_role_is_credited_with_the_cronjobs_it_names_for_flux(
-    widget_role,
-) -> None:
+def test_a_role_is_credited_with_the_cronjobs_it_names_for_flux(widget_role) -> None:
     role = widget_role(defaults=_GATED_CRONJOB_DEFAULTS)
-    assert flux_gated_names(role, owners={"widget": "flux"}) == {"widget-sync"}
-
-
-def test_an_ansible_owned_role_gets_no_credit_for_the_flux_opt_in(widget_role) -> None:
-    """Nothing renders the gate Job of a role Ansible still owns, so the opt-in gates nothing."""
-    role = widget_role(defaults=_GATED_CRONJOB_DEFAULTS)
-    assert flux_gated_names(role, owners={}) == set()
+    assert flux_gated_names(role) == {"widget-sync"}
 
 
 def test_pi_peer_backup_is_gated_by_its_flux_gate_alone() -> None:
