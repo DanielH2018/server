@@ -85,6 +85,15 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 - **The volume rows are filesystem usage of mounted claims**, from kubelet, not Longhorn's
   `actualSize` (ADR 0006). Kubelet reports only a claim a running pod mounts, so a CronJob's
   claim gaps legitimately: the `volume_*` metrics check a floor on the row count and no gap.
+- **`ha_daily_rollup`** loads `ha.sensor_daily`, one row per day and declared sensor in
+  `k8s/roles/airflow/files/dags/homelab_warehouse/ha_rollup.py:SENSORS`. HA writes a state when
+  it changes, so the mean is weighted by how long each value held, and time spent
+  `unavailable` or `unknown` stands in for a gap. The recorder keeps seven days
+  (`purge_keep_days`), so this DAG's catchup reaches back six, and an outage of the DAG longer
+  than that loses days for good.
+  `k8s/roles/airflow/tests/test_ha_rollup.py::test_the_backfill_window_matches_the_recorders_purge_setting`
+  holds the window to HA's setting. Task pods reach HA through home-assistant's `netpol_from`
+  entry in `cluster/services.yml`.
 - **Grafana's "Homelab history" board**
   (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads both
   DAGs' tables through the `Warehouse` datasource.
@@ -105,6 +114,10 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `airflow_postgres_password`, `airflow_warehouse_writer_password` or
   `airflow_warehouse_reader_password`, the operator runs `ALTER ROLE … PASSWORD` in the pod
   after the new value deploys. Nothing else changes the stored hash.
+- **`airflow_ha_token` is a Home Assistant long-lived access token.** To rotate it, the
+  operator makes a new one in HA's UI under their profile's Security tab, sets it with
+  `sops set`, runs `cluster_vars.py write`, and deletes the old token in HA once the new one
+  deploys.
 - **A dead scheduler pages as `AirflowSchedulerDown`.** monitor-bridge's `airflow_scheduler`
   row reads the scheduler's own health server every cycle, and goes down on a 503 or when the
   server does not answer (`k8s/roles/monitor-bridge/files/checks/service.py:check_airflow_scheduler`).
