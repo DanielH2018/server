@@ -41,20 +41,13 @@ THE COST. Each read is two REST calls through `lib.gh`, so the quota ledger coun
 through `gh api`. At a 180s interval that is 40 calls an hour.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# `forge` imports `forge_transport` by bare name, so `deploy_tools/` stays on the path until
-# the deploy_tools area qualifies it.
-# TODO: https://github.com/DanielH2018/server/issues/9403 - drop this insert once #9274 lands.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "deploy_tools"))
-
 import json
 import socket
+import sys
 from collections.abc import Callable
 from subprocess import CompletedProcess
 
-import forge
+from deploy_tools import forge
 from deploy_tools.land_lib.serial_lock import serial_landing_live
 from diagnostics.probe_lib.landing_blockers import blockers, ci_state
 from diagnostics.probe_lib.promote_state import LIVE_PROMOTE_READS
@@ -151,7 +144,7 @@ def main(argv: list[str] | None = None, read_state: Callable[[], dict] = read) -
     try:
         print(json.dumps(read_state()))
     except Exception as exc:
-        print(f"landing_clear: {type(exc).__name__}: {exc}", file=_sys.stderr)
+        print(f"landing_clear: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     return 0
 

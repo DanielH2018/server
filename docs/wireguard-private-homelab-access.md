@@ -97,8 +97,8 @@ error.
   Hosts files don't support wildcards, so list each name you use. They never emit a DNS
   query, so general DNS stays entirely on Mullvad — but that is also the trap: a name you
   **forget** to list emits no local query either. It falls straight through to Mullvad's
-  resolver, which won't return a `10.0.0.x` answer, and the browser reports **"Server not
-  found"**. A new or newly migrated service reaching you as a DNS failure is this, not an
+  resolver, which won't return a `10.0.0.x` answer, and the browser shows **"Server not
+  found"** for it. A new or newly migrated service reaching you as a DNS failure is this, not an
   outage — check the file before you debug the homelab.
 - **Linux convenience — split-DNS *(recommended)*.** Keep
   `DNS = 10.0.0.243, local.daniel-hunter.com`. With `systemd-resolved` + `wg-quick`, the

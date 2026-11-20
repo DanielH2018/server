@@ -149,6 +149,19 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   every edit to the file lands alone, a field change on one service included: the operator
   accepted that cost on 2026-11-19 in place of a rule that reads the diff. A refusal names
   what a serial PR changes from `live_limit.SERIAL_WHAT`.
+- The cost was first measured on 2026-11-20, when two PRs that change the file landed in
+  a row. [#9386](https://github.com/DanielH2018/server/pull/9386) merged at 00:05 UTC and
+  ended `settled` at 00:29. [#9418](https://github.com/DanielH2018/server/pull/9418)
+  merged 15 seconds later and ended `settled` at 01:01. Every other k8s landing was
+  refused for between 55 and 84 minutes. The lower bound runs from the first recorded
+  refusal, at 00:06, to #9418's verdict. The upper bound runs from 23:37 on 2026-11-19,
+  when #9386's previous landing ended, because no log kept the time its last landing took
+  the serial lock. Two PRs were refused in that span,
+  [#9423](https://github.com/DanielH2018/server/pull/9423) and
+  [#9424](https://github.com/DanielH2018/server/pull/9424), and they reached their
+  verdicts 76 and 115 minutes after the refusal. The times are from each host's
+  `landing-verdicts.jsonl` and GitHub's merge times. The measurement records what the
+  2026-11-19 decision costs. It does not reopen the decision.
 - A serial PR that holds the turn waits for those landings instead of refusing. At the
   draft's turn its CI run starts anyway. Just before the merge it waits in the turn, up to
   `slots.DRAIN_S`, for the landings past their merge to reach their verdicts. Its log prints
