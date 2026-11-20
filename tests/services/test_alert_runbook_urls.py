@@ -11,6 +11,12 @@ included: a warning reaches Discord and, through `WarningUnresolved` after 48 ho
 The notification says what to do first, and the runbook (most often `docs/alert-runbooks.md`)
 holds the edge cases.
 
+Every alert's summary reads `<service or host>: <what is wrong>`. The notification prints one
+summary per alert, so a reader scanning a list finds the thing that broke in the same place on
+every line. The subject is the rule's own `service` label, an inventory host, or the firing
+series' labels (`{{ $labels.namespace }}/{{ $labels.pod }}`) where one of them names the thing
+more exactly than the rule's `service` does.
+
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
 template expands. The rule files are plain YAML that Jinja never renders, so the domain is a
 literal there, and this module pins it to `domain` in `group_vars/all.yml`. A slug would need
@@ -24,6 +30,7 @@ import re
 
 from _helpers import K8S_ROLES
 from lib import yaml_fast
+from lib.inventory_lists import host_names
 from lib.repo_paths import ALL_VARS, REPO
 
 ROLE = K8S_ROLES / "observability"
@@ -44,6 +51,9 @@ CITED_PAGE = re.compile(r"(?<![\w/.-])docs/((?!archive/)[\w/-]+)\.md\b")
 # Non-vacuity: an alert that must link its runbook, and the page it links.
 NAMED = ("HostReconcileFailed", "host-packages")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.M)
+_LABEL = r"\{\{ \$labels\.\w+ \}\}"
+# A summary's subject and the `: ` that ends it: one name, or label values joined by `/`.
+SUBJECT = re.compile(rf"(?:(?P<name>[\w.-]+)|{_LABEL}(?:/{_LABEL})*): \S")
 
 
 def _base_url() -> str:
@@ -130,6 +140,34 @@ def notification_problems(alerts: list[tuple[str, dict]]) -> list[str]:
     return problems
 
 
+def summary_problems(
+    alerts: list[tuple[str, dict]], hosts: tuple[str, ...]
+) -> list[str]:
+    """Why an alert's summary is not `<service or host>: <what is wrong>`, or nothing.
+
+    Args:
+        alerts: (file name, rule) for each alert rule.
+        hosts: The inventory hosts a summary may name as its subject.
+    """
+    problems = []
+    for name, rule in alerts:
+        where = f"{name}/{rule['alert']}"
+        summary = (rule.get("annotations") or {}).get("summary", "")
+        service = (rule.get("labels") or {}).get("service")
+        subject = SUBJECT.match(summary)
+        if subject is None:
+            problems.append(
+                f"{where}: the summary {summary!r} does not open with its service or host "
+                "and `: `"
+            )
+        elif subject["name"] not in (None, service, *hosts):
+            problems.append(
+                f"{where}: the summary's subject {subject['name']!r} is neither the rule's "
+                f"service {service!r} nor an inventory host"
+            )
+    return problems
+
+
 def test_every_critical_rule_links_a_runbook_and_every_alert_fits_the_cap_is_clean():
     alerts = _alerts()
     critical = {
@@ -176,6 +214,50 @@ def test_a_warning_description_over_the_cap_is_flagged():
         f"x.yaml/X: the description is {DESCRIPTION_CAP + 1} characters, over the "
         f"{DESCRIPTION_CAP} cap; move the edge cases to the runbook"
     ]
+
+
+def _summarised(
+    summary: str, service: str | None = "longhorn"
+) -> list[tuple[str, dict]]:
+    rule = {"alert": "X", "annotations": {"summary": summary}}
+    if service is not None:
+        rule["labels"] = {"service": service}
+    return [("x.yaml", rule)]
+
+
+HOSTS = ("daniel-box",)
+
+
+def test_every_alert_summary_opens_with_its_service_or_host_is_clean():
+    alerts = _alerts()
+    assert CRITICAL <= {rule["alert"] for _name, rule in alerts}
+    assert summary_problems(alerts, host_names()) == []
+
+
+def test_a_summary_that_opens_with_the_symptom_is_flagged():
+    summary = "Failed system units on daniel-box: a.service."
+    assert summary_problems(_summarised(summary), HOSTS) == [
+        f"x.yaml/X: the summary {summary!r} does not open with its service or host and `: `"
+    ]
+
+
+def test_a_summary_whose_subject_is_another_service_is_flagged():
+    assert summary_problems(_summarised("traefik: the volume is degraded."), HOSTS) == [
+        "x.yaml/X: the summary's subject 'traefik' is neither the rule's service "
+        "'longhorn' nor an inventory host"
+    ]
+
+
+def test_a_summary_that_opens_with_the_rules_service_or_a_host_is_clean():
+    alerts = _summarised("longhorn: the volume is degraded.") + _summarised(
+        "daniel-box: the disk is past the scheduling floor."
+    )
+    assert summary_problems(alerts, HOSTS) == []
+
+
+def test_a_summary_whose_subject_is_the_series_labels_is_clean():
+    summary = "{{ $labels.namespace }}/{{ $labels.pod }}: a container was OOM-killed."
+    assert summary_problems(_summarised(summary, service=None), HOSTS) == []
 
 
 def test_every_alert_links_the_runbook_its_description_cites_is_clean():

@@ -10,6 +10,11 @@ first. Its section here says what the alert means, then the cases the descriptio
 link to a section this page does not have. It also fails any alert, warning or critical, whose
 description is over the cap the notification can carry.
 
+Every summary reads `<service or host>: <what is wrong>`, so each line of a notification opens
+with the thing that broke. The subject is the rule's own `service` label, an inventory host,
+or labels of the firing series such as `{{ $labels.namespace }}/{{ $labels.pod }}`. The same
+test fails a summary in any other shape.
+
 ## The alert plane
 
 ### `AlertmanagerNotificationsFailing`
