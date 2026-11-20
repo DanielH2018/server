@@ -12,8 +12,8 @@ WHAT IT COSTS. One full backup of the used blocks, against `k3s_longhorn_daily_b
 Seed one volume at a time, and read the budget line in
 `journalctl -t longhorn-backup-health` before seeding more than a few.
 
-WHAT IT REFUSES. An unbound claim. A volume in no backup tier, because no job's retain would
-ever prune the backup. A disarmed or unavailable target, because the Backup could never
+WHAT IT REFUSES. An unbound claim. A volume with more than one group label, whose tier is
+ambiguous. A volume in no backup tier, because no job's retain would ever prune the backup. A disarmed or unavailable target, because the Backup could never
 complete. A volume that already has a backup, unless --allow-existing says its recurring run
 was missed. A group no RecurringJob selects.
 
@@ -31,16 +31,19 @@ import json
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK
+from lib.k8s_objects import BackupTarget, LonghornVolume
 from lib.kubectl import MissingKubectl
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
 from lib.longhorn_lib.longhorn_backups import (
     B2_TARGET,
-    GROUP_LABEL_PREFIX,
     NO_BACKUP_GROUP,
+    from_item,
+    from_items,
 )
 
 LONGHORN_NAMESPACE = "longhorn-system"
@@ -60,11 +63,27 @@ class SeedFailed(Exception):
     """A seed started and did not finish."""
 
 
-def tier_group(volume: dict) -> str:
-    """The recurring-job group a volume's labels put it in, or "" for none."""
-    labels = (volume.get("metadata") or {}).get("labels") or {}
-    keys = sorted(k for k in labels if k.startswith(GROUP_LABEL_PREFIX))
-    return keys[0].removeprefix(GROUP_LABEL_PREFIX) if keys else ""
+@dataclass(frozen=True)
+class SeedPlan:
+    """What one seed creates, once every read and refusal has passed.
+
+    Attributes:
+        claim: the PVC being seeded.
+        volume: the Longhorn volume bound to it.
+        group: the RecurringJob group its labels put it in.
+        job: the RecurringJob that selects `group`, whose retain prunes the seed.
+        target: the BackupTarget the volume backs up to.
+        robustness: the volume's `.status.robustness`, printed for the operator.
+        name: the Snapshot's and the Backup's name.
+    """
+
+    claim: str
+    volume: str
+    group: str
+    job: str
+    target: str
+    robustness: str
+    name: str
 
 
 def owning_job(jobs: list[dict], group: str) -> str | None:
@@ -145,7 +164,7 @@ class Seed:
             self.kubectl("-n", LONGHORN_NAMESPACE, "get", *args, "-o", "json")
         )
 
-    def plan(self, namespace: str, claim: str, allow_existing: bool) -> dict:
+    def plan(self, namespace: str, claim: str, allow_existing: bool) -> SeedPlan:
         """Make every read and refusal, and return what a seed would create.
 
         Raises:
@@ -160,7 +179,14 @@ class Seed:
                 "nothing to snapshot."
             )
         volume = self._get("volumes.longhorn.io", pv)
-        group = tier_group(volume)
+        groups = LonghornVolume.from_item(volume).groups
+        if len(groups) > 1:
+            raise SeedRefused(
+                f"{claim} carries {len(groups)} recurring-job group labels "
+                f"({', '.join(groups)}), so its tier is ambiguous. The longhorn-reconcile "
+                "CronJob gives a volume exactly one."
+            )
+        group = groups[0] if groups else ""
         if not group or group == NO_BACKUP_GROUP:
             raise SeedRefused(
                 f"{claim} is in recurring-job group '{group or '(none)'}', so nothing would "
@@ -168,18 +194,16 @@ class Seed:
                 "volume into a tier."
             )
         target = (volume.get("spec") or {}).get("backupTargetName") or B2_TARGET
-        state = self._get("backuptargets.longhorn.io", target)
-        url = (state.get("spec") or {}).get("backupTargetURL")
-        available = (state.get("status") or {}).get("available")
-        if not url or available is not True:
+        state = BackupTarget.from_item(self._get("backuptargets.longhorn.io", target))
+        if state.url is None or not state.available:
             raise SeedRefused(
-                f"backup target '{target}' is disarmed or unavailable (URL {url!r}, available "
-                f"{available!r}), so this backup could not complete."
+                f"backup target '{target}' is disarmed or unavailable (URL {state.url!r}, "
+                f"available {state.available!r}), so this backup could not complete."
             )
         existing = sum(
             1
-            for item in self._get("backups.longhorn.io")["items"]
-            if (item.get("status") or {}).get("volumeName") == pv
+            for backup in from_items(self._get("backups.longhorn.io")["items"])
+            if backup.volume == pv
         )
         if existing and not allow_existing:
             raise SeedRefused(
@@ -191,20 +215,20 @@ class Seed:
             raise SeedRefused(
                 f"no RecurringJob lists group '{group}', so nothing would ever prune this seed."
             )
-        return {
-            "claim": claim,
-            "volume": pv,
-            "group": group,
-            "job": job,
-            "target": target,
-            "robustness": (volume.get("status") or {}).get("robustness", "unknown"),
-            "name": seed_name(pv, existing, self.now()),
-        }
+        return SeedPlan(
+            claim=claim,
+            volume=pv,
+            group=group,
+            job=job,
+            target=target,
+            robustness=(volume.get("status") or {}).get("robustness", "unknown"),
+            name=seed_name(pv, existing, self.now()),
+        )
 
     def _apply(self, manifest: dict) -> None:
         self.kubectl("apply", "-f", "-", stdin=json.dumps(manifest))
 
-    def create(self, plan: dict) -> None:
+    def create(self, plan: SeedPlan) -> None:
         """Create the Snapshot, wait for it, create the Backup, and wait for that.
 
         A failed read polls again until its wait runs out, because Longhorn keeps uploading
@@ -213,8 +237,8 @@ class Seed:
         Raises:
             SeedFailed: a wait ran out, or the Backup ended in Error.
         """
-        name = plan["name"]
-        self._apply(snapshot_manifest(name, plan["volume"], plan["job"]))
+        name = plan.name
+        self._apply(snapshot_manifest(name, plan.volume, plan.job))
         unread = ""
         for _ in range(SNAPSHOT_RETRIES):
             try:
@@ -231,20 +255,20 @@ class Seed:
                 f"snapshot {name} was not ready after "
                 f"{SNAPSHOT_RETRIES * SNAPSHOT_DELAY_S}s.{unread} No Backup was requested."
             )
-        self._apply(backup_manifest(name, plan["volume"], plan["target"], plan["job"]))
+        self._apply(backup_manifest(name, plan.volume, plan.target, plan.job))
         for _ in range(BACKUP_TIMEOUT_S // BACKUP_DELAY_S):
             try:
-                status = self._get("backups.longhorn.io", name).get("status") or {}
+                backup = from_item(self._get("backups.longhorn.io", name))
             except KubectlFailed as err:
                 unread = f" Its last read failed: {err}."
             else:
                 unread = ""
-                if status.get("state") == "Completed":
+                if backup.is_completed:
                     return
-                if status.get("state") == "Error":
+                if backup.state == "Error":
                     raise SeedFailed(
-                        f"the seed backup for {plan['claim']} ended in Error: "
-                        f"{status.get('error', '')}. The Backup CR {name} is still present. "
+                        f"the seed backup for {plan.claim} ended in Error: "
+                        f"{backup.error}. The Backup CR {name} is still present. "
                         "Delete it before retrying, or the apply adopts the failed one."
                     )
             self.sleep(BACKUP_DELAY_S)
@@ -289,9 +313,9 @@ def main(
         seed = Seed(kubectl or for_mode(args.apply, APPLY_COMMAND), sleep, now)
         plan = seed.plan(args.namespace, args.claim, args.allow_existing)
         print(
-            f"seeding {plan['claim']} ({plan['volume']}), tier {plan['group']} "
-            f"(job {plan['job']}), target {plan['target']}, "
-            f"robustness {plan['robustness']}, as {plan['name']}"
+            f"seeding {plan.claim} ({plan.volume}), tier {plan.group} "
+            f"(job {plan.job}), target {plan.target}, "
+            f"robustness {plan.robustness}, as {plan.name}"
         )
         if not args.apply:
             print("dry run: nothing changed. Re-run with --apply to seed.")
@@ -304,8 +328,8 @@ def main(
         error(str(err))
         return FAILED
     print(
-        f"{plan['claim']} now has a recovery point on target {plan['target']}. Its "
-        f"{plan['group']} recurring job takes over, and its retain prunes this backup."
+        f"{plan.claim} now has a recovery point on target {plan.target}. Its "
+        f"{plan.group} recurring job takes over, and its retain prunes this backup."
     )
     return OK
 

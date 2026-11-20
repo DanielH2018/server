@@ -16,7 +16,11 @@ def test_from_item_reads_every_status_field():
             snapshotCreatedAt="2026-10-01T03:30:00Z",
             state="Completed",
             size="1048576",
-            labels={"RecurringJob": "daily-backup"},
+            labels={
+                "RecurringJob": "daily-backup",
+                "KubernetesStatus": '{"pvcName":"app-config","namespace":"homelab"}',
+            },
+            error="upload failed",
         )
     )
     assert backup == backups.Backup(
@@ -26,7 +30,14 @@ def test_from_item_reads_every_status_field():
         state="Completed",
         job="daily-backup",
         size="1048576",
+        claim="app-config",
+        error="upload failed",
     )
+
+
+def test_a_claim_label_that_is_not_json_records_no_claim():
+    backup = backups.from_item(_item(labels={"KubernetesStatus": "{not json"}))
+    assert backup.claim == ""
 
 
 def test_from_item_reads_a_missing_field_as_empty_not_none():

@@ -108,6 +108,13 @@ def test_a_disarmed_default_or_an_unavailable_armed_target_is_flagged():
     ]
 
 
+def test_a_whitespace_url_reads_as_disarmed():
+    doc = {"items": [_target("default", "  ", True)]}
+    assert gates.unreachable_targets(doc, ["default"]) == [
+        "default (disarmed: backupTargetURL is empty)"
+    ]
+
+
 def test_a_disarmed_target_the_runbook_does_not_need_is_clean():
     doc = {
         "items": [

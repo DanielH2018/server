@@ -11,27 +11,12 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_selectors.py
 
 from backup.longhorn_reap_lib import logic
 from backup.longhorn_reap_lib import selection as selectors
-from _reap_entrypoint_harness import _backup, _volume
+from _reap_entrypoint_harness import _backup, _lh_volume
 
 
 def _claimed(name, vol, created, job, pvc, state="Completed"):
     """A Backup CR carrying the KubernetesStatus label Longhorn writes, as compact JSON."""
     return _backup(name, vol, created, job, state=state, pvc=pvc)
-
-
-def test_backup_claim_reads_the_pvc_out_of_the_kubernetesstatus_label():
-    assert (
-        selectors.backup_claim(
-            _claimed("old-0", "pvc-gone", "2026-08-14T00:00:00Z", "", "sonarr-config")
-        )
-        == "sonarr-config"
-    )
-
-
-def test_backup_claim_is_empty_when_the_label_is_not_parseable_json():
-    backup = _backup("old-0", "pvc-gone", "2026-08-14T00:00:00Z", "")
-    backup["status"]["labels"]["KubernetesStatus"] = "{not json"
-    assert selectors.backup_claim(backup) == ""
 
 
 def test_migrated_chain_floor_is_flagged_when_the_replacement_has_no_completed_backup():
@@ -148,7 +133,7 @@ def test_migrated_chain_takes_the_unlabelled_strand_classify_backups_cannot_see(
 
     classified = logic.classify_backups(
         backups,
-        logic.backup_owner_map([_volume("pvc-new", group="weekly-backup-d6")]),
+        logic.backup_owner_map([_lh_volume("pvc-new", group="weekly-backup-d6")]),
         {"pvc-new"},
     )
     assert [name for name, *_ in classified.orphaned] == ["old-0"]

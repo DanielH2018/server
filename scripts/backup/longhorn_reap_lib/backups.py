@@ -100,6 +100,7 @@ import host_lib
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from backup.longhorn_reap_lib import logic, selection
+from lib.k8s_objects import LonghornVolume
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
@@ -362,11 +363,12 @@ def main(argv: list[str]) -> int:
             "ABORT: could not read volumes: %s" % vol_out.strip()[:200], file=sys.stderr
         )
         return 1
-    volumes, err = logic.parse_kubectl_json_items(vol_out, "volume list")
+    volume_items, err = logic.parse_kubectl_json_items(vol_out, "volume list")
     if err:
         print("ABORT: %s" % err, file=sys.stderr)
         return 1
 
+    volumes = [LonghornVolume.from_item(item) for item in volume_items]
     owner = logic.backup_owner_map(volumes)
     existing = logic.existing_volume_set(volumes)
 

@@ -59,6 +59,8 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 - **One partition per day, replaced in one transaction**
   (`k8s/roles/airflow/files/dags/homelab_warehouse/warehouse.py:replace_partition`). A rerun
   or a backfill is always safe.
+- **Each load creates its schema through `ensure_schema`**, which takes an advisory lock
+  first: concurrent `GRANT`s on one catalog row fail with "tuple concurrently updated".
 - **A `check` task after each `load` reads the day back.** It fails the run on a missing key,
   an hour-long gap or a value out of bounds.
 - **A day the source no longer wholly holds is skipped, not loaded.** Prometheus' 7GB size
@@ -94,9 +96,18 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `k8s/roles/airflow/tests/test_ha_rollup.py::test_the_backfill_window_matches_the_recorders_purge_setting`
   holds the window to HA's setting. Task pods reach HA through home-assistant's `netpol_from`
   entry in `cluster/services.yml`.
+- **`claude_usage_rollup`** loads `claude.usage_daily`: spend, tokens, sessions, active time,
+  lines, commits and PRs, summed by node, entrypoint, model and type, so no session id or
+  account reaches the warehouse. Claude Code exports one cumulative counter per session, so
+  `k8s/roles/airflow/files/dags/homelab_warehouse/claude_usage.py:usage_rows` counts each
+  session's rise from its last value before the day, never PromQL's `increase()`, which drops
+  every new session's first export. The series merge `without (instance)`, because a
+  restarted collector re-exports each live session under a new `instance`, and the baseline
+  looks back eight days, past the collector's 168h `metric_expiration`. A day loads only
+  once Prometheus holds those eight days, so the DAG backfills about two weeks, not three.
 - **Grafana's "Homelab history" board**
-  (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads both
-  DAGs' tables through the `Warehouse` datasource.
+  (`k8s/roles/observability/files/dashboards/Infrastructure/homelab-history.json`) reads every
+  DAG's tables through the `Warehouse` datasource.
 
 ## Operating it
 
