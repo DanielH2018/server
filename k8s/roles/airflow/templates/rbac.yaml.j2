@@ -78,3 +78,36 @@ metadata:
   name: airflow-task
   namespace: {{ k8s_namespace }}
 automountServiceAccountToken: false
+---
+# backup_spend_rollup's load task alone runs as this, through its executor_config, to read each
+# Longhorn volume's backup target and claim. Read-only, and on volumes alone.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow-longhorn-reader
+  namespace: {{ k8s_namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-longhorn-reader
+  namespace: longhorn-system
+rules:
+  - apiGroups: [longhorn.io]
+    resources: [volumes]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-longhorn-reader
+  namespace: longhorn-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-longhorn-reader
+subjects:
+  - kind: ServiceAccount
+    name: airflow-longhorn-reader
+    namespace: {{ k8s_namespace }}
