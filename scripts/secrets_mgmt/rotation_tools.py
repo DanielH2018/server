@@ -54,7 +54,7 @@ def sops_names(path: str = SECRETS_FILE) -> list[str]:
     return sorted(k for k in data if k != "sops")
 
 
-def load_registry(path: str = REGISTRY_FILE) -> Registry:
+def load_registry(path: str | os.PathLike = REGISTRY_FILE) -> Registry:
     """The rotation registry, parsed; an empty one when the file is absent.
 
     Raises:

@@ -410,7 +410,7 @@ class World:
     def clients(self, registry: forge.Registry | None = None) -> forge.Forge:
         return forge.Forge(
             registry=registry or forge.Registry(self.transport, "job-token"),
-            github=forge.GitHub(self.transport, "job-token", run=self.run),
+            github=forge.GitHub(self.transport, lambda: "job-token", run=self.run),
             cosign=forge.Cosign(run=self.run),
         )
 

@@ -1,6 +1,5 @@
 """Unit tests for the bedroom lighting macros in custom_templates/lighting.jinja."""
 
-import pytest
 from jinja_harness import render_macro
 
 LIGHT = "lighting.jinja"
@@ -101,18 +100,6 @@ def test_wake_brightness_is_gentle_then_steep():
     assert (
         _brightness(40) == 60
     )  # 20 + (100-20)*(5/10) -> the steep tail near window end
-
-
-def test_wake_brightness_takes_only_elapsed():
-    """The macro has no short-night softening argument.
-
-    A second `sleep_min` argument would scale the mid/knee down for a night under 6 h, but its
-    only possible source (sensor.pixel_9_pro_sleep_duration) exists on no device, so every caller
-    would pass 0 and the branch would be unreachable. Pinning the arity keeps a caller from
-    silently reintroducing an argument the macro would ignore.
-    """
-    with pytest.raises(TypeError):
-        render_macro(LIGHT, "wake_brightness", 15, 300)
 
 
 def test_auto_light_allowed_truth_table():

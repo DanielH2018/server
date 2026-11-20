@@ -3,9 +3,11 @@
 import dataclasses
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -21,6 +23,44 @@ RETIRED = "retired"
 # The manifest key that counts a batch's conflict resumes; `fanout_lib.resume.MAX_RESUMES`
 # bounds it.
 CONFLICT_RESUMES = "conflict_resumes"
+# The manifest key holding the `kept:` line a clean last read for a batch, and how many cleans
+# in a row read it.
+SWEEP_KEPT = "sweep_kept"
+# How many cleans in a row may read the same `kept:` line before the worktree sweep stops
+# running that batch's leg. At the lander's six-hour `CLEAN_INTERVAL_S`, four is one day.
+SWEEP_KEPT_LIMIT = 4
+
+
+class KeptStreak(NamedTuple):
+    """A batch's run of cleans that read the same `kept:` line.
+
+    Attributes:
+        line: the `kept:` line, or "" when no clean kept the batch.
+        passes: how many cleans in a row read `line`.
+        merged_pr: the URL of the branch's newest merged PR when the sweep stopped on the
+            batch, "" for none, or None while it is not recorded.
+    """
+
+    line: str = ""
+    passes: int = 0
+    merged_pr: str | None = None
+
+
+# A value a shell reads as itself wherever a command names it: as a bare word, inside single
+# or double quotes, and inside a systemd `Exec` line. No leading `-`, which ssh and git read
+# as an option.
+_PLAIN_WORD = re.compile(r"[A-Za-z0-9_+./:@][A-Za-z0-9_+./:@-]*")
+
+
+def _refuse_unless_plain_words(record: object, names: tuple[str, ...]) -> None:
+    """Raise ValueError for the first of `record`'s `names` that is not a plain word."""
+    for name in names:
+        value = getattr(record, name)
+        if not isinstance(value, str) or not _PLAIN_WORD.fullmatch(value):
+            raise ValueError(
+                f"{type(record).__name__.lower()} {name} {value!r} is not a plain word "
+                "(letters, digits and _+./:@-, with no leading -)"
+            )
 
 
 @dataclass(frozen=True)
@@ -53,7 +93,7 @@ class Batch:
         extra: the keys of the manifest entry that are not fields here, which a newer
             build wrote. `to_json` writes them back, so a rewrite by this build loses
             nothing the newer build recorded. Not part of equality. It also holds
-            `CONFLICT_RESUMES`, which only a resumed batch's entry carries, so every other
+            `CONFLICT_RESUMES` and `SWEEP_KEPT`, which only some entries carry, so every other
             entry stays readable by a build that constructs a batch from its keys.
     """
 
@@ -71,12 +111,28 @@ class Batch:
     excused_paths: tuple[str, ...] = ()
     extra: dict = field(default_factory=dict, compare=False)
 
+    def __post_init__(self) -> None:
+        """Refuse a `batch`, `host`, `worktree`, `branch` or `unit` that is not a plain word.
+
+        The fan-out commands name these five, unquoted, in shell text they run on `host`. A
+        manifest is a file on disk, so the check is here, where every batch is built, and no
+        command builder quotes or checks one.
+
+        Raises:
+            ValueError: one of the five is not a string of letters, digits and `_+./:@-`, or
+                starts with `-`.
+        """
+        _refuse_unless_plain_words(
+            self, ("batch", "host", "worktree", "branch", "unit")
+        )
+
     @classmethod
     def from_json(cls, data: dict) -> Batch:
         """Build a batch from its manifest entry, keeping the keys that are not fields.
 
         Raises:
             TypeError: `data` is not an object, or lacks a field that has no default.
+            ValueError: a field a command names is not a plain word.
         """
         if not isinstance(data, dict):
             raise TypeError(f"a batch entry is an object, not {type(data).__name__}")
@@ -100,6 +156,47 @@ class Batch:
         counted = {**self.extra, CONFLICT_RESUMES: self.conflict_resumes + 1}
         return dataclasses.replace(self, extra=counted)
 
+    @property
+    def sweep_kept(self) -> KeptStreak:
+        """The batch's streak of identical `kept:` lines, empty when none is recorded."""
+        rec = self.extra.get(SWEEP_KEPT) or {}
+        merged = rec.get("merged_pr")
+        return KeptStreak(
+            line=str(rec.get("line") or ""),
+            passes=int(rec.get("passes") or 0),
+            merged_pr=None if merged is None else str(merged),
+        )
+
+    @property
+    def sweep_stopped(self) -> bool:
+        """Whether `SWEEP_KEPT_LIMIT` cleans in a row kept the batch with the same line."""
+        return self.sweep_kept.passes >= SWEEP_KEPT_LIMIT
+
+    def kept_by_clean(self, line: str) -> Batch:
+        """This batch with a clean's `kept:` line counted: one more pass if it repeats, else one."""
+        streak = self.sweep_kept
+        repeated = line == streak.line
+        counted = KeptStreak(
+            line,
+            streak.passes + 1 if repeated else 1,
+            streak.merged_pr if repeated else None,
+        )
+        return self._with_streak(counted)
+
+    def stopped_at_merge(self, merged_pr: str) -> Batch:
+        """This batch with the branch's newest merged PR recorded as it stood at the stop."""
+        return self._with_streak(self.sweep_kept._replace(merged_pr=merged_pr))
+
+    def _with_streak(self, streak: KeptStreak) -> Batch:
+        return dataclasses.replace(
+            self, extra={**self.extra, SWEEP_KEPT: streak._asdict()}
+        )
+
+    def kept_streak_cleared(self) -> Batch:
+        """This batch with no `kept:` streak recorded."""
+        extra = {k: v for k, v in self.extra.items() if k != SWEEP_KEPT}
+        return dataclasses.replace(self, extra=extra)
+
     def to_json(self) -> dict:
         """The manifest entry for this batch: its fields, then `extra`'s keys beside them.
 
@@ -118,6 +215,15 @@ class Manifest:
     orchestrator_branch: str
     batches: list[Batch]
 
+    def __post_init__(self) -> None:
+        """Refuse a `run_id` or `orchestrator_branch` that is not a plain word.
+
+        Raises:
+            ValueError: either is not a string of letters, digits and `_+./:@-`, or starts
+                with `-`.
+        """
+        _refuse_unless_plain_words(self, ("run_id", "orchestrator_branch"))
+
     @classmethod
     def from_json(cls, data: dict) -> Manifest:
         """Build a run from the object `to_json` wrote.
@@ -125,6 +231,7 @@ class Manifest:
         Raises:
             KeyError: `data` lacks one of the three keys.
             TypeError: `data` or one of its batches has the wrong shape.
+            ValueError: the run or one of its batches holds a field that is not a plain word.
         """
         return cls(
             data["run_id"],
@@ -235,6 +342,7 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     Raises:
         FileNotFoundError: no manifest for `run_id` under `root`, live or retired. The error
             names the live path, so a mistyped run id reads as it always did.
+        ValueError: the file is not JSON, or holds a field that is not a plain word.
     """
     try:
         text = path(run_id, root).read_text()

@@ -68,13 +68,13 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 24 jobs. A concurrent master sweep therefore delays
+  # jobs at once, and a full sweep runs 25 jobs. A concurrent master sweep therefore delays
   # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: a full sweep runs 24 jobs against a pool of 20.
+  # of the pool, not the group key: a full sweep runs 25 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -520,6 +520,46 @@ jobs:
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
 
+  # Plans the `pytest` legs. GitHub fixes a matrix before any of its legs runs, so the legs a
+  # selection does not need can be left unstarted only by a job ahead of them.
+  # `pytest_shard.py --plan` runs the legs' own selection once and publishes the numbers of the
+  # legs it fills as `legs`, and the `pytest` matrix starts those. A pull request diffs its
+  # merge commit against `HEAD^1`, and an unproven push against the green base `prove` names.
+  # A push with no base and a dispatch run no plan step, so `legs` is empty and the matrix
+  # starts every leg, as it does when this job fails.
+  #
+  # Only `pytest` waits for this job. On the 20 pull-request runs measured on 2026-11-20, the
+  # legs a selection left empty held 1046 slot-seconds, about twice what this job costs. The
+  # wait it adds ahead of the legs, about 28s, is off the run's critical path: `hooks` and the
+  # host packages finish minutes after a selected leg. The planner packs nothing, so it runs
+  # on the runner's own `python3` with no setup step.
+  pytest_plan:
+    needs: prove
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: plan the pytest legs
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    outputs:
+      legs: ${{ steps.plan.outputs.legs }}
+    steps:
+      # A pull request diffs against the merge commit's first parent; a push's green base can
+      # be any ancestor.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          persist-credentials: false
+      - name: Plan the legs the selection fills
+        id: plan
+        if: github.event_name == 'pull_request' || needs.prove.outputs.base != ''
+        env:
+          PYTHONPATH: scripts
+          GREEN_BASE: ${{ needs.prove.outputs.base }}
+        run: |
+          set -euo pipefail
+          base=HEAD^1
+          if [ "$GITHUB_EVENT_NAME" = push ]; then base=$GREEN_BASE; fi
+          python3 scripts/dev/pytest_shard.py --plan --changed-since "$base"
+
   # The pytest suite, run as `uv run python -m pytest` with the addopts from pyproject.toml, so a
   # local `uv run pytest` and this job agree about what a test run is. A dispatch runs every module, and so does a push with no green
   # ancestor in reach. A push that has one runs the modules the diff from it can affect, and a
@@ -559,9 +599,10 @@ jobs:
   # This job is the suite's only automated run before a merge, and `land.sh` waits on it
   # through the `prek` gate.
   pytest:
-    needs: prove
+    needs: [prove, pytest_plan]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
-    name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    # No leg count in the name: a run starts only the legs its plan names.
+    name: pytest (shard ${{ matrix.shard }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     # `full` when the legs ran the whole census, `selected` when they ran a pull request's
@@ -572,13 +613,15 @@ jobs:
       scope: ${{ steps.select.outputs.scope }}
     strategy:
       fail-fast: false
-      # Six shards. Changing this list is the whole edit: the
-      # select step below reads `strategy.job-total` for `--of`, and the required context is
-      # the `prek` gate, not any individual leg — nothing outside this file counts the legs.
+      # `pytest_shard.CI_LEGS` legs. A run starts the legs `pytest_plan` published, and a run
+      # with no plan starts all of them through the fallback list, which must name
+      # 1..CI_LEGS (`test_pytest_shards_partition_the_suite.py`). The select step passes no
+      # `--of`, so each leg splits by `CI_LEGS` too. Changing the count means editing the
+      # constant, this list, and `hosts/lib/ci_verdict.py:CI_GATE_NEEDS_JOBS`.
       #
       # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
       # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 24, so every leg's fixed cost also
+      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
@@ -587,8 +630,7 @@ jobs:
       # section prints every worker's finish time, which shows when one group sets the leg's
       # wall.
       matrix:
-        # DECIDED: six shards, on slot-seconds per landing and p90 queue wait (#8456, 2026-11-14)
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: "${{ fromJSON(needs.pytest_plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}"
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
@@ -598,18 +640,18 @@ jobs:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
       - uses: $/.github/actions/setup
-      # `--of "$SHARDS"` reads `strategy.job-total`, so the split follows the matrix above and
-      # cannot drift from it: changing the `shard:` list is the whole edit. The helper assigns
+      # The helper splits by `pytest_shard.CI_LEGS`, whatever the matrix started. It assigns
       # whole test modules by greedy bin packing over recorded per-file durations — never part of
       # a module, or `--dist loadscope`'s module-scoped fixtures would rebuild per shard.
       #
       # On a pull request the checkout is the merge commit, so `HEAD^1` is the base and the
       # diff from it is the pull request's own change. `--changed-since` packs only the modules
       # that diff can affect, into as few legs as keep each no heavier than a full sweep's leg
-      # (`scripts/dev/affected_lib/table.py` has the rule). The matrix cannot shrink to match,
-      # because `strategy.job-total` is fixed before any step runs. So a leg the selection does
-      # not need gets an empty list, writes `count=0`, and every later step skips on it: the
-      # leg ends green after the checkout and the setup.
+      # (`scripts/dev/affected_lib/table.py` has the rule). `pytest_plan` starts exactly those
+      # legs. A leg the selection does not need gets an empty list, writes `count=0`, and every
+      # later step skips on it: the leg ends green after the checkout and the setup. That leg
+      # is the one a plan starts for a selection of no modules, or a spare leg of a run whose
+      # plan failed.
       #
       # A push diffs against the base the `prove` job names: the newest ancestor whose gate
       # passed, which is not always the parent (`scripts/dev/tested_tree.py:green_base`). A
@@ -622,7 +664,6 @@ jobs:
         id: select
         env:
           SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ strategy.job-total }}
           GREEN_BASE: ${{ needs.prove.outputs.base }}
         run: |
           set -euo pipefail
@@ -631,7 +672,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ] && [ -n "${GREEN_BASE:-}" ]; then
             since=(--changed-since "$GREEN_BASE")
           fi
-          uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" \
+          uv run python scripts/dev/pytest_shard.py --shard "$SHARD" \
             "${since[@]}" --out "$RUNNER_TEMP/shard.txt"
       # sops, age, apt-utils and the dotfiles packages, from the action the nightly sweep in
       # pytest-sweep.yml shares.
@@ -1770,7 +1811,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest_plan, pytest, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`ci_verdict.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -1810,6 +1851,7 @@ jobs:
           PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
           PR_GATES: ${{ needs.pr_gates.result }}
+          PYTEST_PLAN: ${{ needs.pytest_plan.result }}
           PYTEST: ${{ needs.pytest.result }}
           LOCKFILE: ${{ needs.lockfile.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
@@ -1819,7 +1861,8 @@ jobs:
           HOST_PACKAGES_BOOTSTRAP: ${{ needs.host_packages_bootstrap.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
-          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
+          echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES" \
+            "pytest-plan=$PYTEST_PLAN pytest=$PYTEST" \
             "lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
@@ -1843,6 +1886,7 @@ jobs:
           need() { local half=$1; shift; "$@" || failed+=("$half=$2"); }
           need hooks ok "$HOOKS"
           need pr-gates ok "$PR_GATES"
+          need pytest-plan ok "$PYTEST_PLAN"
           need pytest ok "$PYTEST"
           need lockfile ok "$LOCKFILE"
           need flux-roundtrip ok "$FLUX_ROUNDTRIP"

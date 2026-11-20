@@ -11,14 +11,14 @@ WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. When this was written, a ruleset bloc
 auto-merged PR, because auto-merge never applies a bypass. Ruleset 27167149
 blocks it again, and the landing also merges at the head SHA it read green and then deploys
 the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
-the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
-fd 9 and read this script's output through a pipe, so a landing that inherited either would
-keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
+the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers read this script's output
+through a pipe, so a landing that inherited it would hold the caller's run open for the whole
+CI wait. The detached landing closes every inherited descriptor
 from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``). The callers are
 system units, and a system unit kills its whole cgroup when its script exits, so the landing
 starts in the operator's user manager instead (``lib/detach_fork.py:in_user_manager``).
 
-``publish`` expects the commit to already be at HEAD of the primary checkout; the caller
+``publish`` expects the commit to already be at HEAD of the caller's own worktree; the caller
 made it, because what to stage and how to word it is the cron's business. It prints ONE
 line to stdout that the caller can alert with, and its exit code says what state the
 tree is in:
@@ -26,7 +26,7 @@ tree is in:
   0  branch pushed, PR opened; the local commit is gone. Its landing started, or every
      landing slot was busy and the next run's ``unlanded`` merges the PR once it is green
   1  the branch never reached origin -- the commit is still local on HEAD. Nothing to
-     clean up on origin; the next run refuses on the dirty/ahead tree
+     clean up on origin; the caller's next ``prepare_tree`` discards it
   2  the branch IS on origin but the PR could not be opened or its landing could not be
      started -- and the local commit is already gone. The caller's next run sees the
      branch through ``unlanded`` and refuses. Also covers the
@@ -113,11 +113,9 @@ FAILURE_TAIL = 400
 # second branch on the strength of an answer GitHub never gave.
 OPEN_PR_UNKNOWN = "unknown"
 
-# `lib.git.git` has no default timeout, and the callers hold the git-tree lock
-# while this runs -- `homelab-checkout-sync` takes the same lock with `flock -n`. git sets no
-# connect timeout of its own, so a blackholed origin would hold the lock and make it skip a
-# run. 30s is well under both that wait and the 60s bound `lib.gh.gh` puts on the PR lookup
-# beside it.
+# `lib.git.git` has no default timeout, and git sets no connect timeout of its own, so a
+# blackholed origin would hang the calling cron until its unit's TimeoutStartSec. 30s is well
+# under the 60s bound `lib.gh.gh` puts on the PR lookup beside it.
 LS_REMOTE_TIMEOUT_S = 30.0
 
 # The landing entry point. Run with this interpreter, not through `land.sh`: that wrapper

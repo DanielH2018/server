@@ -17,6 +17,7 @@ import pytest
 ROLE = pathlib.Path(__file__).resolve().parents[1]
 DENIED = frozenset({"authelia", "traefik"})
 GOOD = {
+    "number": 42,
     "author": {"login": "app/renovate", "is_bot": True},
     "isCrossRepository": False,
     "baseRefName": "master",
@@ -65,6 +66,8 @@ def test_a_renovate_pr_touching_no_denied_role_passes_every_check():
         ({"baseRefName": "release"}, "base"),
         ({"state": "MERGED"}, "open"),
         ({"headRefName": "worktree-renovate-auto-3340"}, "renovate/"),
+        ({"headRefName": None}, "does not parse"),
+        ({"number": "42"}, "does not parse"),
         (
             {
                 "headRefName": "renovate/k8s-image-navidrome-(manual-k8s_autodeploy-false)"

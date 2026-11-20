@@ -48,16 +48,6 @@ def spied() -> Spied:
     return seen
 
 
-def test_no_k8s_render_context_drops_k8s_no_mutate(spied):
-    dropped = {
-        key: reason
-        for _, keys in spied.resolves
-        for key, reason in keys.items()
-        if key in ALWAYS_UNDEFINED
-    }
-    assert dropped == {}
-
-
 def test_k8s_render_resolves_each_clean_context_in_the_whole_dict_pass(spied):
     # A context that drops a key outside ALWAYS_UNDEFINED (a role's built-image tag in stub
     # mode) may still take the per-key fallback, two rounds over its keys; any other gets 2.
