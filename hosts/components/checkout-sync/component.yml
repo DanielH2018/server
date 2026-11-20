@@ -1,13 +1,13 @@
-# The primary checkout's fast-forward on daniel-box. checkout-sync is the only process
-# that fast-forwards the primary checkout. It takes the git-tree lock, which the deploy-ui
-# panel reads. No other job takes it: the committing crons work in their own worktrees. A
+# The primary checkout's fast-forward, on each host whose package lists this component.
+# checkout-sync is the only process that fast-forwards the primary checkout. It takes the
+# git-tree lock, which daniel-box's deploy-ui panel reads. No other job takes it: the committing crons work in their own worktrees. A
 # fast-forward to a commit HEAD already contains does nothing.
 #
 # homelab-checkout-sync.timer starts homelab-checkout-sync.service every 10 minutes as sys_user in
 # /home/<sys_user>/server. hosts/lib/checkout_sync.py does the work, and its docstring lists the
 # steps. The run writes checkout_sync.prom: CheckoutSyncFailed pages while a refusal lasts, and
 # CheckoutSyncNotReporting pages when no verdict lands within the 2-hour deadline
-# (k8s/roles/observability/files/rules/initial-setup-checks.yaml). A crashed run pages through
+# (k8s/roles/observability/files/rule-tables/host-checks.yaml, one copy per listing host). A crashed run pages through
 # `homelab-alert@` (the `failure-alert` component).
 #
 # A host that lists this component lists `secrets-unit`, `failure-alert` and `uv` (for /usr/bin/uv)
