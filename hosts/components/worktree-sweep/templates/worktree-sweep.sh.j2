@@ -19,6 +19,11 @@
 # than that exits 78, a copy with no package beside it exits 69, and no copy at all exits 127.
 # None of the three reads as "nothing to remove": `chezmoi apply` on the host is the repair.
 #
+# A CHECKOUT WITH NO POLICY FILE FAILS THE RUN TOO. Without .claude/prune-worktrees.json the
+# pruner falls back to strict defaults, keeps every fan-out tree and exits 0, which reads as
+# "nothing to remove". The script skips the pruner and exits 66 instead. The usual cause is a
+# primary checkout that nothing fast-forwards: `git pull --ff-only` in it is the repair.
+#
 # THE EXIT CODE REACHES HEALTHCHECKS.IO. The pruner exits 1 when a removal or a
 # branch deletion failed. `$rc` on the ping URL is Healthchecks.io's exit-status
 # endpoint: 0 is a success ping and anything else is a failure, so a failed sweep pages at once
@@ -45,8 +50,14 @@ cd /home/{{ sys_user }}/server || exit 1
 # PATH explicitly: the unit's environment inherits neither /usr/local/bin nor the user's
 # ~/.local/bin, and the pruner's `branch_holds` command and the reap below both run `uv`.
 export PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
-out="$(/home/{{ sys_user }}/.claude/hooks/prune-worktrees.py --require 2 --prune --brief)"
-rc=$?
+if [[ -f .claude/prune-worktrees.json ]]; then
+  out="$(/home/{{ sys_user }}/.claude/hooks/prune-worktrees.py --require 2 --prune --brief)"
+  rc=$?
+else
+  out=""
+  rc=66
+  echo "no .claude/prune-worktrees.json in /home/{{ sys_user }}/server: the checkout is stale; run git pull --ff-only there"
+fi
 [ -n "$out" ] && printf '%s\n' "$out"
 {% if inventory_hostname == ops_cron_host %}
 # A removed worktree's claims read as stale from then on, but only `reap` releases them. Only
