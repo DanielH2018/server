@@ -27,7 +27,6 @@ from validate.validate_lib import (
     engine_case,
     repos_case,
     secrets_case,
-    shadow_case,
 )
 
 METHODS = ("upgrade_path", "cold_install", "by_hand")
@@ -36,7 +35,6 @@ MODULES = {
     "secrets_case": secrets_case,
     "conffile_case": conffile_case,
     "engine_case": engine_case,
-    "shadow_case": shadow_case,
     "repos_case": repos_case,
     "bootstrap_case": bootstrap_case,
     "bootstrap_repo_case": bootstrap_repo_case,

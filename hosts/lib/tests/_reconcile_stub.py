@@ -130,8 +130,6 @@ def systemctl(state: dict, args: list[str]) -> int:
     units = state["units"]
     if verb == "show":
         return _show(units, rest, state["fail"])
-    if verb == "daemon-reload":
-        return 0
     if verb == "list-units":
         return _list_units(units, rest)
     if verb == "reset-failed":
@@ -167,8 +165,6 @@ def systemctl(state: dict, args: list[str]) -> int:
         _effects(state, f"{verb} {unit}")
     elif verb in ("try-restart", "reload"):
         known["invocation"] = known.get("invocation", "inv0") + "+"
-    elif verb == "disable":
-        known["enabled"] = "disabled"
     else:
         raise SystemExit(f"stub systemctl: unexpected {args}")
     return 0
