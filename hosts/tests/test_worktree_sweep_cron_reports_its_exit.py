@@ -35,16 +35,21 @@ def _run(
     said: str = REMOVED_NONE,
     reap_rc: int = 0,
     env: dict[str, str] | None = None,
+    policy: bool = True,
 ):
     """Run `host`'s script with the pruner exiting `sweep_rc`; return its result and the ping URL.
 
     The pruner stub writes its arguments to `pruner-args` under `tmp_path`, prints `said`
     and exits `sweep_rc`. A `pruner` body replaces that stub, and None leaves the host with
     no pruner at all. The `uv` stub writes its arguments to `uv-args` and exits `reap_rc`.
-    `env` replaces the inherited environment.
+    `env` replaces the inherited environment. `policy=False` leaves the checkout without
+    `.claude/prune-worktrees.json`, as a checkout from before that file was added has.
     """
     home = tmp_path / "home"
     (home / "server").mkdir(parents=True, exist_ok=True)
+    if policy:
+        (home / "server/.claude").mkdir(exist_ok=True)
+        (home / "server/.claude/prune-worktrees.json").write_text("{}\n")
     if pruner is not None:
         write_exec(
             home / ".claude/hooks/prune-worktrees.py",
@@ -119,6 +124,17 @@ def test_a_host_with_no_pruner_fails_the_run_and_pings_the_failure(tmp_path):
 
     assert result.returncode == 127
     assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/127"
+
+
+def test_a_checkout_with_no_policy_file_fails_the_run_and_pings_the_failure(tmp_path):
+    # fact: hosts/components/worktree-sweep/CLAUDE.md#Autonomous-role contract (the timer removes worktrees and branches with no human in the loop)
+    # Without the policy the pruner keeps every fan-out tree and exits 0, a false "nothing to remove".
+    result, url = _run(tmp_path, 0, policy=False)
+
+    assert not (tmp_path / "pruner-args").exists()
+    assert "no .claude/prune-worktrees.json" in result.stdout
+    assert result.returncode == 66
+    assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/66"
 
 
 def test_the_ops_cron_host_reaps_claims_after_a_removal(tmp_path):

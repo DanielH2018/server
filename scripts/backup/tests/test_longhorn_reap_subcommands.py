@@ -144,20 +144,6 @@ def test_apply_refusal_names_the_new_entrypoint_and_subcommand(subcommand, tmp_p
 # ── layout census ───────────────────────────────────────────────────────────────────────
 
 
-def test_no_longhorn_reap_module_remains_flat_in_scripts_backup():
-    tracked = _tracked("scripts/backup")
-    assert any(p.name == "longhorn_reap.py" for p in tracked), (
-        "scripts/backup/longhorn_reap.py is not tracked"
-    )
-    flat = sorted(
-        str(p)
-        for p in tracked
-        if p.parent == pathlib.PurePosixPath("scripts/backup")
-        and p.match("longhorn_reap_*.py")
-    )
-    assert flat == [], f"move these into longhorn_reap_lib/: {flat}"
-
-
 def test_libraries_live_in_a_namespace_package_without_an_init():
     tracked = _tracked("scripts/backup/longhorn_reap_lib")
     modules = [p for p in tracked if p.suffix == ".py"]

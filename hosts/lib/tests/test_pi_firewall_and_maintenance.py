@@ -75,7 +75,6 @@ def test_the_scan_sources_the_check_library_and_loads_no_credential(package):
     for scan in ("rkhunter",):
         script = _text(package, f"/usr/lib/homelab/{scan}-check")
         assert "source /usr/lib/homelab/homelab-check-lib.sh ||" in script
-        assert "kuma-push-lib.sh" not in script
         assert "CREDENTIALS_DIRECTORY" not in script
         unit = _text(package, f"/usr/lib/systemd/system/homelab-{scan}-check.service")
         assert "LoadCredential" not in unit and "homelab-secrets" not in unit

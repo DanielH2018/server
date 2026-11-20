@@ -562,6 +562,55 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
 
+## Autonomous-role contract (`homelab-claude-restart@`, a restart of one allowlisted Deployment)
+
+Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
+`hosts/components/claude-code/files/claude_restart.py` as root on daniel-box.
+`docs/claude-agent-user.md`, *The restart allowlist*, has the design and the operator's rulings.
+
+- **Scope:** one `kubectl rollout restart` of the Deployment the allowlist entry `<name>`
+  names, under the field manager `claude-restart`, which Flux's takeover leaves alone. The
+  namespace and the Deployment come from the entry, never from the instance
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_listed_workload_is_restarted_by_the_entrys_names_and_reported`).
+  The allowlist is `restart_allowlist` in
+  `hosts/components/claude-code/templates/claude-triage-pins.j2`, and it is empty, so every
+  request is refused
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_an_empty_allowlist_refuses_every_name_and_posts_nothing`).
+- **Identity:** root, because only root reads the k3s admin kubeconfig. No polkit rule ships,
+  so only root starts the unit
+  (`hosts/tests/test_claude_restart_broker.py::test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule`).
+  The unit passes the script its instance and nothing else
+  (`hosts/tests/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
+- **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_restart_enabled`, true
+  only in daniel-box's host_vars. False drops the unit, the script and the config from the next
+  package version, and keeps `/var/lib/claude-restart`. To stop the broker without a landing,
+  run `sudo touch /etc/claude-restart/hold`; removing the file releases it
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_hold_file_refuses_a_listed_workload`).
+- **Abort valves:** one restart per workload per 24 hours
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_second_restart_of_one_workload_waits_out_its_cooldown`)
+  and three per UTC day
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_daily_cap_counts_every_workloads_restarts`),
+  both pins that no inventory value moves
+  (`hosts/tests/test_claude_restart_broker.py::test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap`).
+  The script refuses while the weekly reboot's mute is open, because a failed restart would
+  page nobody
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_weekly_reboot_mute_refuses_because_a_failure_would_page_nobody`),
+  and while the Deployment is mid-rollout or its Flux Kustomization is not Ready
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_deployment_mid_rollout_or_mid_apply_is_refused_as_busy`).
+  A `flock` holds restarts to one at a time.
+- **Evidence:** every run ends in one `RESTART-RESULT:` line, under `journalctl -t
+  claude-restart` and in `/var/lib/claude-restart/verdict`. Each restart, done or failed, is a
+  line in `/var/lib/claude-restart/log.jsonl` and one Discord post. A failed restart exits 1
+  and pages through `homelab-alert@`. A restart whose Deployment kept its generation reads as
+  failed, because kubectl prints success for an identity that cannot write
+  (`hosts/components/claude-code/tests/test_claude_restart.py::test_a_restart_that_changed_no_generation_fails_and_still_counts`).
+  A refusal exits 0 and posts nothing.
+- **Next-run review:** before the first workload is listed, run the drill in
+  `docs/claude-agent-user.md` and read the verdict. After the first real restart, wait one Flux
+  reconcile and check that the Deployment holds one new ReplicaSet, not two.
+
+Applying it: a new version of daniel-box's host package, which its updater installs.
+
 ## Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
 
 - **Scope:** per agent: a `--ff-only` pull of its clone
@@ -613,6 +662,11 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   minutes (`scripts/dev/fanout_lib/clean.py:sweep_runs`). It runs no leg for a batch whose
   branch heads an open PR. Each leg keeps `clean`'s refusals: an active unit, a dirty tree or
   an unmerged branch keeps the tree. A failed leg logs a line and never changes the exit status.
+  A batch kept by `scripts/dev/fanout_lib/manifest.py:SWEEP_KEPT_LIMIT` cleans in a row with
+  the same line gets no more legs: the sweep logs one line naming `place abandon`, and `place
+  runs` lists the batch as `sweep-stopped`. A changed `kept:` line, an open PR on the branch or
+  a merged PR newer than the one recorded at the stop restarts the count. A unit still active
+  or a process still in the tree clears it, since either ends without anyone acting.
 - **Coordinator check (#9533):** each pass ends with
   `scripts/dev/fanout_lib/coordinators.py:report`. It lists the worktrees locked for a
   coordinator project, and for each one no live process holds, the batches that read `parked`

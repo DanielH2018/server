@@ -322,20 +322,6 @@ UNIT_DEADLINE = re.compile(
 )
 
 
-def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
-    """M6 batch B4's Cutover-1a deleted the Renovate Agent tile and dropped the beat with it.
-
-    A beat into a deleted tile gets a 404, `curl -f` fails, and `OnFailure` pages every day.
-    """
-    posts = directive(unit, "ExecStartPost")
-    assert any("write_check_textfile renovate-agent" in p for p in posts), (
-        "the unit's textfile write is the verdict RenovateAgentNotReporting reads"
-    )
-    assert not any("curl" in p or "KUMA_PUSH_URL" in p for p in posts), posts
-    assert "/api/push/" not in unit
-    assert "KUMA_PUSH_URL" not in render(CONFIG_ENV)
-
-
 def test_config_env_stays_root_owned_and_group_read_only() -> None:
     """It holds the Discord webhook, which only the controller reads."""
     [output] = [

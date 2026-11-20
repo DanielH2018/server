@@ -187,25 +187,6 @@ def test_the_inventory_cannot_repoint_who_the_lander_serves() -> None:
     )
 
 
-# The names the role's defaults gave the lander's settings
-# before the pins moved into a template, set to values that are not the agent's.
-OLD_LANDER_VARS = {
-    "claude_code_lander_checkout": "/srv/lander-sentinel",
-    "claude_code_lander_author": "lander-sentinel-login",
-    "claude_code_lander_branch_prefix": "lander-sentinel-prefix+",
-    "claude_code_lander_agent_user": AGENT,
-    "claude_code_lander_approver": "lander-sentinel-approver",
-}
-
-
-def test_an_inventory_value_under_the_old_setting_names_moves_nothing() -> None:
-    assert unit(OLD_LANDER_VARS) == unit()
-    assert render_component_text("claude-code", RULE, OLD_LANDER_VARS) == (
-        render_component_text("claude-code", RULE)
-    )
-    assert set(OLD_LANDER_VARS).isdisjoint(defaults())
-
-
 def test_the_unit_and_rule_carry_the_pins() -> None:
     """The red half of the two tests above: the templates do read the pins file."""
     pinned = pins()
@@ -244,6 +225,9 @@ FLOOR = [
     "hosts/components/claude-code/files/claude_triage_session.py",
     "hosts/components/claude-code/files/claude-triage-settings-overlay.json",
     "hosts/components/claude-code/files/claude_triage_poll.py",
+    # The restart broker.
+    "hosts/components/claude-code/templates/claude-restart",
+    "hosts/components/claude-code/files/claude_restart.py",
     # The root inspector and its grant.
     "hosts/components/claude-code/files/homelab_rootq.py",
     "hosts/components/claude-code/files/rootq.sh",

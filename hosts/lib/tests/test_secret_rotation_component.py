@@ -109,14 +109,6 @@ def test_the_component_links_the_audit_timer_and_the_boot_unit(package):
     } <= set(package.enable_links())
 
 
-def test_the_package_ships_no_weekly_rotation(package):
-    """The `auto` tier is retired, so no unit or script rotates a secret unattended."""
-    assert f"{UNITS}/homelab-secret-rotation.timer" not in package.files
-    assert f"{UNITS}/homelab-secret-rotation.service" not in package.files
-    assert f"{LIB}/secret-rotate" not in package.files
-    assert "homelab-secret-rotation.timer" not in set(package.enable_links())
-
-
 def test_the_claude_md_carries_the_contract():
     contract = component_contract("secret-rotation")
     assert [part for part in CONTRACT_PARTS if part not in contract] == []

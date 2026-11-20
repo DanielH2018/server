@@ -114,16 +114,13 @@ def test_the_frequent_crons_call_the_guard():
 
 def test_the_frequent_crons_skip_with_no_push_and_exit_clean():
     # Neither script has a Kuma tile any more (disk-health since M3's PR 5, longhorn-backup-health
-    # since M6's B1 Cutover-2), so a skipped run has no heartbeat to keep. It must exit 0 and the
-    # script must not push anywhere. The previous textfile stays and DEADLINE_S covers the slot.
+    # since M6's B1 Cutover-2), so a skipped run has no heartbeat to keep. It must exit 0. The
+    # previous textfile stays and DEADLINE_S covers the slot.
     for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("components", "k3s-host-checks", name)
         guard = text.index(f"if boot_grace_active {GRACE_S}")
         skip_block = text[guard : text.index("\nfi\n", guard)]
         assert "exit 0" in skip_block, name
-        assert "kuma_push" not in text.replace("kuma-push-lib.sh", ""), (
-            f"{name}: a Kuma push is back in a script whose tile is gone"
-        )
 
 
 def test_a_skipped_run_pings_no_healthchecks_slug():

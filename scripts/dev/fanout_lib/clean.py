@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from dev.fanout_lib import manifest as manifest_mod
 from dev.fanout_lib import status as status_mod
 from dev.fanout_lib.launch import archive_command
-from dev.fanout_lib.manifest import Batch, Manifest
+from dev.fanout_lib.manifest import SWEEP_KEPT_LIMIT, Batch, Manifest
 from dev.fanout_lib.target import PROJECT_DIR_ENV, SERVER_TARGET, Target, resolve
 from dev.fanout_lib.transport import REPO, Tools
 from lib.git import git
@@ -307,9 +307,15 @@ def live_process_scan(
     )
 
 
+# The endings of the two `kept:` lines that clear without anyone acting on the tree: the
+# agent's unit stops, or the process using the tree exits. Neither counts toward a streak.
+UNIT_ACTIVE = "still active; stop it first"
+PID_BUSY = "still uses it"
+
+
 def busy_refusal(wt: str) -> str:
     """The `kept:` line a chain prints when `live_process_scan` found a pid using `wt`."""
-    return f'echo "kept: {wt} — pid $busy still uses it"'
+    return f'echo "kept: {wt} — pid $busy {PID_BUSY}"'
 
 
 # What the `clean-one` leg's snapshot holds. `clean-one` imports across `scripts/dev`,
@@ -485,7 +491,7 @@ def remote_clean_command(
     # Full reasoning in this function's docstring.
     return (
         f"if systemctl --user is-active --quiet {b.unit}; then "
-        f'echo "kept: {wt} — unit {b.unit} still active; stop it first"; '
+        f'echo "kept: {wt} — unit {b.unit} {UNIT_ACTIVE}"; '
         f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {repo} fetch --quiet origin {target.base_branch} && "
@@ -539,7 +545,9 @@ def clean_run(
 
     A leg that reached no verdict at all — ssh refused, the fetch failed, a timeout — is
     failed, never kept: kept tells the operator to wait for a merge, failed to look at the
-    host.
+    host. A `kept:` verdict is saved too, as the batch's streak of identical `kept:` lines,
+    which `sweep_runs` reads to stop running a leg that keeps answering the same. A line that
+    clears by itself, a running unit or a live process, clears the streak instead.
 
     Args:
         run: the loaded manifest.
@@ -583,6 +591,11 @@ def clean_run(
             failed.append(b.batch)
         else:
             kept.append(b.batch)
+            settles = line.endswith((UNIT_ACTIVE, PID_BUSY))
+            run.batches[i] = (
+                b.kept_streak_cleared() if settles else b.kept_by_clean(line)
+            )
+            manifest_mod.save(run, root=root)
     if all(b.removed_at for b in run.batches):
         manifest_mod.retire(run.run_id, root)
     return kept, failed
@@ -609,13 +622,21 @@ def sweep_runs(
     yet. Newest first, so a batch that just landed is reached before the budget runs out on
     old runs that keep their trees.
 
+    A batch that `SWEEP_KEPT_LIMIT` cleans in a row kept with the same line gets no leg: its
+    state changes only when someone acts on it, so the sweep says so once and stops. The
+    count restarts on a different `kept:` line from `place clean`, on an open PR for the
+    branch, and on a merged PR newer than the one the stop recorded. A PR can open and merge
+    between two passes, so the open PR alone would miss it.
+
     Nothing here raises for one run's failure: a run whose manifest cannot be written logs a
     line and the sweep moves on, because the caller's exit status pages the operator.
     """
     deadline = clock() + SWEEP_BUDGET_S
 
     def wanted(b: Batch) -> bool:
-        return b.branch not in open_branches and clock() < deadline
+        return (
+            b.branch not in open_branches and not b.sweep_stopped and clock() < deadline
+        )
 
     for run in reversed(manifest_mod.all_runs(root)):
         if clock() >= deadline:
@@ -626,6 +647,52 @@ def sweep_runs(
             out(f"clean {run_id}: {line}")
 
         try:
-            clean_run(run, tools, root, out=say, wanted=wanted)
+            _restart_streaks(run, open_branches, tools, root)
+            kept, _failed = clean_run(run, tools, root, out=say, wanted=wanted)
+            stopped = [
+                i
+                for i, b in enumerate(run.batches)
+                if b.batch in kept and b.sweep_stopped
+            ]
+            for i in stopped:
+                b = run.batches[i]
+                run.batches[i] = b.stopped_at_merge(tools.merged_pr(b.branch, b.repo))
+                manifest_mod.save(run, root=root)
+                say(
+                    f"{b.batch} on {b.host}: kept by {SWEEP_KEPT_LIMIT} cleans in a row "
+                    f"with the same line, so the sweep runs no more legs for it; read its "
+                    f"unlanded commits, then `fanout.py place abandon {run.run_id} {b.batch}`"
+                )
         except OSError as exc:
             say(f"manifest not written: {exc}")
+
+
+def _restart_streaks(
+    run: Manifest, open_branches: frozenset[str], tools: Tools, root: _Path
+) -> None:
+    """Clear the streak of each batch in `run` whose branch has a PR its stop did not see."""
+    updated = [_after_new_prs(b, open_branches, tools) for b in run.batches]
+    if any(new is not old for new, old in zip(updated, run.batches, strict=True)):
+        run.batches[:] = updated
+        manifest_mod.save(run, root=root)
+
+
+def _after_new_prs(b: Batch, open_branches: frozenset[str], tools: Tools) -> Batch:
+    """`b` with its streak cleared for an open PR or a newer merged PR, else `b` itself.
+
+    A stopped batch with no merged PR recorded, as when `place clean` reached the limit,
+    records the branch's newest instead.
+    """
+    streak = b.sweep_kept
+    if b.removed_at or not streak.passes:
+        return b
+    if b.branch in open_branches:
+        return b.kept_streak_cleared()
+    if not b.sweep_stopped:
+        return b
+    merged = tools.merged_pr(b.branch, b.repo)
+    if streak.merged_pr is None:
+        return b.stopped_at_merge(merged)
+    if merged and merged != streak.merged_pr:
+        return b.kept_streak_cleared()
+    return b

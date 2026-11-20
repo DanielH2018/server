@@ -20,6 +20,7 @@ from _job_census import load, problems
 from deploy_tools.bundle_census import report
 from lib import yaml_fast
 from lib.exit_codes import OK, RENDER_OK
+from lib.k8s_objects import K8sObject
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
@@ -227,7 +228,11 @@ RERUN = "k8s/roles/sync/tests/test_sync.py::test_a_second_run_changes_nothing"
 
 
 def test_a_mutation_gate_keeps_its_backoff_and_names_its_rerun_test():
-    job = gate_job(CRONJOB, "abcd1234", {"kind": "mutation", "rerun_safe": RERUN})
+    job = gate_job(
+        K8sObject.from_item(CRONJOB),
+        "abcd1234",
+        {"kind": "mutation", "rerun_safe": RERUN},
+    )
     assert job["spec"]["backoffLimit"] == 2
     assert job["metadata"]["annotations"] == {
         "homelab/job-kind": "mutation",
@@ -239,8 +244,8 @@ def test_a_mutation_gate_keeps_its_backoff_and_names_its_rerun_test():
 
 
 def test_a_new_role_revision_renames_the_gate():
-    first = gate_job(CRONJOB, "abcd1234", {"kind": "verify"})
-    second = gate_job(CRONJOB, "abcd1235", {"kind": "verify"})
+    first = gate_job(K8sObject.from_item(CRONJOB), "abcd1234", {"kind": "verify"})
+    second = gate_job(K8sObject.from_item(CRONJOB), "abcd1235", {"kind": "verify"})
     assert first["metadata"]["name"] != second["metadata"]["name"]
 
 
@@ -310,6 +315,6 @@ def test_a_gate_from_a_pod_template_without_metadata_is_still_its_cronjobs_copy(
         "metadata": {"name": "sync", "namespace": "sync"},
         "spec": {"jobTemplate": {"spec": {"template": template}}},
     }
-    job = gate_job(cronjob, "0123abcd", {"kind": "verify"})
+    job = gate_job(K8sObject.from_item(cronjob), "0123abcd", {"kind": "verify"})
     assert is_gate_copy(job, "sync-verify", {"sync": [cronjob]})
     assert not is_gate_copy(job, "sync-verify", {"sync": []})
