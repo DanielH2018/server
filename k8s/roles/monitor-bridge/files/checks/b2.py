@@ -19,9 +19,10 @@ from bridge.types import (
     JsonObject,
     JsonValue,
     as_object,
+    as_object_list,
     optional_object,
 )
-from verdicts.storage import b2_storage_verdict, b2_sum_versions
+from verdicts.storage import b2_lock_verdict, b2_storage_verdict, b2_sum_versions
 
 # ASSUMPTION, untestable without a live breach: B2 checks the Class B cap before it looks the
 # name up, so a capped account answers 403 rather than this 404.
@@ -262,3 +263,61 @@ def b2_reachable(
 
 def check_b2_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:
     return b2_reachable(cfg, src)
+
+
+def check_b2_object_lock(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
+    """Daily read of the Object Lock setting on the bucket the B2 key is scoped to. (ok, msg).
+
+    Every answer from B2 is cached for B2_LOCK_PROBE_INTERVAL_S, a refusal included: each
+    probe costs two Class C calls, and a lock that is off stays off until the operator acts. A
+    transport failure was billed nothing, so it raises and the next cycle probes again. Empty
+    credentials disable the check.
+    """
+    if not cfg.B2_PROBE_KEY_ID or not cfg.B2_PROBE_APPLICATION_KEY:
+        return True, "B2 Object Lock check disabled (no credentials)"
+    now = now if now is not None else time.time()
+    cache = src.state.b2_lock_probe
+    if cache["ts"] is not None and now - cache["ts"] < cfg.B2_LOCK_PROBE_INTERVAL_S:
+        return cache["ok"], "%s (checked %.0fh ago)" % (
+            cache["msg"],
+            (now - cache["ts"]) / 3600,
+        )
+    try:
+        auth = b2_authorize_data(cfg, src)
+        api_url, token, bucket_id = b2_storage_api(auth)
+        if not api_url or not token or not bucket_id:
+            raise RuntimeError(
+                "B2 auth response carried no storage apiUrl, token or bucketId"
+            )
+        api_info = optional_object(auth.get("apiInfo"), "apiInfo") or {}
+        storage = optional_object(api_info.get("storageApi"), "storageApi") or {}
+        granted = storage.get("capabilities")
+        capabilities = (
+            [c for c in granted if isinstance(c, str)]
+            if isinstance(granted, list)
+            else []
+        )
+        listed = as_object(
+            src.post_json(
+                "%s/b2api/v3/b2_list_buckets" % api_url.rstrip("/"),
+                {"accountId": auth.get("accountId"), "bucketId": bucket_id},
+                headers={"Authorization": token},
+            ),
+            "b2_list_buckets response",
+        )
+        buckets = as_object_list(listed.get("buckets") or [], "b2_list_buckets buckets")
+        if buckets:
+            result = CheckResult.of(b2_lock_verdict(buckets[0], capabilities))
+        else:
+            result = CheckResult(
+                False, "B2 lists no bucket with the key's bucketId", ["bucket missing"]
+            )
+    except urllib.error.HTTPError as e:
+        result = CheckResult(
+            False, "B2 refused the Object Lock read: %s" % e, ["read refused"]
+        )
+    cache["ts"] = now
+    cache["ok"], cache["msg"] = result
+    return result

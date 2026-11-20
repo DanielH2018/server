@@ -147,3 +147,9 @@ def test_a_null_rollup_is_no_checks_and_any_other_shape_is_refused():
     assert parse_rollup(None) == []
     with pytest.raises(ValueError, match="not a list"):
         parse_rollup({"nodes": []})
+
+
+def test_ci_verdict_refuses_an_empty_required_set():
+    """An empty set would grade every commit green, so no caller may pass one."""
+    with pytest.raises(ValueError, match="no required CI contexts"):
+        ci_verdict(_jobs(""), frozenset())

@@ -420,9 +420,7 @@ def ci_verdict(
     """Reduce GitHub's check-runs for ONE commit to PASS / PENDING / FAIL.
 
     `required` is the set of check-run NAMES that must be green — the same strings GitHub reports
-    as branch-protection contexts (`prek (lint + validate + tests + secrets)`). An empty set means
-    the gate is disarmed, which returns `pass` so a host that hasn't re-templated config.env keeps
-    behaving exactly as it does today.
+    as branch-protection contexts (`prek (lint + validate + tests + secrets)`).
 
     A name can carry SEVERAL runs (a re-run, or the same workflow triggered by both `push` and
     `pull_request`), so each name is reduced over all of its runs and the worst outcome wins: any
@@ -437,9 +435,14 @@ def ci_verdict(
     `read_suites()` reports `cancelled`. It is called only when a suspect exists, so an ordinary
     verdict costs no check-suites read, and a read that fails is `pending`. A caller that passes
     no reader keeps such a gate red.
+
+    Raises:
+        ValueError: `required` is empty. Every commit would grade green against it.
     """
     if not required:
-        return CIVerdict.PASS
+        raise ValueError(
+            "no required CI contexts: an empty set would grade every commit green"
+        )
     cancelled = set()
     suspects = cancellation_suspects(check_runs) if read_suites else set()
     if suspects and read_suites:

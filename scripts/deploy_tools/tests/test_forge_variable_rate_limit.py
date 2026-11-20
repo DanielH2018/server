@@ -41,7 +41,7 @@ def _github(answers: list[tuple[int, str, str]]):
 def test_a_rate_limited_read_waits_and_reads_again():
     gh, sleeps, argvs = _github([(1, "", LIMITED), (0, "none\n", "")])
     assert gh.variable("DEPLOY_HOLD") == "none"
-    assert len(sleeps) == 1 and sleeps[0] == 3600
+    assert sum(sleeps) == 3600
     assert [a[:3] for a in argvs].count(["gh", "variable", "get"]) == 2
 
 
@@ -49,4 +49,4 @@ def test_a_read_rate_limited_past_its_waits_raises():
     gh, sleeps, _ = _github([(1, "", LIMITED)] * (forge.RATE_LIMIT_WAITS + 1))
     with pytest.raises(forge.ForgeError, match="rate limit exceeded"):
         gh.variable("DEPLOY_HOLD")
-    assert len(sleeps) == forge.RATE_LIMIT_WAITS
+    assert sum(sleeps) == 3600 * forge.RATE_LIMIT_WAITS
