@@ -27,7 +27,6 @@ from lib.worktrees import (
     Worktree,
     classify,
     held_by_readable_process,
-    local_landed_layer,
     merged_layer,
     primary_checkout,
     processes_using,
@@ -441,7 +440,7 @@ def test_a_recorded_verdict_answers_the_next_call_without_recomputing(tmp_path):
     assert read_verdicts(str(repo))[key] == ""
     # A value git would never compute for this pair, so the answer can only come from the file.
     record_verdict(str(repo), key, "content")
-    assert local_landed_layer(str(repo), head, base="master") == "content"
+    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "content"
 
 
 def test_a_forge_merged_answer_is_recorded_and_not_asked_again(tmp_path):
@@ -450,8 +449,6 @@ def test_a_forge_merged_answer_is_recorded_and_not_asked_again(tmp_path):
         merged_layer(str(repo), head, base="master", forge=lambda *_: True) == "forge"
     )
     assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "forge"
-    # The local layers still say no for this pair, which is what "forge" stands over.
-    assert local_landed_layer(str(repo), head, base="master") is None
 
 
 def test_a_forge_not_merged_answer_is_trusted_only_until_it_expires(tmp_path):
@@ -498,7 +495,7 @@ def test_the_content_check_writes_nothing_into_the_object_store(tmp_path):
     commit(repo, "master moves on", **{"c.txt": "three\n"})
     before = _loose_objects(repo)
 
-    assert local_landed_layer(str(repo), head, base="master") is None
+    assert merged_layer(str(repo), head, base="master", forge=lambda *_: False) is None
 
     assert _loose_objects(repo) == before
 
@@ -515,4 +512,4 @@ def test_the_content_check_still_finds_a_squash_merged_branch(tmp_path):
         repo, "squash of feature, plus more", **{"b.txt": "two\n", "c.txt": "three\n"}
     )
 
-    assert local_landed_layer(str(repo), head, base="master") == "content"
+    assert merged_layer(str(repo), head, base="master", forge=_never_asked) == "content"

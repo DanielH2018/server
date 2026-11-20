@@ -786,9 +786,10 @@ Each risk is checked against `docs/failure-classes.md`.
     - ADR-0019's *Governs* sentence and the census `must_find`;
     - the `atoms.py` module docstring;
     - the regenerated `docs/reference/decisions.md` and `docs/reference/scripts.md`.
-- **The shard-weights table.** `scripts/dev/pytest_shard_weights.json` keeps rows for the
-  deleted tests until the docs-refresh cron drops them. `scripts/dev/pytest_shard.py` says a
-  stale row makes CI slower, never wrong, so no PR edits the table by hand.
+- **The shard-weights table.** No G2 PR edited a shard-weights table by hand, because a
+  stale row makes CI slower, never wrong. The table G2 left stale rows in,
+  `scripts/dev/pytest_shard_weights.json`, was deleted on 2026-11-19. The CI split reads
+  `scripts/dev/pytest_shard_runner_weights.json`, which the docs-refresh cron refreshes.
 
 ## Complexity delta
 

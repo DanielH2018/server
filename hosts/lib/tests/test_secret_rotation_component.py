@@ -8,12 +8,22 @@ crons and timer, and the Autonomous-role contract.
 Run: uv run pytest hosts/lib/tests/test_secret_rotation_component.py
 """
 
+import re
+from datetime import date, timedelta
+
 import pytest
+from _k3s_schedule import calendar_fires
 from _secret_rotation_package import LIB, UNITS, render_fixture, text
 
 from _component_contract import component_contract
+from deploy_tools.promote_lib.reboot_window import read_schedule
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
+from lib.repo_paths import REPO
+
+MINUTES_PER_DAY = 24 * 60
+MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
+SUNDAY = date(2026, 11, 1)
 
 CONTRACT_PARTS = (
     "Scope / exclusions:",
@@ -61,12 +71,50 @@ def test_the_audit_reruns_while_red_and_a_boot_unit_covers_a_reboot(package):
         "ConditionPathExists=/var/lib/homelab/check/secret-rotation-audit.down" in boot
     )
     assert "start --no-block homelab-secret-rotation-audit.service" in boot
+    timer = text(package, f"{UNITS}/homelab-secret-rotation-audit.timer")
+    assert "Persistent=true\n" in timer
 
 
-def test_the_timer_keeps_its_0830_slot(package):
-    audit = text(package, f"{UNITS}/homelab-secret-rotation-audit.timer")
-    assert "OnCalendar=*-*-* 08:30:00\n" in audit
-    assert "Persistent=true\n" in audit
+def _audit_fires(package) -> list[int]:
+    """The minutes of one week, from Sunday 00:00 UTC, at which the audit timer fires."""
+    timer = text(package, f"{UNITS}/homelab-secret-rotation-audit.timer")
+    [calendar] = re.findall(r"^OnCalendar=(.+)$", timer, re.M)
+    fires = [
+        day * MINUTES_PER_DAY + second // 60
+        for day in range(7)
+        for second in calendar_fires(calendar, SUNDAY + timedelta(days=day))
+    ]
+    assert fires, f"OnCalendar={calendar} fires on no day of the week"
+    return fires
+
+
+def test_the_audit_fires_outside_the_weekly_reboot_mute(package):
+    """A verdict written inside Alertmanager's `weekly-reboot` mute pages only once it closes.
+
+    `tests/services/test_alertmanager_reboot_mute.py` holds the rendered mute to this sum.
+    """
+    reboot = read_schedule(REPO)
+    opens = (
+        reboot.weekday * MINUTES_PER_DAY
+        + reboot.hour * 60
+        + reboot.minute
+        - reboot.lead_min
+    )
+    length = reboot.lead_min + reboot.delay_min + reboot.recovery_min
+    mute = {(opens + minute) % MINUTES_PER_WEEK for minute in range(length)}
+    assert not mute.intersection(_audit_fires(package))
+
+
+def test_the_audit_fires_again_inside_its_not_reporting_deadline(package):
+    """`SecretRotationAuditNotReporting` pages on a verdict older than the script's DEADLINE_S."""
+    script = text(package, f"{LIB}/secret-rotation-audit")
+    [deadline] = re.findall(r"^DEADLINE_S=(\d+)$", script, re.M)
+    fires = _audit_fires(package)
+    gaps = [
+        (later - earlier) % MINUTES_PER_WEEK or MINUTES_PER_WEEK
+        for earlier, later in zip(fires, fires[1:] + fires[:1], strict=True)
+    ]
+    assert max(gaps) * 60 < int(deadline)
 
 
 def test_the_component_links_the_audit_timer_and_the_boot_unit(package):
