@@ -6,10 +6,13 @@ the next of `run.verdicts`.
 Run: uv run pytest scripts/dev/tests/test_fanout_review_conflict.py
 """
 
+import json
+
 import pytest
 
 from _review_fakes import PR, _finding, _pipeline, _report
-from dev.fanout_lib.launch import REVIEW_RUNTIME_MAX_S
+from dev.fanout_lib import review_unit
+from dev.fanout_lib.launch import RESUME_FLAG, RESUME_REQUEST, REVIEW_RUNTIME_MAX_S
 from dev.fanout_lib.review.review_land import LAND_MARGIN_S
 
 CONFLICT = (
@@ -85,8 +88,8 @@ def test_a_daniel_server_resolution_the_lander_rule_holds_is_not_landed_again(
     }
     final = pipeline.run_all()
     assert final["result"].startswith(
-        f"needs input: the landing of {PR} stopped short on a merge conflict, and its "
-        "resolution left the PR for a person: it changes the lander's own surface"
+        f"needs input: the conflict resolution of {PR} passed its review at head ddd, "
+        "and the pipeline did not land it: it changes the lander's own surface"
     )
     assert _phases(run).count("conflict") == 1 and len(_landings(run)) == 1
 
@@ -166,3 +169,44 @@ def test_a_resume_that_pushes_no_new_head_is_not_reviewed_or_landed_again(
     )
     assert _phases(run) == ["implement", "review", "conflict"]
     assert len(_landings(run)) == 1
+
+
+def _ended(tmp_path, **kwargs):
+    """A batch whose unit has ended, with its first session on disk and a resolution to come."""
+    reports = [_report(f"Rebased onto master. {PR}"), CLEAN]
+    pipeline, run = _pipeline(tmp_path, reports, **kwargs)
+    first = _report(f"Opened {PR}", session="sid-9")
+    (tmp_path / ".fanout" / "implement.json").write_text(json.dumps(first))
+    run.conflicts = FILES
+    request = {"pr": PR, "line": CONFLICT}
+    (tmp_path / RESUME_REQUEST).write_text(json.dumps(request))
+    return pipeline, run
+
+
+def test_a_resumed_unit_resumes_the_first_session_for_the_conflict_place_resume_named(
+    tmp_path,
+):
+    pipeline, run = _ended(tmp_path)
+    final = review_unit.run(pipeline, [RESUME_FLAG])
+    assert final["result"] == f"VERDICT: settled (deployed)\n{PR}"
+    assert _phases(run) == ["conflict", "review"]
+    argv, prompt, _ = run.claude[0]
+    assert argv[-2:] == ["--resume", "sid-9"]
+    assert CONFLICT in prompt and "- `scripts/x.py`" in prompt
+    assert len(_landings(run)) == 1
+    assert pipeline.record.resumed
+
+
+def test_a_resumed_pr_the_lander_rule_holds_ends_reviewed_and_unlanded(tmp_path):
+    pipeline, run = _ended(tmp_path, host="daniel-server")
+    run.pr_fields = {**LANDABLE, "files": [{"path": "scripts/deploy_tools/land.sh"}]}
+    final = review_unit.run(pipeline, [RESUME_FLAG])
+    assert final["result"].startswith(
+        f"needs input: the conflict resolution of {PR} passed its review at head bbb, "
+        "and the pipeline did not land it: it changes the lander's own surface"
+    )
+    assert final["result"].endswith(
+        "Land it with `land.sh --pr 4000 --arm-merge --await-merge --detach && "
+        f"cc-wait land 4000`.\n{PR}"
+    )
+    assert _phases(run) == ["conflict", "review"] and not _landings(run)

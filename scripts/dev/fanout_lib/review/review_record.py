@@ -4,6 +4,7 @@ Split from `review.py`, which runs the phases, so the record's shape and its ren
 without that module crossing its length cap. `review.py` re-exports every name here.
 """
 
+import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -113,6 +114,10 @@ class Record:
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
+    # True for the record of a unit `fanout.py place resume` started, which ran only the
+    # conflict phases. The batch's first record carries the rest, so `review_stats` counts
+    # this one's cost and no second batch.
+    resumed: bool = False
 
     def settle(self, report: dict, has_pr: bool) -> None:
         """Set `outcome` and `blocker` from the report the batch's last phase printed."""
@@ -222,6 +227,23 @@ def held_for_findings(
             f"{after}, so the PR was not landed: {'; '.join(named)}.\n{record.pr}"
         ),
     }
+
+
+def reviewed_head(state_dir: _Path, batch: str) -> str:
+    """The head the newest record of `batch` under `state_dir` says a reviewer read, or ""."""
+    saved = re.compile(rf"{re.escape(batch)}-\d{{8}}T\d{{6}}Z\.json")
+    if not state_dir.is_dir():
+        return ""
+    for path in sorted(state_dir.iterdir(), reverse=True):
+        if not saved.fullmatch(path.name):
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except OSError, ValueError:
+            continue
+        if isinstance(record, dict) and record.get("head"):
+            return str(record["head"])
+    return ""
 
 
 def issues_section(brief: str) -> str:

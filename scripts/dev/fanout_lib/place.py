@@ -17,10 +17,17 @@ Usage::
     fanout.py place claim --batch 1345,1386 [--batch 1288]
     fanout.py place status <run-id>
     fanout.py place stop <run-id> [batch]
+    fanout.py place resume <run-id> <batch> [--log PATH]
     fanout.py place clean <run-id>
 
 One `launch` runs at a time for a user on a host: it holds `fanout_lib.launch_lock` from its
 first gate to its last manifest save, so a second launch reads the batches the first placed.
+`resume` holds the same lock for the same span.
+
+`resume` restarts one finished batch whose PR's last landing ended `merge-conflict`, on the
+batch's own host, against the same live-batch cap and memory reservation as a launch. Its
+unit runs only the conflict resume of `fanout_lib/review/conflict_resume.py`.
+`fanout_lib/resume.py` has what it refuses and where it reads the verdict.
 
 `launch` claims this repo's issues itself, under the branch checked out where it runs, just
 before each batch's agent starts; `claim` takes the same claims and launches nothing.
@@ -28,7 +35,8 @@ before each batch's agent starts; `claim` takes the same claims and launches not
 
 Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' tiers 5, 1, 75, 0:
 - 0: every batch launched with every issue claimed; `status`: none needs a hand.
-- 1: `launch` refused before placing, or a batch failed to launch. `status`: a batch reads
+- 1: `launch` refused before placing, or a batch failed to launch. `resume` refused, naming
+  the reason and the command that fits, or its unit failed to start. `status`: a batch reads
   `parked` (its landing waits on a hold or rule that is not its own), `needs-input`,
   `no-pr`, `no-verdict` (land.sh printed no VERDICT) or `no-report`.
 - 3: `launch` placed nothing: no host had headroom, a `fanout_lib.launch_gates` cap refused
@@ -37,7 +45,7 @@ Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' ti
 - 5: `status` only: a batch's unit exited non-zero or its session set `is_error`.
 - 6: no candidate host signs commits GitHub verifies, or the signing keys were unreadable.
 - 7: `launch` started batches but dropped at least one refused claim.
-- 8: `launch` waited 120 s for the launch lock (`fanout_lib.launch_lock`) while another
+- 8: `launch` or `resume` waited 120 s for the launch lock (`fanout_lib.launch_lock`) while another
   launch held it, and did nothing.
 - 64: a malformed `--batch`, an unregistered `--repo`, or a run-id with no manifest.
 - 75: `status` only: a host's read timed out and no batch reported 1 or 5.
@@ -73,6 +81,7 @@ from pathlib import Path
 
 from dev.fanout_lib import claims as claims_mod
 from dev.fanout_lib.abandon import cmd_abandon, cmd_stop
+from dev.fanout_lib.resume import add_resume_arguments, cmd_resume
 from dev.fanout_lib import launch as launch_mod
 from dev.fanout_lib import launch_lock
 from dev.fanout_lib import manifest as manifest_mod
@@ -584,6 +593,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
         ("stop", cmd_stop),
         ("clean", cmd_clean),
         ("abandon", cmd_abandon),
+        ("resume", cmd_resume),
     ):
         run_parsers[name] = sub.add_parser(name)
         run_parsers[name].add_argument("run_id")
@@ -610,6 +620,7 @@ def main(argv=None, tools: Tools | None = None) -> int:
         "shortens a done batch to its PR URL",
     )
     run_parsers["abandon"].add_argument("batch")
+    add_resume_arguments(run_parsers["resume"])
     # No `help=` here, matching every other subparser above: argparse only lists a
     # subcommand under "positional arguments" when its own help text is set, so leaving it
     # unset is what keeps `clean-one` out of `--help`'s body. `help=argparse.SUPPRESS`

@@ -27,7 +27,8 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    that ends `pr-ci-red` resumes the implementer once, as the `ci-fix` phase, and the PR is
    landed again. A landing that ends `merge-conflict` resumes it once as the `conflict`
    phase, a fresh reviewer reads the resolution, and the PR is landed again
-   (`conflict_resume`). The implementer is resumed as the `apply` phase only for a
+   (`conflict_resume`). `run_conflict` runs that step alone, for a conflict found by a
+   landing run after the batch had ended. The implementer is resumed as the `apply` phase only for a
    verdict that needs a decision. Before the landing, and on every other host instead of it, a session
    resumes to file what is left.
 5b. CI wait — on a host that does not land, for this repo's batch only, `review_ci`
@@ -107,9 +108,11 @@ from dev.fanout_lib.review.review_ci import (
     ready_gate,
     server_lands,
 )
-from dev.fanout_lib.review.conflict_resume import land_resolving
+from dev.fanout_lib.review.conflict_resume import land_resolving, resolve
 from dev.fanout_lib.review.review_land import (
     LAND_MARGIN_S,
+    MERGE_CONFLICT,
+    Landing,
     out_of_time,
     release,
 )
@@ -122,6 +125,7 @@ from dev.fanout_lib.review.review_record import (
     findings_of,
     held_for_findings,
     issues_section,
+    reviewed_head,
 )
 from dev.fanout_lib.launch import (
     REVIEW_RUNTIME_MAX_S,
@@ -440,19 +444,58 @@ class Pipeline:
                 return out_of_time(self.record.pr)
             # Filed before the merge, so the PR body names each leftover's issue.
             self._file_leftovers()
-            landing, stopped = land_resolving(self)
-            self.record.verdict = landing.line or f"none (exit {landing.rc})"
-            try:
-                if stopped:
-                    return stopped
-                if landing.resumes and self.session:
-                    log_dir = str(self.worktree / ".fanout")
-                    prompt = apply_prompt(self.record.pr, landing, log_dir)
-                    return self._claude("apply", self._resume(), prompt).report
-                return landing_report(self.record.pr, landing)
-            finally:
-                release(self.run, self.worktree, landing)
+            return self._landed(*land_resolving(self))
         return self._file_leftovers() or last.report
+
+    def _landed(self, landing: Landing, stopped: dict | None) -> dict:
+        """The batch's final report after its last landing, resuming for a verdict that needs it."""
+        self.record.verdict = landing.line or f"none (exit {landing.rc})"
+        try:
+            if stopped:
+                return stopped
+            if landing.resumes and self.session:
+                log_dir = str(self.worktree / ".fanout")
+                prompt = apply_prompt(self.record.pr, landing, log_dir)
+                return self._claude("apply", self._resume(), prompt).report
+            return landing_report(self.record.pr, landing)
+        finally:
+            release(self.run, self.worktree, landing)
+
+    def run_conflict(self, pr: str, line: str) -> dict:
+        """Resolve a `merge-conflict` that a landing run after the batch ended stopped on.
+
+        `fanout.py place resume` starts the unit that calls this in place of `run_all`. It
+        runs `conflict_resume.resolve` and nothing before it: the implementer's session is
+        the one the first run left in `.fanout/implement.json`, and the reviewed head is the
+        one the batch's newest record names, or the worktree's head when it names none.
+
+        Args:
+            pr: the batch's PR URL.
+            line: the `VERDICT:` line of the landing that found the conflict.
+
+        Returns:
+            The report the unit writes to `report.json`, as `run_all` returns it.
+        """
+        record = self.record
+        record.resumed = True
+        record.pr = pr
+        try:
+            first = json.loads(
+                (self.worktree / ".fanout" / "implement.json").read_text()
+            )
+        except OSError, ValueError:
+            first = {}
+        self.session = (
+            str(first.get("session_id") or "") if isinstance(first, dict) else ""
+        )
+        record.head = reviewed_head(self.state_dir, self.batch) or self._git(
+            "rev-parse", "HEAD"
+        )
+        self.range_base = self._git("merge-base", record.head, self.target.base)
+        final = self._landed(*resolve(self, Landing(1, MERGE_CONFLICT, line)))
+        record.settle(final, has_pr=True)
+        self._save()
+        return final
 
     def _file_leftovers(self) -> dict | None:
         """Resume the implementer to file the public leftovers; its report, or None if none."""

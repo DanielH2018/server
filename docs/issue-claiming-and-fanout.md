@@ -573,9 +573,55 @@ time, or a resume that pushed no new head ends the batch `needs input: the landi
 stopped short on a merge conflict`, and the line names the conflicting files.
 
 A daniel-box batch and a daniel-server batch that lands its own draft behave the same. A
-daniel-server PR that the server lander lands is out of scope: that landing runs outside
-the batch's unit, the unit has ended by then, and a conflict there is the sub-coordinator's
-to hand to a person or a session.
+rebased head that `server_lands` holds is not landed: the batch ends `needs input: the
+conflict resolution of <PR> passed its review at head <sha>`, with the hold and the
+`land.sh` command that lands it.
+
+### A conflict found after the batch has ended
+
+A PR the pipeline did not land is landed after the batch's unit has stopped: by the server
+lander, or by a sub-coordinator's own `land.sh` for a PR that lander holds. A
+`merge-conflict` there has no unit left to resume. `fanout.py place resume <run-id> <batch>`
+starts one:
+
+```bash
+uv run python scripts/dev/fanout.py place resume <run-id> <batch>
+```
+
+The unit runs the resume, the review of the resolution and the re-land described above, and
+no other phase. `scripts/dev/fanout_lib/review/review.py:Pipeline.run_conflict` and the
+pipeline's own resume both call `scripts/dev/fanout_lib/review/conflict_resume.py:resolve`,
+so the two share one prompt and one review.
+
+- **What it resumes.** A batch of this repo whose unit has stopped, whose worktree still
+  stands, whose PR is open, and whose newest landing ended `merge-conflict`. It refuses
+  anything else with the reason and the command that fits: a running batch, a cleaned
+  batch, a missing worktree, a merged or closed PR, a PR whose landing lock is held
+  (`scripts/deploy_tools/land_lib/pr_lock.py`), and a newest verdict that is not a conflict.
+- **Where it reads the verdict.** `land.sh --detach` writes `land<pr>-<stamp>.log`, and
+  the newest stamp is the PR's last landing. The command reads the batch's own log in its
+  worktree's `.fanout/`, the directory this session's `land.sh --detach` writes to (the
+  one `cc-wait land` reads), and the logs of the server lander. So run it from the session whose
+  `land.sh` found the conflict. `--log <path>` names a log anywhere else. The verdict is the
+  `LAND-RESULT:` line's `verdict` field
+  (`scripts/dev/fanout_lib/resume.py:LandingLog`).
+- **How the unit starts.** On the batch's own host, under the launch lock from the first
+  manifest read to the manifest save, and through the placement gates a launch passes: the
+  signing check, the memory headroom and the live-batch cap. The unit runs master's copy
+  of the pipeline from a fresh snapshot in the worktree's `.fanout/server`
+  (`scripts/dev/fanout_lib/launch.py:resume_command`), because the worktree's own copy is
+  as old as the batch's branch and holds what the implementer left.
+- **Who lands it.** The pipeline lands the PR when it would have at first: a daniel-box
+  batch, or a daniel-server PR that passes `server_lands`. It does not land a PR that check
+  holds, which includes every PR the own-surface rule holds. That batch ends
+  `needs input:` with the reviewed head and the `land.sh` command, and its sub-coordinator
+  lands it.
+- **The bound.** `scripts/dev/fanout_lib/resume.py:MAX_RESUMES` resumes per batch, counted
+  in the run manifest as `conflict_resumes`. Past it the command refuses and names the
+  conflicting files, and the branch is a person's to resolve or the batch is abandoned.
+
+`status`, `place runs` and `cc-wait fanout` read the unit's state, so a resumed batch reads
+`running` and then the state of its new report.
 
 ### A parked batch
 

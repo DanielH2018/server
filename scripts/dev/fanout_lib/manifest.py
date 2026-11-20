@@ -1,5 +1,6 @@
 """The run manifest: ~/.claude/fanout/<run-id>.json, outside every checkout — spec §4."""
 
+import dataclasses
 import json
 import os
 from dataclasses import asdict, dataclass, field, fields
@@ -17,6 +18,9 @@ MANIFEST_DIR = Path.home() / ".claude" / "fanout"
 # Where `retire` moves a run whose every batch is removed. A subdirectory, so the
 # non-recursive `*.json` globs (`all_runs`, the SessionStart banner) never list it.
 RETIRED = "retired"
+# The manifest key that counts a batch's conflict resumes; `fanout_lib.resume.MAX_RESUMES`
+# bounds it.
+CONFLICT_RESUMES = "conflict_resumes"
 
 
 @dataclass(frozen=True)
@@ -48,7 +52,9 @@ class Batch:
             held at launch, each passed with `--allow-shared-file`.
         extra: the keys of the manifest entry that are not fields here, which a newer
             build wrote. `to_json` writes them back, so a rewrite by this build loses
-            nothing the newer build recorded. Not part of equality.
+            nothing the newer build recorded. Not part of equality. It also holds
+            `CONFLICT_RESUMES`, which only a resumed batch's entry carries, so every other
+            entry stays readable by a build that constructs a batch from its keys.
     """
 
     batch: str
@@ -83,6 +89,16 @@ class Batch:
             **given,
             extra={k: v for k, v in data.items() if k not in known},
         )
+
+    @property
+    def conflict_resumes(self) -> int:
+        """How many times `fanout.py place resume` restarted the batch for a merge conflict."""
+        return int(self.extra.get(CONFLICT_RESUMES) or 0)
+
+    def resumed_for_conflict(self) -> Batch:
+        """This batch with one more conflict resume counted."""
+        counted = {**self.extra, CONFLICT_RESUMES: self.conflict_resumes + 1}
+        return dataclasses.replace(self, extra=counted)
 
     def to_json(self) -> dict:
         """The manifest entry for this batch: its fields, then `extra`'s keys beside them.

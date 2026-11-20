@@ -14,12 +14,15 @@ import subprocess
 from functools import partial
 from unittest import mock
 
+import pytest
+
 from dev.fanout_lib import abandon
 from dev.fanout_lib.abandon import remote_abandon_command
 from dev.fanout_lib.clean import live_process_scan
 from dev.fanout_lib.manifest import (
     Batch,
     Manifest,
+    load,
     path as manifest_path,
     retired_path,
     save,
@@ -27,7 +30,7 @@ from dev.fanout_lib.manifest import (
 from dev.fanout_lib.place import main
 from lib.git_testing import git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
-from _fanout_fakes import fake_tools, ok
+from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -222,3 +225,168 @@ def test_a_tree_a_live_process_still_uses_is_kept(tmp_path):
     assert proc.stdout.strip() == f"kept: {worktree} — pid {holder.pid} still uses it"
     branches, registrations = _state(repo)
     assert BRANCH in branches and str(worktree) in registrations
+
+
+# `fanout.py place resume`, over a batch that has ended on daniel-box.
+RESUMED = Batch(
+    "7", "daniel-box", "/w/fanout-7", "worktree-fanout-7", "fanout-7", [7], "t"
+)
+PR = "https://github.com/DanielH2018/server/pull/4000"
+CONFLICT = "VERDICT: merge-conflict (PR #4000 conflicts with master)"
+CONFLICT_LOG = (
+    f"LAND-RESULT: verdict=merge-conflict cause=- pr=4000 exit=1\n{CONFLICT}\n"
+)
+HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
+
+
+def _host_read(state="inactive", tree="standing\n", own_log=""):
+    """What `resume.read_command` prints for a batch whose PR conflicts in two files."""
+    return ok(
+        f"=== 7\nActiveState={state}\nResult=success\nExecMainStatus=0\n"
+        f"--- tree\n{tree}--- landing\n{own_log}"
+        "--- conflicts\ntree0\nscripts/a.py\ndocs/b.md\nexit=1\n"
+    )
+
+
+def _resume(
+    tmp_path, batch=RESUMED, reads=None, landing=CONFLICT_LOG, args=(), **forge
+):
+    """Run `place resume` on `batch`, with the coordinator's own landing log `landing`."""
+    save(Manifest(RUN_ID, "worktree-orch", [batch]), root=tmp_path / "runs")
+    logs = tmp_path / "landings"
+    logs.mkdir()
+    if landing:
+        (logs / "land4000-20261120-100000.log").write_text(landing)
+    forge = {"branch_prs": {batch.branch: [PR]}, "open_prs": (batch.branch,), **forge}
+    tools, run = fake_tools(**forge)
+    # The batch's host, the landing locks' host, the headroom read, then the unit's start.
+    run.answers_by_call = reads or [_host_read(), ok("free\n"), ok(HEADROOM), ok("")]
+    argv = ["resume", RUN_ID, batch.batch, "--log-dir", str(logs), *args]
+    code = main([*argv, "--manifest-root", str(tmp_path / "runs")], tools)
+    return code, run
+
+
+def _started(run):
+    return [call for call in run.host_calls if "systemd-run" in call[1]]
+
+
+def test_resume_restarts_a_finished_batch_on_the_verdict_of_a_landing_run_outside_it(
+    tmp_path, capsys
+):
+    code, run = _resume(tmp_path)
+    assert code == 0
+    ((host, command, request),) = _started(run)
+    assert host == "daniel-box" and "--resume-conflict" in command
+    assert json.loads(request) == {"pr": PR, "line": CONFLICT}
+    (batch,) = load(RUN_ID, tmp_path / "runs").batches
+    assert batch.conflict_resumes == 1
+    assert capsys.readouterr().out == (
+        f"run {RUN_ID}: resumed 7 on daniel-box for {PR} (conflict resume 1 of 2); "
+        f"wait with cc-wait fanout {RUN_ID}\n"
+    )
+
+
+LOCK_RECORD = json.dumps({"host": "daniel-box", "pid": 41, "user": "ubuntu", "log": ""})
+
+
+@pytest.mark.parametrize(
+    ("changed", "reason", "instead"),
+    [
+        (
+            {"reads": [_host_read(state="active")]},
+            "7 on daniel-box is still running",
+            f"cc-wait fanout {RUN_ID}",
+        ),
+        (
+            {"batch": dataclasses.replace(RESUMED, removed_at="2026-11-20")},
+            "7 on daniel-box was cleaned (2026-11-20)",
+            "fanout.py place launch --batch 7",
+        ),
+        (
+            {"reads": [_host_read(tree="")]},
+            "its worktree /w/fanout-7 is gone",
+            f"fanout.py place clean {RUN_ID}",
+        ),
+        (
+            {"merged_prs": {RESUMED.branch: PR}},
+            f"{PR} merged",
+            f"fanout.py place clean {RUN_ID}",
+        ),
+        (
+            {"open_prs": ()},
+            "worktree-fanout-7 has no open PR",
+            f"fanout.py place abandon {RUN_ID} 7",
+        ),
+        (
+            {"reads": [_host_read(), ok(f"held\n{LOCK_RECORD}\n")]},
+            "another landing of it is live (host daniel-box, pid 41",
+            "Re-run the same command once pid 41 has ended",
+        ),
+        (
+            {"landing": "LAND-RESULT: verdict=pr-ci-red\nVERDICT: pr-ci-red (x)\n"},
+            "ended `pr-ci-red`, not `merge-conflict`",
+            f"fanout.py place status {RUN_ID}",
+        ),
+        (
+            {"landing": ""},
+            "found no landing log for #4000",
+            "name it with --log <path>, or land the PR with `land.sh --pr 4000 ",
+        ),
+    ],
+    ids=[
+        "running",
+        "cleaned",
+        "no-worktree",
+        "merged",
+        "closed",
+        "landing-live",
+        "red",
+        "no-log",
+    ],
+)
+def test_resume_refuses_with_its_reason_and_the_command_that_fits(
+    tmp_path, capsys, changed, reason, instead
+):
+    code, run = _resume(tmp_path, **changed)
+    assert code == 1 and not _started(run)
+    err = capsys.readouterr().err
+    assert reason in err and instead in err
+
+
+def test_the_batchs_own_landing_decides_when_it_is_newer_than_a_sessions(tmp_path):
+    # A session's `land.sh` ended red, then the batch's own landing conflicted.
+    own = f"/w/fanout-7/.fanout/land4000-20261120-110000.log\n{CONFLICT_LOG}"
+    red = "LAND-RESULT: verdict=pr-ci-red\nVERDICT: pr-ci-red (x)\n"
+    reads = [_host_read(own_log=own), ok("free\n"), ok(HEADROOM), ok("")]
+    code, run = _resume(tmp_path, reads=reads, landing=red)
+    assert code == 0 and len(_started(run)) == 1
+
+
+def test_a_log_named_with_the_flag_is_the_only_landing_read(tmp_path):
+    elsewhere = tmp_path / "land4000-20261119-080000.log"
+    elsewhere.write_text(CONFLICT_LOG)
+    settled = "LAND-RESULT: verdict=settled\nVERDICT: settled (deployed)\n"
+    code, run = _resume(tmp_path, landing=settled, args=("--log", str(elsewhere)))
+    assert code == 0 and len(_started(run)) == 1
+
+
+def test_a_unit_that_fails_to_start_spends_no_resume(tmp_path, capsys):
+    refused = subprocess.CompletedProcess(
+        ["x"], 1, "", "Failed to start transient unit\nfanout-step: systemd-run\n"
+    )
+    reads = [_host_read(), ok("free\n"), ok(HEADROOM), refused]
+    code, _ = _resume(tmp_path, reads=reads)
+    assert code == 1
+    assert "7 on daniel-box: systemd-run failed (1)" in capsys.readouterr().err
+    assert load(RUN_ID, tmp_path / "runs").batches[0].conflict_resumes == 0
+
+
+def test_resume_past_the_limit_refuses_and_names_the_conflicting_files(
+    tmp_path, capsys
+):
+    spent = RESUMED.resumed_for_conflict().resumed_for_conflict()
+    code, run = _resume(tmp_path, batch=spent)
+    assert code == 1 and not _started(run)
+    err = capsys.readouterr().err
+    assert "was resumed 2 times for a conflict, which is the limit" in err
+    assert "conflicts with origin/master in: scripts/a.py, docs/b.md" in err

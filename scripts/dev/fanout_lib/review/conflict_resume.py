@@ -24,7 +24,13 @@ resume that pushed nothing and a batch with no session to resume all end `needs 
 with the conflicting files named.
 
 A daniel-server batch that lands its own draft takes the same path. Its rebased head is put
-to `review_ci.server_lands` again, as a CI fix's head is.
+to `review_ci.server_lands` again, as a CI fix's head is. A head that check holds is left
+reviewed and unlanded, and the report carries the command that lands it.
+
+A BATCH THAT HAS ENDED. A PR the pipeline did not land is landed by hand after its unit has
+stopped, and a conflict there has no unit to resume. `fanout.py place resume` starts one
+that runs `Pipeline.run_conflict`, which calls `resolve` with that landing's `VERDICT:` line.
+`fanout_lib/resume.py` holds the command and its per-batch limit.
 """
 
 from functools import partial
@@ -34,8 +40,10 @@ from typing import TYPE_CHECKING
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 
+from dev.fanout_lib.brief import lands
+from dev.fanout_lib.land_result import reland_command
 from dev.fanout_lib.review.delta_confirm import split_confirmed
-from dev.fanout_lib.review.review_ci import awaits_ci, land_draft, pr_head, server_lands
+from dev.fanout_lib.review.review_ci import land_draft, pr_head, server_lands
 from dev.fanout_lib.review.review_land import (
     LAND_MARGIN_S,
     MERGE_CONFLICT,
@@ -129,6 +137,34 @@ def land_resolving(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     landing, stopped = land_draft(pipe)
     if stopped or landing.verdict != MERGE_CONFLICT:
         return landing, stopped
+    return resolve(pipe, landing)
+
+
+def _left_reviewed(pipe: "Pipeline", after: str) -> dict:
+    """The report for a reviewed resolution that this pipeline does not land."""
+    record = pipe.record
+    number = record.pr.rstrip("/").rsplit("/", 1)[-1]
+    text = (
+        f"needs input: the conflict resolution of {record.pr} passed its review at head "
+        f"{after[:8]}, and the pipeline did not land it: {record.land_hold}. "
+        f"Land it with `{reland_command(number)}`."
+    )
+    return {"type": "result", "is_error": False, "result": f"{text}\n{record.pr}"}
+
+
+def resolve(pipe: "Pipeline", landing: Landing) -> tuple[Landing, dict | None]:
+    """Resume the implementer once for the conflict `landing` ended on, review, and land again.
+
+    `land_resolving` calls it for a landing the pipeline ran, and `Pipeline.run_conflict`
+    for one that ran after the batch had ended. `pipe.record` names the PR and the head the
+    last review read, and `pipe.session` the implementer's session.
+
+    A PR this host's pipeline does not land (`review_ci.server_lands`) stops at its reviewed
+    head, and the report carries the command that lands it.
+
+    Returns the landing that ended last, and the `needs input:` report that ends the batch
+    when one does; else None.
+    """
     record = pipe.record
     files = conflicting_files(pipe)
     if not pipe.session:
@@ -146,9 +182,8 @@ def land_resolving(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     held = _review(pipe, files, before, after)
     if held:
         return landing, held
-    if awaits_ci(pipe.host, pipe.target) and not server_lands(pipe, after):
-        why = f"and its resolution left the PR for a person: {record.land_hold}"
-        return landing, _stopped(record.pr, landing, files, why)
+    if not lands(pipe.host, pipe.target.repo) and not server_lands(pipe, after):
+        return landing, _left_reviewed(pipe, after)
     if pipe.time_left() < LAND_MARGIN_S:
         return landing, out_of_time(record.pr)
     landing, stopped = land_draft(pipe)

@@ -56,6 +56,11 @@ print("held" if lock_held(sys.argv[1]) else "free")
 """
 
 
+def probe_command(path: str) -> str:
+    """The shell command that prints `held` or `free` for the lock file `path` on its host."""
+    return shlex.join(["python3", "-c", _PROBE, path])
+
+
 def serial_landing_live(hostname: str) -> bool:
     """Whether a landing of a serial PR holds the serial lock, read from `hostname`.
 
@@ -79,7 +84,7 @@ def serial_landing_live(hostname: str) -> bool:
                 "-o",
                 "ConnectTimeout=10",
                 TURN_HOST,
-                shlex.join(["python3", "-c", _PROBE, path]),
+                probe_command(path),
             ],  # fmt: skip
             capture_output=True,
             text=True,

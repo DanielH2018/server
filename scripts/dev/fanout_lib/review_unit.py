@@ -7,6 +7,10 @@ phases and the reasons for them.
 Usage::
 
     fanout.py review --batch 1345-1386 --repo DanielH2018/server < .fanout/brief.md
+    fanout.py review --batch 1345-1386 --repo DanielH2018/server --resume-conflict < .fanout/brief.md
+
+The second form is the unit `fanout.py place resume` starts for a batch that has ended: it
+runs `Pipeline.run_conflict` in place of every phase.
 """
 
 import json
@@ -17,6 +21,7 @@ from typing import TextIO
 from pathlib import Path
 
 
+from dev.fanout_lib.launch import RESUME_FLAG, RESUME_REQUEST
 from dev.fanout_lib.review.api import Pipeline
 from dev.fanout_lib.sizing import DEFAULT, LADDER, by_name
 from dev.fanout_lib.target import resolve
@@ -31,9 +36,22 @@ def main(argv=None) -> int:
     Exits 1 when that report carries `is_error`, so the unit's own result agrees with the
     report `status` reads instead of recording a failed batch as a clean exit.
     """
-    report = build(argv, sys.stdin.read()).run_all()
+    argv = sys.argv[1:] if argv is None else list(argv)
+    report = run(build(argv, sys.stdin.read()), argv)
     write_report(report, sys.stdout, Path(".fanout") / "report.json")
     return exit_code(report)
+
+
+def run(pipeline: Pipeline, argv: list[str]) -> dict:
+    """Every phase, or with `RESUME_FLAG` only the conflict `place resume` named.
+
+    `fanout.py place resume` wrote the PR URL and the landing's `VERDICT:` line to
+    `RESUME_REQUEST` in the worktree before it started this unit.
+    """
+    if RESUME_FLAG not in argv:
+        return pipeline.run_all()
+    request = json.loads((pipeline.worktree / RESUME_REQUEST).read_text())
+    return pipeline.run_conflict(str(request["pr"]), str(request["line"]))
 
 
 def build(argv: list[str] | None, brief: str) -> Pipeline:
@@ -54,6 +72,12 @@ def build(argv: list[str] | None, brief: str) -> Pipeline:
         choices=[rung.name for rung in LADDER],
         default=DEFAULT.name,
         help="the model and effort the implementer runs at",
+    )
+    p.add_argument(
+        RESUME_FLAG,
+        action="store_true",
+        help="run only the merge-conflict resume, for the landing `place resume` names "
+        f"in {RESUME_REQUEST}",
     )
     args = p.parse_args(argv)
     pipeline = Pipeline(Path.cwd(), args.batch, this_host(), resolve(args.repo), brief)
