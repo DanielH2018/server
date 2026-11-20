@@ -58,7 +58,7 @@ def parse_backup_budget(lines):
     return vols
 
 
-def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
+def format_backup_budget(vols, shards, names=None, owners=None):
     """Render the per-shard Class C projection; non-zero exit if a shard is over budget.
 
     `shards` maps volume name to its recurring-job group. A volume with no group never runs a

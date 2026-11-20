@@ -78,7 +78,7 @@ _SCRATCH_PREFIXES = (
 )
 
 
-def _is_scratch(path, repo_root):
+def _is_scratch(path):
     """True when `path` resolves under a scratch directory.
 
     A relative path is never scratch: the hook resolves it against the session's cwd, and a
@@ -371,7 +371,7 @@ def _unwrapped(stage):
     return words[i:], None
 
 
-def _ssh_problem(args, repo_root, written_paths, depth):
+def _ssh_problem(args, written_paths, depth):
     for i, arg in enumerate(args):
         option = args[i + 1] if arg == "-o" and i + 1 < len(args) else arg[2:]
         if (arg == "-o" or arg.startswith("-o")) and re.match(
@@ -418,12 +418,12 @@ def _stage_problem(stage, repo_root, written_paths, depth):
     if word == "gh":
         return _gh_problem(words)
     if word == "ssh":
-        return _ssh_problem(words[1:], repo_root, written_paths, depth)
+        return _ssh_problem(words[1:], written_paths, depth)
     if re.fullmatch(r"python3?(\.\d+)?", word):
         return _python_problem(words, repo_root)
     if word.endswith(".py"):
         return commands.script_problem(word, words[1:], repo_root, _OWN_CHECKOUT)
-    check = commands.checks(repo_root, _is_scratch).get(word)
+    check = commands.checks(_is_scratch).get(word)
     if check is None:
         return f"runs `{word}`, which is not in the read-only command set"
     return check(words[1:])
@@ -447,7 +447,7 @@ def read_only_reason(command, repo_root, written_paths, depth=0):
     if depth > _MAX_DEPTH:
         return "nests commands deeper than this hook reads"
     for path in written_paths(command):
-        if not _is_scratch(path, repo_root):
+        if not _is_scratch(path):
             return f"redirects output into `{path}`"
     # `written_paths` drops a `$VAR/...` target, since it cannot resolve it. Here a target the
     # hook cannot resolve counts as a write: `> $PWD/CLAUDE.md` is one.
