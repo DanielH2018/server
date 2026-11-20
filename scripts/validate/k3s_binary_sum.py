@@ -26,8 +26,6 @@ from lib.repo_paths import REPO, SYSTEM_UPGRADE_DEFAULTS
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 VERSION_KEY, SUM_KEY = "k3s_version", "k3s_binary_sha256_amd64"
 SUM_SHAPE = re.compile(r"[0-9a-f]{64}")
-# A base from before the ansible/ tree was renamed holds the file here (ADR 0030).
-PRE_RENAME_PATH = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
 
 
 class Unjudged(Exception):
@@ -47,18 +45,10 @@ def problems(base: dict, head: dict) -> list[str]:
     return found
 
 
-def keys_at(
-    sha: str,
-    path: str,
-    repo: Path,
-    introducing: bool = False,
-    old_path: str = PRE_RENAME_PATH,
-) -> dict:
+def keys_at(sha: str, path: str, repo: Path, introducing: bool = False) -> dict:
     """The two keys at `sha`. The base side may lack the sum: the PR that adds it is clean."""
     try:
-        shown = git("show", f"{sha}:{path}", cwd=repo, check=False)
-        if shown.returncode != 0:
-            shown = git("show", f"{sha}:{old_path}", cwd=repo)
+        shown = git("show", f"{sha}:{path}", cwd=repo)
         data = yaml_fast.safe_load(shown.stdout)
         if introducing and SUM_KEY not in data:
             return {VERSION_KEY: data[VERSION_KEY], SUM_KEY: None}
@@ -67,13 +57,7 @@ def keys_at(
         raise Unjudged(f"{path} at {sha[:9]}: {exc!r}") from exc
 
 
-def check(
-    base: str,
-    head: str,
-    repo: Path = REPO,
-    path: str = "",
-    old_path: str = PRE_RENAME_PATH,
-) -> int:
+def check(base: str, head: str, repo: Path = REPO, path: str = "") -> int:
     path = path or str(SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO))
     base, head = (
         git_stdout("rev-parse", "--verify", f"{r}^{{commit}}", cwd=repo)
@@ -81,8 +65,8 @@ def check(
     )
     try:
         found = problems(
-            keys_at(base, path, repo, True, old_path),
-            keys_at(head, path, repo, old_path=old_path),
+            keys_at(base, path, repo, True),
+            keys_at(head, path, repo),
         )
     except Unjudged as exc:
         print(f"[FAIL] k3s-binary-sum: cannot judge. {exc}", file=sys.stderr)

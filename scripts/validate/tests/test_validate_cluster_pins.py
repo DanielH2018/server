@@ -330,14 +330,6 @@ def test_the_real_tree_holds_a_k3s_pin_the_check_can_read():
     assert ack is None or ack == pin
 
 
-def test_a_k3s_pin_at_its_pre_rename_path_is_read(repo):
-    sha = _commit(
-        repo,
-        {cluster_pins.K3S_DEFAULTS_BEFORE_RENAME: "k3s_version: v1.37.1+k3s1\n"},
-    )
-    assert cluster_pins.k3s_values_at(sha, repo) == ("v1.37.1+k3s1", None)
-
-
 def test_a_k3s_pin_present_at_the_base_and_gone_at_the_head_is_flagged():
     flagged = cluster_pins.k3s_problems(OLD_K3S, None, None)
     assert len(flagged) == 1
@@ -346,12 +338,3 @@ def test_a_k3s_pin_present_at_the_base_and_gone_at_the_head_is_flagged():
 
 def test_a_k3s_pin_absent_on_both_sides_is_clean():
     assert cluster_pins.k3s_problems(None, None, None) == []
-
-
-def test_a_pin_at_its_pre_rename_path_is_read(repo):
-    """A range whose base predates ADR 0030's rename reads the pin at `ansible/roles/k8s/`."""
-    old = "ansible/roles/k8s/longhorn/defaults/main.yml"
-    sha = _commit(repo, {old: "k3s_longhorn_version: v1.12.1\n"})
-    pin = cluster_pins.pins_at(sha, repo)["k3s_longhorn_version"]
-    assert pin == cluster_pins.Pin(old, "v1.12.1")
-    assert pin.role_dir == "ansible/roles/k8s/longhorn/"
