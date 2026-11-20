@@ -67,5 +67,5 @@ def test_an_absent_data_or_result_reads_as_no_samples():
     ],
 )
 def test_an_answer_that_is_not_an_instant_vector_raises(body):
-    with pytest.raises(ValueError, match=r"answer|sample"):
+    with pytest.raises(ValueError, match=r"answer|sample|series"):
         parse_prom_vector(body)

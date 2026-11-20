@@ -1825,11 +1825,12 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   nor `urllib` as a value, and reads no double-underscore name such as `__globals__`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
-- **Parsing.** A script that reads EndpointSlice readiness or a Prometheus instant query
+- **Parsing.** A script that reads EndpointSlice readiness or a Prometheus query
   parses it through `scripts/renderer/job_files/flux_job_parse.py`, shipped byte-identical
-  beside it as the helper is. `parse_prom_vector` raises on a `"data": null`, so a malformed
-  answer never reads as an empty one. `EndpointState` keeps an absent `ready` apart from an
-  explicit `true`, so each script states which of the two it counts as ready.
+  beside it as the helper is. `parse_prom_result` raises on a `"data": null`, so a malformed
+  answer never reads as an empty one. `parse_prom_vector` also types an instant query's
+  samples. `EndpointState` keeps an absent `ready` apart from an explicit `true`, so each
+  script states which of the two it counts as ready.
 
 **A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
 a copy of it runs a real restore beside the scheduled one. Such a role goes in

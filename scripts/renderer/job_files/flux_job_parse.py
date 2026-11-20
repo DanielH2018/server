@@ -17,7 +17,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-__all__ = ["EndpointState", "Series", "endpoint_states", "parse_prom_vector"]
+__all__ = [
+    "EndpointState",
+    "Series",
+    "endpoint_states",
+    "parse_prom_result",
+    "parse_prom_vector",
+]
 
 
 class EndpointState(Enum):
@@ -67,33 +73,46 @@ class Series:
     value: float
 
 
-def parse_prom_vector(body: object) -> list[Series]:
-    """The samples of a Prometheus instant query's answer.
+def parse_prom_result(body: object) -> list[dict]:
+    """The series objects of a Prometheus query's answer, instant or range.
 
-    An absent `data` or `result` reads as no samples, as monitor-bridge's
+    An absent `data` or `result` reads as no series, as monitor-bridge's
     `bridge/net.py:_query_result` reads it.
 
     Raises:
         ValueError: `body` is not a `{status: success, data: {result: [...]}}` envelope, or a
-            sample is not a `{metric, value: [time, "number"]}` object. A `"data": null` or
-            `"result": null` raises here rather than reading as no samples.
+            series is not an object. A `"data": null` or `"result": null` raises here rather
+            than reading as no series. A failed query's message carries Prometheus's `error`.
     """
     if not isinstance(body, dict):
         raise ValueError(f"the answer is not a JSON object: {body!r:.80}")
     if body.get("status") != "success":
-        raise ValueError(f"the answer's status is {body.get('status')!r}")
+        raise ValueError(
+            f"the answer's status is {body.get('status')!r}: {body.get('error')}"
+        )
     data = body.get("data", {})
     if not isinstance(data, dict):
         raise ValueError(f"the answer's data is not an object: {data!r:.80}")
     result = data.get("result", [])
     if not isinstance(result, list):
         raise ValueError(f"the answer's result is not a list: {result!r:.80}")
-    return [_series(sample) for sample in result]
+    for series in result:
+        if not isinstance(series, dict):
+            raise ValueError(f"a series is not an object: {series!r:.80}")
+    return result
 
 
-def _series(sample: object) -> Series:
-    if not isinstance(sample, dict):
-        raise ValueError(f"a sample is not an object: {sample!r:.80}")
+def parse_prom_vector(body: object) -> list[Series]:
+    """The samples of a Prometheus instant query's answer.
+
+    Raises:
+        ValueError: `parse_prom_result` refuses `body`, or a sample is not a
+            `{metric, value: [time, "number"]}` object.
+    """
+    return [_series(sample) for sample in parse_prom_result(body)]
+
+
+def _series(sample: dict) -> Series:
     metric = sample.get("metric") or {}
     pair = sample.get("value")
     if not isinstance(metric, dict) or not isinstance(pair, list) or len(pair) != 2:

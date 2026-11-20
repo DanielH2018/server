@@ -380,6 +380,7 @@ def _soak(changed_set: str | None = None) -> dict:
         "flux_soak.py": SOAK_SCRIPT.read_text(),
         "soak_reads.py": SIBLINGS["soak_reads.py"].read_text(),
         "soak_pods.py": SIBLINGS["soak_pods.py"].read_text(),
+        "flux_job_parse.py": SIBLINGS["flux_job_parse.py"].read_text(),
         "changed_set.py": changed_set or SIBLINGS["changed_set.py"].read_text(),
     }
     if changed_set == "":
