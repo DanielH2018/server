@@ -10,7 +10,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_cross_role_restart.py
 import importlib
 
 from lib.exit_codes import RENDER_OK
-from lib.k8s_objects import parse_documents
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import CLUSTER_VARS_SOURCE
 from renderer import homelab_render
 from renderer.renderer_lib.restart import (

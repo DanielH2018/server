@@ -40,7 +40,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.git import git_stdout
-from lib.k8s_objects import parse_documents
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import ALL_VARS, JOB_FILES, K8S_ROLES, REPO, SCRIPTS
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,

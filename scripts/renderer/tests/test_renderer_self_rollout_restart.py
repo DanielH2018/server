@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from lib.exit_codes import RENDER_OK
-from lib.k8s_objects import parse_documents
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, select_tags, tag_context

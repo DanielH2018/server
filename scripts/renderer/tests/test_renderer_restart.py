@@ -13,7 +13,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
-from lib.k8s_objects import parse_documents
+from renderer.renderer_lib.documents import parse_documents
 from render_share import sharing_placeholder_renders
 from renderer import homelab_render, standalone_map
 from lib.k8s_roles import k8s_tags

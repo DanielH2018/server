@@ -50,7 +50,8 @@ import jinja2
 import yaml
 
 from lib.k8s_context import resolve_vars
-from lib.k8s_objects import K8sObject, parse_documents
+from lib.k8s_objects import K8sObject
+from renderer.renderer_lib.documents import parse_documents
 from lib.render_guard import StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.environment import RenderError, evaluate, renderer_env

@@ -29,7 +29,8 @@ from pathlib import Path
 
 import yaml
 
-from lib.k8s_objects import K8sObject, parse_documents
+from lib.k8s_objects import K8sObject
+from renderer.renderer_lib.documents import parse_documents
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import KUSTOMIZATION, kustomization_text
 from renderer.renderer_lib.cluster import RenderedTag

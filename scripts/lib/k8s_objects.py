@@ -1,7 +1,8 @@
 """Typed views of the kubectl objects several readers share.
 
 Three records: any object (`K8sObject`), a Longhorn Volume and a Longhorn BackupTarget.
-`parse_documents` reads a YAML stream of objects, such as a rendered manifest, into `K8sObject`s.
+The module imports with the stdlib alone (`lib/stdlib_only.py`), so a YAML reader parses first:
+`renderer/renderer_lib/documents.py:parse_documents` does it for a rendered manifest.
 
 A reader that runs `kubectl get ... -o json` builds one of these right after parsing the body,
 then passes the record on. The record owns the field names, the defaults for a missing field and
@@ -18,11 +19,10 @@ Typical usage example:
     attached = {v.name for v in volumes if v.state is VolumeState.ATTACHED}
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from lib import yaml_fast
 from lib.longhorn_lib.longhorn_backups import GROUP_LABEL_PREFIX
 
 
@@ -115,20 +115,6 @@ class K8sObject:
             status=item.get("status") or {},
             conditions=parse_conditions(item),
         )
-
-
-def parse_documents(texts: Iterable[str]) -> list[tuple[K8sObject, dict]]:
-    """Each mapping document of the YAML streams `texts`, in order, parsed and beside itself.
-
-    A reader that re-serialises, copies or edits a document takes the second member. A document
-    that is not a mapping, such as an empty one, is skipped.
-    """
-    return [
-        (K8sObject.from_item(doc), doc)
-        for text in texts
-        for doc in yaml_fast.safe_load_all(text)
-        if isinstance(doc, dict)
-    ]
 
 
 class VolumeState(StrEnum):
