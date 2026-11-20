@@ -34,7 +34,10 @@ uv's build backend can install the directory where it stands. With `module-root 
 and `namespace = true`, the editable install writes a `.pth` that names `scripts/`, and every
 interpreter in the venv then imports `lib.x`, `dev.x` or `renderer.x` with no insert. A run
 outside a venv (`uv run --no-project`) gets no `.pth`, so each of its launchers sets
-`PYTHONPATH` to its own checkout's `scripts/` (#9271).
+`PYTHONPATH` to its own checkout's `scripts/` (#9271). A GitHub Actions step that runs a
+script with the runner's bare `python3` is such a launcher too, and sets `PYTHONPATH: scripts`.
+The `bare-python-steps-supply-the-scripts-root` row of
+`tests/repo/test_census_rows_workflows.py` refuses one that does not.
 
 The install has one effect the re-plan did not foresee, found when slice 1 ran on the real
 tree. Several mechanisms run one tree's code under another tree's venv:

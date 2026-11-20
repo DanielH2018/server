@@ -58,6 +58,7 @@ jobs:
       - name: Collect changed image refs
         id: images
         env:
+          PYTHONPATH: scripts
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
           FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
           DISPATCH_IMAGES: ${{ inputs.images }}  # same: data, never shell source

@@ -90,6 +90,7 @@ jobs:
           uv: "false"
       - name: Open, update or close the sweep issue
         env:
+          PYTHONPATH: scripts
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.sweep.result }}
           MODULES: ${{ needs.sweep.outputs.modules }}

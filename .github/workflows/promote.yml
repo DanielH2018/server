@@ -441,11 +441,14 @@ jobs:
       # by image-builder's own rule, or nothing is pushed.
       - name: Check each image context against its content tag
         id: plan
+        env:
+          PYTHONPATH: scripts
         run: python3 scripts/deploy_tools/ci_images.py plan out
 
       - name: Push each image whose content tag GHCR does not serve
         id: push
         env:
+          PYTHONPATH: scripts
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |

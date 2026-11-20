@@ -164,6 +164,7 @@ jobs:
       - name: Compare the pushed tree with the tree a green PR run recorded
         id: prove
         env:
+          PYTHONPATH: scripts
           GITHUB_TOKEN: ${{ github.token }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -1965,6 +1966,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 2
         env:
+          PYTHONPATH: scripts
           GITHUB_TOKEN: ${{ github.token }}
           BATCH_BODY: ${{ github.event.pull_request.body }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -2013,6 +2015,7 @@ jobs:
         id: scope
         if: github.event_name == 'pull_request'
         env:
+          PYTHONPATH: scripts
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
           FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch in the script
         run: |
