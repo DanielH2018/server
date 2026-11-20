@@ -363,6 +363,8 @@ takes no `--worktree`. A group differs from a project in three ways:
 
 - It reserves nothing. `reservations` reads only a project, so a plain `next` offers a
   group's issues and any branch claims them.
+- Its issues leave `next --milestone none`, which lists only issues no open milestone holds.
+  `next --milestone "<title>"` lists them.
 - Nothing closes it on its own. The workflow and `reap` close only a milestone a branch
   owns, so a group stays open while it is empty.
 - `status`, `close`, `add` and `remove` name it with `--group "<title>"` in place of
