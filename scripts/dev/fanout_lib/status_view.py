@@ -78,14 +78,17 @@ def runs_lines(
         The lines to print. A run appears with its standing batches only, and a run whose
         batches are all cleaned is counted in the last line instead. A held batch is counted
         under its state, `parked` or `needs-input`, and reads its reason in place of
-        `standing`.
+        `standing`. A batch the worktree sweep stopped on is counted as `sweep-stopped` and
+        reads the `kept:` line that stopped it.
     """
     held = held or {}
 
     def state(b) -> str:
         if b.removed_at:
             return "cleaned"
-        return held.get((b.host, b.batch), ("standing", ""))[0]
+        if (b.host, b.batch) in held:
+            return held[(b.host, b.batch)][0]
+        return "sweep-stopped" if b.sweep_stopped else "standing"
 
     lines = [count_line(state(b) for r in runs for b in r.batches)]
     hidden = 0
@@ -99,6 +102,8 @@ def runs_lines(
             when = f"cleaned {b.removed_at}" if b.removed_at else state(b)
             if not b.removed_at and (b.host, b.batch) in held:
                 when = one_line(held[(b.host, b.batch)][1])
+            elif not b.removed_at and b.sweep_stopped:
+                when = f"sweep-stopped: {b.sweep_kept.line}"
             issues = ",".join(f"#{n}" for n in b.issues)
             lines.append(f"  {b.batch} on {b.host}: {b.branch} {issues} {when}")
     if hidden:
