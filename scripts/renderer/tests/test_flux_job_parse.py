@@ -54,7 +54,7 @@ def test_an_absent_data_or_result_reads_as_no_samples():
         ["not", "an", "object"],
         {"status": "success", "data": {"result": [None]}},
         {"status": "success", "data": {"result": [{"metric": {}, "value": [1]}]}},
-        {"status": "success", "data": {"result": [{"metric": {}, "value": [1, "x"]}]}},
+        {"status": "success", "data": {"result": [{"metric": {}, "value": [1, None]}]}},
     ],
     ids=[
         "null-data",
@@ -63,7 +63,7 @@ def test_an_absent_data_or_result_reads_as_no_samples():
         "not-an-object",
         "null-sample",
         "short-value",
-        "non-numeric-value",
+        "null-value",
     ],
 )
 def test_an_answer_that_is_not_an_instant_vector_raises(body):
