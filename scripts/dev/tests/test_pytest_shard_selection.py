@@ -176,9 +176,11 @@ def test_the_plan_cli_publishes_the_legs_as_json(
     assert capsys.readouterr().out == f"legs {legs} of 6: why\n"
 
 
-def test_a_plan_with_no_base_is_refused():
+def test_a_plan_with_no_base_is_refused(capsys):
     with pytest.raises(SystemExit):
         pytest_shard.main(["--plan"], select=lambda base: None)
+
+    assert "--plan needs --changed-since" in capsys.readouterr().err
 
 
 def test_the_cron_records_the_modules_with_no_current_row_before_its_slice():

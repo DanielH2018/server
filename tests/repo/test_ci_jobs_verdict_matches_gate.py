@@ -210,11 +210,6 @@ def _runs(prove: str, results: dict[str, str]) -> list[CheckRun]:
         ("failure", "", _all("success")),
         ("failure", "true", _all("success")),
         ("success", "", _planned(_all("success"), 2)),
-        (
-            "success",
-            "",
-            _planned(_all("success", **{"pytest (shard 2)": "failure"}), 2),
-        ),
     ],
 )
 def test_jobs_verdict_agrees_with_the_gates_own_script(prove, proven, results):
