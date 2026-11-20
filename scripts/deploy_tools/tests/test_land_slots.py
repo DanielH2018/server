@@ -11,7 +11,7 @@ import pytest
 
 from _land_fakes import Fakes
 from _land_turn_fakes import MERGED, OPEN, START_VIEW, call_order
-from deploy_tools.land_lib import batch, slots, turn
+from deploy_tools.land_lib import batch, serial_lock, slots, turn
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.promote_lib.wait import WaitResult, WaitVerdict
 from lib.proc_testing import fake_bin, path_with
@@ -222,6 +222,7 @@ def test_a_serial_landing_keeps_the_serial_lock_past_its_checks(landing):
     slots.refuse_before_merge(ln, in_turn=True)
     serial = Path(os.environ[turn.TURN_DIR_ENV]) / slots.SERIAL_NAME
     assert slots.try_take([serial], 1) is None
+    assert serial.with_name(serial_lock.HOLDER_NAME).read_text() == ln.opts.pr
     assert ln.serial_lock
     ln.serial_lock()
 

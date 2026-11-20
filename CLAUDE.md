@@ -69,9 +69,12 @@ took effect, so exercise the thing you changed.
 
 ### When to wait
 
-Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI
-(`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`).
+Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD`, master CI and
+the serial lock (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), and exits 1
+while any of the three blocks.
 
+- A serial landing is live. `land.sh` refuses every other PR until it ends, and the probe
+  names its PR.
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
   (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
@@ -79,9 +82,10 @@ Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` an
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
-To resume after a red master CI or a set hold, wait with `cc-wait landing-clear`
-(`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends 0 once neither
-blocks, and its detail names the blocker while it waits. It only waits for the hold to clear.
+To resume after a red master CI, a set hold or a live serial landing, wait with `cc-wait
+landing-clear` (`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends
+0 once none of them blocks, and its detail names the blocker while it waits, in the probe's
+words. It only waits for the hold to clear.
 
 ## Shell Commands — Shape Them to Auto-Approve
 
