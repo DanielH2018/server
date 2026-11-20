@@ -34,12 +34,12 @@ that runs `Pipeline.run_conflict`, which calls `resolve` with that landing's `VE
 """
 
 from functools import partial
-from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 
+from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.brief import lands
 from dev.fanout_lib.land_result import reland_command
 from dev.fanout_lib.review.delta_confirm import split_confirmed
@@ -58,14 +58,11 @@ from dev.fanout_lib.review.review_record import (
     issues_section,
 )
 
-if TYPE_CHECKING:
-    from dev.fanout_lib.review.review import Pipeline
-
 # The most conflicting files a report or a prompt names; the rest are counted.
 MAX_NAMED = 20
 
 
-def conflicting_files(pipe: "Pipeline") -> list[str]:
+def conflicting_files(pipe: BatchRun) -> list[str]:
     """The files in which the batch's branch conflicts with its base, after a fetch of it.
 
     Empty when the two merge cleanly, and when git could not say.
@@ -98,7 +95,7 @@ def _stopped(pr: str, landing: Landing, files: list[str], why: str) -> dict:
     return {"type": "result", "is_error": False, "result": f"{text}\n{pr}"}
 
 
-def _review(pipe: "Pipeline", files: list[str], before: str, after: str) -> dict | None:
+def _review(pipe: BatchRun, files: list[str], before: str, after: str) -> dict | None:
     """Have a fresh reviewer read the resolution; a `needs input:` report if it holds the PR."""
     record = pipe.record
     old_base = pipe.range_base
@@ -128,7 +125,7 @@ def _review(pipe: "Pipeline", files: list[str], before: str, after: str) -> dict
     return held_for_findings(record, pipe.state_dir, "the conflict resolution")
 
 
-def land_resolving(pipe: "Pipeline") -> tuple[Landing, dict | None]:
+def land_resolving(pipe: BatchRun) -> tuple[Landing, dict | None]:
     """Land the batch's draft (`land_draft`), resuming the implementer once for a conflict.
 
     Returns the landing that ended last, and the `needs input:` report that ends the batch
@@ -140,7 +137,7 @@ def land_resolving(pipe: "Pipeline") -> tuple[Landing, dict | None]:
     return resolve(pipe, landing)
 
 
-def _left_reviewed(pipe: "Pipeline", after: str) -> dict:
+def _left_reviewed(pipe: BatchRun, after: str) -> dict:
     """The report for a reviewed resolution that this pipeline does not land."""
     record = pipe.record
     number = record.pr.rstrip("/").rsplit("/", 1)[-1]
@@ -152,7 +149,7 @@ def _left_reviewed(pipe: "Pipeline", after: str) -> dict:
     return {"type": "result", "is_error": False, "result": f"{text}\n{record.pr}"}
 
 
-def resolve(pipe: "Pipeline", landing: Landing) -> tuple[Landing, dict | None]:
+def resolve(pipe: BatchRun, landing: Landing) -> tuple[Landing, dict | None]:
     """Resume the implementer once for the conflict `landing` ended on, review, and land again.
 
     `land_resolving` calls it for a landing the pipeline ran, and `Pipeline.run_conflict`

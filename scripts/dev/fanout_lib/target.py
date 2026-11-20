@@ -1,22 +1,28 @@
 """Which repo a batch works: its register, its primary checkout and the branch it merges to.
 
-`fanout.py place launch --repo` picks one. Every repo except this one is read from
-`REGISTER_CHECKOUTS` in `scripts/dev/findings_lib/boundaries.py`, the table `findings.py --repo`
-already judges claims against, so a repo the dispatcher can launch in is exactly a repo whose
-claims `reap` can judge. There is no second list to keep in step.
+`fanout.py place launch --repo` picks one. Every repo it accepts is a key of
+`REGISTER_CHECKOUTS`, the table `findings.py --repo` also judges claims against, so a repo the
+dispatcher can launch in is exactly a repo whose claims `reap` can judge. There is no second
+list to keep in step.
 """
 
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+from pathlib import Path
 
 from lib.repo_paths import PRIMARY_CHECKOUT
 from lib.worktree_owner import own_prefix
 
 SERVER = "DanielH2018/server"
+# The registers `--repo` can aim at, each with the checkout whose worktrees decide whether a
+# claim on it is live. None is this repo's own primary checkout. A repo missing here can still
+# be read and written, but `claim`, `claims`, `reap` and `next` refuse it: judged against
+# THIS repo's worktrees, every claim on it would read as stale and `reap` would release them.
+REGISTER_CHECKOUTS: dict[str, str | None] = {
+    SERVER: None,
+    "DanielH2018/dotfiles": str(Path.home() / ".local/share/chezmoi"),
+}
 # The interpreter a unit runs repo Python with; `fanout_lib.session_banner.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.15.2"
 # The agent user cannot read /home/ubuntu, and its login profile
@@ -91,8 +97,6 @@ def branch_name(batch: str) -> str:
 
 def registered_repos() -> list[str]:
     """Every repo `--repo` accepts: the registers `findings.py` can judge claims for."""
-    from dev.findings_lib.boundaries import REGISTER_CHECKOUTS
-
     return sorted(REGISTER_CHECKOUTS)
 
 
@@ -113,8 +117,6 @@ def resolve(
     """
     if repo == SERVER:
         return SERVER_TARGET
-    from dev.findings_lib.boundaries import REGISTER_CHECKOUTS
-
     if repo not in REGISTER_CHECKOUTS:
         raise ValueError(f"{repo} is not a register findings.py can judge claims for")
     checkout = REGISTER_CHECKOUTS[repo]

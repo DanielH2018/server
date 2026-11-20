@@ -66,7 +66,7 @@ this repo while the create went elsewhere would re-file the finding on every run
 numbers collide across repos, so `next` reading this repo's PRs would withhold dotfiles #12
 for a server PR that closes #12. `claim`, `claims`, `reap` and `next` also judge each claim
 against that repo's local checkout and its default branch (`REGISTER_CHECKOUTS` in
-`findings_lib/boundaries.py`), because a claim names a branch in the repo that owns the issue.
+`fanout_lib/target.py`), because a claim names a branch in the repo that owns the issue.
 They refuse a repo that table does not list, with exit 2. `issue-fanout` has the dotfiles
 route end to end.
 
@@ -224,8 +224,8 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
     plan_touch,
 )
+from dev.fanout_lib.target import REGISTER_CHECKOUTS
 from dev.findings_lib.boundaries import (
-    REGISTER_CHECKOUTS,
     FindingsTools,
     aimed,
     read_peer_worktrees,
@@ -695,7 +695,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         sys.stderr.write(
             f"{args.cmd}: --repo {args.repo} has no local checkout to judge claims against; "
             f"known: {', '.join(sorted(REGISTER_CHECKOUTS))} "
-            "(findings_lib/boundaries.py REGISTER_CHECKOUTS)\n"
+            "(fanout_lib/target.py REGISTER_CHECKOUTS)\n"
         )
         return FINDINGS_BAD_ARGS
     tools = aimed(tools, args.repo)

@@ -116,7 +116,7 @@ RESUME_FLAG = "--resume-conflict"
 # starts, relative to the worktree. Not `conflict.json`, which is the `conflict` phase's report.
 RESUME_REQUEST = ".fanout/resume.json"
 # What a `place resume` unit's snapshot holds beyond `SNAPSHOT_PATHS`: the files a pipeline
-# of this repo reads from its own source root at start (`review.Pipeline.__init__`), and
+# of this repo reads from its own source root at start (`batch_run.BatchRun.__init__`), and
 # the trees its held hooks read (`held_hooks.HELD_TREES`).
 RESUME_SNAPSHOT_PATHS = (
     *SNAPSHOT_PATHS,

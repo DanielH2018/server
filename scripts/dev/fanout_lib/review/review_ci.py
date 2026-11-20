@@ -59,12 +59,12 @@ import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 
+from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
     LAND_MARGIN_S,
@@ -82,9 +82,6 @@ from dev.fanout_lib.review.review_record import Phase, Record
 from dev.fanout_lib.brief import drafts_pr, lands
 from dev.fanout_lib.status import PR_URL
 from dev.fanout_lib.target import Target
-
-if TYPE_CHECKING:
-    from dev.fanout_lib.review.review import Pipeline
 
 # The longest one wait lasts. Derived from measured `ci.yml` run durations in the docstring.
 CI_WAIT_S = 35 * 60
@@ -402,7 +399,7 @@ def ready_for_ci(
     )
 
 
-def ready_gate(pipe: "Pipeline") -> dict | None:
+def ready_gate(pipe: BatchRun) -> dict | None:
     """Mark this repo's draft PR ready (`ready_for_ci`); a `needs input:` report if it fails."""
     if not drafts_pr(pipe.target):
         return None
@@ -417,7 +414,7 @@ def ready_gate(pipe: "Pipeline") -> dict | None:
     return {"type": "result", "is_error": False, "result": f"needs input: {why}.\n{pr}"}
 
 
-def server_lands(pipe: "Pipeline", head: str) -> bool:
+def server_lands(pipe: BatchRun, head: str) -> bool:
     """Whether a daniel-server batch lands its own draft at `head`, recording why when not.
 
     A batch on a host that does not land, this repo's own, lands its draft as a daniel-box
@@ -459,13 +456,15 @@ def awaits_ci(host: str, target: Target) -> bool:
     return target.is_server and not lands(host, target.repo)
 
 
-def _ci_fix(pipe: "Pipeline", line: str, failures: list[Failure]) -> Phase:
+def _ci_fix(pipe: BatchRun, line: str, failures: list[Failure]) -> Phase:
     """Resume the implementer for a red run, and re-run the failed jobs if it pushed nothing."""
     record, repo = pipe.record, pipe.target.repo
     record.ci_resumed = True
     before = pr_head(pipe.run, record.pr, repo)
     fix = pipe._claude(
-        "ci-fix", pipe._resume(), ci_fix_prompt(record.pr, line, failures)
+        "ci-fix",
+        pipe._resume(),
+        ci_fix_prompt(record.pr, line, [(f.name, f.tail) for f in failures]),
     )
     if before and pr_head(pipe.run, record.pr, repo) == before:
         record.ci_rerun = rerun_failed(pipe.run, repo, before, pipe.clock, pipe.sleep)
@@ -481,7 +480,7 @@ def _again(record: Record) -> str:
 
 # DECIDED: a daniel-box batch spends no CI run before its landing (D9, `docs/ci-throughput.md`).
 # About 6.5% of first runs are red, and a draft can share a landing batch's run.
-def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
+def land_draft(pipe: BatchRun) -> tuple[Landing, dict | None]:
     """Land the PR the pipeline left a draft, resuming the implementer once on a red run.
 
     A landing that ends `pr-ci-red` resumes the implementer as `ci_gate` does, and the PR is
@@ -525,7 +524,7 @@ def land_draft(pipe: "Pipeline") -> tuple[Landing, dict | None]:
 
 # DECIDED: the CI resume gets no delta review. It repairs a check CI named, and the next CI run
 # is the independent verdict on it.
-def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
+def ci_gate(pipe: BatchRun, last: Phase) -> tuple[Phase, dict | None]:
     """Wait for the PR's CI and resume the implementer once on red.
 
     A resume that pushes nothing is followed by one re-run of the failed jobs.

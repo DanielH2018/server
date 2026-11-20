@@ -83,7 +83,7 @@ MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
 PHASE = Path(".fanout") / "phase"
 MAX_BLOCKS = 3
-# Mirrors `review.OWN_COPY`: the pipeline writes it before each phase it runs.
+# Mirrors `batch_run.OWN_COPY`: the pipeline writes it before each phase it runs.
 OWN_COPY = Path(".fanout") / "stop-hook"
 # The pipeline phases whose final message is structured JSON rather than a PR URL.
 UNBLOCKED_PHASES = frozenset({"review"})
