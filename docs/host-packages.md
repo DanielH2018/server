@@ -108,9 +108,7 @@ design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*
   `keeping <entry>: <unit> failed to start`. The failed start already fails the run, so the host
   holds, and the entry retires on the first run after the unit starts. A held host runs no
   reconcile until `--clear-hold`. A unit reconcile did not try to start blocks nothing: a
-  `manual`, `windowed` or masked one. An `/etc` copy that shadows a packaged unit is the exception.
-  Reconcile removes it whatever the start did, because that copy may be why the unit failed, then
-  restarts the unit on the packaged file before it retires the spec's other entries.
+  `manual`, `windowed` or masked one.
 - **The overlap while a host holds.** The keep is per spec, so old and new schedulers can both run
   until `--clear-hold`. A failed timer keeps every cron of its spec, including one whose own timer
   started: a failed `homelab-apt-autoremove.timer` keeps `Weekly system restart` beside a running
@@ -129,10 +127,10 @@ design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*
   removes the directory by hand if it matters. `hosts/tests/test_legacy_cache_directories.py`
   refuses a `legacy:` path that is `/var/cache` or any `.cache` directory, such as
   `/var/lib/claude/.cache` in the agent user's home, or a directory directly inside one.
-- **A legacy template unit.** A `unit` entry such as `claude-land@.service` is disabled and its
-  file removed, but never stopped, because `systemctl` refuses a template's own name. While any
-  instance is active, activating or reloading, the entry stays and counts as drift, as a running
-  legacy service does. A run therefore never ends an instance mid-run.
+- **No legacy unit.** A legacy entry is a `path` or a `cron`. The render refuses a `path` under
+  `/etc/systemd/system`, because reconcile removes it without a daemon-reload or a restart of the
+  packaged unit it shadows. Renaming a unit that holds a port, or retiring an `/etc` copy of a
+  unit, needs that hand-off added to reconcile first. `dpkg` removes a package's own files.
 - **A toggle-gated legacy entry.** A `legacy:` entry may carry `when:`, and ships only while it
   holds. The claude-code component uses it to remove the textfile metrics a disarmed timer
   wrote: the toggle that drops the timer adds the entry. Step 1 stops the dropped timer and service before step 4
@@ -165,13 +163,13 @@ changes. The grammar and the validations are the docstring of
   the reboot-pending series reads 0 after the reboot that cleared the flag (#6188).
   `HostRebootOverdue` pages a flag older than 8 days, which means the weekly reboot did not
   run or was refused: read `journalctl -t weekly-restart` on the host, then reboot it.
-- **Start times.** Each time reconcile starts or restarts a unit in steps 2, 3 or 4b, it
+- **Start times.** Each time reconcile starts or restarts a unit in steps 2 or 3, it
   records the time of the call and writes it as
   `homelab_host_unit_started_seconds{host,unit}`. A rule compares it with the unit's own
   result: `ComposeRestartUnreported` pages a Pi Compose run that wrote nothing (#6342).
 - **Drift is not a failure.** `homelab_host_reconcile_drift{host,arm}` counts items an arm
   left alone on purpose: UFW rules the floor kept, libvirt objects a running guest still
-  references, users the floor kept, and legacy services that are still running.
+  references, and users the floor kept.
   The run succeeds, so a revert still updates the host. The `host_packages` check names a
   non-zero count in its message and does not go down. To retry the items before the host's next
   package version, run `sudo systemctl start homelab-reconcile.service` on the host

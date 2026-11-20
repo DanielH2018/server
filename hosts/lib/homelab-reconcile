@@ -30,8 +30,8 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 
     {"units": {"<unit>": {"policy": "manual" | "windowed"}, "<unit>": {}, ...},
      "enable_links": ["<unit>", ...],
-     "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
-                {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
+     "legacy": [{"path": "/abs/path, not under /etc/systemd/system"},
+                {"cron": "<name>", "user": "<user>"}],
      "handoffs": [{"units": ["<unit>", ...], "legacy": [<legacy entry>, ...]}, ...],
      "reconcilers": [] | ["libvirt", "lines", "ufw", "users"],
      "activations": {"<packaged path>": "<action>"},
@@ -73,7 +73,7 @@ Its state and record, /var/lib/homelab-reconcile/applied.json:
      "retired": ["<legacy entry as canonical JSON>", ...],
      "files": {"<packaged path>": "<sha256>"},     (activated files, by the hash that ran)
      "pending": {"<unit>": "<InvocationID>"},      (units owed a restart: the manual: actions)
-     "started": {"<unit>": <epoch>},               (when steps 2, 3 or 4b last called the unit)
+     "started": {"<unit>": <epoch>},               (when steps 2 or 3 last called the unit)
      "drift": {"<arm>": <items the arm left alone>},
      "ufw": {"ids": ["<rule id>", ...]},           (once any manifest has declared ufw)
      "users": {"names": [...], "expired": [...]}, "libvirt": {"networks": {...}, "nwfilters": {...}},  (likewise)
@@ -85,9 +85,8 @@ step succeeded on it, or when the step's rule left it alone, so the next run ret
 the actions that failed. A `null` hash reads as changed.
 
 Drift is an item an arm or a rule left alone on purpose: a ufw rule the floor kept, a libvirt
-object a running guest still references, a user the floor kept, or a legacy service that is still
-running. It is counted in `drift`, never fails the run, and is retried by
-the next run. A fault fails the run, which holds the host. The run also writes
+object a running guest still references, or a user the floor kept. It is counted in `drift`,
+never fails the run, and is retried by the next run. A fault fails the run, which holds the host. The run also writes
 homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
 The journal holds two lines for every command the run calls and for its wait on the dpkg lock:
@@ -118,7 +117,6 @@ MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
 APPLIED = ROOT / "var/lib/homelab-reconcile/applied.json"
 UNIT_DIR = Path("/usr/lib/systemd/system")
 ETC_UNIT_DIR = Path("/etc/systemd/system")
-CRON_D = Path("/etc/cron.d")
 DROPIN = "50-homelab.conf"
 SECRETS_UNIT = "homelab-secrets.service"
 SECRETS_JSON = ROOT / "usr/lib/homelab/secrets.json"
@@ -134,7 +132,6 @@ ALWAYS_MANUAL = frozenset({"homelab-updater.service", "homelab-reconcile.service
 # A template's own name: `claude-land@.service`, with no instance between `@` and the suffix.
 TEMPLATE_NAME = re.compile(r"[A-Za-z0-9_.:-]+@\.(service|timer|socket|path)")
 UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
-PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 POLICIES = frozenset({"manual", "windowed"})
 # Each arm module has valid(section) and reconcile(section, prev) -> (ok, record | None, drift).
 # Users and lines run before the units start: users before the secrets step, whose outputs a new
@@ -195,17 +192,7 @@ class LegacyCron:
     user: str
 
 
-@dataclass(frozen=True)
-class LegacyCronFile:
-    cron_file: str
-
-
-@dataclass(frozen=True)
-class LegacyUnit:
-    unit: str
-
-
-Legacy = LegacyPath | LegacyCron | LegacyCronFile | LegacyUnit
+Legacy = LegacyPath | LegacyCron
 
 
 @dataclass(frozen=True)
@@ -333,14 +320,11 @@ def parse_legacy(entry: object) -> Legacy | None:
     """The legacy entry as the record of its kind; None for an entry of no known kind."""
     match entry:
         case {"path": str(path)} if len(entry) == 1 and path.startswith("/"):
-            return None if ".." in path.split("/") else LegacyPath(path)
+            refused = ".." in path.split("/") or ETC_UNIT_DIR in Path(path).parents
+            return None if refused else LegacyPath(path)
         case {"cron": str(cron), "user": str(user)} if len(entry) == 2:
             valid = all(value and "\n" not in value for value in (cron, user))
             return LegacyCron(cron, user) if valid else None
-        case {"cron_file": str(name)} if len(entry) == 1 and PLAIN_NAME.fullmatch(name):
-            return LegacyCronFile(name)
-        case {"unit": str(unit)} if len(entry) == 1 and UNIT_NAME.fullmatch(unit):
-            return LegacyUnit(unit)
     return None
 
 
@@ -502,98 +486,6 @@ def retire_path(path: Path) -> bool:
     return True
 
 
-def shadow_path(entry: Legacy, units: dict) -> Path | None:
-    """The /etc/systemd/system path a legacy entry names, when it can shadow a packaged unit.
-
-    A `{path:}` entry under that directory can, except a `<unit>.d/` directory and a drop-in
-    in one whose name is not the packaged drop-in's: neither shadows a packaged file, so
-    `retire_path` removes them as unowned files (#6592). A `<unit>.d/50-homelab.conf` shadows
-    the packaged drop-in of the same name (#6605). A `{unit:}` entry can when the package
-    ships that unit, because an Ansible-era copy of it shadows the packaged one.
-    """
-    if isinstance(entry, LegacyUnit) and entry.unit in units:
-        return ETC_UNIT_DIR / entry.unit
-    path = Path(entry.path if isinstance(entry, LegacyPath) else "")
-    if ETC_UNIT_DIR not in path.parents:
-        return None
-    if path.parent == ETC_UNIT_DIR and path.suffix == ".d":
-        return None
-    dropin_dir = path.parent
-    if (
-        dropin_dir.parent == ETC_UNIT_DIR
-        and dropin_dir.suffix == ".d"
-        and path.name != DROPIN
-    ):
-        return None
-    return path
-
-
-def unit_dir_file(entry: Legacy) -> bool:
-    """True for a `{path:}` entry that names a file present under /etc/systemd/system."""
-    path = Path(entry.path if isinstance(entry, LegacyPath) else "")
-    return ETC_UNIT_DIR in path.parents and os.path.lexists(under_root(path))
-
-
-def shadowed(path: Path) -> tuple[str, Path | None]:
-    """The unit a shadow path configures, and the packaged file it shadows.
-
-    A unit file shadows the packaged unit of its name and a `<unit>.d/50-homelab.conf` the
-    packaged drop-in of that unit. A wants link shadows no file: it names its unit only.
-    """
-    if path.parent == ETC_UNIT_DIR:
-        return path.name, UNIT_DIR / path.name
-    if path.name == DROPIN and path.parent.parent == ETC_UNIT_DIR:
-        unit = path.parent.name.removesuffix(".d")
-        return unit, UNIT_DIR / f"{unit}.d" / DROPIN
-    return path.name, None
-
-
-def enable_links_to(path: Path) -> list[Path]:
-    """The `*.wants/` and `*.requires/` links in /etc/systemd/system that point at `path`.
-
-    `systemctl enable` links an /etc unit by its absolute path, so a link to the packaged unit,
-    or to any other file, is not one of them. A template's instance links carry the instance's
-    name, so the match is on the target alone.
-    """
-    return [
-        ETC_UNIT_DIR / link.parent.name / link.name
-        for link in sorted(under_root(ETC_UNIT_DIR).glob("*/*"))
-        if link.parent.suffix in (".wants", ".requires")
-        and link.is_symlink()
-        and os.readlink(link) == str(path)
-    ]
-
-
-def hand_off(path: Path) -> tuple[bool, bool] | None:
-    """Remove the /etc copy of a unit, or of a unit's drop-in, that the package ships.
-
-    Removing a unit file also removes the enable links in /etc that point at it.
-
-    Returns:
-        None when a removal failed, else whether anything was removed and whether the file's
-        bytes differ from the packaged file's (a wants link has none, so it never differs,
-        and a drop-in the package does not ship always differs).
-    """
-    target = under_root(path)
-    present = os.path.lexists(target)
-    packaged = shadowed(path)[1]
-    try:
-        differs = (
-            present
-            and packaged is not None
-            and target.read_bytes() != under_root(packaged).read_bytes()
-        )
-    except OSError:
-        differs = True
-    if not retire_path(path):
-        return None
-    gone = path.parent == ETC_UNIT_DIR and not os.path.lexists(target)
-    links = enable_links_to(path) if gone else []
-    if not all(retire_path(link) for link in links):
-        return None
-    return present or bool(links), differs
-
-
 def retire_cron(name: str, user: str) -> bool:
     if shutil.which("crontab") is None:
         # No cron package means no crontab holding the entry. Only an absent binary counts:
@@ -627,47 +519,12 @@ def template_unit(unit: str) -> bool:
     return TEMPLATE_NAME.fullmatch(unit) is not None
 
 
-def retire_unit(unit: str) -> bool:
-    """Disable, stop and remove an unowned Ansible-era unit; a template is not stopped.
-
-    systemctl refuses a template's own name as missing its instance, and `running_service` has
-    already kept the entry while any instance runs.
-    """
-    path = ETC_UNIT_DIR / unit
-    template = template_unit(unit)
-    if os.path.lexists(under_root(path)):
-        owner = owned(path)
-        if owner is not False:
-            log(f"{path} is owned by a package, or dpkg cannot say; leaving it")
-            return owner is True
-        if systemctl("disable", unit).returncode != 0:
-            log(f"disable {unit} failed", ERR)
-            return False
-        if (not template and stop([unit])) or not retire_path(path):
-            return False
-        return systemctl("daemon-reload").returncode == 0
-    return template or not stop([unit])
-
-
-def legacy_path(entry: LegacyPath | LegacyCronFile | LegacyUnit) -> Path:
-    """The file a legacy entry other than a cron retires."""
-    match entry:
-        case LegacyPath(path):
-            return Path(path)
-        case LegacyCronFile(name):
-            return CRON_D / name
-        case LegacyUnit(unit):
-            return ETC_UNIT_DIR / unit
-
-
 def retire(entry: Legacy) -> bool:
     match entry:
         case LegacyCron(cron, user):
             return retire_cron(cron, user)
-        case LegacyUnit(unit):
-            return retire_unit(unit)
-        case LegacyPath() | LegacyCronFile():
-            return retire_path(legacy_path(entry))
+        case LegacyPath(path):
+            return retire_path(Path(path))
 
 
 def legacy_key(entry: Legacy) -> str:
@@ -865,7 +722,7 @@ def act(manifest: Manifest, prev: AppliedState) -> tuple[bool, dict]:
             links_state.add(unit)
 
     # Step 1a: the users arm, so an output step 1b writes can name a user this version adds.
-    drift, arms = {"legacy": 0}, {}
+    drift, arms = {}, {}
 
     def run_arms(names: list[str]) -> bool:
         """Run the named arms. Each record goes in `arms`, and each drift count in `drift`."""
@@ -967,87 +824,36 @@ def act(manifest: Manifest, prev: AppliedState) -> tuple[bool, dict]:
             units_state[unit] = new
 
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
-    # retires none until every credential and output exists and homelab-secrets is active.
-    files = [e for e in manifest.legacy if not isinstance(e, LegacyCron)]
-    paths = {str(legacy_path(e)) for e in files if legacy_key(e) not in prev.retired}
+    # retires none until every credential and output exists and homelab-secrets is active. An
+    # entry stays while a unit of its spec failed to start in this run, step 3b's activation
+    # restart included.
+    paths = {
+        str(Path(e.path))
+        for e in manifest.legacy
+        if isinstance(e, LegacyPath) and legacy_key(e) not in prev.retired
+    }
     OWNERS.update(lines.owners(sorted(paths)))
-    retired = []
-    waiting = None
-    removed, handed, plain = False, set(), []
-    for entry in manifest.legacy:
-        key = legacy_key(entry)
-        if key not in prev.retired and digest and waiting is None:
-            waiting = not (secrets and secrets_ready(credentials, outputs))
-        shadow = shadow_path(entry, units)
-        # An Ansible-era copy under /etc shadows the packaged unit of the same name, or that
-        # unit's packaged drop-in: remove it (one daemon-reload and the restarts follow the
-        # loop), whatever the unit's start did, because the copy may be why it failed. With no
-        # packaged unit of that name, the file is the only copy, so it stays and counts as drift.
-        if shadow and key not in prev.retired and not waiting:
-            unit = shadowed(shadow)[0]
-            if unit not in units:
-                drift["legacy"] += 1
-                log(f"keeping {shadow}: the package ships no unit {unit}")
-            elif (result := hand_off(shadow)) is None:
-                ok = False
-            else:
-                retired.append(key)
-                removed |= result[0]
-                if result[1]:
-                    handed.add(unit)
-        else:
-            plain.append(entry)
-
-    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
-    # packaged unit whose fragment changed, in the order step 3 uses.
-    if removed and systemctl("daemon-reload").returncode != 0:
-        log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
-        ok = False
-    for unit in sorted(handed):
-        fresh = unit_states({unit})
-        if not left_alone(unit, units, links, manual, fresh) and not bring_up(
-            unit, "restart", outputs, queued, started
-        ):
-            start_failed.add(unit)
-            ok = False
-
-    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run,
-    # step 3b's activation restart included.
     kept_for = replacement_failed(
         manifest.handoffs, start_failed | failed | activation_failed
     )
-    removed = False
-    asked = {
-        e.unit
-        for e in plain
-        if isinstance(e, LegacyUnit) and legacy_key(e) not in prev.retired
-    }
-    live = {} if waiting else unit_states(asked)
-    for entry in plain:
+    retired = []
+    waiting = None
+    for entry in manifest.legacy:
         key = legacy_key(entry)
-        # A running service is never stopped to retire it: the entry stays and counts as drift.
-        if key not in prev.retired and not waiting and running_service(entry, live):
-            drift["legacy"] += 1
-            log(f"keeping {key}: the service is running, so it retires once it is not")
-        elif key in prev.retired:
+        if key in prev.retired:
             retired.append(key)
-        elif waiting:
+            continue
+        if digest and waiting is None:
+            waiting = not (secrets and secrets_ready(credentials, outputs))
+        if waiting:
             log(f"keeping {key}: the secrets do not all exist yet")
             ok = False
         elif key in kept_for:
             log(f"keeping {key}: {kept_for[key]} failed to start")
+        elif retire(entry):
+            retired.append(key)
         else:
-            # A drop-in removed from under /etc/systemd/system stays in force until a reload.
-            unit_file = unit_dir_file(entry)
-            if retire(entry):
-                retired.append(key)
-                removed |= unit_file
-            else:
-                ok = False
-
-    if removed and systemctl("daemon-reload").returncode != 0:
-        log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
-        ok = False
+            ok = False
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest.unknown_arms:
@@ -1075,27 +881,6 @@ def act(manifest: Manifest, prev: AppliedState) -> tuple[bool, dict]:
     if secrets_state:
         state["secrets_inputs_sha256"] = secrets_state
     return ok, state
-
-
-def running_service(entry: Legacy, states: dict) -> bool:
-    """True for a legacy entry that names a service systemd is running or starting.
-
-    For a template service, true while any of its instances is. Any other service is looked up
-    in `states`, read after step 4b's restarts, and one systemctl would not answer for counts as
-    running, so it stays.
-    """
-    unit = entry.unit if isinstance(entry, LegacyUnit) else ""
-    if not unit.endswith(".service"):
-        return False
-    if template_unit(unit):
-        instances = unit.replace("@.", "@*.", 1)
-        listed = systemctl(
-            "list-units", "--plain", "--no-legend",
-            f"--state={','.join(sorted(activate.RUNNING))}", instances,
-        )  # fmt: skip
-        return listed.returncode != 0 or bool(listed.stdout.strip())
-    active = states.get(unit, {}).get("ActiveState")
-    return active is None or active in activate.RUNNING
 
 
 def left_alone(unit: str, units: dict, links: set, manual: set, states: dict) -> bool:

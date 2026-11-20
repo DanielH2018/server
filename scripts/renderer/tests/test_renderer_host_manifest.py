@@ -46,8 +46,6 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
         "legacy": [
             {"path": "/usr/local/bin/beat.sh"},
             {"cron": "Beat heartbeat", "user": "{{ sys_user }}"},
-            {"cron_file": "beat"},
-            {"unit": "beat.service"},
         ],
     }
     root = hosts({"components": ["beat"]}, {"beat": component}, {"u": ""})
@@ -65,8 +63,6 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
     legacy = (
         reconcile.LegacyPath("/usr/local/bin/beat.sh"),
         reconcile.LegacyCron("Beat heartbeat", "ubuntu"),
-        reconcile.LegacyCronFile("beat"),
-        reconcile.LegacyUnit("beat.service"),
     )
     assert parsed == reconcile.Manifest(
         units={
@@ -243,11 +239,11 @@ def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):
     components = {
         "one": {
             "files": [{"src": "u", "dst": f"{UNITS}/homelab-one.timer"}],
-            "legacy": [{"cron_file": "one"}],
+            "legacy": [{"path": "/etc/cron.d/one"}],
         },
         "two": {
             "files": [{"src": "u", "dst": f"{UNITS}/homelab-two.timer"}],
-            "legacy": [{"cron_file": "two"}],
+            "legacy": [{"path": "/etc/cron.d/two"}],
         },
         "files-only": {"legacy": [{"path": "/usr/local/bin/stale"}]},
         "link-only": {
@@ -263,8 +259,8 @@ def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):
     (updater / "packages" / "homelab-updater" / "u").write_text("")
 
     assert host_mode.render_host("daniel-pi", root).handoffs == [
-        {"units": ["homelab-one.timer"], "legacy": [{"cron_file": "one"}]},
-        {"units": ["homelab-two.timer"], "legacy": [{"cron_file": "two"}]},
+        {"units": ["homelab-one.timer"], "legacy": [{"path": "/etc/cron.d/one"}]},
+        {"units": ["homelab-two.timer"], "legacy": [{"path": "/etc/cron.d/two"}]},
     ]
 
 
@@ -293,14 +289,36 @@ def test_reconcile_refuses_malformed_handoffs(handoffs):
         {"path": "/a", "x": 1},
         {"cron": "a\nb", "user": "u"},
         {"cron": "", "user": "u"},
-        {"cron_file": "../x"},
-        {"unit": "not a unit"},
         {"path": "/a", "unit": "a.service"},
     ],
 )
 def test_reconcile_refuses_a_legacy_entry_of_no_known_kind(entry):
     reconcile = _reconcile()
 
+    with pytest.raises(reconcile.ManifestError, match="no known kind"):
+        reconcile.parse_manifest(json.dumps({"legacy": [entry]}))
+
+
+def test_a_legacy_path_outside_the_unit_directory_is_clean(hosts):
+    root = hosts({"legacy": [{"path": "/etc/systemd/x.conf"}]})
+
+    text = host_mode.render_host("daniel-pi", root).files[MANIFEST][0].decode()
+
+    assert _reconcile().parse_manifest(text).legacy[0].path == "/etc/systemd/x.conf"
+
+
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({"unit": "x.service"}, "is not one of"),
+        ({"path": "/etc/systemd/system/x.service"}, "reconcile has no hand-off"),
+    ],
+)
+def test_a_legacy_entry_reconcile_does_not_retire_is_flagged(hosts, entry, message):
+    root = hosts({"legacy": [entry]})
+    with pytest.raises(RenderRefused, match=message):
+        host_mode.render_host("daniel-pi", root)
+    reconcile = _reconcile()
     with pytest.raises(reconcile.ManifestError, match="no known kind"):
         reconcile.parse_manifest(json.dumps({"legacy": [entry]}))
 
