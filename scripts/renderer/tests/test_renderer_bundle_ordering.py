@@ -22,7 +22,6 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.ordering import (
     TAG_KIND_SUFFIXES,
-    UNRENDERED_DEPS,
     Ordering,
     dependency_cycle,
     kustomization_edges,
@@ -47,39 +46,30 @@ def _depends(doc: dict) -> list[str]:
     return [edge["name"] for edge in doc["spec"].get("dependsOn", [])]
 
 
-def _unrendered(doc: dict) -> str | None:
-    return (doc["metadata"].get("annotations") or {}).get(UNRENDERED_DEPS)
-
-
 def _deferring(*tags: str, namespace: str = "homelab") -> dict:
     """A `<tag>` and a `<tag>-deferred` directory for each of `tags`."""
     files = {"x.yaml": CONFIGMAP.format(namespace=namespace)}
     return {name: files for tag in tags for name in (tag, f"{tag}-deferred")}
 
 
-def test_an_edge_to_a_tag_that_is_not_flux_owned_is_left_out_and_annotated():
-    ordering = Ordering(deps={"texbrain": ["authelia", "traefik"]})
-    doc = _docs(ordering, ["texbrain"])["texbrain"]
-    assert "dependsOn" not in doc["spec"]
-    assert _unrendered(doc) == "authelia,traefik"
+def test_an_edge_to_a_name_that_is_no_k8s_tag_fails_the_bundle():
+    ordering = Ordering(deps={"texbrain": ["authelia", "gone"], "authelia": []})
+    with pytest.raises(ValueError, match=r"names no k8s tag.*texbrain -> gone$"):
+        _docs(ordering, ["texbrain"])
 
 
-def test_an_edge_between_two_flux_owned_roles_is_kept():
-    ordering = Ordering(deps={"texbrain": ["bento-pdf", "traefik"], "bento-pdf": []})
+def test_an_edge_between_two_rendered_tags_is_kept():
+    ordering = Ordering(deps={"texbrain": ["bento-pdf"], "bento-pdf": []})
     docs = _docs(ordering, ["bento-pdf", "texbrain"])
     assert _depends(docs["texbrain"]) == ["bento-pdf"]
-    assert _unrendered(docs["texbrain"]) == "traefik"
-    assert _unrendered(docs["bento-pdf"]) is None
+    assert _depends(docs["bento-pdf"]) == []
 
 
-def test_a_flux_owned_role_outside_the_render_is_kept_not_annotated():
-    """Ownership comes from the inventory, so a `--role` subset does not move an edge."""
-    ordering = Ordering(
-        deps={"texbrain": ["bento-pdf"]},
-        flux_owned=frozenset({"texbrain", "bento-pdf"}),
-    )
+def test_an_edge_to_a_tag_outside_the_render_is_kept():
+    """The tags come from the dependency map, so a `--role` subset does not move an edge."""
+    ordering = Ordering(deps={"texbrain": ["bento-pdf"], "bento-pdf": []})
     doc = _docs(ordering, ["texbrain"])["texbrain"]
-    assert _depends(doc) == ["bento-pdf"] and _unrendered(doc) is None
+    assert _depends(doc) == ["bento-pdf"]
 
 
 def test_an_applies_last_tag_depends_on_other_deferred_kustomizations_not_its_own():
@@ -94,18 +84,14 @@ def test_an_applies_last_tag_depends_on_other_deferred_kustomizations_not_its_ow
 
 
 def test_a_deferred_document_in_a_role_created_namespace_waits_on_that_role():
-    """flux-owned, the namespace's role is an edge; otherwise it is annotated."""
+    """The namespace's role is an edge, and a role that is no k8s tag fails the bundle."""
     directories = _deferring("headlamp", namespace="observability")
     roles = {"observability": "observability"}
-    owned = Ordering(
-        namespace_roles=roles, flux_owned=frozenset({"headlamp", "observability"})
-    )
-    doc = _docs(owned, ["headlamp"], directories)["headlamp-deferred"]
+    ordering = Ordering(deps={"observability": []}, namespace_roles=roles)
+    doc = _docs(ordering, ["headlamp"], directories)["headlamp-deferred"]
     assert _depends(doc) == ["headlamp", "observability"]
-    unowned = Ordering(namespace_roles=roles)
-    doc = _docs(unowned, ["headlamp"], directories)["headlamp-deferred"]
-    assert _depends(doc) == ["headlamp"]
-    assert _unrendered(doc) == "observability"
+    with pytest.raises(ValueError, match=r"headlamp-deferred -> observability$"):
+        _docs(Ordering(namespace_roles=roles), ["headlamp"], directories)
 
 
 def test_a_cycle_in_the_map_fails_the_bundle():
@@ -140,9 +126,8 @@ def test_the_render_refuses_a_cycle_and_writes_nothing(tmp_path, capsys):
         out,
         tags,
         None,
-        flux_owned=lambda: set(tags),
         cluster_file=cluster_file,
-        ordering=lambda owned: Ordering(
+        ordering=lambda: Ordering(
             deps={"bento-pdf": ["littlelink"], "littlelink": ["bento-pdf"]}
         ),
     )
@@ -153,7 +138,7 @@ def test_the_render_refuses_a_cycle_and_writes_nothing(tmp_path, capsys):
 
 def test_the_live_ordering_reads_the_dep_map_and_its_rules():
     """bento-pdf is routed behind Authelia, so the dependency map gives it both edges."""
-    ordering = cluster_mod.bundle_ordering({"bento-pdf"})
+    ordering = cluster_mod.bundle_ordering()
     assert {"authelia", "traefik"} <= set(ordering.deps["bento-pdf"])
     assert "netpol-baseline" in ordering.applies_last
     assert ordering.namespace_roles == {"observability": "observability"}
@@ -353,20 +338,19 @@ def test_a_verify_kind_of_a_tag_with_no_deferred_files_depends_on_the_tag():
 
 
 def test_a_verify_kind_waits_on_the_last_kustomization_of_each_tag_it_names():
-    """A named tag's `-deferred` stands in for it, and one not flux-owned is annotated."""
-    ordering = Ordering(
-        flux_owned=frozenset({"bento-pdf", "pihole"}),
-        verify_after={"bento-pdf": ["pihole", "traefik"]},
-    )
+    """A named tag's `-deferred` stands in for it, and a name that is no k8s tag fails."""
     directories = _every_kind() | {"bento-pdf-verify": {}}
+    ordering = Ordering(verify_after={"bento-pdf": ["pihole"]})
     doc = _docs(ordering, ["bento-pdf", "pihole"], directories)["bento-pdf-verify"]
     assert _depends(doc) == ["bento-pdf", "pihole-deferred"]
-    assert _unrendered(doc) == "traefik"
+    ordering = Ordering(verify_after={"bento-pdf": ["pihole", "gone"]})
+    with pytest.raises(ValueError, match=r"bento-pdf-verify -> gone$"):
+        _docs(ordering, ["bento-pdf", "pihole"], directories)
 
 
 def test_crowdsec_verify_waits_on_the_rolled_traefik():
     """The ban proof reads the edge, so it must probe the Traefik pod a roll brought."""
-    ordering = cluster_mod.bundle_ordering({"crowdsec", "traefik"})
+    ordering = cluster_mod.bundle_ordering()
     assert ordering.verify_after["crowdsec"] == ["traefik"]
     directories = {name: {} for name in ("crowdsec", "crowdsec-verify", "traefik")}
     docs = _docs(ordering, ["crowdsec", "traefik"], directories)
@@ -385,24 +369,23 @@ def test_a_verify_after_that_is_not_a_list_of_other_tags_is_a_problem(tmp_path, 
 
 def test_a_snapshot_kind_inherits_its_tags_edges_and_the_tag_waits_on_it():
     # fact: k8s/roles/volume-snapshot/CLAUDE.md#What fails the Job
-    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
+    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"], "traefik": []})
     docs = _docs(ordering, ["bento-pdf", "pihole"], _every_kind())
-    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
-    assert _unrendered(docs["pihole-snapshot"]) == "traefik"
-    assert _depends(docs["pihole"]) == ["bento-pdf", "pihole-snapshot"]
+    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf", "traefik"]
+    assert _depends(docs["pihole"]) == ["bento-pdf", "pihole-snapshot", "traefik"]
 
 
 def test_a_prepull_kind_inherits_its_tags_edges_beside_the_snapshot():
-    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"]})
+    ordering = Ordering(deps={"pihole": ["bento-pdf", "traefik"], "traefik": []})
     directories = _every_kind() | {"pihole-prepull": {}}
     docs = _docs(ordering, ["bento-pdf", "pihole"], directories)
-    assert _depends(docs["pihole-prepull"]) == ["bento-pdf"]
-    assert _unrendered(docs["pihole-prepull"]) == "traefik"
-    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf"]
+    assert _depends(docs["pihole-prepull"]) == ["bento-pdf", "traefik"]
+    assert _depends(docs["pihole-snapshot"]) == ["bento-pdf", "traefik"]
     assert _depends(docs["pihole"]) == [
         "bento-pdf",
         "pihole-prepull",
         "pihole-snapshot",
+        "traefik",
     ]
 
 

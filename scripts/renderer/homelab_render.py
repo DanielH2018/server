@@ -39,7 +39,7 @@ A placeholder render also writes the context of each image its tags' roles build
 consumer's ref reads in the same render (`renderer_lib/images.py`, D5.4a1). A full render
 writes every one. `--all-images` writes every one whatever `--role` names, or beside `--shared-only`,
 which the publish job passes because its `images` job builds every context.
-In both modes, every flux-owned tag's restart targets get `checksum/restart`, hashed from the
+In both modes, every tag's restart targets get `checksum/restart`, hashed from the
 placeholder-form documents and `secrets/cluster-vars.source`
 (`renderer_lib/restart.py`), and its claims and Namespaces the prune label (`prune_label.py`).
 
@@ -89,7 +89,7 @@ from renderer.renderer_lib.bundle import (
     bundle_files,
     write_bundle,
 )
-from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT, k8s_tags
+from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
 from renderer.renderer_lib.ordering import NO_ORDERING, Ordering
 from renderer.renderer_lib.cluster import (
     RenderedTag,
@@ -154,13 +154,12 @@ def cluster(
     roles: list[str] | None,
     secret_stubs: Path | None,
     render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
-    flux_owned: Callable[[], set[str]] = k8s_tags,
     kinds: frozenset[str] = SHARED_KINDS,
     cluster_file: Path = CLUSTER_FILE,
     shared_only: bool = False,
     source_file: Path = CLUSTER_VARS_SOURCE,
     manifests_dir: Path = MANIFESTS_DIR,
-    ordering: Callable[[set[str]], Ordering] = bundle_ordering,
+    ordering: Callable[[], Ordering] = bundle_ordering,
     vendored: Path = K8S_ROLES,
     revision: str | None = None,
 ) -> int:
@@ -171,7 +170,6 @@ def cluster(
         roles: The tags to render, or None for every render target.
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
         render: The placeholder render; a test replaces it with one over fixture sets.
-        flux_owned: Returns every k8s tag; a test passes fixture tags.
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
         cluster_file: The cluster file the `cluster-vars` kind copies; a test passes a
             fixture.
@@ -181,8 +179,7 @@ def cluster(
             passes a fixture.
         manifests_dir: The SOPS manifests a published tag's directory copies; a test passes
             a fixture directory.
-        ordering: Returns what `dependsOn` is generated from, given the flux-owned tags; a
-            test passes a fixture map.
+        ordering: Returns what `dependsOn` is generated from; a test passes a fixture map.
         vendored: The role tree vendored files are read from; a test passes a fixture.
         revision: The commit the soak Job judges; None renders it at the normalised SHA.
     """
@@ -190,13 +187,12 @@ def cluster(
         return _shared_cluster(out, cluster_file, revision, render)
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(
-            out, roles, secret_stubs, kinds, render, flux_owned, source_file, vendored
+            out, roles, secret_stubs, kinds, render, source_file, vendored
         )
     return _placeholder_cluster(
         out,
         roles,
         render,
-        flux_owned,
         kinds,
         cluster_file,
         source_file,
@@ -210,17 +206,15 @@ def cluster(
 def stamp_restarts(
     rendered: list[RenderedTag],
     placeholder: PlaceholderRender,
-    owned: set[str],
     keys: list[str],
     source: dict[str, str],
 ) -> list[RenderedTag]:
-    """`rendered` with `checksum/restart` stamped on each flux-owned tag's restart targets.
+    """`rendered` with `checksum/restart` stamped on each tag's restart targets.
 
     Args:
         rendered: The tags to stamp, in either render mode.
-        placeholder: A placeholder render holding every flux-owned tag of `rendered`. The
+        placeholder: A placeholder render holding every tag of `rendered`. The
             value is hashed from it, so both modes stamp the same value.
-        owned: The flux-owned tags.
         keys: The key names of `secrets/secrets.yml`.
         source: `source_digests`.
 
@@ -231,9 +225,6 @@ def stamp_restarts(
     forms = {t.tag: t for t in placeholder.tags}
     stamped = []
     for tag in rendered:
-        if tag.tag not in owned:
-            stamped.append(tag)
-            continue
         try:
             context = tag_context(K8S_ROLES / tag.tag, tag.tag, {})
         except ValueError as exc:
@@ -264,7 +255,6 @@ def _stub_cluster(
     secret_stubs: Path,
     kinds: frozenset[str],
     render: Callable[[list[str], list[str]], PlaceholderRender],
-    flux_owned: Callable[[], set[str]],
     source_file: Path,
     vendored: Path,
 ) -> int:
@@ -282,18 +272,15 @@ def _stub_cluster(
         rendered = [render_tag(tag, stubs) for tag in tags]
         # The stamp hashes the placeholder form, never the stub render, so the value equals
         # the placeholder render's.
-        owned = set(tags) & flux_owned()
-        if owned:
-            keys = secret_keys()
-            placeholder = render(sorted(owned), keys)
-            rendered = stamp_restarts(
-                ghcr_refs(rendered, owned, placeholder.images),
-                placeholder,
-                owned,
-                keys,
-                source_digests(source_file),
-            )
-            rendered = label_tags(rendered, owned)
+        keys = secret_keys()
+        placeholder = render(tags, keys)
+        rendered = stamp_restarts(
+            ghcr_refs(rendered, placeholder.images),
+            placeholder,
+            keys,
+            source_digests(source_file),
+        )
+        rendered = label_tags(rendered)
         written = write_cluster(attach_vendored(rendered, roles=vendored), out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
@@ -311,18 +298,16 @@ def _placeholder_cluster(
     out: Path,
     roles: list[str] | None,
     render: Callable[[list[str], list[str]], PlaceholderRender],
-    flux_owned: Callable[[], set[str]],
     kinds: frozenset[str],
     cluster_file: Path,
     source_file: Path,
     manifests_dir: Path,
-    ordering: Callable[[set[str]], Ordering],
+    ordering: Callable[[], Ordering],
     vendored: Path,
     revision: str | None,
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
-        owned = flux_owned()
         keys = secret_keys()
         result = render(tags, keys)
         problems = sops_manifest_entries(result, keys)
@@ -336,22 +321,18 @@ def _placeholder_cluster(
                 file=sys.stderr,
             )
             return RENDER_FAILED
-        # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
-        # render of any other tag, a deferring one included, writes its cluster/ alone.
-        published = [t.tag for t in result.tags if t.tag in owned] if roles else []
-        tags = ghcr_refs(result.tags, owned, result.images)
-        tags = stamp_restarts(tags, result, owned, keys, source_digests(source_file))
+        published = [t.tag for t in result.tags] if roles else []
+        tags = ghcr_refs(result.tags, result.images)
+        tags = stamp_restarts(tags, result, keys, source_digests(source_file))
         tags = copy_sops_manifests(
-            label_tags(tags, owned), result.sops_manifests, published, manifests_dir
+            label_tags(tags), result.sops_manifests, published, manifests_dir
         )
         tags = attach_vendored(tags, result.key_sets, vendored)
         tags = attach_snapshots(tags, published, ROLLOUT_TIMEOUT_DEFAULT, vendored)
         tags = attach_prepulls(tags, published, vendored)
         tags = attach_gates(tags, published, vendored, result.key_sets)
         bundle = (
-            _bundle(
-                tags, result, out, published, cluster_file, ordering(owned), revision
-            )
+            _bundle(tags, result, out, published, cluster_file, ordering(), revision)
             if published
             else {}
         )

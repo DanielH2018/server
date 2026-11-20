@@ -119,8 +119,7 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     Flux applies (D2.4b), where the hourly record list leaves it out."""
     services = _services(tmp_path, "  - name: littlelink\n    owner: flux\n")
     assert cluster_mod.select_tags(["littlelink"], services) == ["littlelink"]
-    flux_owned = k8s_tags(services)
-    assert flux_owned == {"littlelink"}
+    assert k8s_tags(services) == {"littlelink"}
     # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.
     dotenv = tmp_path / "cluster-vars"
     dotenv.write_text("x=ENC[AES256_GCM,data:eA==,type:str]\n")
@@ -128,7 +127,6 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
         out,
         ["littlelink"],
         None,
-        flux_owned=lambda: flux_owned,
         cluster_file=dotenv,
     )
     assert code == RENDER_OK

@@ -49,7 +49,6 @@ def _sops_render(tmp_path, cluster_file, manifest: str | None):
         out,
         ["pi-peer-backup", "bento-pdf"],
         None,
-        flux_owned=lambda: {"pi-peer-backup", "bento-pdf"},
         cluster_file=cluster_file,
         manifests_dir=manifests,
     )

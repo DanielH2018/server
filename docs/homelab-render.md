@@ -114,8 +114,7 @@ patches applied.
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
 `DIR/digests.json`, for the k8s tags it names, plus each shared kind's
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
-describes them. A stub render, a render without `--role` and a render that names no
-flux-owned tag write none of them. A published tag whose role lists `render_sops_manifests`
+describes them. A stub render and a render without `--role` write none of them. A published tag whose role lists `render_sops_manifests`
 also gets a byte copy of each of its SOPS manifests from `secrets/cluster-manifests/`
 in `DIR/cluster/<tag>/`, and `decryption` on its Kustomization.
 

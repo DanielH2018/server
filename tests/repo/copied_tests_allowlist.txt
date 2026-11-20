@@ -38,8 +38,8 @@ k8s/roles/sonarr/tests/test_sonarr_verify.py 1
 k8s/roles/tdarr/tests/test_tdarr_verify.py 4
 scripts/renderer/tests/test_renderer_autofix_bridge_script.py 2
 scripts/renderer/tests/test_renderer_monitor_bridge_script.py 2
-scripts/renderer/tests/test_renderer_prepull.py 2
-scripts/renderer/tests/test_renderer_snapshot.py 2
+scripts/renderer/tests/test_renderer_prepull.py 1
+scripts/renderer/tests/test_renderer_snapshot.py 1
 scripts/tests/test_census_rows_test_modules.py 1
 scripts/tests/test_census_rows_test_renders.py 1
 tests/repo/test_census_rows_layout.py 1

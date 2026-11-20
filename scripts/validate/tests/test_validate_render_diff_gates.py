@@ -24,18 +24,18 @@ from validate import render_diff_gates as gate
 from renderer.template_filters.toposort import build_k8s_dep_map
 
 
-def snap(moved=(), flux=("bento-pdf",), texbrain_deps=(), side="base"):
-    """A snapshot of four fixture entries; each tag in `moved` renders differently per side."""
+def snap(moved=(), absent=(), texbrain_deps=(), side="base"):
+    """A snapshot of four fixture entries, less `absent`; a tag in `moved` renders differently per side."""
     entries: list[dict] = [
         {"name": "authelia"},
         {"name": "bento-pdf", "use_authelia": True},
         {"name": "texbrain", "use_authelia": True, "depends_on": list(texbrain_deps)},
         {"name": "netpol-baseline"},
     ]
+    entries = [e for e in entries if e["name"] not in absent]
     names = [e["name"] for e in entries]
     return gate.Snapshot(
         renders={n: f"{n}-{side}" if n in moved else n for n in names},
-        owners={n: "flux" if n in flux else "ansible" for n in names},
         deps=build_k8s_dep_map(entries, "/nonexistent"),
     )
 
@@ -47,12 +47,7 @@ def judge(moved, base_kw=None, head_kw=None):
 
 
 def test_an_edge_added_with_a_change_to_the_dependent_is_flagged_by_arm_2():
-    flux = ("bento-pdf", "texbrain")
-    flagged = judge(
-        {"texbrain"},
-        base_kw={"flux": flux},
-        head_kw={"flux": flux, "texbrain_deps": ["bento-pdf"]},
-    )
+    flagged = judge({"texbrain"}, head_kw={"texbrain_deps": ["bento-pdf"]})
     assert flagged == [
         "arm 2: texbrain gains dependsOn ['bento-pdf'] and its own render moves in the same "
         "PR. Land the edge alone first, then the change."
@@ -60,15 +55,14 @@ def test_an_edge_added_with_a_change_to_the_dependent_is_flagged_by_arm_2():
 
 
 def test_the_edge_alone_is_clean():
-    flux = ("bento-pdf", "texbrain")
-    head_kw = {"flux": flux, "texbrain_deps": ["bento-pdf"]}
-    assert judge(set(), base_kw={"flux": flux}, head_kw=head_kw) == []
+    assert judge(set(), head_kw={"texbrain_deps": ["bento-pdf"]}) == []
 
 
-def test_a_flip_that_moves_the_render_and_gains_edges_is_clean():
-    head_kw = {"flux": ("bento-pdf", "texbrain"), "texbrain_deps": ["bento-pdf"]}
-    base, head = snap({"texbrain"}), snap({"texbrain"}, side="head", **head_kw)
-    assert head.depends_on("texbrain") - base.depends_on("texbrain") == {"bento-pdf"}
+def test_a_tag_the_pr_adds_with_its_edges_is_clean():
+    base = snap(absent={"texbrain"})
+    head = snap(side="head", texbrain_deps=["bento-pdf"])
+    assert "texbrain" in gate.counted(base, head)
+    assert "bento-pdf" in head.depends_on("texbrain")
     assert gate.problems(base, head) == []
 
 
@@ -95,9 +89,9 @@ def head_snapshot(head_tree) -> gate.Snapshot:
     return gate.snapshot(head_tree, ROLES)
 
 
-def test_a_snapshot_maps_every_k8s_entry_to_flux(head_snapshot):
-    """No entry carries an `owner` key, so the plane is read from the platform alone (H1.9)."""
-    assert set(ROLES) <= head_snapshot.flux_owned()
+def test_a_snapshot_keys_its_deps_by_every_k8s_entry(head_snapshot):
+    """Every entry, not the two rendered: arm 3 walks the keys for what the base holds."""
+    assert set(ROLES) < set(head_snapshot.deps)
 
 
 def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Snapshot:
@@ -149,18 +143,16 @@ CLUSTER_ROLE = "ClusterRole//bento-pdf-reader"
 BENTO = {"Deployment/homelab/bento-pdf", NETPOL, CLUSTER_ROLE}
 
 
-def removal(base_objects, head_objects, declared=(), head_flux=("bento-pdf",), **kw):
+def removal(base_objects, head_objects, declared=(), **kw):
     base = gate.Snapshot(
         renders={},
-        owners={"bento-pdf": "flux"},
-        deps={},
+        deps={"bento-pdf": []},
         objects={"bento-pdf": base_objects},
         unpruned=kw.get("unpruned", ()),
     )
     head = gate.Snapshot(
         renders={},
-        owners={t: "flux" for t in head_flux},
-        deps={},
+        deps={"bento-pdf": []},
         objects={"bento-pdf": head_objects},
     )
     return gate.removal_problems(base, head, declared)
@@ -204,15 +196,15 @@ def test_a_dropped_prune_disabled_claim_is_clean():
 
 def test_a_tag_that_drops_its_whole_render_is_flagged():
     """The default deletion policy deletes what leaves with the tag."""
-    assert len(removal(BENTO, set(), head_flux=())) == len(BENTO)
+    assert len(removal(BENTO, set())) == len(BENTO)
 
 
 def _retirement(declared):
     """bento-pdf gone from the head's entries and render, against a base that holds it."""
     base = gate.Snapshot(
-        renders={}, owners={"bento-pdf": "flux"}, deps={}, objects={"bento-pdf": BENTO}
+        renders={}, deps={"bento-pdf": []}, objects={"bento-pdf": BENTO}
     )
-    head = gate.Snapshot(renders={}, owners={}, deps={})
+    head = gate.Snapshot(renders={}, deps={})
     return gate.removal_problems(base, head, declared)
 
 
@@ -236,14 +228,11 @@ def test_a_verify_directorys_dropped_object_is_flagged():
 def _tag_rule(head_tags, role_names, base_objects=None):
     base = gate.Snapshot(
         renders={},
-        owners={},
         deps={},
         objects=base_objects or {},
         tags={"flux", "bento-pdf"},
     )
-    head = gate.Snapshot(
-        renders={}, owners={}, deps={}, tags=head_tags, role_names=role_names
-    )
+    head = gate.Snapshot(renders={}, deps={}, tags=head_tags, role_names=role_names)
     return gate.tag_problems(base, head)
 
 
@@ -267,34 +256,12 @@ def test_flux_missing_at_the_head_is_flagged():
     assert line.startswith("arm 6: flux is not in the render")
 
 
-def test_a_flux_owned_tag_that_renders_nothing_is_flagged():
-    assert len(removal(BENTO, set())) == len(BENTO)
-
-
-def test_an_object_moved_to_an_ansible_owned_tag_is_flagged():
-    """Flux still prunes it from bento-pdf, and Ansible applies authelia only later."""
-    base = gate.Snapshot(
-        renders={},
-        owners={"bento-pdf": "flux", "authelia": "ansible"},
-        deps={},
-        objects={"bento-pdf": BENTO},
-    )
+def test_an_object_moved_to_another_tag_is_clean():
+    deps = {"bento-pdf": [], "texbrain": []}
+    base = gate.Snapshot(renders={}, deps=deps, objects={"bento-pdf": BENTO})
     head = gate.Snapshot(
         renders={},
-        owners=base.owners,
-        deps={},
-        objects={"bento-pdf": BENTO - {NETPOL}, "authelia": {NETPOL}},
-    )
-    assert len(gate.removal_problems(base, head, ())) == 1
-
-
-def test_an_object_moved_to_another_flux_owned_tag_is_clean():
-    flux = {"bento-pdf": "flux", "texbrain": "flux"}
-    base = gate.Snapshot(renders={}, owners=flux, deps={}, objects={"bento-pdf": BENTO})
-    head = gate.Snapshot(
-        renders={},
-        owners=flux,
-        deps={},
+        deps=deps,
         objects={"bento-pdf": BENTO - {NETPOL}, "texbrain": {NETPOL}},
     )
     assert gate.removal_problems(base, head, ()) == []
@@ -319,8 +286,7 @@ def _digests(own: str, suspended: bool) -> dict:
 def suspended_snap(own: str, suspended: bool) -> gate.Snapshot:
     return gate.Snapshot(
         renders={},
-        owners={"bento-pdf": "flux"},
-        deps={},
+        deps={"bento-pdf": []},
         digests=_digests(own, suspended),
     )
 
@@ -412,15 +378,13 @@ def test_gate_reads_the_trailers_from_the_prs_commits(tmp_path, messages, expect
     snaps = {
         "base": gate.Snapshot(
             renders={},
-            owners={"bento-pdf": "flux"},
-            deps={},
+            deps={"bento-pdf": []},
             objects={"bento-pdf": BENTO},
             tags={"flux"},
         ),
         "head": gate.Snapshot(
             renders={},
-            owners={"bento-pdf": "flux"},
-            deps={},
+            deps={"bento-pdf": []},
             objects={"bento-pdf": BENTO - {NETPOL}},
             tags={"flux"},
         ),
@@ -438,12 +402,9 @@ def test_gate_runs_arm_6(tmp_path, capsys, head_tags, expected):
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "commit", "-q", "--allow-empty", "-m", "Base")
     snaps = {
-        "base": gate.Snapshot(
-            renders={}, owners={}, deps={}, tags={"flux", "bento-pdf"}
-        ),
+        "base": gate.Snapshot(renders={}, deps={}, tags={"flux", "bento-pdf"}),
         "head": gate.Snapshot(
             renders={},
-            owners={},
             deps={},
             tags=head_tags,
             role_names={"flux", "bento-pdf"},

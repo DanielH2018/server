@@ -3,14 +3,13 @@
 Every edge is generated, never hand-written, from an `Ordering` the caller reads out of
 `scripts/renderer/template_filters/toposort.py` (`cluster.bundle_ordering`):
 
-- a tag depends on the flux-owned members of its `build_k8s_dep_map` edges. An edge to any
-  other name is left out, because it would name a Kustomization that does not exist, and the
-  annotation `homelab/unrendered-deps` lists it for a reader;
+- a tag depends on its `build_k8s_dep_map` edges. An edge to a name that is no k8s tag fails
+  the render, because it would name a Kustomization that does not exist;
 - a `K8S_APPLIES_LAST` tag also depends on every other tag's `<tag>-deferred`;
 - a tag with a document in `k8s_namespace`, in any of its directories, depends on the shared
   kind `homelab-namespace`, which creates that Namespace and its LimitRange (D5 step 30);
 - `<tag>-deferred` depends on `<tag>`, and on the role that creates a namespace one of its
-  documents names, by the same flux-owned rule;
+  documents names;
 - `<tag>-snapshot` inherits `<tag>`'s edges (C3), and `<tag>` then depends on it, so the role
   applies only after its snapshot is taken (D5.2a). `<tag>-prepull` does the same, so the role
   applies only after its images are on the node. The two are siblings, never a chain,
@@ -19,7 +18,7 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
   on the role that creates a namespace one of its documents names, as `<tag>-deferred` does.
   `<tag>-verify` depends on the tag's last Kustomization: `<tag>-deferred` when the tag
   renders one, `<tag>` otherwise (D5.1a1). It also depends on the last Kustomization of each
-  tag its role names in `flux_verify_after`, by the same flux-owned rule, so its Jobs probe
+  tag its role names in `flux_verify_after`, so its Jobs probe
   that tag's rolled workload rather than the one it replaces;
 - an edge to a Kustomization that a suspended tag owns is dropped, and the annotation `homelab/suspended-deps` lists it, because Flux would hold the dependent at
   `DependencyNotReady` until the resume (C3 *Suspension*, D5.1b). `drop_suspended` is the one step.
@@ -103,9 +102,6 @@ VERIFY_AFTER = "flux_verify_after"
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
-# they name no flux-owned tag, so no Kustomization of that name exists.
-UNRENDERED_DEPS = "homelab/unrendered-deps"
-# Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
 # they name a Kustomization of a tag whose role sets `flux_suspend: true` (D5.1b). Each comes
 # back in the first render after the resume.
 SUSPENDED_DEPS = "homelab/suspended-deps"
@@ -117,14 +113,11 @@ class Edges:
 
     Attributes:
         kept: The names its `dependsOn` lists.
-        unrendered: The names it waits on that are no flux-owned tag, which `dependsOn`
-            cannot name. `UNRENDERED_DEPS` lists them.
         suspended: The Kustomizations of suspended tags it would otherwise depend on.
             `SUSPENDED_DEPS` lists them.
     """
 
     kept: frozenset[str] = frozenset()
-    unrendered: frozenset[str] = frozenset()
     suspended: frozenset[str] = frozenset()
 
 
@@ -134,12 +127,11 @@ class Ordering:
 
     Attributes:
         deps: Each deploy tag mapped to the names `build_k8s_dep_map` gives it, built from the
-            full k8s `containers_list`.
+            full k8s `containers_list`. Its keys are every k8s tag, so an edge may name a
+            tag outside the render, and an edge to any other name fails the render.
         applies_last: The `K8S_APPLIES_LAST` tags.
         namespace_roles: Each namespace a role creates mapped to that role.
-        flux_owned: The k8s tags the bundle publishes, or None for the published
-            tags. An edge to any other name is left out and annotated.
-        suspended: The tags whose role sets `flux_suspend: true`, read over every flux-owned
+        suspended: The tags whose role sets `flux_suspend: true`, read over every k8s
             role so a `--role` subset drops the same edges. An edge to any of their
             Kustomizations is dropped and annotated (`drop_suspended`).
         workload_namespace: `k8s_namespace`, whose Namespace the shared kind
@@ -152,7 +144,6 @@ class Ordering:
     deps: Mapping[str, Iterable[str]] = field(default_factory=dict)
     applies_last: frozenset[str] = frozenset()
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
-    flux_owned: frozenset[str] | None = None
     suspended: frozenset[str] = frozenset()
     workload_namespace: str | None = None
     verify_after: Mapping[str, Iterable[str]] = field(default_factory=dict)
@@ -466,14 +457,23 @@ def kustomization_edges(
     Returns:
         `<tag>` for each tag, and `<tag><suffix>` for each per-tag kind whose directory the
         tag renders.
+
+    Raises:
+        ValueError: An edge names neither a published tag nor a key of `ordering.deps`.
     """
     tags = sorted(set(tags))
-    owned = set(tags) if ordering.flux_owned is None else set(ordering.flux_owned)
+    known = set(tags) | set(ordering.deps)
+    unknown: dict[str, set[str]] = {}
+
+    def existing(name: str, wanted: set[str]) -> set[str]:
+        if wanted - known:
+            unknown[name] = wanted - known
+        return wanted & known
+
     deferring = [tag for tag in tags if tag + DEFERRED_SUFFIX in directories]
     edges = {}
     for tag in tags:
-        wanted = set(ordering.deps.get(tag, ())) - {tag}
-        kept = wanted & owned
+        kept = existing(tag, set(ordering.deps.get(tag, ())) - {tag})
         if tag in ordering.applies_last:
             # Every other tag's deferred apply, never its own: `<tag>-deferred` depends on
             # `<tag>`, so that edge would be a cycle.
@@ -492,7 +492,7 @@ def kustomization_edges(
             # that exists. The `-snapshot`, `-prepull` and `-precheck` copies below inherit it,
             # and the tag's other kinds wait on `<tag>`.
             kept.add(HOMELAB_NAMESPACE)
-        edges[tag] = Edges(frozenset(kept), frozenset(wanted - owned))
+        edges[tag] = Edges(frozenset(kept))
     for tag in deferring:
         name = tag + DEFERRED_SUFFIX
         wanted = {
@@ -500,9 +500,7 @@ def kustomization_edges(
             for ns in _namespaces(directories[name])
             if ns in ordering.namespace_roles
         } - {tag}
-        edges[name] = Edges(
-            frozenset({tag} | (wanted & owned)), frozenset(wanted - owned)
-        )
+        edges[name] = Edges(frozenset({tag} | existing(name, wanted)))
     for tag in tags:
         # Each predecessor copies `<tag>`'s edges before `<tag>` gains any, so neither depends
         # on itself or on the other.
@@ -525,25 +523,29 @@ def kustomization_edges(
                 for ns in _namespaces(directories[name])
                 if ns in ordering.namespace_roles
             }
-            edges[name] = Edges(
-                edges[name].kept | (wanted & owned),
-                edges[name].unrendered | (wanted - owned),
-            )
-        edges[tag] = Edges(edges[tag].kept | set(before), edges[tag].unrendered)
+            edges[name] = Edges(edges[name].kept | existing(name, wanted))
+        edges[tag] = Edges(edges[tag].kept | set(before))
         if tag + VERIFY_SUFFIX in directories:
-            # The other tags' last Kustomizations, read from `directories`: a flux-owned tag
-            # outside the render is kept by its own name, as a tag's edge onto it is.
+            # The other tags' last Kustomizations, read from `directories`: a tag outside
+            # the render is kept by its own name, as a tag's edge onto it is.
+            name = tag + VERIFY_SUFFIX
             wanted = set(ordering.verify_after.get(tag, ())) - {tag}
             after = {
                 other + DEFERRED_SUFFIX
                 if other + DEFERRED_SUFFIX in directories
                 else other
-                for other in wanted & owned
+                for other in existing(name, wanted)
             }
             last = tag + DEFERRED_SUFFIX if tag + DEFERRED_SUFFIX in edges else tag
-            edges[tag + VERIFY_SUFFIX] = Edges(
-                frozenset({last} | after), frozenset(wanted - owned)
+            edges[name] = Edges(frozenset({last} | after))
+    if unknown:
+        raise ValueError(
+            "a dependsOn edge names no k8s tag, so no Kustomization of that name exists: "
+            + "; ".join(
+                f"{name} -> {', '.join(sorted(names))}"
+                for name, names in sorted(unknown.items())
             )
+        )
     return drop_suspended(edges, ordering.suspended)
 
 
@@ -568,7 +570,7 @@ def drop_suspended(
     result = {}
     for name, edge in edges.items():
         gone = frozenset(n for n in edge.kept if is_suspended(n))
-        result[name] = Edges(edge.kept - gone, edge.unrendered, edge.suspended | gone)
+        result[name] = Edges(edge.kept - gone, edge.suspended | gone)
     return result
 
 

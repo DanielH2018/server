@@ -11,11 +11,10 @@ them. A tag counts for arm 2 whenever its
 arm 1 (docs/archive/deploy/d6-delete-old-path.md, *The render-diff gates
 after D6*).
 
-- **Arm 2, edge first.** A tag that is flux-owned at both ends gains a `dependsOn` edge, and
-  its own render moves in the same PR. A tag that becomes flux-owned in the PR is not judged:
-  its Kustomization is born with its edges, and D3's `checksum/restart` stamp moves its render
-  in the same commit, so judging it would refuse every flip.
-- **Arm 3, a dropped object (D5.1f, D6.19).** A tag flux-owned at the base loses an object of
+- **Arm 2, edge first.** A tag that is a k8s entry at both ends gains a `dependsOn` edge, and
+  its own render moves in the same PR. A tag the PR adds is not judged: its Kustomization is
+  born with its edges.
+- **Arm 3, a dropped object (D5.1f, D6.19).** A tag that is a k8s entry at the base loses an object of
   any kind from its render, or leaves the render whole, and no commit in `base..head` carries `Removes-Object:
   <kind>/<namespace>/<name>` for it (`lib/removes_object.py`). Flux would prune it while its
   Kustomization reads Ready. A rename passes: the object's kind, namespace and name, with the
@@ -91,7 +90,6 @@ LAYOUTS = (
     (Path("k8s/roles"), Path("inventory/group_vars/all.yml")),
     (Path("ansible/roles/k8s"), Path("ansible/inventory/group_vars/all.yml")),
 )
-FLUX_PLANE = "flux"
 
 
 class RenderFailed(RuntimeError):
@@ -105,8 +103,8 @@ class Snapshot:
     Attributes:
         renders: Each tag mapped to a digest of its `cluster/<tag>/` and
             `cluster/<tag>-deferred/` output. A tag the render left out is absent.
-        owners: Each k8s entry mapped to its plane. `snapshot` maps every one to `flux`.
-        deps: Each k8s entry mapped to its `build_k8s_dep_map` edges.
+        deps: Each k8s entry mapped to its `build_k8s_dep_map` edges. Its keys are every
+            tag Flux applies on that side.
         deferred: Each `<tag>-deferred` directory mapped to its files, for the namespace
             edges `kustomization_edges` derives.
         namespace_roles: Each namespace a role creates mapped to that role.
@@ -114,13 +112,12 @@ class Snapshot:
             `<kind>/<namespace>/<name>`; a per-tag kind's directory counts for `<tag>`.
         unpruned: The objects labelled or annotated `kustomize.toolkit.fluxcd.io/prune:
             disabled`.
-        digests: The render's parsed `digests.json`, or empty when no tag is flux-owned.
+        digests: The render's parsed `digests.json`, or empty when the render wrote none.
         tags: The deploy tags the render's `flux/` publishes.
         role_names: The role directories in the tree.
     """
 
     renders: Mapping[str, str]
-    owners: Mapping[str, str]
     deps: Mapping[str, Iterable[str]]
     deferred: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
@@ -130,20 +127,15 @@ class Snapshot:
     tags: Collection[str] = ()
     role_names: Collection[str] = ()
 
-    def flux_owned(self) -> frozenset[str]:
-        return frozenset(t for t, p in self.owners.items() if p == FLUX_PLANE)
-
     def depends_on(self, tag: str) -> frozenset[str]:
         """The `dependsOn` names the renderer writes for `tag` and its deferred apply."""
-        owned = self.flux_owned()
         ordering = Ordering(
             deps=self.deps,
             applies_last=frozenset(K8S_APPLIES_LAST),
             namespace_roles=self.namespace_roles,
-            flux_owned=owned,
         )
         directories = {name: {} for name in self.renders} | dict(self.deferred)
-        edges = kustomization_edges(owned, directories, ordering)
+        edges = kustomization_edges(self.deps, directories, ordering)
         return frozenset().union(
             *(edges[n].kept for n in (tag, tag + DEFERRED_SUFFIX) if n in edges)
         )
@@ -162,7 +154,7 @@ def problems(base: Snapshot, head: Snapshot) -> list[str]:
     """Arm 2's reasons the PR must be split, one line each; empty when it may land as one."""
     found = []
     for tag in sorted(counted(base, head)):
-        if tag not in base.flux_owned() or tag not in head.flux_owned():
+        if tag not in base.deps or tag not in head.deps:
             continue
         gained = head.depends_on(tag) - base.depends_on(tag)
         if gained:
@@ -182,19 +174,10 @@ def removal_problems(
         declared: The objects a `Removes-Object` line in the PR's commits declares.
     """
     declared, unpruned = set(declared), set(base.unpruned)
-    # Only what Flux applies at the head holds an object, as only that reaches `decide`'s
-    # bundle: an object moved to an Ansible-owned tag is still pruned. A shared-kind directory
-    # has no entry, so it counts.
-    held = set().union(
-        *(
-            set(idents)
-            for tag, idents in head.objects.items()
-            if head.owners.get(tag, FLUX_PLANE) == FLUX_PLANE
-        )
-    )
+    held = set().union(*(set(idents) for idents in head.objects.values()))
     held_stems = {stem(ident) for ident in held}
     found = []
-    for tag in sorted(base.flux_owned()):
+    for tag in sorted(base.deps):
         for ident in sorted(set(base.objects.get(tag, ())) - held):
             if ident in declared or ident in unpruned or stem(ident) in held_stems:
                 continue
@@ -286,7 +269,7 @@ def snapshot(
     inventory and templates.
 
     Every tag is passed with `--role`, so the render writes the publish bundle and its
-    `digests.json` for the flux-owned ones. The shared kinds' directories are left out of what
+    `digests.json`. The shared kinds' directories are left out of what
     arms 1 to 3 read, as they were before the bundle was written.
 
     Args:
@@ -352,7 +335,6 @@ def snapshot(
     objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,
-        owners=dict.fromkeys(names, FLUX_PLANE),
         deps=build_k8s_dep_map(k8s, str(roles_dir)),
         deferred={n: f for n, f in dirs.items() if n.endswith(DEFERRED_SUFFIX)},
         namespace_roles={

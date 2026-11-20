@@ -243,7 +243,6 @@ def test_decide_and_the_pr_gate_agree_on_a_dropped_prune_disabled_claim(where):
         objects, unpruned = _objects(dirs)
         return Snapshot(
             renders={"bento-pdf": str(sorted(objects["bento-pdf"]))},
-            owners={"bento-pdf": "flux"},
             deps={"bento-pdf": []},
             objects=objects,
             unpruned=unpruned,

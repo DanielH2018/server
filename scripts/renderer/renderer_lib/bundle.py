@@ -74,7 +74,6 @@ from renderer.renderer_lib.ordering import (
     SNAPSHOT_SUFFIX,
     SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
-    UNRENDERED_DEPS,
     VERIFY_SUFFIX,
     Edges,
     Ordering,
@@ -224,8 +223,8 @@ def tag_kustomization(
         decrypts: Whether the tag's role lists `render_sops_manifests`, which alone decides
             `decryption`. kustomize-controller decrypts nothing without it (D3.3c).
         edges: The generated edges (D4.2). `dependsOn` lists `edges.kept` and the
-            `cluster-vars` edge in sorted order, `UNRENDERED_DEPS` lists `edges.unrendered`
-            and `SUSPENDED_DEPS` lists `edges.suspended`; each is left out when empty.
+            `cluster-vars` edge in sorted order, and `SUSPENDED_DEPS` lists
+            `edges.suspended`; each is left out when empty.
         prune: False for a role whose defaults set `flux_prune: false` (`role_fields`).
         suspend: True for a role whose defaults set `flux_suspend: true`, the one value written.
         content: The tag's `own` digest, written as `CONTENT_DIGEST` unless None.
@@ -260,8 +259,9 @@ def tag_kustomization(
     if health_check_exprs:
         spec["healthCheckExprs"] = health_check_exprs
     metadata: dict = {"name": tag, "namespace": FLUX_NAMESPACE}
-    annotations = {UNRENDERED_DEPS: edges.unrendered, SUSPENDED_DEPS: edges.suspended}
-    annotations = {k: ",".join(sorted(v)) for k, v in annotations.items() if v}
+    annotations = {}
+    if edges.suspended:
+        annotations[SUSPENDED_DEPS] = ",".join(sorted(edges.suspended))
     if content is not None:
         annotations[CONTENT_DIGEST] = content
     if annotations:
