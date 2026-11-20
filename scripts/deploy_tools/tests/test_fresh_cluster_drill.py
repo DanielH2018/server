@@ -10,7 +10,7 @@ import tarfile
 import pytest
 import yaml
 from lib import yaml_fast
-import fresh_cluster_drill as fresh
+from deploy_tools import fresh_cluster_drill as fresh
 
 DIGEST = "sha256:" + "a" * 64
 OTHER = "sha256:" + "b" * 64

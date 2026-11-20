@@ -6,7 +6,7 @@ digests, plus `_unclassified`.
 Run: uv run pytest scripts/deploy_tools/tests/test_changed_set.py
 """
 
-from changed_set import UNCLASSIFIED, changed_set
+from deploy_tools.changed_set import UNCLASSIFIED, changed_set
 
 GRAPH = {"homelab": [], "bento-pdf": [], "sonarr": [], "cluster-vars": []}
 

@@ -23,7 +23,7 @@ HOMEPAGE_APP = "homepage"
 
 def _entry(containers_list, name):
     for entry in containers_list or []:
-        if isinstance(entry, dict) and entry.get("name") == name:
+        if entry["name"] == name:
             return entry
     raise ValueError(f"no containers_list entry is named {name!r}")
 
@@ -50,7 +50,7 @@ def netpol_caller_fences(containers_list):
     entry, unless the item sets `role_owned`. Returning the fences rather than the entries
     lets the deploy narrowing name the fields the template reads (#4395).
     """
-    entries = [e for e in containers_list or [] if isinstance(e, dict)]
+    entries = containers_list or []
     fences = []
     for entry in entries:
         callers = netpol_callers(entry)

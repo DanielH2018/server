@@ -19,10 +19,7 @@ not its own `Closes #N` line, because GitHub closes the issue such a line names.
 """
 
 import re
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import JsonObject, as_object, as_object_list
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import Landing

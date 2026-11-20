@@ -55,7 +55,6 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
     START_GRACE_S,
     alive,
