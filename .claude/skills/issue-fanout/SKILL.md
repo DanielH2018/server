@@ -370,7 +370,10 @@ text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held 
 `needs-input` and carries its PR URL. A clean finish without a PR URL reads `no-pr`. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
-unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
+unless another batch exits 1 or 5; `place.py`'s docstring has every tier. When GitHub cannot be
+asked for a batch's PR, the batch keeps its state and the PR URL its final text names, and the
+count line names it (`…; GitHub could not be asked for the PR of <batch>`); the row's
+`pr_unconfirmed` is true under `--json`. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
 PR from this session with `land.sh`. A daniel-server batch whose PR the server lander holds
 for a person or for you reads `needs-input: the server lander will not land #N`, with the
 next step and the lander's ruling (`scripts/dev/fanout_lib/status.py:with_lander_verdict`).

@@ -8,6 +8,11 @@ them.
 A text that names a PR while GitHub holds none for the branch is a defect to report, not a PR
 to review: `OwnPr.problem` says so, and both callers end `needs input:` on it.
 
+A read GitHub did not answer sets `problem` too, and `OwnPr.unanswered` with it. The pipeline
+still ends `needs input:` there, because it reviews and lands no PR it cannot confirm.
+`status` leaves the batch as its final text reads, because a failed read says nothing about
+the batch.
+
 A closed PR that never merged is no batch's own. `fanout.py place abandon` leaves the remote
 branch and its closed PR behind, a relaunch reuses the branch name, and the closed PR's old CI
 then read as the new batch's. `parse_branch_prs` drops such PRs and lists an open PR
@@ -120,10 +125,12 @@ class OwnPr:
         url: the PR GitHub holds for the branch, "" when there is none to use.
         problem: why a PR the text names is not the branch's, "" when nothing conflicts.
             Set only when `url` is empty.
+        unanswered: GitHub could not be asked, so `problem` describes the read, not the batch.
     """
 
     url: str = ""
     problem: str = ""
+    unanswered: bool = False
 
 
 def own_pr(
@@ -145,7 +152,7 @@ def own_pr(
         The branch's PR when it has one: the one the text names when it names one of them, else
         the newest. An empty `OwnPr` when the text names no PR, or only `earlier` ones, which
         the caller reads as `no-pr`. A `problem` when the text names any other PR and the
-        branch has none.
+        branch has none, marked `unanswered` when `branch_prs` is None.
     """
     named = list(dict.fromkeys(PR_URL.findall(text)))
     if not named:
@@ -161,7 +168,10 @@ def own_pr(
         why = f"branch {branch} holds only {', '.join(earlier)}, from an earlier launch"
     else:
         why = f"branch {branch} has no open or merged PR on GitHub"
-    return OwnPr(problem=f"the final text names {', '.join(named)}, but {why}")
+    return OwnPr(
+        problem=f"the final text names {', '.join(named)}, but {why}",
+        unanswered=branch_prs is None,
+    )
 
 
 def worktree_own_pr(

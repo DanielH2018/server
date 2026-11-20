@@ -716,7 +716,10 @@ report, unless the lander has started a landing of the PR. Past that, `place sta
 `needs-input: the server lander has not taken #N in 30 minutes`, and the coordinator runs
 `probe.py lander` and lands the PR. A landing the lander started ends in its own
 `LAND-RESULT:` line, which `status` reads. `place runs` does not apply the bound, because it
-never asks GitHub whether the PR merged.
+never asks GitHub whether the PR merged. `place status` does not apply it either on a poll
+where GitHub could not be asked for the batch's PR. That batch keeps its state and the PR
+URL its final text names, the count line names it, and its `status --json` row carries
+`pr_unconfirmed`.
 
 `cc-wait fanout` stays `running` while a batch awaits the lander, and its detail counts
 those batches. The row `status --json` prints carries `awaiting_lander`, which is the field
