@@ -7,10 +7,10 @@ tells the workflow.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_selection.py
 """
 
-import affected_tests
+from dev import affected_tests
 import pytest
-import pytest_shard
-from affected_lib import table
+from dev import pytest_shard
+from dev.affected_lib import table
 
 from lib.git_testing import commit, init_repo
 

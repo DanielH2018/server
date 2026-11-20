@@ -9,14 +9,10 @@ imports any other module here.
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
-from fanout_lib.review.review import STATE_DIR, Pipeline
-from fanout_lib.review.review_land import LAND_SH, VERDICT_LINE, login
-from fanout_lib.review.review_record import (
+from dev.fanout_lib.review.review import STATE_DIR, Pipeline
+from dev.fanout_lib.review.review_land import LAND_SH, VERDICT_LINE, login
+from dev.fanout_lib.review.review_record import (
     CONFIDENCE_FLOOR,
     RECORD_NAME,
     SAVED_FORMAT,

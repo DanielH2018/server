@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-import repo_guards
+from dev import repo_guards
 from lib.proc_testing import fake_bin, run
 from lib.repo_paths import REPO
 

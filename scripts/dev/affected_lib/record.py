@@ -16,13 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Reach `scripts/dev` and `scripts/lib`: a directly-invoked script gets only its own directory on sys.path.
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from affected_lib import trace, traced_pytest
-from affected_lib.table import Row, Table, parent_dirs, tracked_blobs
+from dev.affected_lib import trace, traced_pytest
+from dev.affected_lib.table import Row, Table, parent_dirs, tracked_blobs
 from lib.git import git
 
 # A module's run under the trace. The heaviest module takes about 90s untraced on a CI runner.

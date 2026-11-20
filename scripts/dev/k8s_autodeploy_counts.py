@@ -21,7 +21,6 @@ from collections.abc import Sequence
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.repo_paths import K8S_ROLES
 
 from lib import yaml_fast

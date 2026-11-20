@@ -26,7 +26,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from gen_hook_settings import GUARD_SUFFIX
+from dev.gen_hook_settings import GUARD_SUFFIX
 from test_run_hook import _variant_runner
 
 from lib.proc_testing import write_exec

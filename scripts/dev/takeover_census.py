@@ -50,10 +50,8 @@ proves nothing, so it never passes.
 
 # `diagnostics` lives beside `dev` under `scripts/`, and a directly-run script gets only its own
 # directory on sys.path. This has to sit ABOVE the imports below.
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import json
 import sys

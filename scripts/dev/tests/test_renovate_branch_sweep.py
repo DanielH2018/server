@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 from lib.exit_codes import USAGE_ERROR
-from renovate_branch_sweep import (
+from dev.renovate_branch_sweep import (
     DASHBOARD_TITLE,
     NoDashboard,
     dashboard_body,

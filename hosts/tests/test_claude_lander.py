@@ -19,7 +19,7 @@ import pytest
 from _helpers import REPO
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import handoff, options, policy
-from fanout_lib.target import branch_name
+from dev.fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env

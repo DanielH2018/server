@@ -16,19 +16,14 @@ from datetime import UTC, datetime
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-# `scripts/lib` sits two levels up, for `lib.cli_help`.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib import manifest as manifest_mod
-from fanout_lib import status as status_mod
-from fanout_lib.clean import busy_refusal, live_process_scan, read_clean_result
-from fanout_lib.manifest import Batch, Manifest
-from fanout_lib.target import SERVER_TARGET, Target, resolve
-from fanout_lib.transport import Tools
+from dev.fanout_lib import manifest as manifest_mod
+from dev.fanout_lib import status as status_mod
+from dev.fanout_lib.clean import busy_refusal, live_process_scan, read_clean_result
+from dev.fanout_lib.manifest import Batch, Manifest
+from dev.fanout_lib.target import SERVER_TARGET, Target, resolve
+from dev.fanout_lib.transport import Tools
 from lib.cli_help import error
 
 

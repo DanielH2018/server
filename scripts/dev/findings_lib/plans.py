@@ -7,11 +7,8 @@ prints what these return; `gh_calls.run` is the only thing that executes them.
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from datetime import date
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from collections.abc import Mapping
 

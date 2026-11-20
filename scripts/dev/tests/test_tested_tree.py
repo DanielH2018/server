@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-import tested_tree
+from dev import tested_tree
 from lib.git_testing import commit, git, git_out, init_repo
 
 REPO_NAME = "o/r"

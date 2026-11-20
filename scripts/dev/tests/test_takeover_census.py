@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-import takeover_census as tc
+from dev import takeover_census as tc
 
 RESTARTED_AT = "spec.template.metadata.annotations.kubectl.kubernetes.io/restartedAt"
 LAST_APPLIED = "metadata.annotations.kubectl.kubernetes.io/last-applied-configuration"

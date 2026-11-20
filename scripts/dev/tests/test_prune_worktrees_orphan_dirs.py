@@ -18,7 +18,7 @@ import os
 import subprocess
 from pathlib import Path
 
-import prune_worktrees
+from dev import prune_worktrees
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
 from lib.worktree_testing import ignore_foreign_slice_holds
 

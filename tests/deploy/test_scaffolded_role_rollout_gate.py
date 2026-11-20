@@ -7,7 +7,7 @@ scaffolded role rather than restating its regex.
 
 from pathlib import Path
 
-import new_k8s_service as scaffold
+from dev import new_k8s_service as scaffold
 from _autodeploy import _deployment_templates
 from _autodeploy_rollout import _primary_rollout_name, _ungated_deployments
 

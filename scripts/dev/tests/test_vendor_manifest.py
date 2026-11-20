@@ -7,7 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_vendor_manifest.py
 
 import hashlib
 
-from vendor_manifest import main, removed_objects
+from dev.vendor_manifest import main, removed_objects
 
 OLD = b"""\
 apiVersion: policy/v1beta1

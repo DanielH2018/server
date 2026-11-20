@@ -25,7 +25,7 @@ from lib.git_testing import (
 from lib.proc_testing import run
 from lib.worktree_testing import ignore_foreign_slice_holds
 from lib.worktrees import REMOVABLE, Worktree
-from prune_worktrees import (
+from dev.prune_worktrees import (
     delete_branch,
     find_orphan_dirs,
     landed_orphan_branches,
@@ -94,14 +94,15 @@ def _main_recording_removals(monkeypatch, tmp_path, argv, removable=2, removes=T
         )
         for i in range(removable)
     ]
-    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: repo)
+    monkeypatch.setattr("dev.prune_worktrees.primary_checkout", lambda: repo)
     monkeypatch.setattr(
-        "prune_worktrees.survey", lambda repo: [(REMOVABLE, t, "merged") for t in trees]
+        "dev.prune_worktrees.survey",
+        lambda repo: [(REMOVABLE, t, "merged") for t in trees],
     )
-    monkeypatch.setattr("prune_worktrees.find_orphan_dirs", lambda *a, **k: [])
-    monkeypatch.setattr("prune_worktrees.parse_worktree_list", lambda porcelain: [])
-    monkeypatch.setattr("prune_worktrees.git_stdout", lambda *a, **k: "")
-    monkeypatch.setattr("prune_worktrees.remove", fake_remove)
+    monkeypatch.setattr("dev.prune_worktrees.find_orphan_dirs", lambda *a, **k: [])
+    monkeypatch.setattr("dev.prune_worktrees.parse_worktree_list", lambda porcelain: [])
+    monkeypatch.setattr("dev.prune_worktrees.git_stdout", lambda *a, **k: "")
+    monkeypatch.setattr("dev.prune_worktrees.remove", fake_remove)
     return main(argv), removed, trees
 
 

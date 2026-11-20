@@ -17,16 +17,11 @@ Usage::
 
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.api import CONFIDENCE_FLOOR, STATE_DIR
+from dev.fanout_lib.review.api import CONFIDENCE_FLOOR, STATE_DIR
 from lib.cli_help import ArgumentParser
 
 # `<batch>-<YYYYMMDDTHHMMSSZ>.json`, as `Pipeline._save` names a record.

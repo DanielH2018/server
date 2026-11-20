@@ -10,11 +10,7 @@ from functools import partial
 
 # Reach the sibling package and `lib` (scripts/): a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.exit_codes import (
     FANOUT_PLACE_BATCH_FAILED,
@@ -23,14 +19,14 @@ from lib.exit_codes import (
     FANOUT_PLACE_UNREAD,
 )
 from deploy_tools.land_lib.detach import result_fields
-from fanout_lib import operator_waits
-from fanout_lib.branch_pr import PR_URL, own_pr
-from fanout_lib.brief import LANDS, lands
-from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
-from fanout_lib.manifest import Batch, Manifest
-from fanout_lib.transport import Tools
-from fanout_lib.target import SERVER
-from fanout_lib.unit_state import unit_props_command
+from dev.fanout_lib import operator_waits
+from dev.fanout_lib.branch_pr import PR_URL, own_pr
+from dev.fanout_lib.brief import LANDS, lands
+from dev.fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
+from dev.fanout_lib.manifest import Batch, Manifest
+from dev.fanout_lib.transport import Tools
+from dev.fanout_lib.target import SERVER
+from dev.fanout_lib.unit_state import unit_props_command
 
 STATUS_TIMEOUT_S = 30.0
 # The line a session ends with when it cannot finish: the brief's *Finishing* section names

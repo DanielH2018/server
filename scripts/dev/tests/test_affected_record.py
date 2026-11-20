@@ -7,7 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_affected_record.py
 """
 
 import pytest
-from affected_lib import record, table, trace, traced_pytest
+from dev.affected_lib import record, table, trace, traced_pytest
 
 from _helpers import REPO
 

@@ -10,15 +10,13 @@ from dataclasses import dataclass, field
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import ISSUES_HEADING
-from fanout_lib.review.review_prompts import is_held
-from fanout_lib.sizing import DEFAULT, REVIEWER, Rung
-from fanout_lib.status import BLOCKER, NO_PR
+from dev.fanout_lib.brief import ISSUES_HEADING
+from dev.fanout_lib.review.review_prompts import is_held
+from dev.fanout_lib.sizing import DEFAULT, REVIEWER, Rung
+from dev.fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 # DECIDED: 0.5, not 0.6 (#3675). Judged against 86 batches' records, 5 of the 6 medium findings

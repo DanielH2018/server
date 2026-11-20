@@ -153,7 +153,7 @@ def test_every_contract_key_is_a_tracked_file():
 
 def test_the_place_docstring_lists_every_code_its_contract_declares():
     """`fanout.py place --help` prints the docstring, so a code missing from it is unexplained."""
-    from fanout_lib import place
+    from dev.fanout_lib import place
 
     doc = place.__doc__ or ""
     missing = [

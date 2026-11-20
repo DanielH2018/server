@@ -8,10 +8,10 @@ import os
 
 import pytest
 
-from fanout_lib import headroom_probe, launch_lock
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main as place_main
+from dev.fanout_lib import headroom_probe, launch_lock
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main as place_main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 GIB = 1024**3

@@ -16,9 +16,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
-from fanout_lib import status
-from fanout_lib.brief import render_brief
-from findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib import status
+from dev.fanout_lib.brief import render_brief
+from dev.findings_lib.issue_model import Issue, IssueState
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fanout-stop.py"

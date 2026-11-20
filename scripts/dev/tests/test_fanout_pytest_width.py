@@ -9,9 +9,9 @@ import shlex
 
 import pytest
 from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.launch import systemd_run_command
-from fanout_lib.review.held_hooks import PYTEST_WORKERS_ENV, pytest_workers
-from fanout_lib.target import Target
+from dev.fanout_lib.launch import systemd_run_command
+from dev.fanout_lib.review.held_hooks import PYTEST_WORKERS_ENV, pytest_workers
+from dev.fanout_lib.target import Target
 
 
 @pytest.mark.parametrize(

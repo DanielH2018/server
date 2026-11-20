@@ -25,7 +25,7 @@ Run: uv run pytest tests/repo/test_pytest_shards_partition_the_suite.py
 import re
 
 import pytest
-import pytest_shard
+from dev import pytest_shard
 from _helpers import REPO
 from lib import yaml_fast
 

@@ -5,9 +5,9 @@ Run: uv run pytest scripts/dev/tests/test_fanout_batch_caps.py
 
 import shlex
 
-from fanout_lib.launch import BATCH_MEMORY_MAX, systemd_run_command
-from fanout_lib.placement import RESERVATION_BYTES
-from fanout_lib.target import Target
+from dev.fanout_lib.launch import BATCH_MEMORY_MAX, systemd_run_command
+from dev.fanout_lib.placement import RESERVATION_BYTES
+from dev.fanout_lib.target import Target
 
 DOTFILES = Target("DanielH2018/dotfiles", "/srv/dotfiles", "origin/main")
 

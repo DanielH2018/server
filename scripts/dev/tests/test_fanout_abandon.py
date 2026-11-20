@@ -14,17 +14,17 @@ import subprocess
 from functools import partial
 from unittest import mock
 
-from fanout_lib import abandon
-from fanout_lib.abandon import remote_abandon_command
-from fanout_lib.clean import live_process_scan
-from fanout_lib.manifest import (
+from dev.fanout_lib import abandon
+from dev.fanout_lib.abandon import remote_abandon_command
+from dev.fanout_lib.clean import live_process_scan
+from dev.fanout_lib.manifest import (
     Batch,
     Manifest,
     path as manifest_path,
     retired_path,
     save,
 )
-from fanout_lib.place import main
+from dev.fanout_lib.place import main
 from lib.git_testing import git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
 from _fanout_fakes import fake_tools, ok

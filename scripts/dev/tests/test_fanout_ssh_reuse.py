@@ -5,10 +5,10 @@ Run: uv run pytest scripts/dev/tests/test_fanout_ssh_reuse.py
 
 import os
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.place import main
-from fanout_lib import headroom_probe, wait_probe
-from fanout_lib.transport import MUX_PERSIST_S, SSH_OPTS, _argv, control_dir
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.place import main
+from dev.fanout_lib import headroom_probe, wait_probe
+from dev.fanout_lib.transport import MUX_PERSIST_S, SSH_OPTS, _argv, control_dir
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"

@@ -257,11 +257,11 @@ def test_tighten_ratchets_inserts_the_tests_directory_through_its_repo_paths_con
 
 def test_the_declared_fanout_units_are_the_commands_the_builders_write():
     # FANOUT_UNITS copies two command lines built in Python; this keeps the copy honest.
-    from fanout_lib.clean import remote_clean_command
-    from fanout_lib.launch import review_command
-    from fanout_lib.manifest import Batch
-    from fanout_lib.notify import stop_post
-    from fanout_lib.target import SERVER_TARGET
+    from dev.fanout_lib.clean import remote_clean_command
+    from dev.fanout_lib.launch import review_command
+    from dev.fanout_lib.manifest import Batch
+    from dev.fanout_lib.notify import stop_post
+    from dev.fanout_lib.target import SERVER_TARGET
     from lib.stdlib_only import FANOUT_UNITS
 
     written = [
@@ -293,12 +293,12 @@ def _unrooted(text: str) -> list[str]:
 
 def _launchers() -> dict[str, str]:
     """Every launcher of a no-venv entry point, as the command text it runs."""
-    from fanout_lib.clean import remote_clean_command
-    from fanout_lib.launch import review_command
-    from fanout_lib.manifest import Batch
-    from fanout_lib.notify import stop_post
-    from fanout_lib.session_banner import HEALTH_CMD
-    from fanout_lib.target import SERVER_TARGET
+    from dev.fanout_lib.clean import remote_clean_command
+    from dev.fanout_lib.launch import review_command
+    from dev.fanout_lib.manifest import Batch
+    from dev.fanout_lib.notify import stop_post
+    from dev.fanout_lib.session_banner import HEALTH_CMD
+    from dev.fanout_lib.target import SERVER_TARGET
     from lib.stdlib_only import WAIT_SOURCES
 
     batch = Batch("1", "daniel-box", "/w1", "wt-1", "fanout-1", [1], "t")
@@ -350,10 +350,10 @@ def test_every_launcher_holds_a_line_the_root_check_reads():
 
 
 def test_the_fanout_launchers_name_the_scripts_of_the_copy_they_run():
-    from fanout_lib.brief import _snapshot_root
-    from fanout_lib.launch import review_command, worktree_path
-    from fanout_lib.notify import stop_post
-    from fanout_lib.target import SERVER_TARGET, Target
+    from dev.fanout_lib.brief import _snapshot_root
+    from dev.fanout_lib.launch import review_command, worktree_path
+    from dev.fanout_lib.notify import stop_post
+    from dev.fanout_lib.target import SERVER_TARGET, Target
 
     other = Target("DanielH2018/dotfiles", "/c", "origin/main")
     assert f"PYTHONPATH={worktree_path('1')}/scripts " in review_command("1")
@@ -368,7 +368,7 @@ def test_the_review_unit_leaves_its_phases_no_launcher_pythonpath(
     tmp_path, monkeypatch
 ):
     # The review unit is the one no-venv entry whose children run in other checkouts.
-    from fanout_lib import review_unit
+    from dev.fanout_lib import review_unit
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PYTHONPATH", "/w1/scripts")

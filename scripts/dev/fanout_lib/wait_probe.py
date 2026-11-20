@@ -39,16 +39,11 @@ import io
 import json
 import sys
 from collections.abc import Callable
-from pathlib import Path
 
-# Reach `fanout_lib` (scripts/dev) and `lib` (scripts/): a directly-invoked script gets only
-# its own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib import manifest as manifest_mod
-from fanout_lib import place
-from fanout_lib.status import UNREAD, exit_tier
+from dev.fanout_lib import manifest as manifest_mod
+from dev.fanout_lib import place
+from dev.fanout_lib.status import UNREAD, exit_tier
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
 from lib.exit_codes import FANOUT_PLACE_BATCH_FAILED, FANOUT_PLACE_OK
 

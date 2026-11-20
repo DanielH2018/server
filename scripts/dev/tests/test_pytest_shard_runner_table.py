@@ -11,10 +11,10 @@ import json
 import subprocess
 
 import pytest
-import pytest_shard
-import shard_prebuild
-import shard_weight_gate
-import tested_tree
+from dev import pytest_shard
+from dev import shard_prebuild
+from dev import shard_weight_gate
+from dev import tested_tree
 from lib.git import git
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]

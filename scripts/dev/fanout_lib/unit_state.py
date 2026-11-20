@@ -14,12 +14,9 @@ from collections.abc import Sequence
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.manifest import Batch
+from dev.fanout_lib.manifest import Batch
 
 # A line of its own between the headroom reply and the unit blocks. It cannot start with
 # `=== `, which opens each batch's block, and no signing-key line begins with `--- `.

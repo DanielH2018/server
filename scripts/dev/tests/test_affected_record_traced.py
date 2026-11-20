@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from affected_lib import record, table
+from dev.affected_lib import record, table
 
 from _helpers import REPO
 

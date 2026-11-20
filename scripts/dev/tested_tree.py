@@ -57,7 +57,6 @@ from collections.abc import Callable
 from typing import Any
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.tree_stack import Conflict, stack

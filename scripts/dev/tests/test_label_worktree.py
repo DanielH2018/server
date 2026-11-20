@@ -1,6 +1,6 @@
 import subprocess
 
-from label_worktree import main
+from dev.label_worktree import main
 from lib.git_testing import init_repo
 from lib.worktree_label import read_label
 

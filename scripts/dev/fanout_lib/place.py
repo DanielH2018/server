@@ -67,29 +67,22 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 import argparse
 import dataclasses
 import json
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. `scripts/dev`
-# holds `fanout_lib` and `findings_lib`, and `scripts` holds `lib`. Both are relative to THIS
-# file, so a batch worktree's copy imports that worktree's own tree (see `fanout_lib.clean`).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib import claims as claims_mod
-from fanout_lib.abandon import cmd_abandon, cmd_stop
-from fanout_lib import launch as launch_mod
-from fanout_lib import launch_lock
-from fanout_lib import manifest as manifest_mod
-from fanout_lib import signing as signing_mod
-from fanout_lib import sizing
-from fanout_lib import status as status_mod
-from fanout_lib.status_view import one_line, runs_lines, status_lines
-from fanout_lib.brief import render_brief
-from findings_lib.tracked_paths import tracked_files
-from fanout_lib.launch_gates import (
+from dev.fanout_lib import claims as claims_mod
+from dev.fanout_lib.abandon import cmd_abandon, cmd_stop
+from dev.fanout_lib import launch as launch_mod
+from dev.fanout_lib import launch_lock
+from dev.fanout_lib import manifest as manifest_mod
+from dev.fanout_lib import signing as signing_mod
+from dev.fanout_lib import sizing
+from dev.fanout_lib import status as status_mod
+from dev.fanout_lib.status_view import one_line, runs_lines, status_lines
+from dev.fanout_lib.brief import render_brief
+from dev.findings_lib.tracked_paths import tracked_files
+from dev.fanout_lib.launch_gates import (
     batch_paths,
     fetch_issues,
     live_elsewhere,
@@ -113,10 +106,10 @@ from lib.exit_codes import (
     FANOUT_PLACE_PARTLY_LAUNCHED,
 )
 from lib.git import git
-from fanout_lib.session_banner import health_lines
-from fanout_lib.placement import HostReading, NoHeadroom, place
-from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
-from fanout_lib.transport import (
+from dev.fanout_lib.session_banner import health_lines
+from dev.fanout_lib.placement import HostReading, NoHeadroom, place
+from dev.fanout_lib.target import SERVER, for_launch, registered_repos, resolve
+from dev.fanout_lib.transport import (
     HOSTS,
     Tools,
     this_host,
@@ -450,10 +443,10 @@ def cmd_clean_one(
     """
     import functools
 
-    from fanout_lib.clean import clean_one as default_clean
-    from fanout_lib.clean import delete_branch as default_brancher
-    from fanout_lib.clean import lock as default_locker
-    from fanout_lib.clean import unlock as default_unlocker
+    from dev.fanout_lib.clean import clean_one as default_clean
+    from dev.fanout_lib.clean import delete_branch as default_brancher
+    from dev.fanout_lib.clean import lock as default_locker
+    from dev.fanout_lib.clean import unlock as default_unlocker
     from lib.worktrees import is_dirty, is_merged, parse_worktree_list, remove
 
     target = resolve(args.repo)
@@ -498,7 +491,7 @@ def cmd_clean(args, tools: Tools) -> int:
     Exits 1 when a leg reached no verdict, because a kept tree and an unreachable host need
     opposite things from the operator.
     """
-    from fanout_lib.clean import clean_run
+    from dev.fanout_lib.clean import clean_run
 
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
     kept, failed = clean_run(run, tools, args.manifest_root)

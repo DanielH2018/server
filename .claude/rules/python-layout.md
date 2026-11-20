@@ -12,18 +12,19 @@ This file is what you need while placing a file, plus the rules every new check 
 long form, with the measurements and the incidents behind each rule, is
 `docs/python-code-organization.md`.
 
-## Import from the installed root, and bootstrap only a bare sibling
+## Import dotted from the installed root
 
 `scripts/` is the import root (`docs/adr/0039-scripts-is-installed-in-place.md`). In a venv
 the editable install's `.pth` supplies it, and outside one the launcher's `PYTHONPATH` does.
-So a dotted import from the root (`from lib.git import git`, `from deploy_tools.land_lib import
-policy`) needs no insert.
+So every import of a module under `scripts/` is dotted from the root (`from lib.git import
+git`, `from dev.fanout_lib import place`, `from deploy_tools.land_lib import policy`) and needs
+no insert. That holds inside a module's own directory too: `from dev import prune_worktrees`,
+never `import prune_worktrees`. One file imported under two names is two module objects, so a
+test that patches one leaves the other untouched.
 
-A bare import of a sibling in another directory (`import fanout_lib` from outside
-`scripts/dev/`) still needs the module's own aliased insert of that directory until slice 3 of
-the scripts packaging milestone qualifies its area. `pythonpath` in `pyproject.toml` is a
-pytest setting, so pytest resolving it proves nothing about the cron or hook that runs it.
-`scripts/tests/test_script_bootstraps_present.py` flags a missing insert.
+`pythonpath` in `pyproject.toml` is a pytest setting, so pytest resolving a bare import
+proves nothing about the cron or hook that runs it.
+`scripts/tests/test_script_bootstraps_present.py` flags a bare import with no insert behind it.
 
 A module that imports `host_lib`, `ci_verdict`, `builder_ci_grade`, `gh_quota` or a role module
 `scripts/lib/repo_paths.py:ROLE_MODULES` lists by bare name imports `lib.host_modules` first

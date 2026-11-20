@@ -8,7 +8,7 @@ import (#4271), and one that reaches `hosts/lib` crashed `probe.py` (#8878).
 import shutil
 import sys
 
-from fanout_lib.launch import SNAPSHOT_PATHS
+from dev.fanout_lib.launch import SNAPSHOT_PATHS
 from lib.proc_testing import run as run_proc
 from lib.repo_paths import REPO
 

@@ -25,9 +25,9 @@ Run: uv run pytest hosts/tests/test_docs_refresh_records_shard_weights.py
 import re
 
 import pytest
-import pytest_shard
-from affected_lib import record as affected_record
-from affected_lib import table as affected_table
+from dev import pytest_shard
+from dev.affected_lib import record as affected_record
+from dev.affected_lib import table as affected_table
 
 from _helpers import REPO
 from lib import yaml_fast

@@ -26,15 +26,12 @@ re-lands it after `cc-wait landing-clear`.
 """
 
 import subprocess
-import sys as _sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/dev
-_sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # scripts/
 from deploy_tools.land_lib.detach import result_fields, result_in
-from fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
+from dev.fanout_lib.land_result import FINISHED_VERDICTS, VERDICT_LINE, park_line
 
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 # The verdicts after which an apply is owed or the deploy needs a look. The landing is

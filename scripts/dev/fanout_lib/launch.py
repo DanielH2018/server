@@ -8,18 +8,16 @@ from datetime import UTC, datetime
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.manifest import Batch
-from fanout_lib.notify import stop_post
-from fanout_lib.placement import RESERVATION_BYTES
-from fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
-from fanout_lib.sizing import DEFAULT, Rung
-from fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
-from fanout_lib.transport import REPO, Tools
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.notify import stop_post
+from dev.fanout_lib.placement import RESERVATION_BYTES
+from dev.fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
+from dev.fanout_lib.sizing import DEFAULT, Rung
+from dev.fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
+from dev.fanout_lib.transport import REPO, Tools
 
 LAUNCH_TIMEOUT_S = 120.0
 # The early-stop paragraph from Anthropic's Opus 5.5 guide (*Unattended agentic runs*),

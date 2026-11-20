@@ -6,8 +6,8 @@ pack against it, so the projected legs finish together.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_prebuild.py
 """
 
-import pytest_shard
-import shard_prebuild
+from dev import pytest_shard
+from dev import shard_prebuild
 import render_share
 from lib.git import git
 from lib.repo_paths import REPO

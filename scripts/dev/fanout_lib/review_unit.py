@@ -16,15 +16,11 @@ import sys
 from typing import TextIO
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.api import Pipeline
-from fanout_lib.sizing import DEFAULT, LADDER, by_name
-from fanout_lib.target import resolve
-from fanout_lib.transport import this_host
+from dev.fanout_lib.review.api import Pipeline
+from dev.fanout_lib.sizing import DEFAULT, LADDER, by_name
+from dev.fanout_lib.target import resolve
+from dev.fanout_lib.transport import this_host
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 

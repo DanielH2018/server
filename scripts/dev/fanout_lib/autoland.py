@@ -60,22 +60,18 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.boundaries import FindingsTools
 from dev.findings_lib.gh_calls import load_issues
 from dev.findings_lib.issue_model import Issue
-from fanout_lib import operator_waits, own_surface
+from dev.fanout_lib import operator_waits, own_surface
 from deploy_tools.land_lib.detach import result_fields
-from fanout_lib.clean import sweep_runs
-from fanout_lib.land_result import another_has_it
-from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
-from fanout_lib.review.api import LAND_SH, VERDICT_LINE, login
-from fanout_lib.target import SERVER, SERVER_CHECKOUT
-from fanout_lib.transport import Tools
+from dev.fanout_lib.clean import sweep_runs
+from dev.fanout_lib.land_result import another_has_it
+from dev.fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
+from dev.fanout_lib.review.api import LAND_SH, VERDICT_LINE, login
+from dev.fanout_lib.target import SERVER, SERVER_CHECKOUT
+from dev.fanout_lib.transport import Tools
 from lib.cli_help import ArgumentParser
 from lib.gh import gh
 from lib.git import git

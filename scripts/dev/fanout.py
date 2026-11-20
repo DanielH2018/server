@@ -21,22 +21,18 @@ so no other command's imports may reach them.
 import argparse
 import importlib
 import sys
-from pathlib import Path
 
-# Reach `lib` (scripts/): a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import USAGE_ERROR
 
 COMMANDS = {
-    "place": "fanout_lib.place",
-    "probe": "fanout_lib.wait_probe",
-    "headroom": "fanout_lib.headroom_probe",
-    "review": "fanout_lib.review_unit",
-    "stats": "fanout_lib.review_stats",
-    "land-server": "fanout_lib.autoland",
+    "place": "dev.fanout_lib.place",
+    "probe": "dev.fanout_lib.wait_probe",
+    "headroom": "dev.fanout_lib.headroom_probe",
+    "review": "dev.fanout_lib.review_unit",
+    "stats": "dev.fanout_lib.review_stats",
+    "land-server": "dev.fanout_lib.autoland",
 }
 
 _HELP = {

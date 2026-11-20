@@ -14,10 +14,7 @@ Exit codes: 0 the table printed, even an empty one; 1 the log is unreadable.
 
 import re
 import sys
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from pathlib import Path
 

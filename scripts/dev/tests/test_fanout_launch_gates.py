@@ -12,10 +12,10 @@ from concurrent.futures import ThreadPoolExecutor, wait
 
 import pytest
 
-from fanout_lib import launch_lock
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.place import main
+from dev.fanout_lib import launch_lock
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 # Roomy on both planes and holding a registered key, so a refusal here comes from a gate

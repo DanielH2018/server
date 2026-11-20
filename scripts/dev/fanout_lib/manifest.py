@@ -8,12 +8,10 @@ from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.sizing import DEFAULT
-from fanout_lib.target import SERVER
+from dev.fanout_lib.sizing import DEFAULT
+from dev.fanout_lib.target import SERVER
 
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
 # Where `retire` moves a run whose every batch is removed. A subdirectory, so the

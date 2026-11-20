@@ -26,13 +26,11 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import _snapshot_root, _worktree_path
-from fanout_lib.manifest import Batch
-from fanout_lib.target import HEADLESS_PYTHON, Target, branch_name
-from fanout_lib.status import (
+from dev.fanout_lib.brief import _snapshot_root, _worktree_path
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.target import HEADLESS_PYTHON, Target, branch_name
+from dev.fanout_lib.status import (
     NEEDS_INPUT,
     NO_PR,
     NO_REPORT,
@@ -42,7 +40,7 @@ from fanout_lib.status import (
     parse_status,
     reconciled,
 )
-from fanout_lib.transport import merged_pr_url, this_host
+from dev.fanout_lib.transport import merged_pr_url, this_host
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import OK
 

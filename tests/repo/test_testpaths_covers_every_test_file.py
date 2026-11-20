@@ -26,7 +26,7 @@ passing side alone.
 import tomllib
 from pathlib import PurePosixPath
 
-import pytest_shard
+from dev import pytest_shard
 from _helpers import REPO
 from lib.proc_testing import run
 

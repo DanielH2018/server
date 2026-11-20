@@ -24,12 +24,7 @@ Typical usage example:
 """
 
 import sys as _sys
-from pathlib import Path as _Path
 
-# `scripts` for the `lib.yaml_fast` import `_helpers` makes, and `tests` for
-# `_ratchet_census` and `_ratchet` themselves. Both are pytest `pythonpath` entries, which a
-# direct invocation never reads.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.repo_paths import TESTS
 
 _sys.path.insert(0, str(TESTS))
