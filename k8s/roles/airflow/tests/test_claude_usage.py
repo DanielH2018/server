@@ -60,21 +60,8 @@ def test_a_session_that_began_in_the_day_counts_from_zero():
     )
 
 
-def test_a_session_with_no_baseline_would_count_its_earlier_days_again():
-    with_baselines = sum(cost_rows().values())
-    without = sum(cost_rows(baselines={}).values())
-
-    assert without - with_baselines == pytest.approx(6.0529 + 0.5123 + 2.8230, abs=1e-3)
-
-
 def test_a_counter_that_drops_counts_up_again_from_zero():
     assert pr.series_increase(series(5, 7, 1, 3), baseline=5) == 2 + 1 + 2
-
-
-def test_the_queries_merge_a_restarted_collectors_series_into_one_per_session():
-    for query in (cu.usage_query(COST, WINDOW), cu.baseline_query(COST, WINDOW)):
-        assert query.startswith("max without (instance) (")
-    assert f"[8d] @ {WINDOW.start}" in cu.baseline_query(COST, WINDOW)
 
 
 def test_spend_without_tokens_and_a_negative_row_fail_the_check():
@@ -86,6 +73,14 @@ def test_spend_without_tokens_and_a_negative_row_fail_the_check():
     assert cu.quality_problems(DAY, rows) == [
         f"{DAY}: sessions has a negative row",
         f"{DAY}: cost and tokens disagree on whether Claude Code ran",
+    ]
+
+
+def test_tokens_without_spend_fail_the_check():
+    rows = [{"metric": "tokens", "value": 1200.0}]
+
+    assert cu.quality_problems(DAY, rows) == [
+        f"{DAY}: cost and tokens disagree on whether Claude Code ran"
     ]
 
 

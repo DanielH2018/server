@@ -118,6 +118,7 @@ def test_the_backfill_window_matches_the_recorders_purge_setting():
 
 def test_a_refused_connection_is_retried_and_each_request_carries_the_token():
     requests = []
+    sleeps = []
 
     def opener(request, timeout):
         requests.append(request)
@@ -133,11 +134,12 @@ def test_a_refused_connection_is_retried_and_each_request_carries_the_token():
         DAY,
         ["sensor.x"],
         opener=opener,
-        sleep=lambda _: None,
+        sleep=sleeps.append,
     )
 
     assert history == []
     assert len(requests) == 2
+    assert sleeps == [ha.CONNECT_BACKOFF_S]
     assert requests[1].get_header("Authorization") == "Bearer secret-token"
 
 
