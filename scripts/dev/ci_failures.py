@@ -40,12 +40,8 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, time, timedelta
-from pathlib import Path as _Path
 from typing import Any
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser, warn
 from lib.exit_codes import FAILED, OK

@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from fanout_lib.signing import (
+from dev.fanout_lib.signing import (
     fingerprint,
     normalize_key,
     signing_key_read_command,

@@ -11,9 +11,7 @@ It exits 0 with rows or without, and 2 only when git cannot resolve the merge ba
 """
 
 import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import json

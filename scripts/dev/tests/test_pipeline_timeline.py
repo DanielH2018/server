@@ -3,7 +3,7 @@
 import json
 import subprocess
 
-from pipeline_timeline import (
+from dev.pipeline_timeline import (
     ci_by_branch,
     concurrency,
     job_times,

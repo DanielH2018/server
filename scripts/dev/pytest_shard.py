@@ -97,25 +97,22 @@ import sys
 import tomllib
 from pathlib import Path, PurePosixPath
 
-# Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path,
-# and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Reach `render_share`, which decides which test modules read the fleet render.
 sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 
-from affected_lib import table as affected_table
+from dev.affected_lib import table as affected_table
 from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
-from shard_prebuild import (
+from dev.shard_prebuild import (
     CENSUS_FILE_PREFIX,
     CI_WORKERS,
     prebuild_kinds,
     prebuild_seconds,
     prebuild_wall,
 )
-from shard_weight_gate import (
+from dev.shard_weight_gate import (
     RUNNER_HEAVY_SECONDS,
     RUNNER_WEIGHTS_PATH,
     STALE_WEIGHT_RATIO,

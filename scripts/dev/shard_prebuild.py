@@ -14,9 +14,6 @@ import re
 import sys as _sys
 from pathlib import Path, PurePosixPath
 
-# Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path,
-# and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Reach `render_share`, which decides which test modules read the fleet render.
 _sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 

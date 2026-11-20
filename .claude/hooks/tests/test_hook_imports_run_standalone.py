@@ -248,7 +248,7 @@ def test_a_module_from_another_checkout_is_reported(scratch):
 # through its own `__file__` finds the held copy's, so the copy must carry it.
 @pytest.fixture(scope="module")
 def held(tmp_path_factory) -> Path:
-    from fanout_lib.review.held_hooks import read_hooks, write_hooks
+    from dev.fanout_lib.review.held_hooks import read_hooks, write_hooks
 
     root = tmp_path_factory.mktemp("held")
     write_hooks(read_hooks(REPO), root)
@@ -304,7 +304,7 @@ def test_the_held_ssh_guard_reads_the_inventory_hosts(held):
 
 def test_a_held_copy_reads_its_own_inventory_ahead_of_the_venvs_checkout(tmp_path):
     # The venv's `.pth` names this checkout's `scripts/`; the copy's own root must win.
-    from fanout_lib.review.held_hooks import read_hooks, write_hooks
+    from dev.fanout_lib.review.held_hooks import read_hooks, write_hooks
 
     write_hooks(read_hooks(REPO), tmp_path)
     (tmp_path / "inventory/host_vars/daniel-held-only.yml").write_text("{}\n")

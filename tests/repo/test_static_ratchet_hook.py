@@ -15,7 +15,7 @@ import shlex
 import tomllib
 
 import pytest
-import shard_prebuild
+from dev import shard_prebuild
 import xdist_width
 from _helpers import REPO
 

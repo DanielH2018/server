@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from fanout_lib.brief import LANDS
-from fanout_lib.launch import snapshot_root, systemd_run_command, worktree_path
-from fanout_lib.manifest import Batch
-from fanout_lib.notify import NOTIFY_SCRIPT, PAGED_STATES, notify, page_command
-from fanout_lib.target import Target
+from dev.fanout_lib.brief import LANDS
+from dev.fanout_lib.launch import snapshot_root, systemd_run_command, worktree_path
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.notify import NOTIFY_SCRIPT, PAGED_STATES, notify, page_command
+from dev.fanout_lib.target import Target
 from lib.repo_paths import REPO as REPO_ROOT
 
 B = Batch("b", LANDS, "/wt", "worktree-fanout-b", "fanout-b", [1], "t")

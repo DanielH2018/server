@@ -7,7 +7,7 @@ import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
 
-from fanout_lib.review import processes
+from dev.fanout_lib.review import processes
 
 
 def _raw_claude_calls(tmp_path, reports, monkeypatch, inherited=None, settings=None):

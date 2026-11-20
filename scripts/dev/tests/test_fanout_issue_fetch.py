@@ -8,10 +8,10 @@ from datetime import date
 
 import pytest
 
-from fanout_lib import brief as brief_mod
-from fanout_lib.brief import operator_comments
-from fanout_lib.transport import ISSUE_FIELDS
-from findings_lib.issue_model import (
+from dev.fanout_lib import brief as brief_mod
+from dev.fanout_lib.brief import operator_comments
+from dev.fanout_lib.transport import ISSUE_FIELDS
+from dev.findings_lib.issue_model import (
     Comment,
     Issue,
     IssueState,
@@ -19,7 +19,7 @@ from findings_lib.issue_model import (
     parse_issue,
     release_comment,
 )
-from findings_lib.plans import plan_defer, plan_manual, plan_touch
+from dev.findings_lib.plans import plan_defer, plan_manual, plan_touch
 
 
 _VIEW = {

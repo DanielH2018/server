@@ -84,15 +84,13 @@ import sys as _sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
-from ci_slot_cost import job_spans
-from fanout_lib import operator_waits
-from fanout_lib.ci_reruns import NO_RERUN, rerun_fields, rerun_line
-from fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
-from fanout_lib.stops import load_stops, stop_lines
+from dev.ci_slot_cost import job_spans
+from dev.fanout_lib import operator_waits
+from dev.fanout_lib.ci_reruns import NO_RERUN, rerun_fields, rerun_line
+from dev.fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
+from dev.fanout_lib.stops import load_stops, stop_lines
 from lib.cli_help import ArgumentParser, answer_help
 from lib.gh import gh_json
 

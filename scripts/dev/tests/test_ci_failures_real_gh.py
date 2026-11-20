@@ -53,7 +53,7 @@ def test_a_window_past_the_cap_is_split(tmp_path):
 
 
 def test_unknown_step_lines_count_only_inside_the_failed_steps_seconds():
-    import ci_failures
+    from dev import ci_failures
 
     # Real `gh run view --log-failed` labels the whole failed job this way.
     logged = [
@@ -74,7 +74,7 @@ def test_unknown_step_lines_count_only_inside_the_failed_steps_seconds():
 
 
 def test_caret_escapes_and_collection_errors_name_their_module():
-    import ci_failures
+    from dev import ci_failures
 
     # `gh` prints an ESC byte as the two characters ^[ when it writes a log.
     lines = [
@@ -89,7 +89,7 @@ def test_caret_escapes_and_collection_errors_name_their_module():
 
 
 def test_a_timestamped_failed_line_in_a_run_header_is_not_counted():
-    import ci_failures
+    from dev import ci_failures
 
     lines = [
         "2026-11-05T14:09:02.5Z ##[group]Run cd job",

@@ -5,10 +5,10 @@ Run: uv run pytest scripts/dev/tests/test_wait_probe.py
 
 import pytest
 
-from fanout_lib import place
-from fanout_lib import wait_probe
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.status import UNREAD
+from dev.fanout_lib import place
+from dev.fanout_lib import wait_probe
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.status import UNREAD
 from _fanout_fakes import fake_tools, ok
 
 

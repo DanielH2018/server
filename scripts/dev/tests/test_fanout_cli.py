@@ -9,11 +9,11 @@ import subprocess
 import pytest
 
 
-from fanout_lib import brief as brief_mod
-from fanout_lib import launch as launch_mod
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.target import Target
-from fanout_lib.place import main
+from dev.fanout_lib import brief as brief_mod
+from dev.fanout_lib import launch as launch_mod
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.target import Target
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, labelled_issue, ok
 
 # Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.

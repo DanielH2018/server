@@ -8,8 +8,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status_blocker_first.py
 import dataclasses
 import json
 
-from fanout_lib.manifest import Batch
-from fanout_lib.status import parse_status, status_line
+from dev.fanout_lib.manifest import Batch
+from dev.fanout_lib.status import parse_status, status_line
 
 BOX = Batch(
     "b",

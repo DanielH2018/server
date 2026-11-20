@@ -10,18 +10,20 @@ from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.delta_confirm import split_confirmed
-from fanout_lib.review.review_prompts import delta_prompt, fix_prompt
-from fanout_lib.review.review_record import Phase, actionable, findings_of, survivors
-from fanout_lib.status import PR_URL
+from dev.fanout_lib.review.delta_confirm import split_confirmed
+from dev.fanout_lib.review.review_prompts import delta_prompt, fix_prompt
+from dev.fanout_lib.review.review_record import (
+    Phase,
+    actionable,
+    findings_of,
+    survivors,
+)
+from dev.fanout_lib.status import PR_URL
 
 if TYPE_CHECKING:
-    from fanout_lib.review.review import Pipeline
+    from dev.fanout_lib.review.review import Pipeline
 
 MAX_FIX_ROUNDS = 2
 

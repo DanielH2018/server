@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_repo_guards.py
 import subprocess
 
 import pytest
-import repo_guards
+from dev import repo_guards
 from lib.repo_paths import REPO
 
 

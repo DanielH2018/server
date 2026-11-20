@@ -171,7 +171,7 @@ def _function(tree: ast.Module, name: str) -> ast.AST | None:
 def _dispatched(tree: ast.Module, command: str) -> tuple[list[str], list[ast.AST]]:
     """What `command` reaches in an entry: module names a dict maps it to, and code it runs.
 
-    Four dispatch shapes occur: `COMMANDS = {"review": "fanout_lib.review_unit"}` with an
+    Four dispatch shapes occur: `COMMANDS = {"review": "dev.fanout_lib.review_unit"}` with an
     `importlib.import_module`, `if command == "probe":` around a call-time import, an argparse
     `add_parser("clean-one")` whose `set_defaults(fn=...)` names the function, and a registry
     row `("etcd-restore", "etcd_restore", ...)` whose module sits under a dotted string constant

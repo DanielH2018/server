@@ -15,12 +15,9 @@ from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
+from dev.fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
 
 STOPPED = ("needs-input", "failed")
 # The blocker line as the summary prints it.

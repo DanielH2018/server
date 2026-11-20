@@ -36,11 +36,8 @@ from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-import ci_failures
+from dev import ci_failures
 
-# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.branch_adds import added_advice
 from lib.cli_help import ArgumentParser

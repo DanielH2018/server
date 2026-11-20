@@ -7,8 +7,8 @@ import functools
 import os
 
 import pytest
-from fanout_lib.launch import unit_name
-from fanout_lib.target import SERVER_TARGET, Target
+from dev.fanout_lib.launch import unit_name
+from dev.fanout_lib.target import SERVER_TARGET, Target
 from lib import fanout_lock
 from lib.worktrees import KEEP, REMOVABLE, Worktree, classify, lock_is_live
 

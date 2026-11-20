@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-import fanout
+from dev import fanout
 
 DEV = Path(__file__).resolve().parents[1]
 

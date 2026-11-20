@@ -12,24 +12,18 @@ import subprocess
 # relative to THIS file, so `clean-one` imports the `lib.worktrees` sitting beside the copy of
 # fanout.py it was started from (the primary checkout's, see `remote_clean_command`).
 # Never change either to an absolute path.
-import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-# `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
-# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh, and `lib.worktrees`
-# the one way it judges a worktree.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from fanout_lib import manifest as manifest_mod
-from fanout_lib import status as status_mod
-from fanout_lib.manifest import Batch, Manifest
-from fanout_lib.target import SERVER_TARGET, Target, resolve
-from fanout_lib.transport import REPO, Tools
+from dev.fanout_lib import manifest as manifest_mod
+from dev.fanout_lib import status as status_mod
+from dev.fanout_lib.manifest import Batch, Manifest
+from dev.fanout_lib.target import SERVER_TARGET, Target, resolve
+from dev.fanout_lib.transport import REPO, Tools
 from lib.git import git
 from lib.worktrees import (
     REMOVABLE,

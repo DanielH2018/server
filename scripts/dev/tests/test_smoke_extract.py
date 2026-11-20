@@ -3,7 +3,7 @@
 Run: uv run pytest scripts
 """
 
-from smoke_extract import extract_changed_images
+from dev.smoke_extract import extract_changed_images
 
 
 def test_extracts_added_image_line():

@@ -51,9 +51,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path.
-import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from lib.git import git
 

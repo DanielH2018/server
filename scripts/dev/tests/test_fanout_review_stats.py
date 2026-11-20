@@ -6,8 +6,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_stats.py
 import json
 from dataclasses import asdict
 
-from fanout_lib.review.review_record import Record
-from fanout_lib.review_stats import load, main, summarize
+from dev.fanout_lib.review.review_record import Record
+from dev.fanout_lib.review_stats import load, main, summarize
 
 
 def _test_finding(subkind, confidence=0.8):

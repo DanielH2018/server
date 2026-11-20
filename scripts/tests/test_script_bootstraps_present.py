@@ -465,13 +465,3 @@ def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_
     assert is_pytest_only(Path("tests/_k8s_render.py"))
     assert not is_pytest_only(Path("scripts/deploy_tools/_fakes.py"))
     assert not is_pytest_only(Path("scripts/lib/render_guard.py"))
-
-
-def test_known_deferred_bootstraps_are_satisfied():
-    """Pin a file with a deferred-import shape, so a future change to the evaluator that
-    regresses it fails here specifically, not just in the aggregate test above."""
-    missing, unresolvable = find_bootstrap_gaps()
-    flagged = {f for f, *_ in missing} | {f for f, *_ in unresolvable}
-    for rel in ("scripts/dev/k8s_autodeploy_counts.py",):
-        path = REPO / rel
-        assert path not in flagged, f"{rel} regressed: {flagged}"

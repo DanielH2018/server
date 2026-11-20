@@ -11,16 +11,16 @@ import json
 import re
 
 from _review_fakes import _pipeline
-from fanout_lib.brief import (
+from dev.fanout_lib.brief import (
     DESIGN_HEADING,
     DESIGN_RULES,
     relevant_health,
     render_brief,
 )
-from fanout_lib.review.review import issues_section
-from fanout_lib.review.review_prompts import system_prompt
-from fanout_lib.target import Target
-from findings_lib.issue_model import Comment, Issue, IssueState
+from dev.fanout_lib.review.review import issues_section
+from dev.fanout_lib.review.review_prompts import system_prompt
+from dev.fanout_lib.target import Target
+from dev.findings_lib.issue_model import Comment, Issue, IssueState
 
 ISSUES = [
     Issue(

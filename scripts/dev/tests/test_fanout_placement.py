@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_placement.py
 import pytest
 
 from _fanout_fakes import HOST_KEY, fake_tools, ok
-from fanout_lib.placement import (
+from dev.fanout_lib.placement import (
     READ_COMMAND,
     RESERVATION_BYTES,
     HostReading,
@@ -15,7 +15,7 @@ from fanout_lib.placement import (
     parse_reading,
     place,
 )
-from fanout_lib.transport import HOST_READ_COMMAND, read_host
+from dev.fanout_lib.transport import HOST_READ_COMMAND, read_host
 
 GIB = 1024**3
 

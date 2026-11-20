@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 
-from review_metrics import validate_row
+from dev.review_metrics import validate_row
 
 OUTCOMES = Path(__file__).resolve().parents[1] / "review_outcomes.jsonl"
 

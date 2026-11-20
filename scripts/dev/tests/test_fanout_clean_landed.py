@@ -14,10 +14,10 @@ import dataclasses
 import sys
 from pathlib import Path
 
-from fanout_lib import clean as clean_mod
-from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
-from fanout_lib.place import main
-from fanout_lib.target import PROJECT_DIR_ENV, SERVER_CHECKOUT
+from dev.fanout_lib import clean as clean_mod
+from dev.fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
+from dev.fanout_lib.place import main
+from dev.fanout_lib.target import PROJECT_DIR_ENV, SERVER_CHECKOUT
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
 from lib.worktree_testing import ignore_foreign_slice_holds_env

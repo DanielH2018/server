@@ -15,7 +15,7 @@ import re
 from _agent_package import agent_setup_script, render_daniel_server_with
 from _helpers import REPO
 from _setup_render import render_component_text
-from fanout_lib.target import branch_name
+from dev.fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 from lib.git_testing import git

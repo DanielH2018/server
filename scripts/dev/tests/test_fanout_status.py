@@ -6,15 +6,15 @@ Run: uv run pytest scripts/dev/tests/test_fanout_status.py
 import dataclasses
 import subprocess
 
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.manifest import Batch, Manifest, save
-from fanout_lib.status import (
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.manifest import Batch, Manifest, save
+from dev.fanout_lib.status import (
     parse_status,
     status_command,
     status_line,
     stop_command,
 )
-from fanout_lib.place import main
+from dev.fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 B = Batch(

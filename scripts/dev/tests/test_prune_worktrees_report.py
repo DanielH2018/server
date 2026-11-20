@@ -4,7 +4,7 @@ Run: uv run pytest scripts/dev/tests/test_prune_worktrees_report.py
 """
 
 from lib.worktrees import REMOVABLE, Worktree
-from prune_worktrees import VANISHED, survey_report
+from dev.prune_worktrees import VANISHED, survey_report
 
 
 def _tree(name):

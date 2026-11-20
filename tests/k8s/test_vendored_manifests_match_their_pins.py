@@ -11,7 +11,7 @@ import hashlib
 
 
 from lib.repo_paths import K8S_ROLES
-from vendor_manifest import check_tree, main, roles_in
+from dev.vendor_manifest import check_tree, main, roles_in
 
 # (role, file) pairs the census must find in the real tree. traefik-crds vendored the first;
 # H1.3 added metallb's `metallb-native.yaml`, and H1.5a added longhorn's.

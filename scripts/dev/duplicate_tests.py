@@ -22,7 +22,6 @@ from collections import defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.git import git

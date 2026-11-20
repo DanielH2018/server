@@ -63,12 +63,9 @@ from typing import TYPE_CHECKING
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.review.review_land import (
+from dev.fanout_lib.review.review_land import (
     FINISHED_VERDICTS,
     LAND_MARGIN_S,
     PR_CI_RED,
@@ -79,15 +76,15 @@ from fanout_lib.review.review_land import (
     login,
     out_of_time,
 )
-from fanout_lib import own_surface
-from fanout_lib.review.review_prompts import ci_fix_prompt
-from fanout_lib.review.review_record import Phase, Record
-from fanout_lib.brief import drafts_pr, lands
-from fanout_lib.status import PR_URL
-from fanout_lib.target import Target
+from dev.fanout_lib import own_surface
+from dev.fanout_lib.review.review_prompts import ci_fix_prompt
+from dev.fanout_lib.review.review_record import Phase, Record
+from dev.fanout_lib.brief import drafts_pr, lands
+from dev.fanout_lib.status import PR_URL
+from dev.fanout_lib.target import Target
 
 if TYPE_CHECKING:
-    from fanout_lib.review.review import Pipeline
+    from dev.fanout_lib.review.review import Pipeline
 
 # The longest one wait lasts. Derived from measured `ci.yml` run durations in the docstring.
 CI_WAIT_S = 35 * 60

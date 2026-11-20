@@ -3,11 +3,11 @@
 import json
 import subprocess
 
-from fanout_lib.review.base_check import BaseCheck
-from fanout_lib.brief import render_brief
-from findings_lib.issue_model import Issue, IssueState
-from fanout_lib.review.review import Pipeline
-from fanout_lib.target import SERVER_TARGET
+from dev.fanout_lib.review.base_check import BaseCheck
+from dev.fanout_lib.brief import render_brief
+from dev.findings_lib.issue_model import Issue, IssueState
+from dev.fanout_lib.review.review import Pipeline
+from dev.fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
 BRANCH = "worktree-batch-1345"

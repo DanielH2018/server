@@ -1,6 +1,6 @@
 """The hook durations `prek_durations.py` reads from a prek trace log."""
 
-from prek_durations import durations, main, table
+from dev.prek_durations import durations, main, table
 
 LOG = """\
 2026-11-19T00:52:17.386926Z TRACE discover{cwd="/repo"}: close time.busy=1.38ms time.idle=1.34µs

@@ -15,9 +15,6 @@ Exit codes: 0 the message is clean, 1 it holds the emoji, 64 bad arguments.
 import sys
 from pathlib import Path
 
-# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser, error
 

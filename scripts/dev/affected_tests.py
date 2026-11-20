@@ -28,13 +28,10 @@ import shutil
 import sys
 import time
 from collections import Counter
-from pathlib import Path
 
-# Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import pytest_shard
-from affected_lib import record, table
+from dev import pytest_shard
+from dev.affected_lib import record, table
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import REPO
 

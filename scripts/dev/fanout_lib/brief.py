@@ -9,19 +9,15 @@ from collections.abc import Collection, Sequence
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from fanout_lib.target import (
+from dev.fanout_lib.target import (
     SERVER,
     SERVER_TARGET,
     Target,
     branch_name,
 )
-from findings_lib.issue_model import (
+from dev.findings_lib.issue_model import (
     _CLAIM_RE,
     _RELEASE_RE,
     _REOBSERVED,
@@ -389,7 +385,7 @@ def _precomputed(cited: list[str]) -> str:
     unit and every remote clean at import. Only `launch` renders a brief, and it runs
     in the project env.
     """
-    from findings_lib.precomputed import precomputed
+    from dev.findings_lib.precomputed import precomputed
 
     return precomputed(cited)
 

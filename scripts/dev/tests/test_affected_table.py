@@ -7,7 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_affected_table.py
 """
 
 import pytest
-from affected_lib import table
+from dev.affected_lib import table
 
 from _helpers import REPO
 

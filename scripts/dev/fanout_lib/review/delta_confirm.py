@@ -14,10 +14,7 @@ from collections.abc import Callable
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
-from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # A fix that adds or removes a few lines moves the cited line, so the quote is looked for around the line, not on it.
 WINDOW = 10
