@@ -169,6 +169,7 @@ _HOSTS_KEYS = (
     "server_ip",
     "compose_services",
     "claude_agent_ssh_login_enabled",
+    "ssh_host_ed25519_key",
 )
 
 
