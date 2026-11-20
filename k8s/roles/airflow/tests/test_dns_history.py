@@ -15,7 +15,7 @@ import pytest
 from dags.homelab_warehouse import dns_history as dh
 
 DAY = date(2026, 11, 19)
-FROM = int(datetime(2026, 11, 19, tzinfo=timezone.utc).timestamp())
+DAY_START = int(datetime(2026, 11, 19, tzinfo=timezone.utc).timestamp())
 ANSWERS = {
     "stats/database/summary": {
         "sum_queries": 29160,
@@ -85,7 +85,8 @@ def test_every_read_covers_the_utc_day_and_the_session_is_logged_out():
 
     reads = [query for method, path, query in fake.calls if path.startswith("stats/")]
     assert all(
-        q["from"] == [str(FROM)] and q["until"] == [str(FROM + 86400)] for q in reads
+        q["from"] == [str(DAY_START)] and q["until"] == [str(DAY_START + 86400)]
+        for q in reads
     )
     assert [q["blocked"] for _, p, q in fake.calls if p.endswith("top_domains")] == [
         ["false"],
