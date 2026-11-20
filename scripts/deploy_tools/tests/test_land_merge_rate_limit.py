@@ -18,6 +18,7 @@ from _land_fakes import Fakes
 from deploy_tools import await_ci
 from deploy_tools.land_lib import merge, tools
 from deploy_tools.land_lib.outcome import Outcome
+from lib import gh_rate_limit
 
 QUOTA_FREES_IN_S = 900
 MERGE_POLL_S = 30
@@ -25,10 +26,17 @@ _HEAD = {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c592b53c"}
 _MERGED = {"state": "MERGED", "mergeable": "UNKNOWN", "headRefOid": "c592b53c"}
 
 
-def _rate_limited() -> urllib.error.HTTPError:
+def _rate_limited(spent: bool = False) -> urllib.error.HTTPError:
+    """A secondary limit's 403, or the spent core quota's, which reports a reset far ahead."""
     headers = email.message.Message()
-    headers["Retry-After"] = str(QUOTA_FREES_IN_S)
-    body = b'{"message": "You have exceeded a secondary rate limit."}'
+    if spent:
+        headers["X-RateLimit-Remaining"] = "0"
+        headers["X-RateLimit-Reset"] = "4000000000"
+        headers["X-RateLimit-Resource"] = "core"
+        body = b'{"message": "API rate limit exceeded for user ID 41801780."}'
+    else:
+        headers["Retry-After"] = str(QUOTA_FREES_IN_S)
+        body = b'{"message": "You have exceeded a secondary rate limit."}'
     return urllib.error.HTTPError(
         "https://api.github.com/x",
         403,
@@ -47,7 +55,7 @@ def ci_reads():
         error.close()
 
 
-def _rate_limited_landing(landing, ci_reads, views, merge_timeout):
+def _rate_limited_landing(landing, ci_reads, views, merge_timeout, spent=False):
     """A landing whose real CI read goes to a GitHub that refuses every read for its rate."""
     ln, calls = landing(
         Fakes(gh_views={"state,mergeable,headRefOid": views}),
@@ -56,7 +64,7 @@ def _rate_limited_landing(landing, ci_reads, views, merge_timeout):
     )
 
     def refuse(sha):
-        ci_reads.append((sha, _rate_limited()))
+        ci_reads.append((sha, _rate_limited(spent)))
         raise ci_reads[-1][1]
 
     wait = partial(
@@ -84,6 +92,16 @@ def test_a_rate_limited_ci_read_sleeps_until_the_quota_frees(landing, ci_reads):
     assert ci_reads, "the merge loop never read the head's CI"
     [slept] = _sleeps(calls)
     assert QUOTA_FREES_IN_S <= slept <= QUOTA_FREES_IN_S + MERGE_POLL_S
+
+
+def test_a_spent_quota_that_resets_early_ends_the_sleep(landing, ci_reads):
+    # The fake `gh api rate_limit` answers the core quota with every call left.
+    ln, calls = _rate_limited_landing(
+        landing, ci_reads, [_HEAD, _MERGED], merge_timeout=7200, spent=True
+    )
+    merge.await_merge(ln)
+    assert ci_reads, "the merge loop never read the head's CI"
+    assert _sleeps(calls) == [gh_rate_limit.RECHECK_S]
 
 
 def test_merge_timeout_still_bounds_a_rate_limited_wait(landing, ci_reads):

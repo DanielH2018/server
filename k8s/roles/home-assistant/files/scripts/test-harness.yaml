@@ -14,7 +14,7 @@
 bedroom_run_scenario:
   alias: "Bedroom — run test scenario"
   description: >-
-    Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/reset) at compressed or
+    Exercise a bedroom scenario on demand (bedtime/wake/nightlight/away/arrive/held/reset) at compressed or
     real speed, driving the real scripts/automations — for testing without waiting for night or
     leaving home.
   # CAVEAT (test-only tool): mode:restart + an in-sequence restore means pressing Run again DURING
@@ -132,6 +132,31 @@ bedroom_run_scenario:
                 message: >-
                   Triggered arrive-home: fan resumes per temperature; lights re-check only if FP300
                   present, not manual-off, and currently off.
+        # Held — park one test alert in the away-hold store, then run the REAL arrival flush with
+        # its condition, so the phone gets one "While you were out (1)" digest and the store ends
+        # empty. bedroom_notify's own away gate needs a real away, as the away scenario says.
+        - conditions: "{{ scenario == 'held' }}"
+          sequence:
+            - event: bedroom_held_alert
+              event_data:
+                action: hold
+                tag: test_scenario_held
+                title: "🧪 Test alert"
+                message: "Held by the test scenario."
+            - delay: "00:00:02"
+            - service: persistent_notification.create
+              data:
+                notification_id: test_scenario
+                title: "🧪 Scenario: held"
+                message: >-
+                  Parked one test alert ({{ states('sensor.bedroom_held_alerts') }} held), then ran
+                  the arrival flush: expect one "While you were out" push on the phone and
+                  sensor.bedroom_held_alerts back at 0.
+            - service: automation.trigger
+              target:
+                entity_id: automation.bedroom_flush_held_notifications
+              data:
+                skip_condition: false
         # Reset — clear every override and return to a clean daytime baseline.
         - conditions: "{{ scenario == 'reset' }}"
           sequence:

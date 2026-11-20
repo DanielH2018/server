@@ -15,7 +15,6 @@ NOW = datetime(2026, 11, 12, 12, 0, tzinfo=UTC)
 K8S_PATH = "k8s/roles/sonarr/templates/deployment.yaml.j2"
 
 QUIET = live_limit.Reads(
-    pr_paths=lambda pr: ["scripts/dev/x.py"],
     core_quota=lambda: (5000, int(NOW.timestamp()) + 3600),
     now=lambda: NOW,
 )
@@ -34,13 +33,11 @@ def test_a_low_quota_about_to_reset_lowers_nothing():
     )
 
 
-def test_a_failed_read_lowers_nothing_and_reads_no_kind():
+def test_a_failed_read_lowers_nothing():
     def refused():
         raise OSError("gh: API rate limit exceeded")
 
-    reads = replace(QUIET, core_quota=refused, pr_paths=lambda pr: refused())
-    assert live_limit.low_quota(reads) is None
-    assert live_limit.pr_kind("939", reads) == ""
+    assert live_limit.low_quota(replace(QUIET, core_quota=refused)) is None
 
 
 @pytest.mark.parametrize(
@@ -57,7 +54,7 @@ def test_a_failed_read_lowers_nothing_and_reads_no_kind():
     ],
 )
 def test_a_prs_paths_decide_its_kind(path, kind):
-    assert live_limit.pr_kind("939", replace(QUIET, pr_paths=lambda pr: [path])) == kind
+    assert live_limit.kind([path]) == kind
 
 
 def test_every_serial_role_is_a_k8s_role_directory():

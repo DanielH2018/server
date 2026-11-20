@@ -169,20 +169,20 @@
         tag: "threshold_alert_{{ trigger.entity_id }}"
         # Per-category routing flags. `pulse` = brief red light flash (air quality only). `watch` =
         # also buzz the wrist (glanceable). `pierce` = sound even while quiet/DND (severe air quality
-        # only — the can't-miss tier). `critical_away` = push while AWAY instead of holding for the
-        # arrival digest (temperature only — it's the damage-class safety net for when nobody's home;
-        # it does NOT pierce DND at home, so it's a tier below `pierce`). `recovery` = send a "back to
-        # normal" notice (severe skips it; the moderate recovery covers it). All notify goes through
-        # script.bedroom_notify (DND-aware).
+        # only — the can't-miss tier). `alert_class` = what the alert is about, which decides whether
+        # it is held while away (notify_route in custom_templates/notify.jinja; temperature is
+        # `safety` because it is the net for an AC or heating failure in an empty home). `recovery` =
+        # send a "back to normal" notice (severe skips it; the moderate recovery covers it). All
+        # notify goes through script.bedroom_notify (DND-aware).
         cfg: >-
-          {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'recovery': true},
-              'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'recovery': false},
-              'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
-              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
-              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'critical_away': true, 'recovery': true},
-              'watch':            {'bad': '⌚ Pixel Watch not reporting', 'ok': '⌚ Pixel Watch reporting', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
-              'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
-              'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
+          {{ {'airquality':       {'bad': '⚠️ Air quality', 'ok': '✅ Air quality', 'pulse': true,  'watch': true,  'pierce': false, 'alert_class': 'comfort', 'recovery': true},
+              'airqualitysevere': {'bad': '🚨 Air quality HIGH', 'ok': '✅ Air quality', 'pulse': true, 'watch': true, 'pierce': true, 'alert_class': 'safety', 'recovery': false},
+              'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'alert_class': 'upkeep', 'recovery': true},
+              'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'alert_class': 'comfort', 'recovery': true},
+              'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'alert_class': 'safety', 'recovery': true},
+              'watch':            {'bad': '⌚ Pixel Watch not reporting', 'ok': '⌚ Pixel Watch reporting', 'pulse': false, 'watch': false, 'pierce': false, 'alert_class': 'alert_chain', 'recovery': true},
+              'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'alert_class': 'comfort', 'recovery': true},
+              'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'alert_class': 'safety', 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
         # categories get none. Handled by bedroom_notification_action.
         boost_actions: "{{ [{'action': 'BEDROOM_BOOST_FAN', 'title': 'Boost fan'}] if category in ['airquality', 'airqualitysevere'] else [] }}"
@@ -214,7 +214,7 @@
                     tag: "{{ tag }}"
                     watch: "{{ cfg.watch }}"
                     pierce: "{{ cfg.pierce }}"
-                    critical_away: "{{ cfg.critical_away | default(false) }}"
+                    alert_class: "{{ cfg.alert_class }}"
                     actions: "{{ boost_actions }}"
       # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
       # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
@@ -227,9 +227,7 @@
                 message: "{{ label }} back to normal ({{ value }}{{ unit_sp }})"
                 tag: "{{ tag }}"
                 recovery: true
-                # A critical_away category (temperature) pushed its bad alert while away rather than
-                # holding it, so its all-clear should push too (there's no hold_<tag> to cancel).
-                critical_away: "{{ cfg.critical_away | default(false) }}"
+                alert_class: "{{ cfg.alert_class }}"
           else:
             # Severe air quality (the only recovery:false categories) sends NO recovery PUSH by
             # design — the moderate recovery covers the all-clear — but its bad alert pierced and so
@@ -301,6 +299,7 @@
                 message: "{{ name }} is offline (no data)"
                 tag: "{{ tag }}"
                 watch: true
+                alert_class: alert_chain
       # from:"unavailable" edges only, so the remaining case (id == 'recovery') is the default.
       # Only notify recovery if the device was actually unavailable >= 5 min (the same threshold the
       # offline alert needs) — otherwise the unavailable→available blip on every HA/Z2M restart would
@@ -316,13 +315,12 @@
                 message: "{{ name }} is reporting again"
                 tag: "{{ tag }}"
                 recovery: true
+                alert_class: alert_chain
 
-# Flush held notifications on arrival: when you re-enter the home geofence, any alerts that were
-# parked while you were away (persistent_notification ids starting with hold_) and did NOT resolve
-# meanwhile are delivered as ONE "While you were out" digest, then cleared. Anything that resolved
-# while away was already dismissed by its recovery (bedroom_notify), so it never appears here. The
-# condition gates the whole thing so arriving with nothing held is silent. `match` is start-anchored,
-# so 'hold_' won't catch the pierce path's bare-tag persistent notifications.
+# Flush held alerts on arrival: when person.daniel re-enters the home geofence, every alert
+# bedroom_notify parked in sensor.bedroom_held_alerts while away is delivered as ONE "While you
+# were out" digest, then removed from the store. An alert that recovered while away was removed by
+# its recovery, so it never appears. Arriving with nothing held is silent.
 - id: bedroom_flush_held_notifications
   alias: Bedroom flush held notifications
   description: On arrival home, deliver any still-unresolved away-held alerts as one digest, then clear them.
@@ -333,28 +331,27 @@
       to: "home"
   condition:
     - condition: template
-      value_template: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list | count > 0 }}"
+      value_template: >-
+        {{ state_attr('sensor.bedroom_held_alerts', 'held') is mapping
+           and state_attr('sensor.bedroom_held_alerts', 'held') | count > 0 }}
   action:
     - variables:
-        held: "{{ states.persistent_notification | selectattr('object_id', 'match', 'hold_') | list }}"
-        count: "{{ held | count }}"
-        body: "{{ held | map(attribute='attributes.message') | map('regex_replace', '^', '• ') | join('\n') }}"
-    # Deliberately NO continue_on_error here (unlike bedroom_notify's pushes): if this push
-    # fails (renamed notify service), aborting BEFORE the dismiss loop below keeps the held
-    # notes visible in the UI instead of discarding them undelivered — and this automation's
-    # logger is NOT excluded by ha_runtime_error_alert, so the failure pages on its own.
+        held: "{{ state_attr('sensor.bedroom_held_alerts', 'held') }}"
+        body: "{% from 'notify.jinja' import held_digest %}{{ held_digest(held) }}"
+    # No continue_on_error, unlike bedroom_notify's pushes: a failed push aborts before the
+    # `flushed` event, so the alerts stay held for the next arrival. This automation's logger is
+    # not excluded by ha_runtime_error_alert, so the failure raises its own alert.
     - service: notify.mobile_app_pixel_9_pro
       data:
-        title: "🏠 While you were out ({{ count }})"
+        title: "🏠 While you were out ({{ held | count }})"
         message: "{{ body }}"
         data:
           tag: held_digest
-    - repeat:
-        for_each: "{{ held | map(attribute='object_id') | list }}"
-        sequence:
-          - service: persistent_notification.dismiss
-            data:
-              notification_id: "{{ repeat.item }}"
+    # Removes the delivered tags only, so an alert held after the read above stays for next time.
+    - event: bedroom_held_alert
+      event_data:
+        action: flushed
+        tags: "{{ held.keys() | list }}"
 
 # Actionable-notification dispatcher: handle taps on notification buttons. The companion app fires
 # mobile_app_notification_action with the BEDROOM_* action id from the button. Buttons are attached
@@ -390,7 +387,7 @@
             - service: script.bedroom_fan_set
               data:
                 reason: "auto"
-            # Clear the "Left on" HA persistent note (the critical_away visibility fallback) now that
+            # Clear the "Left on" HA persistent note (the pushed-while-away visibility fallback) now that
             # you've acted on it — the bedroom_away tag has no recovery path of its own.
             - service: persistent_notification.dismiss
               data:
@@ -422,6 +419,7 @@
         title: "🚨 Bedroom occupied"
         message: "Motion detected in the bedroom while you're away."
         tag: unexpected_occupancy
+        alert_class: safety
         watch: true
         pierce: true
 
@@ -451,3 +449,4 @@
           the AirGradient "Calibrate CO₂" button (Settings → Devices → AirGradient ONE). Current
           reading: {{ states('sensor.bedroom_airgradient_one_carbon_dioxide') }} ppm.
         tag: co2_calibration_reminder
+        alert_class: upkeep

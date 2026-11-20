@@ -907,9 +907,9 @@ groups:
             ${host}: the wired link ${k3s_node_static_link} is down, so the node runs on WiFi.
           description: >-
             ${k3s_node_static_link} on ${host} has had no carrier, or has been down, for 5
-            minutes, so the node routes over its slower WiFi fallback, which carries Longhorn
-            replication. Check the cable and the switch port, then run `ip link show
-            ${k3s_node_static_link}` and `ip route get 1.1.1.1` on ${host}.
+            minutes. ${host} serves Longhorn replicas over WiFi, and volumes on the other node
+            get I/O errors. Restore the wire first: check the cable and the switch port, then
+            run `ip -br link` on ${host}.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
       # One copy per host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold

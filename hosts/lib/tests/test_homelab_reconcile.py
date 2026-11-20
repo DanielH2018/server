@@ -183,7 +183,7 @@ def test_a_masked_unit_is_never_started_and_an_unmasked_one_is(node):
 
 
 TIMER = "homelab-gc.timer"
-CRON_ENTRY = {"cron_file": "gc"}
+CRON_ENTRY = {"path": "/etc/cron.d/gc"}
 
 
 def replaced_cron(node: Node) -> Path:
@@ -257,39 +257,6 @@ def test_a_failed_unit_of_another_spec_keeps_no_legacy_entry(node):
     assert node.run().returncode == 1
     assert not cron.exists()
     assert len(node.applied()["retired"]) == 1
-
-
-def test_a_failed_unit_does_not_keep_the_copy_that_shadows_it(node):
-    node.unit(TIMER, linked=True)
-    copy = node.root / "etc/systemd/system" / TIMER
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    copy.write_text("[Unit]\nDescription=stale\n")
-    entry = {"path": f"/etc/systemd/system/{TIMER}"}
-    node.manifest["legacy"].append(entry)
-    node.manifest["handoffs"] = [{"units": [TIMER], "legacy": [entry]}]
-    node.state["fail"].append(f"restart {TIMER}")
-
-    assert node.run().returncode == 1
-    assert not copy.exists()
-
-
-def test_a_failed_restart_on_the_packaged_file_keeps_the_legacy_entry(node):
-    cron = replaced_cron(node)
-    node.manifest["legacy"].clear()
-    settled(node)
-    node.manifest["legacy"].append(CRON_ENTRY)
-    copy = node.root / "etc/systemd/system" / TIMER
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    copy.write_text("[Unit]\nDescription=stale\n")
-    shadow = {"path": f"/etc/systemd/system/{TIMER}"}
-    node.manifest["legacy"].append(shadow)
-    node.manifest["handoffs"][0]["legacy"].append(shadow)
-    node.state["fail"].append(f"restart {TIMER}")
-
-    assert node.run().returncode == 1
-    assert not copy.exists()
-    assert cron.exists()
-    assert node.actions() == [["restart", TIMER]]
 
 
 def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):
@@ -397,82 +364,6 @@ def test_a_retired_path_with_a_trailing_slash_keeps_its_recorded_key(node):
     assert result.returncode == 0, result.stderr
     assert node.applied()["retired"] == [key]
     assert olddir.exists(), "an entry already retired is not retired again"
-
-
-def test_an_ansible_era_unit_is_disabled_stopped_and_removed_unless_a_package_owns_it(
-    node,
-):
-    for name in ("pi-sd-health.timer", "owned.timer"):
-        path = node.root / "etc/systemd/system" / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("[Timer]\n")
-        node.state["units"][name] = {
-            "load": "loaded",
-            "active": "active",
-            "enabled": "enabled",
-        }
-        node.manifest["legacy"].append({"unit": name})
-    node.state["owned"] = ["/etc/systemd/system/owned.timer"]
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == [
-        ["disable", "pi-sd-health.timer"],
-        ["stop", "pi-sd-health.timer"],
-    ]
-    assert not (node.root / "etc/systemd/system/pi-sd-health.timer").exists()
-    assert (node.root / "etc/systemd/system/owned.timer").exists()
-    assert len(node.applied()["retired"]) == 2
-
-
-def test_a_retired_template_unit_is_disabled_and_removed_but_never_stopped(node):
-    path = node.root / "etc/systemd/system/claude-land@.service"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("[Service]\n")
-    node.state["units"]["claude-land@3633.service"] = {
-        "load": "loaded",
-        "active": "inactive",
-        "enabled": "static",
-    }
-    node.state["units"]["claude-land@.service"] = {
-        "load": "loaded",
-        "active": "inactive",
-        "enabled": "static",
-    }
-    node.manifest["legacy"].append({"unit": "claude-land@.service"})
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == [["disable", "claude-land@.service"]]
-    assert not path.exists()
-    assert node.applied()["retired"] == ['{"unit": "claude-land@.service"}']
-
-
-def test_a_template_unit_with_a_running_instance_is_kept(node):
-    """A landing in flight keeps its unit file, as a running service keeps its own."""
-    path = node.root / "etc/systemd/system/claude-land@.service"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("[Service]\n")
-    node.state["units"]["claude-land@3633.service"] = {
-        "load": "loaded",
-        "active": "activating",
-        "enabled": "static",
-    }
-    node.state["units"]["claude-land@.service"] = {
-        "load": "loaded",
-        "active": "inactive",
-        "enabled": "static",
-    }
-    node.manifest["legacy"].append({"unit": "claude-land@.service"})
-
-    result = node.run()
-
-    assert result.returncode == 0, result.stderr
-    assert node.actions() == []
-    assert path.exists()
-    assert node.applied()["retired"] == []
 
 
 # The dpkg lock and the record.

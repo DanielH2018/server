@@ -83,6 +83,7 @@ home_assistant_template_files:
   - diagnostics.jinja
   - fan.jinja
   - lighting.jinja
+  - notify.jinja
   - ventilation.jinja
 
 # files/scripts/*.yaml, the same shape for scripts: one file per topic, merged into the

@@ -64,13 +64,13 @@ bedroom_notify:
       description: Sound even while quiet (DND/sleep) via the high-importance channel.
       required: false
       example: true
-    critical_away:
+    alert_class:
       description: >-
-        Deliver to the phone even while AWAY (bypass the away-hold) instead of parking it for the
-        arrival digest — for damage-class alerts (e.g. extreme temperature) whose whole point is to
-        reach you when nobody's home. Does NOT pierce DND at home (lower tier than `pierce`).
+        What the alert is about: power, safety, alert_chain, away_only, comfort or upkeep. Only
+        comfort and upkeep are held while away; notify_route in custom_templates/notify.jinja owns
+        the rule. An alert with no class pushes.
       required: false
-      example: true
+      example: comfort
     recovery:
       description: This is an "all clear" — while away it cancels the held alert with the same tag instead of being delivered.
       required: false
@@ -93,43 +93,43 @@ bedroom_notify:
              or is_state('input_boolean.bedroom_sleep_mode', 'on') }}
         importance: "{{ 'high' if (pierce | default(false)) else ('low' if quiet else 'default') }}"
         channel: "{{ 'Bedroom critical' if (pierce | default(false)) else 'Bedroom alerts' }}"
+        # Fails open: an unknown or unavailable tracker reads as home, so the alert pushes.
         away: "{{ states('person.daniel') not in ['home', 'unknown', 'unavailable'] }}"
-    # Away-aware hold: while you're outside the home geofence, non-critical alerts are parked as a
-    # persistent_notification (id hold_<tag>) instead of pushed — then either cancelled by their
-    # recovery (same tag) or flushed as a digest on arrival (bedroom_flush_held_notifications).
-    # Two flags fall straight through to the normal push instead of being held: `pierce` (the
-    # can't-miss tier) and `critical_away` (damage-class alerts like extreme temperature whose
-    # entire purpose is to reach you WHILE away — held-then-digested would defeat them; unlike
-    # pierce they don't also sound through DND at home). `away` fails open (unknown/unavailable ->
-    # deliver) so a tracker glitch over-notifies rather than swallowing.
-    # TODO: https://github.com/DanielH2018/server/issues/9598 - the hold is off, so every alert
-    # pushes while away. A parked alert is never delivered: the arrival flush reads
-    # states.persistent_notification, which Home Assistant does not populate.
-    - if: "{{ false }}"
+        route: "{% from 'notify.jinja' import notify_route %}{{ notify_route(away, alert_class | default(''), pierce | default(false), recovery | default(false)) }}"
+    # Away-hold: an alert that can wait is parked in sensor.bedroom_held_alerts, keyed by tag, and
+    # bedroom_flush_held_notifications delivers the parked alerts as one digest on arrival.
+    # A recovery that arrives while away removes the parked alert, so a condition that clears
+    # before anyone returns is never shown.
+    - if: "{{ route == 'cancel' }}"
       then:
-        - if: "{{ recovery | default(false) }}"
+        - event: bedroom_held_alert
+          event_data:
+            action: cancel
+            tag: "{{ tag }}"
+        # The alert may have fired at home and left the bare-tag note the fallback below creates.
+        - service: persistent_notification.dismiss
+          data:
+            notification_id: "{{ tag }}"
+        - stop: "recovered while away; the held alert is cancelled"
+    - if: "{{ route == 'hold' }}"
+      then:
+        - event: bedroom_held_alert
+          event_data:
+            action: hold
+            tag: "{{ tag }}"
+            title: "{{ title }}"
+            message: "{{ message }}"
+        # The alert stops here only once the store shows it. A store that did not take it leaves
+        # the alert on the push path below, so a broken store costs a late push, not a lost alert.
+        - wait_template: >-
+            {{ state_attr('sensor.bedroom_held_alerts', 'held') is mapping
+               and tag in state_attr('sensor.bedroom_held_alerts', 'held') }}
+          timeout: "00:00:05"
+          continue_on_timeout: true
+        - if: "{{ wait.completed }}"
           then:
-            # Resolved while away -> drop the held alert; you'll never see it.
-            - service: persistent_notification.dismiss
-              data:
-                notification_id: "hold_{{ tag }}"
-            # Also dismiss the bare-`tag` visibility note the fallback below creates when a
-            # watch/pierce-tier alert first fired WHILE HOME: this branch `stop`s before that
-            # fallback, so without this a recover-while-away strands a stale "⚠️" note (air
-            # quality / sensor-offline / UPS / zigbee-bridge) contradicting live state. Dismiss
-            # of an absent id no-ops, so it's safe for tags that never created a bare note.
-            - service: persistent_notification.dismiss
-              data:
-                notification_id: "{{ tag }}"
-          else:
-            # Park it (same tag updates in place) — held until you get home.
-            - service: persistent_notification.create
-              data:
-                notification_id: "hold_{{ tag }}"
-                title: "{{ title }}"
-                message: "{{ message }}"
-        - stop: "held while away (non-critical)"
-    # Visibility fallback for the ELEVATED tiers (pierce / watch / critical_away): the alert ALSO lands
+            - stop: "held while away"
+    # Visibility fallback for the ELEVATED tiers (pierce / watch / pushed while away): the alert ALSO lands
     # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
     # mobile push fails. It runs BEFORE the pushes because a re-paired phone or watch renames its
     # notify.mobile_app_* service, and the resulting ServiceNotFound aborts the script at that push even
@@ -150,7 +150,7 @@ bedroom_notify:
             - service: persistent_notification.dismiss
               data:
                 notification_id: "{{ tag }}"
-        - conditions: "{{ (pierce | default(false)) or (watch | default(false)) or (critical_away | default(false)) }}"
+        - conditions: "{{ (pierce | default(false)) or (watch | default(false)) or away }}"
           sequence:
             - service: persistent_notification.create
               data:

@@ -37,6 +37,7 @@
         title: "📦 {{ count }} update(s) available"
         message: "{{ lines }}"
         tag: update_digest
+        alert_class: upkeep
 
 # UPS power-event alert: nothing else watches the UPS. Driven off the RAW NUT status flags
 # (sensor.apc_ups_status_data: "OL"=online, "OB"=on battery, "LB"=low battery, "CHRG"=charging) —
@@ -86,6 +87,7 @@
                 title: "🪫 UPS low battery"
                 message: "Battery critical ({{ charge }}%) — server may shut down. ~{{ runtime_min }} min left."
                 tag: ups_power
+                alert_class: power
                 watch: true
                 pierce: true
         # Newly on battery — a routine outage. Watch buzz; routine for DND (a brief blip shouldn't wake
@@ -97,6 +99,7 @@
                 title: "🔌 Power outage"
                 message: "UPS on battery ({{ charge }}% · ~{{ runtime_min }} min runtime)."
                 tag: ups_power
+                alert_class: power
                 watch: true
         # Newly Replace-Battery — the UPS's own periodic self-test failed (NUT set RB). Independent of
         # the mains/charge state (RB can trip while OL and charge/runtime still read fine), so it's the
@@ -109,6 +112,7 @@
                 title: "🔋 UPS replace battery"
                 message: "UPS battery needs replacing — self-test flagged RB."
                 tag: ups_power
+                alert_class: power
                 watch: true
         # Recovered — was on battery, mains is back (can only be a genuine OB->OL runtime transition,
         # never the startup reconnect, because from_state must be a valid OB flag, not unavailable).
@@ -119,6 +123,7 @@
                 title: "✅ Power restored"
                 message: "Mains power back; UPS online ({{ charge }}%)."
                 tag: ups_power
+                alert_class: power
                 recovery: true
         # Replace-Battery cleared — the RB flag dropped (battery replaced or a later self-test passed).
         # Routine recovery, same convention as the UPS-restored recovery above (recovery: true).
@@ -129,6 +134,7 @@
                 title: "✅ UPS battery OK"
                 message: "UPS Replace-Battery flag cleared."
                 tag: ups_power
+                alert_class: power
                 recovery: true
 
 # Zigbee bridge offline alert: binary_sensor.zigbee2mqtt_bridge_connection_state (HA auto-discovers it
@@ -165,6 +171,7 @@
                 title: "🛑 Zigbee bridge offline"
                 message: "Zigbee2MQTT / the coordinator is down — all Zigbee devices are unavailable."
                 tag: zigbee_bridge
+                alert_class: alert_chain
                 watch: true
       # from:"off" -> "on" recovery edge only (the remaining default case). Same tag replaces the alert.
       default:
@@ -173,6 +180,7 @@
             title: "✅ Zigbee bridge online"
             message: "Zigbee2MQTT is back; devices are reconnecting."
             tag: zigbee_bridge
+            alert_class: alert_chain
             recovery: true
 
 # HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
@@ -230,3 +238,4 @@
         title: "⚠️ HA error: {{ trigger.event.data.name.split('.')[-1] }}"
         message: "{{ (trigger.event.data.message | join(' '))[:200] }}"
         tag: "ha_error_{{ trigger.event.data.name | replace('.', '_') }}"
+        alert_class: alert_chain

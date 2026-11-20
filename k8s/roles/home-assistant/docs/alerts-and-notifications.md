@@ -28,7 +28,8 @@ that reports rather than actuates.
   PM2.5 100 / VOC 400 / NOx 200) are starting points — tune in the ~2026-06-25 pass.
 - **Notification routing — `script.bedroom_notify` (since 2026-06-18).** The single cross-cutting
   layer EVERY bedroom alert calls (threshold engine, sensor-offline, away). Fields:
-  `title, message, tag, watch, pierce` (last two default false). Computes the Android `channel` +
+  `title, message, tag, watch, pierce` (last two default false), plus `alert_class`, which the
+  away-hold below reads. Computes the Android `channel` +
   `importance` from `pierce` and the live **"quiet"** state (`sensor.pixel_watch_3_do_not_disturb_sensor`
   not `off`, `unknown` or `unavailable` — the watch's DND, since the phone's sensor no longer
   exists — OR `input_boolean.bedroom_sleep_mode` on): `pierce` → high-importance "Bedroom critical"
@@ -40,36 +41,44 @@ that reports rather than actuates.
   critical" channel as a DND exception in Android (after the first critical alert creates it) — high
   importance alone doesn't pierce DND. Only **severe air quality** sets `pierce`; sensor-offline +
   air-quality set `watch`; battery/humidity/recoveries are routine (silent while quiet, phone-only).
-- **The away-hold is switched off (2026-11-20, issue
-  [9598](https://github.com/DanielH2018/server/issues/9598)).** `bedroom_notify` pushes every
-  alert while `person.daniel` is away, recoveries included. The arrival flush counts
-  `states.persistent_notification`, and Home Assistant has kept persistent notifications out of
-  the state machine since release 2023.6, so the flush never ran and a parked alert never
-  reached the phone. The rest of this bullet describes the hold as designed.
-- **Away-aware notification hold (since 2026-06-19).** `script.bedroom_notify` parks non-critical
-  alerts while you're outside the home geofence. `away = person.daniel not in [home, unknown,
-  unavailable]` (fails OPEN — a tracker glitch over-notifies, the opposite safe default to the
-  unexpected-occupancy tripwire). While away + NOT `pierce`: instead of pushing, it
-  `persistent_notification.create`s id `hold_<tag>` (so a re-fire with the same tag updates in place),
-  then `stop`s before the push path. A recovery (`recovery: true`, same tag) `dismiss`es `hold_<tag>`
-  and sends nothing — so a condition that self-resolves before you return is never seen. `pierce`
-  alerts and the at-home path are unchanged. **`critical_away` (since 2026-06-24) also bypasses the
-  hold** — it pushes WHILE away (at normal importance; unlike `pierce` it does NOT sound through DND
-  at home) for damage-class alerts whose whole purpose is to reach you when nobody's home. Only the
-  `temperature` threshold category sets it: the extreme-temperature alert is the away safety net for
-  an AC/heating failure, so holding-then-digesting it (you'd see "92 °F" only after getting home,
-  too late) defeats the point. A `critical_away` recovery pushes its all-clear too (no `hold_<tag>`
-  to cancel). On arrival (`automation.bedroom_flush_held_notifications`,
-  `person.daniel -> home`), all still-held `hold_*` notifications are delivered as ONE "While you were
-  out (N)" digest (bulleted messages; phone-only, so per-alert action buttons like Boost fan are lost —
-  tap into HA to act) and then dismissed; arriving with nothing held is silent. Recovery call-sites
-  carrying `recovery: true`: threshold-ok, sensor-online, UPS-restored, zigbee-bridge-online.
-  **Known limitation:** persistent notifications are in-memory, so an HA restart (e.g. a deploy) while
-  away loses the held queue — accepted, since held items are non-critical and the overlap is rare (the
-  one damage-class away alert, extreme temperature, is `critical_away` so it's pushed not held — it's
-  not in the fragile queue).
-  `match` filtering is start-anchored, so `hold_` never catches the pierce path's bare-`tag`
-  persistent notifications.
+- **Away-hold.** While `person.daniel` is away, `script.bedroom_notify` parks an alert that can
+  wait and pushes every other alert at once. `away` is `person.daniel` not in `home`, `unknown`
+  or `unavailable`, so a tracker fault reads as home and the alert pushes.
+    - **The rule lives in `notify_route`** (`files/custom_templates/notify.jinja`). Each caller
+      passes `alert_class`, which says what the alert is about. Two classes can wait: `comfort`
+      (how the room feels to a person in it) and `upkeep` (maintenance with no deadline). Every
+      other class pushes while away: `power` (mains and UPS), `safety` (smoke, water, extreme
+      temperature, an open window, intrusion), `alert_chain` (a sensor, bridge or Home Assistant
+      fault that can stop other alerts) and `away_only` (only an absent person can act on it).
+      An alert with no class, or a class the macro does not know, also pushes, so a new alert
+      reaches the phone until someone decides it can wait. `pierce` pushes whatever the class.
+    - **The store is `sensor.bedroom_held_alerts`**, a trigger-based template sensor in
+      `files/templates.yaml`. Its `held` attribute maps each tag to a title and a message, and
+      its state is the count. Every write is a `bedroom_held_alert` event: `hold` adds or
+      replaces a tag, `cancel` removes one, `flushed` removes the tags a digest delivered. The
+      `held_after` macro computes the mapping after each event. Home Assistant restores a
+      trigger-based sensor's state and attributes, so held alerts survive a restart.
+    - **A hold is confirmed before the alert stops.** After the `hold` event, `bedroom_notify`
+      waits up to 5 seconds for the tag to appear in the store. If it does not, the alert
+      continues to the push path. A store that stops working costs a late push, never a lost
+      alert.
+    - **A recovery while away cancels the held alert** with the same tag and sends nothing, so a
+      condition that clears before anyone returns is never shown. A recovery of a class that
+      never waits pushes, like its alert did.
+    - **On arrival** (`automation.bedroom_flush_held_notifications`, `person.daniel` to `home`)
+      the held alerts go to the phone as one "While you were out (N)" digest, one
+      `• title: message` line each. The digest carries no action buttons. The automation fires
+      `flushed` only after the push succeeds, so a failed push leaves the alerts held for the
+      next arrival. Arriving with nothing held is silent.
+    - **An alert pushed while away also leaves a note in the HA panel**, keyed by its tag, and
+      its recovery dismisses the note.
+    - **To exercise the store and the flush**, run the `held` scenario from the dashboard's
+      test card. It parks one test alert and runs the flush, so the phone gets one digest.
+    - **HISTORY —** from 2026-06-19 to 2026-11-20 the hold parked alerts as persistent
+      notifications and the flush counted `states.persistent_notification`. Home Assistant
+      dropped that state domain in release 2023.6, so the flush never ran and no held alert
+      reached the phone, UPS on battery included (#9598). The `critical_away` flag of that
+      design is replaced by `alert_class`.
 - **Actionable notifications (since 2026-06-18).** `bedroom_notify` takes an optional `actions` list
   (`[{action, title}]`, phone-only) → the companion app renders buttons; taps fire
   `mobile_app_notification_action`, dispatched by `automation.bedroom_notification_action` on the

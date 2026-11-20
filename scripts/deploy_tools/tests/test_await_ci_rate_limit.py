@@ -8,10 +8,12 @@ import io
 import urllib.error
 
 from deploy_tools import await_ci
+from lib import gh_rate_limit
 import pytest
 from ci_verdict import CheckRun
 
 INTERVAL_S = 20
+RESET = 4_000_000_000
 
 
 @pytest.fixture
@@ -21,7 +23,7 @@ def rate_limited():
     headers["X-RateLimit-Limit"] = "5000"
     headers["X-RateLimit-Remaining"] = "0"
     # A reset far past any clock: the wait is capped, never shortened to one poll.
-    headers["X-RateLimit-Reset"] = "4000000000"
+    headers["X-RateLimit-Reset"] = str(RESET)
     headers["X-RateLimit-Resource"] = "core"
     body = b'{"message": "API rate limit exceeded for user ID 41801780."}'
     error = urllib.error.HTTPError(
@@ -35,9 +37,8 @@ def rate_limited():
     error.close()
 
 
-def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
-    rate_limited,
-):
+def _wait_through(rate_limited, read_quota) -> list[float]:
+    """The seconds `wait` slept on a read GitHub refused once, then answered green."""
     green = [
         CheckRun(name, "completed", "success") for name in await_ci.required_contexts()
     ]
@@ -64,9 +65,28 @@ def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
         clock=lambda: now[0],
         fetch=fetch,
         fetch_suites=lambda _s: [],
+        read_quota=read_quota,
     )
     assert code == 0
-    assert slept and slept[0] > INTERVAL_S
+    return slept
+
+
+def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
+    rate_limited,
+):
+    slept = _wait_through(rate_limited, lambda _name: {"remaining": 0, "reset": RESET})
+    assert sum(slept) > INTERVAL_S
+
+
+def test_a_rate_limit_wait_ends_once_the_quota_has_calls_again(rate_limited):
+    reads = iter([{"remaining": 0, "reset": RESET}])
+
+    def read_quota(name):
+        assert name == "core"
+        return next(reads, {"remaining": 5000, "reset": RESET})
+
+    slept = _wait_through(rate_limited, read_quota)
+    assert sum(slept) == 2 * gh_rate_limit.RECHECK_S
 
 
 def test_a_rate_limit_403_is_not_read_as_a_pending_verdict(rate_limited):
