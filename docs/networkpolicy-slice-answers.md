@@ -57,8 +57,7 @@ Deployed 2026-08-17. Ten workloads labelled, four per-workload allow policies li
 ### 3. Host → ClusterIP is admitted by the baseline's `cni0` `/32`s — only on the caller's own node
 
 Slice 2 was built as the experiment for this rather than pre-allowing both address forms.
-sonarr's Ansible verify tasks called sonarr's ClusterIP from the Ansible controller on
-daniel-box on every deploy, until sonarr's Flux flip (D5.20) replaced them with the in-cluster
+sonarr's Ansible-era verify tasks called sonarr's ClusterIP from daniel-box on every deploy, until sonarr's Flux flip (D5.20) replaced them with the in-cluster
 `sonarr-verify` Job; with sonarr fenced and **no node-IP ipBlock in its policy**, that verify
 passed and returned real data (14 series, 20.8 GiB measured through the mount). So a host caller
 does arrive as the node's `cni0` address, and the baseline's existing `10.42.0.1/32` and
@@ -100,7 +99,7 @@ right, so treat the list as the deliverable and the method as insufficient.
 
 Host → ClusterIP callers targeting a **fenced** pod:
 
-1. `hosts/components/fake-remux` → sonarr, from daniel-box. sonarr's own Ansible
+1. `hosts/components/fake-remux` → sonarr, from daniel-box. sonarr's own Ansible-era
    verify tasks were a second caller until sonarr's Flux flip (D5.20) moved the reads in-cluster.
    It is same-node and stays that way: sonarr is pinned to daniel-box by the `media-data` PV's
    *required* `nodeAffinity` (`k8s/roles/media-volume/templates/pv.yaml.j2`).

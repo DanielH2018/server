@@ -390,10 +390,10 @@ or every object in it declares nothing, and the census cannot tell the two apart
 
 ## A Flux-owned service stays Flux-owned
 
-**The operator ruled on 2026-11-06 that services do not move back from Flux to Ansible.** A
-Flux-owned service stays Flux-owned, or it retires through *Retiring a flux-owned service*. The
-ruling ends the handback, the two-PR move to Ansible that D2 planned as a rollback, and no
-procedure for it exists.
+**The operator ruled on 2026-11-06 that a service does not move off Flux.** A Flux-owned
+service stays Flux-owned, or it retires through *Retiring a flux-owned service*. The ruling
+ends the handback, the two-PR move off Flux that D2 planned as a rollback, and no procedure
+for it exists.
 
 To recover from a bad role change, fix the role forward. To stop the role's reconciliation
 meanwhile, use *Stopping one service: `flux_suspend`*.
@@ -411,7 +411,7 @@ Three things hold the ruling on the tree:
   ```
 
 - **No ownership flag.** Every `cluster/services.yml` entry is Flux's, so no key marks one (H1.9).
-- **No Ansible path.** No local script applies a k8s entry: `promote` and Flux do, and
+- **No local path.** No local script applies a k8s entry: `promote` and Flux do, and
   `land.sh` gates the tags a PR changed.
 
 D6's plan,
@@ -653,10 +653,12 @@ or a resume without `--field-manager=homelab-operator`, on a server-side apply w
 
 ## Bootstrapping Flux on a rebuilt cluster
 
-This section is the single owner of the bring-up and DR order. No Ansible path installs Flux,
-because no local script applies the flux tag (D5 step 29).
+This section owns the cluster's order, from the Flux install to the root Kustomization. No
+local script installs Flux or applies the flux tag (D5 step 29).
 `docs/longhorn-disaster-recovery.md`, `docs/break-glass.md` and `docs/k3s-etcd-restore.md` link
-here rather than keep an order of their own. Every step is **operator-only**. The bootstrap
+here rather than keep an order of their own. The steps before it, from a blank machine to a
+running k3s, are *Rebuilding daniel-box* in `docs/host-packages.md`, and *Scenario: total loss,
+from the kit alone* in `docs/break-glass.md` puts the pages in order. Every step is **operator-only**. The bootstrap
 drill, `.github/workflows/bootstrap-drill.yml`, rehearses this order on a throwaway kind
 cluster.
 
@@ -670,7 +672,7 @@ sudo systemctl restart homelab-k3s-kubeconfig.service
 ```
 
 The `homelab` Namespace and its LimitRange come from the shared kind `homelab-namespace`, which
-step 6 applies. The Ansible k8s play creates neither object.
+step 6 applies.
 
 1. Confirm that `prod`'s `longhorn-backup` render arms both backup targets, from a checkout of
    `prod`'s commit (step 2 reads it):
@@ -815,7 +817,7 @@ The `bootstrap-*` rows of `tests/repo/test_runbook_rules.py` fail this section w
 root's apply comes before the restore step, when a hand apply lacks
 `--field-manager=kustomize-controller`, and when a step names `reset_to_last_good` without its
 condition and the recorded exception. They also refuse, on any line of the section, fenced
-lines included, the forms R4's PR 7b refused: a local or Ansible deploy, a hand suspend of the
+lines included, the forms R4's PR 7b refused: a local deploy script, an `ansible-playbook` run, a hand suspend of the
 root and the `flux_sync_suspend` key set to `true`.
 
 ### Why the root is withheld, not suspended
@@ -1725,8 +1727,8 @@ never from the render, so a renderer bug cannot widen it. Each per-tag kind has 
 - `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
   same `verify_files` the renderer reads), or opts a CronJob into a gate Job with
   `flux_cronjob_gates` (`RoleDefaults.cronjob_gates`). sonarr, radarr, n8n, prowlarr and media-volume do
-  the first; karakeep and pi-peer-backup do the second (#5652). configarr sets the second
-  ahead of its flip, which stays inert while it is Ansible-owned.
+  the first; karakeep and pi-peer-backup do the second (#5652). configarr does the second
+  too.
 
 It fails when:
 

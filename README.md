@@ -1,7 +1,8 @@
 # Server Homelab
 
-A **k3s** homelab managed as infrastructure-as-code with **Ansible**, with a small residual
-**Docker** footprint on the Pi. Services are fronted by **Traefik** with **Authelia** SSO,
+A **k3s** homelab managed as infrastructure-as-code: **Flux** applies the cluster from git,
+and each host installs a signed **Debian package** built from the repo. A small residual
+**Docker** footprint stays on the Pi. Services are fronted by **Traefik** with **Authelia** SSO,
 secrets encrypted with **SOPS/age**, storage on **Longhorn**, and reverse-proxied behind
 **Cloudflare**.
 

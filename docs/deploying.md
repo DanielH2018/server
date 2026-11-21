@@ -28,7 +28,7 @@ incidents behind them.
   playbooks. A host's setup ships in its host package, as the bullet above says, and
   `hosts/bootstrap-host.sh` brings up a new host.
 
-Flux follows the promoted artifact and applies every service's render, so no Ansible play
+Flux follows the promoted artifact and applies every service's render, so no local command
 deploys a workload. [The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it
 reports.
 
