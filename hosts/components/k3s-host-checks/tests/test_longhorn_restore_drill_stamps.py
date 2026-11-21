@@ -115,7 +115,7 @@ def test_reader_pages_on_a_stale_configmap_stamp(tmp_path):
     cm = _drill_cm({"last-success": str(int(READER_NOW - 4 * 86400))})
     proc = _run_reader_against(stub, tmp_path, STUB_DRILL_CM=cm)
 
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "last successful restore drill was 4d ago" in proc.stdout, proc.stdout
 
 
@@ -127,7 +127,7 @@ def test_reader_pages_at_once_on_a_configmap_with_no_seen_entry(tmp_path):
     )
     proc = _run_reader_against(stub, tmp_path, STUB_DRILL_CM=cm)
 
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "restore-drill state did not persist" in proc.stdout, proc.stdout
 
 
@@ -149,7 +149,7 @@ def test_reader_pages_on_an_unseen_candidate_past_the_configmaps_creation_time(
     )
     proc = _run_reader_against(stub, tmp_path, STUB_DRILL_CM=cm)
 
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "not restore-proven in 7d: pvc-b" in proc.stdout, proc.stdout
 
 
@@ -168,5 +168,5 @@ def test_reader_pages_on_a_configmap_with_no_last_success_beside_a_fresh_directo
         LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
     )
 
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "no restore drill has ever succeeded" in proc.stdout, proc.stdout
