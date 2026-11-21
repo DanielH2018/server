@@ -182,22 +182,20 @@ tests:
             exp_annotations:
               summary: 'prowlarr: All notifications are unavailable due to failures.'
               description: >-
-                A Connect notification in the app fails every send, so the app's own health
-                notifications do not reach Discord. A Discord 404 in the app's log means the
-                webhook was deleted: the seed Job writes arr_discord_webhook_url into each
-                Discord (health) row on the next rollout. A missing CustomScript file needs its
-                row fixed or removed in the app's Settings, Connect.
+                A Connect notification fails every send, so the app's health notifications miss
+                Discord. A Discord 404 in the app's log means a deleted webhook, which the seed Job
+                rewrites on the next rollout. A missing CustomScript needs its row fixed in
+                Settings, Connect.
           - exp_labels:
               severity: warning
               service: sonarr
             exp_annotations:
               summary: 'sonarr: Notifications unavailable due to failures: Episode Trimmer.'
               description: >-
-                A Connect notification in the app fails every send, so the app's own health
-                notifications do not reach Discord. A Discord 404 in the app's log means the
-                webhook was deleted: the seed Job writes arr_discord_webhook_url into each
-                Discord (health) row on the next rollout. A missing CustomScript file needs its
-                row fixed or removed in the app's Settings, Connect.
+                A Connect notification fails every send, so the app's health notifications miss
+                Discord. A Discord 404 in the app's log means a deleted webhook, which the seed Job
+                rewrites on the next rollout. A missing CustomScript needs its row fixed in
+                Settings, Connect.
 
   # A 30-minute failure that clears, as during a Discord outage, stays quiet. So does an app
   # whose health issues come from other checks.

@@ -63,11 +63,9 @@ groups:
             sonarr: {{ with query "sonarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
             }}{{ (index . 0).Labels.message }}{{ end }}.
           description: >-
-            A Connect notification in the app fails every send, so the app's own health
-            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
-            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
-            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
-            the app's Settings, Connect.
+            A Connect notification fails every send, so the app's health notifications miss Discord.
+            A Discord 404 in the app's log means a deleted webhook, which the seed Job rewrites on
+            the next rollout. A missing CustomScript needs its row fixed in Settings, Connect.
 
       - alert: ArrNotificationsFailing
         expr: max(radarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
@@ -80,11 +78,9 @@ groups:
             radarr: {{ with query "radarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
             }}{{ (index . 0).Labels.message }}{{ end }}.
           description: >-
-            A Connect notification in the app fails every send, so the app's own health
-            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
-            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
-            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
-            the app's Settings, Connect.
+            A Connect notification fails every send, so the app's health notifications miss Discord.
+            A Discord 404 in the app's log means a deleted webhook, which the seed Job rewrites on
+            the next rollout. A missing CustomScript needs its row fixed in Settings, Connect.
 
       - alert: ArrNotificationsFailing
         expr: max(lidarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
@@ -97,11 +93,9 @@ groups:
             lidarr: {{ with query "lidarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
             }}{{ (index . 0).Labels.message }}{{ end }}.
           description: >-
-            A Connect notification in the app fails every send, so the app's own health
-            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
-            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
-            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
-            the app's Settings, Connect.
+            A Connect notification fails every send, so the app's health notifications miss Discord.
+            A Discord 404 in the app's log means a deleted webhook, which the seed Job rewrites on
+            the next rollout. A missing CustomScript needs its row fixed in Settings, Connect.
 
       - alert: ArrNotificationsFailing
         expr: max(prowlarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
@@ -114,8 +108,6 @@ groups:
             prowlarr: {{ with query "prowlarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
             }}{{ (index . 0).Labels.message }}{{ end }}.
           description: >-
-            A Connect notification in the app fails every send, so the app's own health
-            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
-            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
-            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
-            the app's Settings, Connect.
+            A Connect notification fails every send, so the app's health notifications miss Discord.
+            A Discord 404 in the app's log means a deleted webhook, which the seed Job rewrites on
+            the next rollout. A missing CustomScript needs its row fixed in Settings, Connect.

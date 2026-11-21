@@ -101,6 +101,7 @@ def test_the_apps_call_the_one_shared_seed_job():
 
 @pytest.mark.parametrize("app", APPS)
 def test_the_flipped_seed_job_passes_every_job_census_row(flipped, app):
+    _seed(flipped[app])
     assert problems({f"{app}-verify": flipped[app]}) == []
 
 
@@ -382,7 +383,7 @@ def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
         if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == app
     ]
     jobs = [doc for doc in flipped[app] if doc["kind"] == "Job"]
-    assert jobs
+    assert _seed(flipped[app]) in jobs
     refused = [
         job["metadata"]["name"]
         for job in jobs
