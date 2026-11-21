@@ -297,7 +297,8 @@ behind it do not wait out the same limit
 (`scripts/deploy_tools/land_lib/landing.py:Landing.without_turn`). Its log prints `gave the
 landing turn back to wait out GitHub's rate limit`. Once the wait ends, it asks for the turn
 again before the work that waited goes on, so no branch update, ready flip, batch or merge
-runs without the turn. Master may have moved during the wait, so before the merge a head
+runs without the turn. An ask that times out goes on without the turn, as any landing's
+does. Master may have moved during the wait, so before the merge a head
 that master moved past gives the turn back and rejoins the line as a draft. A batch
 member's reads still wait with the holder's turn held.
 
