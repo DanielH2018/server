@@ -1,0 +1,6 @@
+{# arr-notification's seed Job; k8s/templates/arr-notification-seed.yml.j2 has its design. #}
+{% from 'arr-notification-seed.yml.j2' import arr_notification_seed with context %}
+{{ arr_notification_seed(
+     seed_defaults=lookup('file', role_file('defaults/main.yml', role='arr-notification')) | from_yaml,
+     seed_script=lookup('file', role_file('files/seed_arr_notification.py', role='arr-notification')),
+     deployment=lookup('template', 'deployment.yaml.j2')) }}

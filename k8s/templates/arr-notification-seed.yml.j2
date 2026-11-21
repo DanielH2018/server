@@ -1,5 +1,5 @@
 {#
-  arr-notification's seed as a post-apply mutation Job, for sonarr, radarr and lidarr.
+  arr-notification's seed as a post-apply mutation Job, for sonarr, radarr, lidarr and prowlarr.
 
   Each app's `templates/verify/notification.yaml.j2` calls `arr_notification_seed`, so the app
   is `container_item.name` and never a literal. The renderer emits the Job into `<app>-verify`
@@ -19,8 +19,8 @@
   renderer's secret checks cannot follow from `k8s/templates/`.
 
   DECIDED: the script and the declared values come from arr-notification by `lookup()`, not
-  from the renderer. A cross-role lookup puts arr-notification's files in the sonarr, radarr
-  and lidarr renders, so a change there redeploys all three, the coupling the Ansible `include_role` of arr-notification
+  from the renderer. A cross-role lookup puts arr-notification's files in the sonarr, radarr,
+  lidarr and prowlarr renders, so a change there redeploys all four, the coupling the Ansible `include_role` of arr-notification
   had before the flip, so the lookup changed no routing. A renderer argument for one role's script
   would be a special case for three readers.
 
