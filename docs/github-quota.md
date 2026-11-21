@@ -267,6 +267,28 @@ the operator's PC. For `graphql` it also holds the points a recorded call cost a
 That is the right answer for the operator's terminal. For a session it covers writes only,
 once claude-guard routes every read.
 
+**Most core spend beyond the ledger is not the other host.** daniel-box and daniel-server
+spend one quota through two tokens, so each host keeps its own ledger file and reports the
+other host's calls as beyond the ledger. The two ledgers name different identities
+(`tok-2edb9dd14a9a` on daniel-box, `tok-0b068a5c1034` on daniel-server), but their windows
+share GitHub's reset epoch to the second. A measurement on 2026-11-21 joined both hosts'
+`truth` and `spend` tables on that reset epoch. It kept the 70 closed core windows from
+2026-11-14 to 2026-11-21 whose last sample came within 60 seconds of the reset:
+
+- GitHub counted 121,458 core calls in those windows.
+- daniel-box's ledger recorded 40,722 of them, so its `gh-quota status` reads 66% beyond.
+- daniel-server's ledger recorded 9,254, so its `gh-quota status` reads 92% beyond.
+- Both ledgers together leave 71,482 calls, or 59%, attributed to neither host.
+
+The other host therefore explains about 7 points of daniel-box's share. On daniel-server it
+explains 33 points, because daniel-box makes most of the spend. One busy hour shows the same
+shape: the window that reset at 02:34 UTC on 2026-11-19 counted 4,447 calls, of which
+daniel-box recorded 1,298 and daniel-server 43, which leaves 3,106 (70%) beyond both ledgers.
+A single `gh-quota status` snapshot can read far lower: 31% on 2026-11-20 was one window
+part-way through, and that window ended at 25% once both hosts were subtracted. The host REST
+readers are unrecorded until slice 3 ships, because `host_lib.github_get` does not call the
+ledger.
+
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
 override it. In `off`, `record` returns at once. `GH_QUOTA_MODE=off` in one call's
