@@ -26,8 +26,8 @@
 #
 # Templates, scripts and defaults sit beside this file (`templates/`, `files/` and
 # `defaults/main.yml`); the renderer loads defaults/main.yml beneath the `defaults:` below. Each
-# template that names a sibling unit takes that name from a variable, which the `defaults:` below
-# set to the packaged name; defaults/main.yml sets the two failure pages'. Each host's
+# template that names a sibling unit takes that name from a variable, which defaults/main.yml
+# sets to the packaged name. Each host's
 # package.yml reaches them with `component: claude-code`.
 #
 # DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
@@ -48,9 +48,6 @@
 #
 # Not shipped: the operator's own Claude Code install, which the dotfiles repo owns.
 defaults:
-  # The packaged unit names the templates read (see the header).
-  claude_code_rc_unit: homelab-claude-rc.service
-  claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
   # What the role computes in tasks: the agents switched on, and the group initial_setup names.
   claude_code_agents_present: [claude]
   claude_code_worktree_holders_group: worktree-holders
