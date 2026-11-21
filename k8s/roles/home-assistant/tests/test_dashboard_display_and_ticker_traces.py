@@ -71,6 +71,7 @@ def test_display_show_idle_trigger_holds_for_a_minute():
 
 
 NOW = datetime(2026, 11, 12, 19, 25, tzinfo=timezone.utc)
+DISMISS = "automation.bedroom_display_go_ambient_when_dark_or_sleeping"
 
 
 def _show_allowed_after_dismiss(dismissed: datetime | None, lux: str = "70") -> bool:
@@ -78,11 +79,10 @@ def _show_allowed_after_dismiss(dismissed: datetime | None, lux: str = "70") -> 
     templates = [
         c["value_template"]
         for c in conditions
-        if c.get("condition") == "template"
-        and "automation.bedroom_display_dismiss" in c["value_template"]
+        if c.get("condition") == "template" and DISMISS in c["value_template"]
     ]
     assert len(templates) == 1, templates
-    attributes = {("automation.bedroom_display_dismiss", "last_triggered"): dismissed}
+    attributes = {(DISMISS, "last_triggered"): dismissed}
     rendered = render_template(
         templates[0],
         state_attr=lambda entity_id, name: attributes[(entity_id, name)],
