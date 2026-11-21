@@ -26,8 +26,6 @@ and writes the state file (REPLACE_STATE_FILE, default replace_state.json in tha
 directory). Always exits 0; the state file carries the verdict.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

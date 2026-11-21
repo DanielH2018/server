@@ -21,8 +21,6 @@ Usage:
   mkv_attachment_repair.py --dry-run PATH # just these files
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

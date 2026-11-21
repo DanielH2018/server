@@ -21,8 +21,6 @@ Exit 0 = up, 1 = down. Each run logs one `status=<up|down>` line under the
 claude-weekly-summary tag and writes claude-weekly-summary.prom to TEXTFILE_DIR.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import json
 import os

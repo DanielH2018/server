@@ -18,8 +18,6 @@ inventory/group_vars/all.yml). Carries no secrets.
 Usage: state_push.py <label> <state-file> <max-age-hours> [<label> <state-file> <max-age-hours> ...]
 """
 
-from __future__ import annotations
-
 import json
 import os
 import sys

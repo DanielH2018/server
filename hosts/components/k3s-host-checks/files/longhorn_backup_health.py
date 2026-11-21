@@ -34,8 +34,6 @@ Prints `up<TAB>msg` or `down<TAB>msg` and exits 0. Ahead of that line it prints 
 section (`_ProblemClasses`), which the wrapper writes as a `homelab_check_detail` series.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

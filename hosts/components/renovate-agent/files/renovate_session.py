@@ -16,8 +16,6 @@ and the runner reads `Result=timeout`.
 Usage: renovate_session.py   (takes no arguments; -h/--help prints this text)
 """
 
-from __future__ import annotations
-
 import os
 import signal
 import subprocess

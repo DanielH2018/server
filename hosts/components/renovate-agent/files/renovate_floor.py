@@ -10,8 +10,6 @@ Stdlib only, like the rest of the agent. Every input is a GitHub API answer the 
 with the operator's token, at the head SHA it pins land.sh to.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import PurePosixPath
 

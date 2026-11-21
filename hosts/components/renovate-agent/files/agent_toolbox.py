@@ -11,8 +11,6 @@ which is what makes it the leaf both of them import.
 Stdlib only, like the rest of the agent.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 

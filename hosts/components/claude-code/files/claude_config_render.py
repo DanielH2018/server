@@ -22,8 +22,6 @@ Usage: claude_config_render.py render|publish
 Exit 0 = published, unchanged or deferred, 1 = refused. Each command logs one `status=` line.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re

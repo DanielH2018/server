@@ -265,9 +265,14 @@ that the tree agrees —
 the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
 the line and half did not.
 
-**The exception is `k8s/roles/*/files/`**, which the guard exempts. A program there runs
-under the HOST's interpreter rather than the repo's uv env — `python3` on daniel-server and
-daniel-pi is 3.12.3 — and below 3.14 there is no PEP 649, so annotations evaluate eagerly at
+**The exception is code that runs on an older interpreter**, which the guard exempts:
+`k8s/roles/*/files/`, `hosts/lib/`, and each component file ruff's
+`per-file-target-version` in `pyproject.toml` targets at py312. A program there runs under
+the host's or the pod image's interpreter rather than the repo's uv env. `python3` on
+daniel-server and daniel-pi is 3.12.3. A component program that starts through
+`uv run --python {{ host_python_version }}` runs on 3.15 and is not exempt, nor are
+`hosts/lib/checkout_sync.py` and `hosts/lib/host_package_builder.py`, which start the same
+way. Below 3.14 there is no PEP 649, so annotations evaluate eagerly at
 `def`/`class` time and the import is real insurance against a forward reference. The repo suite
 cannot see that difference, because it runs on 3.15 where both spellings are lazy.
 

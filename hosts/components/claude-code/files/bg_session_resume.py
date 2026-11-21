@@ -19,8 +19,6 @@ A roster older than `MAX_ROSTER_AGE_S` is skipped whole. Claude Code itself asks
 resumes a session that ended more than 48 hours ago, and this script follows the same line.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import socket

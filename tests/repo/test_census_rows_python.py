@@ -20,6 +20,7 @@ from pathlib import PurePosixPath
 import pytest
 from _helpers import REPO
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
+from _future_annotations_row import NO_FUTURE_ANNOTATIONS, host_shipped
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
@@ -41,41 +42,6 @@ def _parse(subject: Subject) -> ast.AST | None:
         return ast.parse(subject.text)
     except SyntaxError:
         return None
-
-
-# ── from __future__ import annotations ────────────────────────────────────────────────
-
-FUTURE_ANNOTATIONS = re.compile(r"^from __future__ import annotations\b", re.MULTILINE)
-
-# DECIDED: host-shipped `k8s/roles/*/files/*.py`, `hosts/components/*/files/*.py` and
-# `hosts/lib/` are EXEMPT, and the exemption is not cosmetic. `hosts/lib/host_lib.py` runs under
-# the hosts' own interpreter (`python3 -V` on daniel-server and daniel-pi reports 3.12.3,
-# measured 2026-09-05), for instance through the repository signer, and the k8s files run under
-# whatever python their pod image ships. The component files are a mix: some start through
-# `uv run --python {{ host_python_version }}` (3.15.2), where the import is dead, and others
-# have no such pin. The census does not tell them apart, so the whole directory stays exempt.
-# `scripts/lib/longhorn_lib/` is not exempt: its reader runs under the pinned 3.15.2, and three
-# of its modules use the parenthesis-free `except A, B:` that 3.12 rejects.
-# Below 3.14 there is no PEP 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing insurance against a
-# forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises
-# NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such
-# annotation is lazy either way. So the exemption is what keeps a green suite from
-# authorising a cron-time NameError on a host.
-HOST_SHIPPED = re.compile(
-    r"^(k8s/roles/[^/]+/files/|hosts/components/[^/]+/files/|hosts/lib/[^/]+\.py$)"
-)
-
-
-def _uv_run_modules() -> list[str]:
-    return [rel for rel in tracked("*.py") if not HOST_SHIPPED.match(rel)]
-
-
-def _future_offence(subject: Subject) -> list[str]:
-    return (
-        ["imports annotations from __future__"]
-        if FUTURE_ANNOTATIONS.search(subject.text)
-        else []
-    )
 
 
 # ── "<host>" in x ─────────────────────────────────────────────────────────────────────
@@ -240,35 +206,7 @@ def _shadowing_offence(subject: Subject) -> list[str]:
 
 
 ROWS = (
-    Census(
-        name="no-future-annotations",
-        reason=(
-            "On the repo's uv interpreter (3.14) PEP 649 already defers annotation evaluation, "
-            "so `from __future__ import annotations` is dead weight, and half a directory "
-            "carrying it is how the convention drifts (docs/python-code-organization.md). "
-            "Host-shipped `k8s/roles/*/files/` is exempt: see the DECIDED marker."
-        ),
-        files=_uv_run_modules,
-        offence=_future_offence,
-        red=(
-            Subject("a.py", '"""A module."""\n\nfrom __future__ import annotations\n'),
-        ),
-        green=(
-            Subject("a.py", '"""A module."""\n\nimport os\n'),
-            Subject("b.py", "from __future__ import division\n"),
-        ),
-        min_matches=200,
-        # One per context that reaches the uv interpreter: a template filter, a Claude hook, an
-        # eval script and the suite's shared helper.
-        must_find=frozenset(
-            {
-                "scripts/renderer/template_filters/toposort.py",
-                ".claude/hooks/block-footguns.py",
-                "evals/trend.py",
-                "tests/_helpers.py",
-            }
-        ),
-    ),
+    NO_FUTURE_ANNOTATIONS,
     Census(
         name="no-host-shaped-membership-literal",
         reason=(
@@ -514,8 +452,40 @@ def test_every_pythonpath_root_is_a_real_directory():
 
 def test_the_future_annotations_exemption_finds_the_host_shipped_modules():
     """An exemption that matched nothing would gate host scripts on a rule their 3.12 cannot take."""
-    exempt = {rel for rel in tracked("*.py") if HOST_SHIPPED.match(rel)}
+    exempt = {rel for rel in tracked("*.py") if host_shipped(rel)}
     assert len(exempt) >= 20
-    assert {"hosts/lib/host_lib.py", "hosts/lib/ci_verdict.py"} <= exempt
+    assert {
+        "hosts/lib/host_lib.py",
+        "hosts/lib/ci_verdict.py",
+        "hosts/components/claude-code/files/homelab_rootq.py",
+        "hosts/components/gh-quota/files/gh_quota.py",
+    } <= exempt
     assert not any(rel.startswith("scripts/lib/longhorn_lib/") for rel in exempt)
-    assert not any(HOST_SHIPPED.match(rel) for rel in tracked("hosts/lib/tests/*.py"))
+    assert not any(host_shipped(rel) for rel in tracked("hosts/lib/tests/*.py"))
+
+
+_UV_PINNED_LAUNCH = re.compile(
+    r"--python \{\{ host_python_version \}\}[\s\\]+(?:\{\{ \w+ \}\})?(\S+\.py)\b"
+)
+
+
+def test_no_program_started_on_the_pinned_python_is_exempt():
+    """A program `uv run --python {{ host_python_version }}` starts runs on 3.15, where the import is dead."""
+    sources: dict[str, list[str]] = {}
+    for rel in tracked("*.py"):
+        if rel.startswith("hosts/") and "/tests/" not in rel:
+            sources.setdefault(PurePosixPath(rel).name, []).append(rel)
+    launched = set()
+    for rel in tracked("*.j2"):
+        if rel.startswith("hosts/"):
+            for path in _UV_PINNED_LAUNCH.findall((REPO / rel).read_text()):
+                homes = sources.get(PurePosixPath(path).name, [])
+                assert len(homes) == 1, f"{rel} starts {path}, tracked at {homes}"
+                launched.add(homes[0])
+    assert {
+        "hosts/components/claude-code/files/bg_session_resume.py",
+        "hosts/components/fake-remux/files/state_push.py",
+        "hosts/components/renovate-notify/files/renovate_notify.py",
+        "hosts/lib/host_package_builder.py",
+    } <= launched
+    assert not sorted(rel for rel in launched if host_shipped(rel))

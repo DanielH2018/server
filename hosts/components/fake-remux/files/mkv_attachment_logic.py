@@ -10,8 +10,6 @@ The split exists so this half is testable: an mkv is a binary no test can commit
 script owns the probe and the rewrite and this module owns every decision they make.
 """
 
-from __future__ import annotations
-
 import pathlib
 import re
 

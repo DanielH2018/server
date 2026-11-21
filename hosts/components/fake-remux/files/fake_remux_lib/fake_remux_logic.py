@@ -15,8 +15,6 @@ CLAIMS a remux quality but whose video stream was re-encoded gives itself away t
 The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode trips both.
 """
 
-from __future__ import annotations
-
 from itertools import pairwise
 from typing import NamedTuple
 

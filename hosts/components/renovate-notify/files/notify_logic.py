@@ -4,8 +4,6 @@ Maps open Renovate PRs to an actionable bucket and decides when to (re)notify, s
 the I/O shell (renovate_notify.py) only fetches, persists, and posts.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone

@@ -21,8 +21,6 @@ Exit 0 = up, 1 = down. Each run logs one `status=<up|down>` line under the
 claude-dotfiles-mirror tag and writes claude-dotfiles-mirror.prom to TEXTFILE_DIR.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess
