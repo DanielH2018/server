@@ -128,10 +128,17 @@ def instance_rows(
         (day, instance, "total", "blocked", "", summary["sum_blocked"]),
         (day, instance, "total", "clients", "", summary["total_clients"]),
     ]
-    clients = get("stats/database/top_clients", {**window, "count": TOP_CLIENTS})
+    clients = [
+        client
+        for blocked in ("false", "true")
+        for client in get(
+            "stats/database/top_clients",
+            {**window, "blocked": blocked, "count": TOP_CLIENTS},
+        )["clients"]
+    ]
     rows += [
         (day, instance, "client", ip, label, n)
-        for ip, (label, n) in _clients_by_address(clients["clients"]).items()
+        for ip, (label, n) in _clients_by_address(clients).items()
     ]
     for kind, blocked in (("domain", "false"), ("blocked_domain", "true")):
         domains = get(
@@ -150,8 +157,10 @@ def _clients_by_address(clients: Sequence[Mapping]) -> dict[str, tuple[str, int]
 
     FTL's database keeps one client record per address and name it has seen, and
     `top_clients` counts queries per record, so an address seen under two names comes back
-    twice. Its counts add up, and the label is the first non-empty name, the busiest one,
-    because FTL lists clients by count.
+    twice. `top_clients` also counts either permitted or blocked queries, never both, so
+    `clients` holds both lists, permitted first. An address's counts add up, and the label
+    is the first non-empty name, the busiest permitted one, because FTL lists clients by
+    count.
     """
     merged: dict[str, tuple[str, int]] = {}
     for client in clients:
