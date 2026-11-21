@@ -28,7 +28,12 @@ PVC = "some-config"
 
 def _probe_log(*lines: str, checked: int, bad: int) -> str:
     return "\n".join(
-        ["files=3 bytes=4096", *lines, f"sqlite_checked={checked} sqlite_bad={bad}"]
+        [
+            "files=3 bytes=4096",
+            *lines,
+            f"sqlite_checked={checked} sqlite_bad={bad}",
+            "postgres_checked=0 postgres_bad=0",
+        ]
     )
 
 
@@ -126,7 +131,7 @@ def test_the_probe_pod_runs_the_program_over_a_read_only_mount(tmp_path: Path) -
     created = [c for c in run.calls if " run restore-drill-" in c]
     assert len(created) == 1, run.calls
     spec = json.loads(created[0].split("--overrides=", 1)[1])["spec"]
-    (container,) = spec["containers"]
+    container = spec["containers"][0]
     assert container["command"][:2] == ["sh", "-c"]
     assert 'python3 -c "$SQLITE_CHECK" /drill /scratch' in container["command"][2]
     assert {"name": "SQLITE_CHECK", "value": _probe_program()} in container["env"]
