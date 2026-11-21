@@ -347,6 +347,7 @@ then doubled, and the bare name with the link satisfies both reads. This is the 
 `scripts/backup/etcd_restore_drill.sh` restores with:
 
 ```bash
+sudo -i
 cd /var/lib/rancher/k3s/server
 ln db/snapshots/<local-snapshot-name> <local-snapshot-name>
 k3s server \
@@ -356,10 +357,11 @@ k3s server \
 rm <local-snapshot-name>
 ```
 
-Either command restores and exits — it does not stay running. Then:
+Either command restores and exits — it does not stay running. Then, from the `ubuntu` shell or
+the root shell:
 
 ```bash
-systemctl start k3s
+sudo systemctl start k3s
 ```
 
 **daniel-server (the agent) must then rejoin.** A cluster reset changes the cluster's identity;
