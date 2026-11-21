@@ -123,7 +123,7 @@ GuC only takes effect after a reboot, so do that when convenient, then confirm w
 
 > This used to be a hand-run `echo … | sudo tee -a`, which appends a **duplicate** option
 > line every time it's run — daniel-server's `i915.conf` still carries the line twice from
-> exactly that. The Ansible task is idempotent and converges it back to one.
+> exactly that. The package ships the whole file, so it holds the line once.
 
 `enable_guc` is an i915 option, so the task additionally checks that `/sys/module/i915` exists
 and skips on a non-Intel GPU. `has_igpu` on its own would be the wrong gate — it means "pass
@@ -163,10 +163,10 @@ not a hand-run `cscli bouncers add`.
 
 Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are in §9.
 
-## 9. Post-deploy setup that Ansible can't do
+## 9. Post-deploy setup that no package or render can do
 
 Flux applying the host's workloads green does **not** mean the host is done. The steps below live in each
-app's own database, which Ansible never writes. Most of them **fail silently** — the container
+app's own database, which no package or render writes. Most of them **fail silently** — the container
 stays healthy while the feature behind it does nothing (the exception is Authelia, whose role
 asserts up front and fails the deploy). Work top-down.
 
@@ -192,7 +192,7 @@ reports SKIP. Run it once Flux has applied the host's workloads, and again after
    hash and RSA key per the setup instructions in `k8s/roles/authelia/templates/config-secret.yaml.j2`
    (header comment explains fresh-install secrets) — the role asserts they exist. Note that
    OIDC configuration is live as of E7 (2026-08-13).
-**Why these can't move into Ansible** (checked 2026-07-30, so it doesn't get re-litigated):
+**Why these can't move into the repo** (checked 2026-07-30, so it doesn't get re-litigated):
 Home Assistant's `/api/onboarding/users`
 is drivable, but minting a long-lived token isn't, and seeding `.storage/` by hand corrupts
 installs. The *arr keys are deliberately left manual: writing `config.xml` under a running

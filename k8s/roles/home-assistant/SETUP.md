@@ -5,7 +5,7 @@ scratch, how to operate it day-to-day, and where to tune it. For implementation 
 *editing* the config, see [`CLAUDE.md`](CLAUDE.md). Per-feature design rationale lives in
 the commits that shipped each feature; this guide arrived in `81232dca7`.
 
-Everything is Ansible-managed — **git is the source of truth; HA UI edits are overwritten on
+Everything is managed from the repo — **git is the source of truth; HA UI edits are overwritten on
 deploy.** Flux applies the role (its entry is in `cluster/services.yml`), so merge the change and `promote` applies it.
 Nothing applies it by hand.
 
@@ -77,8 +77,8 @@ give the merge rules and add-a-file steps for those two trees; [`CLAUDE.md`](CLA
 one convention that breaks edits") covers the rest, including why HA Jinja can't go inline in
 `configuration.yaml`/`customize.yaml`/`ui-lovelace.yaml`.
 
-The one exception is `templates/config/secrets.yaml.j2` — the only genuinely Ansible-templated
-config file, rendered with `lookup('template')` into the role's Secret, feeding the rest of the
+The one exception is `templates/config/secrets.yaml.j2` — the only genuinely Jinja-templated
+config file, rendered into the role's Secret, feeding the rest of the
 config through HA's native `!secret` indirection (see §10c).
 
 ---
@@ -210,10 +210,10 @@ Home Developer Console — use that. Repo-specific values:
 > Hand off three things from the above: the **Project ID**, the **service-account JSON**, and the
 > **HomeGraph API key**. They become the SOPS secrets below.
 
-### 10c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
-**Key constraint:** `configuration.yaml` is copied verbatim — it must contain **no** Ansible
+### 10c. Voice control — repo-side — IMPLEMENTED (2026-06-21)
+**Key constraint:** `configuration.yaml` is copied verbatim — it must contain **no** Jinja
 `{{ }}` (the `validate-ha-config` hook rejects it). So all templated/secret values go through HA's
-native `!secret` indirection backed by an Ansible-generated `secrets.yaml`, except the multi-line
+native `!secret` indirection backed by a rendered `secrets.yaml`, except the multi-line
 service account, which `configuration.yaml` reads with `!include` from a file the init container
 installs.
 
@@ -225,8 +225,8 @@ installs.
 2. **The JSON key has a Secret of its own.** `templates/google-sa-secret.yaml.j2` renders
    Secret `home-assistant-google-sa`, and the init container installs it as
    `config/google_service_account.json`, mode 600. It is multi-line, so a Flux placeholder
-   cannot carry it (target slice R2). **`templates/config/secrets.yaml.j2`** (Ansible-rendered
-   via the role's Secret → `config/secrets.yaml`, mode 600) carries `google_assistant_project_id`,
+   cannot carry it (target slice R2). **`templates/config/secrets.yaml.j2`** (rendered
+   into the role's Secret → `config/secrets.yaml`, mode 600) carries `google_assistant_project_id`,
    plus `external_url` / `internal_url` (these need the `domain` var, which is why they can't
    live in configuration.yaml).
 3. **`configuration.yaml`** reads the project id via `!secret` and the JSON via `!include`

@@ -4,7 +4,7 @@ The host-package pipeline builds `homelab-*` Debian packages from master on dani
 them, and serves them as an apt repository at `http://<daniel-box server_ip>:8791`. The
 `builder` component of `homelab-daniel-box` installs the builder half on daniel-box; its
 rules are in `hosts/components/builder/CLAUDE.md`, and its design is in
-[the H3 plan](archive/host/h3-pi-pilot.md). Until H7.41b the Ansible role
+[the H3 plan](archive/host/h3-pi-pilot.md). Until H7.41b the Ansible-era role
 `homelab_builder` installed it.
 
 This page holds the procedures an operator runs when the pipeline stops or must be stopped:
@@ -55,7 +55,7 @@ lists.
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
-  `secrets/hosts/daniel-box.sops.yaml` carries. Before H7, Ansible kept the builder, the
+  `secrets/hosts/daniel-box.sops.yaml` carries. Before H7, the Ansible-era roles kept the builder, the
   repository and every other daniel-box timer, and before H6.4a the GitOps deployer kept k3s's
   files. Since H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
   daniel-server's package does not ship `k3s-restart` yet, so a k3s-agent restart there stays a
@@ -267,8 +267,8 @@ before an enable of UFW applies it.
   `dpkg-query -W -f='${Conffiles}'` on each owner. An unowned file, and a conffile, take the
   edit. Any other owned file is a fault: the package shipped something wrong. The arm
   rewrites a file in place and keeps its owner and mode, because sshd rejects an
-  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible
-  task's, so the first run adopts the line or block Ansible wrote.
+  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible-era
+  task's, so the first run adopts the line or block that task wrote.
 - **The checks at render time run before the arm's.** A `lines:` entry whose line its own regexp
   misses would be appended again on every run, and a libvirt XML without a `<uuid>` would make
   `net-define` collide with the live object. Both fail the render.
@@ -560,7 +560,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 1. Merge the PR. A merge applies nothing under `hosts/`: the builder and the updater do.
 1. Let the builder rewrite `/etc/homelab-builder/archive-key.fpr`. Its `ExecStartPre=+` script
    `builder-fingerprint` writes the file from the signer's GnuPG home on every run, so no
-   Ansible apply is needed. A held builder still runs it. To write it now, run
+   other step is needed. A held builder still runs it. To write it now, run
    `sudo /usr/lib/homelab/builder-fingerprint`.
 1. Release the builder hold (`sudo rm /etc/homelab-builder/hold`). The builder's keyring check
    now accepts the render, so the builder publishes a `homelab-updater` that ships the new

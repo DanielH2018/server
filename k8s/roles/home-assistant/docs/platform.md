@@ -273,7 +273,7 @@ interactive. Rejected, and the reasons are worth keeping because the proposal re
   because Traefik's pod IP changes on every restart; `configuration.yaml`'s `DECIDED: the whole
   pod CIDR` comment has the trade-off. The manifests task rollout-restarts HA when the rendered config changes,
   so an edit takes effect on the next deploy. **Note:** HA may rewrite parts of its
-  own config via the UI, but this file is the Ansible source of truth and is
+  own config via the UI, but this file is the source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
   stores separately (`.storage/`, the recorder DB…), which are NOT templated.
   - **Smart-plug entity_id renames (2026-06-25, NOT templated — survives deploy, NOT a Z2M re-pair).**

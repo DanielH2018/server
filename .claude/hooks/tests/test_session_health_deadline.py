@@ -35,7 +35,7 @@ def _probes(**overrides):
         "dirty_primary_problems": lambda: [],
         "other_live_sessions": lambda cwd: [],
         "unlabelled_worktree_lines": lambda cwd: [],
-        "stale_worktree_lines": lambda: [],
+        "stale_worktree_lines": lambda repo: [],
         "remote_fanout_lines": lambda: [],
     }
     probes.update(overrides)
@@ -51,7 +51,7 @@ def test_the_probes_run_at_the_same_time(capsys):
         barrier.wait()
         return ["  ✗ target loki [loki:3100] down"]
 
-    def stale_worktree_lines():
+    def stale_worktree_lines(repo):
         barrier.wait()
         return ["  old-thing — worktree-old-thing merged"]
 
@@ -67,7 +67,7 @@ def test_the_probes_run_at_the_same_time(capsys):
 def test_a_probe_past_the_deadline_is_named_and_the_rest_still_print(capsys):
     never = threading.Event()
 
-    def hung():
+    def hung(repo):
         never.wait()
         return ["  never printed"]
 
@@ -83,6 +83,15 @@ def test_a_probe_past_the_deadline_is_named_and_the_rest_still_print(capsys):
     assert "loki" in out
     assert "the removable-worktree survey did not finish within 0.2s" in out
     assert "never printed" not in out
+
+
+def test_a_probe_whose_subprocess_timed_out_is_named(capsys):
+    def stale_worktree_lines(repo):
+        raise subprocess.TimeoutExpired("prune-worktrees.py", 5)
+
+    assert _mod.main(**_probes(stale_worktree_lines=stale_worktree_lines)) == 0
+    operator = json.loads(capsys.readouterr().out)["systemMessage"]
+    assert "the removable-worktree survey timed out after 5s, skipped" in operator
 
 
 def test_a_hung_worktree_costs_its_own_session_line_only():

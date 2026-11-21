@@ -50,7 +50,7 @@ def _output(
             dirty_primary_problems=lambda: [],
             other_live_sessions=lambda cwd: list(sessions),
             unlabelled_worktree_lines=lambda cwd: list(unlabelled),
-            stale_worktree_lines=lambda: list(worktrees),
+            stale_worktree_lines=lambda repo: list(worktrees),
             remote_fanout_lines=lambda: list(fanout),
         )
         == 0
