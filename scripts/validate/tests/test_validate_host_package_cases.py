@@ -11,13 +11,20 @@ Run: uv run pytest scripts/validate/tests/test_validate_host_package_cases.py
 
 import json
 import ast
+import functools
 import getpass
 import hashlib
 import importlib
 import inspect
+import os
 import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -341,6 +348,33 @@ def test_apt_refuses_a_repository_past_its_valid_until(tmp_path):
     done = _apt_update(repo, tmp_path)
     assert done.returncode != 0
     assert "is expired" in done.stderr
+
+
+def test_a_republish_is_served_to_apts_if_modified_since_fetch(tmp_path):
+    repo = _publish(tmp_path)
+    in_release = repo / "dists/homelab/InRelease"
+    # Pins the first index's mtime ahead of the republish, as one written in the same second.
+    ahead = int(time.time()) + 2
+    os.utime(in_release, (ahead, ahead))
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(repo))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}/dists/homelab/InRelease"
+    try:
+        with urllib.request.urlopen(url) as first:
+            modified = first.headers["Last-Modified"]
+        fx.publish(repo, [])
+        request = urllib.request.Request(url, headers={"If-Modified-Since": modified})
+        try:
+            with urllib.request.urlopen(request) as second:
+                body = second.read()
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            pytest.fail(f"the republished InRelease was answered {exc.code}")
+        assert body == in_release.read_bytes()
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def _tracked(*paths: str) -> list[Path]:
