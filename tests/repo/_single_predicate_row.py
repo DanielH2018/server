@@ -191,9 +191,14 @@ SINGLE_PREDICATE_CHECK_IS_A_ROW = Census(
         Subject(
             "tests/k8s/test_x.py",
             "from renderer import homelab_render\n"
-            "def test_a_tag_renders(tmp_path_factory):\n"
+            "def test_a_tag_renders():\n"
+            "    assert homelab_render.cluster(OUT, ['a'], None) == 0\n"
+            "    assert (OUT / 'a.yaml').read_text()\n",
+        ),
+        Subject(
+            "tests/k8s/test_x.py",
+            "def test_a_scratch_tree_is_read(tmp_path_factory):\n"
             "    out = tmp_path_factory.mktemp('o')\n"
-            "    assert homelab_render.cluster(out, ['a'], None) == 0\n"
             "    assert (out / 'a.yaml').read_text()\n",
         ),
         Subject(
