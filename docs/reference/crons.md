@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-19 06:17 UTC
-generated_sha: 74a6a49d0
+generated_at: 2026-11-20 18:17 UTC
+generated_sha: fd213a5e7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -44,7 +44,7 @@ generated_sha: 74a6a49d0
 | homelab-crowdsec-probe.timer | `OnBootSec=1min, OnUnitActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/crowdsec-probe/units/homelab-crowdsec-probe.timer` |
 | homelab-disk-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-disk-health.timer.j2` |
 | homelab-docker-engine.timer | `OnCalendar=*-*-* 00:30:00` | daniel-pi | `root` | yes (apply) | `hosts/components/pi-docker/units/homelab-docker-engine.timer` |
-| homelab-docker-prune.timer | `OnCalendar=*-*-* 06:30:00` | daniel-pi | `root` | yes (prune) | `hosts/components/host-maintenance/units/homelab-docker-prune.timer.j2` |
+| homelab-docker-prune.timer | `OnCalendar=*-*-* 06:30:00` | daniel-pi | `root` | yes (prune) | `hosts/components/pi-docker/units/homelab-docker-prune.timer.j2` |
 | homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box | `ubuntu` | read the script | `hosts/components/docs-refresh/units/homelab-docs-refresh.timer` |
 | homelab-dpkg-purge.timer | `OnCalendar=Sun *-*-* 02:15:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-dpkg-purge.timer` |
 | homelab-etcd-restore-drill.timer | `OnCalendar=Mon *-*-* 10:20:00` | daniel-box | `root` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-etcd-restore-drill.timer.j2` |

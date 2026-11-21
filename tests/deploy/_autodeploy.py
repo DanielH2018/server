@@ -130,9 +130,8 @@ def _deployment_templates(role: Path) -> list[str]:
     The `kind` match tolerates optional quoting (`kind: "Deployment"`) and an optional trailing
     comment (`kind: Deployment  # web`), the same tolerance `_batch_templates` already carries
     for `Job`/`CronJob`. No live template uses either spelling. The tolerance is load-bearing
-    because `_rollout_gate_offender` trusts an empty result here as proof a role renders no
-    Deployment/DaemonSet at all. A quoted or commented `kind:` line this could not see would
-    grant a batch-gate exemption to a role that still has an ungated rollout.
+    because `_ungated_deployments` judges only the templates listed here, so a quoted or
+    commented `kind:` line this could not see would hide an ungated Deployment.
     """
     return [
         name

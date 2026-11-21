@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-20 06:17 UTC
-generated_sha: e1464d63a
+generated_at: 2026-11-20 18:17 UTC
+generated_sha: fd213a5e7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: e1464d63a
 
 # Secrets
 
-120 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
+121 secret(s) in the rotation registry (`secrets/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -34,6 +34,7 @@ needs a human to mint the new value in the app, then `sops set` it.
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
 | `airflow_api_jwt_secret` | 2026-09-20 | 2027-08-27 | 280 |
+| `airflow_github_token` | 2026-03-07 | 2027-02-15 | 87 |
 | `airflow_ha_token` | 2026-08-20 | 2027-07-27 | 249 |
 | `airflow_postgres_password` | 2026-09-17 | 2027-09-07 | 291 |
 | `airflow_warehouse_reader_password` | 2026-06-13 | 2027-05-24 | 185 |

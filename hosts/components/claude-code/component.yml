@@ -229,9 +229,10 @@ files:
   - {src: templates/claude-triage-poll.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.timer, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: units/homelab-claude-triage-poll-alert.service, dst: /usr/lib/systemd/system/homelab-claude-triage-poll-alert.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/50-claude-triage.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-triage.rules, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  # The restart broker: a root unit that restarts one allowlisted Deployment. No polkit rule
-  # ships for it, so only root starts it. Its allowlist and caps are pins in
+  # The restart broker: a root unit that restarts one allowlisted Deployment, and the polkit
+  # rule that lets the triage controller start it. Its allowlist and caps are pins in
   # templates/claude-triage-pins.j2.
+  - {src: templates/50-claude-restart.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-restart.rules, when: "claude_code_restart_enabled and claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_restart.py, dst: /opt/claude-restart/claude_restart.py, when: "claude_code_restart_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-restart/host_lib.py, when: "claude_code_restart_enabled"}
   - {lib: weekly_window.py, dst: /opt/claude-restart/weekly_window.py, when: "claude_code_restart_enabled"}

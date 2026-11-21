@@ -227,6 +227,7 @@ FLOOR = [
     "hosts/components/claude-code/files/claude_triage_poll.py",
     # The restart broker.
     "hosts/components/claude-code/templates/claude-restart",
+    "hosts/components/claude-code/templates/50-claude-restart.rules.j2",
     "hosts/components/claude-code/files/claude_restart.py",
     # The root inspector and its grant.
     "hosts/components/claude-code/files/homelab_rootq.py",
@@ -281,6 +282,16 @@ FLOOR = [
     "uv.toml",
     ".python-version",
     ".github/",
+    # What CI runs with a write-scoped token.
+    "scripts/dev/tested_tree.py",
+    "scripts/deploy_tools/ci_images.py",
+    "scripts/lib/cli_help.py",
+    "scripts/lib/exit_codes.py",
+    "scripts/lib/git.py",
+    "scripts/lib/host_modules.py",
+    "scripts/lib/repo_paths.py",
+    "scripts/lib/tree_stack.py",
+    "hosts/lib/ci_verdict.py",
     "hosts/components/host-hardening/",
     "hosts/components/sshd/",
     "secrets/.sops.yaml",

@@ -19,6 +19,7 @@ from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
+from _group_vars_host_reader_row import HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER
 from _kuma_push_row import NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _role_python_paths_row import ROLE_FILES_CITE_REAL_PYTHON_PATHS
@@ -426,6 +427,7 @@ ROWS += (
     REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE,
     COMMENTS_CITE_NO_TICKET,
     SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
+    HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER,
 )
 
 _IDS = [row.name for row in ROWS]

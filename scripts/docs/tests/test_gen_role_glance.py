@@ -54,18 +54,17 @@ def test_image_vars_reads_the_role_defaults_then_a_hoisted_group_var():
 
 
 @pytest.mark.parametrize(
-    ("owner", "name", "repository"),
+    ("name", "repository"),
     [
-        ("flux", "terraria", "ghcr.io/danielh2018/terraria"),
-        (None, "terraria", "<k8s_registry_pull_host>/terraria"),
+        ("terraria", "ghcr.io/danielh2018/terraria"),
         # Only a built image moves to GHCR; no role builds this one.
-        ("flux", "selftest", "<k8s_registry_pull_host>/selftest"),
+        ("selftest", "<k8s_registry_pull_host>/selftest"),
     ],
 )
-def test_pulled_repository_moves_only_a_flux_owned_built_image(owner, name, repository):
+def test_pulled_repository_moves_only_a_built_image(name, repository):
     ref = f"{{{{ k8s_registry_pull_host }}}}/{name}:sha-0123456789ab"
     built = frozenset({"terraria"})
-    assert g.pulled_repository(ref, owner=owner, built=built) == repository
+    assert g.pulled_repository(ref, built=built) == repository
 
 
 def test_the_ghcr_prefix_matches_the_renderers():
@@ -76,7 +75,7 @@ def test_the_ghcr_prefix_matches_the_renderers():
 
 # --- the in-place writer -----------------------------------------------------------------
 
-BLOCK = g.render_block(['- **Deploy tag:** `--tags "x"`'])
+BLOCK = g.render_block(["- **Applied by:** x"])
 DOC = (
     "# x\n\nIntro.\n\n## At a glance\n- **Why:** hand-written reasoning.\n\n## Traps\n"
 )
@@ -91,7 +90,7 @@ def test_render_doc_inserts_the_block_under_the_heading_and_keeps_the_prose():
 
 
 def test_render_doc_replaces_a_stale_block_and_is_idempotent():
-    first = g.render_doc(DOC, g.render_block(['- **Deploy tag:** `--tags "old"`']))
+    first = g.render_doc(DOC, g.render_block(["- **Applied by:** old"]))
     second = g.render_doc(first, BLOCK)
     assert second == g.render_doc(DOC, BLOCK)
     assert g.render_doc(second, BLOCK) == second
@@ -175,10 +174,6 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     ]
 
 
-# An entry that carries `owner` is not Ansible's to deploy (D2.4b): the deploy tag and the
-# stance would both mislead, so one Applied by line names what applies it.
-
-
 def _littlelink_block(tmp_path):
     """The block `stale_k8s_docs` writes for a copy of littlelink, its entry without `owner`."""
     entry = dict(g.Estate().k8s_entries()["littlelink"])
@@ -191,11 +186,10 @@ def _littlelink_block(tmp_path):
     return (dst / "CLAUDE.md").read_text().split("<!-- /generated_from -->")[0]
 
 
-def test_a_k8s_role_glance_names_flux_in_place_of_the_deploy_tag(tmp_path):
+def test_a_k8s_role_glance_names_flux_and_the_land_gate(tmp_path):
     """No `owner` key marks the entry: an entry in the service list alone makes it Flux's (H1.9)."""
     block = _littlelink_block(tmp_path)
     assert "- **Applied by:** Flux, through `promote`" in block
     # The block is wrapped, so match the gate across a line break.
     unwrapped = " ".join(block.split())
     assert "`land.sh --tags=littlelink` gates the rollout" in unwrapped
-    assert "Deploy tag" not in block and "Auto-deploy" not in block

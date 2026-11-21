@@ -867,6 +867,12 @@ Three rules give the tree that shape:
   open, its backlog is reserved for that branch (*An open project reserves its backlog*):
   an orchestrator outside the tree is not offered a project's issue and cannot claim one.
 
+**A session is sized, not inherited.** On 2026-11-20 a root on the top model started about
+forty sessions, and every one inherited that model, including drills, doc edits and
+sub-coordinators that only orchestrate. Every `start_session` call now sets `model` and
+`effort` from the tiers in the skill's *Root* section, which reuse the rungs of
+`scripts/dev/fanout_lib/sizing.py:LADDER`. The skill holds the table and how to raise a tier.
+
 Four changes on master carry the tree. Launches are serialised and gated across runs
 (*One launch at a time, and files held across runs*,
 [#9242](https://github.com/DanielH2018/server/pull/9242) and

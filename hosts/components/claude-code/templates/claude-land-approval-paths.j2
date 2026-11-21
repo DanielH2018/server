@@ -32,10 +32,12 @@ hosts/components/claude-code/files/claude_triage_run.py
 hosts/components/claude-code/files/claude_triage_session.py
 hosts/components/claude-code/files/claude-triage-settings-overlay.json
 hosts/components/claude-code/files/claude_triage_poll.py
-# The restart broker: its unit and its config (a prefix), and the root script that decides
-# what is restarted. Its allowlist and caps are in claude-triage-pins.j2, above. The broker is
-# the one write to a workload an unattended run can ask for, so a run must not widen it.
+# The restart broker: its unit and its config (a prefix), the polkit rule that says who may
+# start it, and the root script that decides what is restarted. Its allowlist and caps are in
+# claude-triage-pins.j2, above. The broker is the one write to a workload an unattended run can
+# ask for, so a run must not widen it.
 hosts/components/claude-code/templates/claude-restart
+hosts/components/claude-code/templates/50-claude-restart.rules.j2
 hosts/components/claude-code/files/claude_restart.py
 # The read-only root inspector: the root script that decides what root reads and
 # prints, the shim and the sudoers grant. The agent holds the grant, so it must not widen what
@@ -107,6 +109,20 @@ uv.toml
 .python-version
 # CI, which decides what "green" means for the merge.
 .github/
+# The code two CI jobs run while a step holds the job's write-scoped token: each script and
+# every module it imports. `prek` in ci.yml records a landing batch's tested trees, and `images`
+# in promote.yml pushes the image content tags.
+# hosts/tests/test_ci_token_code_needs_approval.py derives the set from the two jobs, so a
+# script or an import either gains fails there until it is listed.
+scripts/dev/tested_tree.py
+scripts/deploy_tools/ci_images.py
+scripts/lib/cli_help.py
+scripts/lib/exit_codes.py
+scripts/lib/git.py
+scripts/lib/host_modules.py
+scripts/lib/repo_paths.py
+scripts/lib/tree_stack.py
+hosts/lib/ci_verdict.py
 # sudo, ssh and the operator's own login: the sudo cache, the SSH directory and sshd's AllowGroups.
 hosts/components/host-hardening/
 hosts/components/sshd/
