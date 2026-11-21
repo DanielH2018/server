@@ -112,20 +112,20 @@ dashboard-level arms, `files/pending_logic.py` for everything that parses, times
 Pending-Status-Checks item. `notify_logic` imports `PENDING_HEADER` from `pending_logic` and
 nothing goes the other way, so the pair cannot cycle. The fetch/persist/post shell is
 `files/renovate_notify.py`, which imports from both. `host_lib.py`,
-`renovate_identity.py`, which owns Renovate's GitHub logins, and `ci_verdict.py` are copied in
-from `hosts/lib/` — edit them there, not here.
+`renovate_identity.py`, which owns Renovate's GitHub logins, `ci_verdict.py` and
+`builder_ci_grade.py` are copied in from `hosts/lib/` — edit them there, not here.
 
 `renovate_notify.build_pr` parses a PR's check runs and commit statuses into `CheckRun` values,
 and `hosts/lib/ci_verdict.py:checks_verdict` grades them. A failed check in either source is
 `fail`. A cancelled or stale run is no verdict, so it reads `pending` and never `stuck`, and so
 does a head with no check at all.
 
-`notify_logic` also carries a copy of `builder_ci_grade`'s check-runs page walk, because the
-notifier cannot import the builder's module. GitHub serves a check-runs or combined-status read with no
-`per_page` as one page of 30 entries, so a failing entry past that page once read as green
-(#6002). The copy walks every page of both reads, and a read short of `total_count` fails the
-run instead of posting a digest that omits the PR.
-`tests/test_renovate_notify.py` holds the copy equal to `builder_ci_grade`'s (#5991).
+`renovate_notify.build_pr` reads both sources through
+`hosts/lib/builder_ci_grade.py:read_check_pages`, the page walk the builder and checkout-sync
+use. GitHub serves a check-runs or combined-status read with no `per_page` as one page of 30
+entries, so a failing entry past that page once read as green (#6002). The walk reads every
+page of both sources. A read short of `total_count` fails the run instead of posting a digest
+that omits the PR.
 
 ## What a dry run does not prove
 
