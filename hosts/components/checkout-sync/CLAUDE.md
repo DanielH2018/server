@@ -5,7 +5,7 @@
 - **Scope / exclusions:** a `git merge --ff-only` of `master` in the primary checkout, to the newest
   first-parent commit of origin/master whose required CI is green, within the walk bound. Never
   a red, pending or cancelled commit, never a non-fast-forward, never another branch, never a
-  dirty tree. It applies nothing: it reads no `DEPLOY_HOLD` and no `hold_sha`. After any run
+  dirty tree. It applies nothing: it reads no `DEPLOY_HOLD` and no hold SHA. After any run
   that refused nothing it runs `uv sync --frozen --compile-bytecode` in the checkout, which
   writes the venv's bytecode as sys_user and removes a package uv.lock no longer lists.
 - **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
