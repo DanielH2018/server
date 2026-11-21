@@ -1349,8 +1349,8 @@ groups:
       summary: 'daniel-box: the primary checkout sync has stopped reporting.'
       description: >-
         No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box, so nothing confirms
-        the primary checkout follows master. A fetch that keeps failing or a git-tree lock held for hours
-        writes no verdict. Read `journalctl -t homelab-checkout-sync` on daniel-box.
+        the primary checkout follows master. A fetch that keeps failing writes no verdict. Read `journalctl
+        -t homelab-checkout-sync` on daniel-box.
       runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
   - alert: CheckoutSyncNotReporting
     expr: |
@@ -1367,8 +1367,8 @@ groups:
       summary: 'daniel-server: the primary checkout sync has stopped reporting.'
       description: >-
         No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-server, so nothing
-        confirms the primary checkout follows master. A fetch that keeps failing or a git-tree lock held
-        for hours writes no verdict. Read `journalctl -t homelab-checkout-sync` on daniel-server.
+        confirms the primary checkout follows master. A fetch that keeps failing writes no verdict. Read
+        `journalctl -t homelab-checkout-sync` on daniel-server.
       runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
   - alert: HostReconcileFailed
     expr: homelab_host_reconcile_ok{origin="daniel-box"} == 0
