@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-19 22:10 UTC
-generated_sha: fc80e375d
+generated_at: 2026-11-21 15:45 UTC
+generated_sha: 7a64823b9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,7 +21,7 @@ generated_sha: fc80e375d
 
 | Service | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|
-| airflow | <span class="fqdn" data-host="airflow">airflow.&lt;domain&gt;</span> · <span class="fqdn" data-host="airflow.local">airflow.local.&lt;domain&gt;</span> | Authelia two_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| airflow | <span class="fqdn" data-host="airflow">airflow.&lt;domain&gt;</span> · <span class="fqdn" data-host="airflow.local">airflow.local.&lt;domain&gt;</span> | Authelia two_factor | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | artifacts | <span class="fqdn" data-host="artifacts">artifacts.&lt;domain&gt;</span> · <span class="fqdn" data-host="artifacts.local">artifacts.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | authelia | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | autofix-bridge | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
