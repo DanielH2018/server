@@ -152,18 +152,22 @@ MAX_AGE_S = MAX_AGE_HOURS * 3600
 WEEKLY_MAX_AGE_S = WEEKLY_MAX_AGE_HOURS * 3600
 
 
-def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
-    """(volume, creationTimestamp, namespace/pvcName, backupTargetName) per non-blank line."""
+def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str, str]]:
+    """(volume, creationTimestamp, namespace/pvcName, backupTargetName, tier-since) per line.
+
+    The fields are tab-separated, so a blank target or a missing `homelab/tier-since`
+    annotation keeps its column.
+    """
     rows = []
     for line in raw.splitlines():
         if not line.strip():
             continue
-        parts = line.split(None, 3)
-        parts += [""] * (4 - len(parts))
-        vol, created, claim, target = parts[:4]
+        parts = line.split("\t", 4)
+        parts += [""] * (5 - len(parts))
+        vol, created, claim, target, tier_since = (part.strip() for part in parts)
         if not vol:
             continue
-        rows.append((vol, created, claim, target))
+        rows.append((vol, created, claim, target, tier_since))
     return rows
 
 
@@ -481,15 +485,16 @@ def main(now: float | None = None) -> int:
             "-l",
             selector,
             "-o",
-            'jsonpath={range .items[*]}{.metadata.name}{" "}{.metadata.creationTimestamp}'
-            '{" "}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}'
-            '{" "}{.spec.backupTargetName}{"\\n"}{end}',
+            'jsonpath={range .items[*]}{.metadata.name}{"\\t"}{.metadata.creationTimestamp}'
+            '{"\\t"}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}'
+            '{"\\t"}{.spec.backupTargetName}'
+            '{"\\t"}{.metadata.annotations.homelab/tier-since}{"\\n"}{end}',
         )
         if rows_raw is None:
             continue
         rows = _parse_volume_rows(rows_raw)
         if job.startswith(backups.WEEKLY_SHARD_PREFIX):
-            for vol, _created, claim, target in rows:
+            for vol, _created, claim, target, _tier_since in rows:
                 if (target or backups.B2_TARGET) not in disarmed_set:
                     weekly_watched[vol] = claim
         logic.check_tier(

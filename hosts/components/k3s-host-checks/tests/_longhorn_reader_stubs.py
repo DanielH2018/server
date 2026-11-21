@@ -346,9 +346,9 @@ elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     branch = "tier-" + sel.split("/")[-1].split("=")[0]
     if sel == "recurring-job-group.longhorn.io/default=enabled":
-        body = "pvc-web-data %s default/web-data default\n" % SNAPSHOT_TS
+        body = "pvc-web-data\t%s\tdefault/web-data\tdefault\t\n" % SNAPSHOT_TS
     elif sel == "recurring-job-group.longhorn.io/weekly-backup-d4=enabled":
-        body = "pvc-weekly-data %s default/weekly-data default\n" % SNAPSHOT_TS
+        body = "pvc-weekly-data\t%s\tdefault/weekly-data\tdefault\t\n" % SNAPSHOT_TS
     else:
         body = ""
 elif args[:2] == ["get", "volumes.longhorn.io"]:
@@ -398,8 +398,17 @@ def _run_reader_against(stub, tmp_path, **env_overrides):
     )
 
 
-def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> Path:
-    """Two daily-tier volumes: `pvc-old` already backed up, `pvc-new` created moments ago.
+def _grace_pair_stub_kubectl(
+    tmp_path,
+    created_ts: str,
+    old_backup_ts: str,
+    new_target: str = "default",
+    tier_since: str = "",
+) -> Path:
+    """Two daily-tier volumes: `pvc-old` already backed up, `pvc-new` created at `created_ts`.
+
+    `pvc-new` carries `new_target` as its backup target and `tier_since` as its
+    `homelab/tier-since` annotation, each blank when empty.
 
     `pvc-old` has a matching coverage row so checks 2/3/5/6 stay clean regardless of the cron
     parse — only `pvc-new`'s fate (graced silently vs. paged as uncovered) depends on whether
@@ -445,8 +454,8 @@ elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
     if sel == "recurring-job-group.longhorn.io/default=enabled":
         emit(
-            "pvc-old {old_backup_ts} default/old-data default\\n"
-            "pvc-new {created_ts} default/new-data default\\n"
+            "pvc-old\\t{old_backup_ts}\\tdefault/old-data\\tdefault\\t\\n"
+            "pvc-new\\t{created_ts}\\tdefault/new-data\\t{new_target}\\t{tier_since}\\n"
         )
     else:
         emit("")
