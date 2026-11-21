@@ -41,9 +41,7 @@ Deployment write here.
   and the docs generators, the catalogue and the tier tests resolve the same expressions through
   `scripts/lib/service_tiers.py:resolved_tier_lists`.
   `tests/test_longhorn_reconcile_render.py::test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults`
-  holds the two forms equal, and
-  `tests/test_longhorn_reconcile_render.py::test_setup_k3s_no_longer_defines_the_tier_lists`
-  holds the keys to one home. The script reads `r2` for each Volume's `spec.backupTargetName`
+  holds the two forms equal. The script reads `r2` for each Volume's `spec.backupTargetName`
   and `weekly` and `nobackup` for the group labels.
 - **Claims are `namespace/pvcName`.** The script reads the PVC a Volume CR serves from
   `status.kubernetesStatus`. A volume that serves none reads as `/`, is on no list, and is
