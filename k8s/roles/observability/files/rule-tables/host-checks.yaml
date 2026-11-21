@@ -276,14 +276,27 @@ groups:
       # tests/services/test_b1_rule_literals.py pins the two together. A daily check
       # gets a day plus an hour (k3s_daily_check_deadline_s).
       # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
+      #
+      # LonghornBackupHealthFailed fires once per problem class: the producer writes one
+      # homelab_check_detail series per class, so a second problem while the check is red opens
+      # a second alert. The second arm pages a red verdict that named no class, such as a reader
+      # that crashed.
       - alert: LonghornBackupHealthFailed
         hosts: {component: k3s-host-checks}
-        expr: homelab_check_success{check="longhorn-backup-health",origin="${host}"} == 0
+        expr: |
+          homelab_check_detail{check="longhorn-backup-health",origin="${host}"} == 1
+          or
+          (
+              homelab_check_success{check="longhorn-backup-health",origin="${host}"} == 0
+            unless on (origin)
+              homelab_check_detail{check="longhorn-backup-health",origin="${host}"}
+          )
         labels:
           severity: critical
           service: ${host}
         annotations:
-          summary: '${host}: the Longhorn backup check is red.'
+          summary: >-
+            ${host}: the Longhorn backup check is red{{ with $labels.detail }} for {{ . }}{{ end }}.
           description: >-
             longhorn_backup_health.py on ${host} reported a failing backup-plane check: an
             unavailable backup target, a stale or errored backup, a failed job, or a restore drill
