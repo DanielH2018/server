@@ -842,8 +842,9 @@ itself needs nothing done to it.
 
 ### Scenario: sudo refuses after a host's Ubuntu release upgrade
 
-Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs's `visudo` rejects the
-`timestamp_type` line in `/etc/sudoers.d/10-timestamp`. The release-upgrade procedure in
+Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs refuses some settings classic
+sudo accepts. `/etc/sudoers.d/10-timestamp` carries none of them, and a test runs both
+implementations' `visudo` on it. The release-upgrade procedure in
 [Upgrading a host's Ubuntu release](host-packages.md#upgrading-a-hosts-ubuntu-release) checks
 this from a held root shell before the reboot. If a host already rebooted and sudo refuses, get
 root at the host's console or in recovery mode, then run
