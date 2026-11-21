@@ -1113,6 +1113,24 @@ Every `k3s` subcommand needs root.
     Go on only when both `s3://` and `file://` rows read `true` and the gates exit 0. A restore
     follows *Restoring* in [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md): the S3 form passes
     the bare name, and the local form hard-links the file first.
+1. Install the updates the current release has pending, from the `ubuntu` shell.
+   `do-release-upgrade` refuses to start while any are pending, with `Please install all
+   available updates for your release before upgrading.`
+
+    ```bash
+    sudo apt update
+    apt list --upgradable
+    ```
+
+    - When the list holds only Ubuntu packages, run `sudo apt full-upgrade`.
+    - When it holds a `homelab-*` package, master published one while updates were stopped.
+      Install it through the updater, never with apt, because only the updater runs
+      reconcile: resume updates, run `sudo systemctl start homelab-updater.service`, stop
+      updates again, and list once more.
+    - When the upgrade installed a kernel or `libc6`, `/var/run/reboot-required` exists.
+      `do-release-upgrade` refuses to start until the host reboots, so run `sudo reboot`, then
+      list again from a new `ubuntu` shell.
+
 1. Open a root shell with `sudo -i` and keep it open. Every command from here up to the reboot
    runs in it, without `sudo`, unless its step names the `ubuntu` shell. The upgrade replaces
    sudo, so no step after this one depends on `sudo` working until the sudo check passes.
@@ -1141,14 +1159,16 @@ Every `k3s` subcommand needs root.
 
 1. Upgrade the host. Do not reboot yet. `do-release-upgrade` runs inside a GNU screen window,
    so a dropped SSH session reattaches with `screen -r`. Keep a console on standby anyway. If it
-   shows *Foreign Packages Installed*, answer `y`, because its default aborts the upgrade.
+   shows *Foreign Packages Installed*, answer `y`, because its default aborts the upgrade. At
+   its closing `Restart required` prompt, answer `N`: the next two steps run before the reboot.
 
     ```bash
     do-release-upgrade
     ```
 
-1. Put the sources back and remove the drop-in, so the updater sees its repository again and
-   the verify step's `dpkg --verify` passes.
+1. Put the sources back and remove the drop-in. Until this step runs, `homelab.sources` reads
+   `Enabled: no`, so the updater sees no repository and the verify step's `dpkg --verify`
+   fails.
 
     ```bash
     cp -a /root/pre-release-upgrade/. /etc/apt/sources.list.d/
@@ -1181,10 +1201,19 @@ Every `k3s` subcommand needs root.
     it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
     file. To run sudo-rs on a host instead, first merge a change to
     `hosts/components/host-hardening/templates/10-timestamp` that drops `timestamp_type` for
-    that host. Reboot only once the second session's sudo works:
+    that host. Reboot only once the second session's sudo works and the step that puts the
+    sources back has run:
 
     ```bash
     reboot
+    ```
+
+    A host that rebooted before the sources went back takes that step from the `ubuntu` shell,
+    before the verify step:
+
+    ```bash
+    sudo cp -a /root/pre-release-upgrade/. /etc/apt/sources.list.d/
+    sudo rm /etc/update-manager/release-upgrades.d/90-homelab.cfg
     ```
 
 1. Verify the host against the release, from a new `ubuntu` shell. The reboot ended the root
