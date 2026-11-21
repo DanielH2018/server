@@ -63,8 +63,12 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   selection once and publishes the leg numbers, and the `pytest` matrix starts only those
   (#8944). A selection of no modules starts one leg, because GitHub fails a job whose matrix
   is empty, and that leg skips every step after its select step. A run with no base, and a
-  run whose plan failed, starts every leg. `scripts/dev/ci_slot_cost.py --recent 20
-  --pull-requests` counts the empty legs.
+  run whose plan failed, starts every leg. A failed plan still fails the gate, so its run
+  needs a rerun. The plan step and every leg diff against the same base, which
+  `tests/repo/test_ci_pytest_selects_affected_modules.py` checks for each event `ci.yml`
+  runs on. Each leg passes the plan back to `pytest_shard.py --planned`, and the leg fails
+  when its own selection fills more legs than the plan started. `scripts/dev/ci_slot_cost.py
+  --recent 20 --pull-requests` counts the empty legs.
 - **What the plan costs.** On the 20 pull-request runs measured on 2026-11-20, the empty
   legs held 1046 slot-seconds, about twice what one planning job on each run costs. Only
   `pytest` waits for the planning job, which starts its legs about 28s later. That wait does

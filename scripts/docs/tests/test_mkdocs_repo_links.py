@@ -6,6 +6,8 @@ gate, and they carry the two halves that must agree: the anchors injected into t
 page, and the links pointed at them.
 """
 
+from pathlib import Path
+
 import markdown
 import pytest
 import yaml
@@ -153,6 +155,14 @@ def test_two_scripts_sharing_a_basename_are_both_ambiguous() -> None:
 def test_the_basename_scan_ignores_the_virtualenv() -> None:
     """`.venv` vendors a urllib3 `probe.py`; letting it count would unlink every bare one."""
     assert hook.ambiguous_basenames(REPO, {"scripts/diagnostics/probe.py"}) == set()
+
+
+def test_the_basename_scan_ignores_a_fanout_checkout(tmp_path: Path) -> None:
+    """`.fanout/server/` is a second checkout, so counting it would double every basename."""
+    for directory in ("scripts/diagnostics", ".fanout/server/scripts/diagnostics"):
+        (tmp_path / directory).mkdir(parents=True)
+        (tmp_path / directory / "probe.py").touch()
+    assert hook.ambiguous_basenames(tmp_path, {"scripts/diagnostics/probe.py"}) == set()
 
 
 def test_every_target_is_a_page_that_exists(index: dict[str, tuple[str, str]]) -> None:

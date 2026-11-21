@@ -235,7 +235,7 @@ def test_a_flake_that_passes_on_re_run_keeps_its_job_name_in_the_record(tmp_path
     pipeline, run, _ = _flaky_batch(tmp_path)
     run.rollup = [
         {
-            "name": "pytest (shard 3 of 6)",
+            "name": "pytest (shard 3)",
             "conclusion": "FAILURE",
             "detailsUrl": JOB_URL,
         }
@@ -243,7 +243,7 @@ def test_a_flake_that_passes_on_re_run_keeps_its_job_name_in_the_record(tmp_path
     pipeline.run_all()
     record = _record(tmp_path)
     assert record["ci_gate"].startswith("passed")
-    assert record["ci_rerun_jobs"] == ["pytest (shard 3 of 6)"]
+    assert record["ci_rerun_jobs"] == ["pytest (shard 3)"]
 
 
 def test_a_resume_that_pushes_a_fix_re_runs_nothing(tmp_path):

@@ -193,17 +193,13 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "EGdsQqhVk"
+        "type": "loki",
+        "uid": "loki"
       },
-      "description": "Estimated only — on a subscription plan this is not real spend, same caveat as the main board.",
+      "description": "Sums cost_usd over every api_request event in the dashboard's time range. An API-equivalent estimate, not an invoice, on a subscription plan. The collector stamps node on each log record, so events from before that stamp shipped group under an empty node.",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          },
-          "decimals": 3,
+          "decimals": 2,
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -215,24 +211,35 @@
         "y": 15
       },
       "id": 7,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
       "targets": [
         {
-          "editorMode": "code",
-          "expr": "sum by (node) ({__name__=~\"claude_code_cost_usage.*\"})",
+          "expr": "sum by (node) (sum_over_time({service_name=\"claude-code\"} | event_name=`api_request` | unwrap cost_usd [$__range]))",
           "legendFormat": "{{node}}",
-          "range": true,
+          "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Cumulative cost by node (USD, estimated)",
-      "type": "timeseries"
+      "title": "Cost by node (USD, estimated)",
+      "type": "bargauge"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "EGdsQqhVk"
+        "type": "loki",
+        "uid": "loki"
       },
-      "description": "Per-session_id breakdown — the main board never groups by session. Estimated only, same subscription caveat.",
+      "description": "Sums cost_usd over every api_request event in the dashboard's time range. An API-equivalent estimate, not an invoice, on a subscription plan. The ten costliest sessions, with the node each ran on.",
       "fieldConfig": {
         "defaults": {
           "decimals": 3,
@@ -249,14 +256,23 @@
       "id": 8,
       "targets": [
         {
-          "expr": "topk(10, sum by (session_id, node) ({__name__=~\"claude_code_cost_usage.*\"}))",
-          "format": "table",
-          "instant": true,
+          "expr": "topk(10, sum by (session_id, node) (sum_over_time({service_name=\"claude-code\"} | event_name=`api_request` | unwrap cost_usd [$__range])))",
+          "queryType": "instant",
           "refId": "A"
         }
       ],
       "title": "Top sessions by cost (USD, estimated)",
       "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {

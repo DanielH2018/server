@@ -97,6 +97,11 @@ def _legs(prefix: str) -> frozenset[str]:
     return frozenset(n for n in CI_GATE_NEEDS_JOBS if n.startswith(prefix))
 
 
+def _leg_number(leg: str) -> int:
+    """The N of a `CI_PYTEST_LEGS` name, `pytest (shard N)`."""
+    return int(leg.removeprefix("pytest (shard ").removesuffix(")"))
+
+
 # GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
 # after its legs: the `name:` template with its expressions unexpanded, or the job id when it has
 # no `name:`. A run can report `host_packages` and the bootstrap template below as skipped, and
@@ -336,8 +341,10 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it. A run starts only the `pytest` legs `pytest_plan` planned.
-    The legs share one `if:` and start together, so once one leg has run, a leg with no run
-    of its own was not planned and is left out, as the gate's aggregate result leaves it out.
+    The legs share one `if:` and start together, and every plan starts legs 1..k. Once one
+    leg has run, a leg numbered past the highest leg with a run of its own was not planned and
+    is left out, as the gate's aggregate result leaves it out. A missing leg below it is a gap
+    no plan produces, so it stays required and the verdict is `pending`.
     """
     states: dict[str, set[str]] = {}
     for run in check_runs:
@@ -362,9 +369,12 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     # A draft run's job-level skip names every leg without being a run of any of them.
     own = {run.name for run in check_runs}
     planned = any(n in own and states[n] - {RunState.SKIPPED} for n in CI_PYTEST_LEGS)
+    last_planned = len(CI_PYTEST_LEGS)
+    if planned:
+        last_planned = max(_leg_number(n) for n in CI_PYTEST_LEGS if n in own)
     for name in CI_GATE_NEEDS_JOBS:
         job = states.get(name)
-        if planned and name in CI_PYTEST_LEGS and name not in own:
+        if name in CI_PYTEST_LEGS and _leg_number(name) > last_planned:
             continue
         if job is None or RunState.PENDING in job:
             return CIVerdict.PENDING
