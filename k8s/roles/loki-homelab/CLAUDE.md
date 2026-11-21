@@ -177,7 +177,8 @@ firing alert to Alertmanager in the observability namespace, on its Service at p
 
 ## A departed pod's logs survive it — an empty result is usually the query
 
-Loki keeps what a pod wrote after the pod is deleted, rescheduled or lost to a node reboot.
+Loki keeps what a pod wrote after the pod is deleted, rescheduled or lost to a node reboot,
+once Alloy has opened the pod's log file. The two exceptions are at the end of this section.
 
 **HISTORY —** Measured 2026-09-10 over a 2-day window on `{namespace="homelab"}`: dozens of ReplicaSet
 generations that no longer exist still answer — `artifacts-7989779d8b-29kwl`,
@@ -186,11 +187,23 @@ successor's first line. `speedtest-685455d6d9-fb847`, the pod #1604 reported as 
 nothing, answers with its `Pinged hostname` line stamped `2026-09-09 11:00:04`.
 
 So an empty result for a pod that went away is a claim about the query, not about the pod,
-until you have ruled out the query's window and its line budget. `probe.py loki-query --help`
+until you have ruled out the query's window and its line budget, and the pod lived longer
+than about 5 seconds. `probe.py loki-query --help`
 (`scripts/diagnostics/probe_lib/cli_parser.py:_build_parser`) gives each default under
 `--since` and `--limit`, and says how each one returns nothing for a
 pod that did log.
 
-What is genuinely not durable is narrower than "the pod's logs": a line the container writes
-in the seconds between Alloy's last read and the node going down. Nothing here bounds that
-window, and no measurement in this repo has sized it.
+Two cases are genuinely not durable, and both are narrower than "the pod's logs":
+
+- **A pod deleted within about 5 seconds of starting leaves nothing.** Alloy's
+  `discovery.kubernetes` publishes targets at most once every 5 seconds, a constant no config
+  attribute changes, and `local.file_match` re-globs every 10. Kubelet removes the pod's log
+  file when the pod is deleted. A file that appears and disappears between two publishes is
+  never opened. A file Alloy has opened is read to its end, so the loss is the whole pod or
+  nothing. A Job's or CronJob's pod is kept after it completes, so it is not at risk, but a
+  pod its controller deletes on exit is. Airflow's task pods were the measured case, and
+  `k8s/roles/airflow/templates/pod-template.yaml.j2` makes each one linger past both
+  intervals.
+- **A line written just before a node goes down.** The container can write a line in the
+  seconds between Alloy's last read and the node going down. Nothing here bounds that window,
+  and no measurement in this repo has sized it.

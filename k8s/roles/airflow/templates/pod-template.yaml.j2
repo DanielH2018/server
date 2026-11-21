@@ -41,6 +41,16 @@ data:
         - name: base
           image: {{ airflow_k8s_task_image }}
           imagePullPolicy: IfNotPresent
+{# The executor sets only `args`, so this replaces the image's ENTRYPOINT and keeps its two
+   parts. The sleep keeps the pod's log file on disk past Alloy's 5 s discovery throttle and
+   its 10 s file_match sync, or a pod the scheduler deletes sooner never reaches Loki. #}
+          command:
+            - /usr/bin/dumb-init
+            - --
+            - /bin/bash
+            - -c
+            - '/entrypoint "$@"; status=$?; sleep 15; exit "$status"'
+            - base
 {{ hardened_security_context(read_only=true, non_root=true) }}
           env:
 {{ airflow_env(false) }}
