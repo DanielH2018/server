@@ -16,8 +16,6 @@ import os
 import shutil
 import subprocess
 import sys
-import types
-from pathlib import Path
 
 import pytest
 
@@ -59,10 +57,6 @@ def test_a_crash_in_main_exits_non_zero_so_run_hook_can_report_it(tmp_path):
     )
     assert proc.returncode != 0
     assert proc.stderr.strip().splitlines()[-1] == "RuntimeError: payload read broke"
-
-
-def _result(stdout, returncode=0):
-    return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
 def test_banner_empty_when_no_problems():
@@ -123,7 +117,7 @@ def _run_main(
         dirty_primary_problems=lambda: parked or [],
         other_live_sessions=lambda cwd: sessions or [],
         unlabelled_worktree_lines=lambda cwd: [],
-        stale_worktree_lines=lambda: worktrees or [],
+        stale_worktree_lines=lambda repo: worktrees or [],
         remote_fanout_lines=lambda: remote_fanout or [],
     )
 
@@ -265,74 +259,11 @@ def test_main_prints_remote_fanout_lines(monkeypatch, capsys):
     assert "daniel-server" in capsys.readouterr().out
 
 
-def test_stale_worktree_lines_reports_removable():
-    brief = (
-        "WARN: 1 merged worktree(s) can be removed:\n"
-        "  old-thing — worktree-old-thing merged, clean, unlocked\n"
-        "  → ~/.claude/hooks/prune-worktrees.py --prune\n"
-    )
-    lines = _mod.stale_worktree_lines(lambda *a, **k: _result(brief))
-    assert any("old-thing" in line for line in lines)
-
-
-def test_stale_worktree_lines_silent_when_clean():
-    assert _mod.stale_worktree_lines(lambda *a, **k: _result("")) == []
-
-
-def test_stale_worktree_lines_swallows_a_timeout():
-    def boom(*a, **k):
-        raise subprocess.TimeoutExpired(cmd="prune-worktrees.py", timeout=30)
-
-    assert _mod.stale_worktree_lines(boom) == []
-
-
-def test_a_pruner_that_fails_is_named_rather_than_read_as_nothing_to_remove():
-    # Exit 78 is a deployed copy older than this repo needs. An empty banner would say
-    # the checkout has no merged worktrees.
-    def stale(*a, **k):
-        return types.SimpleNamespace(
-            stdout="", stderr="this pruner is interface 1\n", returncode=78
-        )
-
-    assert _mod.stale_worktree_lines(stale) == [
-        "  ⚠ the worktree pruner failed: this pruner is interface 1"
-    ]
-
-
-def test_a_host_with_no_pruner_is_named_rather_than_read_as_nothing_to_remove():
-    def missing(*a, **k):
-        raise FileNotFoundError("prune-worktrees.py")
-
-    [line] = _mod.stale_worktree_lines(missing)
-    assert "no worktree pruner at" in line and "chezmoi apply" in line
-
-
 def test_the_banner_requires_the_interface_the_library_does():
     from hooklib import worktree_lines
     from lib._claude_worktree import REQUIRED_INTERFACE
 
     assert worktree_lines.PRUNER_INTERFACE == REQUIRED_INTERFACE
-
-
-# settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
-# buffers — the whole banner, parked-checkout warning included. The worktree read is
-# the slow step (it reaches GitHub), so its own cap sits inside that budget. Every
-# probe runs before anything prints, under `TOTAL_DEADLINE_S` (test_session_health_deadline.py
-# pins the deadline).
-
-
-def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
-    settings = json.loads(
-        Path(_HOOK).parent.parent.joinpath("settings.json").read_text(encoding="utf-8")
-    )
-    budgets = [
-        hook["timeout"]
-        for group in settings["hooks"]["SessionStart"]
-        for hook in group["hooks"]
-        if hook["command"].endswith("run-hook.sh session-health")
-    ]
-    assert budgets, "settings.json registers no session-health SessionStart hook"
-    assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
 
 
 def _hook_output(capsys):
@@ -381,24 +312,21 @@ def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
 # the fail-loud, because a silent [] is what hid the bug.
 @pytest.fixture
 def _fence_worktree_survey(fenced_calls, tmp_path, monkeypatch):
-    """Stand a recording `prune-worktrees.py` in for the dotfiles pruner the hook runs.
+    """Keep the hook off the host's worktree pruner and its survey cache.
 
-    The hook finds the pruner under the user-level Claude directory, so `CLAUDE_CONFIG_DIR`
-    points it at a scratch one holding the stand-in.
+    A scratch `CLAUDE_CONFIG_DIR` holds a stand-in pruner, and a scratch `XDG_CACHE_HOME`
+    holds a fresh, clean survey, so the hook starts no refresh and writes nothing outside
+    `tmp_path`.
 
     A `systemctl` stub answers the live-session scan's fan-out unit queries `inactive`, the
     state of a collected batch unit, so the host's own fan-out units stay unasked.
-
-    `prune-worktrees.py --brief` surveys every `.claude/worktrees/*` checkout on the host, and
-    the hook kills it at `WORKTREE_TIMEOUT_S`. daniel-box carries over a hundred of them and
-    CI's runner none, so letting it run made this file take 4-5s on daniel-box and 0.77s on CI.
-    That recorded shard weight then tripped CI's over-recorded check.
     """
-    write_exec(
-        tmp_path / "claude" / "hooks" / "prune-worktrees.py",
-        '#!/bin/sh\nprintf \'%s\\n\' "prune-worktrees.py $*" >> "$FENCE_CALLS"\n',
-    )
+    write_exec(tmp_path / "claude" / "hooks" / "prune-worktrees.py", "#!/bin/sh\n")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    survey = tmp_path / "cache" / "session-health" / "worktree-survey.txt"
+    survey.parent.mkdir(parents=True)
+    survey.write_text("exit 0\n", encoding="utf-8")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     stub_dir = fake_bin(
         tmp_path / "systemctl-stub", systemctl="#!/bin/sh\necho inactive\n"
     )
@@ -420,9 +348,8 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
 
     Deliberately a real subprocess reaching real external binaries: `curl` (via
     `uv run probe.py targets`). The `_fence_external_binaries` conftest fixture
-    stubs them so this runs without side effects. `_fence_worktree_survey` stubs the worktree
-    survey, whose runtime depends on how many worktrees the host carries. The calls file below
-    is the proof that both fences held.
+    stubs them so this runs without side effects, and the calls file below is the proof that
+    the fence held. `_fence_worktree_survey` keeps the hook off the host's pruner and cache.
     """
     fenced_calls = _fence_worktree_survey
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
@@ -447,14 +374,10 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     # indistinguishable from a passing run without this: the real binaries would just run
     # underneath it.
     recorded = fenced_calls.read_text()
-    for binary in (
-        "curl",
-        "prune-worktrees.py --require",
-    ):
-        assert binary in recorded, (
-            f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
-            f"recorded calls:\n{recorded}"
-        )
+    assert "curl" in recorded, (
+        "the real `curl` ran instead of the stub — the PATH fence did not hold.\n"
+        f"recorded calls:\n{recorded}"
+    )
 
 
 def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch):
