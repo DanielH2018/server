@@ -91,8 +91,8 @@ permission prompt.
 
 **`sudo k3s kubectl` is not an escape hatch — `sudo` is in `permissions.deny`**, so it is blocked
 outright, not prompted. With the
-read-only SA on one side and denied `sudo` on the other, **Ansible is the only write path to this
-cluster.**
+read-only SA on one side and denied `sudo` on the other, **`promote` and Flux are the only write
+path to this cluster.**
 
 **That ceiling bounds `kubectl`, not the session.** A session holds everything its Unix user
 holds. Remote Control sessions and new interactive sessions run as the `claude` user, which holds

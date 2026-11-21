@@ -26,6 +26,7 @@ from _role_python_paths_row import ROLE_FILES_CITE_REAL_PYTHON_PATHS
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
 from _review_ledger_glob_row import REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE
 from _archived_plan_citations_row import SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB
+from _ansible_mention_row import LIVE_DOCS_NAME_NO_ANSIBLE
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib.facts.citations import macro_citations
@@ -428,6 +429,7 @@ ROWS += (
     COMMENTS_CITE_NO_TICKET,
     SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
     HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER,
+    LIVE_DOCS_NAME_NO_ANSIBLE,
 )
 
 _IDS = [row.name for row in ROWS]

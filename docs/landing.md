@@ -825,7 +825,7 @@ YAML file holds the key at the base and at the merge commit, and refuses five sh
 - **A pin set outside the role file that holds it.** Inventory, play vars, `include_role`
   vars and `set_fact` override a role default, so a pin there would move the deployed version
   while the role file stays put. The check matches the key at any indent, as YAML `key:` or
-  INI `key=`, in every YAML and INI file under `ansible/` and every file under `inventory/`,
+  INI `key=`, in every YAML file under `k8s/` and every file under `inventory/`,
   `group_vars/` or `host_vars/`. It skips a comment, which starts at a `#` that opens the line
   or follows whitespace outside a quoted value, or at a `;` that opens the line. A quoted
   `#`, as in `note="a #b"`, is part of the value. A `-e` passed at run time is outside
@@ -921,7 +921,7 @@ one exception being a primary that already contains the commit.
 A gate run by hand has the same exposure. An orchestrator worktree locked hours behind master
 holds old role templates, owners and alert tables, and a `probe.py health` run from it grades
 the live workload against them (#5912). The `block-footguns` hook denies `probe.py health` and
-`probe.py takeover` from a linked worktree that holds an older copy of an `ansible/` or
+`probe.py takeover` from a linked worktree that holds an older copy of a `k8s/`, `inventory/` or
 `scripts/` file `origin/master` has changed. The denial names the same command run from the
 primary checkout. Rebasing the worktree onto `origin/master` also clears it. `land.sh` runs the probe as a subprocess, so the
 hook never sees the gate above.
@@ -1057,7 +1057,7 @@ decision is a file list GitHub truncated, which is derived from the diff in step
 **A document under a role is not a manual apply.** A `.md` — a role's `CLAUDE.md`, a
 `README.md`, one under `files/` — maps to no role and to no plane, because no playbook applies
 prose. Landing PR #1696 ended `needs-manual-apply` for a role whose only changed file was its
-CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `lib/role_paths.py:role_for` maps no `.md` to a role, and
+CLAUDE.md, and asked for a full deploy of every role (issue #1701). `lib/role_paths.py:role_for` maps no `.md` to a role, and
 `land_tags.quiet_paths` drops a `.md` under the setup plane before any diff is read.
 
 **A role the PR itself registers is not one either.** Which tags exist is read at the MERGE

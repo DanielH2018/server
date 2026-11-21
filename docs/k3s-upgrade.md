@@ -115,7 +115,7 @@ cd /home/ubuntu/server && sudo k3s kubectl auth can-i get plans.upgrade.cattle.i
 
 SUC upgrades daniel-box. Merging a `k3s_version` bump makes Flux apply the `system-upgrade` tag,
 the `k3s-server` Plan resolves the new version, its `prepare` container waits for the gates, and
-the upgrade container replaces the binary. No Ansible command is part of the upgrade.
+the upgrade container replaces the binary. No hand command is part of the upgrade.
 The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of the restart,
 because they all sit behind this node.
 
@@ -206,7 +206,7 @@ Until step 3, `probe.py landing` lists each object that still carries the annota
 
 SUC upgrades daniel-server. The `k3s-agent` Plan resolves the same version as the server Plan.
 Its `prepare` container runs the gates in `agent` mode, which first waits for the `k3s-server`
-Plan to finish, and then the upgrade container replaces the binary. No Ansible command is part
+Plan to finish, and then the upgrade container replaces the binary. No hand command is part
 of the upgrade.
 
 Do not run `hosts/bootstrap-host.sh` to upgrade. It runs the installer only for a missing

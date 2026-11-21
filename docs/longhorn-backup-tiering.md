@@ -51,7 +51,7 @@ The table lists the volumes the three tier lists name. These volumes are in no l
 already unbacked before the tiering: `pihole-etc`, `livesync-data`, `grafana-data`, and the
 registry, `prometheus`, `loki`, `tempo`, speedtest, karakeep-meili, mosquitto and flaresolverr
 volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
-the TSDBs. The configs kopia *kept* are Ansible-rendered here.
+the TSDBs. The configs kopia *kept* are rendered from the repo here.
 
 ### Which kopia rule each volume preserves
 
