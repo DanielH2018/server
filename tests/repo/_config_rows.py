@@ -118,8 +118,7 @@ _AGENT_REASON = (
     "closes) is rendered by the docs-refresh cron into the *Settled findings* table of "
     "`docs/reference/backlog.md`. An inline list in each agent would drift. This guards the "
     "shape, not the content: a pointer dropping out, or a section heading naming a domain "
-    "`findings.py` does not know. An inline list creeping back into an agent is the "
-    "`agents-carry-no-inline-reflag-list` row of `test_census_rows_text.py`. What a reviewer "
+    "`findings.py` does not know. What a reviewer "
     "does with the list is a session's judgment, which no test can see."
 )
 

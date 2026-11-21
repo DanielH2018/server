@@ -6,7 +6,7 @@ reader and an order rule written out by hand. As a row, the section, the unit an
 data, and the reading, the verdict and the red proof are here once.
 
 A rule reads the text under `heading` in `doc`, splits it into units (`LINES`, `COMMANDS`,
-`STEPS`, `ITEMS`, `BLOCKS` or `SECTION`), keeps the units `select` matches, and holds when:
+`STEPS`, `ITEMS` or `BLOCKS`), keeps the units `select` matches, and holds when:
 
 - each kept unit carries every string in `require`;
 - no kept unit matches `forbid`;
@@ -169,11 +169,6 @@ def BLOCKS(text: str) -> list[str]:
     return blocks
 
 
-def SECTION(text: str) -> list[str]:
-    """The whole section as one unit."""
-    return [text]
-
-
 # ── Red fixtures: edits of the rule's own section ────────────────────────────────────
 
 Red = Callable[[str], str]
@@ -201,11 +196,6 @@ def edit_words(words: str, new: str) -> Red:
         return out
 
     return red
-
-
-def replaced_by(literal: str) -> Red:
-    """A whole section written out, such as one as it stood at an older commit."""
-    return lambda _text: literal
 
 
 def move_step(step: int, before: int) -> Red:
