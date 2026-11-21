@@ -81,6 +81,23 @@ def test_a_jobs_wait_runs_from_its_creation_and_a_skipped_job_holds_no_slot():
     assert "hooks" not in cost["families"]
 
 
+def test_a_job_carried_over_from_an_earlier_attempt_keeps_its_slot_seconds_but_has_no_wait():
+    cost = run_cost(
+        [
+            _job("pytest (shard 1)", 100, 10, 70),
+            _job("pytest (shard 2)", 100, 130, 190),
+            _job("hooks (lint)", 100, 5, 65),
+        ]
+    )
+
+    assert cost["jobs"] == 3
+    assert cost["slot_s"] == 180
+    assert cost["waits"] == [30]
+    assert cost["families"]["pytest"]["wait_median_s"] == 30
+    assert cost["families"]["hooks"]["wait_median_s"] is None
+    assert head_line(1, cost).endswith("queue wait p50 30s, p90 30s")
+
+
 def test_a_legs_setup_is_its_span_outside_the_suite_step_with_action_shas_folded():
     cost = run_cost([_leg(1, 0, 5, (20, 140)), _leg(2, 0, 9, (30, 150))])
 
