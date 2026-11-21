@@ -1,7 +1,7 @@
 """Declare the *arr Discord Connect notification instead of leaving it as UI state.
 
-WHY THIS EXISTS. A Sonarr/Radarr/Lidarr "Connect" notification is a row in `sonarr.db` /
-`radarr.db` / `lidarr.db` on the app's config PVC — live state no manifest reproduces. Nothing
+WHY THIS EXISTS. A Sonarr/Radarr/Lidarr/Prowlarr "Connect" notification is a row in the
+app's database on the app's config PVC — live state no manifest reproduces. Nothing
 but that volume holds the row: a Longhorn revert past its creation, or anyone recreating the
 claim, drops the notification silently and the app goes quiet in exactly the failure it exists
 to report.
@@ -52,9 +52,9 @@ from flux_job_connect import Request, open_url
 # Mirrors scripts/diagnostics/probe_lib/arr.py. The API is reached at the Service ClusterIP
 # directly, NOT through Traefik: no app has an Authelia bypass for /api/*, so a routed
 # request 302s to the login page instead of reaching the app.
-ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "lidarr": 8686}
-# Lidarr serves /api/v1; Sonarr and Radarr serve /api/v3. Keyed by app so no caller passes it.
-ARR_API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1"}
+ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "lidarr": 8686, "prowlarr": 9696}
+# Lidarr and Prowlarr serve /api/v1; Sonarr and Radarr serve /api/v3. Keyed by app so no caller passes it.
+ARR_API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1", "prowlarr": "v1"}
 
 IMPLEMENTATION = "Discord"
 

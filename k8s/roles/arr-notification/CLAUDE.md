@@ -3,8 +3,8 @@
 This role renders no manifest and starts no workload. It declares one *arr app's Discord
 "Connect" notification over the app's own API
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:main`), so the notification is repo
-state rather than UI state. The declaration runs as a seed Job that sonarr's, radarr's and
-lidarr's `templates/verify/notification.yaml.j2` render (*The Job form*, below). Each of those
+state rather than UI state. The declaration runs as a seed Job that sonarr's, radarr's,
+lidarr's and prowlarr's `templates/verify/notification.yaml.j2` render (*The Job form*, below). Each of those
 templates reads this role's script and defaults by `lookup()`. Those lookups are the role's
 only callers, and no app includes the role
 (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_seed_job_reads_no_role_but_its_app_and_arr_notification`).
@@ -37,6 +37,11 @@ adopted two rows and minted nothing: the first deploy reported **no change**.
 `Discord (health)` from `GET /api/v1/notification/schema`, with the same health-only triggers.
 On 2026-11-14 lidarr's seed Job reported **no change**, so the row exists.
 
+**HISTORY —** prowlarr carried a hand-made `Discord (health)` row whose webhook Discord
+answered with a 404 on 2026-11-21, while the SOPS webhook still passed monitor-bridge's
+`discord` check (#9565). Its seed Job adopts that row by name and writes the SOPS webhook
+into it.
+
 A missing row is created from the app's schema
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:schema_for`), and a row someone adds
 by hand under the declared name first is adopted instead.
@@ -56,12 +61,12 @@ name, so a CustomScript that happened to share the name is left alone
 - **It adopts, it never deletes.** A Discord notification this role does not match is left
   alone. Deleting on a name miss would destroy live rows from a deploy path.
 - **The API version is per app, inside the script.** `ARR_API_VERSIONS` maps sonarr and radarr
-  to `v3` and lidarr to `v1`, keyed like `ARR_PORTS`, so no caller passes it. Lidarr's
+  to `v3` and lidarr and prowlarr to `v1`, keyed like `ARR_PORTS`, so no caller passes it. Lidarr's
   notification carries `onHealthIssue`, `onHealthRestored` and `includeHealthWarnings` under
   the same names (Lidarr v3.1.6.5079, `NotificationResource`), so the health-only default
   applies unchanged.
 - **Every trigger the app carries is set, not just the true ones.** `trigger_keys` derives the
-  set from the object the API returned, because the three apps do not carry the same keys
+  set from the object the API returned, because the apps do not carry the same keys
   and upstream adds more. Declaring only the true half would let a trigger enabled in the UI
   survive a deploy that is meant to be the whole truth about when Discord is notified.
 - **The update merges into the body the API returned.** Building one from scratch blanks
@@ -105,9 +110,9 @@ uv run python k8s/roles/arr-notification/files/seed_arr_notification.py --test
 
 ## The Job form
 
-The seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify` and
-`lidarr-verify`. The Job's body is one macro, `k8s/templates/arr-notification-seed.yml.j2`.
-Each app's `templates/verify/notification.yaml.j2` calls it, byte-identical in all three
+The seed runs as a post-apply mutation Job in `sonarr-verify`, `radarr-verify`,
+`lidarr-verify` and `prowlarr-verify`. The Job's body is one macro, `k8s/templates/arr-notification-seed.yml.j2`.
+Each app's `templates/verify/notification.yaml.j2` calls it, byte-identical in all four
 (`k8s/roles/arr-notification/tests/test_seed_job.py::test_the_apps_call_the_one_shared_seed_job`).
 The caller passes in every `lookup()` the macro needs. The two lookups into this role must stay
 in the caller, because `scripts/lib/k8s_role_callers.py:role_callers` reads only a role's own
@@ -115,7 +120,7 @@ templates, and those lookups are each app's only edge to this role
 (`scripts/lib/tests/test_k8s_role_callers.py::test_the_lookup_form_resolves`).
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
-  changes all three apps' renders. The template also reads
+  changes all four apps' renders. The template also reads
   `k8s/roles/arr-notification/defaults/main.yml:arr_notification_name`,
   `k8s/roles/arr-notification/defaults/main.yml:arr_notification_triggers` and
   `k8s/roles/arr-notification/defaults/main.yml:arr_notification_include_health_warnings` from
@@ -155,7 +160,7 @@ templates, and those lookups are each app's only edge to this role
 `k8s/roles/arr-notification/files/seed_arr_notification.py:needs_update` —
 the three functions that decide create, rewrite or no-op.
 
-`tests/test_seed_job.py` renders the three apps' Jobs, runs the Job census over them, and
+`tests/test_seed_job.py` renders the four apps' Jobs, runs the Job census over them, and
 runs the rendered script twice against a fixture API from no row and from a drifted row. The
 second run must write nothing; the Job's `homelab/rerun-safe` annotation names that test
 (`k8s/roles/arr-notification/tests/test_seed_job.py::test_a_second_run_changes_nothing`). A

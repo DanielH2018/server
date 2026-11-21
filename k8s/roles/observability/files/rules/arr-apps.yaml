@@ -42,3 +42,80 @@ groups:
             Prowlarr has failed to push its indexers to an app for 6 hours, or exportarr serves no
             Prowlarr health. A 401 in Prowlarr's log means a stale key: paste the app's API key
             into Prowlarr's Settings, Apps, then click Sync App Indexers.
+
+      # NotificationStatusCheck reports a Connect notification whose sends fail: a deleted Discord
+      # webhook, or a CustomScript whose file is gone. The app's own onHealthIssue posts go
+      # through those notifications, so a failing one silences every health error the app raises,
+      # Prowlarr's all-indexers-down among them.
+      # One rule per app with exportarr, because the exportarr job discovers its targets and so
+      # cannot hand the alert a `service`. `max` drops `instance` and `message`, which move with
+      # each pod and each failing notification.
+      # The hour rides out a Discord outage: the app retries on a backoff and clears the check on
+      # the next good send, as one 30-minute Radarr episode did.
+      - alert: ArrNotificationsFailing
+        expr: max(sonarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
+        for: 1h
+        labels:
+          severity: warning
+          service: sonarr
+        annotations:
+          summary: >-
+            sonarr: {{ with query "sonarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
+            }}{{ (index . 0).Labels.message }}{{ end }}.
+          description: >-
+            A Connect notification in the app fails every send, so the app's own health
+            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
+            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
+            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
+            the app's Settings, Connect.
+
+      - alert: ArrNotificationsFailing
+        expr: max(radarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
+        for: 1h
+        labels:
+          severity: warning
+          service: radarr
+        annotations:
+          summary: >-
+            radarr: {{ with query "radarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
+            }}{{ (index . 0).Labels.message }}{{ end }}.
+          description: >-
+            A Connect notification in the app fails every send, so the app's own health
+            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
+            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
+            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
+            the app's Settings, Connect.
+
+      - alert: ArrNotificationsFailing
+        expr: max(lidarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
+        for: 1h
+        labels:
+          severity: warning
+          service: lidarr
+        annotations:
+          summary: >-
+            lidarr: {{ with query "lidarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
+            }}{{ (index . 0).Labels.message }}{{ end }}.
+          description: >-
+            A Connect notification in the app fails every send, so the app's own health
+            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
+            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
+            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
+            the app's Settings, Connect.
+
+      - alert: ArrNotificationsFailing
+        expr: max(prowlarr_system_health_issues{job="exportarr", source="NotificationStatusCheck"}) > 0
+        for: 1h
+        labels:
+          severity: warning
+          service: prowlarr
+        annotations:
+          summary: >-
+            prowlarr: {{ with query "prowlarr_system_health_issues{job='exportarr',source='NotificationStatusCheck'} > 0"
+            }}{{ (index . 0).Labels.message }}{{ end }}.
+          description: >-
+            A Connect notification in the app fails every send, so the app's own health
+            notifications do not reach Discord. A Discord 404 in the app's log means the webhook
+            was deleted: the seed Job writes arr_discord_webhook_url into each Discord (health)
+            row on the next rollout. A missing CustomScript file needs its row fixed or removed in
+            the app's Settings, Connect.

@@ -7,7 +7,7 @@
 k8s_autodeploy: false
 k8s_autodeploy_reason: "renders no manifest and starts no workload — a shared include the *arr roles call after their own deploy, so there is no workload for rollout status to gate; not a services entry, so a promoted bump matches no play and deploys nothing while reporting success"
 
-# The caller passes arr_notification_app (sonarr | radarr | lidarr). Everything below has a default.
+# The caller passes arr_notification_app (sonarr | radarr | lidarr | prowlarr). Everything below has a default.
 #
 # The seed Job in k8s/templates/arr-notification-seed.yml.j2 reads
 # arr_notification_name, arr_notification_triggers and arr_notification_include_health_warnings
@@ -31,11 +31,11 @@ arr_notification_triggers:
   - onHealthIssue
   - onHealthRestored
 
-# Sonarr's, Radarr's and Lidarr's "Include Health Warnings" toggle — false live, so warnings stay out and only
+# The apps' "Include Health Warnings" toggle — false live, so warnings stay out and only
 # health ERRORS post.
 arr_notification_include_health_warnings: false
 
-# The Discord "username" the message posts as. Live values are `Sonarr`, `Radarr` and `Lidarr`.
+# The Discord "username" the message posts as. Live values are `Sonarr`, `Radarr`, `Lidarr` and `Prowlarr`.
 arr_notification_username: "{{ arr_notification_app | capitalize }}"
 
 # The *arr apps take up to 10 min to come up on a first boot that installs DOCKER_MODS (see
