@@ -19,6 +19,7 @@ from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
+from _runbook_k3s_sudo_row import RUNBOOK_K3S_COMMANDS_CARRY_SUDO
 from _group_vars_host_reader_row import HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER
 from _kuma_push_row import AFFECTED_TABLE, NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
@@ -420,6 +421,7 @@ ROWS += (
     RESET_PATHS,
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
+    RUNBOOK_K3S_COMMANDS_CARRY_SUDO,
     NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA,
     AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,
