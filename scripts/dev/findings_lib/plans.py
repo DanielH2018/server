@@ -12,7 +12,7 @@ from datetime import date
 
 from collections.abc import Mapping
 
-from dev.findings_lib.milestone import branch_of, is_project
+from dev.findings_lib.milestone import branch_of, is_group, is_project
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
@@ -393,14 +393,27 @@ def plan_release(
     ]
 
 
-def plan_milestone_add(issue: Issue, project: dict) -> list[list[str]]:
+def plan_milestone_add(
+    issue: Issue, project: dict, open_milestones: frozenset[int]
+) -> list[list[str]]:
     """Plans the gh argv that files ``issue`` in the backlog of the milestone ``project``.
 
-    Returns an empty list when the issue is already there.
+    An issue left in a closed milestone is free, as it is to `next --milestone none`, and
+    the edit moves it.
+
+    Args:
+        issue: the register issue to file.
+        project: the open project or group to file it in.
+        open_milestones: the numbers of the repo's open milestones, from
+            `milestone.open_numbers`.
+
+    Returns:
+        The argv to run, or an empty list when the issue is already there.
 
     Raises:
         ClaimRefused: the issue is closed, outside the register, claimed, or held by
-            another milestone, whoever made that one.
+            another open milestone, whoever made that one. The reason names the command
+            that frees it.
     """
     if not issue.is_open:
         raise ClaimRefused("closed — nothing to work")
@@ -411,14 +424,24 @@ def plan_milestone_add(issue: Issue, project: dict) -> list[list[str]]:
     title = issue.milestone_title
     if title == project["title"]:
         return []
-    if title is not None:
-        raise ClaimRefused(
-            f"in milestone `{title}` — `milestone remove` on its branch frees it"
-        )
+    if issue.milestone and issue.milestone.get("number") in open_milestones:
+        raise ClaimRefused(f"in milestone `{title}` — {_freed_by(issue)}")
     held = issue.holder
     if held:
         raise ClaimRefused(f"claimed by `{held}` — a backlog holds unclaimed issues")
     return [["issue", "edit", str(issue.number), "--milestone", project["title"]]]
+
+
+def _freed_by(issue: Issue) -> str:
+    """The way to take ``issue`` out of the open milestone it sits in, as a phrase."""
+    owner, title = branch_of(issue.milestone), issue.milestone_title
+    if is_project(issue.milestone):
+        return f"`milestone remove {issue.number} --worktree {owner}` frees it"
+    if owner:
+        return f"it is `{owner}`'s claimed work; `release` frees it"
+    if issue.milestone is not None and is_group(issue.milestone):
+        return f'`milestone remove {issue.number} --group "{title}"` frees it'
+    return "the tools do not own that milestone; take it out by hand"
 
 
 def plan_milestone_remove(issue: Issue, project: dict) -> list[list[str]]:

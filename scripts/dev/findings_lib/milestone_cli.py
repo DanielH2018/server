@@ -15,6 +15,7 @@ group by `--group "<title>"`. `findings_lib/milestone.py` owns the scheme.
 import argparse
 import sys
 from collections.abc import Callable
+from functools import partial
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -86,7 +87,11 @@ def _change_backlog(
 
     Returns 0 when every issue was changed or already as asked, 3 when any was refused.
     """
-    plan = plan_milestone_add if verb == "add" else plan_milestone_remove
+    if verb == "add":
+        open_now = milestone.open_numbers(tools.owner_name, gh_json=tools.gh_json)
+        plan = partial(plan_milestone_add, open_milestones=open_now)
+    else:
+        plan = plan_milestone_remove
     changed, refused = 0, []
     for number in map(int, numbers):
         try:

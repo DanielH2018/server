@@ -187,14 +187,29 @@ def _backlog(*issues, milestones=(PROJECT,)):
 
 
 def test_add_files_an_unclaimed_issue_and_refuses_one_another_milestone_holds(capsys):
+    release = {"title": "Release 1.0", "number": 3, "state": "open"}
+    release["description"] = description_for("worktree-b", project=True)
     free = make_issue(1132)
-    taken = {**make_issue(1140), "milestone": {"title": "Release 1.0", "number": 3}}
-    tools, calls = _backlog(free, taken)
+    taken = {**make_issue(1140), "milestone": release}
+    tools, calls = _backlog(free, taken, milestones=[PROJECT, release])
     assert main(["milestone", "add", "1132", "1140", "--worktree", WT], tools) == 3
     assert calls.gh == [["issue", "edit", "1132", "--milestone", "Backups"]]
     captured = capsys.readouterr()
     assert captured.out == "1 added to `Backups`, 1 refused\n"
-    assert "#1140 refused: in milestone `Release 1.0`" in captured.err
+    assert (
+        "#1140 refused: in milestone `Release 1.0` — "
+        "`milestone remove 1140 --worktree worktree-b` frees it"
+    ) in captured.err
+
+
+def test_add_moves_an_issue_a_closed_project_left_behind(capsys):
+    closed = {"title": "Old project", "number": 24, "state": "closed"}
+    closed["description"] = description_for("worktree-b", project=True)
+    left = {**make_issue(1140), "milestone": closed}
+    tools, calls = _backlog(left, milestones=[PROJECT, closed])
+    assert main(["milestone", "add", "1140", "--worktree", WT], tools) == 0
+    assert calls.gh == [["issue", "edit", "1140", "--milestone", "Backups"]]
+    assert capsys.readouterr().out == "1 added to `Backups`\n"
 
 
 def test_add_is_refused_on_a_branch_whose_milestone_is_not_a_project(capsys):

@@ -19,7 +19,8 @@ open. `reap` closes one whose branch no worktree on either host holds any more, 
 
 A PROJECT is a session milestone that also holds a backlog. `milestone start --project`
 writes the second description form, and `is_project` reads it. `milestone add` files
-unclaimed issues under a project and `milestone remove` takes them out. `release`, `reap` and
+unclaimed issues under a project and `milestone remove` takes them out. An issue left in a
+closed milestone counts as unfiled, so `add` moves it. `release`, `reap` and
 `manual` leave an issue in a project, so a batch that fails returns its issue to the
 backlog. An open project reserves its backlog for its branch: `reservations` is the one
 answer to who may take an issue, which `next`, `list`, `new-issues` and `claim` read.
@@ -397,10 +398,19 @@ def held_issues(
     if title is None:
         return issues
     if title == NO_MILESTONE:
-        numbers = {m["number"] for m in _milestones(repo, "open", gh_json)}
+        numbers = open_numbers(repo, gh_json=gh_json)
         return [i for i in issues if (i.milestone or {}).get("number") not in numbers]
     titled(title, repo, gh_json=gh_json)
     return [i for i in issues if i.milestone_title == title]
+
+
+def open_numbers(repo: str, *, gh_json: GhJson = real_gh_json) -> frozenset[int]:
+    """The numbers of ``repo``'s open milestones.
+
+    gh's issue JSON omits a milestone's state, so this is how a reader tells whether the
+    milestone an issue sits in still holds it. A closed milestone holds nothing.
+    """
+    return frozenset(m["number"] for m in _milestones(repo, "open", gh_json))
 
 
 def titled(title: str, repo: str, *, gh_json: GhJson = real_gh_json) -> dict:
@@ -486,7 +496,7 @@ def reservations(
     ]
     if not theirs:
         return {}
-    open_now = {m["number"] for m in _milestones(repo, "open", gh_json)}
+    open_now = open_numbers(repo, gh_json=gh_json)
     return {
         i.number: i.milestone
         for i in theirs
