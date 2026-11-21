@@ -1,10 +1,11 @@
-"""Each k3s node ships the AppArmor profile that names k3s's runc.
+"""Each k3s node gives k3s's runc the AppArmor label `runc`.
 
 Ubuntu 26.04 stacks every container's label with `unconfined` when the runtime that starts it
 runs under the bare `unconfined` label. The stacked label fails the container profile's own
 peer rules, so a signal between two processes of one container is denied: rsync never ends a
-local copy, `timeout` never kills, and Traefik's and Authelia's init containers hang. Nothing
-goes red on the host. The package is the only thing that puts the profile on a rebuilt node.
+local copy, `timeout` never kills, and Traefik's and Authelia's init containers hang. A runtime
+under any name but `runc` or `crun` fails the other way: the container profile refuses its
+signals, so no container stops. Nothing goes red on the host in either case.
 """
 
 import re
@@ -12,18 +13,22 @@ import shutil
 from pathlib import Path
 
 import pytest
-from _host_packages import HOSTS, package, shipped_text
+from _host_packages import HOSTS, package
 from lib import yaml_fast
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 
-PROFILE = "/etc/apparmor.d/homelab-k3s-runc"
+UBUNTU_PROFILE = "/etc/apparmor.d/runc"
+# The opening line of the profile the `apparmor` package ships, on 24.04 and 26.04 alike.
+UBUNTU_OPENING = "profile runc /usr/{bin,sbin}/runc flags=(unconfined) {"
 K3S_COMPONENTS = {"k3s-server", "k3s-agent"}
 DATA = "/var/lib/rancher/k3s/data"
 # k3s unpacks its runc under the sha256 of the bundle it came from.
 K3S_RUNC = f"{DATA}/{'3' * 64}/bin/runc"
-NOT_K3S_RUNC = ("/usr/sbin/runc", f"{DATA}/3/extra/bin/runc", f"{DATA}/3/bin/runc-old")
-ABI = Path("/etc/apparmor.d/abi/4.0")
+ATTACHED = (K3S_RUNC, "/usr/sbin/runc", "/usr/bin/runc")
+NOT_ATTACHED = (f"{DATA}/3/extra/bin/runc", f"{DATA}/3/bin/runc-old", "/usr/sbin/crun")
+# The labels containerd's container profile takes a signal from, besides its own daemon's.
+SIGNAL_PEERS = {"unconfined", "runc", "crun"}
 
 
 def components(host: str) -> set[str]:
@@ -34,16 +39,42 @@ def components(host: str) -> set[str]:
 K3S_NODES = [host for host in HOSTS if components(host) & K3S_COMPONENTS]
 
 
-@pytest.fixture(scope="module")
-def profile() -> str:
-    """The profile's text. The component ships one file, so one node's copy stands for both."""
-    return shipped_text(K3S_NODES[0], PROFILE)
+def edits(host: str) -> list[dict]:
+    return [e for e in package(host).lines if e["path"] == UBUNTU_PROFILE]
+
+
+def opening(host: str) -> re.Match:
+    (edit,) = edits(host)
+    found = re.fullmatch(r"profile (\S+) (\S+) flags=\(([^)]*)\) \{", edit["line"])
+    assert found, (
+        f"{host}: {edit['line']!r} opens no profile with an attachment and flags"
+    )
+    return found
+
+
+def alternatives(pattern: str) -> list[str]:
+    """`pattern` with its innermost-first `{a,b}` groups expanded."""
+    group = re.search(r"\{([^{}]*)\}", pattern)
+    if not group:
+        return [pattern]
+    return [
+        expanded
+        for choice in group.group(1).split(",")
+        for expanded in alternatives(
+            pattern[: group.start()] + choice + pattern[group.end() :]
+        )
+    ]
 
 
 def attaches(attachment: str, path: str) -> bool:
-    """Whether an AppArmor attachment of literals and `*` matches `path`. `*` stops at `/`."""
-    pattern = "[^/]*".join(re.escape(part) for part in attachment.split("*"))
-    return re.fullmatch(pattern, path) is not None
+    """Whether an AppArmor attachment of literals, `{a,b}` and `*` matches `path`.
+
+    `*` stops at `/`, as it does in AppArmor.
+    """
+    return any(
+        re.fullmatch("[^/]*".join(map(re.escape, each.split("*"))), path)
+        for each in alternatives(attachment)
+    )
 
 
 def test_both_cluster_nodes_are_checked():
@@ -51,38 +82,50 @@ def test_both_cluster_nodes_are_checked():
 
 
 @pytest.mark.parametrize("host", HOSTS)
-def test_only_a_k3s_node_ships_the_profile(host):
-    assert (PROFILE in package(host).files) == (host in K3S_NODES)
+def test_only_a_k3s_node_edits_the_runc_profile(host):
+    assert bool(edits(host)) == (host in K3S_NODES)
 
 
 @pytest.mark.parametrize("host", K3S_NODES)
-def test_a_changed_profile_is_loaded_by_reconcile(host):
-    assert package(host).activations[PROFILE] == "reload:apparmor.service"
+def test_the_edit_replaces_the_opening_line_ubuntu_ships(host):
+    (edit,) = edits(host)
+
+    assert re.search(edit["regexp"], UBUNTU_OPENING)
+    assert package(host).activations[UBUNTU_PROFILE] == "reload:apparmor.service"
 
 
-def test_the_profile_attaches_to_k3s_runc_alone_and_confines_nothing(profile):
-    found = re.search(r"^profile \S+ (\S+) flags=\(([^)]*)\) \{$", profile, re.M)
-    assert found, "the file declares no profile with an attachment and flags"
-    attachment, flags = found.groups()
+@pytest.mark.parametrize("host", K3S_NODES)
+def test_k3s_runc_runs_under_a_label_a_container_takes_signals_from(host):
+    name, _, flags = opening(host).groups()
 
-    assert attaches(attachment, K3S_RUNC)
-    assert not [path for path in NOT_K3S_RUNC if attaches(attachment, path)]
+    assert name in SIGNAL_PEERS - {"unconfined"}
     assert flags.split(",") == ["unconfined"]
 
 
-def test_the_profile_grants_no_user_namespace(profile):
-    rules = [line.split("#")[0].strip() for line in profile.splitlines()]
+@pytest.mark.parametrize("host", K3S_NODES)
+def test_the_profile_attaches_to_k3s_runc_and_keeps_the_host_runc(host):
+    attachment = opening(host).group(2)
 
-    assert not [rule for rule in rules if rule.startswith("userns")]
+    assert [path for path in ATTACHED if attaches(attachment, path)] == list(ATTACHED)
+    assert not [path for path in NOT_ATTACHED if attaches(attachment, path)]
 
 
 @pytest.mark.skipif(
-    not (shutil.which("apparmor_parser") and ABI.exists()),
-    reason="needs apparmor_parser and the 4.0 policy ABI the profile declares",
+    not (shutil.which("apparmor_parser") and Path(UBUNTU_PROFILE).exists()),
+    reason="needs apparmor_parser and the runc profile the apparmor package ships",
 )
-def test_apparmor_parser_accepts_the_profile(profile, tmp_path):
-    candidate = tmp_path / "homelab-k3s-runc"
-    candidate.write_text(profile)
+@pytest.mark.parametrize("host", K3S_NODES)
+def test_apparmor_parser_accepts_the_edited_profile(host, tmp_path):
+    (edit,) = edits(host)
+    shipped = Path(UBUNTU_PROFILE).read_text().splitlines()
+    candidate = tmp_path / "runc"
+    candidate.write_text(
+        "\n".join(
+            edit["line"] if re.search(edit["regexp"], line) else line
+            for line in shipped
+        )
+        + "\n"
+    )
 
     result = run(
         ["apparmor_parser", "--skip-kernel-load", "--skip-cache", str(candidate)]
