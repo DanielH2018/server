@@ -1,4 +1,4 @@
-# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-agent) -- edits
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
 # here are overwritten. The logind delay kubelet's graceful node shutdown needs.
 #
 # kubelet refuses to start its shutdown manager while logind's InhibitDelayMaxSec is below the sum
@@ -6,4 +6,4 @@
 # filename order across /etc and /usr/lib, and unattended-upgrades' own file sorts after it and
 # sets 30. This file's name sorts after both.
 [Login]
-InhibitDelayMaxSec={{ k3s_agent_graceful_shutdown | sum(attribute='seconds') }}
+InhibitDelayMaxSec={{ k3s_graceful_shutdown | sum(attribute='seconds') }}

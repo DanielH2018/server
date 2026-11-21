@@ -190,3 +190,35 @@ k3s_cpu_weight: 1000
 # both. The docs-refresh run's pytest and mkdocs outrank pods too, as system.slice siblings of
 # k3s, but k3s_cpu_weight keeps them to a small part of the slice.
 k3s_system_slice_cpu_weight: 1000
+
+# Kubelet's graceful node shutdown, rendered into kubelet.conf.d on both k3s nodes. Here rather
+# than in component.yml's `defaults:`, because k3s-agent ships the same files and a borrowing
+# component reads only this file. Without it every shutdown of a node logs out Longhorn's iSCSI
+# sessions under mounted ext4 filesystems: open-iscsi's stop runs logout-all.sh while the pods
+# still hold the mounts, and the journals abort. kubelet instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
+# then Longhorn, then the system-critical pods.
+#
+# kubelet takes that lock only when logind's delay covers the groups' sum, which the logind
+# drop-in in component.yml's `files:` sets. Without the drop-in the shutdown manager fails at every k3s
+# start. To see that it holds, run `systemd-inhibit --list`, which names a kubelet `shutdown`
+# lock in `delay` mode.
+#
+# The boot side needs no iSCSI setting: iscsid.conf already sets `node.startup = manual`, and
+# the logins after boot follow instance-manager's tgtd and a fresh sendtargets discovery, which
+# is Longhorn's attach path. If a boot after a graceful shutdown still logs read-only remounts,
+# the cause is in Longhorn's engine or replica state, not here.
+#
+# Each group opens at its priority and runs to the next one. 1000000000 is the value of
+# Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
+# system-cluster-critical; system-node-critical (2000001000) lands in that last group.
+# ENFORCED: hosts/tests/test_k3s_server_component.py.
+#
+# DECIDED: 90 seconds in total, because the UPS chain cannot give more. upsmon's SHUTDOWNCMD is
+# `systemctl poweroff`, which waits on kubelet's delay lock like the weekly reboot does, and an
+# FSD raised by `battery.runtime.low` (120 s, k8s/roles/nut/defaults/main.yml) leaves about two
+# minutes of battery. kubelet moves to the next group as soon as a group's pods have stopped, so
+# a group's seconds are its ceiling, not its cost.
+k3s_graceful_shutdown:
+  - {priority: 0, seconds: 45}
+  - {priority: 1000000000, seconds: 30}
+  - {priority: 2000000000, seconds: 15}
