@@ -589,9 +589,14 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   (`hosts/components/claude-code/tests/test_claude_triage_poll_restartable.py::test_a_poll_that_cannot_read_the_restartable_services_fails`),
   and a `poll_routes` key that names a listed service fails
   `hosts/tests/test_claude_restart_allowlist.py::test_a_route_naming_a_listed_service_is_flagged`.
-- **Identity:** root, because only root reads the k3s admin kubeconfig. No polkit rule ships,
-  so only root starts the unit
-  (`hosts/tests/test_claude_restart_broker.py::test_the_broker_ships_only_behind_its_toggle_and_with_no_polkit_rule`).
+- **Identity:** root, because only root reads the k3s admin kubeconfig. Besides root, only
+  the triage controller, `claude-triage-ctl`, may start the unit, and it may only start it:
+  `hosts/components/claude-code/templates/50-claude-restart.rules.j2` admits no other user and
+  no other verb, by the operator's 2026-11-20 ruling
+  (`hosts/tests/test_claude_restart_broker.py::test_only_the_triage_controller_may_start_the_broker_and_only_start_it`).
+  Neither `claude` nor the triage session user can. The rule admits an instance only in the
+  script's name shape
+  (`hosts/tests/test_claude_restart_broker.py::test_the_rule_admits_only_the_broker_in_the_scripts_name_shape`).
   The unit passes the script its instance and nothing else
   (`hosts/tests/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_restart_enabled`, true
