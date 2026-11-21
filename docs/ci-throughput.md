@@ -108,6 +108,13 @@ dependency the module gained, which no selected run is told to run.
   `Nightly pytest sweep is red` that names the failed modules, comments on it while the
   sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
   label, because the findings register drops an issue a bot opened.
+- **It runs the tests marked `image` too.** `addopts` deselects them from every pytest
+  run, and `image-leg.yml` runs them only on a pull request whose diff matches its
+  `paths:` list, which misses modules the image tests import. A second step in the sweep
+  runs `-m image` over the whole tree after the suite, red or green, and appends to the
+  log the sweep issue reads its failed modules from. The step needs Docker, so the sweep
+  stays on a hosted runner (the `pytest-sweep-runs-the-image-tests` row of
+  `tests/repo/test_census_rows_workflows.py`).
 - **It shares its tool installs with the pytest legs.** Both call
   `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
 - **To run the whole suite on a branch,** dispatch it there:
@@ -803,8 +810,8 @@ other eight jobs stay hosted, because they are short or need what a pod does not
    that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
    a probe sets each beside the hosted run of the same commit. The suite's Docker tests already
    run in a hosted job of their own, `image-leg.yml`, so the `pytest` job needs no Docker
-   daemon. The slice ends after a week with no shadow job green
-   where its twin was red.
+   daemon. The nightly sweep runs those tests as well, so it would stay on a hosted runner.
+   The slice ends after a week with no shadow job green where its twin was red.
 1. **C3, paused.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no
    runner answers.
