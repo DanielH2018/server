@@ -133,7 +133,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 60
             timeoutSeconds: 15
-{{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='50m', mem_request='128Mi') }}
+{{ container_resources(cpu_limit='1', mem_limit='512Mi', cpu_request='50m', mem_request='192Mi') }}
       volumes:
         - name: crowdsec-acquis
           configMap:
