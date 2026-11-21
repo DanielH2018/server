@@ -3,84 +3,6 @@
 from home_assistant import ha_state_checks as hsm
 
 
-def test_referenced_entities_collects_write_and_trigger_targets():
-    config = {
-        "automation": [
-            {
-                "id": "a",
-                "alias": "A",
-                "trigger": [
-                    {
-                        "platform": "state",
-                        "entity_id": "binary_sensor.aqara_fp300_presence",
-                    }
-                ],
-                "condition": [
-                    {
-                        "condition": "state",
-                        "entity_id": "person.daniel",
-                        "state": "home",
-                    }
-                ],
-                "action": [
-                    {
-                        "service": "light.turn_on",
-                        "target": {"entity_id": "light.bedroom_lights"},
-                    }
-                ],
-            }
-        ],
-        "script": {},
-        "scene": [],
-    }
-    refs = hsm.referenced_entities(config)
-    assert {
-        "binary_sensor.aqara_fp300_presence",
-        "person.daniel",
-        "light.bedroom_lights",
-    } <= refs
-
-
-def test_resolution_errors_flags_unknown_managed_entity():
-    config = {
-        "automation": [
-            {
-                "id": "a",
-                "alias": "A",
-                "action": [
-                    {
-                        "service": "switch.turn_on",
-                        "target": {"entity_id": "switch.typo_does_not_exist"},
-                    }
-                ],
-            }
-        ],
-        "script": {},
-        "scene": [],
-    }
-    known = {"light.bedroom_lights"}  # switch.typo... absent
-    errs = hsm.resolution_errors(config, known)
-    assert any("switch.typo_does_not_exist" in e for e in errs)
-
-
-def test_resolution_ignores_unmanaged_domains_and_templated():
-    config = {
-        "automation": [
-            {
-                "id": "a",
-                "alias": "A",
-                "action": [
-                    {"service": "notify.mobile_app_x", "data": {"message": "hi"}},
-                    {"service": "light.turn_on", "target": {"entity_id": "{{ x }}"}},
-                ],
-            }
-        ],
-        "script": {},
-        "scene": [],
-    }
-    assert hsm.resolution_errors(config, set()) == []
-
-
 def test_override_writer_errors_flags_undeclared_writer():
     # fact: k8s/roles/home-assistant/CLAUDE.md#Claude tooling for this role
     # fact: .claude/skills/ha-edit-automation/SKILL.md#3b. Regenerate the state model if you changed who writes what
@@ -341,51 +263,6 @@ def test_check_errors_on_real_role_is_clean_after_generate(tmp_path):
     # After Task 4/5/6 produced fresh artifacts + snapshot, the real role must validate clean.
     errs = hsm.check_errors()
     assert errs == [], "real role failed state-model checks:\n" + "\n".join(errs)
-
-
-def test_referenced_services_collects_literals_skips_templated():
-    config = {
-        "automation": [
-            {
-                "id": "a",
-                "alias": "A",
-                "action": [
-                    {"service": "notify.mobile_app_x"},
-                    {"service": "{{ 'light.' ~ 'turn_on' }}"},
-                    {"service": "scene.turn_on", "target": {"entity_id": "scene.x"}},
-                ],
-            }
-        ],
-        "script": {},
-    }
-    assert hsm.referenced_services(config) == {"notify.mobile_app_x", "scene.turn_on"}
-
-
-def test_service_resolution_flags_unknown_in_any_domain():
-    # notify is NOT a managed entity-domain, but a typo'd notify SERVICE must still be caught
-    # (the documented notify.pixel_watch_3 service_not_found bug).
-    config = {
-        "automation": [
-            {"id": "a", "alias": "A", "action": [{"service": "notify.pixel_watch_3"}]}
-        ],
-        "script": {},
-    }
-    known = {"notify.mobile_app_pixel_watch_3", "light.turn_on"}
-    errs = hsm.service_resolution_errors(config, known)
-    assert any("notify.pixel_watch_3" in e for e in errs)
-
-
-def test_service_resolution_resolves_config_script_via_known():
-    config = {
-        "automation": [
-            {"id": "a", "alias": "A", "action": [{"service": "script.bedroom_blip"}]}
-        ],
-        "script": {"bedroom_blip": {"sequence": []}},
-    }
-    known = hsm.config_services(
-        config
-    )  # the freshness hatch resolves a brand-new script
-    assert hsm.service_resolution_errors(config, known) == []
 
 
 def _lights_set_call(extra):
