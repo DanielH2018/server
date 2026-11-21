@@ -125,7 +125,7 @@ verbatim-prompts store this role's LAN route
   95% of the remaining volume. An empty stream on a quiet day is the filter working, so nothing
   watches this stream for freshness. No rule reads it: kubelet's `Failed to start node shutdown
   manager` line is the diagnosis a reader looks up, and the alert reads the lock itself
-  (`hosts/components/k3s-agent/files/kubelet-shutdown-lock-check.sh`), because kubelet logs
+  (`hosts/components/k3s-server/files/kubelet-shutdown-lock-check.sh`), because kubelet logs
   nothing on success. `tests/k8s/test_alloy_ships_k3s_log.py` runs the
   filter over real line shapes and holds the path to the `k3s_log_file` both k3s host components
   carry.

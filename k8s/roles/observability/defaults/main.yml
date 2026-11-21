@@ -112,7 +112,7 @@ observability_ksm_flux_resource_state:
 k8s_autodeploy: false
 k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, one sub-image per workload across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"
 
-# longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
+# longhorn-nobackup, NOT longhorn, for Loki and Prometheus. Two reasons, either sufficient:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
 #     Both are bulky, regenerable state.
 #   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output
@@ -127,8 +127,8 @@ observability_prometheus_storage: 12Gi
 # scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
 # backup, the export is the save step.
 observability_grafana_storage: 1Gi
-# Alertmanager's silences and notification log. Small, and on the no-backup class: losing it
-# costs only those two, and the cost is one re-sent notification per open alert.
+# Alertmanager's silences and notification log, small and regenerable. A rebuild drops every
+# active silence, so silenced alerts page again until someone re-creates the silence.
 observability_alertmanager_storage: 1Gi
 
 # The role's claims, which the renderer renders. Each names `namespace` because the claims

@@ -1,4 +1,4 @@
-# Shipped by the host package's k3s-agent component with its enable link. Every 5 minutes;
+# Shipped by the host package's k3s-server component with its enable link. Every 5 minutes;
 # kubelet-shutdown-lock-check.sh's DEADLINE_S is three runs.
 [Unit]
 Description=Check kubelet's shutdown delay lock every 5 minutes
