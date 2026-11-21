@@ -232,6 +232,7 @@ files:
   - {src: templates/50-claude-restart.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-restart.rules, when: "claude_code_restart_enabled and claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_restart.py, dst: /opt/claude-restart/claude_restart.py, when: "claude_code_restart_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-restart/host_lib.py, when: "claude_code_restart_enabled"}
+  - {shared: k8s_conditions.py, dst: /opt/claude-restart/lib/k8s_conditions.py, when: "claude_code_restart_enabled"}
   - {lib: weekly_window.py, dst: /opt/claude-restart/weekly_window.py, when: "claude_code_restart_enabled"}
   - {src: templates/claude-restart-config.json.j2, dst: /etc/claude-restart/config.json, when: "claude_code_restart_enabled"}
   - {src: templates/claude-restart@.service.j2, dst: /usr/lib/systemd/system/homelab-claude-restart@.service, when: "claude_code_restart_enabled"}

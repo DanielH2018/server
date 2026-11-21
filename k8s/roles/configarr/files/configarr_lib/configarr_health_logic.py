@@ -17,6 +17,7 @@ process-only healthcheck missed the 2026-06-10 v8 breakage because every failing
 from __future__ import annotations
 
 from configarr_lib import configarr_status as cs
+from lib.k8s_conditions import ConditionStatus, parse_conditions
 
 # A Job the CronJob controller created but which has neither succeeded nor failed yet. Excluded
 # from the verdict rather than reported: a run in progress says nothing about whether the LAST one
@@ -34,9 +35,9 @@ def finished_at(job) -> str:
     status = job.get("status") or {}
     if status.get("completionTime"):
         return status["completionTime"]
-    for condition in status.get("conditions") or []:
-        if condition.get("type") == "Failed" and condition.get("status") == "True":
-            return condition.get("lastTransitionTime") or ""
+    failed = parse_conditions(job).get("Failed")
+    if failed is not None and failed.status is ConditionStatus.TRUE:
+        return failed.last_transition
     return ""
 
 
