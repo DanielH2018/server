@@ -52,10 +52,8 @@ order:
    was re-examined on 2026-09-28 (#2808) and rejected, because operator rulings and
    cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
    both name that slug, and no skill, agent or eval case carries a retired spelling of it
-   (ENFORCED by two rows of
-   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`:
-   `review-surfaces-name-the-standing-slug` and
-   `review-surfaces-carry-no-retired-standing-slug`).
+   (ENFORCED by the `review-surfaces-name-the-standing-slug` row of
+   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`).
    A slug the store does not hold primes nothing, and the harness reports no error for it.
 2. **The newest two dated `review-*-state` ledgers the store actually holds** — for recency only:
    what shipped since the standing list was last distilled, and this week's refutations with their
@@ -72,8 +70,7 @@ order:
    `docs/reference/backlog.md`** — the design facts the reviewer agents used to carry inline,
    one section per domain, and the register `findings.py close --accepted`/`--refuted` writes,
    rendered by the docs-refresh cron. Each reviewer agent reads its own domain from both
-   before it flags. The `agents-carry-no-inline-reflag-list` row of
-   `tests/repo/test_census_rows_text.py` keeps the inline copies from coming back.
+   before it flags.
 
 **Item 1's file missing from the store stops the run.** Name the missing slug to the operator and
 wait. A missing file is not an error the harness reports, so a run that skips it proceeds unprimed

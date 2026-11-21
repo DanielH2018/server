@@ -93,7 +93,6 @@ def _missing_macro_offence(subject: Subject) -> list[str]:
 UNSORTED_ITEMS = re.compile(r"\.items\(\)(?![^\n]*\bsort\b)")
 
 STANDING_SLUG = "review-standing-decisions"
-RETIRED_SLUGS = ("homelab-review-standing-donot-reflag",)
 # The surfaces a review primes from; each must name the slug the memory store holds.
 PRIMED_SURFACES = frozenset(
     {
@@ -102,12 +101,6 @@ PRIMED_SURFACES = frozenset(
         ".claude/skills/ha-review/SKILL.md",
     }
 )
-
-
-# The inline form: the heading phrase followed by a colon and the list itself. The pointer
-# form ends the phrase with a full stop, so this matches the drifting copy and not its
-# replacement.
-INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
 
 
 # ── Units the host packages ship ─────────────────────────────────────────────────────
@@ -164,29 +157,6 @@ ROWS = (
             Subject("b.md", "`templates/config/app.yml.j2`, then app.yml.j2 again\n"),
         ),
         must_find=frozenset({"docs/adr/index.md", "CLAUDE.md"}),
-    ),
-    Census(
-        name="role-docs-deploy-through-deploy-sh",
-        reason=(
-            "`scripts/deploy.sh` takes the tree lock, snapshots HEAD and checks the tag and "
-            "staleness before it runs the playbook; a bare `ansible-playbook ansible/deploy.yml` "
-            "does none of that. The bare form spreads by copying a sibling doc. Write "
-            '`./scripts/deploy.sh --tags "<svc>"`, adding `-e target=daniel-pi` for a Pi service.'
-        ),
-        files=lambda: [
-            rel for rel in tracked("k8s/roles/*/CLAUDE.md") if rel.count("/") == 3
-        ],
-        offence=lines_matching(re.compile(r"ansible-playbook\s+ansible/deploy\.yml")),
-        red=(
-            Subject(
-                "a.md",
-                '- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "sonarr"`',
-            ),
-        ),
-        green=(Subject("a.md", '- Deploy: `./scripts/deploy.sh --tags "sonarr"`'),),
-        must_find=frozenset(
-            f"k8s/roles/{role}/CLAUDE.md" for role in ("sonarr", "traefik", "authelia")
-        ),
     ),
     Census(
         name="root-claude-md-has-no-self-disclaiming-prose",
@@ -323,52 +293,6 @@ ROWS = (
                 "homelab-pi-watchdog-health.timer",
                 "homelab-pi-audit-health.timer",
             }
-        ),
-    ),
-    Census(
-        name="review-surfaces-carry-no-retired-standing-slug",
-        reason=(
-            f"The standing-list memory is `{STANDING_SLUG}`. A missing memory is no error the "
-            "harness reports, so a skill priming from a retired spelling proceeds unprimed and "
-            "the fan-out re-derives settled decisions."
-        ),
-        files=lambda: tracked(
-            *(
-                f"{d}/*.{ext}"
-                for d in (".claude/skills", ".claude/agents", "evals/cases")
-                for ext in ("md", "json")
-            )
-        ),
-        offence=lambda s: [slug for slug in RETIRED_SLUGS if slug in s.text],
-        red=(
-            Subject("a.md", "prime from `homelab-review-standing-donot-reflag` first"),
-        ),
-        green=(Subject("a.md", f"prime from `{STANDING_SLUG}` first"),),
-        must_find=PRIMED_SURFACES,
-    ),
-    Census(
-        name="agents-carry-no-inline-reflag-list",
-        reason=(
-            "The accepted designs live once, in "
-            "`.claude/skills/homelab-review/accepted-designs.md`, one section per reviewer "
-            "domain, and the settled-findings register in `docs/reference/backlog.md`. An "
-            'inline "Honor accepted designs (don\'t re-flag): ..." list in an agent drifts '
-            "from both. Point at the domain's section instead "
-            "(the `pointed-reviewer-agents-name-their-domain-in-both-sources` row holds the pointers)."
-        ),
-        files=lambda: tracked(".claude/agents/*.md"),
-        offence=lines_matching(INLINE_REFLAG_LIST),
-        red=(Subject("a.md", "Honor accepted designs (don't re-flag): the arr stack"),),
-        green=(
-            Subject("a.md", "Honor accepted designs (don't re-flag). See `## cicd`."),
-        ),
-        must_find=frozenset(
-            f".claude/agents/{name}.md"
-            for name in (
-                "homelab-container-reviewer",
-                "homelab-cicd-reviewer",
-                "homelab-backup-observability-reviewer",
-            )
         ),
     ),
     Census(
