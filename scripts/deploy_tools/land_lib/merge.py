@@ -676,7 +676,7 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                         updated_from, rejoined, drafted = head, True, True
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
-                slots.refuse_before_merge(ln, head, in_turn)
+                slots.refuse_before_merge(ln, head)
                 if not (updated_from or stale_base.batch_tested(ln, head)):
                     stale_base.refuse_stale_approved(
                         ln, head, view.get("mergeable") == "CONFLICTING"

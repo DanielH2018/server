@@ -15,7 +15,7 @@ import pytest
 from dev import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
-from deploy_tools.land_lib import batch, line, live_limit, turn
+from deploy_tools.land_lib import batch, gh_read, line, live_limit, turn
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -347,3 +347,24 @@ def test_a_holder_stacks_its_batch_only_once_it_holds_the_turn_again(batch_of):
     ]
     assert order[:5] == ["try_turn", "release_turn", "sleep", "try_turn", "stack"]
     assert hub.merged == [OWN, "7"]
+
+
+def test_a_holder_whose_turn_a_rate_limit_wait_lost_forms_no_batch(batch_of, capsys):
+    ln, hub, _ = batch_of(drafts=("7",), fakes=Fakes(turn=[True, False]))
+    # The read before the turn fails for good, so the turn's rule reads the files again;
+    # GitHub refuses that read too, and after its wait another landing holds the turn.
+    refusals = iter(range(gh_read.RATE_LIMIT_WAITS + 2))
+    limited = subprocess.CalledProcessError(
+        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+    )
+
+    def gh_json(*args, **kwargs):
+        if "files,headRefOid" in args and next(refusals, None) is not None:
+            raise limited
+        return hub.gh_json(*args, **kwargs)
+
+    ln.tools = replace(ln.tools, gh_json=gh_json)
+    land(ln)
+    assert "going on without a turn" in capsys.readouterr().out
+    assert hub.stacked == {} and hub.batch_prs == []
+    assert hub.merged == [OWN]
