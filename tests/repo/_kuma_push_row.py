@@ -49,6 +49,5 @@ NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA = Census(
     allow={
         "scripts/secrets_mgmt/git_dates.py": "names the retired push tokens to date them",
         "evals/history.json": "a recorded eval case id",
-        "evals/review_coverage/2026-09-18.json": "a dated coverage record",
     },
 )

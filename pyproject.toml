@@ -427,8 +427,6 @@ ignore_names = [
   "historical_names", "undeclared_departures", "revived_departures",
   # kubectl.py: test_every_named_node_is_a_host_in_the_inventory.
   "RETIRED_CLUSTER_NODES",
-  # review_metrics.py: evals/tests/test_review_outcomes.py and the committed-ledger check.
-  "validate_row", "COVERAGE_DIR",
   # secret_registry.py: the live-registry check in test_secret_registry.py.
   "record_names",
   # dialect.py: test_renderer_dialect.py's census of every template and variable value.
