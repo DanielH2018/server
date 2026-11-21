@@ -81,25 +81,32 @@ def _secret_refs(docs: list[dict]) -> dict[str, tuple[str, str]]:
     }
 
 
+def _failures(*rows: dict) -> list[seed.Failure]:
+    failures = seed.parse_failures(json.dumps(list(rows)))
+    assert failures is not None
+    return failures
+
+
 def test_key_is_rejected_on_an_api_key_failure():
-    assert seed.key_is_rejected([URL_FAILURE, KEY_FAILURE])
+    assert seed.key_is_rejected(_failures(URL_FAILURE, KEY_FAILURE))
 
 
 def test_key_is_rejected_on_no_other_failure():
-    assert not seed.key_is_rejected([URL_FAILURE])
+    assert not seed.key_is_rejected(_failures(URL_FAILURE))
 
 
 def test_find_application_takes_the_one_entry_of_its_kind():
-    entries = [
-        {"id": 1, "implementation": "Sonarr"},
-        {"id": 2, "implementation": "Radarr"},
-    ]
-    assert seed.find_application(entries, "Radarr")["id"] == 2
+    entries = seed.parse_applications(
+        [{"id": 1, "implementation": "Sonarr"}, {"id": 2, "implementation": "Radarr"}]
+    )
+    assert seed.find_application(entries, "Radarr").id == 2
 
 
 @pytest.mark.parametrize("count", [0, 2])
 def test_find_application_refuses_none_or_two(count):
-    entries = [{"id": n, "implementation": "Sonarr"} for n in range(count)]
+    entries = seed.parse_applications(
+        [{"id": n, "implementation": "Sonarr"} for n in range(count)]
+    )
     with pytest.raises(seed.SeedError, match=f"{count} Sonarr applications"):
         seed.find_application(entries, "Sonarr")
 

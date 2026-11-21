@@ -27,10 +27,12 @@ Every request goes through `flux_job_connect.open_url`, the helper the Job censu
 a script Flux runs, and the script imports only modules that census admits.
 """
 
+import argparse
 import json
 import os
 import sys
 import urllib.error
+from dataclasses import dataclass, replace
 
 from flux_job_connect import Request, open_url
 
@@ -83,13 +85,48 @@ def request(api_url: str, api_key: str, path: str, method: str = "GET", body=Non
     return json.loads(raw) if raw.strip() else None
 
 
-def find_application(applications: list[dict], implementation: str) -> dict:
+@dataclass(frozen=True)
+class Application:
+    """One entry of Prowlarr's application list.
+
+    Attributes:
+        id: The entry's id, which its PUT path names.
+        implementation: The app it points at, such as `Sonarr`.
+        body: The entry as the API returned it, which a test or a PUT sends back.
+    """
+
+    id: int
+    implementation: str
+    body: dict
+
+
+@dataclass(frozen=True)
+class Failure:
+    """One validation failure from Prowlarr's test of an application.
+
+    Attributes:
+        field: The setting it names, such as `ApiKey`.
+        message: Prowlarr's message for it.
+    """
+
+    field: str
+    message: str
+
+
+def parse_applications(rows: list) -> list[Application]:
+    """The entries of `GET /api/v1/applications`."""
+    return [Application(int(r["id"]), str(r["implementation"]), r) for r in rows]
+
+
+def find_application(
+    applications: list[Application], implementation: str
+) -> Application:
     """The one application entry of `implementation`.
 
     Raises:
         SeedError: no entry, or more than one, carries it.
     """
-    found = [a for a in applications if a.get("implementation") == implementation]
+    found = [a for a in applications if a.implementation == implementation]
     if len(found) != 1:
         raise SeedError(
             f"Prowlarr has {len(found)} {implementation} applications, not one"
@@ -97,56 +134,64 @@ def find_application(applications: list[dict], implementation: str) -> dict:
     return found[0]
 
 
-def key_is_rejected(failures: list[dict]) -> bool:
+def key_is_rejected(failures: list[Failure]) -> bool:
     """Whether a failed application test names the API key.
 
     Prowlarr answers a test that the app refused with a 401 as the failure
     `{"propertyName": "ApiKey", "errorMessage": "API Key is invalid"}`.
     """
-    return any(
-        str(f.get("propertyName", "")).lower() == KEY_FIELD.lower() for f in failures
-    )
+    return any(f.field.lower() == KEY_FIELD.lower() for f in failures)
 
 
-def with_key(application: dict, api_key: str) -> dict:
+def with_key(application: Application, api_key: str) -> Application:
     """A copy of `application` whose `apiKey` field holds `api_key`.
 
     Raises:
         SeedError: the entry has no `apiKey` field.
     """
-    body = json.loads(json.dumps(application))
+    body = json.loads(json.dumps(application.body))
     for field in body.get("fields") or []:
         if field.get("name") == KEY_FIELD:
             field["value"] = api_key
-            return body
+            return replace(application, body=body)
     raise SeedError(
-        f"the {application.get('implementation')} application has no {KEY_FIELD!r} field"
+        f"the {application.implementation} application has no {KEY_FIELD!r} field"
     )
 
 
-def stored_key_failures(api_url: str, api_key: str, application: dict) -> list[dict]:
+def parse_failures(body: str) -> list[Failure] | None:
+    """The validation failures a 400 body lists, or None when it is not such a list."""
+    try:
+        rows = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(rows, list):
+        return None
+    return [
+        Failure(str(r.get("propertyName", "")), str(r.get("errorMessage", "")))
+        for r in rows
+        if isinstance(r, dict)
+    ]
+
+
+def stored_key_failures(
+    api_url: str, api_key: str, application: Application
+) -> list[Failure]:
     """The failures of Prowlarr's test of `application` with its stored key; empty on a pass.
 
     Raises:
         ApiError: the test answered anything but 2xx or a 400 failure list.
     """
     try:
-        request(api_url, api_key, "applications/test", method="POST", body=application)
+        request(
+            api_url, api_key, "applications/test", method="POST", body=application.body
+        )
     except ApiError as exc:
-        failures = failure_list(exc.body) if exc.code == 400 else None
+        failures = parse_failures(exc.body) if exc.code == 400 else None
         if failures is None:
             raise
         return failures
     return []
-
-
-def failure_list(body: str) -> list[dict] | None:
-    """The validation failures a 400 body lists, or None when it is not such a list."""
-    try:
-        failures = json.loads(body)
-    except ValueError:
-        return None
-    return failures if isinstance(failures, list) else None
 
 
 def seed(api_url: str, api_key: str, app_keys: dict[str, str]) -> list[str]:
@@ -160,7 +205,7 @@ def seed(api_url: str, api_key: str, app_keys: dict[str, str]) -> list[str]:
     Raises:
         SeedError: an app has no single entry, or its test fails on anything but the key.
     """
-    applications = request(api_url, api_key, "applications")
+    applications = parse_applications(request(api_url, api_key, "applications"))
     written = []
     for implementation, app_key in app_keys.items():
         application = find_application(applications, implementation)
@@ -168,16 +213,16 @@ def seed(api_url: str, api_key: str, app_keys: dict[str, str]) -> list[str]:
         if not failures:
             continue
         if not key_is_rejected(failures):
-            reasons = sorted({str(f.get("errorMessage")) for f in failures})
+            reasons = sorted({f.message for f in failures})
             raise SeedError(
                 f"Prowlarr's test of its {implementation} application failed: {reasons}"
             )
         request(
             api_url,
             api_key,
-            f"applications/{application['id']}",
+            f"applications/{application.id}",
             method="PUT",
-            body=with_key(application, app_key),
+            body=with_key(application, app_key).body,
         )
         written.append(implementation)
     return written
@@ -191,7 +236,8 @@ def env_or_fail(key: str) -> str:
     return value
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args(argv)
     written = seed(
         f"{env_or_fail('PROWLARR_URL')}/api/v1",
         env_or_fail("PROWLARR_API_KEY"),
