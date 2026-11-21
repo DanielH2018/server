@@ -89,15 +89,23 @@ def _raw_dict_functions(source: str) -> set[str]:
             args.kwarg,
         ]
         notes = [param.annotation for param in params if param] + [node.returns]
-        if any(note and _is_raw_dict(ast.unparse(note)) for note in notes):
+        if any(note and _is_raw_dict(note) for note in notes):
             found.add(node.name)
     return found
 
 
-def _is_raw_dict(annotation: str) -> bool:
-    return annotation in ("dict", "dict[str, Any]") or (
-        annotation.rpartition(".")[2] == "JsonValue"
-    )
+def _is_raw_dict(note: ast.expr) -> bool:
+    """Whether ``note`` is a bare dict, ``dict[str, Any]`` or ``JsonValue``, optional or not."""
+    if isinstance(note, ast.BinOp) and isinstance(note.op, ast.BitOr):
+        sides = (note.left, note.right)
+        others = [side for side in sides if ast.unparse(side) != "None"]
+        return len(others) == 1 and _is_raw_dict(others[0])
+    text = ast.unparse(note)
+    if isinstance(note, ast.Subscript) and text.startswith(
+        ("Optional[", "typing.Optional[")
+    ):
+        return _is_raw_dict(note.slice)
+    return text in ("dict", "dict[str, Any]") or text.rpartition(".")[2] == "JsonValue"
 
 
 def _sources(

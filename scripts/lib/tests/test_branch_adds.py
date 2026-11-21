@@ -86,10 +86,25 @@ def test_a_function_that_takes_or_returns_a_raw_dict_is_named(tmp_path):
     )
 
 
-def test_a_raw_dict_signature_the_base_already_had_is_not_named(tmp_path):
-    old = "def takes(spec: dict) -> str:\n    return spec['name']\n"
+def test_only_the_raw_dict_signatures_the_branch_adds_to_an_edited_module_are_named(
+    tmp_path,
+):
+    old = (
+        "def takes(spec: dict) -> str:\n    return spec['name']\n\n\n"
+        "def later(name):\n    return name\n"
+    )
+    new = (
+        "from typing import Optional\n\n\n"
+        "def takes(spec: dict) -> str:\n    return spec['name']\n\n\n"
+        "def later(name: Optional[dict]):\n    return name\n\n\n"
+        "def loads(cfg: dict | None = None) -> str:\n    return takes(cfg)\n"
+    )
     repo = init_repo(tmp_path)
-    commit(repo, "base", **{"scripts/rows.py": old})
+    commit(repo, "base", **{"scripts/rows.py": old, "scripts/use.py": "later\n"})
     git(repo, "branch", "base")
-    commit(repo, "move", **{"scripts/rows.py": None, "scripts/lib/rows.py": old})
-    assert added_advice(repo, "base") == ""
+    commit(repo, "edit", **{"scripts/rows.py": new, "scripts/use.py": "later loads\n"})
+    assert (
+        (added_advice(repo, "base") or "")
+        .splitlines()[-1]
+        .endswith("and pass that on: scripts/rows.py:later, scripts/rows.py:loads")
+    )
