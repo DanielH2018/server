@@ -1200,14 +1200,17 @@ Every `k3s` subcommand needs root.
     ```
 
 1. On a cluster node, check that AppArmor labels the containers as it did before the upgrade.
-   The first command prints `homelab-k3s-runc (unconfined)`. The second prints nothing: a line
-   it prints is a container with a stacked label, which *AppArmor on a k3s node* explains.
-   The third counts the denials since the boot. Read any it counts with the same `grep`
-   without `-c`.
+   *AppArmor on a k3s node* explains each line. The first command prints the profile's opening
+   line with `var/lib/rancher/k3s/data` in its attachment. The second prints nothing: a line it
+   prints is a container with a stacked label. The third prints nothing either: a line it
+   prints is a signal from runc that a container refused, and that container cannot be
+   stopped. The fourth counts the denials since the boot. Read any it counts with the same
+   `grep` without `-c`.
 
     ```bash
-    sudo aa-status | grep homelab-k3s-runc
+    grep '^profile runc ' /etc/apparmor.d/runc
     ps -eo label=,pid=,comm= | grep '//&'
+    sudo grep 'apparmor="DENIED" operation="signal"' /var/log/audit/audit.log | grep 'comm="runc"'
     sudo grep -c 'apparmor="DENIED"' /var/log/audit/audit.log
     ```
 
@@ -1273,10 +1276,11 @@ cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
 
 ## AppArmor on a k3s node
 
-The `k3s-apparmor` component ships `/etc/apparmor.d/homelab-k3s-runc` on daniel-box and
-daniel-server. The profile carries `flags=(unconfined)` and attaches to
-`/var/lib/rancher/k3s/data/*/bin/runc`. It confines nothing. It gives k3s's runc a label other
-than the bare `unconfined`, and a node on Ubuntu 26.04 needs that.
+The `k3s-apparmor` component edits one line of `/etc/apparmor.d/runc` on daniel-box and
+daniel-server. That file is the `apparmor` package's profile for `/usr/{bin,sbin}/runc`. It
+carries `flags=(unconfined)` and confines nothing. The edit widens its attachment to
+`/var/lib/rancher/k3s/data/*/bin/runc`, so k3s's runc runs under the label `runc`, where it
+ran under the bare `unconfined`. A node on Ubuntu 26.04 needs that.
 
 **What breaks without it.** Two things have to be true, and a 26.04 node has both.
 
@@ -1303,32 +1307,41 @@ So every container process carries `cri-containerd.apparmor.d//&unconfined` wher
   profiles in `/etc/apparmor.d`. Its `mosquitto` profile denied the container's mosquitto its
   own config file, and its `wg-quick` profile killed `wg-quick up` in wg-easy.
 
-Ubuntu exempts a runtime by naming it: the package ships a `runc` profile of the same shape
-for `/usr/{bin,sbin}/runc`. k3s unpacks its runc under `/var/lib/rancher/k3s/data/`, which
-that profile does not match. Issue [9833] holds the audit-log evidence.
+Ubuntu exempts a runtime by naming it, and the `runc` profile is that name. k3s unpacks its
+runc under `/var/lib/rancher/k3s/data/`, which the shipped attachment does not match. Issue
+[9833] holds the audit-log evidence.
 
-**What the profile costs.** A process that executes k3s's runc gets a label the forced stack
+**The label has to be `runc`.** containerd's container profile takes a signal only from
+`unconfined`, `runc`, `crun` and containerd's own label
+(`contrib/apparmor/template.go` in containerd). A separate profile named
+`homelab-k3s-runc` ran on both nodes for an hour on 2026-11-21. Containers started under it
+with the right label, and none could be stopped: every `runc kill` was denied with
+`peer="homelab-k3s-runc"`, and deleted pods stayed in `Terminating`.
+
+**What the edit costs.** A process that executes k3s's runc gets a label the forced stack
 does not apply to. Any local user can execute that binary, as any local user can execute
-`/usr/sbin/runc` on an Ubuntu host with Docker. The profile carries no `userns` rule, so it
-grants no unprivileged user namespace. The sysctl keeps its value for every other process on
-the host.
+`/usr/sbin/runc` on an Ubuntu host with Docker. The shipped profile's `userns` rule covers
+the k3s path too. The sysctl keeps its value for every other process on the host.
+`/etc/apparmor.d/runc` is a conffile, and `53homelab-keep-conffiles` keeps the edited copy,
+so a later `apparmor` package's change to that file does not arrive on its own.
 
-**Reading the state.** The upgrade procedure's label check is the test: `ps -eo
-label=,pid=,comm= | grep '//&'` prints each process with a stacked label. A container
-started before the profile loaded keeps its stacked label until its pod restarts.
+**Reading the state.** The upgrade procedure's AppArmor step is the test. `ps -eo
+label=,pid=,comm= | grep '//&'` prints each process with a stacked label. A denied signal
+with `comm="runc"` in `/var/log/audit/audit.log` is a container that cannot be stopped. A
+container started under the stacked label keeps it until its pod restarts.
 `apparmor.service` loads the profile before k3s starts at boot. auditd takes the denials, so
-they are in `/var/log/audit/audit.log` and `journalctl -k` shows none.
+`journalctl -k` shows none.
 
 **The options that lost.**
 
 - `kernel.apparmor_restrict_unprivileged_unconfined = 0` in `/etc/sysctl.d/` restores the
-  24.04 behaviour for every process on the host, where the profile restores it for one
+  24.04 behaviour for every process on the host, where the edit restores it for one
   binary.
 - A container profile whose peer rules admit the stacked label fixes the signals and leaves
   the host profiles attaching inside containers. containerd merged that change on 2026-11-16
   ([containerd 14487]) and backported it to its 2.3 branch, which k3s follows. No containerd
   or k3s release carried it on 2026-11-21. A k3s that carries it changes nothing here: the
-  profile keeps the label unstacked, so the added rules never match.
+  edit keeps the label unstacked, so the added rules never match.
 - Disabling each host profile that attaches inside a container needs a new entry for every
   profile a later `apparmor` package adds.
 - Running pods with `appArmorProfile: Unconfined` removes a confinement layer from every
