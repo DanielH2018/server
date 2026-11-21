@@ -828,7 +828,7 @@ An allowlist entry must be:
   config sends alerts to Alertmanager, as `observability` and `loki-homelab` do. A role also
   joins it when it owns a scrape job that a rule for another service reads, as
   `blackbox-exporter`, `monitor-bridge` and `node-exporter` do. `coredns` is the one member
-  kept by hand, because Alertmanager resolves its receivers through it.
+  kept by hand, because every pod, Alertmanager included, resolves names through it.
 
 ### The restart broker
 

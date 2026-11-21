@@ -18,10 +18,10 @@ from _k8s_render import pod_spec, rendered_docs
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from lib import yaml_fast
 from lib.guard_jinja_env import template_env
-from validate.alert_conventions import RULES_CONFIGMAP, expression_jobs
+from validate.alert_conventions import RULES_CONFIGMAP, _alerts, expression_jobs
 
-# The alert plane no rendered file states. Alertmanager resolves Discord and the mail relay
-# through coredns, so a failed coredns restart silences every page.
+# The alert plane no rendered file states. Every pod resolves names through coredns,
+# Alertmanager's receivers included, so a failed coredns restart silences every page.
 UNSTATED_ALERT_PLANE = frozenset({"coredns"})
 NO_PROFILE = "none"
 # Every kind whose pods carry the role as their alerts' `service`.
@@ -51,13 +51,6 @@ def _configmap_values(docs: list[tuple]):
             except yaml.YAMLError:
                 continue
             yield role, doc["metadata"]["name"], key, value
-
-
-def _alerts(rule_file: object) -> list[dict]:
-    groups = rule_file.get("groups") if isinstance(rule_file, dict) else None
-    return [
-        rule for group in groups or [] for rule in group["rules"] if "alert" in rule
-    ]
 
 
 def _selected_jobs(expr: str) -> set[str]:
@@ -95,12 +88,12 @@ def alert_plane(docs: list[tuple]) -> frozenset[str]:
             rule_files[key] = value
     owners = {
         job: rule["labels"]["service"]
-        for rule in _alerts(rule_files.get("scrape-targets.yaml"))
+        for _, rule in _alerts(rule_files.get("scrape-targets.yaml"))
         if rule["alert"] == "ScrapeTargetDown"
         for job in _selected_jobs(str(rule["expr"]))
     }
     for rule_file in rule_files.values():
-        for rule in _alerts(rule_file):
+        for _, rule in _alerts(rule_file):
             service = (rule.get("labels") or {}).get("service")
             plane |= {
                 owners[job]
