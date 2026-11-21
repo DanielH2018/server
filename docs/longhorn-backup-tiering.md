@@ -359,20 +359,25 @@ b2 bucket update --file-lock-enabled --default-retention-mode governance \
 ```
 
 Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` clears at the
-next daily read. If it reads `key bypasses governance`, the Longhorn key holds
+next daily read after both this command and the key rotation below. If it reads `key bypasses governance`, the Longhorn key holds
 `bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
 `longhorn_b2_application_key`.
 
 The row also reads `key cannot extend retention` until the Longhorn key holds
 `writeFileRetentions`. B2 cannot add a capability to a key, so mint a new one with the master
-key and rotate the same two secrets to it:
+key and rotate the same two secrets to it. Read the live key's capabilities first, because
+Longhorn breaks after the rotation if the new key lacks one it uses:
 
 ```bash
+b2 key list --long
 b2 key create --bucket daniel-server-kopia longhorn-weekly \
-  listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions,writeFileRetentions
+  <the live key's capabilities, comma-separated>,writeFileRetentions
 ```
 
-The list leaves out `bypassGovernance` on purpose. With the new key in place, the
+The new list must not hold `bypassGovernance`. Before minting, read *`writeFileRetentions`
+lets a leaked key lock objects for good* in ADR-0041's *Consequences*. A key that holds the
+capability and sits in a cluster Secret can lock objects in compliance mode, which no key can
+undo, and the ADR names the separate sweep key that avoids it. With the new key in place, the
 `homelab-b2-retention` timer on daniel-box stops declining at its next 07:30 UTC run. To
 confirm, read its line with `journalctl -t b2-retention --since today`. It must read
 `b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.

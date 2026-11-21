@@ -116,9 +116,25 @@ lifecycle rule then removes it as before. The sweep costs about four Class C cal
 because each retention update is Class A, which B2 does not meter.
 
 **A deletion with the Longhorn key still hides a locked block.** The lock keeps the version
-but not the name, so a restore after such a deletion needs the operator to remove the hide
-markers with the master key first. The lock makes the deletion recoverable; it does not leave
+but not the name, so a restore after such a deletion needs the operator to delete the hide
+markers first. A hide marker carries no retention, so any key with `deleteFiles` can delete
+one, and the locked version becomes current again. The lock makes the deletion recoverable; it does not leave
 the backups restorable untouched.
+
+**`writeFileRetentions` lets a leaked key lock objects for good.** Backblaze documents the
+capability as setting a retention's mode and expiration. Backblaze also states that no user
+can remove compliance-mode retention, the master key included, and names closing the account as the
+only way out. A holder of the Longhorn key could therefore lock objects in compliance mode for
+up to 3,000 days and keep them billed for that long. Switching an existing governance
+retention to compliance takes `bypassGovernance`, so the exposure is mainly objects whose lock
+has lapsed. The bound is the bucket's stored bytes plus whatever the key uploads, which a B2
+storage cap limits if the account sets one. The alternative is a separate sweep key with only
+`listBuckets`, `listFiles`, `readBucketRetentions` and `writeFileRetentions`. It would be held
+in SOPS for the host and never rendered into a cluster Secret, so a leaked cluster credential
+would not carry the capability. The sweep reads the Longhorn key, and
+[#9787](https://github.com/DanielH2018/server/issues/9787) leaves the choice to the operator at
+mint time. Choosing the separate key means pointing the sweep at the new SOPS keys and
+dropping the `writeFileRetentions` condition from the `b2_object_lock` row.
 
 **The sweep depends on its timer.** If it stops, the locks on blocks older than the default
 period lapse within one period. Checks 9 and 10 of `longhorn-backup-health` read its journal
