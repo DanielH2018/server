@@ -56,7 +56,8 @@ HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI = os.environ.get("LOKI_URL", "http://loki:3100")
 # The observability Loki (verbatim prompt/response content). Only the metadata
-# whitelist in k8s_reads.claude_event_rows ever leaves through this server.
+# whitelist in k8s_reads.claude_event_rows and claude_code_usage's cost sums ever
+# leave through this server.
 CLAUDE_LOKI = os.environ.get("CLAUDE_LOKI_URL", "")
 # In-cluster API access with the pod's own read-only ServiceAccount (rbac.yaml).
 KUBE_API = os.environ.get("KUBE_API_URL", "https://kubernetes.default.svc")
@@ -361,25 +362,49 @@ def top_containers(by: str = "cpu", n: int = 5) -> list[dict]:
     return _prom_rows(q)
 
 
+# Each api_request event carries its own cost_usd. The cost counter carries session_id, so a
+# sum of its live series drops every session whose series has gone stale.
+_CLAUDE_COST_7D = (
+    'sum_over_time({service_name="claude-code"} | event_name=`api_request` '
+    "| unwrap cost_usd [7d])"
+)
+
+
+def _claude_loki_rows(logql: str) -> list[dict]:
+    """A LogQL metric query against the observability Loki, at now, as {labels, value} rows.
+
+    Loki serves Prometheus's instant-query path and response shape under `/loki`.
+    """
+    base = k8s_reads.claude_loki_base_or_raise(CLAUDE_LOKI)
+    return safe_reads.parse_metric(
+        obs_api.get_json(obs_api.prom_query_url(f"{base}/loki", logql))
+    )
+
+
 @mcp.tool()
 def claude_code_usage() -> dict:
-    """Claude Code telemetry at a glance (the OTLP -> otel-collector -> Prometheus stream).
+    """Claude Code telemetry at a glance, from the otel-collector's Prometheus metrics.
 
     Totals plus by-model / by-type breakdowns. Empty until a Claude Code session has
-    exported to the collector. Cost is estimated, not real spend on a subscription plan.
+    exported to the collector. The two cost fields sum the trailing 7 days of api_request
+    events in the observability Loki. Cost is an API-equivalent estimate, not real spend on
+    a subscription plan.
     """
     queries = {
         "sessions": 'sum({__name__=~"claude_code_session_count.*"})',
         "active_time_seconds": 'sum({__name__=~"claude_code_active_time.*"})',
-        "cost_usd_estimated": 'sum({__name__=~"claude_code_cost_usage.*"})',
         "lines_of_code": 'sum({__name__=~"claude_code_lines_of_code.*"})',
         "commits": 'sum({__name__=~"claude_code_commit_count.*"})',
         "pull_requests": 'sum({__name__=~"claude_code_pull_request_count.*"})',
         "tokens_by_type": 'sum by (type) ({__name__=~"claude_code_token_usage.*"})',
         "tokens_by_model": 'sum by (model) ({__name__=~"claude_code_token_usage.*"})',
-        "cost_by_model_usd": 'sum by (model) ({__name__=~"claude_code_cost_usage.*"})',
     }
-    return {k: _prom_rows(q) for k, q in queries.items()}
+    usage = {k: _prom_rows(q) for k, q in queries.items()}
+    usage["cost_usd_estimated_7d"] = _claude_loki_rows(f"sum({_CLAUDE_COST_7D})")
+    usage["cost_by_model_usd_7d"] = _claude_loki_rows(
+        f"sum by (model) ({_CLAUDE_COST_7D})"
+    )
+    return usage
 
 
 @mcp.tool()
