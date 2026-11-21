@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The gates that stand between a k3s restart and the cluster: the apply-time checks.
 
-Three callers share this one stdlib-only script, shipped as `/usr/lib/homelab/k3s_gates.py`:
+Three callers share this stdlib-only script, shipped as `/usr/lib/homelab/k3s_gates.py` beside
+`lib/k8s_conditions.py`, the repo's condition parser:
 
   server  a system-upgrade-controller (SUC) Plan's `prepare` container on daniel-box. It polls
           until every check passes, then exits 0 and the upgrade container runs.
@@ -41,6 +42,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from lib.k8s_conditions import (
+    NO_CONDITION,
+    Condition,
+    ConditionStatus,
+    parse_conditions,
+)
 
 # ── what the cluster is expected to hold ─────────────────────────────────────────────────────
 # `lib.kubectl.CLUSTER_NODES["prod"]` is the repo's copy; the parity test holds the two equal.
@@ -168,8 +176,9 @@ class Api:
 # ── cluster checks. Each returns its refusals; an empty list is a pass ───────────────────────
 
 
-# DECIDED: a host-local view of `scripts/lib/k8s_objects.py:K8sObject`. This script ships alone,
-# stdlib-only, so it cannot import the repo's copy; test_k3s_gates_parity.py holds the two equal.
+# DECIDED: a host-local view of `scripts/lib/k8s_objects.py:K8sObject`. `K8sObject` reaches
+# `host_lib`, which the package does not ship beside this script; test_k3s_gates_parity.py holds the
+# two equal. The condition parser imports nothing first-party, so it ships under `lib/`.
 @dataclass(frozen=True)
 class _Object:
     """One API object's fields the checks read, parsed once.
@@ -181,8 +190,7 @@ class _Object:
         labels: `.metadata.labels`.
         spec: `.spec`, unparsed.
         status: `.status`, unparsed.
-        conditions: each `.status.conditions` entry keyed by its `type`. The first entry of a
-            type wins.
+        conditions: `.status.conditions`, as `parse_conditions` reads them.
     """
 
     name: str
@@ -191,19 +199,16 @@ class _Object:
     labels: dict
     spec: dict
     status: dict
-    conditions: dict[str, dict]
+    conditions: dict[str, Condition]
 
-    def condition(self, kind: str) -> object:
-        """The `status` of condition `kind`, unconverted; "Unknown" when it has none."""
-        return self.conditions.get(kind, {}).get("status", "Unknown")
+    def condition(self, kind: str) -> ConditionStatus:
+        """The `status` of condition `kind`; `UNKNOWN` when it has none."""
+        return self.conditions.get(kind, NO_CONDITION).status
 
     @classmethod
     def parse(cls, item: dict) -> _Object:
         meta = item.get("metadata") or {}
         status = item.get("status") or {}
-        conditions: dict[str, dict] = {}
-        for raw in status.get("conditions") or []:
-            conditions.setdefault(str(raw.get("type")), raw)
         generation = meta.get("generation")
         return cls(
             name=str(meta.get("name", "?")),
@@ -212,7 +217,7 @@ class _Object:
             labels=meta.get("labels") or {},
             spec=item.get("spec") or {},
             status=status,
-            conditions=conditions,
+            conditions=parse_conditions(item),
         )
 
 
@@ -254,12 +259,12 @@ def check_backups(get: Getter) -> list[str]:
 
 def check_nodes(get: Getter, expected: tuple[str, ...] = NODES) -> list[str]:
     """Refuse on an expected node that is absent or whose `Ready` condition is not True."""
-    seen = {item.name: str(item.condition("Ready")) for item in _items(get(NODES_PATH))}
+    seen = {item.name: item.condition("Ready") for item in _items(get(NODES_PATH))}
     refusals = []
     for name in expected:
         if name not in seen:
             refusals.append(f"node {name} is not in the cluster")
-        elif seen[name] != "True":
+        elif seen[name] is not ConditionStatus.TRUE:
             refusals.append(f"node {name} is Ready={seen[name]}")
     return refusals
 
@@ -341,7 +346,7 @@ def check_server_plan_done(get: Getter, version: str | None) -> list[str]:
     refusals = []
     if status.get("applying"):
         refusals.append(f"plan {SERVER_PLAN} is applying to {status['applying']}")
-    if plan.condition("Complete") != "True":
+    if plan.condition("Complete") is not ConditionStatus.TRUE:
         refusals.append(f"plan {SERVER_PLAN} is not Complete")
     latest = status.get("latestVersion")
     if not isinstance(latest, str) or _munge(latest) != want:
@@ -368,7 +373,9 @@ def check_suc_idle(get: Getter) -> list[str]:
         if applying:
             refusals.append(f"plan {plan_name} is applying to {applying}")
     for job in _items(get(JOBS_PATH)):
-        if "True" not in (job.condition(k) for k in ("Complete", "Failed")):
+        if ConditionStatus.TRUE not in (
+            job.condition(k) for k in ("Complete", "Failed")
+        ):
             refusals.append(f"job {job.name} has not finished")
     return refusals
 
@@ -390,7 +397,7 @@ def check_flux_settled(get: Getter, notes: list[str]) -> list[str]:
         if spec.get("suspend") is True:
             notes.append(f"Kustomization {name} is suspended: skipped")
             continue
-        if item.condition("Ready") != "True":
+        if item.condition("Ready") is not ConditionStatus.TRUE:
             refusals.append(f"Kustomization {name} is not Ready")
         if status.get("observedGeneration") != item.generation:
             refusals.append(

@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import k3s_gates
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus
 
 # The reconcile component installs reconcile_lib beside this script, and every host package
 # ships that component (hosts/components/reconcile/component.yml).
@@ -175,10 +176,10 @@ def node_restarted(api: k3s_gates.Api, node: str, since: float) -> bool:
     """True when the node reads Ready=True with a heartbeat at least a second after `since`."""
     try:
         doc = api(f"{k3s_gates.NODES_PATH}/{node}")
-        ready = k3s_gates._Object.parse(doc).conditions.get("Ready", {})
-        if ready.get("status") != "True":
+        ready = k3s_gates._Object.parse(doc).conditions.get("Ready", NO_CONDITION)
+        if ready.status is not ConditionStatus.TRUE:
             return False
-        beat = k3s_gates._utc(ready.get("lastHeartbeatTime"), "lastHeartbeatTime")
+        beat = k3s_gates._utc(ready.last_heartbeat, "lastHeartbeatTime")
     except (k3s_gates.ReadError, ValueError, TypeError, AttributeError):
         return False  # an API read error counts as "not yet"
     return beat.timestamp() >= since + 1

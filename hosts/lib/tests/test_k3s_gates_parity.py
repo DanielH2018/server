@@ -156,6 +156,4 @@ def test_the_scripts_object_view_reads_each_field_as_k8s_objects_does():
             shared.spec,
             shared.status,
         )
-        assert {t: view.condition(t) for t in view.conditions} == {
-            t: c.status for t, c in shared.conditions.items()
-        }
+        assert view.conditions == shared.conditions
