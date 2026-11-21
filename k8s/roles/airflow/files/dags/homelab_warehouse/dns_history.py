@@ -130,8 +130,8 @@ def instance_rows(
     ]
     clients = get("stats/database/top_clients", {**window, "count": TOP_CLIENTS})
     rows += [
-        (day, instance, "client", c["ip"], c.get("name") or "", c["count"])
-        for c in clients["clients"]
+        (day, instance, "client", ip, label, n)
+        for ip, (label, n) in _clients_by_address(clients["clients"]).items()
     ]
     for kind, blocked in (("domain", "false"), ("blocked_domain", "true")):
         domains = get(
@@ -143,6 +143,21 @@ def instance_rows(
             for d in domains["domains"]
         ]
     return rows
+
+
+def _clients_by_address(clients: Sequence[Mapping]) -> dict[str, tuple[str, int]]:
+    """Each address's label and query count, one entry per address.
+
+    FTL's database keeps one client record per address and name it has seen, and
+    `top_clients` counts queries per record, so an address seen under two names comes back
+    twice. Its counts add up, and the label is the first non-empty name, the busiest one,
+    because FTL lists clients by count.
+    """
+    merged: dict[str, tuple[str, int]] = {}
+    for client in clients:
+        label, n = merged.get(client["ip"], ("", 0))
+        merged[client["ip"]] = (label or client.get("name") or "", n + client["count"])
+    return merged
 
 
 def quality_problems(
