@@ -2151,8 +2151,16 @@ read. After its deletes, `prune` runs `cosign verify` on `prod`'s digest, and on
 `last-good`'s when that tag exists. A failed verify fails the run, so a wrong selection
 shows as a red run on the day it happens. `prune` waits one second before each delete,
 because GitHub rate-limits bursts of writes with a 403 that reads like a permission error.
-The run's last line counts the versions it listed, the untagged ones among them, the untagged
+`forge.py` sends a delete that GitHub answers with a 5xx again, up to three tries, ten
+seconds apart (`scripts/deploy_tools/forge.py:DELETE_TRIES`). Any other failed delete ends
+the loop, so no signature goes before the version it signs. The run's last line counts the versions it listed, the untagged ones among them, the untagged
 versions whose manifest has a `subject`, and the versions it selected, deleted and verified.
+
+A red run reaches the operator through one GitHub issue, titled
+`Scheduled prune-artifacts run is red`. The workflow's `report` job runs
+`scripts/dev/scheduled_report.py`, which opens the issue on a red run on master, comments on
+it while the prune stays red, and closes it on the next green run. A dispatch on a branch
+reports nothing.
 
 The first run shows whether the workflow's `GITHUB_TOKEN` may list and delete versions of a
 package that the user account owns. If the run logs an HTTP 403, the operator grants this

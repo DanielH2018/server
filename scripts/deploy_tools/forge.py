@@ -79,6 +79,10 @@ CHECK_RUN_PAGE_SIZE, CHECK_RUN_PAGES_MAX = 100, 20
 # mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
 # permission error.
 DELETE_PAUSE_S = 1.0
+# A delete answered with a 5xx is sent again, DELETE_TRIES in all, after DELETE_RETRY_PAUSE_S.
+# A retry of a delete that did land answers 404, which reads as already gone.
+DELETE_TRIES = 3
+DELETE_RETRY_PAUSE_S = 10.0
 # The rate-limit waits `variable` sits through before it reports the failure.
 RATE_LIMIT_WAITS = 3
 
@@ -115,7 +119,8 @@ class GitHub:
             run: starts the `gh` subprocess.
             repository: the `owner/name` slug.
             versions_per_page: the page size of the package listing.
-            sleep: waits DELETE_PAUSE_S before each delete.
+            sleep: waits DELETE_PAUSE_S before each delete, and DELETE_RETRY_PAUSE_S
+                before each retry of one.
         """
         self._transport = transport
         self._lookup_token = token
@@ -379,16 +384,21 @@ class GitHub:
             True when the version was deleted, False when the API no longer holds it.
 
         Raises:
-            ForgeError: any status but 204 or 404, or no answer. A token without the
-                package's Admin role gets a 403 here.
+            ForgeError: any status but 204, 404 or 5xx, a 5xx on each of DELETE_TRIES
+                tries, or no answer. A token without the package's Admin role gets a 403
+                here.
         """
         url = f"{PACKAGE_VERSIONS_URL}/{version_id}"
         self._sleep(DELETE_PAUSE_S)
-        response = self._transport("DELETE", url, self._rest_headers())
-        if response.status == 204:
-            return True
-        if response.status == 404:
-            return False
+        for tries_left in range(DELETE_TRIES - 1, -1, -1):
+            response = self._transport("DELETE", url, self._rest_headers())
+            if response.status == 204:
+                return True
+            if response.status == 404:
+                return False
+            if response.status < 500 or not tries_left:
+                break
+            self._sleep(DELETE_RETRY_PAUSE_S)
         raise ForgeError(
             f"delete package version {version_id}: HTTP {response.status}"
             f"{_api_message(response)}"

@@ -65,3 +65,46 @@ def test_a_moved_module_and_a_docs_edit_add_nothing(tmp_path):
         },
     )
     assert added_advice(repo, "base") == ""
+
+
+def test_a_function_that_takes_or_returns_a_raw_dict_is_named(tmp_path):
+    module = (
+        "from typing import Any\n\nfrom lib.json_types import JsonValue\n\n\n"
+        "def plain(name: str) -> str:\n    return name\n\n\n"
+        "def takes(spec: dict) -> str:\n    return plain(spec['name'])\n\n\n"
+        "class Reader:\n    def gives(self) -> dict[str, Any]:\n        return {}\n\n\n"
+        "def narrows(value: JsonValue) -> str:\n    return takes(Reader().gives())\n"
+    )
+    repo = _branch(
+        tmp_path, **{"scripts/rows.py": module, "scripts/use.py": "narrows\n"}
+    )
+    assert (added_advice(repo, "base") or "").splitlines()[-1] == (
+        "  a raw dict in the signature. Parse the value into a typed one where it is "
+        "read, as scripts/lib/k8s_objects.py and scripts/lib/container_entry.py do, "
+        "and pass that on: scripts/rows.py:gives, scripts/rows.py:narrows, "
+        "scripts/rows.py:takes"
+    )
+
+
+def test_only_the_raw_dict_signatures_the_branch_adds_to_an_edited_module_are_named(
+    tmp_path,
+):
+    old = (
+        "def takes(spec: dict) -> str:\n    return spec['name']\n\n\n"
+        "def later(name):\n    return name\n"
+    )
+    new = (
+        "from typing import Optional\n\n\n"
+        "def takes(spec: dict) -> str:\n    return spec['name']\n\n\n"
+        "def later(name: Optional[dict]):\n    return name\n\n\n"
+        "def loads(cfg: dict | None = None) -> str:\n    return takes(cfg)\n"
+    )
+    repo = init_repo(tmp_path)
+    commit(repo, "base", **{"scripts/rows.py": old, "scripts/use.py": "later\n"})
+    git(repo, "branch", "base")
+    commit(repo, "edit", **{"scripts/rows.py": new, "scripts/use.py": "later loads\n"})
+    assert (
+        (added_advice(repo, "base") or "")
+        .splitlines()[-1]
+        .endswith("and pass that on: scripts/rows.py:later, scripts/rows.py:loads")
+    )

@@ -305,12 +305,20 @@ groups:
       runbook_url: >-
         https://docs.local.daniel-hunter.com/alert-runbooks/#claudeweeklysummarynotreporting
   - alert: LonghornBackupHealthFailed
-    expr: homelab_check_success{check="longhorn-backup-health",origin="daniel-box"} == 0
+    expr: |
+      homelab_check_detail{check="longhorn-backup-health",origin="daniel-box"} == 1
+      or
+      (
+          homelab_check_success{check="longhorn-backup-health",origin="daniel-box"} == 0
+        unless on (origin)
+          homelab_check_detail{check="longhorn-backup-health",origin="daniel-box"}
+      )
     labels:
       severity: critical
       service: daniel-box
     annotations:
-      summary: 'daniel-box: the Longhorn backup check is red.'
+      summary: >-
+        daniel-box: the Longhorn backup check is red{{ with $labels.detail }} for {{ . }}{{ end }}.
       description: >-
         longhorn_backup_health.py on daniel-box reported a failing backup-plane check: an unavailable
         backup target, a stale or errored backup, a failed job, or a restore drill that is overdue. `journalctl

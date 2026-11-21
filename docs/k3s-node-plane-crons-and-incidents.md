@@ -84,7 +84,11 @@ and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread messages 
 
 Each check below reports a `down` verdict. The script writes that verdict to
 `longhorn-backup-health.prom` as `homelab_check_success 0`, and the Prometheus rule
-`LonghornBackupHealthFailed` reads it.
+`LonghornBackupHealthFailed` reads it. The script also writes one
+`homelab_check_detail{detail="<class>"}` series per problem class, a slug naming the check
+section, such as `tier-coverage` or `etcd-s3`. The rule fires once per class, so a second
+problem during a red window opens its own alert. A red verdict with no class, such as a crashed
+reader, fires the rule's bare arm.
 
 **The trim is Longhorn's `trim` RecurringJob since H2.2c, so its evidence is the cluster's.**
 The `longhorn-backup` role declares the job, and Longhorn runs it from a CronJob of the same name

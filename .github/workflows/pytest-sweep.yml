@@ -16,7 +16,7 @@ name: pytest-sweep
 # red sweep under that name would hold every landing behind a SHA whose own run was green.
 # ENFORCED by the pytest-sweep-* rows of tests/repo/test_census_rows_workflows.py.
 #
-# The run reaches the operator through one GitHub issue, which `scripts/dev/sweep_report.py`
+# The run reaches the operator through one GitHub issue, which `scripts/dev/scheduled_report.py`
 # opens on a red sweep and closes on the next green one.
 #
 # It is its own workflow for the reasons renovate-config-canary.yml gives: a `schedule:` on
@@ -120,5 +120,6 @@ jobs:
           MODULES: ${{ needs.sweep.outputs.modules }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          python scripts/dev/sweep_report.py --repo "$GITHUB_REPOSITORY" \
+          python scripts/dev/scheduled_report.py --workflow "$GITHUB_WORKFLOW" \
+            --repo "$GITHUB_REPOSITORY" \
             --result "$RESULT" --run-url "$RUN_URL" --modules "$MODULES"
