@@ -89,8 +89,12 @@ drop-in that skips obsolete removal. The notes below cover what is specific to e
 
 ### daniel-server
 
-- Delete `/etc/apt/sources.list.d/docker.sources` first. No package owns it, and Docker left
-  this host on 2026-08-14. `do-release-upgrade` would only disable it.
+- Delete `/etc/apt/sources.list.d/docker.sources` first, from the `ubuntu` shell. No package
+  owns it, and Docker left this host on 2026-08-14. `do-release-upgrade` would only disable it.
+
+    ```bash
+    sudo rm /etc/apt/sources.list.d/docker.sources
+    ```
 - `wezterm.list` is unowned. `do-release-upgrade` converts it to `.sources` and disables it.
   Re-enable it afterwards if WezTerm updates still matter on this host.
 - The kernel already runs 7.0 (HWE), so the Intel XE graphics see no kernel jump.
@@ -139,7 +143,8 @@ daniel-server's time on 7.0 covers some of daniel-box's hardware and not the res
 Before the reboot, `ls /boot/vmlinuz-6.8*` shows whether a 6.8 kernel stays installed as a
 GRUB fallback entry.
 
-After the reboot, check the kernel, then the node:
+After the reboot, check the kernel, then the node. Each check, and the `ls` above, runs from the
+`ubuntu` shell without `sudo`. `kubectl` there reads through the read-only kubeconfig.
 
 1. `uname -r` prints a 7.0 kernel.
 1. `ip -br addr show dev eno1` shows `10.0.0.215`. k3s pins `node-ip` to that address. If the
