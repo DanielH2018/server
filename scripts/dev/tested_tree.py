@@ -62,7 +62,14 @@ from lib.git import git
 from lib.tree_stack import Conflict, stack
 
 from lib import host_modules  # noqa: F401
-from ci_verdict import CI_GATE_NAME, CIVerdict, ci_verdict, parse_check_runs
+from ci_verdict import (
+    CI_GATE_NAME,
+    CIVerdict,
+    CommitStatus,
+    ci_verdict,
+    parse_check_runs,
+    parse_commit_statuses,
+)
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
 # it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
@@ -87,25 +94,20 @@ Get = Callable[[str], Rows]
 Post = Callable[[str, dict[str, str]], None]
 
 
-def _is_recorded_run(status: dict[str, Any], repo: str, tree: str | None) -> bool:
+def _is_recorded_run(status: CommitStatus, repo: str, tree: str | None) -> bool:
     """Whether `status` is the green record this repository's CI wrote for `tree`.
 
     With `tree` None, a record for any tree counts.
     """
-    creator = status.get("creator")
-    login = creator.get("login") if isinstance(creator, dict) else None
-    url = status.get("target_url")
-    recorded = status.get("description")
     return (
-        status.get("context") == CONTEXT
-        and status.get("state") == "success"
-        and isinstance(recorded, str)
-        and _OBJECT_ID.fullmatch(recorded) is not None
-        and tree in (None, recorded)
-        and login == CREATOR
-        and isinstance(url, str)
+        status.context == CONTEXT
+        and status.state == "success"
+        and _OBJECT_ID.fullmatch(status.description) is not None
+        and tree in (None, status.description)
+        and status.creator == CREATOR
         and re.fullmatch(
-            rf"https://github\.com/{re.escape(repo)}/actions/runs/\d+", url
+            rf"https://github\.com/{re.escape(repo)}/actions/runs/\d+",
+            status.target_url,
         )
         is not None
     )
@@ -129,10 +131,10 @@ def tested_run(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
             return "", "no pull request merged as this commit"
         for head in heads:
             statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-            for status in statuses:
+            for status in parse_commit_statuses(statuses):
                 if _is_recorded_run(status, repo, tree):
                     return (
-                        status["target_url"],
+                        status.target_url,
                         f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
                     )
         return (
@@ -203,9 +205,9 @@ def head_is_proven(get: Get, repo: str, head: str) -> tuple[bool, str]:
         return False, "the PR head is unreadable"
     try:
         statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
-        for status in statuses:
+        for status in parse_commit_statuses(statuses):
             if _is_recorded_run(status, repo, None):
-                tree = status["description"]
+                tree = status.description
                 return (
                     True,
                     f"PR head {head[:8]} carries a green run on tree {tree[:8]}",
