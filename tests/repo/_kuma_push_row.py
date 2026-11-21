@@ -3,18 +3,22 @@
 import re
 
 from _row_table import Census, Subject, lines_matching, tracked
+from dev.affected_lib.table import TABLE_PATH
+from lib.repo_paths import REPO
 
 _KUMA_PUSH = re.compile(r"kuma[_-]push|KUMA_PUSH|uptime-kuma-alive")
 _TEST_PATH = re.compile(r"(^|/)tests/|(^|/)test_[^/]*\.py$")
 _ROOTS = ("hosts/*", "k8s/*", "scripts/*", "inventory/*", ".claude/*", ".github/*")
+AFFECTED_TABLE = TABLE_PATH.relative_to(REPO).as_posix()
 
 
 def _shipped_and_tooling_files() -> list[str]:
-    # Tests keep push fixtures, and docs and the archive keep the history.
+    # Tests keep push fixtures, and docs and the archive keep the history. The affected-test
+    # table lists test paths, this row's own `_kuma_push_row.py` among them.
     return [
         rel
         for rel in tracked(*_ROOTS, "evals/*", "pyproject.toml", "prek.toml")
-        if not _TEST_PATH.search(rel)
+        if not _TEST_PATH.search(rel) and rel != AFFECTED_TABLE
     ]
 
 

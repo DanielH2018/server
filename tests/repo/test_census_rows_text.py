@@ -20,7 +20,7 @@ from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _group_vars_host_reader_row import HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER
-from _kuma_push_row import NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
+from _kuma_push_row import AFFECTED_TABLE, NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _role_python_paths_row import ROLE_FILES_CITE_REAL_PYTHON_PATHS
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
@@ -452,3 +452,9 @@ def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census
 def test_the_macro_corpus_skips_the_generated_register():
     """The one exclusion; `must_find` above is the positive control that a doc is still read."""
     assert GENERATED_REGISTER not in _macro_docs()
+
+
+def test_the_kuma_push_census_skips_the_affected_test_table():
+    """The table names test paths such as `tests/repo/_kuma_push_row.py`, which match the row."""
+    assert AFFECTED_TABLE in tracked("scripts/*")
+    assert AFFECTED_TABLE not in NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA.files()
