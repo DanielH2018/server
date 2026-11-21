@@ -1,12 +1,16 @@
 import json
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import notify_logic
-import pytest
 import renovate_notify as rn
 import builder_ci_grade
 from ci_verdict import CIVerdict
+
+from lib import yaml_fast
+
+COMPONENT = Path(__file__).resolve().parents[1]
 
 
 class _FakeResp:
@@ -201,67 +205,12 @@ def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch
     assert pr.ci is not CIVerdict.PASS
 
 
-# The notifier cannot import the builder's module, so notify_logic carries a copy of the page
-# walk. These hold the copy equal to `builder_ci_grade`'s.
+def test_the_notifier_walks_check_pages_with_the_builders_shipped_module():
+    spec = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
+    shipped = {entry["lib"] for entry in spec["files"] if "lib" in entry}
 
-
-def _listing(runs: int, total: int | None = None):
-    """A `fetch_page` over `runs` filler runs whose body reports `total` (default: `runs`)."""
-    listing = [{"name": "r%d" % i} for i in range(runs)]
-
-    def fetch_page(query: str) -> dict:
-        page = int(query.rsplit("page=", 1)[1])
-        size = notify_logic.CHECK_PAGE_SIZE
-        return {
-            "total_count": runs if total is None else total,
-            "check_runs": listing[(page - 1) * size : page * size],
-        }
-
-    return fetch_page
-
-
-def test_the_page_size_and_cap_match_the_builders():
-    assert (notify_logic.CHECK_PAGE_SIZE, notify_logic.CHECK_PAGES_MAX) == (
-        builder_ci_grade._CHECK_PAGE_SIZE,
-        builder_ci_grade._CHECK_PAGES_MAX,
-    )
-
-
-@pytest.mark.parametrize(
-    "fetch_page",
-    [
-        _listing(0),
-        _listing(100),
-        _listing(150),
-        _listing(100, total=150),
-        _listing(150, total=120),
-        _listing(2100),
-        lambda query: {"check_runs": []},
-        lambda query: {"total_count": 0},
-        lambda query: [],
-    ],
-    ids=[
-        "empty",
-        "one-full-page",
-        "two-pages",
-        "short-of-total",
-        "past-total",
-        "past-the-cap",
-        "no-total",
-        "no-list",
-        "not-a-dict",
-    ],
-)
-def test_the_page_walk_matches_the_builders(fetch_page):
-    def outcome(read):
-        try:
-            return read(fetch_page, "check_runs")
-        except ValueError as exc:
-            return "ValueError: %s" % exc
-
-    assert outcome(notify_logic.read_check_pages) == outcome(
-        builder_ci_grade.read_check_pages
-    )
+    assert rn.read_check_pages is builder_ci_grade.read_check_pages
+    assert "builder_ci_grade.py" in shipped
 
 
 def test_a_failing_31st_commit_status_makes_the_pr_ci_read_failing(monkeypatch):
