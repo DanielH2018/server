@@ -228,6 +228,7 @@ nav:
           # keeps the skill short.
           - Landing a merged PR: landing.md
           - The Flux deploy plane: flux-deploy-plane.md
+          - promote failure record: promote-failure-record.md
           - The homelab-render renderer: homelab-render.md
           - Host packages: host-packages.md
           - Secret rotation: secret-rotation.md
