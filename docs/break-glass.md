@@ -39,12 +39,17 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `secrets/.sops.yaml` (recipient comments above the `age:` line).
 
 2. **The k3s cluster token.** A copy taken out-of-band on 2026-08-23, matching
-   `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. Since
+   `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. The password
+   manager holds the copy. Since
    2026-08-20 (`--secrets-encryption` armed), the etcd snapshot cannot decrypt Secrets, CA
    certs, or the service key without this token — restoring onto a *replacement* host is a
    no-op without it. Restoring onto daniel-box's own intact disk does not need it.
    On a daniel-box rebuild the token goes to that path. On a daniel-server rebuild it goes to
    the agent's env file, `/etc/systemd/system/k3s-agent.service.env`, which the installer writes.
+   The repo does not record the entry's title, so find the entry by its date and its shape:
+    - the entry dates from 2026-08-23, unless a later rotation re-copied it;
+    - the value is one line in k3s's full token format, `K10<64 hex digits>::server:<secret>`.
+      An age key starts `AGE-SECRET-KEY-`, so the entries of items 1 and 10 cannot pass for it.
    Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section) and *Rebuilding a cluster
    node* in `docs/host-packages.md`.
 
@@ -99,10 +104,14 @@ otherwise; none of the values below are secrets themselves, only names and locat
    (`.claude/skills/add-secret/SKILL.md`).
 
 8. **A GitHub-hosted repo bundle, refreshed alongside the age-key backup.** GitHub holds
-   the only off-site copy of the encrypted `secrets.yml` and all the Ansible; the age key
-   alone cannot reconstruct it. Keep a `git bundle create … --all` snapshot in the same
-   off-site place as the recovery age key so a simultaneous loss of both hosts and GitHub
-   itself does not strand everything else on this list. The bundle carries no issue history,
+   the only off-site copy of the encrypted `secrets.yml` and of every role and host package;
+   the age key alone cannot reconstruct it. Keep a `git bundle create … --all` snapshot in
+   the same off-site place as the recovery age key so a simultaneous loss of both hosts and
+   GitHub itself does not strand everything else on this list. To clone from the bundle, run
+   `git clone homelab-<date>.bundle server`. The clone's `origin` is the bundle file, so once
+   GitHub answers again, point it back with
+   `git -C server remote set-url origin https://github.com/DanielH2018/server.git`.
+   The bundle carries no issue history,
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
@@ -167,7 +176,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `homelab-signer`, import the copy with
       `gpg --homedir /var/lib/homelab-signer/gnupg --batch --import`. The builder's next run
       writes `/etc/homelab-builder/archive-key.fpr` from the imported key through its
-      `ExecStartPre=+` script, with no Ansible apply. The package does not generate a key. A
+      `ExecStartPre=+` script. The package does not generate a key. A
       rebuild with no copy starts with a fresh key from
       `gpg --homedir /var/lib/homelab-signer/gnupg --batch --pinentry-mode loopback
       --passphrase "" --quick-generate-key "homelab archive signing key <homelab-archive@daniel-box>"
@@ -278,9 +287,8 @@ Each host holds up to two age keys, and they have different readers.
 
 - **The host key, `/etc/homelab/age.key`.** `hosts/bootstrap-host.sh` (step 3) creates it on
   every host, and `homelab-secrets.service` decrypts the host's own SOPS file with it.
-- **The operator's user-home key, `~/.config/sops/age/keys.txt`.** Ansible's `community.sops`
-  lookups, the operator's `sops` edits, the `add-secret` skill and the secret rotation timer
-  read it. They decrypt `secrets/secrets.yml` and the cluster files.
+- **The operator's user-home key, `~/.config/sops/age/keys.txt`.** The operator's `sops`
+  edits, the `add-secret` skill and the secret rotation timer read it. They decrypt `secrets/secrets.yml` and the cluster files.
 
 The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#6643):
 
@@ -302,7 +310,7 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
 ## Rebuild a host, never restore a disk image
 
 To bring a lost host back, rebuild it with `hosts/bootstrap-host.sh`. A whole-disk image
-taken before that host's move from Ansible to its package is not a supported restore path.
+taken before that host moved to its package (ADR 0029) is not a supported restore path.
 
 Such an image brings back the Ansible-era files, and nothing removes them. Reconcile reports
 no drift for them. The files are:
@@ -317,6 +325,46 @@ and `git grep 'legacy:' 3221ba11d^ -- hosts/components` lists them in that commi
 parent tree.
 
 ## What to do first, by scenario
+
+### Scenario: total loss, from the kit alone
+
+Every host is gone, and GitHub may be too. This list is the order from a blank machine to a
+reconciled Flux, and each step links the page that holds its procedure. Every step is
+**operator-only**.
+
+1. On any working machine, clone the repo from the bundle (item 8), or from GitHub if it
+   answers.
+1. Place the recovery key (item 1) at `~/.config/sops/age/keys.txt`, as item 7 describes.
+   Confirm it with the one-value decrypt in step 6 of *Annual drill*, never with a whole-file
+   `sops -d`.
+1. Rebuild daniel-box by
+   [Rebuilding daniel-box](host-packages.md#rebuilding-daniel-box) in `docs/host-packages.md`.
+   With GitHub or GHCR unreachable, read
+   [Rebuilding with GitHub or GHCR unreachable](host-packages.md#rebuilding-with-github-or-ghcr-unreachable)
+   first: `hosts/bootstrap-host.sh --offline` reads the kit's offline bootstrap files
+   (item 8). That page's steps run in this order:
+    1. `hosts/bootstrap-host.sh`, which installs the host package and the k3s binary;
+    1. the server token (item 2) and the archive signing key (item 9);
+    1. the etcd restore from the R2 snapshot (item 3), only when you want back the objects the
+       repo does not declare. [The etcd restore doc](k3s-etcd-restore.md) says when that is.
+       A restore needs the token;
+    1. the first k3s start;
+    1. Flux, by
+       [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster)
+       in `docs/flux-deploy-plane.md`. That section owns the cluster's order from there: the
+       cluster key's Secret (item 10), the Longhorn restores from B2 and R2 (item 4), and the
+       root Kustomization last.
+1. Rebuild daniel-server by
+   [Rebuilding daniel-server](host-packages.md#rebuilding-daniel-server), once daniel-box
+   serves its package repository. The agent joins with the token (item 2).
+1. Rebuild daniel-pi by *Scenario: daniel-pi must be rebuilt from a blank SD card* below.
+1. Run the post-deploy setup in
+   [§9 of the bring-up runbook](host-bring-up.md#9-post-deploy-setup-that-no-package-or-render-can-do).
+   It needs a running cluster with its workloads applied, so it comes after the Flux step.
+   `postflight.py` names each item still pending. A volume restored from Longhorn brings back
+   its app's own keys and tokens, so it reports pending only the apps that started empty.
+1. Point the router's WireGuard forward at the new daniel-box (item 6). Then refresh the
+   kit (item 8) and run `recovery_kit.py record`, because the rebuilt hosts hold new keys.
 
 ### Scenario: daniel-box is dead, daniel-server survives
 
@@ -339,8 +387,7 @@ the recovery key (item 1).
    That section owns the order: k3s bring-up, the Flux install, the plumbing tags, the
    Longhorn restores of `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore
    sync*, then *Restore volumes BEFORE the root exists*), and the root Kustomization last. The
-   root provisions empty PVCs under the backed-up names, so it comes after the restores. No
-   Ansible path deploys a workload on the cluster.
+   root provisions empty PVCs under the backed-up names, so it comes after the restores.
 4. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
 
 ### Scenario: daniel-server is dead, daniel-box survives
@@ -667,8 +714,9 @@ behind a green monitor. `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` rec
 
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 
-Ansible runs from daniel-box in normal operation (repo-root CLAUDE.md, *Project Overview*).
-If your own working machine is what's gone, the lab itself needs nothing done to it.
+No part of normal operation runs on your own machine. daniel-box builds every host's package,
+and `promote` and Flux apply the cluster. If your own working machine is what's gone, the lab
+itself needs nothing done to it.
 
 1. SSH into daniel-box directly using credentials from the password manager — it holds
    its own age key and its own checkout, so you can work from there without rebuilding

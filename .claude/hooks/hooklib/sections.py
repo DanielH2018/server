@@ -1,8 +1,7 @@
 """Run the SessionStart banner's probes at once, under one total deadline.
 
 Each probe reads something slow and independent: `probe.py targets` through `uv run`, the
-primary checkout's `git status`, a diff per live worktree, and
-the dotfiles pruner's `--brief`, which reaches GitHub. Run one after another, their individual
+primary checkout's `git status`, and a diff per live worktree. Run one after another, their individual
 caps added up to more than the 15s the harness gives the hook, and a kill at that budget
 discards every section still buffered (#6153). Run together, the slowest probe sets the cost.
 
@@ -11,6 +10,7 @@ Package name is `hooklib`, not `lib`, so it never shares a namespace-package nam
 """
 
 import queue
+import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -28,14 +28,17 @@ def run_sections(
 
     Returns:
         One list of lines per probe. A probe that raised gives [], the banner's usual
-        degrade. A probe still running at the deadline gives one `⚠` line naming it rather
-        than [], because an empty list reads the same as "nothing to report".
+        degrade. A probe that raised `subprocess.TimeoutExpired`, or that was still running
+        at the deadline, gives one `⚠` line naming it rather than [], because an empty list
+        reads the same as "nothing to report". A probe therefore lets a timeout propagate.
     """
     results: list[list[str] | None] = [None] * len(probes)
 
-    def work(i, probe):
+    def work(i, name, probe):
         try:
             results[i] = probe()
+        except subprocess.TimeoutExpired as exc:
+            results[i] = [f"  ⚠ {name} timed out after {exc.timeout:g}s, skipped"]
         except Exception:
             results[i] = []
 
@@ -43,8 +46,8 @@ def run_sections(
     # exit, so a probe hung past the deadline would hold the hook until the harness kills it
     # and the printed sections with it.
     threads = [
-        threading.Thread(target=work, args=(i, probe), daemon=True)
-        for i, (_name, probe) in enumerate(probes)
+        threading.Thread(target=work, args=(i, name, probe), daemon=True)
+        for i, (name, probe) in enumerate(probes)
     ]
     for thread in threads:
         thread.start()

@@ -94,7 +94,8 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
     """Return down Prometheus scrape targets, minus any deliberately scaled to 0 replicas.
 
     Best-effort: returns [] on any failure, since monitoring being unreachable must not
-    block or spam session start.
+    block or spam session start. A timeout of the probe propagates, so `run_sections`
+    names it.
 
     Args:
         run: `session-health.py`'s `_run` — takes (argv, timeout), raises on timeout or a
@@ -117,6 +118,8 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
             6,
         )
         active = _active_targets(res.stdout)
+    except subprocess.TimeoutExpired:
+        raise
     except Exception:
         return []
     if namespace is None:
