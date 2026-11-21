@@ -244,9 +244,8 @@ def _stack(
         The master commit the branch starts at and the branch's tip. The tip is "" when the
         holder's own head does not merge.
     """
-    ref = gh_read.read(
+    ref = ln.read(
         lambda: _api(ln, "GET", f"git/ref/heads/{BRANCH}", jq="{sha: .object.sha}"),
-        ln.tools.sleep,
         "gh api git/ref",
     )
     base = str(as_object(ref, BRANCH).get("sha") or "")
@@ -393,11 +392,10 @@ def _answer(ln: Landing, member: Member, what: str) -> None:
 
 def _merge_commit(ln: Landing) -> str:
     """The commit `ln`'s PR merged as; "" when GitHub does not read it as merged."""
-    got = gh_read.read(
+    got = ln.read(
         lambda: _api(
             ln, "GET", f"pulls/{ln.opts.pr}", jq="{merged, sha: .merge_commit_sha}"
         ),
-        ln.tools.sleep,
         f"gh api pulls/{ln.opts.pr}",
     )
     pull = as_object(got, "a pull request")
@@ -472,6 +470,8 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
         if in_turn and draft:
             # Before the draft's run, so a PR its merge would be refused spends no run.
             slots.refuse_before_run(ln, draft)
+            # A rate-limit wait in those rules can end without the turn (`turn.held`).
+            in_turn = ln.give_back_turn is not None
         if in_turn and draft and ln.opts.batch and not ln.lands_alone:
             try:
                 ln.batched_s = form(ln, draft)

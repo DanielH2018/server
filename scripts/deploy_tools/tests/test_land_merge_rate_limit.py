@@ -1,13 +1,15 @@
-"""The merge wait backs off a rate-limited CI read until the quota frees.
+"""The merge wait backs off a rate-limited read until the quota frees, holding no turn.
 
 The merge loop's CI read runs the real `await_ci_verdict` and `await_ci.wait`; only GitHub's
 check-runs and check-suites reads are replaced, by a 403 that names when the quota frees.
+The tests of the landing turn run the merge wait in `turn.held`, as the pipeline does.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_merge_rate_limit.py
 """
 
 import email.message
 import io
+import subprocess
 import urllib.error
 from dataclasses import replace
 from functools import partial
@@ -15,6 +17,7 @@ from functools import partial
 import pytest
 
 from _land_fakes import Fakes
+from _land_turn_fakes import MASTER_MOVED, MERGED, OPEN, land_in_turn, turn_landing
 from deploy_tools import await_ci
 from deploy_tools.land_lib import merge, tools
 from deploy_tools.land_lib.outcome import Outcome
@@ -125,3 +128,90 @@ def test_a_rate_limited_merge_timeout_names_the_rate_limit(landing, ci_reads):
         merge.await_merge(ln)
     assert "refused its CI read for the rate" in exc.value.detail
     assert "gh run rerun" not in exc.value.detail
+
+
+def _turn_order(calls) -> list[str]:
+    """The turn's takes and releases, the sleeps and every write to the PR, in order."""
+    order = []
+    for name, args, _ in calls:
+        if name in ("try_turn", "release_turn", "sleep"):
+            order.append(name)
+        elif name == "gh" and args[:3] == ("pr", "ready", "--undo"):
+            order.append("draft")
+        elif name == "gh" and args[:2] == ("pr", "ready"):
+            order.append("ready")
+        elif name == "gh" and "PUT" in args:
+            order.append("update" if args[3].endswith("/update-branch") else "merge")
+    return order
+
+
+SECONDARY_LIMIT = subprocess.CalledProcessError(
+    1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+)
+
+
+def _refuse_once(ln, field: str) -> None:
+    """Refuse the first `gh pr view --json <field>` read for the rate."""
+    real, refused = ln.tools.gh_json, []
+
+    def gh_json(*args, **kwargs):
+        if args[-1] == field and not refused:
+            refused.append(args)
+            raise SECONDARY_LIMIT
+        return real(*args, **kwargs)
+
+    ln.tools = replace(ln.tools, gh_json=gh_json)
+
+
+def test_a_read_refused_inside_the_turn_gives_the_turn_back_for_its_wait(landing):
+    # The first read inside the draft's turn is the compare of its base with master.
+    ln, calls = turn_landing(landing, compare=[SECONDARY_LIMIT, []])
+    land_in_turn(ln)
+    assert _turn_order(calls) == [
+        "try_turn",
+        "release_turn",
+        "sleep",
+        "try_turn",
+        "ready",
+        "merge",
+        "release_turn",
+    ]
+
+
+def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_for_its_wait(landing):
+    ln, calls = turn_landing(landing, polls=(OPEN, OPEN, MERGED))
+    verdicts = iter([await_ci.RateLimitedError(MERGE_POLL_S)])
+
+    def ci(sha, timeout):
+        refusal = next(verdicts, None)
+        if refusal:
+            raise refusal
+        return tools.CiVerdict(0, "CI green")
+
+    ln.tools = replace(ln.tools, await_ci=ci)
+    land_in_turn(ln)
+    assert _turn_order(calls) == [
+        "try_turn",
+        "ready",
+        "release_turn",
+        "sleep",
+        "try_turn",
+        "merge",
+        "release_turn",
+    ]
+
+
+def test_a_head_master_moved_past_during_the_wait_rejoins_the_line_unmerged(landing):
+    ln, calls = turn_landing(landing, compare=[[], MASTER_MOVED[0]])
+    _refuse_once(ln, "commits")
+    land_in_turn(ln)
+    assert _turn_order(calls) == [
+        "try_turn",
+        "ready",
+        "release_turn",
+        "sleep",
+        "try_turn",
+        "draft",
+        "update",
+        "release_turn",
+    ]

@@ -374,7 +374,7 @@ def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T
         ]
 
     try:
-        return gh_read.read(call, ln.tools.sleep, f"gh api pulls/{what}")
+        return ln.read(call, f"gh api pulls/{what}")
     except gh_read.GhReadFailed as exc:
         _refuse(ln, f"could not list the PR's {what}: {exc}")
     except ValueError as exc:

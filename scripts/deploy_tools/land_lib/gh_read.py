@@ -7,12 +7,14 @@ fails at once.
 
 A rate-limit 403 is the exception to that: it says nothing about the request, so `read` waits
 until the quota resets and asks again, up to `RATE_LIMIT_WAITS` times. The wait reads the
-quota as it goes, so it ends at the reset (`lib.gh_rate_limit.wait_out`).
+quota as it goes, so it ends at the reset (`lib.gh_rate_limit.wait_out`). A landing reads
+through `Landing.read`, which gives the landing turn back for the length of that wait.
 """
 
 import re
 import subprocess
 from collections.abc import Callable
+from functools import partial
 from typing import TypeVar
 
 
@@ -47,13 +49,12 @@ def read(
     call: Callable[[], T],
     sleep: Callable[[float], None],
     label: str,
-    rate_limit_waits: int = RATE_LIMIT_WAITS,
+    wait_with: Callable[[Callable[[], None]], None],
 ) -> T:
     """`call()`, retried on a transient gh failure; `GhReadFailed` once it is not worth another.
 
-    A rate limit is waited out up to `rate_limit_waits` times. A read made while the landing
-    holds the landing turn passes 0, so a rate limit fails it at once instead of holding the
-    turn through the wait.
+    A rate limit is waited out up to `RATE_LIMIT_WAITS` times. `wait_with` runs each of those
+    waits, which it is given as a call.
 
     Only gh's own failures are caught. Anything else `call` raises, such as the `ValueError`
     of an unparseable answer, propagates on the first attempt: gh answered, and asking again
@@ -68,10 +69,17 @@ def read(
                 why = (exc.stderr or "").strip()
             except subprocess.TimeoutExpired:
                 why = "gh timed out"
-            if not gh_rate_limit.is_rate_limited(why) or waited_out >= rate_limit_waits:
+            if not gh_rate_limit.is_rate_limited(why) or waited_out >= RATE_LIMIT_WAITS:
                 break
             waited_out += 1
-            gh_rate_limit.wait_out(why, sleep, lambda line: say(f"{label} {line}"))
+            wait_with(
+                partial(
+                    gh_rate_limit.wait_out,
+                    why,
+                    sleep,
+                    lambda line: say(f"{label} {line}"),
+                )
+            )
         if wait is None or not is_transient(why):
             raise GhReadFailed(why, attempt)
         say(f"{label} failed transiently ({why}); retrying in {wait}s")

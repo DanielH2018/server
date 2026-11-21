@@ -11,7 +11,8 @@ landing turn. A head that has had no CI run gets its branch updated when the lan
 turn (`merge._start_run`, `update_branch`). A green head of a ready PR that master moved past
 is converted to draft and updated before the landing asks for the turn, so it waits in the
 line like any draft (`rejoin_line`). One that master moved past while it waited for the turn is
-rejoined once it takes the turn, and gives the turn back (`merge.await_merge`).
+rejoined once it takes the turn, and gives the turn back (`rejoin_in_turn`), as is one that
+master moved past while a rate-limit wait had the turn given up.
 
 A green head that reaches the merge with a stale base anyway merges as it stands, and master's
 own run tests it. The one exception is a head the landing policy admitted on an approval,
@@ -56,7 +57,7 @@ def batch_tested(ln: Landing, head: str) -> bool:
         why = f"its head is {head[:8]}, not the {ln.tested_head[:8]} the batch stacked"
     else:
         try:
-            tip = gh_read.read(call, ln.tools.sleep, "gh api git/ref")
+            tip = ln.read(call, "gh api git/ref")
         except (gh_read.GhReadFailed, ValueError) as exc:
             tip = f"unreadable ({exc})"
         if tip == ln.tested_on:
@@ -97,7 +98,7 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
         return as_list(got, "gh api compare")
 
     try:
-        paths = gh_read.read(call, ln.tools.sleep, "gh api compare")
+        paths = ln.read(call, "gh api compare")
     except gh_read.GhReadFailed as exc:
         ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc}", 1)
     except ValueError as exc:
@@ -122,7 +123,7 @@ def _pr_paths(ln: Landing) -> set[str] | None:
         return [parse_file(e) for p in pages for e in as_object_list(p, "files page")]
 
     try:
-        files = gh_read.read(call, ln.tools.sleep, "gh api pulls/files")
+        files = ln.read(call, "gh api pulls/files")
     except (gh_read.GhReadFailed, ValueError) as exc:
         ln.die(f"could not list PR #{ln.opts.pr}'s files: {exc}", 1)
     if len(files) >= policy.FILE_CAP:
@@ -271,4 +272,23 @@ def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
         "converted it to draft and updated its branch, so it waits in the line for a run "
         f"on the {BRANCH} of its turn"
     )
+    return True
+
+
+def rejoin_in_turn(ln: Landing, head: str, conflicting: bool) -> bool:
+    """Give the landing turn back and rejoin the line when master moved past `head`.
+
+    For a landing that holds the turn and finds master moved after the run of `head`: while
+    it waited in line, or while a rate-limit wait had given the turn up
+    (`Landing.without_turn`).
+
+    Returns:
+        Whether the PR is now a draft at an updated head and the turn is given back; False,
+        changing nothing, for a landing that does not hold the turn or a head `rejoin_line`
+        leaves alone.
+    """
+    if not (ln.give_back_turn and rejoin_line(ln, head, conflicting)):
+        return False
+    ln.give_back_turn()
+    say("gave the landing turn back to wait in the line as a draft")
     return True
