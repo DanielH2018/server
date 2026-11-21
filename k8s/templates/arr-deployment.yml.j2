@@ -22,7 +22,8 @@
   The call site keeps the two macro calls this body makes on its behalf —
   `workload-shell.yml.j2`'s `spec_shell`/`pod_shell` and `security-context.yml.j2`'s
   `hardened_security_context` — inside THIS file rather than at the caller, so
-  `tests/k8s/test_workload_shell_uses_the_macros.py` scans this file for them the way
+  the `workload-shell-comes-from-the-macros` row of
+  `tests/repo/test_census_rows_roles.py` scans this file for them the way
   it scans pihole's shared Deployment macro instead of pihole's two callers.
 
   Arguments. Everything textual derives from `app`: `metadata.name`, both `app:` labels, the

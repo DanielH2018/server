@@ -18,7 +18,7 @@ prowlarr is deliberately NOT a caller and is not checked here: no media mount, n
 no startupProbe, plus a node affinity the other two do not carry. The macro's own header says
 why that is a second shape rather than more arguments.
 
-`test_workload_shell_uses_the_macros.py` is the other half — it scans the MACRO for the
+The `workload-shell-comes-from-the-macros` row of `test_census_rows_roles.py` is the other half — it scans the MACRO for the
 `spec_shell`/`pod_shell` calls the callers no longer make themselves.
 
 Run: uv run pytest tests/k8s/test_arr_deployments_share_one_macro.py

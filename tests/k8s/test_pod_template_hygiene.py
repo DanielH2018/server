@@ -6,8 +6,8 @@ memory pressure. A grep for the field name cannot tell a template that omits it 
 sets it inside a macro, so this guard reads the parsed pod spec.
 
 Every Deployment and DaemonSet takes the field from `pod_shell` in
-`k8s/templates/workload-shell.yml.j2`, and `test_workload_shell_uses_the_macros.py`
-refuses a hand-written copy. This census is the other half: a macro cannot force its own
+`k8s/templates/workload-shell.yml.j2`, and the `workload-shell-comes-from-the-macros`
+census row refuses a hand-written copy. This census is the other half: a macro cannot force its own
 call, and a template that skips it renders without the field, which only the parsed pod spec
 can see. Jobs and CronJobs are out of scope on purpose: each is a probe or a GC pass that
 completes in seconds, and a priority buys nothing for a pod that is gone before pressure can
