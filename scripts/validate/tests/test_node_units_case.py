@@ -9,7 +9,18 @@ Run: uv run pytest scripts/validate/tests/test_node_units_case.py
 
 from validate import host_package_cases
 from validate.validate_lib import case_groups, node_units_case
-from validate.validate_lib.node_units_case import nut_monitor_problems
+from validate.validate_lib.node_units_case import (
+    WIFI_FILES,
+    WIFI_OLD,
+    nut_monitor_problems,
+    wifi_copy_problems,
+)
+
+# The valid file installed, the two netplan refuses left the old one in place.
+WIFI_RIGHT = {
+    name: (0, rendered) if accepted else (1, WIFI_OLD)
+    for name, (rendered, accepted) in WIFI_FILES.items()
+}
 
 RUNNING = {
     "ActiveState": "active",
@@ -48,8 +59,28 @@ def test_the_mode_wrapper_or_a_restart_loop_is_flagged():
     ]
 
 
-def test_the_case_starts_the_shipped_drop_in():
+def test_an_installer_that_sorts_every_wifi_file_is_clean():
+    assert wifi_copy_problems(WIFI_RIGHT) == []
+
+
+def test_an_installer_that_refuses_a_valid_file_is_flagged():
+    aborted = {**WIFI_RIGHT, "valid": (1, WIFI_OLD)}
+    assert wifi_copy_problems(aborted) == [
+        "the valid file: the installer exited 1 and kept the old file"
+    ]
+
+
+def test_an_installer_that_installs_a_file_netplan_refuses_is_flagged():
+    rendered = WIFI_FILES["short passphrase"][0]
+    accepted = {**WIFI_RIGHT, "short passphrase": (0, rendered)}
+    assert wifi_copy_problems(accepted) == [
+        "the short passphrase file: the installer exited 0 and installed it"
+    ]
+
+
+def test_the_case_runs_the_shipped_files():
     assert node_units_case.NUT_DROPIN_SOURCE.is_file()
+    assert node_units_case.WIFI_SCRIPT_SOURCE.is_file()
 
 
 def test_the_host_packages_job_runs_the_case():

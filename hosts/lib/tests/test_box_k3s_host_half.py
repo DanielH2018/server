@@ -290,6 +290,8 @@ def _run_wifi_copy(tmp_path, generate_rc: int):
     rendered.write_text("rendered\n")
     (tmp_path / "etc/netplan").mkdir(parents=True)
     (tmp_path / WIFI_FILE.lstrip("/")).write_text("old\n")
+    netplan = tmp_path / "netplan"
+    write_exec(netplan, "#!/bin/sh\nexit 0\n")
     generate = tmp_path / "generate"
     write_exec(generate, f"#!/bin/sh\nexit {generate_rc}\n")
     return run(
@@ -297,6 +299,7 @@ def _run_wifi_copy(tmp_path, generate_rc: int):
         env={
             **os.environ,
             "HOMELAB_ROOT": str(tmp_path),
+            "NETPLAN": str(netplan),
             "NETPLAN_GENERATE": str(generate),
         },
         check=False,
