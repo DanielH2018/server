@@ -1,5 +1,6 @@
 """Hermetic tests for the entity and service resolution checks (no live HA)."""
 
+import pytest
 from home_assistant import ha_state_checks as hsm
 
 
@@ -104,6 +105,23 @@ def test_resolution_errors_flags_an_automation_read_by_its_id():
         "{{ state_attr('automation.dismiss', 'last_triggered') }} "
         "{{ is_state('automation.go_dark', 'on') }}"
     )
+    errs = hsm.resolution_errors(config, set())
+    assert errs == [
+        "unresolved entity reference: automation.dismiss "
+        "(typo, or run `ha_state_model.py refresh` if it is a new device)"
+    ]
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "is_state('automation.dismiss', 'on')",
+        "is_state_attr('automation.dismiss', 'last_triggered', none)",
+        "states('automation.dismiss')",
+    ],
+)
+def test_resolution_errors_flags_an_automation_read_through_each_call_form(call):
+    config = _automation_reading("{{ " + call + " }}")
     errs = hsm.resolution_errors(config, set())
     assert errs == [
         "unresolved entity reference: automation.dismiss "
