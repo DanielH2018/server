@@ -37,7 +37,9 @@ Another holds a dummy docker-ce below the real Pi package's pin, runs the update
 engine stays held and reads pending, then records what apt does with the hold when a red fixture
 of the Pi package Depends on the pinned version (`validate_lib/engine_case.py`).
 Another installs the three apt-source components over seeded copies of the files the roles
-wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
+wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). Another installs the
+Ubuntu packages that daniel-server's and daniel-box's units override, puts each shipped override
+on them, and starts it (`validate_lib/node_units_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
 branch with a break-glass kit, the kit's two red fixtures, a local build whose Depends only
 the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and a host made from

@@ -1213,6 +1213,7 @@ jobs:
             scripts/validate/validate_lib/fixture_host_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/host_specs.py
+            scripts/validate/validate_lib/node_units_case.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/repos_case.py
             scripts/validate/validate_lib/scratch_clones.py
