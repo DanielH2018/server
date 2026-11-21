@@ -149,8 +149,8 @@ def claude_loki_base_or_raise(url: str) -> str:
     """The observability Loki base URL, or a clear error while the tool is dark."""
     if not url:
         raise RuntimeError(
-            "claude_code_events is dark: CLAUDE_LOKI_URL is unset, so this deploy "
-            "cannot reach the observability Loki. claude_code_usage (metrics) and "
+            "claude_code_events and claude_code_usage are dark: CLAUDE_LOKI_URL is unset, "
+            "so this deploy cannot reach the observability Loki. query_metric and "
             "query_logs (homelab Loki) still work."
         )
     return url

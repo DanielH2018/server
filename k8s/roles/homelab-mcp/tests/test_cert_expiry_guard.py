@@ -7,7 +7,8 @@ function unchanged, which is all `cert_expiry` needs to be called directly.
 
 The image carries `obs_api` flat beside app.py. Here a copy of the repo module under
 `scripts/diagnostics/probe_lib` takes the image's bare name, with `get_json` replaced by a
-recorder, so the last test can prove a Loki read always sends an explicit window.
+recorder, so the last two tests can prove a Loki read always sends an explicit window and
+that claude_code_usage reads its cost from the observability Loki.
 
 Run: uv run pytest k8s/roles/homelab-mcp/tests/test_cert_expiry_guard.py
 """
@@ -16,6 +17,7 @@ import importlib
 import socket
 import sys
 import types
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -132,3 +134,23 @@ def test_a_loki_read_sends_an_explicit_backward_window(app):
     (url,) = app.obs_api.seen
     assert url.startswith(f"{app.LOKI}/loki/api/v1/query_range?")
     assert "start=" in url and "end=" in url and "direction=backward" in url
+
+
+def test_claude_cost_sums_api_request_events_in_the_observability_loki(
+    app, monkeypatch
+):
+    """The cost counter's live series drop each finished session; every event keeps its cost."""
+    monkeypatch.setattr(app, "CLAUDE_LOKI", "http://claude-loki:3100")
+    usage = app.claude_code_usage()
+    instant = "http://claude-loki:3100/loki/api/v1/query?"
+    queries = {
+        parse_qs(urlsplit(url).query)["query"][0]
+        for url in app.obs_api.seen
+        if url.startswith(instant)
+    }
+    assert queries == {
+        f"sum({app._CLAUDE_COST_7D})",
+        f"sum by (model) ({app._CLAUDE_COST_7D})",
+    }
+    assert "| event_name=`api_request` | unwrap cost_usd [7d]" in app._CLAUDE_COST_7D
+    assert {"cost_usd_estimated_7d", "cost_by_model_usd_7d"} <= usage.keys()
