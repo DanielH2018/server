@@ -105,6 +105,11 @@ COMPONENT_TIMERS_CARRY_A_CONTRACT = Census(
         }
     ),
     allow={
+        "hosts/components/k3s-agent/component.yml": (
+            "homelab-kubelet-shutdown-lock.timer is k3s-server's, borrowed through "
+            "`component: k3s-server`; it only reads, and hosts/components/k3s-server/CLAUDE.md "
+            "holds its contract"
+        ),
         "hosts/components/nut-secondary/component.yml": (
             "homelab-ups-watchdog.timer only reads and reports; upsmon is the actor that "
             "changes state, and k8s/roles/nut/CLAUDE.md documents it"

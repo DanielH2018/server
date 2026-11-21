@@ -2,7 +2,7 @@
 
 kubelet logs its failure to take logind's shutdown delay lock once per start and logs nothing on
 success, so an alert on that line cannot resolve after a fix. `kubelet-shutdown-lock-check.sh`
-in the k3s-agent component reads the lock itself, and three properties hold:
+in the k3s-server component reads the lock itself, and three properties hold:
 
 THE VERDICT IS THE LOCK. A `kubelet` shutdown lock in `delay` mode writes success 1; any other
 lock list, or a systemd-inhibit that cannot list, writes 0. Only the second fails the unit.
@@ -22,9 +22,10 @@ from _aide_check_run import LOGGER_STUB
 from _helpers import K8S_ROLES, REPO
 from _host_packages import HOSTS, package, shipped_text
 from lib import yaml_fast
+from lib.repo_paths import K3S_SERVER
 from lib.proc_testing import fake_bin, run, write_exec
 
-SCRIPT = REPO / "hosts/components/k3s-agent/files/kubelet-shutdown-lock-check.sh"
+SCRIPT = K3S_SERVER / "files" / "kubelet-shutdown-lock-check.sh"
 CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 TIMER = "/usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer"
@@ -147,8 +148,8 @@ def literal_problems(
     return problems
 
 
-def test_graceful_hosts_names_daniel_server():
-    assert "daniel-server" in graceful_hosts()
+def test_graceful_hosts_names_both_k3s_nodes():
+    assert graceful_hosts() == {"daniel-box", "daniel-server"}
 
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
@@ -169,11 +170,11 @@ def test_literal_problems_is_flagged_on_a_window_that_drifted():
 
 def test_literal_problems_is_flagged_on_a_graceful_host_with_no_rules():
     problems = literal_problems(
-        rules(RULES.read_text()), graceful_hosts() | {"daniel-box"}, deadline()
+        rules(RULES.read_text()), graceful_hosts() | {"daniel-pi"}, deadline()
     )
     assert problems == [
-        "no rule ('KubeletShutdownLockMissing', 'daniel-box')",
-        "no rule ('KubeletShutdownLockNotReporting', 'daniel-box')",
+        "no rule ('KubeletShutdownLockMissing', 'daniel-pi')",
+        "no rule ('KubeletShutdownLockNotReporting', 'daniel-pi')",
     ]
 
 
