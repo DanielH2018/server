@@ -72,7 +72,7 @@ runs:
 
     - name: Install uv
       if: inputs.uv == 'true'
-      uses: astral-sh/setup-uv@v10.3.3  # zizmor: ignore[unpinned-uses]
+      uses: astral-sh/setup-uv@v10.4.0  # zizmor: ignore[unpinned-uses]
       with:
         # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
         # before the first one executes, so without a cache every run repays the download. The
