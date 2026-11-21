@@ -956,6 +956,13 @@ A headless `claude -p` batch runs without isolation and draws none of these refu
 The places auto mode and this repo have to talk (`PostToolUseFailure` and, for a `git push`,
 `PostToolUse`, both Bash).
 
+Only the `PostToolUse` registration carries `if: Bash(git push*)`. The harness evaluates `if`
+on `PostToolUseFailure` too, but the gen-hooks grammar this repo shares with dotfiles refuses
+the key there (`scripts/dev/gen_hook_settings.py:IF_EVENTS`). So the harness spawns the hook,
+and a `uv` process, on every failed Bash call, and the hook prints nothing for any failure but
+a push. [#9759](https://github.com/DanielH2018/server/issues/9759) tracks widening both
+parsers and adding the filter.
+
 It grants no retry on a classifier **denial**. The one retry branch was removed on 2026-11-07,
 after a week with no retry ledger in any session. On a **failure** it decodes only a
 ruleset-refused `git push`, as the `push-rules` section describes.
