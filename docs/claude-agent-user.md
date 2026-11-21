@@ -273,6 +273,11 @@ truth, with a reason beside each entry. It holds:
 - `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
   the packages `uv run` syncs before `land.py` starts
 - `.github/`
+- the code two CI jobs run while a step holds the job's write-scoped token: `prek` in `ci.yml`
+  runs `scripts/dev/tested_tree.py`, and `images` in `promote.yml` runs
+  `scripts/deploy_tools/ci_images.py`. The list names each script and every module it imports.
+  `hosts/tests/test_ci_token_code_needs_approval.py::test_code_run_with_a_write_token_is_listed`
+  derives the set from the two jobs. The operator added them on 2026-11-20.
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
 - `secrets/.sops.yaml` and `secrets/secrets.yml`
@@ -594,7 +599,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 |---|---|---|
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
-| 3 | The `claude-restart@` broker and its allowlist | The broker is built, its allowlist holds `docs`, and only root starts it. The caller's polkit rule and the triage run's request are planned; see [The restart allowlist](#the-restart-allowlist). |
+| 3 | The `claude-restart@` broker and its allowlist | The broker is built, its allowlist holds `docs`, and the triage controller may start it. The triage run's request for a restart is planned; see [The restart allowlist](#the-restart-allowlist). |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs a visible agent account (#5126). |
 | 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
@@ -847,15 +852,20 @@ Every run ends in one `RESTART-RESULT:` line, in the journal under `claude-resta
 `homelab-alert@`. A refusal exits 0 and posts nothing, so asking for a refused name cannot
 page Discord.
 
-No polkit rule ships, so only root starts the unit. Which user may start it is the operator's
-open decision. The 2026-10-15 ruling names the agent, and the 2026-11-12 rulings made restarts
-a T2 right and took every start right from `claude`.
+Besides root, only the triage controller starts the unit. The operator ruled on 2026-11-20
+that `claude-triage-ctl` is the caller: the 2026-10-15 ruling names the agent, and the
+2026-11-12 rulings then made restarts a T2 right and took every start right from `claude`,
+whose interactive sessions read untrusted text and hold no write to a workload.
+`templates/50-claude-restart.rules.j2` lets the controller start
+`homelab-claude-restart@<name>.service` and nothing else, in the script's name shape. The triage
+session user has no start right, so a run asks for a restart through its result, which the
+runner reads. That request is not built.
 
 A caller of the broker can restart each listed Deployment once a day, and three a day in
 all. It cannot name a namespace, a kind or a flag, scale or delete anything, change an image,
 add an entry, read the admin kubeconfig or mute a page.
 
-To run the drill (**operator-only**, because only root starts the unit):
+To run the drill (**operator-only**, because only root and the controller start the unit):
 
 ```bash
 sudo systemctl start homelab-claude-restart@docs; cat /var/lib/claude-restart/verdict
@@ -868,6 +878,17 @@ the ReplicaSets, which shows whether Flux left the restart alone:
 
 ```bash
 kubectl -n homelab get replicasets -l app=docs --sort-by=.metadata.creationTimestamp
+```
+
+To check who may start it (**operator-only**), start it as the controller and as the agent.
+The first is admitted and ends in a verdict. polkit refuses the second:
+
+```bash
+sudo -u claude-triage-ctl systemctl start homelab-claude-restart@docs; cat /var/lib/claude-restart/verdict
+```
+
+```bash
+sudo -u claude systemctl start homelab-claude-restart@docs
 ```
 
 To hold the

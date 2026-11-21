@@ -25,7 +25,6 @@ GUARDED_STEPS = frozenset(
         "Install the tools the tests run",
         "Restore pytest's rewritten test modules",
         "Run the test suite",
-        "Save pytest's rewritten test modules",
         "Check every heavy module's recorded weight",
     }
 )

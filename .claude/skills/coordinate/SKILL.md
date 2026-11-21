@@ -24,7 +24,7 @@ manifests cover one user on one host.
 
 ## Root
 
-The root runs in the primary checkout and stays thin. It does seven things:
+The root runs in the primary checkout and stays thin. It does eight things:
 
 - **Start a sub-coordinator per project.** The brief is this skill's name and the project's
   milestone title, with the issue numbers when the operator named them. The app starts a
@@ -32,6 +32,22 @@ The root runs in the primary checkout and stays thin. It does seven things:
   `uv run python scripts/dev/findings.py next --milestone none` lists the issues no open
   milestone holds, which is the pool a project is picked from. An issue in a group is held
   by that group's milestone, so read it with `next --milestone "<title>"`.
+- **Size every session you start.** A `start_session` call sets `model` and `effort`, and a
+  child never inherits yours. Pick the smallest tier that fits, and name it in the line that
+  introduces the session. Tiers use the rung names of
+  `scripts/dev/fanout_lib/sizing.py:LADDER`. The model's id comes from the session's
+  environment, never from this skill.
+
+    | Tier | Starts |
+    |---|---|
+    | `sonnet-low` or `sonnet-medium` | a read and report, a drill walk-through, record-keeping, a doc or skill text edit, a fully specified mechanical change, one issue with a vetted remedy and tests beside it |
+    | `opus-medium` | a sub-coordinator, which orchestrates and edits nothing; an issue that needs some investigation; a multi-file change inside one module |
+    | `opus-high` | an investigation with an unknown cause; a change to landing, CI or fan-out code; a cross-cutting refactor; a review that must find things |
+    | your own model | design with a privilege boundary, a guard or permission change, or work where a wrong answer is expensive and hard to see; state the reason |
+
+  Raise a tier when the task has no vetted remedy, touches a privilege boundary, or a cheaper
+  session already failed at it. To raise a session that is under-sized, ask the operator to
+  run the app's `set_session_model` or `set_session_effort`, which need the operator.
 - **Carry the operator's launch approval in the brief, and never originate one.** When the
   operator told you to start the project, quote the words that named it, exactly as typed,
   and state the grouping rules (*Approval*). For a project you chose yourself, or grouping
@@ -71,7 +87,8 @@ line per such project with its branch, its worktree and the batches that wait on
 for a project that also holds a waiting batch, so the page is the usual way a death is
 noticed. Start a session in the same
 worktree with the same milestone title, and quote in its brief the same operator words the
-first brief quoted, so the replacement inherits the approval. *Resume* rebuilds its state.
+first brief quoted, so the replacement inherits the approval. The replacement starts at the tier its predecessor
+had, unless the restart is because that tier failed. *Resume* rebuilds its state.
 The app starts a
 session only on a turn the operator typed, and takes a named folder only on a start the
 operator asked for. A recap or a peer message is no such turn, so ask the operator for one
@@ -157,6 +174,9 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
 6. **Wait for more work** when the backlog is empty, with `cc-wait findings --milestone
    "<title>"`. The wait records the project's free issues when it starts and ends on any
    other free issue the project gains, so it takes no `--after`.
+
+A session you start, or ask the operator to start, is sized by the root's rule (*Root*, *Size
+every session you start*), and the line that introduces it names the tier.
 
 Done when: the worktree's lock reason names the project, `milestone status` prints the
 project form, and every launch ran under an approval the operator gave: words your brief
