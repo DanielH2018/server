@@ -47,7 +47,7 @@ Every `Verify` log also prints `digest-mismatch: error`. That line is an input o
 | The `actionlint` binary download from GitHub releases failed | 4 | Fixed by [b5d6e5eca](https://github.com/DanielH2018/server/commit/b5d6e5eca) on 2026-11-08. |
 | GitHub, GHCR or Sigstore failed for one request | 6 | Transient: six different steps, one run each. |
 | GHCR denied the signature push | 1 | One run; no later recurrence. |
-| uv found no `lint` group while building 3005a0e7 | 2 | One commit; the next commit's runs passed. |
+| 3005a0e7's `promote.yml` asked uv to skip a `lint` group that the checked-out commit lacks | 2 | Self-clearing: only runs triggered by a commit older than 3005a0e7 could hit it. |
 | A dispatch by an account off the allow list | 1 | Expected: the guard refused the start. |
 | GitHub ended the run failed with no job failed | 2 | Not established. |
 
@@ -85,9 +85,11 @@ more than three times in a later window is a workload issue for that role.
 Three `render` runs and one `verify` run failed while uv built `actionlint-py`, whose build
 downloads the `actionlint` binary from a GitHub release. The download timed out twice and returned
 504 twice, all between 09:05 and 11:00 UTC on 2026-11-08.
-[b5d6e5eca](https://github.com/DanielH2018/server/commit/b5d6e5eca) landed at 11:21 that day. It
-sets `UV_NO_GROUP: lint` at the top of `promote.yml`, which covers every job. No promote run
-failed on that download after it.
+[b5d6e5eca](https://github.com/DanielH2018/server/commit/b5d6e5eca) landed at 11:21 that day.
+`actionlint-py` was in the `dev` group then, and the commit set `UV_NO_DEV` for every job in
+`promote.yml`. [3005a0e7](https://github.com/DanielH2018/server/commit/3005a0e71) moved the lint
+tools into a `lint` group at 18:49 and added `UV_NO_GROUP: lint` beside `UV_NO_DEV`. No promote
+run failed on that download after 11:21.
 
 ### One-off failures (7)
 
@@ -111,11 +113,19 @@ failed on that download after it.
 
 ### The `lint` group at 3005a0e7 (2)
 
-Both runs built [3005a0e7](https://github.com/DanielH2018/server/commit/3005a0e71), which moved
-the lint tools into a `lint` uv group. `uv sync` in the setup action stopped with ``Group `lint`
-is not defined in the project's `dependency-groups` table``. The commit's own `pyproject.toml`
-defines the group. The next commit's runs passed with no change to `promote.yml`, the setup action
-or `pyproject.toml`, so the cause is not established.
+`uv sync` in the setup action stopped with ``Group `lint` is not defined in the project's
+`dependency-groups` table``. A `workflow_run` run reads its workflow file from master's tip, and
+the tip was [3005a0e7](https://github.com/DanielH2018/server/commit/3005a0e71). That commit added
+`UV_NO_GROUP: lint` to `promote.yml` and the `lint` group to `pyproject.toml`. The `render` job
+checks out the commit whose CI triggered the run, though. Run 42513247395 checked out
+[37b2cd08](https://github.com/DanielH2018/server/commit/37b2cd08f), and run 42513592265 checked
+out [0bddab21](https://github.com/DanielH2018/server/commit/0bddab217), 3005a0e7's parent.
+Neither commit's `pyproject.toml` defines a `lint` group. uv refuses to skip a group the project
+does not define, so the workflow and the tree it built disagreed. Only a run triggered by a commit
+older than 3005a0e7 could fail this way, so the cause cleared itself once those runs ended.
+
+The *Workflow commit* column in the table below is the run's `head_sha`, the commit the workflow
+file came from. These two rows show that it can differ from the tree the run built.
 
 ### No failed job (2)
 
@@ -127,7 +137,7 @@ or `pyproject.toml`, so the cause is not established.
 
 ## Every run
 
-| Created (UTC) | Run | Event | Commit | Job / step | Cause |
+| Created (UTC) | Run | Event | Workflow commit | Job / step | Cause |
 |---|---|---|---|---|---|
 | 2026-11-06 02:15 | [42149207603](https://github.com/DanielH2018/server/actions/runs/42149207603) | `workflow_run` | [`8af998dd`](https://github.com/DanielH2018/server/commit/8af998dd7815c542913ba202af67df97e6591aec) | `promote` / Log in to GHCR read-only | GHCR login EOF |
 | 2026-11-07 14:29 | [42381848496](https://github.com/DanielH2018/server/actions/runs/42381848496) | `workflow_run` | [`c66fb784`](https://github.com/DanielH2018/server/commit/c66fb7841d793c80c64ffe0b2325e0d5e26a1733) | `publish` / Push and sign the bundle | the Sigstore transparency log (`rekor.sigstore.dev`) returned 500 |
@@ -137,8 +147,8 @@ or `pyproject.toml`, so the cause is not established.
 | 2026-11-08 10:55 | [42473501232](https://github.com/DanielH2018/server/actions/runs/42473501232) | `workflow_dispatch` | [`3c9d1c07`](https://github.com/DanielH2018/server/commit/3c9d1c0740ec80ce92493c7747b4143f2cd0c3e5) | `render` / Build the bundle | `actionlint` download timed out |
 | 2026-11-08 11:00 | [42473786677](https://github.com/DanielH2018/server/actions/runs/42473786677) | `workflow_run` | [`164e6824`](https://github.com/DanielH2018/server/commit/164e6824330807653ef621f461aba031c1b19e1f) | `verify` / Verify | `actionlint` download timed out |
 | 2026-11-08 14:18 | [42489197013](https://github.com/DanielH2018/server/actions/runs/42489197013) | `workflow_run` | [`2a2090cc`](https://github.com/DanielH2018/server/commit/2a2090cc469130cf5c0754dc77c2676dbba6401c) | `verify` / Verify | Verify verdict: `speedtest` |
-| 2026-11-08 19:05 | [42513247395](https://github.com/DanielH2018/server/actions/runs/42513247395) | `workflow_run` | [`3005a0e7`](https://github.com/DanielH2018/server/commit/3005a0e715562d5acfc8026c54eb8c3a46a0147c) | `render` / Run ./.github/actions/setup | `lint` group not defined at 3005a0e7 |
-| 2026-11-08 19:09 | [42513592265](https://github.com/DanielH2018/server/actions/runs/42513592265) | `workflow_run` | [`3005a0e7`](https://github.com/DanielH2018/server/commit/3005a0e715562d5acfc8026c54eb8c3a46a0147c) | `render` / Run ./.github/actions/setup | `lint` group not defined at 3005a0e7 |
+| 2026-11-08 19:05 | [42513247395](https://github.com/DanielH2018/server/actions/runs/42513247395) | `workflow_run` | [`3005a0e7`](https://github.com/DanielH2018/server/commit/3005a0e715562d5acfc8026c54eb8c3a46a0147c) | `render` / Run ./.github/actions/setup | `lint` group missing from the checked-out commit |
+| 2026-11-08 19:09 | [42513592265](https://github.com/DanielH2018/server/actions/runs/42513592265) | `workflow_run` | [`3005a0e7`](https://github.com/DanielH2018/server/commit/3005a0e715562d5acfc8026c54eb8c3a46a0147c) | `render` / Run ./.github/actions/setup | `lint` group missing from the checked-out commit |
 | 2026-11-09 02:35 | [42551826199](https://github.com/DanielH2018/server/actions/runs/42551826199) | `workflow_run` | [`55b3b995`](https://github.com/DanielH2018/server/commit/55b3b995dfd07dcf7fa2ba651da99551d9034aad) | `promote` / Decide | unsigned newer bundle ([#9753](https://github.com/DanielH2018/server/issues/9753)) |
 | 2026-11-09 05:28 | [42567486754](https://github.com/DanielH2018/server/actions/runs/42567486754) | `workflow_run` | [`7125b3d9`](https://github.com/DanielH2018/server/commit/7125b3d9c470456c2f9409d9847c84679a1d2faa) | `publish` / Run `sigstore/cosign-installer` | GitHub 504 on the cosign download |
 | 2026-11-09 05:41 | [42568756378](https://github.com/DanielH2018/server/actions/runs/42568756378) | `workflow_run` | [`bc342bd2`](https://github.com/DanielH2018/server/commit/bc342bd2eda1c443d64307d52f74ab0313eb9cd2) | `tag` / Run fluxcd/flux2/action | GitHub 504 on the flux download |
