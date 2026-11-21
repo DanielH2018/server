@@ -2375,7 +2375,8 @@ tests:
               description: >-
                 Without the lock, a shutdown stops pods undrained and can abort Longhorn's ext4
                 journals. Read {job="k3s"} in loki-homelab for "Failed to start node shutdown
-                manager" and the logind value it names, then restart k3s-agent.
+                manager" and the logind value it names, then restart the node's k3s unit
+                (k3s or k3s-agent).
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlockmissing
       - eval_time: 21m
         alertname: KubeletShutdownLockMissing

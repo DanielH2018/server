@@ -1,4 +1,4 @@
-# Shipped by the host package's k3s-agent component. Started by homelab-kubelet-shutdown-lock.timer.
+# Shipped by the host package's k3s-server component. Started by homelab-kubelet-shutdown-lock.timer.
 [Unit]
 Description=Check that kubelet holds its shutdown delay lock and write the textfile verdict
 
