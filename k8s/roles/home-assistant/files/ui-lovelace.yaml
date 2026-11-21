@@ -1,4 +1,4 @@
-# Managed by Ansible (k8s/roles/home-assistant) — YAML-mode dashboard.
+# YAML-mode dashboard.
 # Registered under `lovelace: dashboards:` in configuration.yaml (url path `lovelace`, sidebar
 # title "Bedroom"), NOT as the root `lovelace: mode: yaml` — the root
 # dashboard is storage-mode/UI-managed. Edit here + deploy

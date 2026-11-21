@@ -11,10 +11,12 @@ Run: uv run pytest .claude/hooks/tests/test_block_protected_bash_read_only.py
 
 import importlib.util
 import os
+import re
 import sys
 
 import pytest
 from _hook_common import parse_payload
+from _row_table import Census, Subject, check, proof_problems, tracked
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
@@ -27,7 +29,8 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-from hooklib.read_only_agents import read_only_agents  # noqa: E402  (after the path insert)
+from hooklib import read_only_commands  # noqa: E402  (after the path insert)
+from hooklib.read_only_agents import read_only_agents, read_only_reason  # noqa: E402
 
 # The agents the census must find. The issue named these six; security-review carries the key
 # too, so the key and the "Read-only" description stay one-to-one.
@@ -106,6 +109,8 @@ FLAGGED = [
     "prek run --all-files",
     "./scripts/deploy.sh --tags docs",
     "uv run python scripts/dev/findings.py open --title x",
+    "uv run python scripts/secrets_mgmt/secret_rotation.py sync",
+    "uv run python scripts/secrets_mgmt/secret_rotation.py record x 2026-01-01",
     'python3 -c \'open("x", "w")\'',
     "uv run pytest tests/repo -q",
     "cp secrets/secrets.yml /tmp/copy.yml",
@@ -138,6 +143,12 @@ CLEAN = [
     "uv run python scripts/diagnostics/probe.py health docs",
     "uv run python scripts/dev/fact_status.py lint",
     "uv run python scripts/dev/fact_status.py notice --since origin/master",
+    "uv run python scripts/dev/fact_status.py report --json --no-replay",
+    "uv run python scripts/secrets_mgmt/secret_rotation.py audit",
+    "uv run python scripts/secrets_mgmt/secret_rotation.py consumers cloudflare_api_token",
+    "rootq ufw",
+    "rootq-socket nft",
+    "ssh daniel-server rootq nft",
     "ssh daniel-server 'journalctl -u k3s -n 50 | grep -i error'",
     "for f in a b; do cat $f; done",
     "cat $(git rev-parse --show-toplevel)/CLAUDE.md",
@@ -217,6 +228,95 @@ def test_every_read_only_agent_in_the_tree_carries_the_key():
     assert claimed <= derived, (
         f"read-only in prose but not in frontmatter: {claimed - derived}"
     )
+
+
+_SPAN = re.compile(r"`([^`\n]+)`(\s*\(refused)?")
+_PLACEHOLDER = re.compile(r"<[^<>\s]+>")
+_NAME = re.compile(r"^name:\s*(\S+)", re.M)
+# Commands the `checks` table does not hold that an agent file might still tell its agent to run.
+_OTHER_COMMANDS = {"git", "gh", "ssh", "uv", "python", "python3", "sudo", "doas"}
+_OTHER_COMMANDS |= {"pytest", "prek", "ansible-playbook"}
+_COMMAND_WORDS = _OTHER_COMMANDS | set(read_only_commands.checks(lambda _path: False))
+
+
+def _is_command(span):
+    words = span.split()
+    if len(words) < 2:
+        return False
+    first = words[0]
+    return (
+        first in _COMMAND_WORDS
+        or first.startswith("./")
+        or (first.startswith("scripts/") and first.endswith(".py"))
+    )
+
+
+def _unrunnable_commands(subject):
+    """Each backticked command the hook refuses unmarked, or that a `(refused` mark misnames."""
+    hits = []
+    for n, line in enumerate(subject.text.splitlines(), 1):
+        for span, marked in _SPAN.findall(line):
+            if not _is_command(span):
+                continue
+            command = _PLACEHOLDER.sub("x", span)
+            refusal = read_only_reason(command, _REPO, _mod.written_paths)
+            if refusal and not marked:
+                hits.append(f"line {n}: `{span}` {refusal}")
+            elif marked and not refusal:
+                hits.append(
+                    f"line {n}: `{span}` is marked refused, but the hook allows it"
+                )
+    return hits
+
+
+def _read_only_agent_files():
+    names = read_only_agents()
+    return [
+        rel
+        for rel in tracked(".claude/agents/*.md")
+        if (found := _NAME.search(Subject(rel).text)) and found.group(1) in names
+    ]
+
+
+READ_ONLY_AGENTS_RUN_ONLY_WHAT_THE_HOOK_ALLOWS = Census(
+    name="read-only-agents-run-only-what-the-hook-allows",
+    reason=(
+        "A read-only agent's Bash goes through `read_only_reason`, so a command its file "
+        "tells it to run but the allowlist refuses costs the agent that step of its review. "
+        "Add the command to `read_only_commands.py` when it only reads, or cut it from the "
+        "agent file. A command named only to say it is off-limits carries `(refused` after "
+        "its span."
+    ),
+    files=_read_only_agent_files,
+    offence=_unrunnable_commands,
+    red=(
+        Subject("a.md", "- `sudo ufw status verbose` — firewall path.\n"),
+        Subject("a.md", "- `uv run pytest <suite>` (read-only test run)\n"),
+        Subject("a.md", "- `rootq ufw` (refused: no)\n"),
+    ),
+    green=(
+        Subject("a.md", "- `rootq ufw` / `kubectl get pods -n <ns>`\n"),
+        Subject("a.md", "CI runs `prek run --all-files` (refused to you).\n"),
+        Subject(
+            "a.md", "`scripts/validate/render_templates.py` and `read_only: true`\n"
+        ),
+    ),
+    must_find=frozenset(
+        {
+            ".claude/agents/homelab-cicd-reviewer.md",
+            ".claude/agents/homelab-network-diagnostician.md",
+            ".claude/agents/homelab-docs-freshness-reviewer.md",
+        }
+    ),
+)
+
+
+def test_read_only_agents_run_only_what_the_hook_allows():
+    assert check(READ_ONLY_AGENTS_RUN_ONLY_WHAT_THE_HOOK_ALLOWS) == []
+
+
+def test_the_read_only_agent_command_row_can_go_red():
+    assert proof_problems(READ_ONLY_AGENTS_RUN_ONLY_WHAT_THE_HOOK_ALLOWS) == []
 
 
 def test_a_scratch_symlink_into_the_repo_is_not_scratch(tmp_path):
