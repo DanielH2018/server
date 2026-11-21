@@ -6,8 +6,8 @@ as one JSON document.
 
 Every fact comes from a reader that already exists; this module only joins them:
 
-- **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
-  `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
+- **Master CI.** The newest `ci.yml` run on master, through `gh`. A run that
+  `ci_verdict.WorkflowRun.no_verdict` admits is no verdict, and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
 - **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` family on
   daniel-box. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where
@@ -80,7 +80,7 @@ from diagnostics.probe_lib.promote_state import (
 
 # The host-side verdict logic, so the CI rule is the builder's and not a copy.
 from lib import host_modules  # noqa: F401
-from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS
+from ci_verdict import WorkflowRun
 
 # deploy-ui's daemon on daniel-box: `deploy_ui_port` in
 # `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
@@ -90,18 +90,17 @@ HTTP_TIMEOUT_S = 5
 SUBPROCESS_TIMEOUT_S = 30
 
 
-def ci_state(run: dict | None) -> str:
+def ci_state(run: WorkflowRun | None) -> str:
     """Reduce the newest master `ci.yml` run to `green`, `red`, `pending` or `no-verdict`.
 
     `None` (no run listed) is `pending`, because an empty list is never green
     (`docs/landing.md`). Only a completed run with a real failing conclusion is `red`.
     """
-    if not run or run.get("status") != "completed":
+    if run is None or run.status != "completed":
         return "pending"
-    conclusion = run.get("conclusion") or None
-    if conclusion == "success":
+    if run.conclusion == "success":
         return "green"
-    if conclusion in _CI_NO_VERDICT_CONCLUSIONS:
+    if run.no_verdict:
         return "no-verdict"
     return "red"
 
@@ -309,11 +308,11 @@ def collect(
                 ]
             )
         )
-        newest = runs[0] if runs else None
+        newest = WorkflowRun.parse(runs[0]) if runs else None
         snap["ci"] = {
             "state": ci_state(newest),
-            "sha": (newest or {}).get("headSha", "")[:8],
-            "url": (newest or {}).get("url", ""),
+            "sha": newest.head_sha[:8] if newest else "",
+            "url": newest.url if newest else "",
         }
 
     def verdict_of(log: str) -> str | None:
