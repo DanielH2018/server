@@ -7,26 +7,21 @@ from _row_table import Census, Subject, tracked
 
 _ALL_VARS = "inventory/group_vars/all.yml"
 _HOST_KEY = re.compile(r"^([a-z0-9_]+_host):", re.MULTILINE)
-_SCANNED = (".yml", ".yaml", ".j2", ".py", ".sh", ".md", ".json")
-_HISTORY = "docs/archive/"
-_THIS_FILE = "tests/repo/_group_vars_host_reader_row.py"
+_READER_ROOTS = ("hosts/*", "k8s/*", "scripts/*", ".github/*", ".claude/*")
+_READER_SUFFIXES = (".yml", ".yaml", ".j2", ".py", ".sh")
+_TEST_PATH = re.compile(r"(^|/)tests/|(^|/)test_[^/]*\.py$|(^|/)conftest\.py$")
+_COMMENT = re.compile(r"(^|\s)#.*$")
 
 
 @cache
 def _read_text() -> str:
-    """Every scanned tracked file but the definitions, this row and the archive, minus whole-line comments."""
-    lines = []
-    for rel in tracked("*"):
-        if (
-            rel in (_ALL_VARS, _THIS_FILE)
-            or rel.startswith(_HISTORY)
-            or not rel.endswith(_SCANNED)
-        ):
-            continue
-        lines += [
-            l for l in Subject(rel).text.splitlines() if not l.lstrip().startswith("#")
-        ]
-    return "\n".join(lines)
+    """Shipped code and templates, minus tests and comments: what can read a key at deploy time."""
+    return "\n".join(
+        _COMMENT.sub("", line)
+        for rel in tracked(*_READER_ROOTS)
+        if rel.endswith(_READER_SUFFIXES) and not _TEST_PATH.search(rel)
+        for line in Subject(rel).text.splitlines()
+    )
 
 
 def _unread_keys(subject: Subject) -> list[str]:

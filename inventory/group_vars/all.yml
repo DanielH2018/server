@@ -530,8 +530,6 @@ k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_r
 # The UPS's USB host: the nut-secondary component reads it, paired with the k8s/nut pod's
 # nodeSelector.
 ups_host: daniel-server
-# The Raspberry Pi; hosts/components/pi-tuning/ ships its tuning.
-optimize_pi_host: daniel-pi
 # The one host that runs the repo-level ops crons gated to a single host: the worktree sweep,
 # the infrastructure-map refresh, the generated-docs refresh and the weekly eval sweep. They
 # need the primary checkout, uv, gh and a local kubectl, which daniel-box is the only host to
