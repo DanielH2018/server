@@ -9,6 +9,8 @@ own import comment).
 import json
 import os
 import socket
+import subprocess
+import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -143,14 +145,65 @@ def pruner_path() -> Path:
     return Path(config) / "hooks" / "prune-worktrees.py"
 
 
-def _stale_worktree_lines(run, timeout):
+# How old the cached survey may be before a session start refreshes it. The pruner's
+# `--brief` took 131s on daniel-box over 325 worktrees, so no session start can wait for it.
+SURVEY_TTL_S = 15 * 60
+# The refresh's own bound, so a hung pruner cannot hold the refresh lock for good.
+SURVEY_TIMEOUT_S = 600
+
+# Run by `sh -c` with the cache path as `$0` and the pruner's argv as `$@`. The rename is
+# atomic, so a reader sees the previous survey or the whole new one, and the last line
+# records the pruner's exit status.
+_REFRESH_SCRIPT = (
+    '"$@" > "$0.tmp" 2>&1; echo "exit $?" >> "$0.tmp"; mv -f "$0.tmp" "$0"'
+)
+
+
+def survey_cache_path() -> Path:
+    """Where the last worktree survey is kept: per user, never inside a checkout."""
+    cache = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(cache) / "session-health" / "worktree-survey.txt"
+
+
+def _start_detached(argv, cwd):
+    """Start `argv` in its own session, holding none of the hook's file descriptors.
+
+    The harness waits for the hook's stdout to close, so an inherited descriptor would hold
+    the session start for the whole refresh.
+    """
+    subprocess.run(
+        ["setsid", "--fork", *argv],
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+        timeout=5,
+    )
+
+
+def _survey_lines(text):
+    """The banner lines a finished survey's cache file holds."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    status = lines.pop() if lines and lines[-1].startswith("exit ") else "exit ?"
+    if status == "exit 0":
+        return lines
+    why = lines[-1].strip() if lines else status
+    return [f"  ⚠ the worktree pruner failed: {why}"]
+
+
+def stale_worktree_lines(cwd, start=_start_detached, clock=time.time):
     """Merged worktrees this repo can remove, as ready-to-print banner lines.
 
     Claude Code's own worktree keeper reports these too, but each of its lines ends by
     asking the reader to run `gh pr list --state merged --head <branch>` by hand to tell a
     squash-merged branch from one that is merely behind. The dotfiles pruner makes
-    that call, so this prints its `--brief` verdict instead. Bounded, like every other
-    check here: it reaches GitHub, and a slow API must never stall session start.
+    that call, so this prints its `--brief` verdict instead.
+
+    The lines come from the last survey in `survey_cache_path()`, read without waiting. A
+    survey older than `SURVEY_TTL_S`, or none at all, starts one detached refresh, which a
+    later session start reads. `flock --nonblock` lets only one refresh run per user however
+    many sessions start at once.
 
     This is the only SessionStart pass that classifies this repo's worktrees. The pruner's
     own SessionStart sweep stays out of this repo, because `.claude/prune-worktrees.json`
@@ -160,18 +213,44 @@ def _stale_worktree_lines(run, timeout):
     empty banner would read as "nothing to remove".
 
     Args:
-        run: the subprocess runner (session-health.py's `_run`, passed in rather than
-            imported back -- this module cannot import from the hook that imports it).
-        timeout: seconds before the subprocess is abandoned.
+        cwd: the checkout the pruner surveys from.
+        start: runs an argv detached in `cwd`; a test passes a recorder.
+        clock: the current time in epoch seconds; a test passes a fixed one.
     """
-    pruner = str(pruner_path())
-    try:
-        proc = run([pruner, "--require", str(PRUNER_INTERFACE), "--brief"], timeout)
-    except FileNotFoundError:
+    pruner = pruner_path()
+    if not pruner.is_file():
         return [f"  ⚠ no worktree pruner at {pruner}: `chezmoi apply` deploys it"]
-    except Exception:
-        return []
-    if proc.returncode != 0:
-        why = (proc.stderr.strip().splitlines() or [f"exit {proc.returncode}"])[-1]
-        return [f"  ⚠ the worktree pruner failed: {why}"]
-    return [line for line in proc.stdout.splitlines() if line.strip()]
+    cache = survey_cache_path()
+    try:
+        age = clock() - cache.stat().st_mtime
+        lines = _survey_lines(cache.read_text(encoding="utf-8"))
+    except OSError:
+        age = None
+        lines = [
+            "  the removable-worktree survey is running in the background; "
+            "a later session start shows it"
+        ]
+    if age is None or age > SURVEY_TTL_S:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            start(
+                [
+                    "flock",
+                    "--nonblock",
+                    f"{cache}.lock",
+                    "sh",
+                    "-c",
+                    _REFRESH_SCRIPT,
+                    str(cache),
+                    "timeout",
+                    str(SURVEY_TIMEOUT_S),
+                    str(pruner),
+                    "--require",
+                    str(PRUNER_INTERFACE),
+                    "--brief",
+                ],
+                cwd,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            lines.append(f"  ⚠ the worktree survey could not start: {exc}")
+    return lines
