@@ -88,8 +88,7 @@ tier.
 - **One skill dispatches the reviewer, with no base ref.** `git grep -n
   docs-freshness-reviewer` finds one dispatcher: `.claude/skills/homelab-review/SKILL.md`,
   in the row *Docs vs live-config drift*. That table names the agent and passes no base
-  ref. The other hits are the agent file, `docs/archive/`, the eval corpus under `evals/`,
-  and `scripts/dev/tests/test_review_metrics.py`, which reads only the name.
+  ref. The other hits are the agent file, `docs/archive/`, and the eval corpus under `evals/`.
 - **The user forbids an unasked review dispatch.** The user-level `~/.claude/CLAUDE.md`,
   section *Verification & self-checking*, reads: "Don't dispatch a review subagent on your
   own initiative to double-check work you already finished." Its source is the chezmoi
@@ -508,8 +507,7 @@ Each risk is checked against `docs/failure-classes.md`.
     - `docs/claude-tooling.md`;
     - a pytest shard-weight row, which the docs-refresh cron adds.
 - **PR 3:** the two arm test pairs, and the `docs/claude-tooling.md` subsection.
-- **PR 4:** the agent file. No test reads its tiers. `scripts/dev/tests/test_review_metrics.py`
-  reads only the agent's name.
+- **PR 4:** the agent file. No test reads its tiers.
 
 ## Complexity delta
 
