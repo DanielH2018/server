@@ -275,6 +275,14 @@ def test_restart_timer_does_not_start_a_stopped_host() -> None:
     )
 
 
+def test_sibling_unit_names_render_as_the_packaged_names() -> None:
+    """The restart and metrics timers start the `homelab-*` units, with no Ansible-era fallback."""
+    restart = directive(render("claude-rc-restart.service.j2"), "ExecStart")[0]
+    assert restart.endswith("try-restart homelab-claude-rc.service"), restart
+    metrics = directive(render("claude-cgroup-metrics.timer.j2"), "Unit")[0]
+    assert metrics == "homelab-claude-cgroup-metrics.service", metrics
+
+
 def test_enable_flag_also_turns_the_host_off(tmp_path) -> None:
     """The flag must drive both directions, not just the way in.
 
