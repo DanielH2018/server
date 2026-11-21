@@ -825,10 +825,12 @@ An allowlist entry must be:
 - outside the alert plane, where a failed restart removes the thing that reports it. The test
   derives the alert plane from the render
   (`hosts/tests/test_claude_restart_allowlist.py:alert_plane`). A role joins it when its
-  config sends alerts to Alertmanager, as `observability` and `loki-homelab` do, or when it renders a Service that an Alertmanager receiver names as its host. A role also
-  joins it when it owns a scrape job that a rule for another service reads, as
-  `blackbox-exporter`, `monitor-bridge` and `node-exporter` do. `coredns` is the one member
-  kept by hand, because every pod, Alertmanager included, resolves names through it.
+  config sends alerts to Alertmanager, as `observability` and `loki-homelab` do. A role
+  joins it when it renders a Service that an Alertmanager receiver names as its host; every
+  receiver is outside the cluster. A role also joins it when it owns a scrape job that a rule
+  for another service reads, as `blackbox-exporter`, `monitor-bridge` and `node-exporter` do.
+  `coredns` is the one member kept by hand, because every pod, Alertmanager included,
+  resolves names through it.
 
 ### The restart broker
 
