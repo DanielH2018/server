@@ -11,6 +11,11 @@
 # Setting this to false stops AND disables the host and its restart timer; that is the rollback.
 claude_code_rc_enabled: true
 
+# The packaged names of the Remote Control host and the cgroup metrics service, which the
+# restart timer and the metrics timer start.
+claude_code_rc_unit: homelab-claude-rc.service
+claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
+
 # The failure pages, the units the package ships for OnFailure=. claude-rc.service pages
 # through its own alert unit; the syncs, the memory store copy, the server-batch lander and the
 # pipeline timeline page through the shared instanced alert.
