@@ -365,7 +365,7 @@ next daily read. If it reads `key bypasses governance`, the Longhorn key holds
 
 ### Step 2b: give the daily sweep a key that can extend retention
 
-The sweep below declines until the key it reads holds `writeFileRetentions`. The choice of key
+The sweep below is blocked until the key it reads holds `writeFileRetentions`. The choice of key
 stays open in [#9787](https://github.com/DanielH2018/server/issues/9787). Read
 *`writeFileRetentions` lets a leaked key lock objects for good* in ADR-0041's *Consequences*
 before choosing. The two options:
@@ -387,7 +387,7 @@ b2 key create --bucket daniel-server-kopia longhorn-weekly \
   <the live key's capabilities, comma-separated>,writeFileRetentions
 ```
 
-With the key in place, the `homelab-b2-retention` timer on daniel-box stops declining at its
+With the key in place, the `homelab-b2-retention` timer on daniel-box stops being blocked at its
 next 07:30 UTC run. To
 confirm, read its line with `journalctl -t b2-retention --since today`. It must read
 `b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.
@@ -405,10 +405,11 @@ plus the bucket's default period. It skips each backup's `locks/` files.
   page per 1,000 objects. Each retention update is Class A, which B2 does not meter.
 - **It adds no storage.** It uploads nothing. A block that Longhorn prunes leaves the listing,
   so its lock lapses within one period, and the lifecycle rule removes it as before.
-- **It declines and changes nothing** while the lock is off, the default retention is not
-  governance mode, or the key lacks `writeFileRetentions`. The `b2_object_lock` row reports
-  the first two. Nothing pages on the third until #9787 picks the key; the decline line is in
-  `journalctl -t b2-retention`.
+- **It declines and changes nothing** while the lock is off or the default retention is not
+  governance mode. The `b2_object_lock` row reports both.
+- **It is blocked** once the bucket is locked but the key lacks `writeFileRetentions`. It
+  prints `b2-retention: blocked: the key lacks writeFileRetentions` and exits 1, and check 10
+  reports the sweep as not completing until either key from step 2b is in place.
 - **Checks 9 and 10 watch it.** `longhorn-backup-health` reads the `b2-retention` journal
   tag, and reports `down` on a `FAILED` line or on a day with no completed run.
 

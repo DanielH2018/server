@@ -20,14 +20,19 @@ WHAT IT COSTS. One authorize, one `b2_list_buckets` and one `b2_list_file_names`
 objects, all Class C: about four a day. Each `b2_update_file_retention` is Class A, which B2
 does not meter.
 
-EXIT CODES. 0 after a sweep or a decline, 1 when B2 refused an update, 75 when the credentials,
+EXIT CODES. 0 after a sweep or a decline, 1 when B2 refused an update or the key cannot extend
+a retention, 75 when the credentials,
 the authorize, the bucket read or the listing failed, or an update got no answer from B2. A run
 stops at the first unanswered call rather than wait out the timeout on every object. Checks 9 and 10
 of longhorn-backup-health read the summary line, not the code.
 
 WHEN IT DECLINES. It changes nothing, prints a `declined:` line and exits 0 while the bucket's
-lock is off, its default retention is not governance mode, or the key lacks
-`writeFileRetentions`. monitor-bridge's `b2_object_lock` row reports the first two.
+lock is off or its default retention is not governance mode. monitor-bridge's `b2_object_lock`
+row reports both, so check 10 counts the run as completed.
+
+WHEN IT IS BLOCKED. With the bucket locked but a key that lacks `writeFileRetentions`, it
+prints a `blocked:` line and exits 1. Check 10 does not count that line as a completed run, so
+longhorn-backup-health reports the sweep until a key that can extend retention is in place.
 
 Usage (the homelab-b2-retention timer runs it from the primary checkout):
     uv run python scripts/backup/b2_extend_retention.py
@@ -99,8 +104,6 @@ def extend(
 
 def run(session: B2Session, now_s: float) -> tuple[int, str]:
     """One sweep over an authorized session. Returns (exit code, summary line)."""
-    if CAPABILITY not in session.capabilities:
-        return OK, f"{TAG}: declined: the key lacks {CAPABILITY}"
     lock = session.bucket_lock()
     if reason := lock_problem(lock):
         return OK, f"{TAG}: declined: {reason}"
@@ -109,6 +112,8 @@ def run(session: B2Session, now_s: float) -> tuple[int, str]:
             OK,
             f"{TAG}: declined: the bucket's default retention has no readable period",
         )
+    if CAPABILITY not in session.capabilities:
+        return FAILED, f"{TAG}: blocked: the key lacks {CAPABILITY}"
     files = lockable(session.list_files(BACKUPSTORE_PREFIX))
     until_s = int(now_s) + days * 86400
     extended, gone, failures = extend(session, files, until_s * 1000)

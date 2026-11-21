@@ -107,14 +107,21 @@ def test_the_listing_is_scoped_to_the_backupstore_volumes():
     )
 
 
-def test_a_key_without_write_file_retentions_declines_before_any_read(
-    capsys,
-):
-    transport = FakeTransport(_auth(capabilities=("listFiles",)))
+def test_a_key_without_write_file_retentions_is_blocked_on_a_locked_bucket(capsys):
+    transport = FakeTransport(_auth(capabilities=("listFiles",)), _bucket())
+    code, out, _ = _run(transport, capsys)
+    assert code == 1
+    assert out == "b2-retention: blocked: the key lacks writeFileRetentions"
+    assert "b2_list_file_names" not in [api for api, _ in transport.calls]
+
+
+def test_an_unlocked_bucket_declines_before_the_key_is_judged(capsys):
+    transport = FakeTransport(
+        _auth(capabilities=("listFiles",)), _bucket(enabled=False)
+    )
     code, out, _ = _run(transport, capsys)
     assert code == 0
-    assert out == "b2-retention: declined: the key lacks writeFileRetentions"
-    assert transport.calls == [("b2_authorize_account", None)]
+    assert out == "b2-retention: declined: Object Lock is off on the bucket"
 
 
 @pytest.mark.parametrize(

@@ -135,7 +135,9 @@ so a Longhorn upgrade that rewords them blinds check 9 until the regex follows. 
 `test_budget_check_is_clean_on_a_run_within_budget` and
 `test_budget_check_is_flagged_on_an_over_budget_projection` hold to the table. The
 `b2-retention` shapes are the `extended` and `declined:` lines `run` in
-`scripts/backup/b2_extend_retention.py` prints, which
+`scripts/backup/b2_extend_retention.py` prints. Its `blocked:` line, for a key that cannot
+extend retention, matches neither, so check 10 reports that run as not completing. The tests
+`test_retention_check_is_flagged_as_not_reporting_when_the_key_cannot_extend`,
 `test_retention_check_is_clean_on_a_completed_sweep` and
 `test_retention_check_is_flagged_when_b2_refused_an_extension` hold to the table.
 

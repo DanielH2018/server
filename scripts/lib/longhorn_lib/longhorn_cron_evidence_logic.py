@@ -260,7 +260,8 @@ CRON_LINES = {
         "OVER BUDGET:",
         "a weekly shard's next prune is projected past B2's daily Class C cap",
     ),
-    # The two summary lines `run` in scripts/backup/b2_extend_retention.py prints.
+    # The two completed-run lines `run` in scripts/backup/b2_extend_retention.py prints. Its
+    # `blocked:` line, a key that cannot extend retention, matches neither on purpose.
     "b2-retention": CronLines(
         re.compile(
             r"b2-retention: extended \d+ of \d+ objects|b2-retention: declined: "

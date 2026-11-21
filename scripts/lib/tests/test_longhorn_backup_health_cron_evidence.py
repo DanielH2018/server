@@ -405,7 +405,7 @@ _RETENTION = _B2._replace(
 )
 
 
-def _retention_line(refuse: bool) -> str:
+def _retention_line(refuse: bool = False, can_extend: bool = True) -> str:
     """The summary line `b2_extend_retention.run` prints over one listed block."""
     from backup import b2_extend_retention
     from lib.b2 import B2Error, B2Session
@@ -426,7 +426,7 @@ def _retention_line(refuse: bool) -> str:
                 "storageApi": {
                     "apiUrl": "https://api.example",
                     "bucketId": "bid",
-                    "capabilities": ["writeFileRetentions"],
+                    "capabilities": ["writeFileRetentions"] if can_extend else [],
                 }
             },
             "authorizationToken": "tok",
@@ -465,5 +465,14 @@ def test_retention_check_is_flagged_as_not_reporting_after_an_error():
         "b2-retention": ["b2-retention: error: HTTP 403 from b2_list_file_names"]
     }.get
     problems = logic.check_cron(journal, 26, _RETENTION, _NOW)
+    assert len(problems) == 1
+    assert "b2-retention has logged nothing in the last 26h" in problems[0][1]
+
+
+def test_retention_check_is_flagged_as_not_reporting_when_the_key_cannot_extend():
+    """A locked bucket and a key without writeFileRetentions extends nothing, so it never completed."""
+    line = _retention_line(can_extend=False)
+    assert line == "b2-retention: blocked: the key lacks writeFileRetentions"
+    problems = logic.check_cron({"b2-retention": [line]}.get, 26, _RETENTION, _NOW)
     assert len(problems) == 1
     assert "b2-retention has logged nothing in the last 26h" in problems[0][1]

@@ -133,8 +133,9 @@ storage cap limits if the account sets one. The alternative is a separate sweep 
 in SOPS for the host and never rendered into a cluster Secret, so a leaked cluster credential
 would not carry the capability. The sweep reads the Longhorn key until
 [#9787](https://github.com/DanielH2018/server/issues/9787) decides, and choosing the separate
-key means pointing the sweep at the new SOPS keys. No monitor pages on the capability, so the
-open decision is not settled by an alert. Until it is, the sweep declines and logs why.
+key means pointing the sweep at the new SOPS keys. Until a key that can extend retention is in
+place, the sweep on a locked bucket prints a `blocked:` line, and check 10 of
+`longhorn-backup-health` reports it as not completing. Either choice clears that report.
 
 **The sweep depends on its timer.** If it stops, the locks on blocks older than the default
 period lapse within one period. Checks 9 and 10 of `longhorn-backup-health` read its journal
