@@ -5,7 +5,8 @@ streak, skipped behind a down gate, or missing its rule in `bridge-exporter.yaml
 those cases by hand through `probe.py metric`. This prints one line per exported check:
 its value, the age of its last run, and its notes:
 
-- `down` and the members the row names, from `homelab_check_success` and `homelab_check_detail`;
+- `down` and the members the row names, from `homelab_check_success` and `homelab_check_detail`,
+  then `rule <Alert>` for each `bridge-exporter.yaml` rule that selects the row;
 - `skipped: gate <g> down`, when the row's gate in `check_table.CHECKS` is itself an exported
   row reading 0. A gate with no row of its own (`startup_grace`) reads as up, as the bridge
   treats it;
@@ -16,7 +17,10 @@ its value, the age of its last run, and its notes:
 - `down streak n/N`, from the bridge's own log line in loki-homelab. A held cycle exports 1, so
   Prometheus cannot show it. The line counts only when it was logged in the cycle that recorded
   the row's last run, because a streak resets without a line;
-- `no rule`, when `bridge-exporter.yaml` names no `check="<row>"`: that row never pages.
+- `no rule`, when `bridge-exporter.yaml` names no `check="<row>"`: that row never pages;
+- `not in this checkout`, when Prometheus exports a row that this checkout's `check_table.py`
+  lacks. The rules file is read from the same checkout, which predates the row, so its rule
+  is unknown here rather than absent.
 
 A table row with no series reads `not exported` (disabled by `CHECKS_ONLY` or `CHECKS_SKIP`).
 Exit 1 when a row is down or stale (a skipped row is its gate's or its exporter's page), 75 when
@@ -34,6 +38,7 @@ from dataclasses import dataclass, field
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import _rows_from_loki, loki_endpoint, prom_query_url
 from diagnostics.probe_lib.obs_api import loki_query_url
+from lib import yaml_fast
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 from lib.repo_paths import REPO
 from renderer.template_filters.py_table import py_table
@@ -132,9 +137,16 @@ def suppressed_checks(up: list[dict], dependent: dict[str, set[str]]) -> dict[st
     }
 
 
-def ruled(rules_text: str) -> set[str]:
-    """The checks `bridge-exporter.yaml` has a per-check rule for."""
-    return set(_RULED.findall(rules_text))
+def rules_by_check(rules_text: str) -> dict[str, list[str]]:
+    """Each check `bridge-exporter.yaml` selects, mapped to the alerts whose `expr` selects it."""
+    alerts: dict[str, list[str]] = {}
+    for group in yaml_fast.parse_yaml(rules_text)["groups"]:
+        for rule in group["rules"]:
+            if "alert" not in rule:
+                continue
+            for check in _RULED.findall(rule["expr"]):
+                alerts.setdefault(check, []).append(rule["alert"])
+    return alerts
 
 
 def streaks(lines: list[tuple[int, str]], rows: dict[str, Row]) -> dict[str, str]:
@@ -155,7 +167,7 @@ def report(
     *,
     table_gates: dict[str, str],
     table_names: list[str],
-    with_rule: set[str],
+    rules: dict[str, list[str]],
     held: dict[str, str] | str,
     suppressed: dict[str, str] | str,
     now: float,
@@ -195,6 +207,7 @@ def report(
                     "down"
                     + (f": {', '.join(sorted(row.details))}" if row.details else "")
                 )
+                notes += [f"rule {alert}" for alert in rules.get(name, [])]
         else:
             state = "up"
             if isinstance(held, dict) and name in held:
@@ -204,7 +217,9 @@ def report(
             notes.append(f"stale: past {int(row.deadline or 0)}s")
             if state == "up":
                 state = "stale"
-        if name not in with_rule:
+        if name not in table_names:
+            notes.append("not in this checkout's check table, pull to read its rule")
+        elif name not in rules:
             notes.append("no rule in bridge-exporter.yaml, never pages")
         counts[state] += 1
         when = "never" if age is None else f"{core.age_phrase(age)} ago"
@@ -273,7 +288,7 @@ def print_checks(ns, now: float | None = None, fetch=core.fetch_parsed) -> int:
         rows,
         table_gates=gates(source),
         table_names=[r["name"] for r in py_table(source, "CHECKS")],
-        with_rule=ruled(RULES.read_text()),
+        rules=rules_by_check(RULES.read_text()),
         held=_held(rows, now, fetch),
         suppressed=_suppressed(base, pin, dependent, fetch),
         now=now,
