@@ -9,9 +9,10 @@ name: image-leg
 # (tests/repo/test_every_ci_job_is_gated.py), which would make this one a merge blocker through
 # that required context. A red run is visible on the PR and blocks nothing.
 #
-# It runs on a PR that touches what the image tests read or this file, and on a dispatch. The
-# `paths:` filter is safe because the check is not a required context: a skipped trigger cannot
-# leave a required check waiting.
+# It runs on a PR that touches what the image tests read or this file, and on a dispatch.
+# scripts/tests/test_image_leg_paths_cover_test_imports.py holds the `paths:` list against the
+# image tests' import closure. The `paths:` filter is safe because the check is not a required
+# context: a skipped trigger cannot leave a required check waiting.
 
 on:
   pull_request:
@@ -27,13 +28,64 @@ on:
       # crowdsec's two images: the role pins the jobs image, all.yml pins the engine image.
       - "k8s/roles/crowdsec/**"
       - "inventory/group_vars/all.yml"
-      - "k8s/roles/conftest.py"
-      - "tests/_k8s_render.py"
       - "hosts/lib/tests/test_pi_compose_network_measurement.py"
-      - "tests/_shell_render.py"
-      - "scripts/lib/proc_testing.py"
       - "pyproject.toml"
       - "uv.lock"
+      # `$/` pins the setup action to this pull request's commit.
+      - ".github/actions/setup/**"
+      # What the image tests, their conftests and the `addopts` plugins import.
+      # scripts/tests/test_image_leg_paths_cover_test_imports.py fails on a module missing here.
+      - "k8s/conftest.py"
+      - "tests/conftest.py"
+      - "tests/_helpers.py"
+      - "tests/_k8s_render.py"
+      - "tests/_role_census.py"
+      - "tests/_shell_render.py"
+      - "tests/failure_report.py"
+      - "tests/leakguard.py"
+      - "tests/named_files.py"
+      - "tests/phase_timing.py"
+      - "tests/render_share.py"
+      - "tests/xdist_width.py"
+      - "hosts/lib/host_lib.py"
+      - "hosts/lib/tests/conftest.py"
+      - "hosts/lib/tests/_updater_host.py"
+      - "scripts/deploy_tools/chained_timeout.py"
+      - "scripts/deploy_tools/changed_set.py"
+      - "scripts/deploy_tools/kustomizations.py"
+      - "scripts/lib/cli_help.py"
+      - "scripts/lib/container_entry.py"
+      - "scripts/lib/estate.py"
+      - "scripts/lib/exit_codes.py"
+      - "scripts/lib/git.py"
+      - "scripts/lib/guard_jinja_env.py"
+      - "scripts/lib/inventory_lists.py"
+      - "scripts/lib/jinja_comments.py"
+      - "scripts/lib/k8s_conditions.py"
+      - "scripts/lib/k8s_context.py"
+      - "scripts/lib/k8s_lookups.py"
+      - "scripts/lib/k8s_objects.py"
+      - "scripts/lib/k8s_role_callers.py"
+      - "scripts/lib/k8s_roles.py"
+      - "scripts/lib/k8s_yaml.py"
+      - "scripts/lib/longhorn_lib/longhorn_backups.py"
+      - "scripts/lib/plain_scalar.py"
+      - "scripts/lib/proc_testing.py"
+      - "scripts/lib/progress.py"
+      - "scripts/lib/render_context.py"
+      - "scripts/lib/render_guard.py"
+      - "scripts/lib/repo_paths.py"
+      - "scripts/lib/role_files.py"
+      - "scripts/lib/yaml_fast.py"
+      - "scripts/renderer/homelab_render.py"
+      - "scripts/renderer/shadow_diff.py"
+      - "scripts/renderer/renderer_lib/*.py"
+      - "scripts/renderer/template_filters/*.py"
+      - "scripts/secrets_mgmt/cluster_vars_check.py"
+      - "scripts/validate/render_lib/shell.py"
+      - "scripts/validate/validate_lib/host_specs.py"
+      - "scripts/validate/validate_lib/shell_lint.py"
+      - "scripts/validate/validate_lib/shipped_render.py"
   workflow_dispatch:
 
 concurrency:

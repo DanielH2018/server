@@ -146,27 +146,10 @@ TEMPLATE_SOURCE_READERS = {
         "comparison: absorption shows up as a key present in the source and absent from the "
         "PARSED render, so reading only the render erases the defect"
     ),
-    "k8s/test_container_security_context_uses_the_macro.py": (
-        "whether a container block CALLS `hardened_security_context()` or writes its body out; "
-        "a copy that still matches renders identically to the macro call, so only the source "
-        "tells them apart. The rendered result is checked by "
-        "`test_container_security_context.py`"
-    ),
     "longhorn/test_longhorn_reap_never_scheduled.py": (
         "the host components' unit templates, which no render covers, and the synthetic "
         "`.service.j2` and `.timer.j2` under `tmp_path` the red proofs write. A schedule is "
         "forbidden by name, so the source is the subject"
-    ),
-    "k8s/test_root_security_context_is_written_out_in_full.py": (
-        "whether a template builds a root securityContext through "
-        "`hardened_security_context(run_as_user=0)` rather than writing the block out; the "
-        "render expands the macro, so the call and a hand-written copy render identically and "
-        "only the source tells them apart"
-    ),
-    "k8s/test_workload_shell_uses_the_macros.py": (
-        "whether a workload document CALLS `pod_shell()`/`spec_shell()` or copies the fields "
-        "the macros emit; both render to the same YAML, so the distinction exists only in the "
-        "source"
     ),
     "k8s/test_root_needs_dac_capability.py": (
         "the fallback for the two templates no render reaches: `k8s/image-builder`'s build "
@@ -221,13 +204,10 @@ KNOWN_MEMBERS = frozenset(
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",
         "k8s/test_configmap_keys_not_absorbed.py",
-        "k8s/test_container_security_context_uses_the_macro.py",
         "k8s/test_checksum_annotations_documented.py",
-        "k8s/test_root_security_context_is_written_out_in_full.py",
         "k8s/test_k8s_manifests.py",
         "k8s/test_root_needs_dac_capability.py",
         "k8s/test_volume_names_descriptive.py",
-        "k8s/test_workload_shell_uses_the_macros.py",
         "k8s/test_shared_manifest_defaults.py",
         "k8s/test_tls_cert_resolver_optional.py",
         "k8s/test_vip_pins.py",

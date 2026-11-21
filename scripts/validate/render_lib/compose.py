@@ -139,7 +139,8 @@ def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     bites: a tag alone gives Renovate NO update axis, so a bare ``latest`` is one no manager
     can ever raise a PR against, and nothing in the repo records which bytes are running.
     ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
-    the k8s plane already uses (see tests/k8s/test_base_images_digest_pinned.py, whose globs
+    the k8s plane already uses (see the every-external-image-pin-carries-a-digest row of
+    tests/repo/test_census_rows_roles.py, whose selector
     reach k8s/roles but never the Pi's package; this is that gate's Pi half).
     """
     missing: list[tuple[str, str]] = []

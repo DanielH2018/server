@@ -81,7 +81,7 @@ allowlisted with its reason in `tests/k8s/test_deploy_strategy.py`) or
 `k8s/roles/cluster-base/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
 through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
 or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
-`tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
+the `workload-shell-comes-from-the-macros` row of `tests/repo/test_census_rows_roles.py`, which refuses an owned field
 written out by hand. The container-level `securityContext` is `hardened_security_context`
 from `security-context.yml.j2`, as before. A CronJob's containers sit one level deeper, under
 `jobTemplate`, and take the 14-space twins `job_hardened_security_context` and

@@ -9,13 +9,10 @@ mostly render-based guards, which are not textual censuses. So the checks stay a
 Run: uv run pytest tests/repo/test_census_rows_suite.py
 """
 
-import ast
-import functools
 import re
 
 import pytest
 from _row_table import (
-    REPO,
     Census,
     Subject,
     check,
@@ -24,6 +21,7 @@ from _row_table import (
     text_lacks,
     tracked,
 )
+from _single_predicate_row import SINGLE_PREDICATE_CHECK_IS_A_ROW
 
 SELF = "tests/repo/test_census_rows_suite.py"
 
@@ -88,92 +86,6 @@ ROLE_DIRS_CALLERS = frozenset(
         "services/test_bridge_patch_boundary.py",
     )
 )
-
-
-# A module that reads tracked content: a walk a Census selector stands in for, or one file
-# read by its path, which a selector naming that file stands in for.
-READS_THE_TREE = re.compile(
-    r"\.r?glob\(|\bls-files\b|\btracked\(|\bos\.walk\(|\brole_dirs\("
-    r"|\.read_text\(|\.read_bytes\(|\bopen\(|\bsafe_load\(|\bload_\w+\(|\b_load\("
-    r"|^from test_\w+ import",
-    re.MULTILINE,
-)
-# A module that runs code rather than reading text: a subprocess other than `git ls-files`,
-# a render, a scratch tree or a patched callable. A row holds none of these.
-RUNS_CODE = re.compile(
-    r"\bsubprocess\b|\brun\(\[(?!\"git\", \"ls-files\")|\brender\w*\("
-    r"|\btmp_path\b|\bmonkeypatch\b|\burlopen\("
-)
-# A helper function that renders. Its `subprocess` stays out of this: `git_out` shells out
-# to `git ls-files`, which a row may do.
-RENDERS = re.compile(r"\brender\w*\(")
-BUILDS_A_ROW = re.compile(r"\b(?:Census|RunbookRule|Property)\(")
-
-
-@functools.cache
-def _helper_function_renders(module: str, name: str) -> bool:
-    """Whether tracked module `module` defines function `name`, and it renders.
-
-    The function renders when its own source does, or when it calls a function of the same
-    module that does, at any depth.
-    """
-    for rel in tracked(f"*/{module.rpartition('.')[2]}.py"):
-        text = (REPO / rel).read_text(errors="replace")
-        defs = {
-            node.name: node
-            for node in ast.walk(ast.parse(text))
-            if isinstance(node, ast.FunctionDef)
-        }
-        pending, seen = [name], set()
-        while pending:
-            current = pending.pop()
-            if current in seen or current not in defs:
-                continue
-            seen.add(current)
-            if RENDERS.search(ast.get_source_segment(text, defs[current]) or ""):
-                return True
-            pending += [
-                call.func.id
-                for call in ast.walk(defs[current])
-                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-            ]
-    return False
-
-
-def _calls_a_rendering_helper(text: str) -> bool:
-    """Whether the module calls a function it imports, and that function renders.
-
-    A test that renders through `route_tree()` has no `render(` of its own to match.
-    """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return False
-    imported = {
-        (alias.asname or alias.name): (node.module, alias.name)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module
-        for alias in node.names
-    }
-    return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in imported
-        and _helper_function_renders(*imported[node.func.id])
-        for node in ast.walk(tree)
-    )
-
-
-def _standalone_check_offence(subject: Subject) -> list[str]:
-    text = subject.text
-    if (
-        BUILDS_A_ROW.search(text)
-        or not READS_THE_TREE.search(text)
-        or RUNS_CODE.search(text)
-        or _calls_a_rendering_helper(text)
-    ):
-        return []
-    return ["a standalone check over tracked text; make it a row"]
 
 
 ROWS = (
@@ -253,159 +165,7 @@ ROWS = (
         min_matches=len(ROLE_DIRS_CALLERS),
         must_find=ROLE_DIRS_CALLERS,
     ),
-    Census(
-        name="a-single-predicate-check-is-a-row",
-        reason=(
-            "A one-selector, one-predicate check is a row, not a file "
-            "(.claude/rules/python-layout.md). A row fails `subject gone: delete this row` "
-            "once its selector matches nothing, so it retires with its subject; a file "
-            "passes over an empty census until someone notices. Write the check as a "
-            "`Census` row, a row of the workflow table, a rendered-property row or a "
-            "`RunbookRule` row. A check that needs "
-            "a second render context, a cross-document join or a long exemption list keeps "
-            "its file and goes in `allow` with that reason."
-        ),
-        files=lambda: tracked("tests/repo/test_*.py", "tests/services/test_*.py"),
-        offence=_standalone_check_offence,
-        red=(
-            Subject(
-                "tests/repo/test_x.py",
-                "def test_ci_pins_its_runner():\n"
-                "    ci = safe_load((REPO / '.github/workflows/ci.yml').read_text())\n"
-                "    assert ci['jobs']['pytest']['runs-on'] != 'ubuntu-latest'\n",
-            ),
-            Subject(
-                "tests/repo/test_x.py",
-                "def test_every_doc_is_short():\n"
-                "    for p in DOCS.glob('*.md'):\n"
-                "        assert len(p.read_text()) < 9000\n",
-            ),
-            Subject(
-                "tests/repo/test_x.py",
-                "from lib.git_testing import git_out\n"
-                "def test_every_doc_is_short():\n"
-                "    for p in git_out(REPO, 'ls-files', 'docs').splitlines():\n"
-                "        assert len((REPO / p).read_text()) < 9000\n",
-            ),
-            Subject(
-                "tests/repo/test_x.py",
-                "".join(
-                    f"def test_doc_{i}_is_short():\n"
-                    f"    assert len((REPO / 'docs/{i}.md').read_text()) < 9000\n"
-                    for i in range(12)
-                ),
-            ),
-        ),
-        green=(
-            Subject(
-                "tests/repo/test_x.py",
-                "ROWS = (Census(files=lambda: tracked('docs/*.md')),)\n"
-                "def test_row_holds(): ...\n",
-            ),
-            Subject(
-                "tests/repo/test_x.py", "def test_parse(): assert parse('a') == 1\n"
-            ),
-            Subject(
-                "tests/repo/test_x.py",
-                "def test_the_render_names_a_port():\n"
-                "    assert 'port' in render_role_template('a', 'b.j2')\n",
-            ),
-            Subject(
-                "tests/repo/test_x.py",
-                "from test_alertmanager_routing import route_tree\n"
-                "def test_the_tree_names_a_receiver():\n"
-                "    assert 'blackhole' in route_tree()['receiver']\n"
-                "    assert (REPO / 'a.yml').read_text()\n",
-            ),
-        ),
-        min_matches=100,
-        must_find=frozenset({SELF, "tests/repo/test_runbook_rules.py"}),
-        allow={
-            "tests/repo/test_ci_lint_group.py": (
-                "a join of pyproject.toml's lint group and default groups against every "
-                "workflow that installs the project"
-            ),
-            "tests/repo/test_claude_md_paragraphs_have_one_home.py": (
-                "a join of each long CLAUDE.md paragraph against every other operator doc"
-            ),
-            "tests/repo/test_doc_values_hook.py": (
-                "a join of the prek hook's `files` pattern against the paths the doc_values "
-                "rows name and the paths the docs-refresh cron stages"
-            ),
-            "tests/repo/test_failure_class_detectors.py": (
-                "a join of docs/failure-classes.md against the detector tests it cites"
-            ),
-            "tests/repo/test_host_package_case_inputs_census.py": (
-                "a join of the render step's CASE_INPUTS against the modules the cases "
-                "script imports and the tracked tree"
-            ),
-            "tests/repo/test_kind_node_image_follows_k3s.py": (
-                "a join of CI's kind node image against the k3s version in the "
-                "system-upgrade role's defaults"
-            ),
-            "tests/repo/test_renovate_canary_is_scheduled_not_per_merge.py": (
-                "a join of ci.yml and renovate-config-canary.yml, which run the one "
-                "retrying validator script"
-            ),
-            "tests/repo/test_vale_matches_the_ci_pin.py": (
-                "a join of the Vale version and sha256 CI installs against the "
-                "homelab-tools package pin"
-            ),
-            "tests/services/test_ha_trusted_proxies_cover_cloudflare.py": (
-                "a join of Home Assistant's trusted_proxies against the pod CIDR and the "
-                "Cloudflare ranges in the group vars"
-            ),
-            "tests/services/test_scrape_target_flap_rule.py": (
-                "a join of the flap rules against the promtool cases that exercise them"
-            ),
-            "tests/services/test_rule_thresholds_owned_by_rules_files.py": (
-                "a join of each pinned threshold against its rule's span in two "
-                "directories, and of the rules files against the routing table"
-            ),
-            "tests/services/test_host_check_rule_literals.py": (
-                "a join of the rule file against the inventory, which #9019 rewrites"
-            ),
-            "tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": (
-                "a join of the writer script's metrics against the alert rules and the "
-                "Grafana board that read them"
-            ),
-            "tests/repo/test_every_ci_job_is_gated.py": (
-                "a join of ci.yml's jobs and the gate step's reads against the ruleset "
-                "contexts in the github-checks defaults"
-            ),
-            "tests/repo/test_pytest_shards_partition_the_suite.py": (
-                "a join of ci.yml's pytest matrix against pytest_shard.py's assignment of "
-                "the tracked suite and its runner-seconds table"
-            ),
-            "tests/repo/test_release_fetches_use_pinned_tool.py": (
-                "a join of every workflow's release fetches against the pinned-tool action "
-                "and the tools it fetches"
-            ),
-            "tests/repo/test_static_ratchet_hook.py": (
-                "a join of the prek hooks' entries and `files` gates against the modules "
-                "they name, their import closure and ci.yml's prek steps"
-            ),
-            "tests/repo/test_testpaths_covers_every_test_file.py": (
-                "a join of pyproject.toml's testpaths against every tracked test file"
-            ),
-            "tests/repo/test_ty_config_covers_the_repo.py": (
-                "a join of ty's include and extra-paths against pytest's pythonpath and "
-                "testpaths and every tracked Python file"
-            ),
-            "tests/services/test_alert_runbook_urls.py": (
-                "a join of the alert rules against the docs pages and headings they link, "
-                "the inventory hosts, the group vars' domain and the promtool cases"
-            ),
-            "tests/services/test_storage_rule_literals.py": (
-                "a join of storage.yaml against the Longhorn robustness allow-list, the "
-                "roles' snapshot caps and transients, and the host checks' disk floor"
-            ),
-            "tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py": (
-                "a join of pi-peer-backup's schedule against two other roles' Longhorn "
-                "slots and the group vars' time zone"
-            ),
-        },
-    ),
+    SINGLE_PREDICATE_CHECK_IS_A_ROW,
 )
 
 _IDS = [row.name for row in ROWS]
