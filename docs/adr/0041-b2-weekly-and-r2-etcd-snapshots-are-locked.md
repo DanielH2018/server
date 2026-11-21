@@ -72,13 +72,13 @@ a backup (`k3s_longhorn_weekly_backup_retain` weekly backups). The key Longhorn 
 must not hold `bypassGovernance`, so governance mode binds it, and the operator's master key
 keeps the one way to remove a mistaken lock.
 
-The same key holds `writeFileRetentions`. A daily sweep
+A daily sweep
 (`scripts/backup/b2_extend_retention.py`, run by the `homelab-b2-retention` timer on
 daniel-box) sets the retention of every current Longhorn object under
 `longhorn/backupstore/volumes/` to now plus the bucket's default period. That keeps every
-block a retained backup references locked, however old its upload. A key without
-`bypassGovernance` can extend a governance retention but never shorten it, so the capability
-gives a leaked key no way to unlock anything. Longhorn's own `full-backup-interval` would
+block a retained backup references locked, however old its upload. The sweep needs a key with
+`writeFileRetentions`, and which key holds it is open: see the *Consequences* below and
+[#9787](https://github.com/DanielH2018/server/issues/9787). Longhorn's own `full-backup-interval` would
 renew each lock by re-uploading every block, and was rejected: the replaced versions stay
 billed until the lifecycle rule removes them, so the bucket would hold about two copies of the
 referenced set. The bucket held 6.25 GB of B2's 10 GB free tier on 2026-11-21.
@@ -94,7 +94,7 @@ monitor-bridge's `b2_object_lock` row
 (`k8s/roles/monitor-bridge/files/checks/b2.py:check_b2_object_lock`) reads the B2 setting
 once a day. It pages a warning when the bucket departs from this record: the lock off, no
 default retention, compliance mode, a retention as long as the weekly prune age, or a writer
-key that holds `bypassGovernance` or lacks `writeFileRetentions`.
+key that holds `bypassGovernance`.
 
 The R2 rule needs a standing reader too, and this record does not yet have one. Until it
 lands, the operator verifies the rule by hand with `wrangler r2 bucket lock list` after
@@ -131,10 +131,10 @@ has lapsed. The bound is the bucket's stored bytes plus whatever the key uploads
 storage cap limits if the account sets one. The alternative is a separate sweep key with only
 `listBuckets`, `listFiles`, `readBucketRetentions` and `writeFileRetentions`. It would be held
 in SOPS for the host and never rendered into a cluster Secret, so a leaked cluster credential
-would not carry the capability. The sweep reads the Longhorn key, and
-[#9787](https://github.com/DanielH2018/server/issues/9787) leaves the choice to the operator at
-mint time. Choosing the separate key means pointing the sweep at the new SOPS keys and
-dropping the `writeFileRetentions` condition from the `b2_object_lock` row.
+would not carry the capability. The sweep reads the Longhorn key until
+[#9787](https://github.com/DanielH2018/server/issues/9787) decides, and choosing the separate
+key means pointing the sweep at the new SOPS keys. No monitor pages on the capability, so the
+open decision is not settled by an alert. Until it is, the sweep declines and logs why.
 
 **The sweep depends on its timer.** If it stops, the locks on blocks older than the default
 period lapse within one period. Checks 9 and 10 of `longhorn-backup-health` read its journal

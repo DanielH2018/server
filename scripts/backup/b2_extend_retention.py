@@ -27,7 +27,7 @@ of longhorn-backup-health read the summary line, not the code.
 
 WHEN IT DECLINES. It changes nothing, prints a `declined:` line and exits 0 while the bucket's
 lock is off, its default retention is not governance mode, or the key lacks
-`writeFileRetentions`. monitor-bridge's `b2_object_lock` row reports each of those states.
+`writeFileRetentions`. monitor-bridge's `b2_object_lock` row reports the first two.
 
 Usage (the homelab-b2-retention timer runs it from the primary checkout):
     uv run python scripts/backup/b2_extend_retention.py

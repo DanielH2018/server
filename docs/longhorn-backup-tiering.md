@@ -359,14 +359,27 @@ b2 bucket update --file-lock-enabled --default-retention-mode governance \
 ```
 
 Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` clears at the
-next daily read after both this command and the key rotation below. If it reads `key bypasses governance`, the Longhorn key holds
+next daily read. If it reads `key bypasses governance`, the Longhorn key holds
 `bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
 `longhorn_b2_application_key`.
 
-The row also reads `key cannot extend retention` until the Longhorn key holds
-`writeFileRetentions`. B2 cannot add a capability to a key, so mint a new one with the master
-key and rotate the same two secrets to it. Read the live key's capabilities first, because
-Longhorn breaks after the rotation if the new key lacks one it uses:
+### Step 2b: give the daily sweep a key that can extend retention
+
+The sweep below declines until the key it reads holds `writeFileRetentions`. The choice of key
+stays open in [#9787](https://github.com/DanielH2018/server/issues/9787). Read
+*`writeFileRetentions` lets a leaked key lock objects for good* in ADR-0041's *Consequences*
+before choosing. The two options:
+
+- **The Longhorn key.** The sweep reads it unchanged. B2 cannot add a capability to a key, so
+  mint a new key with the master key, then rotate `longhorn_b2_key_id` and
+  `longhorn_b2_application_key` to it. That key sits in a cluster Secret.
+- **A separate sweep key** with `listBuckets`, `listFiles`, `readBucketRetentions` and
+  `writeFileRetentions`, held in SOPS for the host and never rendered into a cluster Secret.
+  The sweep then needs a code change to read the new SOPS keys.
+
+Either new key must not hold `bypassGovernance`. To mint the Longhorn key, start from the live
+key's capabilities, because Longhorn breaks after the rotation if the new key lacks one it
+uses:
 
 ```bash
 b2 key list --long
@@ -374,11 +387,8 @@ b2 key create --bucket daniel-server-kopia longhorn-weekly \
   <the live key's capabilities, comma-separated>,writeFileRetentions
 ```
 
-The new list must not hold `bypassGovernance`. Before minting, read *`writeFileRetentions`
-lets a leaked key lock objects for good* in ADR-0041's *Consequences*. A key that holds the
-capability and sits in a cluster Secret can lock objects in compliance mode, which no key can
-undo, and the ADR names the separate sweep key that avoids it. With the new key in place, the
-`homelab-b2-retention` timer on daniel-box stops declining at its next 07:30 UTC run. To
+With the key in place, the `homelab-b2-retention` timer on daniel-box stops declining at its
+next 07:30 UTC run. To
 confirm, read its line with `journalctl -t b2-retention --since today`. It must read
 `b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.
 
@@ -397,7 +407,8 @@ plus the bucket's default period. It skips each backup's `locks/` files.
   so its lock lapses within one period, and the lifecycle rule removes it as before.
 - **It declines and changes nothing** while the lock is off, the default retention is not
   governance mode, or the key lacks `writeFileRetentions`. The `b2_object_lock` row reports
-  each of those states.
+  the first two. Nothing pages on the third until #9787 picks the key; the decline line is in
+  `journalctl -t b2-retention`.
 - **Checks 9 and 10 watch it.** `longhorn-backup-health` reads the `b2-retention` journal
   tag, and reports `down` on a `FAILED` line or on a day with no completed run.
 

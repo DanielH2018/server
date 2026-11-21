@@ -188,8 +188,7 @@ checks each gate suppresses.
   because the key lacks `readBucketRetentions`. `down` too when the retention is in compliance
   mode, which no key can shorten, or is not shorter than `B2_PRUNE_AGE_DAYS` (14), the age the
   weekly prune deletes a backup at. `down` when the key, the one Longhorn writes with, holds
-  `bypassGovernance`, or lacks `writeFileRetentions`, which the daily lock sweep
-  (`scripts/backup/b2_extend_retention.py`) needs to keep old blocks locked. Any answer from B2 is cached for `B2_LOCK_PROBE_INTERVAL_S` (a day), a
+  `bypassGovernance`. Any answer from B2 is cached for `B2_LOCK_PROBE_INTERVAL_S` (a day), a
   refusal included, because B2 billed it. A transport failure raises and the next cycle
   probes again. Behind `b2_reachable`, and its rule shares the gate's `for: 10m`, because the
   row reads 0 whenever the gate does. The record is ADR-0041.)
