@@ -104,7 +104,7 @@ dependency the module gained, which no selected run is told to run.
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
   (the `pytest-sweep-result-cannot-grade-a-commit` row of
   `tests/repo/test_census_rows_workflows.py`).
-- **It reports through one issue.** `scripts/dev/sweep_report.py` opens an issue titled
+- **It reports through one issue.** `scripts/dev/scheduled_report.py` opens an issue titled
   `Nightly pytest sweep is red` that names the failed modules, comments on it while the
   sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
   label, because the findings register drops an issue a bot opened.

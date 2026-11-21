@@ -14,6 +14,7 @@ from _workflow_rows import (
     jobs,
     judge,
     mutants,
+    report_job_problems,
     runs,
     steps,
     triggers,
@@ -67,16 +68,6 @@ def _sweep_grading_problems(wf: Workflow) -> list[str]:
         writes = (job.get("permissions") or {}).get("issues") == "write"
         if writes and any("pytest" in runs(s) for s in steps(job)):
             found.append(f"job {job_id} runs the suite with a token that writes issues")
-    return found
-
-
-def _sweep_report_problems(wf: Workflow) -> list[str]:
-    condition = str(jobs(wf).get("report", {}).get("if", ""))
-    found = []
-    if "github.ref == 'refs/heads/master'" not in condition:
-        found.append("the report job does not stop at master")
-    if "always()" not in condition:
-        found.append("a red sweep does not reach the report")
     return found
 
 
@@ -278,7 +269,7 @@ PYTEST_SWEEP_ROWS = (
                 "The issue speaks for master: a dispatch on a branch reports nothing. A red "
                 "sweep must still reach the report, so the job's condition keeps `always()`."
             ),
-            offence=judge(_sweep_report_problems),
+            offence=judge(report_job_problems),
             red=mutants(
                 SWEEP,
                 a_report_that_skips_a_red_sweep=lambda wf: jobs(wf)["report"].update(
