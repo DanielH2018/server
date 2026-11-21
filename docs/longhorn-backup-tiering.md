@@ -47,11 +47,11 @@ selecting the `r2` target, not `default`; see
 
 --8<-- "assets/generated/fragments/longhorn-volume-shards.md"
 
-The table lists the volumes the three tier lists name. These volumes are in no list and were
-already unbacked before the tiering: `pihole-etc`, `pihole-etc-2`, `livesync-data`,
-`grafana-data`, `alertmanager-data`, and the registry, `prometheus`, `loki`, `tempo`,
-speedtest, karakeep-meili and mosquitto volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
-the TSDBs. The configs kopia *kept* are rendered from the repo here.
+The table lists the volumes the three tier lists name. Every other volume sits on the
+`longhorn-nobackup` StorageClass and has no backup. The [services page](reference/services.md)
+carries the backup tier of each service, so no list of those volumes is kept here. That is
+consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and the TSDBs. The
+configs kopia *kept* are rendered from the repo here.
 
 ### Which kopia rule each volume preserves
 
