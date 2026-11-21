@@ -1207,6 +1207,22 @@ Every `k3s` subcommand needs root.
     dpkg-query -W homelab-<host>
     ```
 
+    When reconcile fails in this run, the updater writes `/var/lib/homelab-updater/hold`. A
+    held host installs nothing, and every later updater run exits 0 with `held since a failed
+    reconcile` in its journal, so `dpkg-query` keeps printing the same version. A failed
+    reconcile in the verify step writes no hold, because only the updater writes it, but the
+    same failure here does. Read the cause in `journalctl -u homelab-reconcile`. When the fix is
+    a newer package, wait until the builder has published it, then clear the hold and install
+    it:
+
+    ```bash
+    sudo /usr/lib/homelab/homelab-updater --clear-hold --install-newest
+    ```
+
+    When the failure was transient and the installed package is fine, run `sudo
+    /usr/lib/homelab/homelab-updater --clear-hold` instead. It reruns reconcile against the
+    installed package. *Clearing a host's hold* has both levers.
+
 1. Read Prometheus. `homelab_host_reconcile_ok{host="<host>"}` reads 1, and
    `homelab_host_applied_info{host="<host>"}` carries the version `dpkg-query` printed.
 1. On a cluster node, remove the label from daniel-box. system-upgrade-controller resumes on the
@@ -1232,9 +1248,13 @@ Every `k3s` subcommand needs root.
     puts the new release's builds on the old one. `homelab-docker-engine` then installs the
     same versions built for the new release and restarts dockerd.
 
-A host that fails the verify step stays stopped, with its updater timer masked. A host that fails
-the Prometheus read holds, so mask its timer again. Either host keeps its pause label. Its rollback
-is a
+A host that fails the verify step stays stopped, with its updater timer masked. When a package
+fixes the failure, merge it and wait until the builder has published it, then take the resume
+step: its updater run installs the fix before it reconciles. A host resumed before the fix was
+published is already held, so run `sudo /usr/lib/homelab/homelab-updater --clear-hold
+--install-newest` on it once the fix is published, then continue from the Prometheus read. A
+host that fails the Prometheus read holds, so mask its timer again.
+Either host keeps its pause label. Its rollback is a
 rebuild on the previous release with `bootstrap-host.sh`. A cluster node follows *Rebuilding a
 cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
 
