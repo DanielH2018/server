@@ -5,12 +5,16 @@ reads the host's pruner or its cache.
 """
 
 import os
+import sys
 import time
 
 import pytest
-from hooklib import worktree_lines
 
 from lib.proc_testing import write_exec
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from hooklib import worktree_lines
 
 BRIEF = [
     "WARN: 1 merged worktree(s) can be removed:",
