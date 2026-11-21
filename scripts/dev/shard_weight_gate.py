@@ -453,7 +453,7 @@ def refresh_runner_weights(
 # merge-queue run repeats a commit master runs again, so neither counts.
 CI_WORKFLOW = "ci.yml"
 CI_BRANCH = "master"
-# Every pytest leg is named `pytest (shard N of M)` in ci.yml. A prefix rather than a count, so
+# Every pytest leg is named `pytest (shard N)` in ci.yml. A prefix rather than a name list, so
 # changing the matrix needs no edit here.
 PYTEST_JOB_PREFIX = "pytest (shard "
 # How many green master runs `fetch_runner_logs` looks behind for the runs that measured their

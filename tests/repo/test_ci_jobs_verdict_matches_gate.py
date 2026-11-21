@@ -288,3 +288,21 @@ def test_a_run_whose_pytest_legs_have_not_started_is_pending():
     ]
 
     assert jobs_verdict(runs) == "pending"
+
+
+def test_a_gap_in_the_planned_legs_is_pending():
+    """A plan starts legs 1..k, so legs 1 and 3 without leg 2 is not a run a plan produces."""
+    results = _planned(_all("success"), 3)
+    del results["pytest (shard 2)"]
+
+    assert jobs_verdict(_runs("success", results)) == "pending"
+
+
+def test_a_planned_leg_still_running_beside_unplanned_legs_is_pending():
+    runs = _runs("success", _planned(_all("success"), 2))
+    running = [
+        CheckRun(r.name, "in_progress", None) if r.name == "pytest (shard 2)" else r
+        for r in runs
+    ]
+
+    assert jobs_verdict(running) == "pending"
