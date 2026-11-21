@@ -8,6 +8,7 @@ files:
   - {src: files/pending_logic.py, dst: /usr/lib/homelab/renovate-notify/pending_logic.py}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-notify/host_lib.py}
   - {lib: ci_verdict.py, dst: /usr/lib/homelab/renovate-notify/ci_verdict.py}
+  - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/renovate-notify/builder_ci_grade.py}
   - {lib: renovate_identity.py, dst: /usr/lib/homelab/renovate-notify/renovate_identity.py}
   - {src: templates/homelab-renovate-notify.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-notify.service}
   - {src: units/homelab-renovate-notify.timer, dst: /usr/lib/systemd/system/homelab-renovate-notify.timer}

@@ -2,7 +2,8 @@ name: image-leg
 
 # Runs the pytest tests marked `image`: they execute a script and its fixtures inside a pinned
 # container image with `docker run`. `addopts` in pyproject.toml deselects the marker from the
-# `pytest` shards in ci.yml, so this job is the only place those tests run.
+# `pytest` shards in ci.yml, so this job and the nightly run in pytest-sweep.yml are the only
+# places those tests run.
 #
 # A separate workflow, not a ci.yml job: every ci.yml job must be read by the `prek` gate
 # (tests/repo/test_every_ci_job_is_gated.py), which would make this one a merge blocker through
@@ -21,6 +22,8 @@ on:
       - ".github/workflows/image-leg.yml"
       - "k8s/roles/longhorn-restore-drill/**"
       - "tests/longhorn/**"
+      # The restore drill's Postgres container runs the Airflow role's Postgres pin.
+      - "k8s/roles/airflow/defaults/main.yml"
       # crowdsec's two images: the role pins the jobs image, all.yml pins the engine image.
       - "k8s/roles/crowdsec/**"
       - "inventory/group_vars/all.yml"

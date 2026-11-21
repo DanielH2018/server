@@ -10,8 +10,6 @@ schedule change in the `homelab-daniel-box` package moves the bound with no `set
 docs/archive/host/h2-shrink-host-plane.md have the design.
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Callable
 

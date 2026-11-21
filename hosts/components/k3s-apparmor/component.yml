@@ -1,0 +1,28 @@
+# Gives k3s's runc the AppArmor label `runc`, on each k3s node. docs/host-packages.md, *AppArmor
+# on a k3s node*, has the evidence and the options that lost.
+#
+# /etc/apparmor.d/runc is a conffile of `apparmor`. Its profile carries `flags=(unconfined)` and
+# attaches to /usr/{bin,sbin}/runc. The edit widens the attachment to k3s's runc, which k3s
+# unpacks under /var/lib/rancher/k3s/data/<hash>/bin. Two constraints fix the shape:
+#
+# - The label has to be other than the bare `unconfined`. Ubuntu 26.04 stacks the container's
+#   profile with `unconfined` when a runtime under the bare label starts it.
+# - The label has to be `runc`. containerd's container profile takes a signal only from
+#   `unconfined`, `runc`, `crun` and containerd's own label, so a runtime under any other name
+#   cannot stop a container. A second profile for the k3s path fails for that reason.
+#
+# The regexp matches the profile's opening line and nothing else in the file. On a host with no
+# /etc/apparmor.d/runc the line arm would append the line to a new file, which does not parse.
+#
+# `reload:apparmor.service` loads every profile under /etc/apparmor.d again, which leaves the
+# label of each running process as it was. A container started under the stacked label keeps
+# it until its pod restarts. apparmor.service loads the profile before k3s starts at boot.
+#
+# REVERSE: the line arm never removes a line. Dropping this component leaves the widened
+# attachment, to restore by hand from the `apparmor` package's copy.
+#
+# hosts/tests/test_k3s_runc_apparmor_profile.py holds the listing, the label and the attachment.
+depends:
+  - apparmor
+lines:
+  - {path: /etc/apparmor.d/runc, line: "profile runc /{usr/{bin,sbin},var/lib/rancher/k3s/data/*/bin}/runc flags=(unconfined) {", regexp: '^profile runc ', activate: "reload:apparmor.service"}

@@ -38,9 +38,8 @@
 # borrowed whole. Sessions and landings run on this node too, and without it every cluster read
 # here fails. The token cannot read Secrets, and this node already holds the join token.
 #
-# homelab-kubelet-shutdown-lock runs files/kubelet-shutdown-lock-check.sh every 5 minutes. It
-# writes the `kubelet-shutdown-lock` textfile the KubeletShutdownLockMissing and
-# KubeletShutdownLockNotReporting rules read, so a fixed node clears its alert by itself.
+# kubelet's graceful node shutdown, its logind delay and the lock check are k3s-server's files
+# too, shipped here under the agent's activation.
 component: k3s-server
 depends:
   - open-iscsi
@@ -87,36 +86,6 @@ defaults:
       # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
       - system-reserved=memory=4Gi
       - seccomp-default=true
-  # Kubelet's graceful node shutdown, rendered into kubelet.conf.d. Without it every shutdown of
-  # this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems: open-iscsi's stop
-  # runs logout-all.sh while the pods still hold the mounts, and the journals abort. kubelet
-  # instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
-  # then Longhorn, then the system-critical pods.
-  #
-  # kubelet takes that lock only when logind's delay covers the groups' sum, which the logind
-  # drop-in under `files:` sets. Without the drop-in the shutdown manager fails at every agent
-  # start. To see that it holds, run `systemd-inhibit --list`, which names a kubelet `shutdown`
-  # lock in `delay` mode.
-  #
-  # The boot side needs no iSCSI setting: iscsid.conf already sets `node.startup = manual`, and
-  # the logins after boot follow instance-manager's tgtd and a fresh sendtargets discovery, which
-  # is Longhorn's attach path. If a boot after a graceful shutdown still logs read-only remounts,
-  # the cause is in Longhorn's engine or replica state, not here.
-  #
-  # Each group opens at its priority and runs to the next one. 1000000000 is the value of
-  # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
-  # system-cluster-critical; system-node-critical (2000001000) lands in that last group.
-  # ENFORCED: hosts/tests/test_k3s_agent_component.py.
-  #
-  # DECIDED: 90 seconds in total, because the UPS chain cannot give more. upsmon's SHUTDOWNCMD is
-  # `systemctl poweroff`, which waits on kubelet's delay lock like the weekly reboot does, and an
-  # FSD raised by `battery.runtime.low` (120 s, k8s/roles/nut/defaults/main.yml) leaves about two
-  # minutes of battery. kubelet moves to the next group as soon as a group's pods have stopped, so
-  # a group's seconds are its ceiling, not its cost.
-  k3s_agent_graceful_shutdown:
-    - {priority: 0, seconds: 45}
-    - {priority: 1000000000, seconds: 30}
-    - {priority: 2000000000, seconds: 15}
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
@@ -125,18 +94,11 @@ files:
   # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
-  # kubelet reads its config only at start, so the first shutdown it governs is the one after the
-  # agent's next start.
-  - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s-agent.service"}
-  # Without this file kubelet's shutdown manager never starts: logind keeps the 30 s that
-  # unattended-upgrades sets, and kubelet logs `Failed to start node shutdown manager` once at
-  # start. The reload makes the delay live at install; the manager starts at the agent's next start.
-  # DECIDED: a name that sorts last, not a same-name /etc file that masks unattended-upgrades' own.
-  # A mask stops working silently if the package renames its file.
-  - {src: templates/logind-kubelet-shutdown.conf.j2, dst: /usr/lib/systemd/logind.conf.d/zz-homelab-kubelet-shutdown.conf, activate: "reload:systemd-logind.service"}
-  - {src: files/kubelet-shutdown-lock-check.sh, dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
-  - {src: units/homelab-kubelet-shutdown-lock.service, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
-  - {src: units/homelab-kubelet-shutdown-lock.timer, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
+  - {src: "component:templates/kubelet-graceful-shutdown.conf.j2", dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s-agent.service"}
+  - {src: "component:templates/logind-kubelet-shutdown.conf.j2", dst: /usr/lib/systemd/logind.conf.d/zz-homelab-kubelet-shutdown.conf, activate: "reload:systemd-logind.service"}
+  - {src: "component:files/kubelet-shutdown-lock-check.sh", dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
+  - {src: "component:units/homelab-kubelet-shutdown-lock.service", dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
+  - {src: "component:units/homelab-kubelet-shutdown-lock.timer", dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The older block in the

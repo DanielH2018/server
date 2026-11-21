@@ -37,8 +37,8 @@ from pathlib import Path
 from lib.estate import role_defaults
 from lib.render_context import render_context
 from lib.render_guard import dump_numbered
-from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO
+from validate.validate_lib.host_specs import load_component, load_package
 from validate.validate_lib.shipped_render import render_shipped
 from validate.validate_lib.shell_lint import (
     bash_syntax_check,
@@ -73,14 +73,14 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
     overrides = {**SHELL_STUB_OVERRIDES, **(overrides or {})}
     component = path.parents[1]
     if component.parent == COMPONENTS:
-        spec = yaml_fast.safe_load((component / "component.yml").read_text()) or {}
+        spec = load_component(component / "component.yml")
         return render_context(
             None,
             component_host(component.name),
             overrides=overrides,
             component_defaults={
                 **role_defaults(component),
-                **(spec.get("defaults") or {}),
+                **spec.defaults,
             },
         )
     return render_context(path, overrides=overrides)
@@ -89,7 +89,7 @@ def template_context(path: Path, overrides: dict | None = None) -> dict:
 def component_host(name: str) -> str | None:
     """The first host, by name, whose `package.yml` lists component `name`, else None."""
     for spec in sorted(COMPONENTS.parent.glob("*/package.yml")):
-        if name in (yaml_fast.safe_load(spec.read_text()) or {}).get("components", []):
+        if name in load_package(spec).components:
             return spec.parent.name
     return None
 

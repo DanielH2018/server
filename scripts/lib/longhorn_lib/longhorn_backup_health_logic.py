@@ -27,8 +27,6 @@ rather than made byte-identical:
 - Ranks and thresholds are unchanged from the shell; only parsing tolerance was widened.
 """
 
-from __future__ import annotations
-
 import datetime as _dt
 import re
 

@@ -525,8 +525,10 @@ jobs:
   # `pytest_shard.py --plan` runs the legs' own selection once and publishes the numbers of the
   # legs it fills as `legs`, and the `pytest` matrix starts those. A pull request diffs its
   # merge commit against `HEAD^1`, and an unproven push against the green base `prove` names.
-  # A push with no base and a dispatch run no plan step, so `legs` is empty and the matrix
-  # starts every leg, as it does when this job fails.
+  # Every other run has no plan step, so `legs` is empty and the matrix starts every leg, as it
+  # does when this job fails. The step's `if:` and its base are the select step's rule, which
+  # `test_ci_pytest_selects_affected_modules.py` holds equal for every event `on:` names. A
+  # failed plan still fails the gate, although the fallback legs ran.
   #
   # Only `pytest` waits for this job. On the 20 pull-request runs measured on 2026-11-20, the
   # legs a selection left empty held 1046 slot-seconds, about twice what this job costs. The
@@ -550,7 +552,9 @@ jobs:
           persist-credentials: false
       - name: Plan the legs the selection fills
         id: plan
-        if: github.event_name == 'pull_request' || needs.prove.outputs.base != ''
+        if: >-
+          github.event_name == 'pull_request'
+          || (github.event_name == 'push' && needs.prove.outputs.base != '')
         env:
           PYTHONPATH: scripts
           GREEN_BASE: ${{ needs.prove.outputs.base }}
@@ -574,9 +578,11 @@ jobs:
   # step, its `needs` list, and `test_every_ci_job_is_gated.py` all keep working untouched. Shards
   # as separate job ids (`pytest-1`, `pytest-2`, …) would instead make changing N a three-file
   # edit: the gate's `needs`, the gate's result comparison, and the guard's `KNOWN_JOBS` and
-  # `GATE_READS` would each grow an entry per shard. Nothing outside this file names the bare
-  # `pytest` check-run — `ci_required_contexts` and `github_expected_ruleset_contexts`
-  # both name only "prek (lint + validate + tests + secrets)" — so renaming the legs costs nothing.
+  # `GATE_READS` would each grow an entry per shard. No required context names a leg:
+  # `ci_required_contexts` and `github_expected_ruleset_contexts` both name only
+  # "prek (lint + validate + tests + secrets)". The readers that do name the legs,
+  # `hosts/lib/ci_verdict.py:CI_GATE_NEEDS_JOBS` and the `pytest (shard ` prefix in
+  # `scripts/dev/shard_weight_gate.py` and `scripts/dev/ci_slot_cost.py`, change with a rename.
   #
   # `fail-fast: false` for the reason the `hooks` job states above: one shard's failure must not
   # hide another's.
@@ -660,7 +666,8 @@ jobs:
       # legs. A leg the selection does not need gets an empty list, writes `count=0`, and every
       # later step skips on it: the leg ends green after the checkout and the setup. That leg
       # is the one a plan starts for a selection of no modules, or a spare leg of a run whose
-      # plan failed.
+      # plan failed. Each leg passes the plan back as `--planned` and fails when its own
+      # selection fills more legs than the plan started.
       #
       # A push diffs against the base the `prove` job names: the newest ancestor whose gate
       # passed, which is not always the parent (`scripts/dev/tested_tree.py:green_base`). A
@@ -674,6 +681,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           GREEN_BASE: ${{ needs.prove.outputs.base }}
+          PLANNED: ${{ needs.pytest_plan.outputs.legs }}
         run: |
           set -euo pipefail
           since=()
@@ -681,8 +689,10 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ] && [ -n "${GREEN_BASE:-}" ]; then
             since=(--changed-since "$GREEN_BASE")
           fi
+          planned=()
+          if [ -n "${PLANNED:-}" ]; then planned=(--planned "$PLANNED"); fi
           uv run python scripts/dev/pytest_shard.py --shard "$SHARD" \
-            "${since[@]}" --out "$RUNNER_TEMP/shard.txt"
+            "${since[@]}" "${planned[@]}" --out "$RUNNER_TEMP/shard.txt"
       # sops, age, apt-utils and the dotfiles packages, from the action the nightly sweep in
       # pytest-sweep.yml shares.
       - name: Install the tools the tests run
@@ -1202,6 +1212,8 @@ jobs:
             scripts/validate/validate_lib/engine_case.py
             scripts/validate/validate_lib/fixture_host_case.py
             scripts/validate/validate_lib/host_fixtures.py
+            scripts/validate/validate_lib/host_specs.py
+            scripts/validate/validate_lib/node_units_case.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/repos_case.py
             scripts/validate/validate_lib/scratch_clones.py
@@ -1574,9 +1586,9 @@ jobs:
   #
   # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
   # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. These legs
-  # wait for runners because they become ready while the six pytest legs still hold slots. Two
-  # shards per release would put two offline builds on one leg, which lengthens the sweep's
-  # last leg by more than the queue it saves.
+  # wait for runners because they become ready while the planned pytest legs still hold
+  # slots. Two shards per release would put two offline builds on one leg, which lengthens
+  # the sweep's last leg by more than the queue it saves.
   #
   # The `name:` leaves the shard out, so a release's three shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed

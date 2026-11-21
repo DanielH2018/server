@@ -33,14 +33,28 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump.
 - **Its checks.** The Kustomization's `wait` holds both Deployments' rollout. The
-  `prowlarr-verify` Job runs the flaresolverr isolation probe.
+  `prowlarr-verify` Kustomization runs the flaresolverr isolation probe and two seed Jobs
+  that write the Discord notification and the app API keys.
 
 ## Notable
 - **Prowlarr keeps its own copy of each app's API key.** Settings → Apps stores the Sonarr,
-  Radarr and Lidarr keys in Prowlarr's database. Nothing in the repo writes them: a seed Job
-  that writes the SOPS keys there is #9564. Until it lands, a key rotation or a
-  `prowlarr-config` revert leaves Prowlarr's copy stale. A stale copy fails every indexer push
-  with a 401 while RSS through Prowlarr keeps working.
+  Radarr and Lidarr keys in Prowlarr's database. A stale copy fails every indexer push with a
+  401 while RSS through Prowlarr keeps working.
+- **`templates/verify/app-keys.yaml.j2` writes the SOPS keys into those entries.** The seed
+  Job runs `files/seed_prowlarr_app_keys.py` in `prowlarr-verify`, reading each key from the
+  app's `<app>-exportarr` Secret. Prowlarr's API masks `apiKey` as `********`, so the script
+  cannot compare keys. It sends each entry unchanged to `POST /api/v1/applications/test`, which
+  tests the app with the stored key, and PUTs the SOPS key only when that test fails on
+  `ApiKey`. A PUT pushes every indexer to the app, so a second run writes nothing
+  (`k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py::test_a_second_run_writes_nothing`).
+  Any other test failure, or an app with no entry or two, fails the Job without a write. The
+  Job's spec embeds the `cluster-vars.source` digest of the three keys and a digest of the
+  rendered Deployment. Flux therefore runs it again after a key rotation and after each
+  revision that rolls prowlarr. `flux_verify_after` holds `prowlarr-verify` until sonarr,
+  radarr and lidarr are Ready.
+- **A `prowlarr-config` revert can leave a stale key until the next prowlarr revision.** The
+  revert changes no render, so the seed does not run after it. A rerun after a revert is
+  [#9789](https://github.com/DanielH2018/server/issues/9789).
   `ProwlarrAppSyncFailing` in `k8s/roles/observability/files/rules/arr-apps.yaml` pages once
   Prowlarr's `ApplicationLongTermStatusCheck` has reported an app for 6 hours, read from the
   exportarr sidecar's `prowlarr_system_health_issues` series. To repair it, paste the app's
@@ -59,6 +73,11 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it again.
   `job.yaml.j2` carries the caller census, and `tests/test_prowlarr_verify.py` renders the
   directory through the Job census and checks both fences against the pod.
+- **`templates/verify/notification.yaml.j2` declares the `Discord (health)` notification.**
+  It is arr-notification's seed Job (`k8s/roles/arr-notification/`), which writes the SOPS
+  `arr_discord_webhook_url` into the row on every rollout. Prowlarr's all-indexers-down error
+  reaches Discord only through that row. `ArrNotificationsFailing` in
+  `k8s/roles/observability/files/rules/arr-apps.yaml` pages when its sends fail.
 - **Both Deployments wait 780s, above the shared default.** A cold pull on daniel-server took 8m54s for the
   292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). The budget is the literal
   `k8s/roles/prowlarr/defaults/main.yml:manifests_rollout_timeout`, which Flux's

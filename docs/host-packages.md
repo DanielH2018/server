@@ -4,7 +4,7 @@ The host-package pipeline builds `homelab-*` Debian packages from master on dani
 them, and serves them as an apt repository at `http://<daniel-box server_ip>:8791`. The
 `builder` component of `homelab-daniel-box` installs the builder half on daniel-box; its
 rules are in `hosts/components/builder/CLAUDE.md`, and its design is in
-[the H3 plan](archive/host/h3-pi-pilot.md). Until H7.41b the Ansible role
+[the H3 plan](archive/host/h3-pi-pilot.md). Until H7.41b the Ansible-era role
 `homelab_builder` installed it.
 
 This page holds the procedures an operator runs when the pipeline stops or must be stopped:
@@ -55,7 +55,7 @@ lists.
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
-  `secrets/hosts/daniel-box.sops.yaml` carries. Before H7, Ansible kept the builder, the
+  `secrets/hosts/daniel-box.sops.yaml` carries. Before H7, the Ansible-era roles kept the builder, the
   repository and every other daniel-box timer, and before H6.4a the GitOps deployer kept k3s's
   files. Since H6.4a the package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
   daniel-server's package does not ship `k3s-restart` yet, so a k3s-agent restart there stays a
@@ -267,8 +267,8 @@ before an enable of UFW applies it.
   `dpkg-query -W -f='${Conffiles}'` on each owner. An unowned file, and a conffile, take the
   edit. Any other owned file is a fault: the package shipped something wrong. The arm
   rewrites a file in place and keeps its owner and mode, because sshd rejects an
-  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible
-  task's, so the first run adopts the line or block Ansible wrote.
+  `authorized_keys` file with the wrong ones. Its regexp and markers equal the Ansible-era
+  task's, so the first run adopts the line or block that task wrote.
 - **The checks at render time run before the arm's.** A `lines:` entry whose line its own regexp
   misses would be appended again on every run, and a libvirt XML without a `<uuid>` would make
   `net-define` collide with the live object. Both fail the render.
@@ -560,7 +560,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 1. Merge the PR. A merge applies nothing under `hosts/`: the builder and the updater do.
 1. Let the builder rewrite `/etc/homelab-builder/archive-key.fpr`. Its `ExecStartPre=+` script
    `builder-fingerprint` writes the file from the signer's GnuPG home on every run, so no
-   Ansible apply is needed. A held builder still runs it. To write it now, run
+   other step is needed. A held builder still runs it. To write it now, run
    `sudo /usr/lib/homelab/builder-fingerprint`.
 1. Release the builder hold (`sudo rm /etc/homelab-builder/hold`). The builder's keyring check
    now accepts the render, so the builder publishes a `homelab-updater` that ships the new
@@ -1039,6 +1039,12 @@ the Pi gets no work daniel-box or daniel-server could do (operator ruling, 2026-
 arm64 Raspberry Pi image proves little about daniel-box. Each step is **operator-only**, apart from the
 matrix PR.
 
+The commands run in one of two shells. A command written with `sudo` runs from the operator's
+`ubuntu` shell. A command written without `sudo` between *Open a root shell* and the reboot runs
+in that held root shell. `kubectl` in the `ubuntu` shell uses the read-only kubeconfig at
+`~/.kube/config`, which reads nodes, Longhorn nodes and snapshot records and changes nothing.
+Every `k3s` subcommand needs root.
+
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
@@ -1062,7 +1068,54 @@ matrix PR.
       --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
     ```
 
-1. Open a root shell with `sudo -i` and keep it open. Every step up to the reboot runs from it.
+1. On daniel-box, take an etcd snapshot from the `ubuntu` shell, before the root shell opens.
+   daniel-box is the only control-plane and etcd node, and the scheduled snapshots can be 12 hours
+   old. `k3s etcd-snapshot` reads the server token under `/var/lib/rancher/k3s/server/`, so it
+   needs root. Without `sudo` it looks under `~/.rancher/k3s/` and fails with
+   `open /home/ubuntu/.rancher/k3s/server/token: no such file or directory`. The k3s binary lives
+   at `/usr/local/bin/k3s`, which no apt package owns, so the release upgrade leaves k3s at the
+   version that wrote the snapshot.
+
+    ```bash
+    sudo k3s etcd-snapshot save
+    ```
+
+    The save prints one `Unknown flag ... found in config.yaml, skipping` warning for each drop-in
+    key that `etcd-snapshot` has no flag for, such as `disable` and `kubelet-arg`. Those warnings
+    are expected.
+
+    The save inherits the drop-in's `etcd-s3`, `etcd-s3-config-secret` and
+    `etcd-snapshot-compress` keys, so k3s writes a compressed local copy and uploads a second
+    copy to R2. The drop-in's `etcd-snapshot-name: offbox` names scheduled snapshots only. An
+    on-demand save is named `on-demand-daniel-box-<unix-timestamp>.zip`. Record that name in the
+    issue that tracks the upgrade: a restore takes it, and the runbook's *Listing while k3s is
+    stopped* filters on the `offbox-` prefix, so that listing omits it.
+
+    Confirm that both copies exist. The newest snapshot shows two rows with that name, one
+    `file://` and one `s3://`, and each reads `true`. The read-only kubeconfig reads these records,
+    so this command needs no `sudo`:
+
+    ```bash
+    kubectl get etcdsnapshotfiles.k3s.cattle.io --sort-by=.status.creationTime \
+      -o custom-columns=NAME:.spec.snapshotName,LOCATION:.spec.location,READY:.status.readyToUse \
+      | tail -2
+    ```
+
+    Then, from `~/server`, run the restore runbook's gates against the name. They check that the
+    weekly listing drill passed and that the cluster token has an off-box baseline. Without that
+    token no snapshot decrypts. The script exits 0 when all three gates pass. It runs as `ubuntu`
+    without `sudo`: run as root, `uv run` writes root-owned files into the checkout.
+
+    ```bash
+    uv run python scripts/deploy_tools/runbook_gates.py etcd-restore <snapshot-name>
+    ```
+
+    Go on only when both `s3://` and `file://` rows read `true` and the gates exit 0. A restore
+    follows *Restoring* in [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md): the S3 form passes
+    the bare name, and the local form hard-links the file first.
+1. Open a root shell with `sudo -i` and keep it open. Every command from here up to the reboot
+   runs in it, without `sudo`, unless its step names the `ubuntu` shell. The upgrade replaces
+   sudo, so no step after this one depends on `sudo` working until the sudo check passes.
 1. Copy aside the apt sources the host's packages own. `do-release-upgrade` writes
    `Enabled: no` into every source whose URI is not an Ubuntu mirror. That covers
    `homelab.sources`, which `homelab-updater` reads as its only source list. It also covers daniel-pi's `docker.sources`
@@ -1105,19 +1158,20 @@ matrix PR.
 1. Check that the upgraded sudo still reads the host-hardening drop-in, from the held root shell.
    From 26.04 on, `/usr/bin/sudo` is an alternative. `ubuntu-minimal` and
    `ubuntu-server-minimal` depend on `sudo-rs`, which registers at priority 50 against classic
-   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. sudo-rs's `visudo` rejects
-   `timestamp_type` in `/etc/sudoers.d/10-timestamp` (`unknown setting: 'timestamp_type'`), and
-   sudo-rs keeps one credential record per terminal, so it cannot honour `global`.
+   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. The host stays on sudo-rs.
+   `/etc/sudoers.d/10-timestamp` sets only `timestamp_timeout=60`, which both implementations
+   parse, so `visudo -c` passes and prints no `unknown setting` line. sudo-rs keeps one
+   credential record per terminal.
 
     ```bash
     update-alternatives --query sudo
     visudo -c
     ```
 
-    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. Record in
-    the PR or issue that tracks the upgrade whether sudo-rs refused the call or only warned
-    about the line. If `visudo -c` fails or the second session's sudo refuses, select classic
-    sudo from the held root shell and check again:
+    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. It asks for
+    the password once and prints no warning. If `visudo -c` fails or the second session's sudo
+    refuses, select classic sudo from the held root shell and check again, then record the
+    failure in the PR or issue that tracks the upgrade:
 
     ```bash
     update-alternatives --set sudo /usr/bin/sudo.ws
@@ -1126,21 +1180,38 @@ matrix PR.
 
     Do not edit `/etc/sudoers.d/10-timestamp` on the host. The `host-hardening` package owns
     it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
-    file. To run sudo-rs on a host instead, first merge a change to
-    `hosts/components/host-hardening/templates/10-timestamp` that drops `timestamp_type` for
-    that host. Reboot only once the second session's sudo works:
+    file. A setting either implementation's `visudo` refuses fails
+    `hosts/lib/tests/test_pi_host_hardening.py::test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy`.
+    Reboot only once the second session's sudo works:
 
     ```bash
     reboot
     ```
 
-1. Verify the host against the release. `lsb_release -rs` prints the target release, `dpkg --verify`
-   prints nothing, and the reconcile start exits 0.
+1. Verify the host against the release, from a new `ubuntu` shell. The reboot ended the root
+   shell, and the sudo check above proved `sudo` works. `lsb_release -rs` prints the target
+   release, `dpkg --verify` prints nothing, and the reconcile start exits 0. `dpkg --verify` needs
+   `sudo`: as `ubuntu` it reports every root-only file it cannot read as `missing`.
 
     ```bash
     lsb_release -rs
-    dpkg --verify homelab-tools homelab-updater homelab-<host>
+    sudo dpkg --verify homelab-tools homelab-updater homelab-<host>
     sudo systemctl start homelab-reconcile.service
+    ```
+
+1. On a cluster node, check that AppArmor labels the containers as it did before the upgrade.
+   *AppArmor on a k3s node* explains each line. The first command prints the profile's opening
+   line with `var/lib/rancher/k3s/data` in its attachment. The second prints nothing: a line it
+   prints is a container with a stacked label. The third prints nothing either: a line it
+   prints is a signal from runc that a container refused, and that container cannot be
+   stopped. The fourth counts the denials since the boot. Read any it counts with the same
+   `grep` without `-c`.
+
+    ```bash
+    grep '^profile runc ' /etc/apparmor.d/runc
+    ps -eo label=,pid=,comm= | grep '//&'
+    sudo grep 'apparmor="DENIED" operation="signal"' /var/log/audit/audit.log | grep 'comm="runc"'
+    sudo grep -c 'apparmor="DENIED"' /var/log/audit/audit.log
     ```
 
 1. Resume updates as *Stopping updates on one host* describes, then run the updater once. Only the
@@ -1151,6 +1222,22 @@ matrix PR.
     sudo systemctl start homelab-updater.service
     dpkg-query -W homelab-<host>
     ```
+
+    When reconcile fails in this run, the updater writes `/var/lib/homelab-updater/hold`. A
+    held host installs nothing, and every later updater run exits 0 with `held since a failed
+    reconcile` in its journal, so `dpkg-query` keeps printing the same version. A failed
+    reconcile in the verify step writes no hold, because only the updater writes it, but the
+    same failure here does. Read the cause in `journalctl -u homelab-reconcile`. When the fix is
+    a newer package, wait until the builder has published it, then clear the hold and install
+    it:
+
+    ```bash
+    sudo /usr/lib/homelab/homelab-updater --clear-hold --install-newest
+    ```
+
+    When the failure was transient and the installed package is fine, run `sudo
+    /usr/lib/homelab/homelab-updater --clear-hold` instead. It reruns reconcile against the
+    installed package. *Clearing a host's hold* has both levers.
 
 1. Read Prometheus. `homelab_host_reconcile_ok{host="<host>"}` reads 1, and
    `homelab_host_applied_info{host="<host>"}` carries the version `dpkg-query` printed.
@@ -1177,11 +1264,94 @@ matrix PR.
     puts the new release's builds on the old one. `homelab-docker-engine` then installs the
     same versions built for the new release and restarts dockerd.
 
-A host that fails the verify step stays stopped, with its updater timer masked. A host that fails
-the Prometheus read holds, so mask its timer again. Either host keeps its pause label. Its rollback
-is a
+A host that fails the verify step stays stopped, with its updater timer masked. When a package
+fixes the failure, merge it and wait until the builder has published it, then take the resume
+step: its updater run installs the fix before it reconciles. A host resumed before the fix was
+published is already held, so run `sudo /usr/lib/homelab/homelab-updater --clear-hold
+--install-newest` on it once the fix is published, then continue from the Prometheus read. A
+host that fails the Prometheus read holds, so mask its timer again.
+Either host keeps its pause label. Its rollback is a
 rebuild on the previous release with `bootstrap-host.sh`. A cluster node follows *Rebuilding a
 cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
+
+## AppArmor on a k3s node
+
+The `k3s-apparmor` component edits one line of `/etc/apparmor.d/runc` on daniel-box and
+daniel-server. That file is the `apparmor` package's profile for `/usr/{bin,sbin}/runc`. It
+carries `flags=(unconfined)` and confines nothing. The edit widens its attachment to
+`/var/lib/rancher/k3s/data/*/bin/runc`, so k3s's runc runs under the label `runc`, where it
+ran under the bare `unconfined`. A node on Ubuntu 26.04 needs that.
+
+**What breaks without it.** Two things have to be true, and a 26.04 node has both.
+
+- The `apparmor` package sets `kernel.apparmor_restrict_unprivileged_unconfined = 1` in
+  `/usr/lib/sysctl.d/10-apparmor.conf`. Ubuntu 24.04's package leaves it at 0. Under 1, the
+  kernel turns a profile change into a stack with `unconfined` when the task that makes it
+  carries the bare `unconfined` label and lacks `CAP_MAC_OVERRIDE`.
+- Ubuntu kernel 7.0.0-41 and later test that capability at `execve`, where earlier kernels
+  tested it when runc asked for the change. runc asks while it holds every capability and
+  executes the container's entrypoint after it drops them.
+
+So every container process carries `cri-containerd.apparmor.d//&unconfined` where it carried
+`cri-containerd.apparmor.d` before. Two classes of denial follow from the one label:
+
+- **Signals and `ptrace` inside one container.** containerd's profile allows them for
+  `peer=cri-containerd.apparmor.d`, and the stacked label is a different peer. rsync never
+  ends a local copy, because its processes finish with SIGUSR2. `timeout` never kills its
+  child. s6 and dumb-init cannot stop a service. The Go runtime's SIGURG and .NET's
+  suspend signal are denied. `ps`, `pgrep` and `netstat` cannot read a peer's `/proc`
+  entry. On 2026-11-21 the rsync in the `crowdsec-config-install` init container held
+  Traefik and Authelia in `Init` for 12 minutes on daniel-box's first 26.04 boot.
+- **Host profiles confine container binaries.** The `unconfined` half of the stack attaches a
+  profile by path at each exec, as it does for a host process. 26.04 ships about 160
+  profiles in `/etc/apparmor.d`. Its `mosquitto` profile denied the container's mosquitto its
+  own config file, and its `wg-quick` profile killed `wg-quick up` in wg-easy.
+
+Ubuntu exempts a runtime by naming it, and the `runc` profile is that name. k3s unpacks its
+runc under `/var/lib/rancher/k3s/data/`, which the shipped attachment does not match. Issue
+[9833] holds the audit-log evidence.
+
+**The label has to be `runc`.** containerd's container profile takes a signal only from
+`unconfined`, `runc`, `crun` and containerd's own label
+(`contrib/apparmor/template.go` in containerd). A separate profile named
+`homelab-k3s-runc` ran on both nodes for an hour on 2026-11-21. Containers started under it
+with the right label, and none could be stopped: every `runc kill` was denied with
+`peer="homelab-k3s-runc"`, and deleted pods stayed in `Terminating`.
+
+**What the edit costs.** A process that executes k3s's runc gets a label the forced stack
+does not apply to. Any local user can execute that binary, as any local user can execute
+`/usr/sbin/runc` on an Ubuntu host with Docker. The shipped profile's `userns` rule covers
+the k3s path too. The sysctl keeps its value for every other process on the host.
+`/etc/apparmor.d/runc` is a conffile, and `53homelab-keep-conffiles` keeps the edited copy,
+so a later `apparmor` package's change to that file does not arrive on its own.
+
+**Reading the state.** The upgrade procedure's AppArmor step is the test. `ps -eo
+label=,pid=,comm= | grep '//&'` prints each process with a stacked label. A denied signal
+with `comm="runc"` in `/var/log/audit/audit.log` is a container that cannot be stopped. A
+container started under the stacked label keeps it until its pod restarts.
+`apparmor.service` loads the profile before k3s starts at boot. auditd takes the denials, so
+`journalctl -k` shows none.
+
+**The options that lost.**
+
+- `kernel.apparmor_restrict_unprivileged_unconfined = 0` in `/etc/sysctl.d/` restores the
+  24.04 behaviour for every process on the host, where the edit restores it for one
+  binary.
+- A container profile whose peer rules admit the stacked label fixes the signals and leaves
+  the host profiles attaching inside containers. containerd merged that change on 2026-11-16
+  ([containerd 14487]) and backported it to its 2.3 branch, which k3s follows. No containerd
+  or k3s release carried it on 2026-11-21. A k3s that carries it changes nothing here: the
+  edit keeps the label unstacked, so the added rules never match.
+- Disabling each host profile that attaches inside a container needs a new entry for every
+  profile a later `apparmor` package adds.
+- Running pods with `appArmorProfile: Unconfined` removes a confinement layer from every
+  workload.
+
+Ubuntu tracks the kernel side as [Launchpad bug 2172640], which had no fix on 2026-11-21.
+
+[9833]: https://github.com/DanielH2018/server/issues/9833
+[containerd 14487]: https://github.com/containerd/containerd/pull/14487
+[Launchpad bug 2172640]: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172640
 
 ## The signer's page
 

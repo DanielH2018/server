@@ -63,8 +63,12 @@ dispatch runs every module. A push whose tree a pull-request run tested runs not
   selection once and publishes the leg numbers, and the `pytest` matrix starts only those
   (#8944). A selection of no modules starts one leg, because GitHub fails a job whose matrix
   is empty, and that leg skips every step after its select step. A run with no base, and a
-  run whose plan failed, starts every leg. `scripts/dev/ci_slot_cost.py --recent 20
-  --pull-requests` counts the empty legs.
+  run whose plan failed, starts every leg. A failed plan still fails the gate, so its run
+  needs a rerun. The plan step and every leg diff against the same base, which
+  `tests/repo/test_ci_pytest_selects_affected_modules.py` checks for each event `ci.yml`
+  runs on. Each leg passes the plan back to `pytest_shard.py --planned`, and the leg fails
+  when its own selection fills more legs than the plan started. `scripts/dev/ci_slot_cost.py
+  --recent 20 --pull-requests` counts the empty legs.
 - **What the plan costs.** On the 20 pull-request runs measured on 2026-11-20, the empty
   legs held 1046 slot-seconds, about twice what one planning job on each run costs. Only
   `pytest` waits for the planning job, which starts its legs about 28s later. That wait does
@@ -104,10 +108,17 @@ dependency the module gained, which no selected run is told to run.
   `hosts/lib/ci_verdict.py:ci_verdict` never reads it and a red sweep holds no landing
   (the `pytest-sweep-result-cannot-grade-a-commit` row of
   `tests/repo/test_census_rows_workflows.py`).
-- **It reports through one issue.** `scripts/dev/sweep_report.py` opens an issue titled
+- **It reports through one issue.** `scripts/dev/scheduled_report.py` opens an issue titled
   `Nightly pytest sweep is red` that names the failed modules, comments on it while the
   sweep stays red, and closes it on the next green sweep. The issue carries no `claude`
   label, because the findings register drops an issue a bot opened.
+- **It runs the tests marked `image` too.** `addopts` deselects them from every pytest
+  run, and `image-leg.yml` runs them only on a pull request whose diff matches its
+  `paths:` list, which misses modules the image tests import. A second step in the sweep
+  runs `-m image` over the whole tree after the suite, red or green, and appends to the
+  log the sweep issue reads its failed modules from. The step needs Docker, so the sweep
+  stays on a hosted runner (the `pytest-sweep-runs-the-image-tests` row of
+  `tests/repo/test_census_rows_workflows.py`).
 - **It shares its tool installs with the pytest legs.** Both call
   `.github/actions/pytest-tools`, which holds the SOPS, age, apt-utils and dotfiles steps.
 - **To run the whole suite on a branch,** dispatch it there:
@@ -803,8 +814,8 @@ other eight jobs stay hosted, because they are short or need what a pod does not
    that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
    a probe sets each beside the hosted run of the same commit. The suite's Docker tests already
    run in a hosted job of their own, `image-leg.yml`, so the `pytest` job needs no Docker
-   daemon. The slice ends after a week with no shadow job green
-   where its twin was red.
+   daemon. The nightly sweep runs those tests as well, so it would stay on a hosted runner.
+   The slice ends after a week with no shadow job green where its twin was red.
 1. **C3, paused.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no
    runner answers.

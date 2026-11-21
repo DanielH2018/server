@@ -78,6 +78,23 @@ def test_a_day_gives_totals_clients_and_both_kinds_of_domain():
     assert rows[("blocked_domain", "pi-hole.net")] == ("", 8516)
 
 
+def test_an_address_seen_under_two_names_gives_one_client_row(monkeypatch):
+    monkeypatch.setitem(
+        ANSWERS,
+        "stats/database/top_clients",
+        {
+            "clients": [
+                {"ip": "192.168.0.44", "name": "", "count": 5896},
+                {"ip": "192.168.0.44", "name": "raspberrypi.lan", "count": 210},
+            ]
+        },
+    )
+
+    clients = [r[3:] for r in rows_through(FakePihole()) if r[2] == "client"]
+
+    assert clients == [("192.168.0.44", "raspberrypi.lan", 6106)]
+
+
 def test_every_read_covers_the_utc_day_and_the_session_is_logged_out():
     fake = FakePihole()
 

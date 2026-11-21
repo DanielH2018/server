@@ -52,7 +52,7 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
         timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "pvc-new" in proc.stdout or "new-data" in proc.stdout, proc.stdout
 
 

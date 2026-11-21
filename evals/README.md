@@ -163,26 +163,6 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
   `run --by-reads` ablates the sections in that order, so a budget stop cuts the least-read.
   Without it, `run` takes the doc's sections in doc order unless `--section` names them.
 
-## Review outcomes (structured data, not prose)
-
-`review_outcomes.jsonl` holds one JSON object per `/homelab-review` run — `date`, the confirmed
-finding counts by severity (`high`/`medium`/`low`), `refuted`, `downgraded`, and the fix-skeptic
-pass's `fixes_proposed`/`fixes_confirmed_safe`/`fixes_refuted`, plus the `prs` that shipped and the
-`ledger` memory file name. The skill's step 7 appends a row here right after writing the dated
-ledger memory — see `.claude/skills/homelab-review/SKILL.md`'s ledger-writing step for the exact
-command. A count the ledger prose doesn't state as a number is `null`, never a guess.
-
-```bash
-uv run python scripts/dev/review_metrics.py         # trend table: false-positive + fix-refusal rate
-uv run python scripts/dev/review_metrics.py --json   # same, as JSON
-uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the committed file
-```
-
-- **False-positive rate** = refuted findings / (confirmed + refuted). This is the number the
-  skill's step 2 priming (the standing don't-re-flag list) exists to drive down.
-- **Fix-refusal rate** = fixes the fix-skeptic pass refused (UNSAFE or LAUNDERS) / fixes proposed.
-  This is the number the skill's step 7 fix-skeptic pass exists to drive down.
-
 ## What's tested (v1: the /homelab-review fleet)
 
 - **catch-defect** — a planted regression (drawn from this repo's documented gotchas) the agent must flag.

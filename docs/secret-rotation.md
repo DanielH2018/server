@@ -138,7 +138,7 @@ manifest's name in a third column: the Authelia OIDC signing key, the Google ser
 key, the pi backup SSH key and the Mullvad account. For each key, set the new value with
 `sops set`, run `cluster_vars.py write`, and redeploy the key's consumers as
 `secret_rotation.py consumers <key>` prints them. The cluster key never decrypts
-`secrets.yml`, so the keys that only Ansible reads stay safe.
+`secrets.yml`, so the keys that only the host packages read stay safe.
 
 The registry in `secrets/secret_rotation.yml` does not track the cluster key. The key lives
 outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost cluster key
@@ -209,7 +209,7 @@ before deciding what is due. Examples:
   **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches**, so
   `stale_copies.OUTSIDE_THE_TREE` lists both, and a landing that rotates either ends
   `needs-manual-apply`. It stores both in its own config on the `bazarr-config` PVC,
-  entered through its UI, so there is no Ansible template holding them and no redeploy that updates them. After rotating either key,
+  entered through its UI, so there is no template holding them and no redeploy that updates them. After rotating either key,
   set it in Bazarr → Settings → Sonarr → API Key and Settings → Radarr → API Key, then restart
   Bazarr from System → Restart. The restart is required, not cosmetic: Bazarr's SignalR client
   raises `UnAuthorizedHubError` and its thread exits, so it does not retry on a key change alone.
@@ -472,8 +472,8 @@ pod rolls, and the old credential still works. The registry marks them `source: 
 Verify against the app, not the deploy: a login, an API call, a monitor past its grace window.
 `audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
 `secrets.yml`, so committing the copy advances the date either way. Before calling any
-rotation done, grep the key across `ansible/` and ask whether a hit *writes* it to the app or
-only reads it; a single reader means SOPS is a record. Mark that key `source: record` in the
+rotation done, grep the key across `k8s/`, `hosts/`, `inventory/` and `scripts/`, and ask whether
+a hit *writes* it to the app or only reads it; a single reader means SOPS is a record. Mark that key `source: record` in the
 registry and add its mechanism bullet above.
 
 ## `external` — provider consoles (audit-only)

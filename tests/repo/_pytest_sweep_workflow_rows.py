@@ -14,6 +14,7 @@ from _workflow_rows import (
     jobs,
     judge,
     mutants,
+    report_job_problems,
     runs,
     steps,
     triggers,
@@ -28,7 +29,7 @@ INSTALL_STEP = "Install age and apt-utils for the tests"
 IMAGE_VERSION = "steps.image.outputs.version"
 
 
-def _sweep_step(wf: Workflow, name: str) -> dict | None:
+def sweep_step(wf: Workflow, name: str) -> dict | None:
     return next(
         (s for s in steps(jobs(wf).get("sweep", {})) if s.get("name") == name), None
     )
@@ -41,7 +42,7 @@ def _sweep_run_problems(wf: Workflow) -> list[str]:
         found.append("the sweep has no schedule")
     if {"push", "pull_request"} & set(declared):
         found.append("the sweep runs per commit, where ci.yml's selection already runs")
-    suite = _sweep_step(wf, RUN_STEP)
+    suite = sweep_step(wf, RUN_STEP)
     if suite is None:
         found.append(f"the sweep job has no {RUN_STEP!r} step")
     elif "--changed-since" in runs(suite) or "pytest_shard" in runs(suite):
@@ -70,23 +71,13 @@ def _sweep_grading_problems(wf: Workflow) -> list[str]:
     return found
 
 
-def _sweep_report_problems(wf: Workflow) -> list[str]:
-    condition = str(jobs(wf).get("report", {}).get("if", ""))
-    found = []
-    if "github.ref == 'refs/heads/master'" not in condition:
-        found.append("the report job does not stop at master")
-    if "always()" not in condition:
-        found.append("a red sweep does not reach the report")
-    return found
-
-
 def _sweep_save_problems(wf: Workflow) -> list[str]:
     job = jobs(wf).get("sweep", {})
     save = rewrite_step(job, SAVE)
     if save is None:
         return [f"the sweep job has no {SAVE} step for pytest's rewritten modules"]
     found = []
-    suite = _sweep_step(wf, RUN_STEP)
+    suite = sweep_step(wf, RUN_STEP)
     if suite is None or steps(job).index(save) < steps(job).index(suite):
         found.append(f"the save step does not run after {RUN_STEP!r}")
     gate = condition(save)
@@ -150,12 +141,12 @@ def _sudo_problems(action: Workflow) -> list[str]:
     ]
 
 
-def _sweep_job(change: Callable[[dict], object]) -> Callable[[Workflow], object]:
+def sweep_job(change: Callable[[dict], object]) -> Callable[[Workflow], object]:
     return lambda wf: change(jobs(wf)["sweep"])
 
 
 def _rename_sweep_step(old: str, new: str) -> Callable[[Workflow], object]:
-    return _sweep_job(
+    return sweep_job(
         lambda job: [s.update(name=new) for s in steps(job) if s.get("name") == old]
     )
 
@@ -202,7 +193,7 @@ def _restore_before_the_suite(job: dict) -> None:
 
 
 def _edit_save(**fields: object) -> Callable[[Workflow], object]:
-    return _sweep_job(lambda job: _save_step(job).update(fields))
+    return sweep_job(lambda job: _save_step(job).update(fields))
 
 
 def _row(path: str, **row) -> dict:
@@ -233,9 +224,9 @@ PYTEST_SWEEP_ROWS = (
                 a_per_pull_request_run=lambda wf: triggers(wf).update(
                     pull_request=None
                 ),
-                a_sweep_that_runs_a_selection=_sweep_job(_run_a_selection),
+                a_sweep_that_runs_a_selection=sweep_job(_run_a_selection),
                 a_sweep_without_the_suite_step=_rename_sweep_step(RUN_STEP, "Run"),
-                a_sweep_without_the_tools=_sweep_job(_drop_the_tools),
+                a_sweep_without_the_tools=sweep_job(_drop_the_tools),
             ),
         )
     ),
@@ -261,10 +252,10 @@ PYTEST_SWEEP_ROWS = (
                 a_group_not_keyed_on_the_workflow=lambda wf: wf["concurrency"].update(
                     group="${{ github.ref }}"
                 ),
-                a_job_under_the_gates_name=_sweep_job(
+                a_job_under_the_gates_name=sweep_job(
                     lambda job: job.update(name=CI_GATE_NAME)
                 ),
-                a_suite_job_that_writes_issues=_sweep_job(
+                a_suite_job_that_writes_issues=sweep_job(
                     lambda job: job.update(permissions={"issues": "write"})
                 ),
             ),
@@ -278,7 +269,7 @@ PYTEST_SWEEP_ROWS = (
                 "The issue speaks for master: a dispatch on a branch reports nothing. A red "
                 "sweep must still reach the report, so the job's condition keeps `always()`."
             ),
-            offence=judge(_sweep_report_problems),
+            offence=judge(report_job_problems),
             red=mutants(
                 SWEEP,
                 a_report_that_skips_a_red_sweep=lambda wf: jobs(wf)["report"].update(
@@ -373,9 +364,9 @@ PYTEST_SWEEP_ROWS = (
                 a_save_under_a_fixed_key=_edit_save(
                     **{"with": {"path": "**/__pycache__/*-pytest-*.pyc", "key": "k"}}
                 ),
-                a_save_before_the_suite=_sweep_job(_move_save_before_the_suite),
-                a_restore_before_the_suite=_sweep_job(_restore_before_the_suite),
-                a_sweep_with_no_save=_sweep_job(
+                a_save_before_the_suite=sweep_job(_move_save_before_the_suite),
+                a_restore_before_the_suite=sweep_job(_restore_before_the_suite),
+                a_sweep_with_no_save=sweep_job(
                     lambda job: job["steps"].remove(_save_step(job))
                 ),
             ),

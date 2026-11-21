@@ -238,6 +238,13 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_B2_BUDGET_CRON_FIRED_STAMP": str(
                 tmp_path / "fired" / "b2-budget-listing"
             ),
+            "LONGHORN_B2_RETENTION_CRON_FILE": str(
+                _touch_cron(tmp_path, "b2-retention")
+            ),
+            "LONGHORN_B2_RETENTION_CRON_EXPECTED": "True",
+            "LONGHORN_B2_RETENTION_CRON_FIRED_STAMP": str(
+                tmp_path / "fired" / "b2-retention"
+            ),
         }
     )
     env.update(overrides)

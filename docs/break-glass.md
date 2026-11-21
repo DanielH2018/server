@@ -39,12 +39,17 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `secrets/.sops.yaml` (recipient comments above the `age:` line).
 
 2. **The k3s cluster token.** A copy taken out-of-band on 2026-08-23, matching
-   `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. Since
+   `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. The password
+   manager holds the copy. Since
    2026-08-20 (`--secrets-encryption` armed), the etcd snapshot cannot decrypt Secrets, CA
    certs, or the service key without this token — restoring onto a *replacement* host is a
    no-op without it. Restoring onto daniel-box's own intact disk does not need it.
    On a daniel-box rebuild the token goes to that path. On a daniel-server rebuild it goes to
    the agent's env file, `/etc/systemd/system/k3s-agent.service.env`, which the installer writes.
+   The repo does not record the entry's title, so find the entry by its date and its shape:
+    - the entry dates from 2026-08-23, unless a later rotation re-copied it;
+    - the value is one line in k3s's full token format, `K10<64 hex digits>::server:<secret>`.
+      An age key starts `AGE-SECRET-KEY-`, so the entries of items 1 and 10 cannot pass for it.
    Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section) and *Rebuilding a cluster
    node* in `docs/host-packages.md`.
 
@@ -66,8 +71,9 @@ otherwise; none of the values below are secrets themselves, only names and locat
    `longhorn-b2`, rendered from the `longhorn_b2_*` SOPS keys) holds everything not
    explicitly routed to R2; R2 (credential Secret
    `longhorn-r2`, rendered from the `r2_*` SOPS keys) holds
-   `traefik-acme`, `authelia-config`, `home-assistant-config`, and `zigbee2mqtt-data` — the
-   TLS material, the SSO store, and the two slow-to-rebuild home-automation stores. Both
+   `traefik-acme`, `authelia-config`, `home-assistant-config`, `zigbee2mqtt-data` and
+   `airflow-postgres-data` — the TLS material, the SSO store, the two slow-to-rebuild
+   home-automation stores and the Airflow warehouse. Both
    credential sets decrypt from SOPS, so item 1 gates this too.
    Source: `docs/longhorn-disaster-recovery.md` ("Two targets") and
    `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md`.
@@ -99,10 +105,14 @@ otherwise; none of the values below are secrets themselves, only names and locat
    (`.claude/skills/add-secret/SKILL.md`).
 
 8. **A GitHub-hosted repo bundle, refreshed alongside the age-key backup.** GitHub holds
-   the only off-site copy of the encrypted `secrets.yml` and all the Ansible; the age key
-   alone cannot reconstruct it. Keep a `git bundle create … --all` snapshot in the same
-   off-site place as the recovery age key so a simultaneous loss of both hosts and GitHub
-   itself does not strand everything else on this list. The bundle carries no issue history,
+   the only off-site copy of the encrypted `secrets.yml` and of every role and host package;
+   the age key alone cannot reconstruct it. Keep a `git bundle create … --all` snapshot in
+   the same off-site place as the recovery age key so a simultaneous loss of both hosts and
+   GitHub itself does not strand everything else on this list. To clone from the bundle, run
+   `git clone homelab-<date>.bundle server`. The clone's `origin` is the bundle file, so once
+   GitHub answers again, point it back with
+   `git -C server remote set-url origin https://github.com/DanielH2018/server.git`.
+   The bundle carries no issue history,
    so beside it keep the `claude` issue register exported by `findings.py export`: every
    refuted and accepted ruling lives only on GitHub, and without it the next review re-files
    them.
@@ -167,7 +177,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `homelab-signer`, import the copy with
       `gpg --homedir /var/lib/homelab-signer/gnupg --batch --import`. The builder's next run
       writes `/etc/homelab-builder/archive-key.fpr` from the imported key through its
-      `ExecStartPre=+` script, with no Ansible apply. The package does not generate a key. A
+      `ExecStartPre=+` script. The package does not generate a key. A
       rebuild with no copy starts with a fresh key from
       `gpg --homedir /var/lib/homelab-signer/gnupg --batch --pinentry-mode loopback
       --passphrase "" --quick-generate-key "homelab archive signing key <homelab-archive@daniel-box>"
@@ -278,9 +288,8 @@ Each host holds up to two age keys, and they have different readers.
 
 - **The host key, `/etc/homelab/age.key`.** `hosts/bootstrap-host.sh` (step 3) creates it on
   every host, and `homelab-secrets.service` decrypts the host's own SOPS file with it.
-- **The operator's user-home key, `~/.config/sops/age/keys.txt`.** Ansible's `community.sops`
-  lookups, the operator's `sops` edits, the `add-secret` skill and the secret rotation timer
-  read it. They decrypt `secrets/secrets.yml` and the cluster files.
+- **The operator's user-home key, `~/.config/sops/age/keys.txt`.** The operator's `sops`
+  edits, the `add-secret` skill and the secret rotation timer read it. They decrypt `secrets/secrets.yml` and the cluster files.
 
 The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#6643):
 
@@ -302,7 +311,7 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
 ## Rebuild a host, never restore a disk image
 
 To bring a lost host back, rebuild it with `hosts/bootstrap-host.sh`. A whole-disk image
-taken before that host's move from Ansible to its package is not a supported restore path.
+taken before that host moved to its package (ADR 0029) is not a supported restore path.
 
 Such an image brings back the Ansible-era files, and nothing removes them. Reconcile reports
 no drift for them. The files are:
@@ -317,6 +326,46 @@ and `git grep 'legacy:' 3221ba11d^ -- hosts/components` lists them in that commi
 parent tree.
 
 ## What to do first, by scenario
+
+### Scenario: total loss, from the kit alone
+
+Every host is gone, and GitHub may be too. This list is the order from a blank machine to a
+reconciled Flux, and each step links the page that holds its procedure. Every step is
+**operator-only**.
+
+1. On any working machine, clone the repo from the bundle (item 8), or from GitHub if it
+   answers.
+1. Place the recovery key (item 1) at `~/.config/sops/age/keys.txt`, as item 7 describes.
+   Confirm it with the one-value decrypt in step 6 of *Annual drill*, never with a whole-file
+   `sops -d`.
+1. Rebuild daniel-box by
+   [Rebuilding daniel-box](host-packages.md#rebuilding-daniel-box) in `docs/host-packages.md`.
+   With GitHub or GHCR unreachable, read
+   [Rebuilding with GitHub or GHCR unreachable](host-packages.md#rebuilding-with-github-or-ghcr-unreachable)
+   first: `hosts/bootstrap-host.sh --offline` reads the kit's offline bootstrap files
+   (item 8). That page's steps run in this order:
+    1. `hosts/bootstrap-host.sh`, which installs the host package and the k3s binary;
+    1. the server token (item 2) and the archive signing key (item 9);
+    1. the etcd restore from the R2 snapshot (item 3), only when you want back the objects the
+       repo does not declare. [The etcd restore doc](k3s-etcd-restore.md) says when that is.
+       A restore needs the token;
+    1. the first k3s start;
+    1. Flux, by
+       [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster)
+       in `docs/flux-deploy-plane.md`. That section owns the cluster's order from there: the
+       cluster key's Secret (item 10), the Longhorn restores from B2 and R2 (item 4), and the
+       root Kustomization last.
+1. Rebuild daniel-server by
+   [Rebuilding daniel-server](host-packages.md#rebuilding-daniel-server), once daniel-box
+   serves its package repository. The agent joins with the token (item 2).
+1. Rebuild daniel-pi by *Scenario: daniel-pi must be rebuilt from a blank SD card* below.
+1. Run the post-deploy setup in
+   [§9 of the bring-up runbook](host-bring-up.md#9-post-deploy-setup-that-no-package-or-render-can-do).
+   It needs a running cluster with its workloads applied, so it comes after the Flux step.
+   `postflight.py` names each item still pending. A volume restored from Longhorn brings back
+   its app's own keys and tokens, so it reports pending only the apps that started empty.
+1. Point the router's WireGuard forward at the new daniel-box (item 6). Then refresh the
+   kit (item 8) and run `recovery_kit.py record`, because the rebuilt hosts hold new keys.
 
 ### Scenario: daniel-box is dead, daniel-server survives
 
@@ -339,8 +388,7 @@ the recovery key (item 1).
    That section owns the order: k3s bring-up, the Flux install, the plumbing tags, the
    Longhorn restores of `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore
    sync*, then *Restore volumes BEFORE the root exists*), and the root Kustomization last. The
-   root provisions empty PVCs under the backed-up names, so it comes after the restores. No
-   Ansible path deploys a workload on the cluster.
+   root provisions empty PVCs under the backed-up names, so it comes after the restores.
 4. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
 
 ### Scenario: daniel-server is dead, daniel-box survives
@@ -665,10 +713,118 @@ Until step 4, the backup-health monitor reads each annotated target as a problem
 `probe.py health longhorn-backup` fails and names it. A forgotten break-glass therefore cannot sit
 behind a green monitor. `docs/adr/0007-backup-tiering-r2-daily-b2-weekly.md` records the choice.
 
+### Scenario: a backup store was deleted or emptied
+
+This scenario starts when the B2 weekly bucket (`daniel-server-kopia`) or the R2 bucket
+lists no backups: a leaked key, a prune bug or a mistaken command removed them. It ends at a
+Longhorn restore or an etcd restore from what survived. Every step is **operator-only**,
+because no session holds a credential that can read versions, change a bucket or revoke a
+key. No part of it has been drilled.
+
+What survives depends on the locks
+[ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) sets.
+The operator applies them by hand, in
+[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2 and 3
+([#9699](https://github.com/DanielH2018/server/issues/9699)), so check that they exist
+before you count on them:
+
+- **B2.** In the Backblaze console, the bucket's settings show *Object Lock: Enabled* and a
+  governance default retention of 7 days. Every version uploaded in the last 7 days is
+  locked. A delete that names no version only writes a hide marker over it, and a delete of
+  the version itself is refused.
+- **B2, even without a lock.** The bucket's lifecycle rule, `daysFromHidingToDeleting: 7`,
+  keeps every hidden version for 7 days after its hide. A delete through Longhorn or the S3
+  API writes hide markers, so the data stays recoverable for those 7 days. A delete that
+  names each version, as `b2_drain.py` does, removes every unlocked version at once.
+- **A deleted B2 bucket.** B2 refuses to delete a bucket that holds any file, and a locked
+  version cannot be deleted without `bypassGovernance`. A bucket that is gone therefore held
+  no locked version, and nothing in B2 survives it.
+- **R2 etcd snapshots.** `npx wrangler r2 bucket lock list <r2_bucket>` must show the one
+  rule over `etcd-snapshots/`. R2 keeps no versions: it refuses a delete of a locked
+  snapshot with a 409, so every snapshot younger than the rule is still listed as usual.
+  daniel-box's own disk keeps a further 28 local snapshots (kit item 3), which no R2 delete
+  reaches.
+- **The R2 daily tier (`longhorn/` on R2).** It has no lock and R2 keeps no versions. A
+  delete there loses the five R2 volumes (kit item 4) for good. Rebuild each one the way
+  [the no-backup volumes](longhorn-disaster-recovery.md#what-is-and-isnt-in-the-backupstore)
+  are rebuilt.
+
+The B2 lock does not make every surviving backup restorable. A Longhorn backup uploads only
+the blocks that changed, so the older base blocks that a recent backup still references
+carry no lock. A backup whose base blocks were deleted fails its restore even though its
+`.cfg` survived. ADR-0041's *Consequences* has the detail, and
+[#9685](https://github.com/DanielH2018/server/issues/9685) tracks the gap.
+
+1. To stop further deletes, revoke the key that did them before you restore anything. In the
+    Backblaze console (kit item 5), delete the Longhorn application key; in the Cloudflare
+    dashboard, revoke the R2 API token. If a console login did the delete, change that
+    login's password and revoke its sessions first. Revoking the R2 token also stops the etcd
+    snapshot upload until step 5 lands.
+2. To stop Longhorn writing to or pruning the store while you work, disarm both targets with
+    a PR that sets `k3s_longhorn_backup_armed: false` and `k3s_longhorn_r2_armed: false`. When
+    that PR cannot reach the cluster, follow
+    [Longhorn backups must stop and the disarm PR cannot reach the cluster](#scenario-longhorn-backups-must-stop-and-the-disarm-pr-cannot-reach-the-cluster).
+3. To stop B2 expiring the hidden versions, delete the bucket's lifecycle rule in the
+    Backblaze console, and note its value (`daysFromHidingToDeleting: 7`). Step 7 puts it
+    back.
+4. To read what survives in B2, list every version with the account's master key, which the
+    B2 command-line tool v4 reads from `b2 account authorize`. A name whose newest version
+    has the `action` `hide` is one that step 5 can bring back.
+
+    ```bash
+    b2 ls --versions --recursive --json b2://daniel-server-kopia/longhorn/ > versions.json
+    jq -rs 'flatten | group_by(.fileName)[] | max_by(.uploadTimestamp)
+      | select(.action == "hide") | .fileName' versions.json > hidden.txt
+    wc -l hidden.txt
+    ```
+
+    To read what survives in R2, open the bucket in the Cloudflare dashboard (kit item 5)
+    and browse the `etcd-snapshots/` prefix. Do not use the request in
+    [Listing while k3s is stopped](k3s-etcd-restore.md#listing-while-k3s-is-stopped) yet.
+    It reads `/etc/rancher/k3s/etcd-s3.env`, which holds the R2 key that step 1 revoked, so
+    it fails with a 403 until step 6 lands. A 403 does not mean that R2 holds no snapshots.
+    Fall back to daniel-box's local snapshots in
+    `/var/lib/rancher/k3s/server/db/snapshots/` only when the dashboard lists none.
+5. To make the hidden B2 versions current again, delete each hide marker with
+    `b2 file unhide`. It takes one file per call, and each call spends one Class C
+    transaction to find its marker, so check the daily caps in the Backblaze console and
+    raise them for the day before you start. The loop skips `locks/`, so that no stale
+    backup lock comes back.
+
+    ```bash
+    grep -v '/locks/' hidden.txt | while read -r name; do
+      b2 file unhide "b2://daniel-server-kopia/$name"
+    done
+    ```
+
+    Then re-run step 4. `hidden.txt` must hold only `locks/` names.
+6. To give the cluster working credentials, mint a new B2 application key for the bucket
+    without `bypassGovernance`, and a new R2 API token. Store each with
+    [Rotating a value the cluster reads](secret-rotation.md#rotating-a-value-the-cluster-reads)
+    for `longhorn_b2_key_id`, `longhorn_b2_application_key`, `r2_access_key_id` and
+    `r2_secret_access_key`. That procedure's step 5 covers
+    `/etc/rancher/k3s/etcd-s3.env`, the host-package copy of the R2 key that an etcd restore
+    reads. Re-arm both targets in the same PR, or in the next one.
+7. To restore the lifecycle rule, add `daysFromHidingToDeleting: 7` back to the bucket in the
+    Backblaze console once step 5 is done.
+8. To restore what was lost, decide first whether anything was lost besides the backups.
+    - **The live volumes are healthy.** Restore nothing. Take a backup of each volume from
+        the Longhorn UI and check that it reaches `Completed`, so the store again holds a
+        backup that does not depend on deleted blocks.
+    - **Volumes are lost too.** Follow
+        [Procedure (fresh host, total loss)](longhorn-disaster-recovery.md#procedure-fresh-host-total-loss)
+        from its step 3. Force Backup → Sync in the Longhorn UI, because polling is off, then
+        run its gates and restore. A restore that fails on a missing block is the gap the
+        paragraph above this list describes: rebuild that volume instead.
+    - **Cluster objects are lost too.** Restore etcd first with the
+        [k3s etcd restore](k3s-etcd-restore.md#restoring), which needs kit item 2, the
+        cluster token. A restore from a local snapshot passes `--etcd-s3=false`.
+
 ### Scenario: the laptop/machine holding your working access is dead, the lab hosts are fine
 
-Ansible runs from daniel-box in normal operation (repo-root CLAUDE.md, *Project Overview*).
-If your own working machine is what's gone, the lab itself needs nothing done to it.
+No part of normal operation runs on your own machine. daniel-box builds every host's package,
+and `promote` and Flux apply the cluster. If your own working machine is what's gone, the lab
+itself needs nothing done to it.
 
 1. SSH into daniel-box directly using credentials from the password manager — it holds
    its own age key and its own checkout, so you can work from there without rebuilding
@@ -686,8 +842,9 @@ If your own working machine is what's gone, the lab itself needs nothing done to
 
 ### Scenario: sudo refuses after a host's Ubuntu release upgrade
 
-Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs's `visudo` rejects the
-`timestamp_type` line in `/etc/sudoers.d/10-timestamp`. The release-upgrade procedure in
+Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs refuses some settings classic
+sudo accepts. `/etc/sudoers.d/10-timestamp` carries none of them, and a test runs both
+implementations' `visudo` on it. The release-upgrade procedure in
 [Upgrading a host's Ubuntu release](host-packages.md#upgrading-a-hosts-ubuntu-release) checks
 this from a held root shell before the reboot. If a host already rebooted and sudo refuses, get
 root at the host's console or in recovery mode, then run
@@ -874,6 +1031,7 @@ what each source records — not what "should" have happened.
 | daniel-pi rebuild from a blank SD card (*daniel-pi must be rebuilt from a blank SD card*) | **No, and waived.** The operator ruled on 2026-11-08 not to run the rebuild at the Pi's console ([#7505](https://github.com/DanielH2018/server/issues/7505)). CI's bootstrap cases run the script in a container against stub or simulated installs, so they cover neither the console steps nor the WireGuard restore. | `scripts/validate/validate_lib/bootstrap_repo_case.py` |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Its `fresh-cluster` case, added on 2026-11-08 (#7669), is written to run the fresh-cluster steps on a second kind cluster that resolves no name outside the cluster, on the node or in a pod: the controllers and the registry run from image archives, and the registry role's render serves the bundle at `flux_break_glass_url`. Read its `case=fresh-cluster` line in the latest run before you count it as drilled. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), k3s's image import directory, and the way back from the hostPath PV to Longhorn. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass`, `break-glass-red` and `fresh-cluster` |
 | Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/archive/host/h7-delete-ansible.md`, *The proofs* |
+| Recovery from a deleted or emptied backup store (*a backup store was deleted or emptied*) | **No.** The locks it depends on are not yet confirmed: ADR-0041 is Proposed until its scratch-bucket step passes. No run has un-hidden B2 versions or restored from them. | [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md); [#9699](https://github.com/DanielH2018/server/issues/9699) |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill

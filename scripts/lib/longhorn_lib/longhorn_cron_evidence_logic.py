@@ -11,16 +11,15 @@ separate arms because silence and a bad verdict are different faults with differ
   docs/archive/host/h2-shrink-host-plane.md). Its arm reads the CronJob Longhorn
   creates for it, that CronJob's newest Job, and the Job's pod log. The pod log is the evidence,
   because longhorn-manager logs a per-volume failure and can still finish the Job as succeeded.
-- The **B2 deletion accounting** and the **B2 budget listing** are host timers. Each one's arm
-  reads its journal tag (`b2-deletions`, `b2-budget`), its timer file and its fire stamp.
+- The **B2 deletion accounting**, the **B2 budget listing** and the **B2 Object Lock sweep** are
+  host timers. Each one's arm reads its journal tag (`b2-deletions`, `b2-budget`,
+  `b2-retention`), its timer file and its fire stamp.
 
 Rank 4 throughout, where `_fetch_text` uses rank 1 for a failed kubectl read. That asymmetry is
 deliberate: a failed backup-plane read means the backups are unreadable, while everything here
 is the evidence plane. A trim that reclaimed nothing and a deletion nobody could price are both
 real and neither is urgent, so they must not displace a stale backup from the push slot.
 """
-
-from __future__ import annotations
 
 import re
 from typing import NamedTuple
@@ -226,7 +225,7 @@ def check_trim(
     return problems
 
 
-# ── the B2 host crons: the deletion accounting and the budget listing ────────────────────
+# ── the B2 host crons: the deletion accounting, the budget listing and the lock sweep ───────
 
 
 class CronLines(NamedTuple):
@@ -260,6 +259,15 @@ CRON_LINES = {
         re.compile(r"budget per day: \d+ Class C \(cap \d+"),
         "OVER BUDGET:",
         "a weekly shard's next prune is projected past B2's daily Class C cap",
+    ),
+    # The two completed-run lines `run` in scripts/backup/b2_extend_retention.py prints. Its
+    # `blocked:` line, a key that cannot extend retention, matches neither on purpose.
+    "b2-retention": CronLines(
+        re.compile(
+            r"b2-retention: extended \d+ of \d+ objects|b2-retention: declined: "
+        ),
+        "FAILED",
+        "B2 refused to extend an object's lock, so it can lapse",
     ),
 }
 

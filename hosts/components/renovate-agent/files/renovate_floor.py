@@ -15,7 +15,8 @@ from __future__ import annotations
 import re
 from pathlib import PurePosixPath
 
-from renovate_identity import BOT_LOGIN, is_renovate, login
+from ci_verdict import CommitStatus
+from renovate_identity import BOT_LOGIN, is_renovate, is_renovate_login, login
 
 # The T2 approval floor this component ships, which every T2 lander reads (A5a).
 FLOOR_FILE = "/usr/lib/homelab/t2-approval-floor"
@@ -137,7 +138,7 @@ def pusher_problem(events: list[dict], head: str) -> str:
     return ""
 
 
-def soak_problem(statuses: list[dict]) -> str:
+def soak_problem(statuses: list[CommitStatus]) -> str:
     """Why the soak status does not pass; empty when it is absent or `renovate[bot]`'s success.
 
     `statuses` is the commit statuses API's answer for the head, newest first, so the first
@@ -145,14 +146,14 @@ def soak_problem(statuses: list[dict]) -> str:
     as a failure, because the soak is Renovate's own.
     """
     for status in statuses:
-        if status.get("context") != SOAK_CONTEXT:
+        if status.context != SOAK_CONTEXT:
             continue
-        if not is_renovate(status.get("creator")):
+        if not is_renovate_login(status.creator):
             return (
                 f"its {SOAK_CONTEXT} status was posted by "
-                f"{login(status.get('creator'))}, not {BOT_LOGIN}"
+                f"{status.creator}, not {BOT_LOGIN}"
             )
-        if status.get("state") != "success":
+        if status.state != "success":
             return f"its {SOAK_CONTEXT} status has not passed"
         return ""
     return ""

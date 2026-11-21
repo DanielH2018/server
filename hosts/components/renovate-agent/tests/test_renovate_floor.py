@@ -9,6 +9,7 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_renovate_floor.py
 
 import pytest
 import renovate_floor as floor
+from ci_verdict import parse_commit_statuses
 from _helpers import REPO
 from deploy_tools.land_lib import policy
 from lib.proc_testing import run
@@ -163,8 +164,11 @@ def test_a_branch_anyone_else_touched_is_flagged(events, names):
 
 def test_renovates_own_passed_soak_and_no_soak_both_pass():
     soak = {"context": floor.SOAK_CONTEXT, "creator": {"login": "renovate[bot]"}}
-    assert floor.soak_problem([{**soak, "state": "success"}]) == ""
-    assert floor.soak_problem([{"context": "ci/tested-tree", "state": "failure"}]) == ""
+    assert (
+        floor.soak_problem(parse_commit_statuses([{**soak, "state": "success"}])) == ""
+    )
+    other = parse_commit_statuses([{"context": "ci/tested-tree", "state": "failure"}])
+    assert floor.soak_problem(other) == ""
 
 
 @pytest.mark.parametrize(
@@ -198,7 +202,7 @@ def test_renovates_own_passed_soak_and_no_soak_both_pass():
     ],
 )
 def test_a_soak_status_that_is_not_renovates_success_is_flagged(statuses, names):
-    assert names in floor.soak_problem(statuses)
+    assert names in floor.soak_problem(parse_commit_statuses(statuses))
 
 
 # Each top-level entry of the tracked tree that is not under a floor entry, and why a Renovate

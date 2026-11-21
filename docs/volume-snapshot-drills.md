@@ -165,7 +165,7 @@ writes is **operator-only**.
 
 ### The entry point
 
-`scripts/backup/volume_revert.py` runs on daniel-box and needs no Ansible. It takes
+`scripts/backup/volume_revert.py` runs on daniel-box. It takes
 `--service`, one `--claim` per PVC, `--sha` (the role's `digest8`) and `--namespace`. The hold
 post prints one line per role and namespace in this shape:
 

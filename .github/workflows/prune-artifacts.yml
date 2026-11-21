@@ -8,6 +8,9 @@ name: prune-artifacts
 # docs/archive/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
 # pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
 #
+# A red run reaches the operator through one GitHub issue, which `scripts/dev/scheduled_report.py`
+# opens on a red run on master and closes on the next green one.
+#
 # The `prune-*` rows of tests/repo/test_census_rows_workflows.py hold this file's guard,
 # permissions and concurrency group, and hold its cosign pin and RETRY_FUNCTIONS equal to
 # promote.yml's.
@@ -94,3 +97,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: uv run --frozen python scripts/deploy_tools/promote.py prune
+
+  # `issues: write` sits on this job alone, which runs one script and deletes nothing.
+  report:
+    name: report the prune
+    needs: prune
+    if: ${{ always() && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup
+        with:
+          uv: "false"
+      - name: Open, update or close the prune issue
+        env:
+          PYTHONPATH: scripts
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.prune.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python scripts/dev/scheduled_report.py --workflow "$GITHUB_WORKFLOW" \
+            --repo "$GITHUB_REPOSITORY" --result "$RESULT" --run-url "$RUN_URL"

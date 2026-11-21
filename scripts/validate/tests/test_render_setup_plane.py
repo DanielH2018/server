@@ -170,7 +170,10 @@ def test_a_borrowing_component_supplies_its_defaults_and_secret_values(tmp_path)
 
 def test_the_claude_code_templates_get_the_names_its_component_supplies():
     supplied = v.component_supplied("claude-code")
-    assert {"claude_code_agents_present", "claude_code_rc_unit"} <= supplied
+    assert {
+        "claude_code_agents_present",
+        "claude_code_worktree_holders_group",
+    } <= supplied
 
 
 def _component_template(root, text: str, defaults: str):

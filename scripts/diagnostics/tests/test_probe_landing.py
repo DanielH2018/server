@@ -12,6 +12,7 @@ from diagnostics.probe_lib.cli_parser import _build_parser
 from diagnostics.probe_lib import landing_blockers as landing
 from diagnostics.probe_lib.promote_state import PromoteReads
 from lib.repo_paths import REPO
+from ci_verdict import WorkflowRun
 
 
 PORCELAIN = """worktree /home/ubuntu/server
@@ -55,11 +56,26 @@ GREEN = [
 
 
 def test_ci_state_reads_only_a_failing_conclusion_as_red():
-    assert landing.ci_state({"status": "completed", "conclusion": "failure"}) == "red"
-    assert landing.ci_state({"status": "completed", "conclusion": "success"}) == "green"
-    assert landing.ci_state({"status": "in_progress", "conclusion": ""}) == "pending"
     assert (
-        landing.ci_state({"status": "completed", "conclusion": "cancelled"})
+        landing.ci_state(
+            WorkflowRun.parse({"status": "completed", "conclusion": "failure"})
+        )
+        == "red"
+    )
+    assert (
+        landing.ci_state(
+            WorkflowRun.parse({"status": "completed", "conclusion": "success"})
+        )
+        == "green"
+    )
+    assert (
+        landing.ci_state(WorkflowRun.parse({"status": "in_progress", "conclusion": ""}))
+        == "pending"
+    )
+    assert (
+        landing.ci_state(
+            WorkflowRun.parse({"status": "completed", "conclusion": "cancelled"})
+        )
         == "no-verdict"
     )
     assert landing.ci_state(None) == "pending"

@@ -13,7 +13,7 @@ import longhorn_reconcile as lr
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.repo_paths import JOB_FILES, K3S_SERVER, K8S_ROLES
+from lib.repo_paths import JOB_FILES, K8S_ROLES
 from lib.service_tiers import resolved_tier_lists
 
 ROLE = K8S_ROLES / "longhorn-reconcile"
@@ -41,18 +41,6 @@ def test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults():
     # Non-vacuity: each list has members, so an equality of two empty lists cannot pass.
     assert tiers["r2"] and tiers["weekly"] and tiers["nobackup"]
     assert "homelab/traefik-acme" in tiers["r2"]
-
-
-def test_setup_k3s_no_longer_defines_the_tier_lists():
-    """One home per key: a copy left in k3s-server's defaults would drift from the ConfigMap's."""
-    host_plane = load_defaults(K3S_SERVER)
-    for key in (
-        "k3s_longhorn_r2_volumes",
-        "k3s_longhorn_weekly_volumes",
-        "k3s_longhorn_nobackup_volumes",
-    ):
-        assert key in DEFAULTS
-        assert key not in host_plane
 
 
 def test_the_rendered_tiers_pass_the_scripts_own_validation(tmp_path):

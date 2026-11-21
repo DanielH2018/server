@@ -21,7 +21,7 @@ from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
@@ -152,51 +152,6 @@ def test_the_longhorn_packages_and_the_inotify_key_ship_in_the_package(package):
     )
 
 
-def shutdown_groups(package) -> dict[int, int]:
-    config = yaml_fast.safe_load(text(package, GRACEFUL_SHUTDOWN))
-    assert config["kind"] == "KubeletConfiguration"
-    assert "shutdownGracePeriod" not in config
-    return {
-        group["priority"]: group["shutdownGracePeriodSeconds"]
-        for group in config["shutdownGracePeriodByPodPriority"]
-    }
-
-
-def test_shutdown_stops_workloads_before_longhorn_and_longhorn_before_system_pods(
-    package,
-):
-    """Longhorn's group opens at its own PriorityClass, so a bump that moves it fails here."""
-    upstream = K8S_ROLES / "longhorn" / "files" / "upstream" / "longhorn.yaml"
-    longhorn = next(
-        doc["value"]
-        for doc in yaml_fast.safe_load_all(upstream.read_text())
-        if doc
-        and doc["kind"] == "PriorityClass"
-        and doc["metadata"]["name"] == "longhorn-critical"
-    )
-    assert sorted(shutdown_groups(package)) == [0, longhorn, 2000000000]
-
-
-def test_the_whole_shutdown_fits_inside_the_ups_low_battery_margin(package):
-    """An FSD raised at battery.runtime.low leaves 120 s, and poweroff waits on kubelet's lock."""
-    assert sum(shutdown_groups(package).values()) < 120
-
-
-def test_logind_lets_kubelet_delay_the_shutdown_for_every_group(package):
-    """kubelet's shutdown manager refuses to start while logind's delay is below the groups' sum.
-
-    logind merges drop-ins in filename order across /etc and /usr/lib, and the last one wins, so
-    the file must sort after kubelet's own and after unattended-upgrades', which sets 30 s.
-    """
-    (path,) = [p for p in package.files if "/logind.conf.d/" in p]
-    name = path.rsplit("/", 1)[1]
-    assert name > "unattended-upgrades-logind-maxdelay.conf"
-    assert name > "99-kubelet.conf"
-    assert package.activations[path] == "reload:systemd-logind.service"
-    delay = settings(text(package, path))["InhibitDelayMaxSec"]
-    assert delay == [str(sum(shutdown_groups(package).values()))]
-
-
 def test_the_kubeconfig_oneshot_names_the_server_and_the_ca_the_agent_fetched(
     package, tmp_path
 ):
@@ -266,7 +221,7 @@ def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
     )
 
 
-def _run_wifi_copy(tmp_path, generate_rc: int):
+def _run_wifi_copy(tmp_path, get_rc: int = 0, generate_rc: int = 0):
     rendered = (
         tmp_path / "var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
     )
@@ -274,27 +229,45 @@ def _run_wifi_copy(tmp_path, generate_rc: int):
     rendered.write_text("rendered\n")
     (tmp_path / "etc/netplan").mkdir(parents=True)
     (tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml").write_text("old\n")
+    netplan = tmp_path / "netplan"
+    write_exec(netplan, f"#!/bin/sh\nexit {get_rc}\n")
     generate = tmp_path / "generate"
-    write_exec(generate, f"#!/bin/sh\nexit {generate_rc}\n")
+    argv = tmp_path / "generate.argv"
+    write_exec(generate, f'#!/bin/sh\necho "$0 $*" > {argv}\nexit {generate_rc}\n')
     return run(
         [str(COMPONENT / "files" / "homelab-netplan-wifi")],
         env={
             **os.environ,
             "HOMELAB_ROOT": str(tmp_path),
+            "NETPLAN": str(netplan),
             "NETPLAN_GENERATE": str(generate),
         },
     )
 
 
 def test_a_rendered_file_netplan_accepts_replaces_the_old_one(tmp_path):
-    assert _run_wifi_copy(tmp_path, 0).returncode == 0
+    assert _run_wifi_copy(tmp_path).returncode == 0
     installed = tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml"
     assert installed.read_text() == "rendered\n"
     assert installed.stat().st_mode & 0o777 == 0o600
 
 
-def test_a_rendered_file_netplan_refuses_leaves_the_old_one(tmp_path):
-    result = _run_wifi_copy(tmp_path, 1)
+def test_the_generator_runs_as_a_systemd_generator_into_the_scratch_root(tmp_path):
+    """netplan 1.2's generator aborts unless it runs with boot's three output dirs."""
+    assert _run_wifi_copy(tmp_path).returncode == 0
+    command, flag, root, *dirs = (tmp_path / "generate.argv").read_text().split()
+    assert flag == "--root-dir"
+    assert command == f"{root}/usr/lib/systemd/system-generators/netplan"
+    assert dirs == [f"{root}/run/systemd/generator{s}" for s in ("", ".early", ".late")]
+
+
+@pytest.mark.parametrize(
+    ("get_rc", "generate_rc"), [(1, 0), (0, 1)], ids=["parse", "generate"]
+)
+def test_a_rendered_file_netplan_refuses_leaves_the_old_one(
+    tmp_path, get_rc, generate_rc
+):
+    result = _run_wifi_copy(tmp_path, get_rc, generate_rc)
     assert result.returncode == 1
     assert "netplan refuses" in result.stderr
     assert (

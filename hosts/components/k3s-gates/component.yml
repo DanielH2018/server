@@ -1,6 +1,7 @@
-# The apply-time gates for k3s upgrades. `/usr/lib/homelab/k3s_gates.py` is one stdlib-only script
-# with three callers: the k3s-server Plan's `prepare` on daniel-box, the k3s-agent Plan's `prepare`
-# on daniel-server, and `homelab-k3s-restart` in `host` mode. Each Plan's `prepare` runs the script
+# The apply-time gates for k3s upgrades. `/usr/lib/homelab/k3s_gates.py` is a stdlib-only script that
+# imports the condition parser from `lib/` beside it. It has three callers: the k3s-server Plan's
+# `prepare` on daniel-box, the k3s-agent Plan's `prepare` on daniel-server, and
+# `homelab-k3s-restart` in `host` mode. Each Plan's `prepare` runs the script
 # from the host's root, mounted at /host, so every node a Plan selects must have this component
 # installed, or `prepare` fails with `can't open file`.
 #
@@ -20,3 +21,4 @@
 # ENFORCED: hosts/lib/tests/test_k3s_gates_component.py.
 files:
   - {lib: k3s_gates.py, dst: /usr/lib/homelab/k3s_gates.py, mode: "0755"}
+  - {shared: k8s_conditions.py, dst: /usr/lib/homelab/lib/k8s_conditions.py, mode: "0755"}

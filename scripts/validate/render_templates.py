@@ -92,7 +92,7 @@ FAMILIES: dict[str, Family] = {
         shell.run,
         rf"hosts/components/(?!{_COMPOSE_TREES}).*|hosts/[^/]+/package\.yml"
         rf"|k8s/roles/.*\.sh\.j2|{_ROLE_DEFAULTS}"
-        r"|scripts/validate/(validate_lib/shell_lint|render_lib/shell)\.py",
+        r"|scripts/validate/(validate_lib/(shell_lint|host_specs)|render_lib/shell)\.py",
     ),
     # DECIDED: every file under hosts/, so a compose-template-only commit runs units too. The
     # family renders every host package, and the daniel-pi package renders the compose trees
@@ -101,12 +101,12 @@ FAMILIES: dict[str, Family] = {
     "units": _family(
         units.run,
         rf"hosts/.*|k8s/roles/.*\.(service|timer|socket|rules)\.j2|{_ROLE_DEFAULTS}"
-        r"|scripts/validate/render_lib/units\.py",
+        r"|scripts/validate/(validate_lib/host_specs|render_lib/units)\.py",
     ),
     "setup": _family(
         setup_plane.run,
         rf"hosts/components/(?!{_COMPOSE_TREES}).*\.(j2|yml)|secrets/secret_rotation\.yml"
-        r"|scripts/validate/render_lib/setup_plane\.py",
+        r"|scripts/validate/(validate_lib/host_specs|render_lib/setup_plane)\.py",
     ),
     # Every `.j2` under a role, not only templates/: a manifest embeds a script or a config
     # from anywhere in the role with `lookup()`.

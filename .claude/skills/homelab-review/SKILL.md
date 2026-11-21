@@ -14,7 +14,7 @@ verify** → report. Deduplicating before verification is what keeps the skeptic
 twice for one defect.
 
 ## 1. Resolve scope
-Default: all six areas (`scripts/dev/review_metrics.py:REVIEW_DOMAINS`). If the user named a subset (e.g. `homelab-review security,network`), run only
+Default: all six areas. If the user named a subset (e.g. `homelab-review security,network`), run only
 those. Home Assistant is NOT one of them — its review lives in the separate `/ha-review` skill; if the
 user asks for HA, point them there (or invoke it) rather than folding it in here. Map each area to its
 agent:
@@ -52,10 +52,8 @@ order:
    was re-examined on 2026-09-28 (#2808) and rejected, because operator rulings and
    cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
    both name that slug, and no skill, agent or eval case carries a retired spelling of it
-   (ENFORCED by two rows of
-   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`:
-   `review-surfaces-name-the-standing-slug` and
-   `review-surfaces-carry-no-retired-standing-slug`).
+   (ENFORCED by the `review-surfaces-name-the-standing-slug` row of
+   `tests/repo/test_census_rows_text.py::test_census_row_holds_on_the_tree`).
    A slug the store does not hold primes nothing, and the harness reports no error for it.
 2. **The newest two dated `review-*-state` ledgers the store actually holds** — for recency only:
    what shipped since the standing list was last distilled, and this week's refutations with their
@@ -72,8 +70,7 @@ order:
    `docs/reference/backlog.md`** — the design facts the reviewer agents used to carry inline,
    one section per domain, and the register `findings.py close --accepted`/`--refuted` writes,
    rendered by the docs-refresh cron. Each reviewer agent reads its own domain from both
-   before it flags. The `agents-carry-no-inline-reflag-list` row of
-   `tests/repo/test_census_rows_text.py` keeps the inline copies from coming back.
+   before it flags.
 
 **Item 1's file missing from the store stops the run.** Name the missing slug to the operator and
 wait. A missing file is not an error the harness reports, so a run that skips it proceeds unprimed
@@ -211,27 +208,6 @@ died, errored, or came back empty leaves a **coverage hole** — report it as an
 never as a clean one. This is the step-6 manifest rule one level up: silence from a reviewer is a
 missing answer, not a passing grade. Re-dispatch a failed agent if the run is still cheap; if not,
 name the gap in the report.
-
-**Write that manifest as the run's coverage ledger**, `evals/review_coverage/<date>.json` — one
-row per domain (all six, including the ones step 1 scoped out as `out_of_scope`), with the
-agent, its status (`covered` / `clean` / `hole` / `out_of_scope`), the paths it named as
-reviewed, and the fingerprints of its findings and `NEEDS VALIDATION` leads. The shape and the
-rules are in `evals/review_coverage/README.md`; `REVIEW_DOMAINS` in
-`scripts/dev/review_metrics.py` is the domain list. Validate it before step 6:
-
-```bash
-uv run python scripts/dev/review_metrics.py --check-coverage evals/review_coverage/<date>.json
-```
-
-**Enter the worktree that will hold this file before step 3's dispatch, not here.** Once the
-session isolates, the isolation guard refuses every Bash call from agents still running from the
-shared checkout. On 2026-09-26 that happened to three skeptics mid-verdict, and two of them lost
-their `gh` and `kubectl` checks.
-
-A `hole` row needs a reason and a `clean` row needs the paths it cleared, so "nobody looked"
-and "looked and found nothing" are two different rows in the file rather than the same
-silence in the report. `evals/review_outcomes.jsonl` (step 7) counts what the run found; this
-file records what it looked at.
 
 Then merge findings that several agents surfaced — e.g. a healthcheck gap seen by both the security and
 container reviewers is one finding, not two.
@@ -380,16 +356,6 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   and the **deliberate trade-offs** not to re-flag. Do not restate an issue's body in the ledger;
   the issue is the record and the ledger links it. If a ledger already exists for today, write the
   next letter suffix rather than overwriting.
-- **Append one row to `evals/review_outcomes.jsonl`** — the same run's counts as structured data,
-  so `scripts/dev/review_metrics.py` can trend the false-positive and fix-refusal rates across
-  runs instead of a reader re-deriving them from prose each time. One line, matching the schema
-  `scripts/dev/review_metrics.py`'s `validate_row` checks (`high`/`medium`/`low` are the confirmed
-  counts by severity, `refuted`/`downgraded` are finding counts, `fixes_proposed`/
-  `fixes_confirmed_safe`/`fixes_refuted` are the fix-skeptic pass's counts):
-  ```bash
-  printf '%s\n' '{"date": "2026-09-02", "high": 0, "medium": 3, "low": 1, "refuted": 1, "downgraded": null, "fixes_proposed": 4, "fixes_confirmed_safe": 3, "fixes_refuted": 1, "prs": [812, 813], "ledger": "review-2026-09-02-state"}' >> evals/review_outcomes.jsonl
-  ```
-  Use `null` for any count the ledger prose does not state as a number — never a guess.
 - **Then fold the durable half into `review-standing-decisions`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
   Open and recurring items belong in `findings.py`'s register, not there.

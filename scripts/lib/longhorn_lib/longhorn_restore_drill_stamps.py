@@ -11,8 +11,6 @@ disagree on what the drill recorded. An absent ConfigMap, or one with no `last-s
 drill that has never passed, and every reader reports it as one.
 """
 
-from __future__ import annotations
-
 import datetime as _dt
 import json
 from dataclasses import dataclass, field

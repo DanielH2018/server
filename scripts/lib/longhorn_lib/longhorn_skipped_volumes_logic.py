@@ -10,8 +10,6 @@ Kept apart from longhorn_backup_health_logic.py, which sits at its length cap. S
 stdlib only, every input injected, no cluster needed to test it.
 """
 
-from __future__ import annotations
-
 import datetime as _dt
 import re
 

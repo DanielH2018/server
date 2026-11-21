@@ -1,7 +1,9 @@
-"""`CheckRun` and `CheckSuite` parse GitHub's check shapes, and one run grades alike on every path.
+"""The CI types parse GitHub's check, status and run shapes, and one run grades alike on every path.
 
 Run: uv run pytest hosts/lib/tests/test_ci_verdict.py
 """
+
+from datetime import UTC, datetime
 
 import pytest
 from ci_verdict import (
@@ -11,11 +13,14 @@ from ci_verdict import (
     CI_PROVE_JOB,
     CheckRun,
     CheckSuite,
+    CommitStatus,
     RunState,
+    WorkflowRun,
     checks_verdict,
     ci_verdict,
     jobs_verdict,
     parse_check_suites,
+    parse_commit_statuses,
     parse_rollup,
 )
 
@@ -153,3 +158,79 @@ def test_ci_verdict_refuses_an_empty_required_set():
     """An empty set would grade every commit green, so no caller may pass one."""
     with pytest.raises(ValueError, match="no required CI contexts"):
         ci_verdict(_jobs(""), frozenset())
+
+
+def test_a_rest_commit_status_parses_to_its_creator_description_and_time():
+    status = {
+        "context": "ci/tested-tree",
+        "state": "success",
+        "creator": {"login": "github-actions[bot]", "id": 41898282},
+        "description": "a" * 40,
+        "target_url": "https://github.com/o/r/actions/runs/1",
+        "updated_at": "2026-11-20T10:00:00Z",
+    }
+    assert parse_commit_statuses([status, {"context": "x"}]) == [
+        CommitStatus(
+            "ci/tested-tree",
+            "success",
+            "github-actions[bot]",
+            "a" * 40,
+            "https://github.com/o/r/actions/runs/1",
+            datetime(2026, 11, 20, 10, tzinfo=UTC),
+        ),
+        CommitStatus("x", "", None, "", "", datetime.min.replace(tzinfo=UTC)),
+    ]
+
+
+@pytest.mark.parametrize("updated_at", [None, "yesterday", 1700000000])
+def test_a_commit_status_with_no_readable_time_reads_as_the_earliest(updated_at):
+    parsed = CommitStatus.parse({"context": "x", "updated_at": updated_at})
+    assert parsed.updated_at == datetime.min.replace(tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {
+            "id": 7,
+            "status": "completed",
+            "conclusion": "failure",
+            "head_sha": "b" * 40,
+            "html_url": "https://github.com/o/r/actions/runs/7",
+        },
+        {
+            "id": 7,
+            "status": "COMPLETED",
+            "conclusion": "FAILURE",
+            "headSha": "b" * 40,
+            "url": "https://github.com/o/r/actions/runs/7",
+        },
+    ],
+    ids=["rest", "gh-run-list"],
+)
+def test_a_workflow_run_parses_alike_from_rest_and_from_gh(raw):
+    assert WorkflowRun.parse(raw) == WorkflowRun(
+        7, "completed", "failure", "b" * 40, "https://github.com/o/r/actions/runs/7"
+    )
+
+
+@pytest.mark.parametrize(
+    "status, conclusion, no_verdict",
+    [
+        ("completed", "", True),
+        ("completed", "cancelled", True),
+        ("completed", "failure", False),
+        ("in_progress", None, False),
+    ],
+)
+def test_a_completed_run_without_a_real_conclusion_is_no_verdict(
+    status, conclusion, no_verdict
+):
+    run = WorkflowRun.parse({"status": status, "conclusion": conclusion})
+    assert run.no_verdict is no_verdict
+
+
+@pytest.mark.parametrize("parse", [CommitStatus.parse, WorkflowRun.parse])
+def test_a_status_or_run_that_is_not_an_object_is_refused(parse):
+    with pytest.raises(ValueError, match="not an object"):
+        parse(["context", "state"])

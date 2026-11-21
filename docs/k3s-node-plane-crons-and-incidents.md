@@ -84,7 +84,11 @@ and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread messages 
 
 Each check below reports a `down` verdict. The script writes that verdict to
 `longhorn-backup-health.prom` as `homelab_check_success 0`, and the Prometheus rule
-`LonghornBackupHealthFailed` reads it.
+`LonghornBackupHealthFailed` reads it. The script also writes one
+`homelab_check_detail{detail="<class>"}` series per problem class, a slug naming the check
+section, such as `tier-coverage` or `etcd-s3`. The rule fires once per class, so a second
+problem during a red window opens its own alert. A red verdict with no class, such as a crashed
+reader, fires the rule's bare arm.
 
 **The trim is Longhorn's `trim` RecurringJob since H2.2c, so its evidence is the cluster's.**
 The `longhorn-backup` role declares the job, and Longhorn runs it from a CronJob of the same name
@@ -97,9 +101,10 @@ run is older than one period of its own `spec.schedule` plus 2 hours. The period
 live schedule, so no host key restates it. The native job runs inside longhorn-manager, so a
 manager that is not ready runs no trim at all, and check 10 then sees the missed run.
 
-**The B2 accounting and the B2 budget listing are host timers, so their evidence is the
-journal.** Check 9 reports `down` on an `UNPRICED` line from `b2-deletions`, or an
-`OVER BUDGET:` line from `b2-budget`, anywhere in
+**The B2 accounting, the B2 budget listing and the B2 Object Lock sweep are host timers, so
+their evidence is the journal.** Check 9 reports `down` on an `UNPRICED` line from
+`b2-deletions`, an `OVER BUDGET:` line from `b2-budget`, or a `FAILED` line from
+`b2-retention`, anywhere in
 `hosts/components/k3s-host-checks/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`.
 The `b2-budget` line is the one forward-looking reading of a B2 Class C cap breach (#8215).
 Check 10 reports `down` when the window holds no line a completed run writes: the timer
@@ -128,7 +133,13 @@ so a Longhorn upgrade that rewords them blinds check 9 until the regex follows. 
 `b2-budget` shapes are the `OVER BUDGET:` and `budget per day:` rows `format_backup_budget` in
 `scripts/diagnostics/probe_lib/longhorn_budget.py` prints, which
 `test_budget_check_is_clean_on_a_run_within_budget` and
-`test_budget_check_is_flagged_on_an_over_budget_projection` hold to the table.
+`test_budget_check_is_flagged_on_an_over_budget_projection` hold to the table. The
+`b2-retention` shapes are the `extended` and `declined:` lines `run` in
+`scripts/backup/b2_extend_retention.py` prints. Its `blocked:` line, for a key that cannot
+extend retention, matches neither, so check 10 reports that run as not completing. The tests
+`test_retention_check_is_flagged_as_not_reporting_when_the_key_cannot_extend`,
+`test_retention_check_is_clean_on_a_completed_sweep` and
+`test_retention_check_is_flagged_when_b2_refused_an_extension` hold to the table.
 
 **Check 12 watches k3s's own upload, from the host's copy of its config.** It reads the newest
 ready `ETCDSnapshotFile` with an S3 location, and its bound is one period of

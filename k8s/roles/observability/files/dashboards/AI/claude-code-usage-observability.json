@@ -93,13 +93,14 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "EGdsQqhVk"
+        "type": "loki",
+        "uid": "loki"
       },
-      "description": "Estimated only — on a subscription plan this is not real spend.",
+      "description": "Sums cost_usd over every api_request event in the dashboard's time range. An API-equivalent estimate, not an invoice, on a subscription plan.",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
+          "noValue": "0",
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -122,8 +123,8 @@
       },
       "targets": [
         {
-          "expr": "sum({__name__=~\"claude_code_cost_usage.*\"}) or vector(0)",
-          "instant": true,
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=`api_request` | unwrap cost_usd [$__range]))",
+          "queryType": "instant",
           "refId": "A"
         }
       ],
@@ -333,17 +334,13 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "EGdsQqhVk"
+        "type": "loki",
+        "uid": "loki"
       },
-      "description": "Estimated only — on a subscription plan this is not real spend. Edit accept/reject shows as tool_decision events in the Recent events panel below (Claude Code only emits the code_edit_tool.decision metric for interactive diff decisions, not auto-accepted edits).",
+      "description": "Sums cost_usd over every api_request event in the dashboard's time range. An API-equivalent estimate, not an invoice, on a subscription plan.",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          },
-          "decimals": 3,
+          "decimals": 2,
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -355,17 +352,28 @@
         "y": 12
       },
       "id": 10,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
       "targets": [
         {
-          "editorMode": "code",
-          "expr": "sum by (model) ({__name__=~\"claude_code_cost_usage.*\"})",
+          "expr": "sum by (model) (sum_over_time({service_name=\"claude-code\"} | event_name=`api_request` | unwrap cost_usd [$__range]))",
           "legendFormat": "{{model}}",
-          "range": true,
+          "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Cumulative cost by model (USD, estimated)",
-      "type": "timeseries"
+      "title": "Cost by model (USD, estimated)",
+      "type": "bargauge"
     },
     {
       "collapsed": false,
@@ -654,17 +662,13 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "EGdsQqhVk"
+        "type": "loki",
+        "uid": "loki"
       },
-      "description": "Splits spend between interactive use and automation. Series with an empty label predate OTEL_METRICS_INCLUDE_ENTRYPOINT being enabled.",
+      "description": "Sums cost_usd over every api_request event in the dashboard's time range. An API-equivalent estimate, not an invoice, on a subscription plan. Splits spend between interactive use and automation.",
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10
-          },
-          "decimals": 3,
+          "decimals": 2,
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -676,17 +680,28 @@
         "y": 49
       },
       "id": 23,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
       "targets": [
         {
-          "editorMode": "code",
-          "expr": "sum by (app_entrypoint) ({__name__=~\"claude_code_cost_usage.*\"})",
+          "expr": "sum by (app_entrypoint) (sum_over_time({service_name=\"claude-code\"} | event_name=`api_request` | unwrap cost_usd [$__range]))",
           "legendFormat": "{{app_entrypoint}}",
-          "range": true,
+          "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Cumulative cost by entrypoint (USD, estimated)",
-      "type": "timeseries"
+      "title": "Cost by entrypoint (USD, estimated)",
+      "type": "bargauge"
     },
     {
       "datasource": {

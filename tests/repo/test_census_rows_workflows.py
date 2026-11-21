@@ -19,6 +19,7 @@ from _k3s_download_leg_row import K3S_DOWNLOAD_LEG_DOES_NOT_GATE
 from _promote_render_workflow_rows import PROMOTE_RENDER_ROWS
 from _promote_verify_workflow_rows import PROMOTE_VERIFY_ROWS
 from _promote_workflow_rows import PROMOTE_ROWS
+from _pytest_sweep_image_row import PYTEST_SWEEP_RUNS_THE_IMAGE_TESTS
 from _pytest_sweep_workflow_rows import PYTEST_SWEEP_ROWS
 from _prune_workflow_rows import PRUNE_ROWS
 from _row_table import Census, check, proof_problems
@@ -37,6 +38,7 @@ ROWS = (
     *K3S_DOWNLOAD_ROWS,
     *SWEEP_ROWS,
     *PYTEST_SWEEP_ROWS,
+    PYTEST_SWEEP_RUNS_THE_IMAGE_TESTS,
     K3S_DOWNLOAD_LEG_DOES_NOT_GATE,
     SCRIPT_DOWNLOADS_ARE_CACHED,
     *SETUP_ACTION_ROWS,

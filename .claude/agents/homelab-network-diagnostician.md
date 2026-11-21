@@ -73,14 +73,18 @@ files or deploy. You are read-only.
   - `uv run python scripts/diagnostics/probe.py loki-query '<logql>'` — pull recent logs for a service
   - `uv run python scripts/diagnostics/probe.py cert <host>` — what cert/SAN Traefik actually serves
 - `kubectl get pods,svc,endpoints,ingressroute -n <ns>` / `kubectl describe` / `kubectl logs`
-  — confirm a Service actually has endpoints and a route exists. `kubectl exec <pod> -- ...`
-  to test reachability **from inside the cluster** (plain `kubectl` runs as a read-only
-  ServiceAccount, so `exec` is refused by RBAC — use `sudo k3s kubectl` locally on
-  daniel-box, which prompts).
-- `docker inspect <c>` / `docker exec <c> ...` — **daniel-pi only**; there is no Docker on
-  either cluster node.
+  — confirm a Service actually has endpoints and a route exists. Plain `kubectl` runs as a
+  read-only ServiceAccount, and RBAC refuses it `exec`, so you cannot test reachability from
+  inside the cluster. Name the in-cluster check in the report, for the operator to run.
+- `ssh daniel-pi docker inspect <c>` — **daniel-pi only**; there is no Docker on either
+  cluster node. `ssh daniel-pi docker exec <c> ...` (refused: the Bash hook allows
+  no exec).
 - `dig +short <host>` / `getent hosts <host>` — confirm which side of split-horizon resolved.
-- `sudo iptables -nvL DOCKER-USER` / `sudo ufw status verbose` — firewall path.
+- `rootq ufw` / `rootq nft` on the node you run on, or `ssh daniel-server rootq ufw` from
+  daniel-box — the firewall path on a cluster node, through the read-only root reader
+  (`docs/claude-code-root-helpers.md`). A session running as the `claude` agent user runs
+  `rootq-socket ufw` instead. The Pi has no rootq, so its `DOCKER-USER` chain has no read
+  path: name that check in the report.
 
 ## Method
 

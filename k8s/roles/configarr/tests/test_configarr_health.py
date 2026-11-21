@@ -2,9 +2,10 @@
 
 `files/configarr_health.py` runs as the configarr-health CronJob since H2.5b. M6 batch B6b's Cutover-2 removed its Kuma
 push, so the first tests drive its `main` with a stubbed kubectl and read what it logs and
-patches. The last two build the pod's `/config` directory from the rendered ConfigMap, exactly
-as the kubelet mounts it, and run the reader from it, so a module the ConfigMap stops carrying
-fails here rather than in the next scheduled pod.
+patches. The mounted-layout test builds the pod's `/config` directory from the rendered ConfigMap, exactly
+as the kubelet mounts it, and runs the reader from it, so a module the ConfigMap stops carrying
+fails here rather than in the next scheduled pod. The last test holds the condition parser's
+volume key to the key-name shape that promote's bundle scan admits.
 
 Run: uv run pytest k8s/roles/configarr/tests/test_configarr_health.py
 """
@@ -14,9 +15,11 @@ import re
 import socket
 import subprocess
 import sys
+import tomllib
 
 from _k8s_render import render_role_template
 from lib import yaml_fast
+from lib.repo_paths import REPO
 
 import configarr_health
 
@@ -163,3 +166,29 @@ def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):
         timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def _bundle_key_name_allowlist() -> re.Pattern[str]:
+    config = tomllib.loads((REPO / ".gitleaks.toml").read_text())
+    [allowlist] = [
+        a
+        for a in config["allowlists"]
+        if a.get("paths") == [r"^out/cluster/[^/]+/[^/]+\.yaml$"]
+        and a.get("regexTarget") == "line"
+    ]
+    [regex] = allowlist["regexes"]
+    return re.compile(regex)
+
+
+def test_the_parser_key_is_a_name_promotes_gitleaks_scan_admits():
+    # `generic-api-key` reads the parser's file name as a credential when it is the key, and the
+    # renderer drops any `# gitleaks:allow` on the line, so only the allowlist's shape passes.
+    [cronjob] = yaml_fast.safe_load_all(
+        render_role_template("configarr", "health-cronjob.yaml.j2")
+    )
+    pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    [volume] = [v for v in pod["volumes"] if "configMap" in v]
+    [item] = [
+        i for i in volume["configMap"]["items"] if i["path"] == "lib/k8s_conditions.py"
+    ]
+    assert _bundle_key_name_allowlist().match(f"          - key: {item['key']}")

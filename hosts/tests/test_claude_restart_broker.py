@@ -8,13 +8,17 @@ Run: uv run pytest hosts/tests/test_claude_restart_broker.py
 """
 
 import json
+import os
 import re
+import subprocess
+import sys
 
 import pytest
 from _helpers import REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from deploy_tools.land_lib import policy
 from lib import yaml_fast
+from renderer.renderer_lib import host as host_mode
 
 UNIT = "claude-restart@.service.j2"
 CONFIG = "claude-restart-config.json.j2"
@@ -55,9 +59,10 @@ def test_an_inventory_value_cannot_list_a_workload_or_raise_a_cap() -> None:
 
 def test_the_broker_ships_only_behind_its_toggle() -> None:
     entries = shipped()
-    assert {e.get("src", e.get("lib")) for e in entries} == {
+    assert {e.get("src") or e.get("lib") or e["shared"] for e in entries} == {
         "files/claude_restart.py",
         "host_lib.py",
+        "k8s_conditions.py",
         "weekly_window.py",
         f"templates/{CONFIG}",
         f"templates/{UNIT}",
@@ -67,6 +72,26 @@ def test_the_broker_ships_only_behind_its_toggle() -> None:
     # The rule names the triage controller, a user only triage's toggles create.
     (rule,) = [e for e in entries if e.get("src") == f"templates/{RULE}"]
     assert "claude_code_triage_enabled" in rule["when"]
+
+
+def test_the_shipped_broker_imports_from_the_package_layout_alone(tmp_path) -> None:
+    files = host_mode.render_host("daniel-box").files
+    for dst, (body, _mode) in files.items():
+        if dst.startswith("/opt/claude-restart/"):
+            target = tmp_path / dst.removeprefix("/opt/claude-restart/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    # `-S` drops the venv's `.pth`, so only the files beside the script resolve its imports.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, "-S", str(tmp_path / "claude_restart.py"), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
 
 
 def rule_pattern() -> re.Pattern:

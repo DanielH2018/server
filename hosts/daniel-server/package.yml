@@ -66,7 +66,7 @@ users:
 # the live line until it is deleted by hand.
 lines:
   - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, checkout-sync, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, k3s-apparmor, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, checkout-sync, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:

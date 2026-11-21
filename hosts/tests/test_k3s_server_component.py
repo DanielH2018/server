@@ -17,7 +17,7 @@ import shutil
 import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from lib.longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
@@ -29,6 +29,9 @@ ACTION = f"manual:{UNIT}"
 DROPIN = "/usr/lib/systemd/system/k3s.service.d/50-homelab.conf"
 CONFIG_DIR = "/etc/rancher/k3s/config.yaml.d/"
 CONFIG = CONFIG_DIR + "50-homelab.yaml"
+GRACEFUL_SHUTDOWN = (
+    "/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf"
+)
 # The flags whose value is a file the apiserver reads at startup and refuses to start without.
 FILE_FLAGS = ("audit-policy-file", "authentication-config")
 # What the restart unit hashes: every file the package ships that k3s reads at startup.
@@ -38,6 +41,7 @@ STARTUP_FILES = {
     "/var/lib/rancher/k3s/server/audit.yaml",
     "/var/lib/rancher/k3s/server/authentication-config.yaml",
     "/etc/rancher/k3s/registries.yaml",
+    GRACEFUL_SHUTDOWN,
 }
 MARKER = "/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip"
 CPU_WEIGHT = "/usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf"
@@ -49,6 +53,12 @@ SYSTEM_SLICE_WEIGHT = (
 @pytest.fixture(scope="module")
 def package():
     return host_mode.render_host("daniel-box")
+
+
+@pytest.fixture(scope="module", params=["daniel-box", "daniel-server"])
+def node_package(request):
+    """Each k3s node's package: k3s-agent ships this component's graceful-shutdown files too."""
+    return host_mode.render_host(request.param)
 
 
 def text(package, dst: str) -> str:
@@ -167,6 +177,51 @@ def test_the_package_marks_exactly_the_startup_files_for_the_k3s_restart(package
     assert package.policies[UNIT] == "windowed"
     for quiet in ("/etc/logrotate.d/k3s", MARKER):
         assert quiet in package.files and quiet not in package.activations
+
+
+def shutdown_groups(package: host_mode.Package) -> dict[int, int]:
+    config = yaml_fast.safe_load(text(package, GRACEFUL_SHUTDOWN))
+    assert config["kind"] == "KubeletConfiguration"
+    assert "shutdownGracePeriod" not in config
+    return {
+        group["priority"]: group["shutdownGracePeriodSeconds"]
+        for group in config["shutdownGracePeriodByPodPriority"]
+    }
+
+
+def test_shutdown_stops_workloads_before_longhorn_and_longhorn_before_system_pods(
+    node_package,
+):
+    """Longhorn's group opens at its own PriorityClass, so a bump that moves it fails here."""
+    upstream = K8S_ROLES / "longhorn" / "files" / "upstream" / "longhorn.yaml"
+    longhorn = next(
+        doc["value"]
+        for doc in yaml_fast.safe_load_all(upstream.read_text())
+        if doc
+        and doc["kind"] == "PriorityClass"
+        and doc["metadata"]["name"] == "longhorn-critical"
+    )
+    assert sorted(shutdown_groups(node_package)) == [0, longhorn, 2000000000]
+
+
+def test_the_whole_shutdown_fits_inside_the_ups_low_battery_margin(node_package):
+    """An FSD raised at battery.runtime.low leaves 120 s, and poweroff waits on kubelet's lock."""
+    assert sum(shutdown_groups(node_package).values()) < 120
+
+
+def test_logind_lets_kubelet_delay_the_shutdown_for_every_group(node_package):
+    """kubelet's shutdown manager refuses to start while logind's delay is below the groups' sum.
+
+    logind merges drop-ins in filename order across /etc and /usr/lib, and the last one wins, so
+    the file must sort after kubelet's own and after unattended-upgrades', which sets 30 s.
+    """
+    (path,) = [p for p in node_package.files if "/logind.conf.d/" in p]
+    name = path.rsplit("/", 1)[1]
+    assert name > "unattended-upgrades-logind-maxdelay.conf"
+    assert name > "99-kubelet.conf"
+    assert node_package.activations[path] == "reload:systemd-logind.service"
+    delay = setting(text(node_package, path), "InhibitDelayMaxSec")
+    assert delay == str(sum(shutdown_groups(node_package).values()))
 
 
 def test_the_cpu_weight_drop_in_ranks_k3s_above_its_siblings_with_no_restart(package):
