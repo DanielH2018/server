@@ -115,13 +115,13 @@ An empty `last_notified` means nothing needs a human — not that the notifier i
 ## Autonomous-role contract (the timer posts a digest to Discord with no human in the loop)
 
 - **Scope / exclusions:** reads the repo's open Renovate PRs and the dependency dashboard, and posts a
-  Discord digest when what needs a human changes. It writes only /var/lib/renovate-notify.
+  Discord digest when what needs a human changes. It writes /var/lib/renovate-notify and the textfile below.
 - **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
   link from a package version, or reverting this component, stops the timer on the install that
   drops it.
 - **Authoritative sources:** GitHub's REST API, as host_lib.github_get reads it.
-- **Abort valves:** the fingerprint gate, which keeps a standing problem to one page, and reconcile's
-  `hold_sha`.
+- **Abort valves:** the fingerprint gate, which keeps a standing problem to one page, and the updater's
+  hold (docs/host-packages.md).
 - **Required evidence, every run:** renovate-notify.prom in node_exporter's textfile directory, which
   RenovateNotifyNotReporting reads, and a page from homelab-alert@ on a crash.
 - **Next-run review:** `journalctl -u homelab-renovate-notify` before you change a threshold.
