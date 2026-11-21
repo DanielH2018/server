@@ -11,9 +11,10 @@ k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessPro
 
 # Blast-radius caps.
 ical_proxy_k8s_cpu_limit: 500m
-ical_proxy_k8s_mem_limit: 128Mi
+# The working set plateaus near 108 MiB once the feeds are parsed, so 128Mi left too little room.
+ical_proxy_k8s_mem_limit: 256Mi
 ical_proxy_k8s_cpu_request: 50m
-ical_proxy_k8s_mem_request: 16Mi
+ical_proxy_k8s_mem_request: 96Mi
 
 image_builder_builds:
   - image_builder_name: ical-proxy
