@@ -2,7 +2,7 @@
 
 A batch workload is credited when its role names it in `flux_cronjob_gates`, which
 the renderer turns into a gate Job Flux runs once per role revision.
-Consumed by `test_k8s_autodeploy_batch_gates.py` and by `_autodeploy_rollout.py`.
+Consumed by `test_k8s_autodeploy_batch_gates.py`.
 """
 
 from pathlib import Path

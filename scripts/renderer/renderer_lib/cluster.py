@@ -410,11 +410,9 @@ def render_tag(
     if later:
         later[KUSTOMIZATION] = kustomization_text(list(later))
 
-    # DECIDED: `-verify` renders whatever owns the tag, as `-deferred` does. Only a published
-    # tag gets the Kustomization that applies it, and the shadow diff reports the directory
-    # of an Ansible-owned tag as C1-only, so a role adds `templates/verify/` in the PR that
-    # hands its tag to Flux (D5's *How a role declares a verify Job*). `-precheck` follows
-    # the same rule.
+    # DECIDED: `-verify` renders for every tag, as `-deferred` does, and only a published
+    # tag gets the Kustomization that applies it (D5's *How a role declares a verify Job*).
+    # `-precheck` follows the same rule.
     verifying = set(verify_files([tag], roles)[tag])
     checking = set(precheck_files([tag], roles)[tag])
     # Every Job Flux applies runs `flux_job_image`, a flux role default no other role's

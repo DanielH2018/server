@@ -177,17 +177,17 @@ def built_image_names(k8s_roles: Path = K8S_ROLES) -> frozenset[str]:
     )
 
 
-def pulled_repository(ref: str, *, owner: str | None, built: frozenset[str]) -> str:
+def pulled_repository(ref: str, *, built: frozenset[str]) -> str:
     """The repository a render of the role pulls `ref` from.
 
-    `ghcr_refs` moves a flux-owned tag's built-image refs to GHCR in the render, and leaves
-    the role's defaults on the in-cluster registry (D5.4b). So the defaults
-    name the wrong repository for exactly those refs, and this one swap mirrors the render's.
-    Every other image of a flux-owned role keeps its own host, as it does in the render.
+    `ghcr_refs` moves every tag's built-image refs to GHCR in the render, and leaves the
+    role's defaults on the in-cluster registry (D5.4b). So the defaults name the wrong
+    repository for exactly those refs, and this one swap mirrors the render's. Every other
+    image keeps its own host, as it does in the render.
     """
     repo = image_repository(ref)
     host, _, name = repo.partition("/")
-    if owner == "flux" and host == "<k8s_registry_pull_host>" and name in built:
+    if host == "<k8s_registry_pull_host>" and name in built:
         return f"{GHCR}/{name}"
     return repo
 
@@ -202,24 +202,19 @@ def glance_lines(
     k3s_defaults: Path = K3S_DEFAULTS,
     claim_classes: dict[str, str | None] | None = None,
     tiers: LonghornTiers | None = None,
-    owner: str | None = None,
     built: frozenset[str] | None = None,
 ) -> list[str]:
     """The block's bullet lines for one deployed k8s role, unwrapped.
 
     `claim_classes` is `claim_index(k8s_roles)` and `tiers` the Longhorn tier lists, both
     built once by the caller that renders every role; built here for a single-role call,
-    whose tier lists derive the R2 set from the repo's service list. `owner` is the
-    entry's owner, `flux` for every service, None for an Ansible-owned entry. `built` is
+    whose tier lists derive the R2 set from the repo's service list. `built` is
     `built_image_names(k8s_roles)`, built here when the caller passes none.
     """
     name = entry["name"]
     defaults = role_defaults(role_dir)
     tags = ",".join(entry_tags(entry))
-    if owner is not None:
-        lines = [f"- **Applied by:** {owner_stance(tags)}"]
-    else:
-        lines = [f'- **Deploy tag:** `--tags "{tags}"`']
+    lines = [f"- **Applied by:** {owner_stance(tags)}"]
 
     images = image_vars(name, defaults, group_vars)
     if images:
@@ -227,8 +222,7 @@ def glance_lines(
         if built is None:
             built = built_image_names(k8s_roles)
         pins = ", ".join(
-            f"`{pulled_repository(ref, owner=owner, built=built)}` (`{var}`)"
-            for var, ref in images
+            f"`{pulled_repository(ref, built=built)}` (`{var}`)" for var, ref in images
         )
         lines.append(f"- **{label}:** {pins}")
 
@@ -372,7 +366,6 @@ def stale_k8s_docs(
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,
-                owner="flux",
                 built=built,
             )
         )
