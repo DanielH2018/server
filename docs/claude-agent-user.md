@@ -822,9 +822,13 @@ An allowlist entry must be:
   code;
 - the only workload of its role, of any kind, because the `service` label is the role and
   listing one Deployment takes the whole role out of triage;
-- outside the alert plane: not the `observability`, `blackbox-exporter`, `monitor-bridge` or
-  `loki-homelab` role, and not `coredns`, where a failed restart removes the thing that
-  reports it. The test keeps that list by hand, so a role that starts sending pages joins it.
+- outside the alert plane, where a failed restart removes the thing that reports it. The test
+  derives the alert plane from the render
+  (`hosts/tests/test_claude_restart_allowlist.py:alert_plane`). A role joins it when its
+  config sends alerts to Alertmanager, as `observability` and `loki-homelab` do. A role also
+  joins it when it owns a scrape job that a rule for another service reads, as
+  `blackbox-exporter`, `monitor-bridge` and `node-exporter` do. `coredns` is the one member
+  kept by hand, because Alertmanager resolves its receivers through it.
 
 ### The restart broker
 
