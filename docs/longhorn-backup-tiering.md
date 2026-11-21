@@ -48,9 +48,9 @@ selecting the `r2` target, not `default`; see
 --8<-- "assets/generated/fragments/longhorn-volume-shards.md"
 
 The table lists the volumes the three tier lists name. These volumes are in no list and were
-already unbacked before the tiering: `pihole-etc`, `livesync-data`, `grafana-data`, and the
-registry, `prometheus`, `loki`, `tempo`, speedtest, karakeep-meili, mosquitto and flaresolverr
-volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
+already unbacked before the tiering: `pihole-etc`, `pihole-etc-2`, `livesync-data`,
+`grafana-data`, `alertmanager-data`, and the registry, `prometheus`, `loki`, `tempo`,
+speedtest, karakeep-meili and mosquitto volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
 the TSDBs. The configs kopia *kept* are rendered from the repo here.
 
 ### Which kopia rule each volume preserves
