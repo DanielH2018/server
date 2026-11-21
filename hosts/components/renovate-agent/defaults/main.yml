@@ -7,8 +7,6 @@
 # blast radius (the session merges PRs and deploys), not because the role is unfinished.
 renovate_agent_enabled: false
 
-# renovate_agent_host lives in inventory/group_vars/all.yml, not here: initial_setup.yml's
-# `when:` on the role entry is evaluated before this file is in scope.
 renovate_agent_repo: DanielH2018/server
 # The session's and the controller's users, the controller's home and the exchange directory
 # between them are pinned in templates/renovate-agent-pins.j2.
