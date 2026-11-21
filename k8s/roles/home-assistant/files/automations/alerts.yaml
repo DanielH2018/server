@@ -368,7 +368,7 @@
   action:
     - choose:
         # Boost fan: max circulation. Engages the manual override so it persists (clear via Tap Dial
-        # button 3 or the morning reset). Honest caveat: moves air, doesn't lower CO2.
+        # button 4 tap or the morning reset). Honest caveat: moves air, doesn't lower CO2.
         - conditions: "{{ trigger.event.data.action == 'BEDROOM_BOOST_FAN' }}"
           sequence:
             - service: script.bedroom_fan_set
