@@ -55,7 +55,7 @@ pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"
 pihole_k8s_cpu_limit: "1"
 pihole_k8s_mem_limit: 512Mi
 pihole_k8s_cpu_request: 100m
-pihole_k8s_mem_request: 128Mi
+pihole_k8s_mem_request: 320Mi
 pihole_k8s_unbound_cpu_limit: 500m
 pihole_k8s_unbound_mem_limit: 256Mi
 pihole_k8s_unbound_cpu_request: 50m

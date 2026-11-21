@@ -136,6 +136,14 @@ GENERATORS: list[tuple[list[str], str]] = [
     ),
     (
         [
+            "scripts/docs/reference/critical_memory.py",
+            "--out",
+            "docs/assets/generated/critical-memory-p95.json",
+        ],
+        "docs/assets/generated/critical-memory-p95.json",
+    ),
+    (
+        [
             "scripts/infra_map/gen_infra_map.py",
             "--format",
             "svg",

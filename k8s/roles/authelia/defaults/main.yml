@@ -105,7 +105,7 @@ k8s_claims:
 authelia_k8s_cpu_limit: "1"
 authelia_k8s_mem_limit: 512Mi
 authelia_k8s_cpu_request: "100m"
-authelia_k8s_mem_request: 64Mi
+authelia_k8s_mem_request: 144Mi
 
 # Authelia's startup checks report "Errors occurred performing startup checks" and nothing
 # else at info — the per-provider failures only surface at debug. Raise it for a run with

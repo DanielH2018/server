@@ -11,7 +11,8 @@ Rows that would push this file past the test-module length cap live in
 `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
 `_scrape_property_rows.py`, `_edge_property_rows.py`, `_rbac_property_rows.py`,
 `_telemetry_property_rows.py`,
-`_volume_property_rows.py` and `_restart_property_rows.py`, and run here with the rest.
+`_volume_property_rows.py`, `_restart_property_rows.py` and `_memory_property_rows.py`, and run
+here with the rest.
 `_prepull_property_rows.py` holds the rows over a second render, the Flux cluster render of
 every role that sets `flux_prepull_timeout`.
 
@@ -30,6 +31,7 @@ from _edge_property_rows import EDGE_PROPERTIES
 from _helpers import REPO, manifests_rollout_timeout_s
 from _image_property_rows import IMAGE_PROPERTIES
 from _k8s_render import pod_spec
+from _memory_property_rows import MEMORY_PROPERTIES
 from _monitoring_property_rows import MONITORING_PROPERTIES
 from _port_property_rows import PORT_PROPERTIES
 from _prepull_property_rows import PREPULL_PROPERTIES
@@ -407,6 +409,7 @@ PROPERTIES = (
     + PORT_PROPERTIES
     + RBAC_PROPERTIES
     + VOLUME_PROPERTIES
+    + MEMORY_PROPERTIES
     + RESTART_PROPERTIES
     + PREPULL_PROPERTIES
     + TELEMETRY_PROPERTIES
