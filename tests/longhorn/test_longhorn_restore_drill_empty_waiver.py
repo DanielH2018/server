@@ -19,7 +19,9 @@ from _restore_drill import DRILL_DEFAULTS, harness
 
 # n8n-files' own recorded actualSize, the reading the ceiling was derived from.
 RECORDED_BARE_EXT4_BYTES = 51712000
-EMPTY_PROBE = "files=0 bytes=0\nsqlite_checked=0 sqlite_bad=0"
+EMPTY_PROBE = (
+    "files=0 bytes=0\nsqlite_checked=0 sqlite_bad=0\npostgres_checked=0 postgres_bad=0"
+)
 
 
 def _ceiling() -> int:

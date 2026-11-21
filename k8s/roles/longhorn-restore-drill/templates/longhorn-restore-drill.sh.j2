@@ -10,8 +10,9 @@
 # Running it creates and deletes a real Volume, PV, PVC and pod.
 #
 # Restores the newest backup of one small volume from B2 into a NEW volume, mounts it in a
-# throwaway pod, checks the data is real and every SQLite database on it passes
-# `PRAGMA integrity_check`, then tears everything down. The live volume is never touched.
+# throwaway pod, checks the data is real, every SQLite database on it passes
+# `PRAGMA integrity_check` and every Postgres data directory on it starts and answers a catalog
+# query, then tears everything down. The live volume is never touched.
 #
 # This exists because "the backup completed" and "the backup restores" are different claims.
 # The backup-plane heartbeat watches Longhorn's own objects; none of them can tell you whether
@@ -510,14 +511,60 @@ for dirpath, dirnames, filenames in os.walk(root):
 print("sqlite_checked=%d sqlite_bad=%d" % (checked, bad))
 PY
 )
+# A Postgres data directory, found by its `global/pg_control`, is copied into the scratch volume
+# and chowned to the image's postgres user; `cp -a` keeps the 0700 or 0750 mode initdb gave it.
+# Single-user mode then starts it, which replays the WAL the way a server start does and runs as
+# the bootstrap superuser whatever that role is named. The copy drops `postmaster.pid`: a
+# snapshot of a running server holds one, and its PID can name a live process in this container.
+# The image is the Airflow role's pin, so a major upgrade there moves the drill with it. No file
+# is both a Postgres file and a SQLite database, so the two copies together fit the scratch cap.
+{% set postgres_image = (lookup('file', role_file('defaults/main.yml', role='airflow')) | from_yaml).airflow_k8s_postgres_image %}
+PG_CHECK=$(cat <<'PG'
+root=$1 scratch=$2
+copy=$scratch/pg
+list=$scratch/pg-clusters
+checked=0 bad=0
+find "$root" -path '*/global/pg_control' -type f | sort >"$list"
+while IFS= read -r control; do
+  data=${control%/global/pg_control}
+  [ -f "$data/PG_VERSION" ] || continue
+  rel=${data#"$root"}
+  rel=${rel#/}
+  checked=$((checked + 1))
+  rm -rf "$copy"
+  if out=$(cp -a "$data" "$copy" 2>&1); then
+    rm -f "$copy/postmaster.pid" "$copy/postmaster.opts"
+    chown -R postgres:postgres "$copy"
+    out=$(echo 'SELECT count(*) AS n FROM pg_catalog.pg_class;' \
+      | gosu postgres postgres --single -D "$copy" template1 2>&1)
+  fi
+  n=$(printf '%s\n' "$out" | sed -n 's/.* 1: n = "\([0-9][0-9]*\)".*/\1/p' | head -1)
+  if [ -n "$n" ]; then
+    echo "postgres ok ${rel:-.}: pg_class=$n"
+  else
+    bad=$((bad + 1))
+    reason=$(printf '%s\n' "$out" | grep -m1 -E 'FATAL|PANIC|ERROR|cp:' | tr -s ' \t' ' ')
+    echo "postgres bad ${rel:-.}: ${reason:-no catalog answer}"
+  fi
+  rm -rf "$copy"
+done <"$list"
+rm -f "$list"
+echo "postgres_checked=$checked postgres_bad=$bad"
+PG
+)
 # shellcheck disable=SC2016 # the probe pod's sh expands these, not this script
 PROBE_SH='echo files=$(find /drill -type f | wc -l) bytes=$(find /drill -type f -exec cat {} + | wc -c); python3 -c "$SQLITE_CHECK" /drill /scratch'
 OVERRIDES=$(jq -nc --arg name "${DRILL}-probe" --arg image "{{ k3s_longhorn_restore_drill_image }}" \
   --arg claim "$DRILL" --arg sh "$PROBE_SH" --arg py "$SQLITE_CHECK" \
   --arg scratch_limit "{{ k3s_longhorn_restore_drill_max_actual_bytes }}" \
+  --arg pg_image "{{ postgres_image }}" --arg pg "$PG_CHECK" \
   '{spec: {restartPolicy: "Never",
     containers: [{name: $name, image: $image, command: ["sh", "-c", $sh],
       env: [{name: "SQLITE_CHECK", value: $py}],
+      volumeMounts: [{name: "d", mountPath: "/drill", readOnly: true},
+                     {name: "scratch", mountPath: "/scratch"}]},
+                 {name: "postgres", image: $pg_image,
+      command: ["sh", "-c", $pg, "pg-check", "/drill", "/scratch"],
       volumeMounts: [{name: "d", mountPath: "/drill", readOnly: true},
                      {name: "scratch", mountPath: "/scratch"}]}],
     volumes: [{name: "d", persistentVolumeClaim: {"claimName": $claim}},
@@ -535,6 +582,8 @@ $KUBECTL -n "$PVC_NS" run "${DRILL}-probe" --restart=Never \
 # Estimate: ~15 s pod start (lidarr's measured probe=15s), ~15 s count, ~30 s check, ~30 s
 # fallback copy, ~90 s in all. The bound does NOT cover the cap's worst case, one 4 GiB database
 # at ~300-430 s; raise it with longhorn_restore_drill_deadline_seconds when `probe=` nears 150 s.
+# The Postgres container runs beside the count: for airflow-postgres-data's 349 MB, an estimated
+# ~10 s to pull its image, ~10 s to copy and a few seconds to start, inside the same ~90 s.
 PROBE_STARTED=$(date +%s)
 PROBE_DEADLINE=$(( $(date +%s) + 300 ))
 while :; do
@@ -545,7 +594,7 @@ while :; do
 done
 PROBE_ELAPSED=$(( $(date +%s) - PROBE_STARTED ))
 
-PROBE=$($KUBECTL -n "$PVC_NS" logs "${DRILL}-probe" 2>&1)
+PROBE=$($KUBECTL -n "$PVC_NS" logs "${DRILL}-probe" --all-containers=true 2>&1)
 [[ "$PHASE" == "Succeeded" ]] || fail "probe pod ${PHASE}: ${PROBE:-<no logs>}"
 [[ -n "$PROBE" ]] || fail "probe pod produced no output — the volume state is unknown, not empty"
 
@@ -608,6 +657,13 @@ if (( SQLITE_BAD > 0 )); then
   fail "restored volume for ${PVC} holds ${SQLITE_BAD} SQLite database(s) that fail PRAGMA integrity_check: $(grep '^sqlite bad ' <<<"$PROBE" | tr '\n' ';')"
 fi
 
+PG_CHECKED=$(sed -n 's/^postgres_checked=\([0-9]\{1,\}\) postgres_bad=[0-9]\{1,\}$/\1/p' <<<"$PROBE" | tail -1)
+PG_BAD=$(sed -n 's/^postgres_checked=[0-9]\{1,\} postgres_bad=\([0-9]\{1,\}\)$/\1/p' <<<"$PROBE" | tail -1)
+[[ -n "$PG_CHECKED" && -n "$PG_BAD" ]] \
+  || fail "the Postgres check on the restored ${PVC} reported no result: ${PROBE}"
+(( PG_BAD == 0 )) \
+  || fail "restored volume for ${PVC} holds ${PG_BAD} Postgres data directory(s) that fail to start and answer a catalog query: $(grep '^postgres bad ' <<<"$PROBE" | tr '\n' ';')"
+
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
 # DECIDED: an operator-pinned run leaves the global stamp alone. Check 7 reads it as "is the
@@ -628,4 +684,4 @@ else
 fi
 NOTE=""
 [[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
-echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES}, sqlite_ok=${SQLITE_CHECKED}, probe=${PROBE_ELAPSED}s)${NOTE}"
+echo "longhorn-restore-drill: PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES}, sqlite_ok=${SQLITE_CHECKED}, postgres_ok=${PG_CHECKED}, probe=${PROBE_ELAPSED}s)${NOTE}"

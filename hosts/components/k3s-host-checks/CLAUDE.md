@@ -14,7 +14,7 @@
   installed etcd drop-in, the root filesystem and the cluster token file.
 - **Abort valves:** the boot grace in the two */10 checks, and the reader's own per-call deadlines.
 - **Required evidence, every run:** a check textfile that a Prometheus rule reads, and a
-  Healthchecks.io ping. Checks 9 and 10 read the B2 accounting's journal lines AS WRITTEN;
+  Healthchecks.io ping. The two B2 accounting units are the exception: each only touches a fire stamp. Checks 9 and 10 read the B2 accounting's journal lines AS WRITTEN;
   docs/k3s-node-plane-crons-and-incidents.md names the regex and the file to edit together.
 - **Next-run review:** read the B2 ledger before widening scope.
 

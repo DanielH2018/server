@@ -359,3 +359,20 @@ def test_the_rendered_sidecar_is_a_sibling_container_not_a_nested_key():
             f"got {[c.get('name') for c in containers]}"
         )
         assert yaml_fast.safe_load(yaml.safe_dump(containers)) == containers
+
+
+def test_every_arr_pages_on_its_failing_notifications():
+    """Each app's own health notifications post through its Connect rows, so each app needs the
+    rule that pages when those rows fail. The rule is per app because exportarr's targets carry
+    no `service`, so a new sidecar without its rule would fail silently."""
+    rules = REPO / "k8s/roles/observability/files/rules/arr-apps.yaml"
+    [group] = yaml_fast.safe_load(rules.read_text())["groups"]
+    paged = {
+        rule["labels"]["service"]: rule["expr"]
+        for rule in group["rules"]
+        if rule.get("alert") == "ArrNotificationsFailing"
+    }
+    assert set(paged) == set(ARRS)
+    for app, expr in paged.items():
+        assert f"{app}_system_health_issues{{" in expr, (app, expr)
+        assert 'source="NotificationStatusCheck"' in expr, (app, expr)

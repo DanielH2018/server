@@ -12,8 +12,6 @@ Must stay importable on the host Python floor, with no import beyond the standar
 `lib.k8s_objects` and the sibling `longhorn_lib` package (see longhorn_backups.py).
 """
 
-from __future__ import annotations
-
 from lib.k8s_objects import BackupTarget, K8sObject
 
 from . import longhorn_backups as backups
