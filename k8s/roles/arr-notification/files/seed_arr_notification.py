@@ -1,7 +1,7 @@
 """Declare the *arr Discord Connect notification instead of leaving it as UI state.
 
-WHY THIS EXISTS. A Sonarr/Radarr/Lidarr/Prowlarr "Connect" notification is a row in the
-app's database on the app's config PVC — live state no manifest reproduces. Nothing
+WHY THIS EXISTS. A Sonarr/Radarr/Lidarr/Prowlarr "Connect" notification is a row in
+`sonarr.db` / `radarr.db` / `lidarr.db` / `prowlarr.db` on the app's config PVC — live state no manifest reproduces. Nothing
 but that volume holds the row: a Longhorn revert past its creation, or anyone recreating the
 claim, drops the notification silently and the app goes quiet in exactly the failure it exists
 to report.
