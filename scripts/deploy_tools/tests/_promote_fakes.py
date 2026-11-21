@@ -94,6 +94,8 @@ class FakeTransport:
         versions: the package versions the Packages API lists, newest first.
         api_forced: a status to answer for an api.github.com path, such as `.../versions`
             for the listing or `.../versions/<id>` for one delete.
+        api_failures: statuses to answer for an api.github.com path, one per request, before
+            the tables answer it.
         deleted: the id of each version a DELETE removed.
         blobs: each layer's bytes by its digest.
         statuses: each commit's newest status per context, as `{context: state}`.
@@ -111,6 +113,7 @@ class FakeTransport:
     forced: dict[str, int] = field(default_factory=dict)
     versions: list[dict] = field(default_factory=list)
     api_forced: dict[str, int] = field(default_factory=dict)
+    api_failures: dict[str, list[int]] = field(default_factory=dict)
     deleted: list[int] = field(default_factory=list)
     blobs: dict[str, bytes] = field(default_factory=dict)
     statuses: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -171,6 +174,8 @@ class FakeTransport:
             message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}
             body = json.dumps(message).encode()
             return forge.Response(self.api_forced[parts.path], body=body)
+        if self.api_failures.get(parts.path):
+            return forge.Response(self.api_failures[parts.path].pop(0))
         listing = urlsplit(forge.PACKAGE_VERSIONS_URL).path
         if parts.path == listing and method == "GET":
             query = parse_qs(parts.query)

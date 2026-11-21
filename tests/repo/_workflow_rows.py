@@ -143,6 +143,16 @@ def condition(node: dict) -> str:
     return " ".join(str(node.get("if", "")).split())
 
 
+def report_job_problems(wf: Workflow) -> list[str]:
+    """What keeps a `report` job from speaking for master's runs, red ones included."""
+    found = []
+    if "github.ref == 'refs/heads/master'" not in condition(jobs(wf).get("report", {})):
+        found.append("the report job does not stop at master")
+    if "always()" not in condition(jobs(wf).get("report", {})):
+        found.append("a red run does not reach the report")
+    return found
+
+
 _RUNS_ON = re.compile(r"^\s*runs-on:\s*(.+?)\s*$", re.MULTILINE)
 _VERSIONED = re.compile(r"^[a-z]+-\d+(\.\d+)?(-[a-z]+)?$")
 _PACKAGE_BUILD_JOB = re.compile(
