@@ -1198,6 +1198,18 @@ Every `k3s` subcommand needs root.
     sudo systemctl start homelab-reconcile.service
     ```
 
+1. On a cluster node, check that AppArmor labels the containers as it did before the upgrade.
+   The first command prints `homelab-k3s-runc (unconfined)`. The second prints nothing: a line
+   it prints is a container with a stacked label, which *AppArmor on a k3s node* explains.
+   The third counts the denials since the boot. Read any it counts with the same `grep`
+   without `-c`.
+
+    ```bash
+    sudo aa-status | grep homelab-k3s-runc
+    ps -eo label=,pid=,comm= | grep '//&'
+    sudo grep -c 'apparmor="DENIED"' /var/log/audit/audit.log
+    ```
+
 1. Resume updates as *Stopping updates on one host* describes, then run the updater once. Only the
    updater writes the two metrics the next step reads, so until this run they hold their
    pre-upgrade values. The run also installs whatever master published meanwhile.
@@ -1257,6 +1269,75 @@ host that fails the Prometheus read holds, so mask its timer again.
 Either host keeps its pause label. Its rollback is a
 rebuild on the previous release with `bootstrap-host.sh`. A cluster node follows *Rebuilding a
 cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
+
+## AppArmor on a k3s node
+
+The `k3s-apparmor` component ships `/etc/apparmor.d/homelab-k3s-runc` on daniel-box and
+daniel-server. The profile carries `flags=(unconfined)` and attaches to
+`/var/lib/rancher/k3s/data/*/bin/runc`. It confines nothing. It gives k3s's runc a label other
+than the bare `unconfined`, and a node on Ubuntu 26.04 needs that.
+
+**What breaks without it.** Two things have to be true, and a 26.04 node has both.
+
+- The `apparmor` package sets `kernel.apparmor_restrict_unprivileged_unconfined = 1` in
+  `/usr/lib/sysctl.d/10-apparmor.conf`. Ubuntu 24.04's package leaves it at 0. Under 1, the
+  kernel turns a profile change into a stack with `unconfined` when the task that makes it
+  carries the bare `unconfined` label and lacks `CAP_MAC_OVERRIDE`.
+- Ubuntu kernel 7.0.0-41 and later test that capability at `execve`, where earlier kernels
+  tested it when runc asked for the change. runc asks while it holds every capability and
+  executes the container's entrypoint after it drops them.
+
+So every container process carries `cri-containerd.apparmor.d//&unconfined` where it carried
+`cri-containerd.apparmor.d` before. Two classes of denial follow from the one label:
+
+- **Signals and `ptrace` inside one container.** containerd's profile allows them for
+  `peer=cri-containerd.apparmor.d`, and the stacked label is a different peer. rsync never
+  ends a local copy, because its processes finish with SIGUSR2. `timeout` never kills its
+  child. s6 and dumb-init cannot stop a service. The Go runtime's SIGURG and .NET's
+  suspend signal are denied. `ps`, `pgrep` and `netstat` cannot read a peer's `/proc`
+  entry. On 2026-11-21 the rsync in the `crowdsec-config-install` init container held
+  Traefik and Authelia in `Init` for 12 minutes on daniel-box's first 26.04 boot.
+- **Host profiles confine container binaries.** The `unconfined` half of the stack attaches a
+  profile by path at each exec, as it does for a host process. 26.04 ships about 160
+  profiles in `/etc/apparmor.d`. Its `mosquitto` profile denied the container's mosquitto its
+  own config file, and its `wg-quick` profile killed `wg-quick up` in wg-easy.
+
+Ubuntu exempts a runtime by naming it: the package ships a `runc` profile of the same shape
+for `/usr/{bin,sbin}/runc`. k3s unpacks its runc under `/var/lib/rancher/k3s/data/`, which
+that profile does not match. Issue [9833] holds the audit-log evidence.
+
+**What the profile costs.** A process that executes k3s's runc gets a label the forced stack
+does not apply to. Any local user can execute that binary, as any local user can execute
+`/usr/sbin/runc` on an Ubuntu host with Docker. The profile carries no `userns` rule, so it
+grants no unprivileged user namespace. The sysctl keeps its value for every other process on
+the host.
+
+**Reading the state.** The upgrade procedure's label check is the test: `ps -eo
+label=,pid=,comm= | grep '//&'` prints each process with a stacked label. A container
+started before the profile loaded keeps its stacked label until its pod restarts.
+`apparmor.service` loads the profile before k3s starts at boot. auditd takes the denials, so
+they are in `/var/log/audit/audit.log` and `journalctl -k` shows none.
+
+**The options that lost.**
+
+- `kernel.apparmor_restrict_unprivileged_unconfined = 0` in `/etc/sysctl.d/` restores the
+  24.04 behaviour for every process on the host, where the profile restores it for one
+  binary.
+- A container profile whose peer rules admit the stacked label fixes the signals and leaves
+  the host profiles attaching inside containers. containerd merged that change on 2026-11-16
+  ([containerd 14487]) and backported it to its 2.3 branch, which k3s follows. No containerd
+  or k3s release carried it on 2026-11-21. A k3s that carries it changes nothing here: the
+  profile keeps the label unstacked, so the added rules never match.
+- Disabling each host profile that attaches inside a container needs a new entry for every
+  profile a later `apparmor` package adds.
+- Running pods with `appArmorProfile: Unconfined` removes a confinement layer from every
+  workload.
+
+Ubuntu tracks the kernel side as [Launchpad bug 2172640], which had no fix on 2026-11-21.
+
+[9833]: https://github.com/DanielH2018/server/issues/9833
+[containerd 14487]: https://github.com/containerd/containerd/pull/14487
+[Launchpad bug 2172640]: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172640
 
 ## The signer's page
 

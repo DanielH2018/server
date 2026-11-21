@@ -1,0 +1,17 @@
+# The AppArmor profile that names k3s's runc, on each k3s node. The profile's own header says why
+# a node on Ubuntu 26.04 needs it, and docs/host-packages.md, *AppArmor on a k3s node*, has the
+# evidence and the options that lost.
+#
+# `reload:apparmor.service` loads every profile under /etc/apparmor.d again, which leaves the
+# label of each running process as it was. A container started before the profile loaded keeps
+# its stacked label until its pod restarts. apparmor.service loads the profile before k3s starts
+# at boot.
+#
+# REVERSE: dropping this component removes the file and leaves the profile loaded until the next
+# boot. `sudo apparmor_parser -R` on a copy of the file unloads it sooner.
+#
+# hosts/tests/test_k3s_runc_apparmor_profile.py holds the listing, the attachment and the parse.
+depends:
+  - apparmor
+files:
+  - {src: templates/homelab-k3s-runc, dst: /etc/apparmor.d/homelab-k3s-runc, activate: "reload:apparmor.service"}

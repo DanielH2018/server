@@ -1,0 +1,17 @@
+# Names k3s's runc, as Ubuntu's `runc` profile names /usr/sbin/runc. It confines nothing.
+#
+# Ubuntu 26.04 sets kernel.apparmor_restrict_unprivileged_unconfined=1. Under it the kernel turns
+# a profile change made from the bare `unconfined` label into a stack with `unconfined`, so a
+# container started by an unnamed runc carries `cri-containerd.apparmor.d//&unconfined`. That
+# label fails the container profile's own `signal peer=` and `ptrace peer=` rules, and its
+# unconfined half attaches the host's profiles to container binaries by path. A runtime with a
+# named label is exempt. docs/host-packages.md, *AppArmor on a k3s node*, has the evidence.
+#
+# No `userns` rule: k3s's runc runs as root and needs no unprivileged user namespace.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile homelab-k3s-runc /var/lib/rancher/k3s/data/*/bin/runc flags=(unconfined) {
+  @{exec_path} mr,
+}
