@@ -242,7 +242,7 @@ def test_the_caller_reads_the_service_over_a_real_socket_is_flagged(tmp_path):
 
 
 def test_the_helper_parses_on_the_distro_interpreter_is_clean():
-    # ruff formats for the repo's 3.14 and rewrites `except (A, B):` into a form 3.12 rejects.
+    # The helper runs under the hosts' /usr/bin/python3, which is 3.12.
     ast.parse(
         Path(worktree_holders.__file__).read_text(), feature_version=DISTRO_PYTHON
     )

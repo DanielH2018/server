@@ -8,6 +8,7 @@ import re
 import tomllib
 from fnmatch import fnmatch
 from functools import cache
+from pathlib import PurePosixPath
 
 from _helpers import REPO
 from _row_table import Census, Subject, tracked
@@ -53,6 +54,31 @@ def host_shipped(rel: str) -> bool:
     return bool(_HOST_INTERPRETER_TREES.match(rel)) or any(
         fnmatch(rel, glob) for glob in _py312_component_globs()
     )
+
+
+_UV_PINNED_LAUNCH = re.compile(
+    r"--python \{\{ host_python_version \}\}[\s\\]+(?:\{\{ \w+ \}\})?(\S+\.py)\b"
+)
+
+
+def uv_pinned_programs() -> set[str]:
+    """The tracked source of each program a host template starts on `host_python_version`.
+
+    Raises:
+        AssertionError: a launched path's basename matches no tracked host module, or several.
+    """
+    sources: dict[str, list[str]] = {}
+    for rel in tracked("*.py"):
+        if rel.startswith("hosts/") and "/tests/" not in rel:
+            sources.setdefault(PurePosixPath(rel).name, []).append(rel)
+    launched = set()
+    for rel in tracked("*.j2"):
+        if rel.startswith("hosts/"):
+            for path in _UV_PINNED_LAUNCH.findall((REPO / rel).read_text()):
+                homes = sources.get(PurePosixPath(path).name, [])
+                assert len(homes) == 1, f"{rel} starts {path}, tracked at {homes}"
+                launched.add(homes[0])
+    return launched
 
 
 def _uv_run_modules() -> list[str]:

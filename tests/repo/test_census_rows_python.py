@@ -20,7 +20,11 @@ from pathlib import PurePosixPath
 import pytest
 from _helpers import REPO
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
-from _future_annotations_row import NO_FUTURE_ANNOTATIONS, host_shipped
+from _future_annotations_row import (
+    NO_FUTURE_ANNOTATIONS,
+    host_shipped,
+    uv_pinned_programs,
+)
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
@@ -464,24 +468,24 @@ def test_the_future_annotations_exemption_finds_the_host_shipped_modules():
     assert not any(host_shipped(rel) for rel in tracked("hosts/lib/tests/*.py"))
 
 
-_UV_PINNED_LAUNCH = re.compile(
-    r"--python \{\{ host_python_version \}\}[\s\\]+(?:\{\{ \w+ \}\})?(\S+\.py)\b"
-)
+def test_the_exemption_covers_every_component_program_on_the_distro_python():
+    """A `#!/usr/bin/python3` component program runs on 3.12, so the census must exempt it."""
+    distro = {
+        rel
+        for rel in tracked("hosts/components/*.py")
+        if "/tests/" not in rel
+        and (REPO / rel).read_text().startswith("#!/usr/bin/python3")
+    }
+    assert {
+        "hosts/components/claude-code/files/homelab_rootq.py",
+        "hosts/components/worktree-holders/files/worktree_holders.py",
+    } <= distro
+    assert not sorted(rel for rel in distro if not host_shipped(rel))
 
 
-def test_no_program_started_on_the_pinned_python_is_exempt():
+def test_the_exemption_covers_no_program_started_on_the_pinned_python():
     """A program `uv run --python {{ host_python_version }}` starts runs on 3.15, where the import is dead."""
-    sources: dict[str, list[str]] = {}
-    for rel in tracked("*.py"):
-        if rel.startswith("hosts/") and "/tests/" not in rel:
-            sources.setdefault(PurePosixPath(rel).name, []).append(rel)
-    launched = set()
-    for rel in tracked("*.j2"):
-        if rel.startswith("hosts/"):
-            for path in _UV_PINNED_LAUNCH.findall((REPO / rel).read_text()):
-                homes = sources.get(PurePosixPath(path).name, [])
-                assert len(homes) == 1, f"{rel} starts {path}, tracked at {homes}"
-                launched.add(homes[0])
+    launched = uv_pinned_programs()
     assert {
         "hosts/components/claude-code/files/bg_session_resume.py",
         "hosts/components/fake-remux/files/state_push.py",
