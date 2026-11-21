@@ -22,8 +22,6 @@ Usage: claude_restart.py NAME
 Exit 0 = restarted or refused, 1 = failed, 2 = a name outside the unit's shape.
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import json

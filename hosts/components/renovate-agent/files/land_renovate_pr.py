@@ -41,8 +41,6 @@ unmerged. A land.sh crash also prints `refused`, but its traceback keeps land.sh
 failed and `SystemdUnitsFailed` pages only for a landing that went wrong.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re

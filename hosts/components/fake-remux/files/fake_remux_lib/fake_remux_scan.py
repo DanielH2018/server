@@ -25,8 +25,6 @@ FAKE_REMUX_CONFIG (default: autofix-fake-remux/config.env under /etc), writes th
 /var/lib/autofix-fake-remux). Always exits 0; the state file carries the verdict.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

@@ -9,8 +9,6 @@ Imports nothing from `notify_logic`, which imports `PENDING_HEADER` from here â€
 the pair cannot cycle. `renovate_notify.py` imports from both.
 """
 
-from __future__ import annotations
-
 import hashlib
 from datetime import datetime, timezone
 

@@ -24,8 +24,6 @@ Exit 0 for every run that produced a record, inconclusive or timed out included;
 exit means the script itself broke, and the unit's OnFailure= pages that.
 """
 
-from __future__ import annotations
-
 import argparse
 import html
 import json

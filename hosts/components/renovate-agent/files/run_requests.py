@@ -24,8 +24,6 @@ outcome, done or refused, is one line of `REQUEST_LOG`. Stdlib only, like the re
 agent.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import time

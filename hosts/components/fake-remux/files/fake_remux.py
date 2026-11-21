@@ -11,8 +11,6 @@ logic lives in fake_remux_lib/ beside this file; each module's docstring describ
 `fake_remux.py <subcommand> --help` prints it.
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 

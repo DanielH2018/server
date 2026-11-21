@@ -36,8 +36,6 @@ Run: uv run --no-project --python <host_python_version> checkout_sync.py
 `--help` prints this text and exits 0.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

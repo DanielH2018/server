@@ -33,8 +33,6 @@ for a source it has since dropped: the first successful poll drops it and opens 
 because no source can recover it any more.
 """
 
-from __future__ import annotations
-
 import argparse
 import fcntl
 import json

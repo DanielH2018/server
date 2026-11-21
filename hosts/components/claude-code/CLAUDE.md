@@ -211,8 +211,8 @@ sessions waited five hours, until the operator ran `claude agents`.
   session down when it finished or stopped.
 - **The role enables the unit and never starts it.** Its job is the next boot.
   ENFORCED: `hosts/tests/test_claude_bg_resume_unit.py`.
-- **To see what it would do,** run `uv run --no-project /usr/local/lib/claude-bg-resume/bg_session_resume.py
-  --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
+- **To see what it would do,** run `uv run --no-project --python <host_python_version>
+  /usr/local/lib/claude-bg-resume/bg_session_resume.py --claude ~/.local/bin/claude --dry-run`. On a running box it prints 0 sessions. After a boot,
   `journalctl -b -u homelab-claude-bg-resume` shows what it respawned.
 
 What it does not restore:

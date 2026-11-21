@@ -22,8 +22,6 @@ Run by renovate-agent.service from renovate-agent.timer (daily), installed as
 REPO, REPO_DIR, EXCHANGE_DIR and SESSION_USER are required in the config file.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

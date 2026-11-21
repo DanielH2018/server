@@ -5,8 +5,6 @@ Sonarr/docker. Split from the I/O shell exactly like fake_remux_logic.py is spli
 fake_remux_scan.py.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import sys

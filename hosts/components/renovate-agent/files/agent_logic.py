@@ -11,8 +11,6 @@ give this the shape of the docs-refresh deadman that stamped `generators: ok` th
 failures.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass

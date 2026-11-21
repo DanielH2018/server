@@ -17,8 +17,6 @@ calling Discord, and persists neither the fingerprint nor the liveness marker. `
 `--help` print this text.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

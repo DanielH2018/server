@@ -28,8 +28,6 @@ Run: uv run --no-project --python <host_python_version> host_package_builder.py
 `--help` prints this text and exits 0.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

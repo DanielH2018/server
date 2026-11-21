@@ -17,8 +17,6 @@ wall clock, this script copies the transcript from `<SESSION_HOME>` to
 `<EXCHANGE_DIR>/out/transcript.jsonl`, where the runner keeps it beside the run record.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import signal
