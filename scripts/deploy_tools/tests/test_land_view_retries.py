@@ -176,24 +176,6 @@ def test_a_read_still_rate_limited_after_its_waits_refuses(landing):
     assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S] * gh_read.RATE_LIMIT_WAITS
 
 
-FILES = {"files": [{"path": "docs/a.md"}], "headRefOid": "a" * 40}
-
-
-def test_a_file_read_inside_the_turn_fails_at_once_on_a_rate_limit(landing):
-    ln, calls = landing()
-    _reads(ln, [RATE_LIMITED, FILES])
-    with pytest.raises(gh_read.GhReadFailed):
-        ln.changed_paths("a" * 40)
-    assert _sleeps(calls) == []
-
-
-def test_the_file_read_before_the_turn_waits_out_a_rate_limit(landing):
-    ln, calls = landing()
-    _reads(ln, [RATE_LIMITED, FILES])
-    assert ln.changed_paths("a" * 40, before_turn=True) == ["docs/a.md"]
-    assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S]
-
-
 GRAPHQL_RATE_LIMITED = subprocess.CalledProcessError(
     1, "gh", stderr="GraphQL: API rate limit already exceeded for user ID 41801780."
 )

@@ -65,6 +65,9 @@ DAILY_JOB = "daily-backup"
 B2_TARGET = "default"
 R2_TARGET = "r2"
 
+# The Volume annotation longhorn-reconcile stamps with the time a volume joined its tier.
+TIER_SINCE_ANNOTATION = "homelab/tier-since"
+
 COMPLETED = "Completed"
 
 

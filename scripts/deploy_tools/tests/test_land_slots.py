@@ -4,6 +4,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_slots.py
 """
 
 import os
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -197,8 +198,9 @@ def test_a_serial_pr_the_drain_cannot_clear_is_refused_without_waiting(
     landing, in_turn, fakes
 ):
     ln, calls = _merging(landing, _SERIAL, **fakes)
+    ln.give_back_turn = (lambda: None) if in_turn else None
     with pytest.raises(Outcome) as stop:
-        slots.refuse_before_merge(ln, HEAD, in_turn)
+        slots.refuse_before_merge(ln, HEAD)
     assert stop.value.rc == 75
     assert "sleep" not in _names(calls)
 
@@ -221,7 +223,8 @@ def test_a_pr_no_rule_bars_merges(landing, paths, draft, fakes):
 def test_a_serial_landing_keeps_the_serial_lock_past_its_checks(landing):
     ln, _ = _merging(landing, _SERIAL)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln, HEAD, in_turn=True)
+    ln.give_back_turn = lambda: None
+    slots.refuse_before_merge(ln, HEAD)
     serial = Path(os.environ[turn.TURN_DIR_ENV]) / slots.SERIAL_NAME
     assert slots.try_take([serial], 1) is None
     assert serial.with_name(serial_lock.HOLDER_NAME).read_text() == ln.opts.pr
@@ -258,9 +261,34 @@ def test_a_draft_a_rule_bars_spends_no_run(landing):
 def test_the_checks_leave_the_lock_files_free(landing):
     ln, _ = _merging(landing, _K8S, in_window=True)
     ln.tools = replace(ln.tools, try_slot=None)
-    slots.refuse_before_merge(ln, HEAD, in_turn=True)
+    ln.give_back_turn = lambda: None
+    slots.refuse_before_merge(ln, HEAD)
     moved = Path(os.environ[turn.TURN_DIR_ENV])
     names = [*slots.SLOT_NAMES, slots.SERIAL_NAME]
     release = slots.try_take([moved / n for n in names], 1)
     assert release
     release()
+
+
+def test_a_serial_pr_whose_turn_a_rate_limit_wait_lost_is_refused_without_waiting(
+    landing, capsys
+):
+    # The compare inside the draft's turn is refused, and the ask for the turn after the
+    # wait finds another landing holding it until merge_timeout.
+    limited = subprocess.CalledProcessError(
+        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+    )
+    ln, _ = _merging(
+        landing,
+        _SERIAL,
+        True,
+        turn=[True, False],
+        serial=[False],
+        compare=[limited, []],
+    )
+    with pytest.raises(Outcome) as stop:
+        _land(ln)
+    out = capsys.readouterr().out
+    assert stop.value.rc == 75
+    assert "going on without a turn" in out
+    assert "waiting in the landing turn for the landings past their merge" not in out

@@ -75,6 +75,7 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from validate.validate_lib import package_roots
+from validate.validate_lib.host_specs import NfpmSpec, load_nfpm
 
 import homelab_tool_fetch
 
@@ -118,13 +119,12 @@ def lint_script(name: str, text: str) -> list[str]:
     ]
 
 
-def lint_config_types(spec: str) -> list[str]:
-    """Each content entry of an `nfpm.yaml` whose `type` makes it a conffile."""
-    contents = (yaml_fast.safe_load(spec) or {}).get("contents") or []
+def lint_config_types(spec: NfpmSpec) -> list[str]:
+    """Each content entry of a rendered package spec whose `type` makes it a conffile."""
     return [
         f"{entry.get('dst')}: type {entry['type']!r} ships a conffile; "
         "host packages ship plain files only"
-        for entry in contents
+        for entry in spec.contents
         if str(entry.get("type", "")).startswith("config")
     ]
 
@@ -432,7 +432,7 @@ def lint(paths: list[Path]) -> list[str]:
         for spec in sorted(path.rglob("nfpm.yaml")):
             checked += 1
             problems.extend(
-                f"[FAIL] {spec}: {p}" for p in lint_config_types(spec.read_text())
+                f"[FAIL] {spec}: {p}" for p in lint_config_types(load_nfpm(spec))
             )
         for deb in sorted(path.rglob("*.deb")):
             checked += 1

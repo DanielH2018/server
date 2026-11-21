@@ -13,6 +13,8 @@ The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_
 Run: uv run pytest scripts/lib/tests/test_longhorn_backup_health.py
 """
 
+import pytest
+
 from lib.longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
@@ -139,7 +141,7 @@ def test_errored_backups_self_clears_once_the_object_ages_out():
 
 def test_coverage_is_clean_when_the_volume_has_a_fresh_tier_backup():
     result = logic.TierResult()
-    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "default")]
+    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "default", "")]
     coverage = [("pvc-1", "2027-01-15T06:00:00Z", "daily-backup")]
     logic.check_tier(
         result,
@@ -164,7 +166,7 @@ def test_coverage_is_flagged_when_the_tiers_own_job_has_gone_stale():
     volume-only match would have borrowed the daily evidence and stayed green.
     """
     result = logic.TierResult()
-    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "default")]
+    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "default", "")]
     coverage = [("pvc-1", "2027-01-15T06:00:00Z", "daily-backup")]
     logic.check_tier(
         result,
@@ -186,7 +188,7 @@ def test_coverage_is_flagged_when_the_tiers_own_job_has_gone_stale():
 
 def test_coverage_suppresses_a_disarmed_targets_volume():
     result = logic.TierResult()
-    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "r2")]
+    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "r2", "")]
     logic.check_tier(
         result, rows, [], 30 * HOUR, "daily", "daily-backup", "3:30", "*", {"r2"}, NOW
     )
@@ -200,7 +202,7 @@ def test_coverage_grace_counts_a_new_volume_rather_than_dropping_it_silently():
     created = (
         "2027-01-15T07:50:00Z"  # 10 minutes before NOW; first 3:30 run is still ahead
     )
-    rows = [("pvc-1", created, "ns/claim1", "default")]
+    rows = [("pvc-1", created, "ns/claim1", "default", "")]
     logic.check_tier(
         result, rows, [], 30 * HOUR, "daily", "daily-backup", "9:00", "*", set(), NOW
     )
@@ -213,7 +215,7 @@ def test_coverage_grace_counts_a_new_volume_rather_than_dropping_it_silently():
 def test_coverage_grace_distinguishes_seeded_from_brand_new():
     result = logic.TierResult()
     created = "2027-01-15T07:50:00Z"
-    rows = [("pvc-1", created, "ns/claim1", "default")]
+    rows = [("pvc-1", created, "ns/claim1", "default", "")]
     # A backup exists, just not from THIS tier's job — the volume is seeded, not offsite-empty.
     coverage = [("pvc-1", "2027-01-10T00:00:00Z", "some-other-job")]
     logic.check_tier(
@@ -230,6 +232,61 @@ def test_coverage_grace_distinguishes_seeded_from_brand_new():
     )
     assert result.graced_seeded == 1
     assert result.graced_new == 0
+
+
+@pytest.mark.parametrize(
+    ("coverage", "tier_since", "uncovered"),
+    [
+        pytest.param(
+            [("pvc-1", "2027-01-10T00:00:00Z", "weekly-backup-d2")],
+            "2027-01-15T07:50:00Z",
+            None,
+            id="moved-in-with-no-tier-backup-is-clean",
+        ),
+        pytest.param(
+            [("pvc-1", "2027-01-10T00:00:00Z", "weekly-backup-d2")],
+            "",
+            "ns/claim1 (daily, no backup from daily-backup)",
+            id="no-stamp-anchors-to-creation-and-is-flagged",
+        ),
+        pytest.param(
+            [("pvc-1", "2027-01-10T03:30:00Z", "daily-backup")],
+            "2027-01-15T07:50:00Z",
+            None,
+            id="returned-with-a-tier-backup-from-before-the-move-is-clean",
+        ),
+        pytest.param(
+            [("pvc-1", "2027-01-10T03:30:00Z", "daily-backup")],
+            "2027-01-12T00:00:00Z",
+            "ns/claim1 (daily, 124h)",
+            id="stamp-whose-first-run-has-passed-is-flagged",
+        ),
+    ],
+)
+def test_coverage_grace_anchors_to_the_tier_since_stamp(
+    coverage, tier_since, uncovered
+):
+    """A volume created long ago that joined the tier moments ago is graced like a new one."""
+    result = logic.TierResult()
+    rows = [("pvc-1", "2027-01-01T00:00:00Z", "ns/claim1", "default", tier_since)]
+    logic.check_tier(
+        result,
+        rows,
+        coverage,
+        30 * HOUR,
+        "daily",
+        "daily-backup",
+        "9:00",
+        "*",
+        set(),
+        NOW,
+    )
+    if uncovered is None:
+        assert logic.uncovered_problem(result) is None
+        assert result.graced_seeded_vols == ["ns/claim1"]
+        assert result.checked == 0
+    else:
+        assert result.uncovered == [uncovered]
 
 
 # ── check 5: recent-backup (B2 transaction) budget ───────────────────────────────────────────

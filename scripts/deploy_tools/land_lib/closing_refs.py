@@ -60,9 +60,7 @@ def _read_refs(ln: Landing) -> JsonObject:
     label = "gh api graphql closing references"
     fields = ("-F", "owner={owner}", "-F", "repo={repo}", "-F", f"pr={ln.opts.pr}")
     args = ("api", "graphql", "-f", f"query={_QUERY}", *fields, "--jq", _FLATTEN)
-    return gh_read.read(
-        lambda: as_object(ln.tools.gh_json(*args), label), ln.tools.sleep, label
-    )
+    return ln.read(lambda: as_object(ln.tools.gh_json(*args), label), label)
 
 
 def _stranded(refs: JsonObject) -> list[JsonObject]:
@@ -117,11 +115,10 @@ def _close(ln: Landing, number: str) -> None:
         f"Fixed by PR #{ln.opts.pr}. GitHub left this issue open after the merge, "
         "so the landing closed it."
     )
-    gh_read.read(
+    ln.read(
         lambda: ln.tools.gh(
             "issue", "close", number, "--reason", "completed", "--comment", comment
         ),
-        ln.tools.sleep,
         f"gh issue close {number}",
     )
 

@@ -1,7 +1,7 @@
 """grafana_dashboard_uids.py and asset_pins.py print nothing on stdout when they exit non-zero.
 
-Most tests run a script as a subprocess against a scratch tree holding a copy of `scripts/lib`
-and the script, with the copy's `scripts/` on `PYTHONPATH` as a launcher supplies it. Both
+Most tests run a script as a subprocess against a scratch tree holding a copy of `scripts/lib`,
+`hosts/lib` and the script, with the copy's `scripts/` on `PYTHONPATH` as a launcher supplies it. Both
 scripts read their repo from their own location, so the copy runs unpatched. A subprocess also sidesteps `asset_pins.main`'s `out=sys.stdout` default, which is
 bound at import, where `capsys` cannot see it. Every pin in the asset_pins tree has a URL that
 does not render, so each check and refresh fails on `Pin.error` before it fetches anything.
@@ -36,12 +36,17 @@ UNPAIRED_DIGEST_KEY = "stray_tool_sha256"
 
 
 def _copy_script(root: Path, script: str) -> Path:
-    """Copy `scripts/lib` and one validator under `root`; return the copied validator."""
-    shutil.copytree(
-        REPO / "scripts/lib",
-        root / "scripts/lib",
-        ignore=shutil.ignore_patterns("tests", "__pycache__"),
-    )
+    """Copy `scripts/lib`, `hosts/lib` and one validator under `root`; return the validator.
+
+    `lib.longhorn_lib.longhorn_backups` imports `host_lib` from the `hosts/lib` beside its own
+    copy, and `asset_pins.py` reaches it through the renderer that `host_specs` loads through.
+    """
+    for tree in ("scripts/lib", "hosts/lib"):
+        shutil.copytree(
+            REPO / tree,
+            root / tree,
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
     target = root / "scripts/validate" / script
     target.parent.mkdir(parents=True)
     shutil.copy2(REPO / "scripts/validate" / script, target)

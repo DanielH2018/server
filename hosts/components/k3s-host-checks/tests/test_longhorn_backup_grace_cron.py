@@ -80,3 +80,31 @@ def test_well_formed_cron_graces_the_new_volume(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("up\t"), proc.stdout
     assert "awaiting their first scheduled backup" in proc.stdout, proc.stdout
+
+
+def test_a_volume_moved_into_the_tier_is_graced_from_its_tier_since_stamp(tmp_path):
+    """A volume created days ago and moved into the daily tier moments ago is graced.
+
+    Its target is blank, so the stamp must keep its own column rather than read as the target.
+    """
+    stub = _grace_pair_stub_kubectl(
+        tmp_path,
+        created_ts=_rfc3339(NOW - 3 * 86400),
+        old_backup_ts=_rfc3339(NOW - 3600),
+        new_target="",
+        tier_since=_rfc3339(NOW - 30),
+    )
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        STUB_R2_URL="",
+        STUB_DAILY_CRON="30 3 * * *",
+    )
+
+    proc = subprocess.run(
+        reader_argv(now=NOW), capture_output=True, text=True, env=env, timeout=30
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+    assert "awaiting their first scheduled backup" in proc.stdout, proc.stdout
+    assert "default/new-data" in proc.stdout, proc.stdout

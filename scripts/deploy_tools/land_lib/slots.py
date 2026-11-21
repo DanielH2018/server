@@ -292,7 +292,7 @@ def refuse_before_run(ln: Landing, head: str) -> None:
         say(f"{why}; starting its run, and it waits in the turn for that to clear")
 
 
-def refuse_before_merge(ln: Landing, head: str, in_turn: bool) -> None:
+def refuse_before_merge(ln: Landing, head: str) -> None:
     """End the landing with exit 75, merging nothing, while a rule bars its PR from merging.
 
     It runs just before the merge, and `refuse_before_run` runs the same rules when a draft
@@ -301,8 +301,9 @@ def refuse_before_merge(ln: Landing, head: str, in_turn: bool) -> None:
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
     - a serial PR waits while another landing holds a slot or the serial lock, and keeps the
       serial lock until its process ends, a fresh grading included, so every other PR waits
-      for it. When `in_turn`, it waits up to `DRAIN_S` for those landings to reach their
-      verdicts before it refuses, because no other landing merges meanwhile;
+      for it. While it holds the landing turn (`ln.give_back_turn`), it waits up to
+      `DRAIN_S` for those landings to reach their verdicts before it refuses, because no
+      other landing merges meanwhile;
     - a k8s or serial PR waits inside the weekly reboot's no-promotion window while another
       landing holds a slot, so one at a time waits out the window.
 
@@ -310,7 +311,7 @@ def refuse_before_merge(ln: Landing, head: str, in_turn: bool) -> None:
     """
     kind, lock = _kind(ln, head), _lock_of(ln)
     why, drains = _bar(ln, kind, lock)
-    if why and drains and in_turn:
+    if why and drains and ln.give_back_turn:
         why = _drain(ln, kind, lock, why)
     if why:
         _refuse(ln, why)

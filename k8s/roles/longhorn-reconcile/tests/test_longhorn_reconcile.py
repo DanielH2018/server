@@ -29,6 +29,7 @@ from _reconcile_world import (
     _pvc,
     _volume,
 )
+from lib.longhorn_lib import longhorn_backups
 from renderer.template_filters.longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
@@ -201,6 +202,51 @@ def test_a_volume_that_changes_group_and_target_gets_one_patch_carrying_both(env
     assert write[1] == f"{VOLUMES}/pvc-1"
     assert world.volumes["pvc-1"]["spec"]["backupTargetName"] == "default"
     assert f"{P}weekly-backup-d3" in world.volumes["pvc-1"]["metadata"]["labels"]
+
+
+TIER_SINCE = "homelab/tier-since"
+RUN_AT = "2026-11-20T18:34:00Z"
+
+
+@pytest.mark.parametrize(
+    ("claim", "group", "target"),
+    [
+        pytest.param("homelab/sonarr-config", "default", None, id="group-move"),
+        pytest.param("homelab/traefik-acme", "default", "default", id="target-move"),
+        pytest.param(
+            "homelab/authelia-config", "weekly-backup-d2", None, id="shard-to-daily"
+        ),
+    ],
+)
+def test_a_tier_move_stamps_when_the_volume_joined_its_tier(claim, group, target, env):
+    """longhorn-backup-health anchors a moved volume's grace to this stamp, not to creation."""
+    world = World(
+        [_volume("pvc-1", claim, group, target=target)],
+        [_pvc(c, k) for c, k in PVC_CLASS.items()],
+    )
+    assert lr.main([], env, world, now=RUN_AT) == 0
+    assert world.volumes["pvc-1"]["metadata"]["annotations"][TIER_SINCE] == RUN_AT
+    assert len(world.writes()) == 1
+
+
+def test_a_patch_that_moves_no_tier_stamps_nothing(env):
+    """The trim arm's explicit `default` on an unlabelled volume keeps it in the daily tier."""
+    volume = _volume(
+        "pvc-1",
+        "homelab/authelia-config",
+        state="attached",
+        workloads=(("ReplicaSet", "Running"),),
+    )
+    world = World([volume], [_pvc(c, k) for c, k in PVC_CLASS.items()])
+    assert lr.main([], env, world, now=RUN_AT) == 0
+    assert len(world.writes()) == 1
+    assert f"{P}default" in world.volumes["pvc-1"]["metadata"]["labels"]
+    assert TIER_SINCE not in world.volumes["pvc-1"]["metadata"].get("annotations", {})
+
+
+def test_the_tier_since_annotation_is_the_one_the_health_reader_reads():
+    """The health reader asks kubectl for this key; a mismatch reads every volume as unstamped."""
+    assert lr.TIER_SINCE == TIER_SINCE == longhorn_backups.TIER_SINCE_ANNOTATION
 
 
 def test_the_target_names_are_the_ones_setup_k3s_and_the_readers_use():
