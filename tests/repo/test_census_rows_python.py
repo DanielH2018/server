@@ -49,14 +49,14 @@ FUTURE_ANNOTATIONS = re.compile(r"^from __future__ import annotations\b", re.MUL
 
 # DECIDED: host-shipped `k8s/roles/*/files/*.py`, `hosts/components/*/files/*.py` and
 # `hosts/lib/` are EXEMPT, and the exemption is not cosmetic. `hosts/lib/host_lib.py` runs under
-# the hosts' own interpreter, for instance through the repository signer, and the k8s files run
-# under their pod image's. `scripts/lib/longhorn_lib/` is not exempt: its reader runs through
-# `uv run --python {{ host_python_version }}` (3.15.2), and three of its modules use the
-# parenthesis-free `except A, B:` that 3.12 rejects. The hosts' own interpreter is not the
-# repo's uv env: `python3 -V` on daniel-server
-# and daniel-pi both report 3.12.3 (measured 2026-09-05), and the k8s `files/*.py` run under
-# whatever python their pod image ships. Below 3.14 there is no PEP 649, so annotations
-# evaluate EAGERLY at def/class time and the import is load-bearing insurance against a
+# the hosts' own interpreter (`python3 -V` on daniel-server and daniel-pi reports 3.12.3,
+# measured 2026-09-05), for instance through the repository signer, and the k8s files run under
+# whatever python their pod image ships. The component files are a mix: some start through
+# `uv run --python {{ host_python_version }}` (3.15.2), where the import is dead, and others
+# have no such pin. The census does not tell them apart, so the whole directory stays exempt.
+# `scripts/lib/longhorn_lib/` is not exempt: its reader runs under the pinned 3.15.2, and three
+# of its modules use the parenthesis-free `except A, B:` that 3.12 rejects.
+# Below 3.14 there is no PEP 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing insurance against a
 # forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises
 # NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such
 # annotation is lazy either way. So the exemption is what keeps a green suite from
