@@ -214,15 +214,14 @@ def _template_yielding_functions(
 
     The mirror of `_reading_helpers`, which goes the other way: there the read is in the callee
     and the path at the call site, here the glob is in the callee and the read in the caller.
-    `tests/k8s/test_root_security_context_is_written_out_in_full.py` is the shape —
+    The shape is
     `def _manifest_files(): return sorted(p for p in K8S_ROLES.rglob("templates/*.j2") ...)`
     read as `for path in _manifest_files(): path.read_text()`, where neither site carries a
     template path.
 
     Resolved against the `bound` the caller has so far, and recomputed on every pass of
-    `_bindings`' fixed point, because a return value can be a name an earlier pass bound:
-    `test_workload_shell_uses_the_macros.py` returns `roles + shared`, two locals each assigned
-    a comprehension over a glob.
+    `_bindings`' fixed point, because a return value can be a name an earlier pass bound,
+    such as `roles + shared`, two locals each assigned a comprehension over a glob.
     """
     return frozenset(
         node.name

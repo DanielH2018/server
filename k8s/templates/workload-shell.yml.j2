@@ -11,7 +11,8 @@
   `spec:`; `pod_shell` at 6 spaces, directly under `spec.template.spec:`. A Job or CronJob pod
   spec sits elsewhere and is NOT a caller.
 
-  tests/k8s/test_workload_shell_uses_the_macros.py is the call-site guard: every
+  The workload-shell-comes-from-the-macros row of
+  tests/repo/test_census_rows_roles.py is the call-site guard: every
   Deployment template calls both, every DaemonSet template calls `pod_shell`, and none writes
   an owned field out by hand. A macro cannot force its own call, so the rendered-fleet census
   in test_pod_template_hygiene.py, test_deploy_strategy.py and the
