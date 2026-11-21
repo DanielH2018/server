@@ -20,8 +20,6 @@ is the evidence plane. A trim that reclaimed nothing and a deletion nobody could
 real and neither is urgent, so they must not displace a stale backup from the push slot.
 """
 
-from __future__ import annotations
-
 import re
 from typing import NamedTuple
 

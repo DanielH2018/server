@@ -28,8 +28,6 @@ Typical usage example:
     longhorn_backups.completed(backups)
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass
 
