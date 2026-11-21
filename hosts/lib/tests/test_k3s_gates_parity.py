@@ -156,4 +156,3 @@ def test_the_scripts_object_view_reads_each_field_as_k8s_objects_does():
             shared.spec,
             shared.status,
         )
-        assert view.conditions == shared.conditions

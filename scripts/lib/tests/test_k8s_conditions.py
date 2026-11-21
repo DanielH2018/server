@@ -1,5 +1,5 @@
+import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -52,14 +52,26 @@ def test_a_malformed_status_reads_as_no_conditions(item):
     assert parse_conditions(item) == {}
 
 
-def test_the_module_runs_under_a_hosts_system_python():
+def test_the_module_runs_under_a_hosts_python_312():
     """`homelab-k3s-restart` imports it under Ubuntu 24.04's /usr/bin/python3, a 3.12."""
-    system_python = Path("/usr/bin/python3")
-    assert system_python.exists(), "no system python3 to stand for a host's"
+    uv = shutil.which("uv")
+    assert uv, "no uv to fetch the hosts' 3.12"
     ran = subprocess.run(
-        [system_python, "-I", k8s_conditions.__file__],
+        [
+            uv,
+            "run",
+            "--no-project",
+            "--python",
+            "3.12",
+            "python",
+            "-I",
+            "-c",
+            "import runpy, sys; assert sys.version_info[:2] == (3, 12), sys.version; "
+            "runpy.run_path(sys.argv[1])",
+            k8s_conditions.__file__,
+        ],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
     )
     assert ran.returncode == 0, ran.stderr
