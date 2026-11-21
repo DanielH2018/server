@@ -38,7 +38,6 @@ entities:
   - binary_sensor.aqara_fp300_pir_detection
   - binary_sensor.aqara_fp300_presence
   - binary_sensor.pixel_watch_3_bedtime_mode
-  - binary_sensor.pixel_watch_3_on_body_sensor
   - binary_sensor.window_sensor_battery_low
   - binary_sensor.window_sensor_contact
   - binary_sensor.window_sensor_tamper
@@ -209,7 +208,6 @@ entities:
   - sensor.pixel_watch_3_battery_state
   - sensor.pixel_watch_3_charger_type
   - sensor.pixel_watch_3_do_not_disturb_sensor
-  - sensor.pixel_watch_3_light_sensor
   - sensor.pixel_watch_3_next_alarm
   - sensor.sun_next_dawn
   - sensor.sun_next_dusk
