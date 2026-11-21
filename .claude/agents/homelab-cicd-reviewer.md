@@ -14,7 +14,7 @@ deploy. Read-only. The pipeline is mature and battle-tested; **verify the live c
 flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 
 ## The mental model
-- **CI:** `.github/workflows/ci.yml` runs `prek run --all-files` (config `prek.toml`) on PRs + push
+- **CI:** `.github/workflows/ci.yml` runs `prek run --all-files` (refused to you: it rewrites files) (config `prek.toml`) on PRs + push
   to master — YAML lint, gitleaks, pytest, the compose-template validator, ruff. uv
   must be on PATH. The test set is `pyproject.toml` `[tool.pytest.ini_options].testpaths` (single
   source).
@@ -50,8 +50,12 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 
 ## Tools (read-only)
 - `Read`/`Grep` the workflow, `prek.toml`, `renovate.json`, `scripts/deploy_tools/promote.py` and `land.sh` + CLAUDE.md.
-- `uv run pytest <suite>` (read-only test run), `uv run python scripts/secrets_mgmt/secret_rotation.py audit`,
-  `uv run python scripts/validate/render_templates.py` — confirm the live state matches the comments.
+- `uv run python scripts/secrets_mgmt/secret_rotation.py audit` and
+  `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <name>` — confirm the live
+  state matches the comments.
+- The Bash hook refuses every command outside
+  `.claude/hooks/hooklib/read_only_commands.py`, so you cannot run the suite or the renderer.
+  Name the test or render a finding needs in the report, for the dispatcher to run.
   Never run a command that writes state (no `sync`/`record`, no deploy, no commit, no push).
 
 ## Method
