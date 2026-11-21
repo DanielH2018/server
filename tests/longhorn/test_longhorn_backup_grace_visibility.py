@@ -38,7 +38,7 @@ def _graced_result():
     """A single volume created 10 minutes ago, no backup anywhere, first run 3h from now."""
     result = logic.TierResult()
     created = "2027-01-15T07:50:00Z"
-    rows = [("pvc-1", created, "ns/claim1", "default")]
+    rows = [("pvc-1", created, "ns/claim1", "default", "")]
     logic.check_tier(
         result, rows, [], 30 * 3600, "daily", "daily-backup", "11:00", "*", set(), NOW
     )

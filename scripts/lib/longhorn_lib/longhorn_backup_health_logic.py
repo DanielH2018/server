@@ -184,7 +184,7 @@ class TierResult:
 
 def check_tier(
     result: TierResult,
-    rows: list[tuple[str, str, str, str]],
+    rows: list[tuple[str, str, str, str, str]],
     coverage_rows: list[tuple[str, str, str]],
     max_age_s: float,
     tier: str,
@@ -200,11 +200,17 @@ def check_tier(
     every call shares the same global counters in the original script, which is what makes
     UNCOVERED/CHECKED/etc. fleet-wide totals rather than per-tier ones.
 
-    `rows` is (volume, creationTimestamp, namespace/pvcName, backupTargetName) for the volumes
-    this tier's label selector matches. `coverage_rows` is (volumeName, snapshotCreatedAt,
-    RecurringJob) across every Backup, shared unfiltered across every tier.
+    `rows` is (volume, creationTimestamp, namespace/pvcName, backupTargetName, tier-since) for
+    the volumes this tier's label selector matches. tier-since is the `homelab/tier-since`
+    annotation longhorn-reconcile stamps when it moves a volume into a tier, or empty.
+    `coverage_rows` is (volumeName, snapshotCreatedAt, RecurringJob) across every Backup, shared
+    unfiltered across every tier.
+
+    A volume joined its tier at the later of its creation and its tier-since stamp. Until the
+    tier job's first run after that, plus GRACE_SLACK_S, a volume with no backup from the job, or
+    only backups older than the join, is graced rather than uncovered.
     """
-    for vol, created, claim, target in rows:
+    for vol, created, claim, target, tier_since in rows:
         if not vol:
             continue
         target = target or longhorn_backups.B2_TARGET
@@ -221,16 +227,15 @@ def check_tier(
             else None
         )
 
-        if latest is None:
-            created_s = rfc3339_to_epoch(created) or 0
+        joined_s = max(
+            rfc3339_to_epoch(created) or 0, rfc3339_to_epoch(tier_since) or 0
+        )
+        latest_s = rfc3339_to_epoch(latest) if latest is not None else None
+        if latest is None or (latest_s is not None and latest_s < joined_s):
             first_run_s = (
-                first_run_after(created_s, run_hhmm, dow) if created_s > 0 else 0
+                first_run_after(joined_s, run_hhmm, dow) if joined_s > 0 else 0
             )
-            if (
-                created_s > 0
-                and first_run_s > 0
-                and now_s < first_run_s + GRACE_SLACK_S
-            ):
+            if joined_s > 0 and first_run_s > 0 and now_s < first_run_s + GRACE_SLACK_S:
                 result.graced += 1
                 result.graced_vols.append(claim)
                 any_candidates = [ts for (v, ts, j) in coverage_rows if v == vol and ts]
@@ -241,12 +246,12 @@ def check_tier(
                     result.graced_new += 1
                     result.graced_new_vols.append(claim)
                 continue
+        if latest is None:
             result.uncovered.append(f"{claim} ({tier}, no backup from {job})")
             continue
 
         result.checked += 1
-        latest_s = rfc3339_to_epoch(latest) or 0
-        if latest_s == 0:
+        if not latest_s:
             result.uncovered.append(f"{claim} ({tier}, unparseable timestamp)")
         elif now_s - latest_s > max_age_s:
             hours = int((now_s - latest_s) / 3600)
