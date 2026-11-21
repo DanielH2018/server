@@ -43,8 +43,11 @@ WRITTEN = {
         "[Coredump]\nStorage=none\nProcessSizeMax=0\n"
     ),
 }
-# The one directive the task wrote to SUDOERS; the file's comment header is the component's own.
-SUDOERS_DIRECTIVE = "Defaults timestamp_type=global, timestamp_timeout=60"
+# The one directive in SUDOERS; the file's comment header is the component's own. It sets no
+# timestamp type, because sudo-rs, 26.04's default sudo, refuses that setting.
+SUDOERS_DIRECTIVE = "Defaults timestamp_timeout=60"
+# Where each visudo lives: classic sudo's on 24.04, classic beside sudo-rs on 26.04, sudo-rs's.
+VISUDO_PATHS = ("/usr/sbin/visudo", "/usr/sbin/visudo.ws", "/usr/lib/cargo/bin/visudo")
 BLACKLIST_WRITTEN = (
     "install dccp /bin/true\n"
     "install sctp /bin/true\n"
@@ -96,22 +99,33 @@ def sudoers_directives(data: bytes) -> list[str]:
     return [ln for ln in data.decode().splitlines() if ln and not ln.startswith("#")]
 
 
-def test_the_sudoers_file_holds_only_the_directive_its_task_wrote(package):
+def test_the_sudoers_file_holds_only_the_timeout_directive(package):
     data, shipped_mode = package.files[SUDOERS]
     assert sudoers_directives(data) == [SUDOERS_DIRECTIVE]
     assert shipped_mode == 0o440
 
 
-def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_path):
-    visudo = shutil.which("visudo") or "/usr/sbin/visudo"
-    if not Path(visudo).exists():
-        pytest.skip("needs a visudo")
-    version = subprocess.run(
-        [visudo, "--version"], capture_output=True, text=True, check=False, timeout=60
-    ).stdout
-    # The hosts run classic sudo. The ubuntu-26.04 runner's visudo rejects `timestamp_type`.
-    if not version.startswith("visudo version"):
-        pytest.skip(f"the hosts' classic visudo is not here: {version.strip()!r}")
+def _visudo(implementation: str) -> str | None:
+    """The path of the visudo whose `--version` opens with `implementation`, if one is here."""
+    for path in VISUDO_PATHS:
+        if not Path(path).exists():
+            continue
+        version = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, check=False, timeout=60
+        ).stdout
+        if version.split(" ", 1)[0] == implementation:
+            return path
+    return None
+
+
+# Classic sudo prints `visudo version` on 24.04 and `visudo.ws version` beside sudo-rs on 26.04.
+@pytest.mark.parametrize("implementation", ["visudo", "visudo.ws", "visudo-rs"])
+def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(
+    package, tmp_path, implementation
+):
+    visudo = _visudo(implementation)
+    if visudo is None:
+        pytest.skip(f"no {implementation} here")
     good = tmp_path / "10-timestamp"
     good.write_bytes(package.files[SUDOERS][0])
     good.chmod(0o440)

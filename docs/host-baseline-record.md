@@ -96,9 +96,11 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   `/etc/default/ufw`), re-applied on every `ufw enable` or `reload`. Ubuntu ships it with
   `log_martians=0`, so before #2977 this role's loop wrote 1 and `Enable UFW firewall` wrote 0
   back twenty tasks later.
-- **The credential cache is what stops every `!` command re-prompting.**
-  `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global` with a 60-minute timeout, so one
-  authentication covers every pane and every tty-less shell. The `host-hardening` component
+- **The credential cache lasts 60 minutes per terminal.**
+  `/etc/sudoers.d/10-timestamp` sets only `timestamp_timeout=60`. It set
+  `timestamp_type=global` until 2026-11-21, so one authentication covered every pane and every
+  tty-less shell. sudo-rs, which Ubuntu 26.04 selects, refuses that setting and keeps one
+  record per terminal, so a tty-less `! sudo` asks every time. The `host-hardening` component
   ships it, and a test runs `visudo -cf` on the component's copy, because a malformed drop-in locks the escalation path out.
 
 ## Unattended upgrades: two traps

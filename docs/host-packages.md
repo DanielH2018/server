@@ -1158,19 +1158,20 @@ Every `k3s` subcommand needs root.
 1. Check that the upgraded sudo still reads the host-hardening drop-in, from the held root shell.
    From 26.04 on, `/usr/bin/sudo` is an alternative. `ubuntu-minimal` and
    `ubuntu-server-minimal` depend on `sudo-rs`, which registers at priority 50 against classic
-   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. sudo-rs's `visudo` rejects
-   `timestamp_type` in `/etc/sudoers.d/10-timestamp` (`unknown setting: 'timestamp_type'`), and
-   sudo-rs keeps one credential record per terminal, so it cannot honour `global`.
+   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. The host stays on sudo-rs.
+   `/etc/sudoers.d/10-timestamp` sets only `timestamp_timeout=60`, which both implementations
+   parse, so `visudo -c` passes and prints no `unknown setting` line. sudo-rs keeps one
+   credential record per terminal.
 
     ```bash
     update-alternatives --query sudo
     visudo -c
     ```
 
-    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. Record in
-    the PR or issue that tracks the upgrade whether sudo-rs refused the call or only warned
-    about the line. If `visudo -c` fails or the second session's sudo refuses, select classic
-    sudo from the held root shell and check again:
+    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. It asks for
+    the password once and prints no warning. If `visudo -c` fails or the second session's sudo
+    refuses, select classic sudo from the held root shell and check again, then record the
+    failure in the PR or issue that tracks the upgrade:
 
     ```bash
     update-alternatives --set sudo /usr/bin/sudo.ws
@@ -1179,9 +1180,9 @@ Every `k3s` subcommand needs root.
 
     Do not edit `/etc/sudoers.d/10-timestamp` on the host. The `host-hardening` package owns
     it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
-    file. To run sudo-rs on a host instead, first merge a change to
-    `hosts/components/host-hardening/templates/10-timestamp` that drops `timestamp_type` for
-    that host. Reboot only once the second session's sudo works:
+    file. A setting either implementation's `visudo` refuses fails
+    `hosts/lib/tests/test_pi_host_hardening.py::test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy`.
+    Reboot only once the second session's sudo works:
 
     ```bash
     reboot

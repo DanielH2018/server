@@ -35,7 +35,7 @@ def test_daniel_box_ships_the_bytes_the_role_wrote(package, dst):
     assert package.files[dst][0].decode() == WRITTEN[dst]
 
 
-def test_daniel_box_ships_the_sudoers_directive_the_role_wrote(package):
+def test_daniel_box_ships_the_pi_sudoers_directive(package):
     assert sudoers_directives(package.files[SUDOERS][0]) == [SUDOERS_DIRECTIVE]
 
 
