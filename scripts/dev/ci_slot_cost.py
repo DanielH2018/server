@@ -23,7 +23,9 @@ A job's queue wait is `started_at - created_at`. GitHub creates a job's record w
 it `needs` have finished, not when the run starts, so `created_at` already marks the moment
 it became ready (every `host_packages_bootstrap` leg is created when `host_packages_build`
 completes). A skipped job never held a runner and is left
-out.
+out. A re-run attempt carries over the jobs it did not re-run: they keep their first attempt's
+`started_at` but read the re-run's `created_at`, so they start before they were created. Their
+slot-seconds count and their waits are left out.
 
 `--recent N` reads the newest N green `push` runs on master that ran at least one pytest leg,
 then prints one line per run and a pooled block over all of them; `--all` prints each run's
@@ -143,6 +145,15 @@ def leg_setup(span: dict) -> tuple[float, dict[str, float]] | None:
     return span["finished"] - span["started"] - suite, steps
 
 
+def _waits(spans: list[dict]) -> list[float]:
+    """Queue waits of the spans created before they started, which drops carried-over jobs."""
+    return [s["started"] - s["queued"] for s in spans if s["started"] >= s["queued"]]
+
+
+def _median_or_none(values: list[float]) -> float | None:
+    return statistics.median(values) if values else None
+
+
 def run_cost(jobs: list[dict]) -> dict:
     """One run's slot-seconds, queue waits and pytest-leg setup, from its jobs list."""
     spans = job_spans(jobs)
@@ -154,14 +165,12 @@ def run_cost(jobs: list[dict]) -> dict:
     return {
         "jobs": len(spans),
         "slot_s": sum(s["finished"] - s["started"] for s in spans),
-        "waits": [s["started"] - s["queued"] for s in spans],
+        "waits": _waits(spans),
         "families": {
             family: {
                 "jobs": len(members),
                 "slot_s": sum(s["finished"] - s["started"] for s in members),
-                "wait_median_s": statistics.median(
-                    s["started"] - s["queued"] for s in members
-                ),
+                "wait_median_s": _median_or_none(_waits(members)),
             }
             for family, members in by_family.items()
         },
@@ -213,10 +222,14 @@ def head_line(run_id: int, cost: dict) -> str:
     )
 
 
+def _wait_cell(wait: float | None) -> str:
+    return "   -" if wait is None else f"{wait:4.0f}s"
+
+
 def _family_lines(families: dict[str, dict]) -> list[str]:
     return [
         f"  {f['slot_s']:6.0f} slot-s  {f['jobs']:>2.0f} job(s)  "
-        f"median wait {f['wait_median_s']:4.0f}s  {family}"
+        f"median wait {_wait_cell(f['wait_median_s'])}  {family}"
         for family, f in sorted(families.items(), key=lambda kv: -kv[1]["slot_s"])
     ]
 
@@ -247,7 +260,17 @@ def render_pooled(costs: list[dict]) -> str:
             key: statistics.median(
                 c["families"][name][key] for c in costs if name in c["families"]
             )
-            for key in ("jobs", "slot_s", "wait_median_s")
+            for key in ("jobs", "slot_s")
+        }
+        | {
+            "wait_median_s": _median_or_none(
+                [
+                    w
+                    for c in costs
+                    if (w := c["families"].get(name, {}).get("wait_median_s"))
+                    is not None
+                ]
+            )
         }
         for name in names
     }
