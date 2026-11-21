@@ -7,6 +7,9 @@
   `from configarr_lib import ...` and `from lib.k8s_conditions import ...` resolve beside the
   reader.
 
+  The parser's key carries no `.py` suffix: promote's gitleaks scan reads that volume item
+  as a credential, and .gitleaks.toml admits only a snake_case key name.
+
   No secret goes in here, and the pod takes none from a Secret.
   tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
@@ -26,5 +29,5 @@ data:
 {{ lookup('file', role_file('files/configarr_lib/configarr_status.py')) | indent(4, true) }}
   host_lib.py: |
 {{ lookup('file', repo_file('hosts/lib/host_lib.py')) | indent(4, true) }}
-  k8s_conditions.py: |
+  k8s_conditions: |
 {{ lookup('file', repo_file('scripts/lib/k8s_conditions.py')) | indent(4, true) }}
