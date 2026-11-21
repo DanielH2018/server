@@ -20,6 +20,7 @@ import os
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -364,8 +365,13 @@ def test_a_republish_is_served_to_apts_if_modified_since_fetch(tmp_path):
             modified = first.headers["Last-Modified"]
         fx.publish(repo, [])
         request = urllib.request.Request(url, headers={"If-Modified-Since": modified})
-        with urllib.request.urlopen(request) as second:
-            assert second.read() == in_release.read_bytes()
+        try:
+            with urllib.request.urlopen(request) as second:
+                body = second.read()
+        except urllib.error.HTTPError as exc:
+            exc.close()
+            pytest.fail(f"the republished InRelease was answered {exc.code}")
+        assert body == in_release.read_bytes()
     finally:
         server.shutdown()
         server.server_close()
