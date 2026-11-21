@@ -12,7 +12,7 @@
   pull requests, as GitHub's GraphQL API returns them. The board is only ever written, never read as truth.
 - **Abort valves:** a run that finds nothing to change sends one GraphQL read per 25 open issues and
   no mutation. `MUTATION_PAUSE_S` in board.py paces a catch-up under GitHub's secondary write
-  limit, and reconcile's `hold_sha` holds a package that would change the unit.
+  limit, and the updater's hold holds a package that would change the unit.
 - **Required evidence, every run:** the count line `<n> issues: <x> updated, <y> unchanged, <z>
   failed` in the journal under `board-sync`, then one line per item it changed or could not
   change. A failed run adds `status=degraded <n> consecutive failed runs`. The third failed run

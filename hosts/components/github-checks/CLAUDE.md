@@ -11,7 +11,7 @@
 - **Authoritative sources:** defaults/main.yml for what should hold, and GitHub's REST API for what
   does.
 - **Abort valves:** a reachout gate before each read, and no token means a `down` verdict with
-  nothing written. Reconcile's `hold_sha` holds a package that would change either script.
+  nothing written. The updater's hold holds a package that would change either script.
 - **Required evidence, every run:** a `status=<up|down>` line tagged github-ruleset-drift or
   github-interaction-limit in the journal, and each check's .prom in node_exporter's textfile
   directory, which the GitHub rules in observability's gitops-checks.yaml read.
