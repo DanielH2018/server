@@ -277,9 +277,10 @@ over the project's backlog. A project differs from a session milestone in five w
   releases its issue returns that issue to the backlog.
 - An open project reserves its backlog for its branch. *An open project reserves its
   backlog* has the rule.
-- A claim by another branch leaves the issue in the project. Such a claim exists only when
-  it predates the issue's filing in the project, or when the project had closed. The
-  claimer's own session milestone does not take the issue out of the backlog.
+- A claim by another branch leaves the issue in an open project. Such a claim exists only
+  when it predates the issue's filing in the project. The claimer's own session milestone
+  does not take the issue out of the backlog. Once the project has closed, a claim files
+  the issue under the claimer's milestone, as `milestone add` does.
 - `next --milestone "<title>"` lists the project's free issues, and `list` and `new-issues`
   take the same flag. `--milestone none` selects the issues that no open milestone holds,
   which is the pool a root session assigns from. A title that no milestone has exits 64

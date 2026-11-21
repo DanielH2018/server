@@ -282,7 +282,8 @@ def plan_claim(
 
     ``milestone`` is the title of the worktree's session milestone, which an issue edit
     files the issue under. None, for a branch that never ran `milestone start`, files it
-    under nothing. An issue in another branch's project milestone stays there.
+    under nothing. An issue in another branch's open project stays there; one a closed
+    milestone left behind moves.
 
     ``reserved_by`` is the open project that `milestone.reservations` says reserves the
     issue against ``worktree``, or None. A claim ``worktree`` already holds stands.
@@ -329,13 +330,10 @@ def plan_claim(
             f"`block {issue.number} --clear` lifts it"
         )
     n = str(issue.number)
-    filed_in = issue.milestone
-    # A hand-steered worker claims from a project's backlog under its own branch.
-    in_their_project = is_project(filed_in) and branch_of(filed_in) != worktree
     filed = issue.milestone_title == milestone
     file_under = (
         [["issue", "edit", n, "--milestone", milestone]]
-        if milestone and not filed and not in_their_project
+        if milestone and not filed and not reserved_by
         else []
     )
     held = issue.holder

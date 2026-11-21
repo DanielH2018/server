@@ -149,7 +149,7 @@ def test_releasing_keeps_the_issue_in_a_project_milestone():
     assert [p[:2] for p in plans] == [["issue", "comment"]]
 
 
-def test_claiming_from_another_branch_closed_project_leaves_the_issue_in_it():
+def test_claiming_from_another_branch_closed_project_files_the_issue_under_yours():
     plans = plan_claim(
         _issue(milestone=PROJECT_MILESTONE),
         worktree=WT,
@@ -158,7 +158,7 @@ def test_claiming_from_another_branch_closed_project_leaves_the_issue_in_it():
         today=TODAY,
         milestone=FOCUS,
     )
-    assert [p[:2] for p in plans] == [["issue", "comment"]]
+    assert plans[1] == ["issue", "edit", "1132", "--milestone", FOCUS]
 
 
 def test_claiming_from_your_own_project_backlog_only_comments():
