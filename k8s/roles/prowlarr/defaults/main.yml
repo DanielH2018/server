@@ -43,6 +43,14 @@ prowlarr_k8s_size: 2Gi
 manifests_rollout_timeout: 780s
 prowlarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
+# The tags `prowlarr-verify` also waits on. Its app-keys seed reads their `<app>-exportarr`
+# Secrets and has Prowlarr test each app with its stored key, so it runs against their rolled
+# pods. Only Flux reads it (`RoleDefaults.verify_after`).
+flux_verify_after:
+  - lidarr
+  - radarr
+  - sonarr
+
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES
 # in a headless browser. It is reachable by prowlarr and nothing else — a deliberate
