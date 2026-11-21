@@ -34,14 +34,14 @@ def _check(name, value=1, age=60, deadline=900, details=()):
 
 
 def _report(
-    series, held=None, gates=None, names=(), ruled=None, only="", suppressed=None
+    series, held=None, gates=None, names=None, rules=None, only="", suppressed=None
 ):
     rows = monitor_checks.rows_of(series)
     return monitor_checks.report(
         rows,
         table_gates=gates or {},
-        table_names=list(names),
-        with_rule=set(rows) if ruled is None else ruled,
+        table_names=list(rows) if names is None else list(names),
+        rules={n: [] for n in rows} if rules is None else rules,
         held={} if held is None else held,
         suppressed={} if suppressed is None else suppressed,
         now=NOW,
@@ -105,8 +105,22 @@ def test_an_unread_loki_says_so_rather_than_reading_as_no_streak():
 
 
 def test_a_check_with_no_rule_is_flagged_as_never_paging():
-    text, _ = _report(_check("n8n"), ruled=set())
+    text, _ = _report(_check("n8n"), rules={})
     assert "no rule in bridge-exporter.yaml" in _line(text, "n8n")
+
+
+def test_a_down_check_names_the_rule_that_selects_it():
+    text, _ = _report(
+        _check("b2_object_lock", 0), rules={"b2_object_lock": ["B2ObjectLockOff"]}
+    )
+    assert _line(text, "b2_object_lock").endswith("down; rule B2ObjectLockOff")
+
+
+def test_a_live_row_this_checkout_lacks_is_not_called_ruleless():
+    text, _ = _report(_check("b2_object_lock", 0), names=[], rules={})
+    line = _line(text, "b2_object_lock")
+    assert "never pages" not in line
+    assert line.endswith("not in this checkout's check table, pull to read its rule")
 
 
 def test_a_table_row_with_no_series_reads_not_exported():
@@ -123,7 +137,8 @@ def test_a_name_narrows_the_rows_and_an_unknown_one_is_refused():
 
 
 def test_the_real_rule_file_and_table_cover_a_known_check():
-    assert "wan_reachable" in monitor_checks.ruled(monitor_checks.RULES.read_text())
+    rules = monitor_checks.rules_by_check(monitor_checks.RULES.read_text())
+    assert rules["b2_object_lock"] == ["B2ObjectLockOff"]
     gates = monitor_checks.gates(monitor_checks.CHECK_TABLE.read_text())
     assert gates["discord"] == "wan_reachable"
 
