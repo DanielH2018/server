@@ -28,7 +28,9 @@ Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
   - READ-ONLY and NEVER BLOCKS: every external call is timeout-bounded and wrapped;
-    a probe's failure degrades to a quiet skip. `run-hook.sh` exits 0 whatever this does.
+    a probe's failure degrades to a quiet skip, and a probe that timed out is named.
+    `run-hook.sh` exits 0 whatever this does. The one write is the worktree survey's
+    cache under `~/.cache`, which a detached refresh fills.
   - The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
@@ -82,7 +84,7 @@ except ImportError, SyntaxError:
 try:
     from hooklib import service_lines
     from hooklib.sections import keep_where, run_sections
-    from hooklib.worktree_lines import _stale_worktree_lines, remote_fanout_lines
+    from hooklib.worktree_lines import remote_fanout_lines, stale_worktree_lines
 
     HOOKLIB_IMPORT_ERROR = ""
 except (ImportError, SyntaxError) as exc:
@@ -92,7 +94,7 @@ except (ImportError, SyntaxError) as exc:
     def remote_fanout_lines(*_args, **_kwargs):
         return [f"  ⚠ hooklib is broken: {HOOKLIB_IMPORT_ERROR}"]
 
-    def _stale_worktree_lines(*_args, **_kwargs):
+    def stale_worktree_lines(*_args, **_kwargs):
         return []
 
     # One after another, with no deadline: the banner is what this file must keep, and a
@@ -159,7 +161,8 @@ def dirty_primary_problems(primary=None, status=None):
     zero patches on a first-party module). Every default reaches the real thing.
 
     Best-effort, like every other check here: any failure of a read returns [], because a
-    SessionStart banner must never block a session from starting. The exception matches
+    SessionStart banner must never block a session from starting. A timeout propagates, so
+    `run_sections` names it. The exception matches
     `master_moved_problems` — an ImportError is loud, since an empty list is indistinguishable
     from "nothing to report" and that is what hid a whole banner section for a month.
     """
@@ -183,6 +186,8 @@ def dirty_primary_problems(primary=None, status=None):
     try:
         path = primary()
         return dirty_primary_lines(status(path), path) if path else []
+    except subprocess.TimeoutExpired:
+        raise
     except Exception:
         return []
 
@@ -218,7 +223,7 @@ def master_moved_problems(git=None):
     (`.claude/hooks/_stale_probe_rule.py`) is what actually refuses a probe gate from a stale
     tree -- this is only the earlier, cheaper warning. [] on any failure of the git READ,
     including a checkout with no origin/master ref at all -- diagnosing that is not this
-    hook's job.
+    hook's job. A timeout propagates, so `run_sections` names it.
 
     A failure to IMPORT `lib.git` is the exception, and returns a `⚠` line naming it. Both halves of
     this banner import from the same `scripts/` path insert, and `other_live_sessions` already fails
@@ -256,6 +261,8 @@ def master_moved_problems(git=None):
             _changed_files(git, "origin/master...HEAD")
             & _changed_files(git, "HEAD...origin/master")
         )
+    except subprocess.TimeoutExpired:
+        raise
     except Exception:
         return []
     if not shared:
@@ -443,21 +450,12 @@ def unlabelled_worktree_lines(cwd, *, run=None):
     ]
 
 
-# Well inside the 15s budget settings.json kills this hook at (this file's gen-hooks
-# header). The dotfiles pruner's `--brief` takes 1.3s warm.
-WORKTREE_TIMEOUT_S = 5
-
 # How long every probe together may take, from when they start. The 15s hook budget less
 # the `uv run` interpreter start that comes before `main`, with room left to print. One
 # probe can still chain past it: the scrape-target probe runs `probe.py targets` (6s) and then
 # one 5s `kubectl` read per down target. That probe then prints the `did not finish` line,
 # and every other probe's lines still print.
 TOTAL_DEADLINE_S = 10
-
-
-def stale_worktree_lines(run=None):
-    """Shim: `hooklib.worktree_lines` can't import `_run` back from this module."""
-    return _stale_worktree_lines(run or _run, WORKTREE_TIMEOUT_S)
 
 
 PROBE = "uv run python scripts/diagnostics/probe.py"
@@ -576,7 +574,7 @@ def main(
             ("the dirty-primary check", dirty_primary_problems),
             ("the other-session scan", lambda: other_live_sessions(cwd)),
             ("the worktree-label check", lambda: unlabelled_worktree_lines(cwd)),
-            ("the removable-worktree survey", stale_worktree_lines),
+            ("the removable-worktree survey", lambda: stale_worktree_lines(REPO)),
             ("the remote fan-out read", remote_fanout_lines),
         ],
         deadline,

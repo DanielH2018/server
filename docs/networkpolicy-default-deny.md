@@ -406,7 +406,7 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
    baseline makes a missing policy safe rather than broken, so this is optional, but it is
    the executable-check end of the repo's escalation ladder. Slice 1 shipped a narrower
    version of this: `tests/k8s/test_netpol_baseline_labels.py` pins the labelled set.
-2. The probe's `activeDeadlineSeconds` (120s) is shorter than the Ansible wait (180s), so a
+2. The probe's `activeDeadlineSeconds` (120s) was shorter than the Ansible-era wait (180s), so a
    deadline-exceeded run produces a misleading diagnosis in either branch of the fail message.
    Slice 1's probe completed well inside both, so the real timings are now known and this can
    be tuned rather than guessed.

@@ -255,8 +255,35 @@ def test_a_refused_delete_stops_the_run_and_is_flagged(world, capsys):
     code, _, err = _prune(world, capsys)
     assert code == 1
     assert world.transport.deleted == []
+    assert [r for r in world.transport.requests if r[0] == "DELETE"] == [
+        ("DELETE", f"{forge.PACKAGE_VERSIONS_URL}/1")
+    ]
+    assert world.pauses == [forge.DELETE_PAUSE_S]
     assert "delete package version 1: HTTP 403: forced HTTP 403" in err
     assert world.run.verified == [digest_of(world.commits[2])]
+
+
+def test_a_delete_answered_with_a_502_is_retried_and_the_run_is_clean(world, capsys):
+    world.transport.api_failures[f"{LISTING}/1"] = [502]
+    code, lines, _ = _prune(world, capsys)
+    assert code == 0
+    assert world.transport.deleted == [1, 3]
+    assert world.pauses == [
+        forge.DELETE_PAUSE_S,
+        forge.DELETE_RETRY_PAUSE_S,
+        forge.DELETE_PAUSE_S,
+    ]
+    assert " deleted=2 " in lines[-1]
+
+
+def test_a_delete_that_fails_every_try_stops_the_run_and_is_flagged(world, capsys):
+    world.transport.api_failures[f"{LISTING}/1"] = [502] * forge.DELETE_TRIES
+    code, _, err = _prune(world, capsys)
+    assert code == 1
+    assert world.transport.deleted == []
+    tries = [r for r in world.transport.requests if r[0] == "DELETE"]
+    assert len(tries) == forge.DELETE_TRIES
+    assert "delete package version 1: HTTP 502" in err
 
 
 def test_a_prod_that_no_longer_verifies_is_flagged(world, capsys):

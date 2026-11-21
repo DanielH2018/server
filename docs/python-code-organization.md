@@ -28,7 +28,7 @@ decides what a module may import, so it is the first thing to establish about an
 | Kind | Where | How it reaches a host | May import |
 |---|---|---|---|
 | Operator scripts | `scripts/<dir>/` | Run from a checkout with `uv run python scripts/<dir>/<name>.py`, by hand or by a cron on `daniel-box` | Anything in the repo, after a bootstrap |
-| Role-shipped programs | `k8s/roles/<role>/files/` | Ansible copies `files/` to `/opt/<role>/` or into a ConfigMap; the repo is not there | Only what the role's ship list copies beside it |
+| Role-shipped programs | `k8s/roles/<role>/files/` | The renderer copies `files/` into a ConfigMap; the repo is not there | Only what the role's ship list copies beside it |
 | Harness hooks | `.claude/hooks/` | Run by Claude Code from the checkout | The repo, after a bootstrap |
 
 The second row is the constraint that shapes everything else. A role-shipped program cannot
@@ -362,8 +362,6 @@ behind them.
   root too.
 - **Role tests import their own `files/`.** `k8s/conftest.py` added that directory
   in #3746.
-- **No `template_filters/tests/`.** Ansible's `PluginLoader._get_paths_with_context` globs two
-  levels of subdirectories, so a test there loads at deploy time.
 
 ## Strengths to copy from
 

@@ -47,11 +47,11 @@ selecting the `r2` target, not `default`; see
 
 --8<-- "assets/generated/fragments/longhorn-volume-shards.md"
 
-The table lists the volumes the three tier lists name. These volumes are in no list and were
-already unbacked before the tiering: `pihole-etc`, `livesync-data`, `grafana-data`, and the
-registry, `prometheus`, `loki`, `tempo`, speedtest, karakeep-meili, mosquitto and flaresolverr
-volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
-the TSDBs. The configs kopia *kept* are Ansible-rendered here.
+The table lists the volumes the three tier lists name. Every other volume sits on the
+`longhorn-nobackup` StorageClass and has no backup. The [services page](reference/services.md)
+carries the backup tier of each service, so no list of those volumes is kept here. That is
+consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and the TSDBs. The
+configs kopia *kept* are rendered from the repo here.
 
 ### Which kopia rule each volume preserves
 
@@ -362,6 +362,61 @@ Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` c
 next daily read. If it reads `key bypasses governance`, the Longhorn key holds
 `bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
 `longhorn_b2_application_key`.
+
+### Step 2b: give the daily sweep a key that can extend retention
+
+The sweep below is blocked until the key it reads holds `writeFileRetentions`. The choice of key
+stays open in [#9787](https://github.com/DanielH2018/server/issues/9787). Read
+*`writeFileRetentions` lets a leaked key lock objects for good* in ADR-0041's *Consequences*
+before choosing. The two options:
+
+- **The Longhorn key.** The sweep reads it unchanged. B2 cannot add a capability to a key, so
+  mint a new key with the master key, then rotate `longhorn_b2_key_id` and
+  `longhorn_b2_application_key` to it. That key sits in a cluster Secret.
+- **A separate sweep key** with `listBuckets`, `listFiles`, `readBucketRetentions` and
+  `writeFileRetentions`, held in SOPS for the host and never rendered into a cluster Secret.
+  The sweep then needs a code change to read the new SOPS keys.
+
+Either new key must not hold `bypassGovernance`. To mint the Longhorn key, start from the live
+key's capabilities, because Longhorn breaks after the rotation if the new key lacks one it
+uses:
+
+```bash
+b2 key list --long
+b2 key create --bucket daniel-server-kopia longhorn-weekly \
+  <the live key's capabilities, comma-separated>,writeFileRetentions
+```
+
+With the key in place, the `homelab-b2-retention` timer on daniel-box stops being blocked at its
+next 07:30 UTC run. To
+confirm, read its line with `journalctl -t b2-retention --since today`. It must read
+`b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.
+
+### What the daily sweep does
+
+B2 counts a version's retention from its upload, and a Longhorn backup uploads only the blocks
+that changed. Without help, the default retention would lock only the last 7 days of uploads,
+and the base blocks of every retained weekly backup would stay open to deletion.
+`scripts/backup/b2_extend_retention.py` closes that gap. Once a day it lists the current
+objects under `longhorn/backupstore/volumes/` and sets each one's governance retention to now
+plus the bucket's default period. It skips each backup's `locks/` files.
+
+- **It costs about four Class C calls a day:** the authorize, the bucket read and one listing
+  page per 1,000 objects. Each retention update is Class A, which B2 does not meter.
+- **It adds no storage.** It uploads nothing. A block that Longhorn prunes leaves the listing,
+  so its lock lapses within one period, and the lifecycle rule removes it as before.
+- **It declines and changes nothing** while the lock is off or the default retention is not
+  governance mode. The `b2_object_lock` row reports both.
+- **It is blocked** once the bucket is locked but the key lacks `writeFileRetentions`. It
+  prints `b2-retention: blocked: the key lacks writeFileRetentions` and exits 1, and check 10
+  reports the sweep as not completing until either key from step 2b is in place.
+- **Checks 9 and 10 watch it.** `longhorn-backup-health` reads the `b2-retention` journal
+  tag, and reports `down` on a `FAILED` line or on a day with no completed run.
+
+Longhorn's `full-backup-interval` was the other candidate, and ADR-0041 records why it was
+rejected: a full backup re-uploads every block as a new version, and the replaced versions
+stay billed for a week, so the bucket would carry about two copies of the referenced set
+against the 10 GB free tier.
 
 ### Step 3: lock the R2 etcd snapshot prefix
 

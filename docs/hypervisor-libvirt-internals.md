@@ -126,8 +126,8 @@ copy or R2 credential from outliving a run.
 
 The guest's host key is pinned rather than accepted on first connect. A fresh disk every run
 means a guest-minted key every run, so the orchestrator would otherwise have to accept any key
-— and anything else that ever lands on this bridge could then answer for the address. Ansible
-generates the key once, seeds it through cloud-init's `ssh_keys`, and the orchestrator connects
+— and anything else that ever lands on this bridge could then answer for the address. `etcd-drill-prepare`
+generates the key, seeds it through cloud-init's `ssh_keys`, and the orchestrator connects
 with `StrictHostKeyChecking=yes` against that one public half.
 
 ## What ships into the drill guest, and where each piece comes from

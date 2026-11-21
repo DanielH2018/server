@@ -23,6 +23,13 @@ data:
     processors:
       batch:
         timeout: 5s
+      # Logs only: Prometheus already sets `node` on scraped metrics, and a resource
+      # attribute of the same name would collide with it as `exported_node`.
+      resource/node:
+        attributes:
+          - key: node
+            value: ${env:NODE_NAME}
+            action: upsert
     extensions:
       health_check:
         # Probe target only — in-cluster, never a hostPort, carries no telemetry.
@@ -68,7 +75,7 @@ data:
           exporters: [prometheus]
         logs:
           receivers: [otlp]
-          processors: [batch]
+          processors: [resource/node, batch]
           exporters: [otlp_http/loki]
         traces:
           receivers: [otlp]
@@ -108,6 +115,11 @@ spec:
           image: {{ observability_k8s_collector_image }}
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.
           # PID 1 runs as uid 10001, with no earlier root phase behind the capability drop.

@@ -272,14 +272,38 @@ def test_a_publish_that_could_sign_again_is_flagged(workflow, case):
 
 DIGEST = "sha256:" + "5b" * 32
 FAKE_FLUX = f"""#!/usr/bin/env bash
+echo "flux $*" >> "$CALL_LOG"
 echo '{{"digest":"{DIGEST}"}}'
 """
 FAKE_COSIGN = """#!/usr/bin/env bash
 case "$1" in
   verify) exit "${FAKE_VERIFY_RC:-1}" ;;
-  sign) echo "$*" >> "$SIGN_LOG"; exit 0 ;;
+  sign) echo "$*" >> "$SIGN_LOG"; echo "cosign $*" >> "$CALL_LOG"; exit "${FAKE_SIGN_RC:-0}" ;;
 esac
 """
+
+
+def _run_push(workflow, tmp_path, **fakes: str):
+    env = {
+        **os.environ,
+        "RETRY_FUNCTIONS": workflow["env"]["RETRY_FUNCTIONS"],
+        **{k: str(v) for k, v in _push(workflow)["env"].items()},
+        "SHA": "ab" * 20,
+        "GITHUB_REPOSITORY": "owner/repo",
+        "GH_ACTOR": "actor",
+        "GITHUB_TOKEN": "fake",
+        "SIGN_LOG": str(tmp_path / "signs.log"),
+        "CALL_LOG": str(tmp_path / "calls.log"),
+        **fakes,
+    }
+    stubs = fake_bin(
+        tmp_path / "bin",
+        flux=FAKE_FLUX,
+        cosign=FAKE_COSIGN,
+        docker="exit 0\n",
+        sleep="exit 0\n",
+    )
+    return proc_run(["bash", "-c", _push(workflow)["run"]], env=env, stub_bin=stubs)
 
 
 @pytest.mark.parametrize(
@@ -292,21 +316,30 @@ def test_the_push_signs_only_a_digest_that_does_not_verify(
 ):
     assert shutil.which("jq"), "the step reads flux's digest with jq"
     log = tmp_path / "signs.log"
-    env = {
-        **os.environ,
-        "RETRY_FUNCTIONS": workflow["env"]["RETRY_FUNCTIONS"],
-        **{k: str(v) for k, v in _push(workflow)["env"].items()},
-        "SHA": "ab" * 20,
-        "GITHUB_REPOSITORY": "owner/repo",
-        "GH_ACTOR": "actor",
-        "GITHUB_TOKEN": "fake",
-        "FAKE_VERIFY_RC": verify_rc,
-        "SIGN_LOG": str(log),
-    }
-    stubs = fake_bin(
-        tmp_path / "bin", flux=FAKE_FLUX, cosign=FAKE_COSIGN, docker="exit 0\n"
-    )
-    result = proc_run(["bash", "-c", _push(workflow)["run"]], env=env, stub_bin=stubs)
+    result = _run_push(workflow, tmp_path, FAKE_VERIFY_RC=verify_rc)
     assert result.returncode == 0, result.stdout + result.stderr
     calls = log.read_text().splitlines() if log.exists() else []
     assert len(calls) == signs, calls
+
+
+# `decide` verifies the newest `sha-<C>` it reads, so a tag ahead of its signature fails a
+# concurrent run's Decide with `no signatures found`.
+SHA_TAG = f"--tag sha-{'ab' * 20}"
+
+
+def test_the_sha_tag_is_added_only_after_the_signature(workflow, tmp_path):
+    result = _run_push(workflow, tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    push = next(c for c in calls if c.startswith("flux push"))
+    assert ":sha-" not in push, push
+    sign = next(i for i, c in enumerate(calls) if c.startswith("cosign sign"))
+    tag = next(i for i, c in enumerate(calls) if SHA_TAG in c)
+    assert sign < tag, calls
+
+
+def test_a_failed_signature_leaves_no_sha_tag(workflow, tmp_path):
+    result = _run_push(workflow, tmp_path, FAKE_SIGN_RC="1")
+    assert result.returncode != 0, result.stdout + result.stderr
+    calls = (tmp_path / "calls.log").read_text()
+    assert ":sha-" not in calls and SHA_TAG not in calls, calls

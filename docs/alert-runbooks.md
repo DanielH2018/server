@@ -380,7 +380,8 @@ draining them.
 
 - `systemd-analyze cat-config systemd/logind.conf` prints the setting that the k3s log line in
   `loki-homelab` names.
-- Restart k3s-agent. The lock check runs every 5 minutes, and its next run resolves the alert.
+- Restart the node's k3s unit: `k3s` on daniel-box, `k3s-agent` on daniel-server. The lock
+  check runs every 5 minutes, and its next run resolves the alert.
 
 ### `WiredLinkDown`
 

@@ -247,7 +247,7 @@ def process_obsidian_ics(raw_ics):
 
 
 # Ceiling on a fetched ICS feed read into memory. Real calendars are KBs-to-low-MBs; the
-# cap stops a hostile/broken upstream from ballooning the parse past the 128M container cap.
+# cap stops a hostile/broken upstream from ballooning the parse past the container's memory limit.
 MAX_FEED_BYTES = 10 * 1024 * 1024  # 10 MB
 
 

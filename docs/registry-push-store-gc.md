@@ -51,7 +51,7 @@ The verify Job's seed writes one `python-<12 hex>` tag in `registry-selftest` fo
 `k8s/image-builder` built before its role moved to GHCR, and nothing has pushed to one since.
 
 On 2026-10-25 the claim held 3.98 GB. `registry-selftest` held one seed tag
-(`python-f6a589d43c42`), `verify`, and `probe`, which the retired Ansible self-test wrote. Ten
+(`python-f6a589d43c42`), `verify`, and `probe`, which the retired Ansible-era self-test wrote. Ten
 legacy repositories held the rest: `code-server`, `homelab-mcp`, `ical-proxy`, `karakeep`,
 `n8n`, `n8n-runners`, `nut`, `pi-peer-backup`, `terraria` and `valheim`. Each carried
 `latest`, `buildcache` and up to three `sha-<12 hex>` content tags. Summing the distinct

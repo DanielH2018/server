@@ -10,6 +10,7 @@ exemption list keeps a file (`test_container_security_context.py` is the example
 Rows that would push this file past the test-module length cap live in
 `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
 `_scrape_property_rows.py`, `_edge_property_rows.py`, `_rbac_property_rows.py`,
+`_telemetry_property_rows.py`,
 `_volume_property_rows.py` and `_restart_property_rows.py`, and run here with the rest.
 `_prepull_property_rows.py` holds the rows over a second render, the Flux cluster render of
 every role that sets `flux_prepull_timeout`.
@@ -36,6 +37,7 @@ from _property_table import Property, check
 from _rbac_property_rows import RBAC_PROPERTIES
 from _restart_property_rows import RESTART_PROPERTIES
 from _scrape_property_rows import SCRAPE_PROPERTIES
+from _telemetry_property_rows import TELEMETRY_PROPERTIES
 from _volume_property_rows import VOLUME_PROPERTIES
 from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
 
@@ -407,6 +409,7 @@ PROPERTIES = (
     + VOLUME_PROPERTIES
     + RESTART_PROPERTIES
     + PREPULL_PROPERTIES
+    + TELEMETRY_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]

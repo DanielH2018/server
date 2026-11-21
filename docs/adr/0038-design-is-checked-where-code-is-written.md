@@ -52,8 +52,9 @@ so a finding names a rule in the words the implementer was given. A `design` fin
 takes code out: its fix deletes, merges or inlines something the change added, and the
 reviewer is told not to report one whose fix adds a layer, an option or a test.
 
-`scripts/dev/repo_guards.py` prints what a branch adds, net of what it removes, and each new
-top-level name that nothing outside tests uses (`scripts/lib/branch_adds.py:added_advice`).
+`scripts/dev/repo_guards.py` prints what a branch adds, net of what it removes, each new
+top-level name that nothing outside tests uses, and each new function that takes or returns a
+raw dict (`scripts/lib/branch_adds.py:added_advice`).
 It is advice and changes no exit code.
 
 ## Consequences

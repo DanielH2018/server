@@ -41,7 +41,6 @@ from notify_logic import (
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
-    read_check_pages,
     problems_fingerprint,
     compose_message,
     render_autoclosed,
@@ -51,6 +50,7 @@ from notify_logic import (
     DASHBOARD_UNPARSEABLE_MSG,
 )
 import renovate_identity
+from builder_ci_grade import read_check_pages
 from ci_verdict import checks_verdict, parse_check_runs, parse_rollup
 from renovate_identity import RenovatePR
 from pending_logic import (

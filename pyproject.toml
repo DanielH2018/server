@@ -158,7 +158,7 @@ filterwarnings = [
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
-  "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards and run by .github/workflows/image-leg.yml with `-m image`",
+  "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards and run with `-m image` by .github/workflows/image-leg.yml and the nightly .github/workflows/pytest-sweep.yml",
   "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/test_uptime_robot_keywords.py)",
 ]
 # hosts/lib: host_lib is the module the host components' scripts share, shipped beside them in
@@ -233,7 +233,7 @@ extend-exclude = [
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/aide-scan/files/aide_originals.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
+per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/aide-scan/files/aide_originals.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312", "scripts/lib/k8s_conditions.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -407,8 +407,9 @@ ignore_names = [
   "server_hostname", "ua",
   # Fixtures a test requests for their effect and never reads.
   "restore_sigint", "ssh_here",
-  # Called from the extensionless hosts/lib/homelab-reconcile, which vulture does not read.
-  "refresh_pending",
+  # Read from the extensionless hosts/lib/homelab-reconcile and homelab-k3s-restart, which
+  # vulture does not read.
+  "refresh_pending", "last_heartbeat",
   # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.

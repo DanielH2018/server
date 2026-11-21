@@ -6,7 +6,7 @@ plain YAML mapping of `script_name:` entries and nothing else. A script name may
 only one file: HA would let a later file silently override an earlier one, and
 `validate_ha_config.py` refuses that instead.
 
-Managed by Ansible. The init container copies these files into `/config/scripts/` on every
+Managed from git. The init container copies these files into `/config/scripts/` on every
 pod start and sweeps the directory first, so git is the source of truth: a file removed here
 disappears from the pod, and an edit made in the HA UI does not survive a deploy. The UI
 shows these scripts as read-only, because a directory include leaves the script editor no

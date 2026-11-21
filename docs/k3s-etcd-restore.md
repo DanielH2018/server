@@ -122,7 +122,7 @@ sudo sh -c 'sha256sum /var/lib/rancher/k3s/server/token | awk "{print \$1}" \
   | install -m 0600 -D /dev/stdin /var/lib/homelab/etcd-token.sha256'
 ```
 
-**No Ansible task writes this file, and none may be added.** A task that creates the stamp from
+**No package or unit writes this file, and none may be added.** A unit that creates the stamp from
 the live token would cure the mismatch before the daily arm could report it, turning the check
 into a tautology on any host that lost its stamp — the same reason the hash is not recorded in
 `host_vars`. Re-run the command by hand after a deliberate rotation, once the new token is copied.
@@ -142,9 +142,12 @@ in — putting the token next to the snapshot restores exactly the exposure the 
 
 Snapshots taken **before** 2026-08-20 predate the change and restore without any of this.
 
-Redeploying from Ansible is the other recovery path and is usually the better one — it rebuilds
-from the repo, which is the source of truth. The snapshot matters for what Ansible does *not*
-reproduce: objects that exist live but are not declared, and anything created outside the repo.
+Rebuilding from the repo is the other recovery path, and it is usually the better one, because
+the repo is the source of truth. `hosts/bootstrap-host.sh` installs the host package and k3s,
+then Flux applies every workload ([Bootstrapping Flux on a rebuilt
+cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster)). The snapshot matters
+for what that path does *not* reproduce: objects that exist live but are not declared, and
+anything created outside the repo.
 
 ## Where the snapshots are
 
@@ -388,8 +391,7 @@ skips the installer on a node where k3s is installed, so it never rewrites that 
    its sync objects and every Kustomization, so Flux follows `prod` again once the API
    server answers. When `flux-system` is missing or broken, install Flux by
    [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in `docs/flux-deploy-plane.md`, and when
-   a sync object is broken, take *Recovering Flux by hand* there. No Ansible path deploys a
-   workload on the cluster.
+   a sync object is broken, take *Recovering Flux by hand* there.
 5. Check for resurrected objects. A restore can bring back objects that were deliberately
    retired between the snapshot and now. Flux's `prune: true` removes one that the restored
    Kustomization inventory names once the bundle stops declaring it. An object that no inventory

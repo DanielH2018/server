@@ -74,7 +74,8 @@ the `pytest` matrix is the JSON list of leg numbers it prints. The plan always h
 because GitHub fails a job whose matrix is empty, so a selection of no modules runs one leg
 with an empty list, on which CI skips every later step. A run with no plan starts all
 `CI_LEGS` legs. `--plan` packs nothing, so it runs on the runner's own `python3` with no setup
-step.
+step. Each leg passes the plan back as `--planned`, and fails when its own selection fills
+more legs than the plan started, since a module packed past the plan would run nowhere.
 
 THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
 zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
@@ -91,6 +92,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --shard 1 --out list.txt
     uv run python scripts/dev/pytest_shard.py --shard 1 --changed-since HEAD^1
     uv run python scripts/dev/pytest_shard.py --plan --changed-since HEAD^1  # the legs to start
+    uv run python scripts/dev/pytest_shard.py --shard 1 --changed-since HEAD^1 --planned '[1,2]'
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # the table, from CI's logs
     uv run python scripts/dev/pytest_shard.py --leg-spread 42541064791  # one run's leg walls
@@ -300,9 +302,17 @@ def leg_files(
     """
     if selection is None or selection.full:
         return shard_files(shard, shards)
-    weights = load_runner_weights()
-    legs = legs_for(selection.modules, census(), shards, weights)
-    return shard_files(shard, legs, selection.modules, weights) if shard <= legs else []
+    legs = leg_count(shards, selection)
+    if shard > legs:
+        return []
+    return shard_files(shard, legs, selection.modules, load_runner_weights())
+
+
+def leg_count(shards: int, selection: affected_table.Selection | None) -> int:
+    """How many of `shards` legs `leg_files` gives a file: every leg for the whole census."""
+    if selection is None or selection.full:
+        return shards
+    return legs_for(selection.modules, census(), shards, load_runner_weights())
 
 
 def planned_legs(shards: int, selection: affected_table.Selection) -> list[int]:
@@ -310,10 +320,7 @@ def planned_legs(shards: int, selection: affected_table.Selection) -> list[int]:
 
     A matrix of no legs fails its job, so a selection of no modules still starts leg 1.
     """
-    if selection.full:
-        return list(range(1, shards + 1))
-    legs = legs_for(selection.modules, census(), shards, load_runner_weights())
-    return list(range(1, max(legs, 1) + 1))
+    return list(range(1, max(leg_count(shards, selection), 1) + 1))
 
 
 def _summary(shards: int) -> str:
@@ -345,6 +352,16 @@ def main(argv=None, select=affected) -> int:
         help=(
             "with --changed-since, print the JSON list of legs the selection needs and write "
             "it to $GITHUB_OUTPUT as `legs`"
+        ),
+    )
+    parser.add_argument(
+        "--planned",
+        type=lambda text: len(json.loads(text)),
+        metavar="JSON",
+        dest="planned_legs",
+        help=(
+            "with --shard, the JSON list of legs `--plan` started; fail when the leg's own "
+            "selection fills more legs than that"
         ),
     )
     parser.add_argument(
@@ -449,6 +466,14 @@ def main(argv=None, select=affected) -> int:
 
     selection = select(args.changed_since) if args.changed_since else None
     whole = selection is None or selection.full
+    # A module packed into a leg the plan did not start runs nowhere, and the run stays green.
+    needed = leg_count(args.of, selection)
+    if args.planned_legs is not None and needed > args.planned_legs:
+        raise SystemExit(
+            f"shard {args.shard} of {args.of}: this leg's selection fills {needed} leg(s), "
+            f"but the plan started {args.planned_legs}, so the modules past leg "
+            f"{args.planned_legs} would run nowhere"
+        )
     files = leg_files(args.shard, args.of, selection)
     # An empty share of the census is not a fast green: pytest exits 5 ("no tests collected")
     # on one, and a shard that collects nothing has silently stopped covering whatever it used

@@ -16,7 +16,8 @@ for a one-node guest (*Rehearsal in a drill guest*, docs/archive/host/h6-k3s-suc
 then prints `target_version=<the Plan's version>`. `judge` reads one snapshot of the guest and
 prints `PASS ...` (exit 0) or `WAIT ...` (exit 1) with the reason.
 
-The orchestrator calls this under `python3 -I`; PyYAML is the only import outside the stdlib.
+The orchestrator calls this with the checkout venv's `python3 -I`. Outside the stdlib it imports
+PyYAML and the checkout's `lib.k8s_conditions`, which the venv's `.pth` resolves.
 """
 
 import glob
@@ -26,6 +27,7 @@ import shutil
 import sys
 
 import yaml
+from lib.k8s_conditions import NO_CONDITION, ConditionStatus, parse_conditions
 
 HOSTNAME_KEY = "kubernetes.io/hostname"
 KUSTOMIZATION = "system-upgrade"
@@ -169,8 +171,7 @@ def overlay(rendered, out, hostname, plan_name):
 
 
 def _condition(obj, kind):
-    conditions = (obj or {}).get("status", {}).get("conditions", [])
-    return next((c for c in conditions if c.get("type") == kind), {})
+    return parse_conditions(obj or {}).get(kind, NO_CONDITION)
 
 
 def judge(expect, plan_name, target, hostname, digest, snap):
@@ -178,7 +179,7 @@ def judge(expect, plan_name, target, hostname, digest, snap):
     ks, plan, node = snap.get("kustomization"), snap.get("plan"), snap.get("node")
     ready = _condition(ks, "Ready")
     revision = (ks or {}).get("status", {}).get("lastAttemptedRevision", "")
-    observed = f"Ready={ready.get('status')} reason={ready.get('reason')} message={ready.get('message')!r}"
+    observed = f"Ready={ready.status} reason={ready.reason} message={ready.message!r}"
     if not ks or not revision.endswith(digest):
         return (
             False,
@@ -188,12 +189,16 @@ def judge(expect, plan_name, target, hostname, digest, snap):
         return False, f"Plan {plan_name} does not exist in the guest ({observed})"
     complete = _condition(plan, "Complete")
     if expect == "red":
-        if ready.get("status") == "True":
+        if ready.status is ConditionStatus.TRUE:
             return False, f"the Kustomization reads Ready ({observed})"
-        if (complete.get("status"), complete.get("reason")) != ("False", "JobFailed"):
+        if (
+            complete.status is not ConditionStatus.FALSE
+            or complete.reason != "JobFailed"
+        ):
             return (
                 False,
-                f"the Plan has not failed its Job: Complete={complete} ({observed})",
+                f"the Plan has not failed its Job: Complete={complete.status} "
+                f"reason={complete.reason} ({observed})",
             )
         return True, f"the Plan failed and the Kustomization is red: {observed}"
     label = (
@@ -208,7 +213,7 @@ def judge(expect, plan_name, target, hostname, digest, snap):
         return False, f"node label {label!r} is not the Plan's latestHash {latest!r}"
     if kubelet != target:
         return False, f"kubelet {kubelet!r} is not the Plan's version {target!r}"
-    if ready.get("status") != "True":
+    if ready.status is not ConditionStatus.TRUE:
         return False, f"the Kustomization does not read Ready ({observed})"
     return (
         True,

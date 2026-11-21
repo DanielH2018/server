@@ -56,6 +56,9 @@ from lib.cli_help import ArgumentParser, refuse_help_under_describe
 from lib.exit_codes import FAILED, OK
 from lib.gh import gh
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
+
 TERMINAL = {"clear": OK, "gh-unauthenticated": FAILED}
 GH_AUTH_REQUIRED = 4
 INTERVAL_S = 180
@@ -67,7 +70,9 @@ class NoGhLogin(Exception):
     """`gh` has no login configured, so every GitHub read fails until someone logs in."""
 
 
-def _master_ci_run(run_gh: Callable[..., CompletedProcess[str]] = gh) -> dict | None:
+def _master_ci_run(
+    run_gh: Callable[..., CompletedProcess[str]] = gh,
+) -> WorkflowRun | None:
     """The newest `ci.yml` run on master, or None when there is none.
 
     Args:
@@ -88,19 +93,19 @@ def _master_ci_run(run_gh: Callable[..., CompletedProcess[str]] = gh) -> dict | 
     if proc.returncode != 0:
         raise RuntimeError(f"gh api exited {proc.returncode}: {proc.stderr.strip()}")
     runs = json.loads(proc.stdout)["workflow_runs"]
-    return runs[0] if runs else None
+    return WorkflowRun.parse(runs[0]) if runs else None
 
 
 def read(
     deploy_hold: Callable[[], str | None] = LIVE_PROMOTE_READS.deploy_hold,
-    master_ci_run: Callable[[], dict | None] = _master_ci_run,
+    master_ci_run: Callable[[], WorkflowRun | None] = _master_ci_run,
     serial: Callable[[], str | None] = lambda: serial_landing(socket.gethostname()),
 ) -> dict:
     """The landing's state now, as cc-wait's state and detail.
 
     Args:
         deploy_hold: reads DEPLOY_HOLD; None means the variable is absent. Raises on failure.
-        master_ci_run: reads the newest master `ci.yml` run in REST's shape. Raises on failure.
+        master_ci_run: reads the newest master `ci.yml` run. Raises on failure.
         serial: reads the PR whose landing holds the serial lock, None while none does;
             `land.sh` refuses every other landing meanwhile. Raises on failure.
     """
@@ -114,8 +119,8 @@ def read(
     hold = deploy_hold()
     ci = {
         "state": ci_state(run),
-        "sha": (run or {}).get("head_sha", "")[:8],
-        "url": (run or {}).get("html_url", ""),
+        "sha": run.head_sha[:8] if run else "",
+        "url": run.url if run else "",
     }
     found = blockers(
         {

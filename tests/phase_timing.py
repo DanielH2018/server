@@ -14,9 +14,6 @@ pipes pytest through `tee`, so stdout is block-buffered and its timestamps are f
 
 ## What reads it
 
-- `scripts/lib/tests/test_entry_point_census_collects_cheaply.py`, the collect-cost guard,
-  reads each module's collection time from this report and fails when the report is missing.
-  Retiring the plugin turns that guard red unless it gets its own measurement first.
 - The render wall-second constants in `scripts/dev/shard_prebuild.py` come from the `prebuilt`
   column of a master run.
 - The `rewrote` column counts the modules a CI leg's restored rewrite cache missed.

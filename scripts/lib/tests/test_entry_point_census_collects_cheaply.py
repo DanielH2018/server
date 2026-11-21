@@ -1,25 +1,24 @@
-"""Collecting the `--help` census modules costs under a second each.
+"""Importing the `--help` census modules costs under a second of CPU each.
 
 `test_entry_points_answer_help.py` classified every script at import, and
 `test_help_check_rejects_work_output.py` imports it, so each module's collection cost 4.5s
 serially and 7-8s per xdist worker in CI. That time falls outside every `--durations` phase
-and every shard weight. Each module here is collected in its own pytest subprocess, so the
-second cannot ride on the first's import, and the cost is read from the `phase_timing`
-plugin's report, which lists every module collection of 0.2s or more.
+and every shard weight. Each module is imported in its own interpreter, so the second cannot
+ride on the first's import. The import is timed in CPU seconds: a loaded xdist worker
+stretches wall time on a module whose import did not change, and CPU time does not stretch.
 
 Run: uv run pytest scripts/lib/tests/test_entry_point_census_collects_cheaply.py
 """
 
 import os
-import re
 import subprocess
 import sys
 
 import pytest
 
-from lib.repo_paths import REPO
+from lib.repo_paths import REPO, SCRIPTS
 
-BUDGET_SECONDS = 1.0
+BUDGET_CPU_SECONDS = 1.0
 
 CENSUS = "scripts/lib/tests/test_entry_points_answer_help.py"
 CENSUS_IMPORTER = "scripts/lib/tests/test_help_check_rejects_work_output.py"
@@ -35,40 +34,40 @@ MUST_COLLECT = {
     ),
 }
 
-_COLLECTION = re.compile(r"^\s*collect\s+([0-9.]+)s\s+(\S+)\s*$", re.M)
+IMPORT_CPU_SECONDS = """
+import importlib, sys, time
+sys.path[:0] = sys.argv[2:]
+start = time.process_time()
+importlib.import_module(sys.argv[1])
+print(time.process_time() - start)
+"""
 
 
-def _collect(module: str) -> str:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+def _run(argv: list[str], env: dict[str, str] | None = None) -> str:
     done = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            module,
-            "-n",
-            "0",
-            "--collect-only",
-            "-q",
-            "--durations=0",
-        ],
-        cwd=REPO,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=300,
+        argv, cwd=REPO, env=env, capture_output=True, text=True, timeout=300
     )
     assert done.returncode == 0, done.stdout[-2000:] + done.stderr[-2000:]
     return done.stdout
 
 
+def _collected_ids(module: str) -> list[str]:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
+    argv = [sys.executable, "-m", "pytest", module, "-n", "0", "--collect-only", "-q"]
+    return _run(argv, env).splitlines()
+
+
+def _import_cpu_seconds(module: str) -> float:
+    path = REPO / module
+    argv = [sys.executable, "-c", IMPORT_CPU_SECONDS, path.stem, str(SCRIPTS)]
+    return float(_run([*argv, str(path.parent)]).splitlines()[-1])
+
+
 @pytest.mark.parametrize("module", [CENSUS, CENSUS_IMPORTER], ids=os.path.basename)
 def test_the_module_collects_in_under_a_second(module):
-    out = _collect(module)
-    assert MUST_COLLECT[module] in out.splitlines(), out[-2000:]
-    assert "phase timing" in out, f"the phase_timing report is missing:\n{out[-2000:]}"
-    seconds = {name: float(s) for s, name in _COLLECTION.findall(out)}.get(module, 0.0)
-    assert seconds < BUDGET_SECONDS, (
-        f"{module} took {seconds:.2f}s to collect; its import must not classify every "
-        f"script (#7730)\n{out[-1000:]}"
+    assert MUST_COLLECT[module] in _collected_ids(module)
+    seconds = _import_cpu_seconds(module)
+    assert seconds < BUDGET_CPU_SECONDS, (
+        f"{module} took {seconds:.2f} CPU seconds to import; its import must not "
+        f"classify every script (#7730)"
     )

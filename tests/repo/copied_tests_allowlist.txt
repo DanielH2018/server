@@ -26,7 +26,7 @@ k8s/roles/media-volume/tests/test_media_volume_verify.py 4
 k8s/roles/n8n/tests/test_n8n_verify.py 3
 k8s/roles/netpol-baseline/tests/test_netpol_baseline_verify.py 1
 k8s/roles/observability/tests/test_observability_verify.py 2
-k8s/roles/prowlarr/tests/test_prowlarr_verify.py 4
+k8s/roles/prowlarr/tests/test_prowlarr_verify.py 3
 k8s/roles/registry/tests/test_registry_verify.py 1
 k8s/roles/sonarr/tests/test_sonarr_verify.py 1
 k8s/roles/tdarr/tests/test_tdarr_verify.py 4

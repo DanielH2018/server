@@ -2,10 +2,10 @@
 
 `scripts/dev/pytest_shard.py --changed-since` picks the modules and
 `scripts/dev/tests/test_pytest_shard_selection.py` covers it. This module holds the workflow
-to the four things the script cannot see: which events hand it a base, that the matrix
-starts the legs `pytest_plan` planned, that a leg with an empty list skips every later step rather
-than running pytest on nothing, and that the gate can read whether the legs ran the whole
-census.
+to the things the script cannot see: which events hand it a base, that the plan diffs against
+the base its legs do on every event, that the matrix starts the legs `pytest_plan` planned and
+each leg hands the plan back, that a leg with an empty list skips every later step rather than
+running pytest on nothing, and that the gate can read whether the legs ran the whole census.
 
 Run: uv run pytest tests/repo/test_ci_pytest_selects_affected_modules.py
 """
@@ -67,14 +67,38 @@ def _run_step(tmp_path, step: dict, tool: str, event: str, passed: dict) -> str:
     return done.stdout
 
 
-def _arguments(tmp_path, event: str, green_base: str = "") -> str:
+def _arguments(tmp_path, event: str, green_base: str = "", planned: str = "") -> str:
     """What the select step hands `uv` on `event`."""
     step = next(s for s in _job()["steps"] if s.get("name") == SELECT)
     passed = {
         "${{ matrix.shard }}": "2",
         "${{ needs.prove.outputs.base }}": green_base,
+        "${{ needs.pytest_plan.outputs.legs }}": planned,
     }
     return _run_step(tmp_path, step, "uv", event, passed)
+
+
+def _since(arguments: str) -> str | None:
+    """The base `arguments` pass as `--changed-since`, or None when they pass none."""
+    words = arguments.split()
+    return (
+        words[words.index("--changed-since") + 1]
+        if "--changed-since" in words
+        else None
+    )
+
+
+def _plans(event: str, green_base: str) -> bool:
+    """Whether the plan step's `if:` runs it on `event` with `green_base`."""
+    condition = (
+        " ".join(_plan_step()["if"].split())
+        .replace("github.event_name", repr(event))
+        .replace("needs.prove.outputs.base", repr(green_base))
+        .replace("||", " or ")
+        .replace("&&", " and ")
+    )
+    # The input is ci.yml's own condition, with every name substituted by a literal.
+    return eval(condition)
 
 
 def _plan_step() -> dict:
@@ -115,45 +139,45 @@ def test_the_matrix_starts_the_planned_legs_and_every_leg_without_a_plan():
     assert "pytest_plan" in _job()["needs"]
 
 
-@pytest.mark.parametrize(
-    ("event", "green_base", "since"),
-    [("pull_request", "", "HEAD^1"), ("push", "f" * 40, "f" * 40)],
-    ids=["pull-request", "push"],
-)
+def _events() -> list[str]:
+    """Every event ci.yml runs on. YAML 1.1 reads the `on:` key as `True`."""
+    return sorted(yaml_fast.safe_load(CI_WORKFLOW.read_text())[True])
+
+
+@pytest.mark.parametrize("green_base", ["", "f" * 40], ids=["no-base", "a-base"])
+@pytest.mark.parametrize("event", _events())
 def test_the_plan_diffs_against_the_base_its_legs_select_against(
-    tmp_path, event, green_base, since
+    tmp_path, event, green_base
 ):
-    passed = {"scripts": "scripts", "${{ needs.prove.outputs.base }}": green_base}
-    arguments = _run_step(tmp_path, _plan_step(), "python3", event, passed)
+    """A plan from another base than its legs' starts too few legs, or legs over the census."""
+    legs_since = _since(_arguments(tmp_path, event, green_base))
+    plan_since = None
+    if _plans(event, green_base):
+        passed = {"scripts": "scripts", "${{ needs.prove.outputs.base }}": green_base}
+        arguments = _run_step(tmp_path, _plan_step(), "python3", event, passed)
+        assert arguments.split()[:2] == ["scripts/dev/pytest_shard.py", "--plan"]
+        plan_since = _since(arguments)
 
-    assert arguments.split() == [
-        "scripts/dev/pytest_shard.py",
-        "--plan",
-        "--changed-since",
-        since,
-    ]
+    assert plan_since == legs_since
+
+
+def test_every_event_the_workflow_runs_on_is_compared():
+    assert {"pull_request", "push", "merge_group", "workflow_dispatch"} <= set(
+        _events()
+    )
 
 
 @pytest.mark.parametrize(
-    ("event", "green_base", "plans"),
-    [
-        ("pull_request", "", True),
-        ("push", "f" * 40, True),
-        # The legs run the whole census, so every leg is needed.
-        ("push", "", False),
-        ("workflow_dispatch", "", False),
-    ],
-    ids=["pull-request", "push-with-a-base", "push-with-no-base", "dispatch"],
+    ("planned", "passed"),
+    [("[1,2]", ["--planned", "[1,2]"]), ("", [])],
+    ids=["a-plan", "no-plan"],
 )
-def test_only_a_run_with_a_base_plans(event, green_base, plans):
-    condition = (
-        " ".join(_plan_step()["if"].split())
-        .replace("github.event_name", repr(event))
-        .replace("needs.prove.outputs.base", repr(green_base))
-        .replace("||", " or ")
-    )
-    # The input is ci.yml's own condition, with every name substituted by a literal.
-    assert eval(condition) is plans
+def test_each_leg_hands_the_split_the_plan_that_started_it(tmp_path, planned, passed):
+    words = _arguments(tmp_path, "pull_request", planned=planned).split()
+
+    tail = words[words.index("HEAD^1") + 1 :]
+    assert tail[: len(passed)] == passed
+    assert "--planned" not in tail[len(passed) :]
 
 
 def test_the_plan_job_publishes_the_plan_steps_legs():

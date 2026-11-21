@@ -22,7 +22,8 @@ class FakeGh:
 
     `logins` maps a `GH_CONFIG_DIR`, None when the caller sets none, to the token
     `gh auth token` prints there. A directory it does not name is not logged in.
-    `fail` makes the rate-limit call fail the way `gh` can.
+    `fail` makes the rate-limit call fail the way `gh` can. `reply` replaces the JSON
+    body it prints.
     """
 
     def __init__(self):
@@ -31,6 +32,7 @@ class FakeGh:
         self.graphql_reset = RESET
         self.core_used = 0
         self.fail: Exception | None = None
+        self.reply: str | None = None
         self.during_sample: Callable[[], None] | None = None
         self.env: dict[str, str] = {}
 
@@ -48,6 +50,8 @@ class FakeGh:
             self.during_sample()
         if self.fail is not None:
             raise self.fail
+        if self.reply is not None:
+            return subprocess.CompletedProcess(argv, 0, self.reply, "")
         resources = {
             "graphql": {
                 "used": self.graphql_used,

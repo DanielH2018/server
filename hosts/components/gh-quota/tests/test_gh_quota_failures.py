@@ -37,6 +37,26 @@ def test_a_failed_sample_is_counted_and_the_call_is_still_recorded(recording, fa
     assert window.sessions == {SESSION: {"pr list": 1}}
 
 
+@pytest.mark.parametrize(
+    "reply",
+    ["{}", '{"message": "Bad credentials"}', '{"resources": null}', "[]", "not json"],
+    ids=["empty", "error-body", "null-resources", "list", "not-json"],
+)
+def test_a_rate_limit_reply_without_resources_is_counted_and_the_call_is_recorded(
+    recording, reply
+):
+    ledger, clock, gh = recording
+    gh.reply = reply
+
+    ledger.record(["pr", "list"])
+
+    assert ledger.failures() == 1
+    gh.reply = None
+    clock.t += 31
+    (window,) = ledger.windows()
+    assert window.sessions == {SESSION: {"pr list": 1}}
+
+
 def test_a_call_waits_out_another_writer_holding_the_ledger_for_seconds(recording):
     ledger, _clock, _gh = recording
     ledger.record(["pr", "list"])

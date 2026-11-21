@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta
 from email.utils import formatdate
 from pathlib import Path
@@ -272,8 +273,13 @@ def publish(repo: Path, debs: list[Path], valid_until: datetime | None = None) -
     that key's public half. The `Release` is valid until `valid_until`, or VALID_FOR after its
     `Date` when that is None; a past `valid_until` publishes an index apt refuses as expired.
     The directory itself is kept, because the container bind-mounts it: only its contents
-    are replaced.
+    are replaced. Every file under `dists/` gets an mtime at least one whole second past the
+    newest one it replaces, so apt's next `If-Modified-Since` fetch reads the new index.
     """
+    replaced = max(
+        (int(path.stat().st_mtime) for path in (repo / "dists").rglob("*")),
+        default=0,
+    )
     for child in ("pool", "dists"):
         shutil.rmtree(repo / child, ignore_errors=True)
     pool = repo / "pool"
@@ -313,3 +319,7 @@ def publish(repo: Path, debs: list[Path], valid_until: datetime | None = None) -
         str(suite / "Release"),
     )
     (repo / TEST_KEYRING).write_bytes(_gpg(home, "--export"))
+    # http.server answers 304 when the whole-second mtime is no later than If-Modified-Since.
+    stamp = max(time.time(), replaced + 1)
+    for path in (repo / "dists").rglob("*"):
+        os.utime(path, (stamp, stamp))

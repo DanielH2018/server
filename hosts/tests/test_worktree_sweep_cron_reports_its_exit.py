@@ -195,6 +195,7 @@ def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
     init_repo(server)
     commit(server, "init", **{"a.txt": "one\n"})
     held = server / ".claude" / "worktrees" / "held"
+    config = tmp_path / "home" / ".claude"
     held.parent.mkdir(parents=True)
     git(server, "worktree", "add", "-q", "-b", "worktree-held", str(held))
     landed = commit(held, "landed work", **{"b.txt": "two\n"})
@@ -205,7 +206,11 @@ def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
             tmp_path,
             0,
             pruner=f'exec python3 {_launcher()} "$@"\n',
-            env=scrubbed_env(GH_BIN="true", **_own_processes_only(tmp_path)),
+            env=scrubbed_env(
+                GH_BIN="true",
+                CLAUDE_CONFIG_DIR=str(config),
+                **_own_processes_only(tmp_path),
+            ),
         )
     finally:
         holder.kill()
@@ -213,4 +218,5 @@ def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
 
     assert f"in use by a live process: pid {holder.pid}" in result.stderr
     assert held.is_dir()
+    assert str(held) in (config / "logs/sessions.log").read_text()
     assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/0", result.stderr

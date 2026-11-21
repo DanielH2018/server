@@ -349,6 +349,15 @@ OUTSIDE_ROLE_EXEMPT: dict[tuple[str, str, str], str] = {
         "is a whole-directory optional mount the sidecar re-reads on every write, so a new tag "
         "needs no pod roll."
     ),
+    **{
+        ("prowlarr", "Secret", f"{app}-exportarr"): (
+            f"#9564. The prowlarr-app-keys seed Job reads {app}'s API key from the Secret "
+            f"{app}'s render applies, and `flux_verify_after` orders it after {app}. The Job's "
+            "spec embeds the `cluster-vars.source` digest of the key (`APP_KEYS_DIGEST8`), so a "
+            "rotation renames the Job and Flux runs it again with no pod roll."
+        )
+        for app in ("lidarr", "radarr", "sonarr")
+    },
 }
 
 

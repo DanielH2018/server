@@ -1,7 +1,7 @@
 # What the target-architecture migration built
 
 The target-architecture migration ran from 2026-10-11 to 2026-11-12. It replaced the GitOps
-deployer, Uptime Kuma and Ansible with three planes that each have one write path from git.
+deployer, Uptime Kuma and the Ansible-era plays with three planes that each have one write path from git.
 This page says what runs at the end of it and where each part is documented. The plans that
 sequenced the work are off the site's navigation, and [The plans](#the-plans) below links
 them. They describe how the lab got here, not how it runs.
@@ -37,7 +37,7 @@ the log rules. monitor-bridge is an exporter for the checks that only it can rea
 
 ## Hosts: each host is configured by its own package
 
-Ansible is gone. Each host installs a signed Debian package built for it from the repository:
+No Ansible-era play remains. Each host installs a signed Debian package built for it from the repository:
 `homelab-<hostname>`, with `homelab-updater` and `homelab-tools`. The LAN builder on daniel-box
 builds only a master commit with a green CI verdict. `dpkg` removes a file the package stops
 shipping, and the reconcilers in `homelab-reconcile` own the state `dpkg` cannot. The Pi's
