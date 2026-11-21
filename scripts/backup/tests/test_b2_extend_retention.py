@@ -141,13 +141,6 @@ def test_a_bucket_not_set_up_for_the_lock_declines_without_listing(
     assert "b2_list_file_names" not in [api for api, _ in transport.calls]
 
 
-def test_a_period_in_years_converts_to_days():
-    days, _ = sweep.governance_period_days(
-        _bucket(duration=1, unit="years")["buckets"][0]
-    )
-    assert days == 365
-
-
 def test_an_object_a_prune_removed_after_the_listing_counts_as_gone(capsys):
     def update(payload):
         if payload["fileName"] == BLOCK:

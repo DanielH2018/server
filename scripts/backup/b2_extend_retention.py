@@ -37,7 +37,7 @@ import time
 from datetime import datetime, timezone
 
 from diagnostics.probe_lib import core
-from lib.b2 import B2Error, B2Session
+from lib.b2 import B2Error, B2Session, BucketLock
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK, TEMP_FAIL
 
@@ -45,33 +45,20 @@ BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
 # A backup's lock file lives seconds; locking its version only keeps a hidden marker billed.
 LOCKS_SEGMENT = "/locks/"
 CAPABILITY = "writeFileRetentions"
-_PERIOD_DAYS = {"days": 1, "years": 365}
 # B2's error code for a version that a prune removed between the listing and the update.
 FILE_NOT_PRESENT = "file_not_present"
 TAG = "b2-retention"
 
 
-def governance_period_days(bucket: dict) -> tuple[int | None, str]:
-    """The bucket's governance default retention in days, or None and the reason it has none.
-
-    Args:
-        bucket: One entry of a `b2_list_buckets` response.
-    """
-    lock = bucket.get("fileLockConfiguration") or {}
-    if lock.get("isClientAuthorizedToRead") is not True:
-        return None, "the key cannot read the bucket's Object Lock setting"
-    value = lock.get("value") or {}
-    if value.get("isFileLockEnabled") is not True:
-        return None, "Object Lock is off on the bucket"
-    retention = value.get("defaultRetention") or {}
-    if retention.get("mode") != "governance":
-        return None, "the bucket's default retention is not governance mode"
-    period = retention.get("period") or {}
-    duration = period.get("duration")
-    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
-    if not isinstance(duration, int) or duration <= 0 or unit_days is None:
-        return None, "the bucket's default retention has no readable period"
-    return duration * unit_days, ""
+def lock_problem(lock: BucketLock) -> str:
+    """Why the bucket's lock is not a governance lock the sweep can extend, or ""."""
+    if not lock.readable:
+        return "the key cannot read the bucket's Object Lock setting"
+    if not lock.enabled:
+        return "Object Lock is off on the bucket"
+    if lock.mode != "governance":
+        return "the bucket's default retention is not governance mode"
+    return ""
 
 
 def lockable(files: list[dict]) -> list[dict]:
@@ -107,9 +94,14 @@ def run(session: B2Session, now_s: float) -> tuple[int, str]:
     """One sweep over an authorized session. Returns (exit code, summary line)."""
     if CAPABILITY not in session.capabilities:
         return OK, f"{TAG}: declined: the key lacks {CAPABILITY}"
-    days, reason = governance_period_days(session.bucket())
-    if days is None:
+    lock = session.bucket_lock()
+    if reason := lock_problem(lock):
         return OK, f"{TAG}: declined: {reason}"
+    if (days := lock.period_days) is None:
+        return (
+            OK,
+            f"{TAG}: declined: the bucket's default retention has no readable period",
+        )
     files = lockable(session.list_files(BACKUPSTORE_PREFIX))
     until_s = int(now_s) + days * 86400
     extended, gone, failures = extend(session, files, until_s * 1000)
