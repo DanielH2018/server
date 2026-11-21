@@ -61,7 +61,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 - **On daniel-pi (H7.27), daniel-server (H7.28) and daniel-box (H7.29), sshd reads the package's two drop-ins instead of the tasks.**
   `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
   sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
-  where the Ansible tasks wrote the same lines (`ssh_config_path` on the Pi and on daniel-box). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
+  where the Ansible-era tasks wrote the same lines (`ssh_config_path` on the Pi and on daniel-box). On daniel-server the tasks wrote `/etc/ssh/sshd_config`, whose
   Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
@@ -98,9 +98,8 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   back twenty tasks later.
 - **The credential cache is what stops every `!` command re-prompting.**
   `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global` with a 60-minute timeout, so one
-  authentication covers every pane and every tty-less shell. Ansible writes it with
-  `validate: visudo -cf %s` on the cluster nodes, and a test runs the same check on the
-  `host-hardening` component's copy, because a malformed drop-in locks the escalation path out.
+  authentication covers every pane and every tty-less shell. The `host-hardening` component
+  ships it, and a test runs `visudo -cf` on the component's copy, because a malformed drop-in locks the escalation path out.
 
 ## Unattended upgrades: two traps
 
@@ -271,7 +270,7 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
 - **It works in its own worktree, never in the primary checkout.** `prepare_tree` checks out
   `/var/lib/homelab/docs-refresh.d/tree` at the primary checkout's HEAD and runs
   `git clean -ffdx`, keeping only `.venv`. The primary checkout keeps ignored debris CI never
-  sees, such as a deleted role's `__pycache__` or the `ansible/` tree the 2026-11-13 rename left,
+  sees, such as a deleted role's `__pycache__` or the tree the 2026-11-13 rename left behind,
   and the suite failed on that debris on daniel-box alone (`039cae5bf` fixed one walker). The
   tree also frees the run of the git-tree lock, whose 64-minute wait it lost twice to other
   holders. The tree persists between runs, because the detached landing runs `land.py` from it.

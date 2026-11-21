@@ -186,7 +186,7 @@ on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDE
 
 A role's templates render with these variables, resolved for daniel-box:
 
-- role defaults, `group_vars/all.yml` and daniel-box's host_vars, in Ansible's precedence,
+- role defaults, `group_vars/all.yml` and daniel-box's host_vars, in that rising precedence,
   with the stub file's variables over all of them;
 - `services`: every entry of `cluster/services.yml`, in the dependency order of
   `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
