@@ -19,6 +19,7 @@ each check instead encodes one specific invariant someone added after it broke s
 they grow independently of each other and of the model they check.
 """
 
+import re
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
@@ -65,6 +66,13 @@ _MANAGED_DOMAINS = (
     "fan",
     "scene",
     "binary_sensor",
+    "automation",
+)
+
+# An automation's entity id is its alias slug, not its `id:`, so its literals are also read out of
+# template bodies; other domains' template references stay out of scope.
+_TEMPLATE_AUTOMATION_REF = re.compile(
+    r"\b(?:states|is_state|is_state_attr|state_attr)\(\s*['\"](automation\.[a-z0-9_]+)['\"]"
 )
 
 
@@ -83,27 +91,44 @@ def _walk_entity_id_fields(node) -> Iterator[str]:
             yield from _walk_entity_id_fields(value)
 
 
+def _template_automation_refs(node) -> Iterator[str]:
+    """Yield each `automation.<x>` literal passed first to a state-reading call in any string."""
+    if isinstance(node, str):
+        yield from _TEMPLATE_AUTOMATION_REF.findall(node)
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _template_automation_refs(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _template_automation_refs(value)
+
+
 def referenced_entities(config: dict) -> set[str]:
     """Write targets and every structural `entity_id:` field across automations and scripts.
 
     Covers triggers/conditions/actions. Templated values are dropped (can't be resolved
     statically). NON-GOAL (deliberate): entity ids inside `{{ }}` template bodies
     (states('sensor.x')) are NOT extracted — that is regex-fragile and would make this
-    the flaky part of the gate.
+    the flaky part of the gate. The one exception is an `automation.<x>` literal passed first
+    to `states`, `is_state`, `is_state_attr` or `state_attr`.
     """
     refs: set[str] = set()
-    for auto in config.get("automation") or []:
-        refs |= set(_walk_entity_id_fields(auto))
-    for body in (config.get("script") or {}).values():
+    for body in [
+        *(config.get("automation") or []),
+        *(config.get("script") or {}).values(),
+    ]:
         refs |= set(_walk_entity_id_fields(body))
+        refs |= set(_template_automation_refs(body))
     return {r for r in refs if not _is_templated(r)}
 
 
 def resolution_errors(config: dict, known: set[str]) -> list[str]:
     """List errors for each managed-domain entity referenced but absent from `known`.
 
-    Absence means a typo or a stale external snapshot — run `refresh`.
+    Absence means a typo or a stale external snapshot — run `refresh`. Each automation in
+    `config` also resolves by its alias slug, so one added since the last `refresh` passes.
     """
+    known = known | {automation_writer(a) for a in config.get("automation") or []}
     errs = []
     for ref in sorted(referenced_entities(config)):
         if ref.split(".")[0] in _MANAGED_DOMAINS and ref not in known:

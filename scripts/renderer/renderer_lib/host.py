@@ -223,7 +223,7 @@ def _render(
         raise RenderRefused(
             f"{spec_path.relative_to(hosts_root.parent)} does not exist"
         )
-    spec = _load(spec_path, PACKAGE_KEYS)
+    spec = load_spec(spec_path, PACKAGE_KEYS)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
     if "tools" in spec or "tools_on" in spec:
@@ -240,7 +240,7 @@ def _render(
         component = directory / "component.yml"
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
-        unit = _load(component, COMPONENT_KEYS)
+        unit = load_spec(component, COMPONENT_KEYS)
         package.depends.extend(
             str(dep) for dep in unit.get("depends") or [] if dep not in package.depends
         )
@@ -302,7 +302,12 @@ def _plain_name(name: object, kind: str) -> str:
     return name
 
 
-def _load(path: Path, allowed: frozenset[str]) -> dict:
+def load_spec(path: Path, allowed: frozenset[str]) -> dict:
+    """`path`'s YAML mapping, refused unless every top-level key is in `allowed`.
+
+    Raises:
+        RenderRefused: The file is not a mapping, or carries a key outside `allowed`.
+    """
     spec = yaml_fast.safe_load(path.read_text()) or {}
     if not isinstance(spec, dict):
         raise RenderRefused(f"{path} is not a mapping")

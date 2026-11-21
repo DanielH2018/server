@@ -91,7 +91,7 @@ def _session(
             dirty_primary_problems=lambda: [],
             other_live_sessions=lambda cwd: [],
             unlabelled_worktree_lines=lambda cwd: [],
-            stale_worktree_lines=lambda: [],
+            stale_worktree_lines=lambda repo: [],
             remote_fanout_lines=lambda: [],
         )
         == 0

@@ -19,7 +19,7 @@ templates/longhorn-backup-health.sh.j2, a timer every 10 minutes) exports every 
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
 LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (namespace and ages),
-LONGHORN_B2_DELETIONS_CRON_* and LONGHORN_B2_BUDGET_CRON_* (timer file, expected flag, fired
+LONGHORN_B2_DELETIONS_CRON_*, LONGHORN_B2_BUDGET_CRON_* and LONGHORN_B2_RETENTION_CRON_* (timer file, expected flag, fired
 stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
@@ -29,7 +29,9 @@ are one list call each, so the reader reports what the cluster holds, whichever 
 Flux, through the `longhorn-backup` tag, or an operator's break-glass. No baked copy of a flag or
 a schedule can disagree with it. A target that carries the reconcile-disabled annotation is a
 problem the reader reports, never a disarm.
-Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
+Prints `up<TAB>msg` or `down<TAB>msg` and exits 0. Ahead of that line it prints one
+`detail<TAB><class>` line per problem class the run found, a fixed slug naming the check
+section (`_ProblemClasses`), which the wrapper writes as a `homelab_check_detail` series.
 """
 
 from __future__ import annotations
@@ -135,6 +137,12 @@ B2_BUDGET_CRON = cron_evidence.cron_state(
     _require_env("LONGHORN_B2_BUDGET_CRON_FILE"),
     _require_bool_env("LONGHORN_B2_BUDGET_CRON_EXPECTED"),
     _require_env("LONGHORN_B2_BUDGET_CRON_FIRED_STAMP"),
+)
+B2_RETENTION_CRON = cron_evidence.cron_state(
+    "b2-retention",
+    _require_env("LONGHORN_B2_RETENTION_CRON_FILE"),
+    _require_bool_env("LONGHORN_B2_RETENTION_CRON_EXPECTED"),
+    _require_env("LONGHORN_B2_RETENTION_CRON_FIRED_STAMP"),
 )
 # Check 12's drop-in. The schedule and the arm state are read from it each run.
 ETCD_DROP_IN = Path(_require_env("LONGHORN_ETCD_DROP_IN"))
@@ -335,6 +343,26 @@ def _syslog(message: str) -> None:
         pass
 
 
+class _ProblemClasses:
+    """The problem classes a run found, each named by the check section that added a problem.
+
+    A class is a fixed slug, never message text: the wrapper writes each as the `detail` label of
+    one `homelab_check_detail` series, and the alert fires once per label value, so a label that
+    carried an age or a count would open a new alert on every run.
+    """
+
+    def __init__(self, problems: list[tuple[int, str]]) -> None:
+        self._problems = problems
+        self._seen = 0
+        self.names: list[str] = []
+
+    def close(self, name: str) -> None:
+        """Names every problem added since the previous close as class `name`."""
+        if len(self._problems) > self._seen and name not in self.names:
+            self.names.append(name)
+        self._seen = len(self._problems)
+
+
 def _check_restore_drill(
     problems: list[tuple[int, str]], stamps: drill_stamps.DrillStamps, now_s: float
 ) -> None:
@@ -389,6 +417,7 @@ def main(now: float | None = None) -> int:
     now_s = time.time() if now is None else now
 
     problems: list[tuple[int, str]] = []
+    classes = _ProblemClasses(problems)
 
     # ── targets (armed only) and disarmed set ─────────────────────────────────────────────
     # The arm state is the live URL: blank is disarmed (`cluster_state.watch_plan` has the rule
@@ -400,11 +429,13 @@ def main(now: float | None = None) -> int:
     problems += logic.check_target_availability(
         {name: listed[name] for name in backup_targets if name in listed}
     )
+    classes.close("targets")
 
     # ── run times, for the first-run grace ────────────────────────────────────────────────
     # From each tier's live RecurringJob. One whose cron is missing or malformed degrades the
     # first-run grace for that tier, not the reader.
     job_crons = _fetch_job_crons(problems)
+    classes.close("recurring-jobs")
     run_hhmm = cluster_state.run_times(job_crons or {})
     for job, hhmm in run_hhmm.items():
         if hhmm is None and job_crons:
@@ -418,6 +449,7 @@ def main(now: float | None = None) -> int:
     # an empty list, so the one fetch problem is the one thing reported.
     backup_items = _fetch_backups_json(problems)
     backup_list = backups.from_items(backup_items) if backup_items is not None else None
+    classes.close("backup-list")
 
     # ── check 2: freshness ────────────────────────────────────────────────────────────────
     # On a failed fetch, check_freshness is skipped rather than fed a None newest_ts: that path
@@ -432,6 +464,7 @@ def main(now: float | None = None) -> int:
         )
         if fresh_problem:
             problems.append(fresh_problem)
+    classes.close("freshness")
 
     # ── check 3: errored backups ──────────────────────────────────────────────────────────
     error_cutoff_s = now_s - ERROR_MAX_AGE_HOURS * 3600
@@ -441,6 +474,7 @@ def main(now: float | None = None) -> int:
         )
         if errored_problem:
             problems.append(errored_problem)
+    classes.close("errored-backups")
 
     # ── check 4: per-tier coverage ────────────────────────────────────────────────────────
     disarmed_set = set(disarmed_targets)
@@ -514,6 +548,7 @@ def main(now: float | None = None) -> int:
     uncovered_problem = logic.uncovered_problem(result)
     if uncovered_problem:
         problems.append(uncovered_problem)
+    classes.close("tier-coverage")
 
     # ── check 5: recent-backup budget ─────────────────────────────────────────────────────
     day_ago_s = now_s - 86400
@@ -530,6 +565,7 @@ def main(now: float | None = None) -> int:
         )
         if budget_problem:
             problems.append(budget_problem)
+    classes.close("backup-budget")
 
     # ── check 6: failed jobs ──────────────────────────────────────────────────────────────
     job_items = _fetch_jobs_json(problems)
@@ -539,11 +575,13 @@ def main(now: float | None = None) -> int:
         )
         if failed_jobs_problem:
             problems.append(failed_jobs_problem)
+    classes.close("failed-jobs")
 
     # ── checks 7 and 8: the restore drill, from one store ──────────────────────────────────
     stamps = _fetch_drill_stamps(problems)
     if stamps is not None:
         _check_restore_drill(problems, stamps, now_s)
+    classes.close("restore-drill")
 
     # Longhorn keeps each RecurringJob's newest pod (history limit 1), so this one read holds the
     # last run of every RecurringJob: check 11 reads the backup jobs' skips from it and check 9
@@ -563,6 +601,7 @@ def main(now: float | None = None) -> int:
         "--tail=-1",
         "--ignore-errors",
     )
+    classes.close("recurring-job-logs")
 
     # ── checks 9 and 10: what the trim and the B2 timers said, and whether they ran ──────
     # A failed CronJob read is rank 4, the evidence plane's rank, not `_fetch_text`'s rank 1.
@@ -575,10 +614,12 @@ def main(now: float | None = None) -> int:
         problems.append(
             (4, "could not read the trim CronJob — a trim failure has no reader")
         )
-    for cron in (B2_DELETIONS_CRON, B2_BUDGET_CRON):
+    classes.close("trim")
+    for cron in (B2_DELETIONS_CRON, B2_BUDGET_CRON, B2_RETENTION_CRON):
         problems.extend(
             cron_evidence.check_cron(journal, CRON_EVIDENCE_WINDOW_HOURS, cron, now_s)
         )
+    classes.close("b2-timers")
 
     # ── check 11: weekly volumes a backup RecurringJob skipped ───────────────────────────
     # Skipped with the backup list, like check 4, since `weekly_watched` and the coverage rows
@@ -589,9 +630,11 @@ def main(now: float | None = None) -> int:
         )
         if skipped_problem:
             problems.append(skipped_problem)
+    classes.close("skipped-weekly")
 
     # ── check 12: k3s's native etcd snapshots reach S3 ───────────────────────────────────
     etcd_age_s = _check_etcd_s3_snapshot(problems, now_s)
+    classes.close("etcd-s3")
 
     status, msg, push_msg = logic.build_verdict(
         problems,
@@ -616,6 +659,8 @@ def main(now: float | None = None) -> int:
     # journalctl trail even though only `push_msg` reaches the wrapper's stdout.
     _syslog(f"status={status} {msg}")
 
+    for name in classes.names:
+        print(f"detail\t{name}")
     print("%s\t%s" % (status, push_msg))
     return 0
 

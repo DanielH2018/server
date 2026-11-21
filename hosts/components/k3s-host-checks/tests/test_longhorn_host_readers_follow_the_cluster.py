@@ -73,7 +73,7 @@ def test_the_shim_thresholds_are_found():
 def test_a_target_with_a_url_that_is_unavailable_is_flagged(tmp_path):
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     out = _run(tmp_path, stub, STUB_DEFAULT_AVAILABLE="false")
-    assert out.startswith("down\t"), out
+    assert out.splitlines()[-1].startswith("down\t"), out
     assert "backup target default unavailable: STUB_UNAVAILABLE_REASON default" in out
 
 
@@ -120,7 +120,7 @@ def test_the_daily_job_cron_moves_the_first_run_grace(tmp_path):
         STUB_R2_URL="",
         STUB_DAILY_CRON=_daily_cron_at(created + 5 * 3600),
     )
-    assert early.startswith("down\t") and "new-data" in early, early
+    assert early.splitlines()[-1].startswith("down\t") and "new-data" in early, early
     assert (
         late.startswith("up\t") and "awaiting their first scheduled backup" in late
     ), late
@@ -145,7 +145,7 @@ def test_a_failed_target_list_is_flagged_and_never_read_as_a_disarm(
         STUB_DEFAULT_URL="",
         STUB_FAIL_TARGET_LIST="1",
     )
-    assert out.startswith("down\t"), out
+    assert out.splitlines()[-1].startswith("down\t"), out
     logged = logger_calls.read_text()
     assert "backup target list fetch failed" in logged, logged
     assert "DISARMED" not in logged, logged
@@ -156,7 +156,7 @@ def test_a_failed_target_list_is_flagged_and_never_read_as_a_disarm(
 def test_a_list_without_a_target_is_flagged(tmp_path, logger_calls, missing):
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     out = _run(tmp_path, stub, STUB_DROP_TARGET=missing)
-    assert out.startswith("down\t"), out
+    assert out.splitlines()[-1].startswith("down\t"), out
     assert f"backup target {missing} is not in the cluster" in logger_calls.read_text()
 
 
@@ -176,7 +176,7 @@ def test_a_blank_target_held_by_the_break_glass_annotation_is_flagged_and_named(
         STUB_DEFAULT_URL="",
         STUB_DEFAULT_ANNOTATION="1",
     )
-    assert out.startswith("down\t"), out
+    assert out.splitlines()[-1].startswith("down\t"), out
     logged = logger_calls.read_text()
     assert (
         "backup target default carries kustomize.toolkit.fluxcd.io/reconcile=disabled"

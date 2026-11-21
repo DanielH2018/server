@@ -246,7 +246,8 @@ def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
     check_n8n/check_bazarr convention; the sustained-failure grace is about indexer flaps, not
     the bridge's own reach). check_arr_queue does not share it — its *arrs are Deployments
     this bridge watches rolling, where a Prowlarr rollout is not a recurring source of pages. The all-indexers-down red error stays with Prowlarr's own in-app
-    onHealthIssue notification — this owns the per-indexer sustained signal Prowlarr can't express.
+    onHealthIssue notification, which arr-notification's seed declares and ArrNotificationsFailing
+    pages on when its sends fail — this owns the per-indexer sustained signal Prowlarr can't express.
     """
     if not cfg.PROWLARR_API_KEY:
         return True, "prowlarr indexer monitoring disabled (no API key)"

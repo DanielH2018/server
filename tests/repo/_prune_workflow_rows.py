@@ -9,11 +9,12 @@ import copy
 from _promote_workflow import PROMOTE_REF, REF_GUARD
 from _row_table import Census, Subject, tracked
 from _workflow_rows import PROMOTE, checkouts, condition, jobs, judge, load, mutants
-from _workflow_rows import steps, triggers
+from _workflow_rows import report_job_problems, steps, triggers
 from test_promote_workflow_retry import LOAD_RETRY
 
 PRUNE = ".github/workflows/prune-artifacts.yml"
 PRUNE_PERMISSIONS = {"contents": "read", "packages": "write"}
+REPORT_PERMISSIONS = {"contents": "read", "issues": "write"}
 PRUNE_COMMAND = "promote.py prune"
 LOGIN_STEP = "Log in to GHCR"
 COSIGN_PIN = ("COSIGN_VERSION", "COSIGN_SHA256")
@@ -30,6 +31,19 @@ def prune_row(**kw) -> dict:
 
 def _prune(wf: dict) -> dict:
     return jobs(wf).get("prune", {})
+
+
+def _report(wf: dict) -> dict:
+    return jobs(wf).get("report", {})
+
+
+def _report_problems(wf: dict) -> list[str]:
+    found = report_job_problems(wf)
+    if _report(wf).get("needs") != "prune":
+        found.append("the report job does not wait on prune")
+    if _report(wf).get("permissions") != REPORT_PERMISSIONS:
+        found.append(f"report permissions are {_report(wf).get('permissions')}")
+    return found
 
 
 def _env(wf: dict) -> dict:
@@ -120,16 +134,16 @@ PRUNE_ROWS = (
     ),
     Census(
         **prune_row(
-            name="prune-is-the-only-job",
+            name="prune-and-its-report-are-the-only-jobs",
             reason=(
-                "Every row below reads the job named `prune`. A second job runs with no row "
-                "holding its guard, scopes or concurrency group."
+                "The rows here read the jobs named `prune` and `report`. A third job runs "
+                "with no row holding its guard, scopes or concurrency group."
             ),
             offence=judge(
                 lambda wf: (
                     []
-                    if list(jobs(wf)) == ["prune"]
-                    else [f"the jobs are {sorted(jobs(wf))}, not ['prune']"]
+                    if sorted(jobs(wf)) == ["prune", "report"]
+                    else [f"the jobs are {sorted(jobs(wf))}, not ['prune', 'report']"]
                 )
             ),
             red=mutants(
@@ -177,6 +191,31 @@ PRUNE_ROWS = (
                 PRUNE,
                 a_floating_runner=lambda wf: wf["jobs"]["prune"].update(
                     {"runs-on": "ubuntu-latest"}
+                ),
+            ),
+        )
+    ),
+    Census(
+        **prune_row(
+            name="prune-report-speaks-for-masters-runs",
+            reason=(
+                "A failed scheduled prune reaches the operator only through the report's "
+                "issue, so a red prune must still reach the report, and a dispatch on a branch "
+                "reports nothing. `issues: write` sits on the report job alone, and the prune "
+                "job's packages-write token never reaches a job that writes issues."
+            ),
+            offence=judge(_report_problems),
+            red=mutants(
+                PRUNE,
+                a_report_that_skips_a_red_prune=lambda wf: _report(wf).update(
+                    {"if": "${{ github.ref == 'refs/heads/master' }}"}
+                ),
+                a_report_from_any_branch=lambda wf: _report(wf).update(
+                    {"if": "${{ always() }}"}
+                ),
+                a_report_that_does_not_wait=lambda wf: _report(wf).pop("needs"),
+                a_report_that_can_delete=lambda wf: _report(wf)["permissions"].update(
+                    {"packages": "write"}
                 ),
             ),
         )

@@ -23,8 +23,6 @@ PYPROJECT = REPO / "pyproject.toml"
 
 TEST_ONLY_NAMES = (
     ("scripts/lib/kubectl.py", "RETIRED_CLUSTER_NODES"),
-    ("scripts/dev/review_metrics.py", "COVERAGE_DIR"),
-    ("scripts/dev/review_metrics.py", "validate_row"),
     ("scripts/secrets_mgmt/secrets_lib/secret_registry.py", "record_names"),
     ("scripts/renderer/renderer_lib/dialect.py", "off_the_list"),
     ("scripts/renderer/renderer_lib/bundle.py", "rules_missing"),

@@ -1,21 +1,34 @@
 #!/bin/bash
 # homelab-netplan-wifi: install the rendered wifi fallback into /etc/netplan once it passes netplan.
 #
-# A file netplan cannot parse takes every link down at the next boot, so the generator reads the
+# A file netplan cannot parse takes every link down at the next boot, so netplan reads the
 # rendered file in a scratch root first, and a refusal leaves the installed file as it is.
-# HOMELAB_ROOT prefixes the two paths, and NETPLAN_GENERATE names the generator, for the tests.
+# `netplan get` refuses a syntax error or an unknown key. The generator runs as boot runs it, a
+# systemd generator with three output dirs, and refuses what only a backend checks, such as a
+# short passphrase; in that form it skips an unparsable file and exits 0, hence both. netplan 1.2
+# aborts in its Open vSwitch step when the generator runs without the output dirs.
+# HOMELAB_ROOT prefixes the two paths, and NETPLAN and NETPLAN_GENERATE name the two netplan
+# commands, for the tests.
 set -euo pipefail
 
 name=80-homelab-wifi-fallback.yaml
 rendered="${HOMELAB_ROOT:-}/var/lib/homelab-secrets/netplan/$name"
 installed="${HOMELAB_ROOT:-}/etc/netplan/$name"
+netplan="${NETPLAN:-netplan}"
 generate="${NETPLAN_GENERATE:-/usr/libexec/netplan/generate}"
 
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
-install -d -m 0700 "$scratch/etc/netplan"
+install -d -m 0700 "$scratch/etc/netplan" "$scratch/usr/lib/systemd/system-generators"
 install -m 0600 "$rendered" "$scratch/etc/netplan/$name"
-if ! "$generate" --root-dir "$scratch" > /dev/null; then
+generator="$scratch/usr/lib/systemd/system-generators/netplan"
+ln -s "$generate" "$generator"
+out="$scratch/run/systemd"
+install -d "$out/generator" "$out/generator.early" "$out/generator.late"
+# stdout is the parsed file, wifi password and all.
+if ! "$netplan" get --root-dir "$scratch" all > /dev/null \
+    || ! "$generator" --root-dir "$scratch" \
+        "$out/generator" "$out/generator.early" "$out/generator.late" > /dev/null; then
     echo "homelab-netplan-wifi: netplan refuses the rendered file, so $installed stays" >&2
     exit 1
 fi

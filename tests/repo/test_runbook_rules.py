@@ -16,9 +16,7 @@ from _runbook_rule import (
     COMMANDS,
     ITEMS,
     LINES,
-    SECTION,
     STEPS,
-    Red,
     RunbookRule,
     check,
     edit,
@@ -26,7 +24,6 @@ from _runbook_rule import (
     move_line_after,
     move_step,
     proof_problems,
-    replaced_by,
 )
 
 FLUX = "docs/flux-deploy-plane.md"
@@ -43,7 +40,6 @@ SHED = "### Scenario: one node is down and the survivor runs short of memory"
 
 OPERATOR_MANAGER = "--field-manager=homelab-operator"
 KUSTOMIZE_MANAGER = "--field-manager=kustomize-controller"
-BOOTSTRAP_LINK = "flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster"
 
 _SUSPEND = re.compile(r'\bpatch\b.*"suspend":\s*(true|false)')
 _SERVER_SIDE_APPLY = re.compile(r"\bkubectl apply\b.*--server-side")
@@ -51,42 +47,6 @@ _HOLD_SET = re.compile(r"gh variable set DEPLOY_HOLD --body (?!none\b)")
 _HAND_APPLY = re.compile(r"\bkubectl apply\b")
 _ROOT_APPLY = re.compile(r"\bkubectl apply\b.*\broot\.yaml\b")
 _KUBECTL_PATCH = re.compile(r"\bkubectl\b.*\bpatch\b")
-
-# The forms R4's PR 7b refused anywhere in the bootstrap section, fenced lines included: a
-# local deploy, an Ansible deploy of the flux tag, and a hand suspend of the root.
-_BOOTSTRAP_FORBIDDEN = re.compile(
-    r"\./scripts/deploy\.sh|ansible-playbook [^ ]*deploy\.yml|roles/k8s/flux"
-    r"|^[ \t]*flux_sync_suspend: *true|flux_sync_suspend="
-    r"|(patch|suspend) kustomizations?[^ ]*[ /]homelab( |$)"
-)
-
-# The interim step the flux PR wrote before bootstrap step 1, which D5's namespace PR deleted.
-_FLUX_PR_INTERIM_STEP = """**Until D5's namespace PR lands**, run the deploy once first:
-
-```bash
-./scripts/deploy.sh
-kubectl get namespace homelab
-```
-
-"""
-
-# docs/break-glass.md's *daniel-box is dead* scenario as `git show 70591c307:docs/break-glass.md`
-# prints it, every line below its heading.
-_DEAD_BOX_AT_70591C307 = """
-daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
-
-1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*,
-   through *Cluster bring-up*: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
-   pubkey to `secrets/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
-2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
-   if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
-   token, if this is a genuinely new host rather than the same disk).
-3. Restore Longhorn volumes per `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore sync*, then
-   *Restore volumes BEFORE any deploy*), **before** the deploy — deploying first provisions
-   empty PVCs under the same names.
-4. Deploy: `./scripts/deploy.sh`.
-5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
-"""
 
 _HAND_PATCH_REASON = (
     "A hand suspend or resume under kubectl's default manager is taken back by "
@@ -97,18 +57,6 @@ _HOLD_FIRST_REASON = (
     "A hand-apply branch sets DEPLOY_HOLD before its apply, so a promotion cannot move `prod` "
     "past the reset while the operator works."
 )
-_COLD_START_REASON = (
-    "No local script installs Flux or deploys a workload on the cluster, so a cold-start "
-    "runbook sends the operator to the bootstrap section, which owns the bring-up order. "
-    "`./scripts/deploy.sh` is gone, so a step that names it is wrong wherever the link is."
-)
-
-
-def _deploy_step_added(text: str) -> str:
-    """The section with a step naming the retired script appended, its link left in place."""
-    return text + "\n9. Deploy: `./scripts/deploy.sh`.\n"
-
-
 # The shed scenario's one statement of the offline order, and the token `_offline_order`
 # folds it to, so that `forbid` reads only the bullet's other sentences.
 _OFFLINE_ORDER = (
@@ -124,22 +72,6 @@ _OFFLINE_ORDER_LINE = "      before step 4, because a queued `promote` run can s
 def _offline_order(text: str) -> list[str]:
     """Each list item and what hangs from it, the pinned offline-order sentence folded to a token."""
     return [item.replace(_OFFLINE_ORDER, _PINNED) for item in BLOCKS(text)]
-
-
-def _cold_start(doc: str, heading: str, *red: Red) -> RunbookRule:
-    return RunbookRule(
-        name=f"cold-start-links-the-bootstrap:{doc}",
-        reason=_COLD_START_REASON,
-        doc=doc,
-        heading=(heading,),
-        unit=SECTION,
-        require=(BOOTSTRAP_LINK,),
-        forbid=re.compile(r"\./scripts/deploy\.sh"),
-        red=(
-            *(red or (edit(BOOTSTRAP_LINK, "flux-deploy-plane.md", every=True),)),
-            _deploy_step_added,
-        ),
-    )
 
 
 ROWS = (
@@ -238,35 +170,6 @@ ROWS = (
             ),
         ),
     ),
-    RunbookRule(
-        name="bootstrap-holds-no-deploy-or-root-suspend",
-        reason=(
-            "The flux tag is flux-owned: no local or Ansible deploy installs Flux, and the "
-            "root is withheld until the restores, never applied and suspended. The renderer "
-            "refuses `flux_sync_suspend: true`, so the section never shows it as a value."
-        ),
-        doc=FLUX,
-        heading=(BOOTSTRAP,),
-        unit=LINES,
-        forbid=_BOOTSTRAP_FORBIDDEN,
-        min_matches=20,
-        red=(
-            edit("1. Confirm", _FLUX_PR_INTERIM_STEP + "1. Confirm"),
-            edit(
-                "the renderer refuses a\nsuspended sync render,",
-                "the renderer refuses\nflux_sync_suspend: true\nas a value,",
-            ),
-        ),
-    ),
-    _cold_start(
-        BREAK_GLASS,
-        "### Scenario: daniel-box is dead, daniel-server survives",
-        replaced_by(_DEAD_BOX_AT_70591C307),
-    ),
-    _cold_start(
-        "docs/longhorn-disaster-recovery.md", "## Procedure (fresh host, total loss)"
-    ),
-    _cold_start("docs/k3s-etcd-restore.md", "## After the restore"),
     *(
         RunbookRule(
             name=f"hand-patch-names-the-operator-manager:{doc}",
@@ -345,29 +248,6 @@ ROWS = (
             edit(
                 _OFFLINE_ORDER_LINE,
                 f"{_OFFLINE_ORDER_LINE}\n\n      Resume each suspended tag first.",
-            ),
-        ),
-    ),
-    RunbookRule(
-        name="branch-1-holds-no-revert-command",
-        reason=(
-            "Branch 1 runs the revert line of each role's block in the post, so it holds no "
-            "one-role revert command of its own for an operator to copy."
-        ),
-        doc=SNAPSHOT_DRILLS,
-        heading=(REVERT_RUNBOOK, BRANCH_1),
-        unit=LINES,
-        forbid=re.compile(r"volume-revert\.yml|volume_revert\.py|ansible-playbook"),
-        red=(
-            edit(
-                "Run the revert line of each role's block in the",
-                "Run `sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> "
-                "--sha <digest8> --apply`, then the revert line of each role's block in the",
-            ),
-            edit(
-                "Run the revert line of each role's block in the",
-                "Run `ansible-playbook revert.yml`, then the revert line of each role's "
-                "block in the",
             ),
         ),
     ),

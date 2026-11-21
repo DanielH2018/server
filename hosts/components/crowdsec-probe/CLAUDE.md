@@ -13,7 +13,7 @@
 - **Authoritative sources:** this package at the SHA the Pi installed. `domain` and
   `k3s_metallb_ingress_vip` come from group_vars and render into the service at build time, so
   a change to either needs a new package version before the Pi's probe follows it.
-- **Abort valves:** reconcile's `hold_sha`, and the updater's own hold (docs/host-packages.md).
+- **Abort valves:** the updater's hold (docs/host-packages.md).
 - **Required evidence, every cycle:** one `http=<code>` line in
   /var/log/pi-health/crowdsec-edge-probe.status, with `http=000` when nothing answered, and the
   counter `loki_process_custom_crowdsec_edge_probe_total` by status in Prometheus.

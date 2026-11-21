@@ -115,7 +115,7 @@ cd /home/ubuntu/server && sudo k3s kubectl auth can-i get plans.upgrade.cattle.i
 
 SUC upgrades daniel-box. Merging a `k3s_version` bump makes Flux apply the `system-upgrade` tag,
 the `k3s-server` Plan resolves the new version, its `prepare` container waits for the gates, and
-the upgrade container replaces the binary. No Ansible command is part of the upgrade.
+the upgrade container replaces the binary. No hand command is part of the upgrade.
 The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of the restart,
 because they all sit behind this node.
 
@@ -206,7 +206,7 @@ Until step 3, `probe.py landing` lists each object that still carries the annota
 
 SUC upgrades daniel-server. The `k3s-agent` Plan resolves the same version as the server Plan.
 Its `prepare` container runs the gates in `agent` mode, which first waits for the `k3s-server`
-Plan to finish, and then the upgrade container replaces the binary. No Ansible command is part
+Plan to finish, and then the upgrade container replaces the binary. No hand command is part
 of the upgrade.
 
 Do not run `hosts/bootstrap-host.sh` to upgrade. It runs the installer only for a missing
@@ -232,8 +232,8 @@ Every replica on daniel-server detaches and reattaches. That is the single riski
 procedure, and the reason gate 1 exists. Kubelet's graceful node shutdown does not help here
 (#8296). It runs when the host shuts down, through the systemd-logind delay lock, and a restart of
 k3s-agent is not a host shutdown. A reboot of daniel-server is graceful: kubelet stops the
-workloads, then Longhorn, then the system pods, by the groups in `k3s_agent_graceful_shutdown`
-in `hosts/components/k3s-agent/component.yml`. That holds only while kubelet holds the delay
+workloads, then Longhorn, then the system pods, by the groups in `k3s_graceful_shutdown`
+in `hosts/components/k3s-server/component.yml`. That holds only while kubelet holds the delay
 lock. To check it, run `systemd-inhibit --list` on daniel-server: it lists a kubelet `shutdown`
 lock in `delay` mode. kubelet takes the lock at start, so a restart of k3s-agent is also what
 re-arms it.

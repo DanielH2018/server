@@ -50,6 +50,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import TOOLS, AgentTools, log
+from ci_verdict import parse_commit_statuses
 from host_lib import atomic_write
 from renovate_floor import (
     FLOOR_FILE,
@@ -264,7 +265,7 @@ def main(
     )
     if statuses is None or files is None or events is None:
         return refuse("cannot read the head's statuses, files or branch activity")
-    soak = soak_problem(statuses)
+    soak = soak_problem(parse_commit_statuses(statuses))
     if soak:
         return refuse(soak)
     try:

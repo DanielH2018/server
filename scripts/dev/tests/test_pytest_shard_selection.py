@@ -7,12 +7,21 @@ tells the workflow.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_selection.py
 """
 
+import ast
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
 from dev import affected_tests
 import pytest
 from dev import pytest_shard
 from dev.affected_lib import table
 
 from lib.git_testing import commit, init_repo
+from lib.repo_paths import REPO
 
 EMPTY = table.Row(frozenset(), frozenset(), frozenset(), False)
 
@@ -206,3 +215,64 @@ def test_the_cron_records_the_modules_with_no_current_row_before_its_slice():
     assert sorted(recorded_again) == census[2:], (
         "three runs record every current row once"
     )
+
+
+@pytest.mark.parametrize(
+    ("planned", "refused"),
+    [
+        pytest.param(lambda plan: plan, False, id="the-plan-it-would-make"),
+        pytest.param(lambda plan: plan[:-1], True, id="a-plan-one-leg-short"),
+    ],
+)
+def test_a_leg_whose_selection_fills_more_legs_than_the_plan_started_fails(
+    tmp_path, planned, refused
+):
+    census = pytest_shard.census()
+    selection = table.Selection(census[: len(census) // 3], False, "a third")
+    plan = planned(pytest_shard.planned_legs(6, selection))
+    argv = ["--shard", "1", "--changed-since", "HEAD^1", "--planned", json.dumps(plan)]
+    argv += ["--out", str(tmp_path / "shard.txt")]
+
+    if refused:
+        with pytest.raises(SystemExit, match=f"but the plan started {len(plan)}"):
+            pytest_shard.main(argv, select=lambda base: selection)
+    else:
+        assert pytest_shard.main(argv, select=lambda base: selection) == 0
+
+
+def test_the_plan_runs_on_the_standard_library_and_python_3_14(tmp_path):
+    """CI's plan step runs on the runner's own `python3`, 3.14, with no venv and no setup.
+
+    `-S` keeps site-packages off the path, so an import outside the standard library fails
+    the run. `feature_version` checks grammar only, not the 3.15 standard library's additions.
+    """
+    probe, loaded = tmp_path / "probe.py", tmp_path / "loaded.txt"
+    probe.write_text(
+        textwrap.dedent(
+            f"""
+            import atexit, runpy, sys
+            def record():
+                files = (getattr(m, "__file__", None) for m in list(sys.modules.values()))
+                with open({str(loaded)!r}, "w") as out:
+                    out.write("\\n".join(f for f in files if f))
+            atexit.register(record)
+            sys.argv = ["pytest_shard.py", "--plan", "--changed-since", "HEAD"]
+            runpy.run_path("scripts/dev/pytest_shard.py", run_name="__main__")
+            """
+        )
+    )
+    done = subprocess.run(
+        [sys.executable, "-S", str(probe)],
+        cwd=REPO,
+        env={"PATH": os.environ["PATH"], "PYTHONPATH": "scripts"},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+
+    files = [Path(f) for f in loaded.read_text().splitlines()]
+    ours = [f for f in files if f.is_relative_to(REPO) and f.suffix == ".py"]
+    assert REPO / "scripts/dev/affected_lib/table.py" in ours
+    for module in ours:
+        ast.parse(module.read_text(), str(module), feature_version=(3, 14))

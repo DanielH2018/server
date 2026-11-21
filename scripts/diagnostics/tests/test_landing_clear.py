@@ -13,17 +13,20 @@ from diagnostics.probe_lib import landing_blockers
 import pytest
 from deploy_tools.land_lib import serial_lock, turn
 from lib import proc_testing
+from ci_verdict import WorkflowRun
 
 RUN_URL = "https://github.com/DanielH2018/server/actions/runs/123"
 
 
 def _run(status="completed", conclusion="success"):
-    return {
-        "status": status,
-        "conclusion": conclusion,
-        "head_sha": "c3640004deadbeef",
-        "html_url": RUN_URL,
-    }
+    return WorkflowRun.parse(
+        {
+            "status": status,
+            "conclusion": conclusion,
+            "head_sha": "c3640004deadbeef",
+            "html_url": RUN_URL,
+        }
+    )
 
 
 def _read(hold="none", run=None, serial=None):

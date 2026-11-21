@@ -317,7 +317,8 @@ Fix a red guard. Never skip or deselect it. When the run ends with a `facts noti
 re-read each section it names and edit any sentence your change made false. When it ends with
 a `removed names:` list, edit each doc and comment that still uses a name you removed. When
 its `branch adds:` line is followed by names with no caller outside tests, delete each one, or
-say in the PR body what calls it. Do not run the whole suite: a hook refuses a
+say in the PR body what calls it. When it names a function with a raw dict in its signature,
+parse the value into a typed one where it is read, or say in the PR body why it stays raw. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the
 whole suite on the PR and the pipeline resumes you with each failing check.
 """

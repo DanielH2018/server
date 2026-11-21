@@ -1,6 +1,6 @@
 # volume-revert drill, timeout sizing and the Longhorn API findings
 
-`scripts/backup/volume_revert.py` performs the revert. The Ansible role this page describes,
+`scripts/backup/volume_revert.py` performs the revert. The Ansible-era role this page describes,
 `k8s/volume-revert`, was deleted in H7.55 after the 2026-11-08 drill passed through the script.
 The script's module docstring holds the caller contract and the sequence. This page keeps the
 2026-08-21 drill timings, the timeout derivation behind
@@ -190,7 +190,7 @@ full success getting cut short), not a proven-safe one. The unit's `TimeoutStart
 `kubectl` in a Claude session authenticates as a read-only ServiceAccount and `sudo` is denied, so
 **no test in this repo drives this sequence against a real Longhorn volume**. The tests pin the
 order, the guards, the request bodies and the snapshot selection. That the Longhorn API performs
-the revert is proven by the task-6 drill of 2026-08-21, which ran the role through Ansible against
+the revert is proven by the task-6 drill of 2026-08-21, which ran the Ansible-era role against
 `speedtest-config` and verified the outcome with marker files.
 
 That drill also found what source-text tests structurally cannot. The role's input guard wrote its

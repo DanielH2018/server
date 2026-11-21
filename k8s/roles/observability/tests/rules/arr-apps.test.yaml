@@ -6,6 +6,9 @@
 # family, a long-term application failure that keeps firing across a pod change and a
 # recovering app, and a failure of every app. Three keep it silent: a healthy Prowlarr, a
 # short-term application failure alone, and a failed scrape, which ScrapeTargetDown pages.
+#
+# ArrNotificationsFailing fires per app after its hour, across a pod change, and stays silent
+# for a 30-minute failure that clears and for an app whose issues come from other checks.
 rule_files:
   - ../../files/rules/arr-apps.yaml
 evaluation_interval: 1m
@@ -154,4 +157,55 @@ tests:
     alert_rule_test:
       - eval_time: 60m
         alertname: ProwlarrAppSyncFailing
+        exp_alerts: []
+
+  # A failing notification fires after the hour, per app. Prowlarr's pod moves at 40m, which
+  # changes `instance`; the alert keeps firing. Sonarr's CustomScript warning fires on its own.
+  - interval: 1m
+    input_series:
+      - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.104:9707", source="NotificationStatusCheck", type="error", message="All notifications are unavailable due to failures"}'
+        values: '1x40'
+      - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="NotificationStatusCheck", type="error", message="All notifications are unavailable due to failures"}'
+        values: '_x41 1x40'
+      - series: 'sonarr_system_health_issues{job="exportarr", arr="sonarr", instance="10.42.0.31:9707", source="NotificationStatusCheck", type="warning", message="Notifications unavailable due to failures: Episode Trimmer"}'
+        values: '1x80'
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: ArrNotificationsFailing
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: ArrNotificationsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              service: prowlarr
+            exp_annotations:
+              summary: 'prowlarr: All notifications are unavailable due to failures.'
+              description: >-
+                A Connect notification fails every send, so the app's health notifications miss
+                Discord. A Discord 404 in the app's log means a deleted webhook, which the seed Job
+                rewrites on the next rollout. A missing CustomScript needs its row fixed in
+                Settings, Connect.
+          - exp_labels:
+              severity: warning
+              service: sonarr
+            exp_annotations:
+              summary: 'sonarr: Notifications unavailable due to failures: Episode Trimmer.'
+              description: >-
+                A Connect notification fails every send, so the app's health notifications miss
+                Discord. A Discord 404 in the app's log means a deleted webhook, which the seed Job
+                rewrites on the next rollout. A missing CustomScript needs its row fixed in
+                Settings, Connect.
+
+  # A 30-minute failure that clears, as during a Discord outage, stays quiet. So does an app
+  # whose health issues come from other checks.
+  - interval: 1m
+    input_series:
+      - series: 'radarr_system_health_issues{job="exportarr", arr="radarr", instance="10.42.0.35:9707", source="NotificationStatusCheck", type="error", message="All notifications are unavailable due to failures"}'
+        values: '_x10 1x30 _x40'
+      - series: 'prowlarr_system_health_issues{job="exportarr", arr="prowlarr", instance="10.42.1.154:9707", source="IndexerStatusCheck", type="warning", message="Indexers unavailable due to failures: YTS"}'
+        values: '1x80'
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: ArrNotificationsFailing
         exp_alerts: []

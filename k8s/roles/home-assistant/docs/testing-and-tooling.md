@@ -105,7 +105,9 @@ extracted the away/arrive selection into tested macros (`away_items_label`,
   automation or script writes `bedroom_manual_off`, `bedroom_fan_manual` or
   `bedroom_sleep_mode` without being listed. The resolution check (config refs ∪
   `state/external_entities.yml`, snapshotted by `ha_state_model.py refresh`) catches a mistyped
-  or renamed entity before it becomes a silent no-op. Live view: `probe.py ha-state` for
+  or renamed entity before it becomes a silent no-op. It also resolves `automation.<x>`, which HA
+  names by the alias slug, not the `id:`, both in `entity_id:` fields and as the first argument
+  of `states`, `is_state`, `is_state_attr` and `state_attr`. Live view: `probe.py ha-state` for
   current cell values and anomalies, `--inventory` for the full catalog. The role `CLAUDE.md`
   stays the home of the runtime and physical *why* the model cannot derive. Phases 1 and 2
   shipped in commits `fd343cc31` and `d87841da7`.

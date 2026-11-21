@@ -278,11 +278,11 @@ def test_the_summary_names_the_jobs_of_a_flake_that_passed_on_re_run(tmp_path):
     record = {
         "ci_rerun": True,
         "ci_gate": "passed after one resume and a re-run of the failed jobs",
-        "ci_rerun_jobs": ["pytest (shard 3 of 6)"],
+        "ci_rerun_jobs": ["pytest (shard 3)"],
     }
     rows, text = _rerun_summary(tmp_path, {200: record})
-    assert rows[0]["ci_rerun_jobs"] == ["pytest (shard 3 of 6)"]
-    assert "1 passed, failed jobs: pytest (shard 3 of 6)" in text
+    assert rows[0]["ci_rerun_jobs"] == ["pytest (shard 3)"]
+    assert "1 passed, failed jobs: pytest (shard 3)" in text
 
 
 def test_the_summary_prints_no_failed_jobs_when_a_re_run_cleared_them(tmp_path):

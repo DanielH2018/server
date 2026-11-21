@@ -276,14 +276,27 @@ groups:
       # tests/services/test_b1_rule_literals.py pins the two together. A daily check
       # gets a day plus an hour (k3s_daily_check_deadline_s).
       # The `unless` clause leaves a dead exporter to the bridge's `targets` check.
+      #
+      # LonghornBackupHealthFailed fires once per problem class: the producer writes one
+      # homelab_check_detail series per class, so a second problem while the check is red opens
+      # a second alert. The second arm pages a red verdict that named no class, such as a reader
+      # that crashed.
       - alert: LonghornBackupHealthFailed
         hosts: {component: k3s-host-checks}
-        expr: homelab_check_success{check="longhorn-backup-health",origin="${host}"} == 0
+        expr: |
+          homelab_check_detail{check="longhorn-backup-health",origin="${host}"} == 1
+          or
+          (
+              homelab_check_success{check="longhorn-backup-health",origin="${host}"} == 0
+            unless on (origin)
+              homelab_check_detail{check="longhorn-backup-health",origin="${host}"}
+          )
         labels:
           severity: critical
           service: ${host}
         annotations:
-          summary: '${host}: the Longhorn backup check is red.'
+          summary: >-
+            ${host}: the Longhorn backup check is red{{ with $labels.detail }} for {{ . }}{{ end }}.
           description: >-
             longhorn_backup_health.py on ${host} reported a failing backup-plane check: an
             unavailable backup target, a stale or errored backup, a failed job, or a restore drill
@@ -596,14 +609,14 @@ groups:
             nothing is counting its failed units. Read `systemctl status
             homelab-systemd-units.timer` and `journalctl -t systemd-units` on ${host}, then
             /var/lib/node-exporter-textfile/systemd-units.prom.
-      # kubelet's shutdown delay lock on the nodes that run a graceful node shutdown, daniel-server
-      # alone (k3s-agent's kubelet-graceful-shutdown.conf.j2). The k3s-agent component's lock check
-      # writes the verdict every 5 minutes, so a node fixed by hand resolves the alert at its next
-      # run. The 15m `for` covers an agent restart, which drops the lock until kubelet starts
-      # again. The 900s literals equal the script's DEADLINE_S, and
+      # kubelet's shutdown delay lock on the nodes that run a graceful node shutdown: both k3s
+      # nodes, the hosts of the `node` job (k3s-server's kubelet-graceful-shutdown.conf.j2, which
+      # k3s-agent borrows). The lock check writes the verdict every 5 minutes, so a node fixed by
+      # hand resolves the alert at its next run. The 15m `for` covers a k3s restart, which drops
+      # the lock until kubelet starts again. The 900s literals equal the script's DEADLINE_S, and
       # hosts/tests/test_kubelet_shutdown_lock_check.py pins them and the host set.
       - alert: KubeletShutdownLockMissing
-        hosts: {component: k3s-agent}
+        hosts: {job: node}
         expr: |
           homelab_check_success{check="kubelet-shutdown-lock",origin="${host}"} == 0
         for: 15m
@@ -617,10 +630,11 @@ groups:
           description: >-
             Without the lock, a shutdown stops pods undrained and can abort Longhorn's ext4
             journals. Read {job="k3s"} in loki-homelab for "Failed to start node shutdown
-            manager" and the logind value it names, then restart k3s-agent.
+            manager" and the logind value it names, then restart the node's k3s unit
+            (k3s or k3s-agent).
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#kubeletshutdownlockmissing
       - alert: KubeletShutdownLockNotReporting
-        hosts: {component: k3s-agent}
+        hosts: {job: node}
         expr: |
           (
               time() - homelab_check_last_run_timestamp_seconds{check="kubelet-shutdown-lock",origin="${host}"} > 900

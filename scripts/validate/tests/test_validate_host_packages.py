@@ -17,6 +17,7 @@ import pytest
 from lib import proc_testing, yaml_fast
 from lib.repo_paths import REPO
 from validate import host_packages
+from validate.validate_lib.host_specs import load_nfpm
 
 RED = Path(__file__).parent / "fixtures" / "host_packages" / "red"
 
@@ -70,9 +71,10 @@ def test_a_tree_without_hosts_renders_no_package(tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["config|noreplace", "config"])
-def test_a_config_type_is_flagged(kind):
-    spec = (RED / "nfpm.yaml").read_text().replace("config|noreplace", kind)
-    assert host_packages.lint_config_types(spec) == [
+def test_a_config_type_is_flagged(kind, tmp_path):
+    spec = tmp_path / "nfpm.yaml"
+    spec.write_text((RED / "nfpm.yaml").read_text().replace("config|noreplace", kind))
+    assert host_packages.lint_config_types(load_nfpm(spec)) == [
         f"/etc/homelab-red.conf: type {kind!r} ships a conffile; "
         "host packages ship plain files only"
     ]

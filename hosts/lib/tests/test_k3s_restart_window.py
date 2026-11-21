@@ -79,6 +79,7 @@ EXEMPT = {
     "homelab-claude-dotfiles-mirror.timer": "fetches and verifies the dotfiles repo; no k3s",
     "homelab-claude-weekly-summary.timer": "reads run records and posts to Discord; no k3s",
     "homelab-systemd-units.timer": "counts failed units through systemctl; never touches k3s",
+    "homelab-kubelet-shutdown-lock.timer": "reads logind's locks; the alert's 15m `for` covers a restart",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",

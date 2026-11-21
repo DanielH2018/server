@@ -56,7 +56,7 @@ def test_reader_pins_the_transport(tmp_path):
         timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t")
+    assert proc.stdout.splitlines()[-1].startswith("down\t")
     assert "STUB_KUBECTL_MARKER" in proc.stdout
 
 
@@ -221,7 +221,7 @@ def test_reader_derives_the_snapshot_bound_from_the_installed_drop_in(tmp_path):
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     snapshots = etcd_snapshots_body(("s3://b/offbox", NOW - 20 * 3600, True))
     stale = _run_reader_against(stub, tmp_path, STUB_ETCD_SNAPSHOTS=snapshots)
-    assert stale.stdout.startswith("down\t"), stale.stdout
+    assert stale.stdout.splitlines()[-1].startswith("down\t"), stale.stdout
     assert "newest S3 etcd snapshot is 20h old (limit 14h" in stale.stdout
 
     drop_in = tmp_path / "daily.yaml"
@@ -243,7 +243,7 @@ def test_reader_pages_on_a_missing_drop_in_without_listing_snapshots(tmp_path):
         STUB_FAIL_BRANCH="etcd-snapshots",
         LONGHORN_ETCD_DROP_IN=str(tmp_path / "absent" / "50-homelab.yaml"),
     )
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "etcd snapshot drop-in missing" in proc.stdout
     assert "etcd snapshot list" not in proc.stdout
 
@@ -258,7 +258,7 @@ def test_reader_pages_when_the_trim_cronjob_is_gone(tmp_path):
     proc = _run_reader_against(stub, tmp_path, STUB_TRIM_CRONJOB="")
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "the trim RecurringJob has no CronJob" in proc.stdout, proc.stdout
 
 
@@ -272,7 +272,7 @@ def test_reader_pages_naming_a_volume_the_trim_failed_on(tmp_path):
     proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=failed)
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "the trim job failed on 1 volume(s)" in proc.stdout, proc.stdout
     assert "pvc-web-data" in proc.stdout, proc.stdout
 
@@ -299,7 +299,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
         timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "960h old (limit 30h)" in proc.stdout, proc.stdout
 
 
@@ -338,7 +338,7 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH=branch)
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     logged = logger_calls.read_text()
     assert named in logged, logged
 
@@ -372,7 +372,7 @@ def test_an_unparseable_json_body_is_flagged_by_name(
     proc = _run_reader_against(stub, tmp_path, STUB_NULL_BRANCH=branch)
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     logged = logger_calls.read_text()
     assert named in logged, logged
 
@@ -389,7 +389,7 @@ def test_a_failed_backup_list_fetch_does_not_cascade_into_the_tier_loop(
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="backups")
 
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     logged = logger_calls.read_text()
     assert "backup list fetch failed" in logged, logged
     assert "tier volumes fetch failed" not in logged, logged
@@ -421,7 +421,7 @@ def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "jellyfin-config (5.00 GiB)" in proc.stdout, proc.stdout
 
 
@@ -446,7 +446,7 @@ def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
     )
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "no bound PVC" in proc.stdout and "pvc-released" in proc.stdout, proc.stdout
 
 
@@ -465,7 +465,7 @@ def test_reader_pages_naming_a_weekly_volume_its_job_skipped(tmp_path):
     proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
 
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert proc.stdout.splitlines()[-1].startswith("down\t"), proc.stdout
     assert "default/weekly-data (weekly-backup-d4" in proc.stdout, proc.stdout
 
 
@@ -486,3 +486,23 @@ def test_reader_ignores_a_daily_volume_its_job_skipped(tmp_path):
 
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("up\t"), proc.stdout
+
+
+def test_reader_names_each_problem_class_once_ahead_of_its_verdict(tmp_path):
+    """Two drill exclusions are one `restore-drill` class; a missing drop-in adds `etcd-s3`."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_DRILL_CM=fresh_drill_cm(
+            excluded_oversize=f"jellyfin-config\t{5 * 2**30}\n",
+            excluded_nopvc="pvc-released\n",
+        ),
+        LONGHORN_ETCD_DROP_IN=str(tmp_path / "absent" / "50-homelab.yaml"),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    *details, verdict = proc.stdout.splitlines()
+    assert details == ["detail\trestore-drill", "detail\tetcd-s3"], proc.stdout
+    assert verdict.startswith("down\t"), proc.stdout

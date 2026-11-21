@@ -80,10 +80,15 @@ def fields_of(body: dict) -> list[dict]:
     return body["fields"]
 
 
-def test_every_app_with_a_port_has_an_api_version_and_lidarr_alone_is_v1() -> None:
+def test_every_app_with_a_port_has_an_api_version_and_lidarr_and_prowlarr_are_v1() -> (
+    None
+):
     # A port without a version raises KeyError in the Job instead of a SeedError naming the app.
     assert seed.ARR_API_VERSIONS.keys() == seed.ARR_PORTS.keys()
-    assert {app for app, v in seed.ARR_API_VERSIONS.items() if v == "v1"} == {"lidarr"}
+    assert {app for app, v in seed.ARR_API_VERSIONS.items() if v == "v1"} == {
+        "lidarr",
+        "prowlarr",
+    }
 
 
 def test_the_live_discord_notification_is_found_by_name() -> None:

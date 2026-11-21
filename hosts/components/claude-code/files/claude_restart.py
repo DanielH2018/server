@@ -35,6 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from lib.k8s_conditions import ConditionStatus, parse_conditions
 from host_lib import (
     ERR,
     atomic_write,
@@ -126,11 +127,15 @@ def busy_reason(live: dict, flux: Kubectl) -> str:
     if rc != 0:
         return f"the Flux Kustomization {owner} could not be read"
     try:
-        conditions = json.loads(out).get("status", {}).get("conditions", [])
+        kustomization = json.loads(out)
     except ValueError:
+        kustomization = None
+    if not isinstance(kustomization, dict):
         return f"the Flux Kustomization {owner} could not be read"
-    ready = any(c["type"] == "Ready" and c["status"] == "True" for c in conditions)
-    return "" if ready else f"the Flux Kustomization {owner} is not Ready"
+    ready = parse_conditions(kustomization).get("Ready")
+    if ready is not None and ready.status is ConditionStatus.TRUE:
+        return ""
+    return f"the Flux Kustomization {owner} is not Ready"
 
 
 def restart(

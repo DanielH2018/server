@@ -822,9 +822,15 @@ An allowlist entry must be:
   code;
 - the only workload of its role, of any kind, because the `service` label is the role and
   listing one Deployment takes the whole role out of triage;
-- outside the alert plane: not the `observability`, `blackbox-exporter`, `monitor-bridge` or
-  `loki-homelab` role, and not `coredns`, where a failed restart removes the thing that
-  reports it. The test keeps that list by hand, so a role that starts sending pages joins it.
+- outside the alert plane, where a failed restart removes the thing that reports it. The test
+  derives the alert plane from the render
+  (`hosts/tests/test_claude_restart_allowlist.py:alert_plane`). A role joins it when its
+  config sends alerts to Alertmanager, as `observability` and `loki-homelab` do. A role
+  joins it when it renders a Service that an Alertmanager receiver names as its host; every
+  receiver is outside the cluster. A role also joins it when it owns a scrape job that a rule
+  for another service reads, as `blackbox-exporter`, `monitor-bridge` and `node-exporter` do.
+  `coredns` is the one member kept by hand, because every pod, Alertmanager included,
+  resolves names through it.
 
 ### The restart broker
 
@@ -907,10 +913,10 @@ imported `CLAUDE.md` names (#4193, #4194, #4195). Each new operator tool reached
 when someone remembered to copy it.
 
 The dotfiles decide what an agent does not get (DanielH2018/dotfiles#809). Under the flag, they
-leave alone what Ansible owns for the agent: its login profile, git identity and signers, ssh,
+leave alone what the `claude-code` component owns for the agent: its login profile, git identity and signers, ssh,
 and its own `CLAUDE.md`. They render the user `CLAUDE.md` to `~/.claude/operator/CLAUDE.md`
 instead, which the agent's own file imports. They also skip the scripts that need sudo or a
-terminal, the uv and prek install that Ansible pins, and daniel-box's once-per-host timers. The
+terminal, the uv and prek install that `homelab-tools` pins, and daniel-box's once-per-host timers. The
 rendered `settings.json` drops `SUDO_ASKPASS`, names the `<host>-<user>` artifacts path and
 labels telemetry `process.owner=<user>`. Every guard hook stays. `chezmoi-guard` and
 `serve-artifacts` are off: the agent's source is a clone it only pulls, and the artifact port is

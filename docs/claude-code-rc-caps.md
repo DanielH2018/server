@@ -4,7 +4,7 @@ The role doc `hosts/components/claude-code/CLAUDE.md` keeps the rules. This page
 live phone check, the arguments that settled which slice carries the fleet bound, and the
 reasoning behind a few unit-shape rules.
 
-## The phone check Ansible cannot run
+## The phone check no test can run
 
 Start a host by hand and create a session from the phone:
 

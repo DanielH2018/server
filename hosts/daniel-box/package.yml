@@ -98,6 +98,7 @@ components:
   - sshd
   - host-tuning
   - k3s-server
+  - k3s-apparmor
   - k3s-host-dns
   - k3s-host-checks
   - claude-code

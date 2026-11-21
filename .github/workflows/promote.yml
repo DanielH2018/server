@@ -534,6 +534,9 @@ jobs:
 
       # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
       # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
+      # The push lands on the shared `publishing` tag, and `sha-<X>` follows only once the
+      # digest carries promote's signature: `decide` verifies the newest `sha-` tag it reads,
+      # so a tag ahead of its signature fails a concurrent run's Decide.
       # A digest that already verifies is not signed again: GHCR refuses a second signature write
       # with `write_package`. cosign can read a registry error as unsigned, which only costs a
       # redundant sign.
@@ -555,7 +558,7 @@ jobs:
           fi
           ghcr_login
           repo=ghcr.io/danielh2018/homelab-manifests
-          digest="$(flux push artifact "oci://$repo:sha-$SHA" \
+          digest="$(flux push artifact "oci://$repo:publishing" \
             --path=out \
             --source="https://github.com/$GITHUB_REPOSITORY" \
             --revision="master@sha1:$SHA" \
@@ -565,7 +568,7 @@ jobs:
             echo "::error::flux push printed digest '$digest'"
             exit 1
           fi
-          echo "pushed $repo:sha-$SHA at $digest"
+          echo "pushed $repo:publishing at $digest"
           sign_unless_signed() {
             if cosign verify --certificate-identity "$IDENTITY" \
               --certificate-oidc-issuer "$ISSUER" "$1" > /dev/null; then
@@ -575,6 +578,7 @@ jobs:
             cosign sign --yes "$1"
           }
           retry sign_unless_signed "$repo@$digest"
+          retry flux tag artifact "oci://$repo@$digest" --tag "sha-$SHA"
 
       # The drill pushes an unsigned bundle to its own tag. It never writes sha-<X>, because an
       # unsigned sha-<X> makes `decide` report an error for that commit. The annotation gives

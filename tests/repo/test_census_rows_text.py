@@ -19,13 +19,16 @@ from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _comment_ticket_refs_row import COMMENTS_CITE_NO_TICKET
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
+from _runbook_k3s_sudo_row import RUNBOOK_K3S_COMMANDS_CARRY_SUDO
 from _group_vars_host_reader_row import HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER
-from _kuma_push_row import NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
+from _kuma_push_row import AFFECTED_TABLE, NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA
 from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _role_python_paths_row import ROLE_FILES_CITE_REAL_PYTHON_PATHS
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
+from _read_only_skill_writes_row import READ_ONLY_REVIEW_SKILLS_WRITE_NO_TRACKED_FILE
 from _review_ledger_glob_row import REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE
 from _archived_plan_citations_row import SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB
+from _ansible_mention_row import LIVE_DOCS_NAME_NO_ANSIBLE
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib.facts.citations import macro_citations
@@ -90,7 +93,6 @@ def _missing_macro_offence(subject: Subject) -> list[str]:
 UNSORTED_ITEMS = re.compile(r"\.items\(\)(?![^\n]*\bsort\b)")
 
 STANDING_SLUG = "review-standing-decisions"
-RETIRED_SLUGS = ("homelab-review-standing-donot-reflag",)
 # The surfaces a review primes from; each must name the slug the memory store holds.
 PRIMED_SURFACES = frozenset(
     {
@@ -99,12 +101,6 @@ PRIMED_SURFACES = frozenset(
         ".claude/skills/ha-review/SKILL.md",
     }
 )
-
-
-# The inline form: the heading phrase followed by a colon and the list itself. The pointer
-# form ends the phrase with a full stop, so this matches the drifting copy and not its
-# replacement.
-INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
 
 
 # ── Units the host packages ship ─────────────────────────────────────────────────────
@@ -161,29 +157,6 @@ ROWS = (
             Subject("b.md", "`templates/config/app.yml.j2`, then app.yml.j2 again\n"),
         ),
         must_find=frozenset({"docs/adr/index.md", "CLAUDE.md"}),
-    ),
-    Census(
-        name="role-docs-deploy-through-deploy-sh",
-        reason=(
-            "`scripts/deploy.sh` takes the tree lock, snapshots HEAD and checks the tag and "
-            "staleness before it runs the playbook; a bare `ansible-playbook ansible/deploy.yml` "
-            "does none of that. The bare form spreads by copying a sibling doc. Write "
-            '`./scripts/deploy.sh --tags "<svc>"`, adding `-e target=daniel-pi` for a Pi service.'
-        ),
-        files=lambda: [
-            rel for rel in tracked("k8s/roles/*/CLAUDE.md") if rel.count("/") == 3
-        ],
-        offence=lines_matching(re.compile(r"ansible-playbook\s+ansible/deploy\.yml")),
-        red=(
-            Subject(
-                "a.md",
-                '- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "sonarr"`',
-            ),
-        ),
-        green=(Subject("a.md", '- Deploy: `./scripts/deploy.sh --tags "sonarr"`'),),
-        must_find=frozenset(
-            f"k8s/roles/{role}/CLAUDE.md" for role in ("sonarr", "traefik", "authelia")
-        ),
     ),
     Census(
         name="root-claude-md-has-no-self-disclaiming-prose",
@@ -323,52 +296,6 @@ ROWS = (
         ),
     ),
     Census(
-        name="review-surfaces-carry-no-retired-standing-slug",
-        reason=(
-            f"The standing-list memory is `{STANDING_SLUG}`. A missing memory is no error the "
-            "harness reports, so a skill priming from a retired spelling proceeds unprimed and "
-            "the fan-out re-derives settled decisions."
-        ),
-        files=lambda: tracked(
-            *(
-                f"{d}/*.{ext}"
-                for d in (".claude/skills", ".claude/agents", "evals/cases")
-                for ext in ("md", "json")
-            )
-        ),
-        offence=lambda s: [slug for slug in RETIRED_SLUGS if slug in s.text],
-        red=(
-            Subject("a.md", "prime from `homelab-review-standing-donot-reflag` first"),
-        ),
-        green=(Subject("a.md", f"prime from `{STANDING_SLUG}` first"),),
-        must_find=PRIMED_SURFACES,
-    ),
-    Census(
-        name="agents-carry-no-inline-reflag-list",
-        reason=(
-            "The accepted designs live once, in "
-            "`.claude/skills/homelab-review/accepted-designs.md`, one section per reviewer "
-            "domain, and the settled-findings register in `docs/reference/backlog.md`. An "
-            'inline "Honor accepted designs (don\'t re-flag): ..." list in an agent drifts '
-            "from both. Point at the domain's section instead "
-            "(the `pointed-reviewer-agents-name-their-domain-in-both-sources` row holds the pointers)."
-        ),
-        files=lambda: tracked(".claude/agents/*.md"),
-        offence=lines_matching(INLINE_REFLAG_LIST),
-        red=(Subject("a.md", "Honor accepted designs (don't re-flag): the arr stack"),),
-        green=(
-            Subject("a.md", "Honor accepted designs (don't re-flag). See `## cicd`."),
-        ),
-        must_find=frozenset(
-            f".claude/agents/{name}.md"
-            for name in (
-                "homelab-container-reviewer",
-                "homelab-cicd-reviewer",
-                "homelab-backup-observability-reviewer",
-            )
-        ),
-    ),
-    Census(
         name="review-surfaces-name-the-standing-slug",
         reason=(
             "The positive half of the retired-slug row: each surface a review primes from must "
@@ -418,6 +345,7 @@ ROWS += (
     RESET_PATHS,
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
+    RUNBOOK_K3S_COMMANDS_CARRY_SUDO,
     NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA,
     AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,
@@ -425,9 +353,11 @@ ROWS += (
     ROLE_FILES_CITE_REAL_PYTHON_PATHS,
     UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG,
     REVIEW_SKILLS_LIST_LEDGERS_FROM_ANY_USERS_STORE,
+    READ_ONLY_REVIEW_SKILLS_WRITE_NO_TRACKED_FILE,
     COMMENTS_CITE_NO_TICKET,
     SHIPPED_FILES_CITE_NO_TARGET_ARCHITECTURE_STUB,
     HOST_KEYS_IN_GROUP_VARS_HAVE_A_READER,
+    LIVE_DOCS_NAME_NO_ANSIBLE,
 )
 
 _IDS = [row.name for row in ROWS]
@@ -448,3 +378,9 @@ def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census
 def test_the_macro_corpus_skips_the_generated_register():
     """The one exclusion; `must_find` above is the positive control that a doc is still read."""
     assert GENERATED_REGISTER not in _macro_docs()
+
+
+def test_the_kuma_push_census_skips_the_affected_test_table():
+    """The table names test paths such as `tests/repo/_kuma_push_row.py`, which match the row."""
+    assert AFFECTED_TABLE in tracked("scripts/*")
+    assert AFFECTED_TABLE not in NOTHING_SHIPPED_PUSHES_TO_UPTIME_KUMA.files()

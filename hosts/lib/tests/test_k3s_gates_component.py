@@ -7,6 +7,10 @@ already refuses one path from two components (scripts/renderer/tests/test_render
 Run: uv run pytest hosts/lib/tests/test_k3s_gates_component.py
 """
 
+import os
+import subprocess
+import sys
+
 import pytest
 import yaml
 
@@ -47,3 +51,23 @@ def test_daniel_server_ships_the_gates_without_the_restart_unit(server):
     # Without the unit, /run/homelab-k3s-restart/ never exists, so the agent gate's marker check
     # passes by construction.
     assert "/usr/lib/systemd/system/homelab-k3s-restart.service" not in server.files
+
+
+def test_the_shipped_gates_import_from_the_package_layout_alone(server, tmp_path):
+    for dst, (body, _mode) in server.files.items():
+        if dst.startswith("/usr/lib/homelab/") and dst.endswith(".py"):
+            target = tmp_path / dst.removeprefix("/usr/lib/homelab/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+    # `-S` drops the venv's `.pth`, so only the files the package installs beside the script
+    # resolve its imports, as in the Plan's bare python image.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    proc = subprocess.run(
+        [sys.executable, "-S", str(tmp_path / "k3s_gates.py"), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr

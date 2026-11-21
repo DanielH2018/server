@@ -69,21 +69,8 @@ def unprobed_hostnames(targets: dict[str, dict], services: list[dict]) -> list[s
     ]
 
 
-def entries_with_the_retired_key(services: list[dict]) -> list[str]:
-    """The entries still carrying `kuma:`, which the filter ignores, so its opt-out is lost."""
-    return [entry["name"] for entry in services if "kuma" in entry]
-
-
 def _entries() -> list[dict]:
     return copy.deepcopy(host_context()["services"])
-
-
-def test_no_entry_carries_the_retired_kuma_key_is_clean():
-    assert entries_with_the_retired_key(_entries()) == []
-
-
-def test_an_entry_with_the_retired_kuma_key_is_flagged():
-    assert entries_with_the_retired_key([{**_NEW, "kuma": False}]) == ["newsvc"]
 
 
 def test_the_opted_out_entries_render_no_target():
