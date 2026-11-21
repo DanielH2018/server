@@ -81,8 +81,9 @@ verdict leaves.
 
 Two pure modules, `files/notify_logic.py` and `files/pending_logic.py`, with
 `files/renovate_notify.py` as the fetch/persist/post shell. **A new module here needs an entry
-in `component.yml`'s `files:`**, or it never reaches the host. `host_lib.py`, `renovate_identity.py` and
-`ci_verdict.py` are `lib:` entries from `hosts/lib/` — edit them there, not here.
+in `component.yml`'s `files:`**, or it never reaches the host. `host_lib.py`, `renovate_identity.py`,
+`ci_verdict.py` and `builder_ci_grade.py` are `lib:` entries from `hosts/lib/` — edit them
+there, not here.
 
 ```bash
 uv run pytest hosts/components/renovate-notify -q -n0

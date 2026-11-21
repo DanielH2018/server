@@ -4,6 +4,7 @@ Split from host_package_builder.py, which imports it. The grading itself is
 `ci_verdict.ci_verdict`, which both components ship beside this module. Stdlib only, because
 the builder ships beside it with nothing else. checkout_sync.py imports `CiSettings`,
 `read_check_pages` and `token_refused`, and the `checkout-sync` component ships it too.
+renovate-notify imports `read_check_pages`, and its component ships it as well.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 
 
 # The page size and page cap for a check-runs listing, which `read_check_pages` below walks
-# by. renovate-notify's `notify_logic` holds a copy, and its test holds the two equal.
+# by.
 _CHECK_PAGE_SIZE, _CHECK_PAGES_MAX = 100, 20
 
 
