@@ -8,12 +8,13 @@ fails at once.
 A rate-limit 403 is the exception to that: it says nothing about the request, so `read` waits
 until the quota resets and asks again, up to `RATE_LIMIT_WAITS` times. The wait reads the
 quota as it goes, so it ends at the reset (`lib.gh_rate_limit.wait_out`). A landing reads
-through `Landing.read`, which gives the landing turn back before that wait.
+through `Landing.read`, which gives the landing turn back for the length of that wait.
 """
 
 import re
 import subprocess
 from collections.abc import Callable
+from functools import partial
 from typing import TypeVar
 
 
@@ -48,12 +49,12 @@ def read(
     call: Callable[[], T],
     sleep: Callable[[float], None],
     label: str,
-    before_wait: Callable[[], None],
+    wait_with: Callable[[Callable[[], None]], None],
 ) -> T:
     """`call()`, retried on a transient gh failure; `GhReadFailed` once it is not worth another.
 
-    A rate limit is waited out up to `RATE_LIMIT_WAITS` times, and `before_wait` runs before
-    each of those waits.
+    A rate limit is waited out up to `RATE_LIMIT_WAITS` times. `wait_with` runs each of those
+    waits, which it is given as a call.
 
     Only gh's own failures are caught. Anything else `call` raises, such as the `ValueError`
     of an unparseable answer, propagates on the first attempt: gh answered, and asking again
@@ -71,8 +72,14 @@ def read(
             if not gh_rate_limit.is_rate_limited(why) or waited_out >= RATE_LIMIT_WAITS:
                 break
             waited_out += 1
-            before_wait()
-            gh_rate_limit.wait_out(why, sleep, lambda line: say(f"{label} {line}"))
+            wait_with(
+                partial(
+                    gh_rate_limit.wait_out,
+                    why,
+                    sleep,
+                    lambda line: say(f"{label} {line}"),
+                )
+            )
         if wait is None or not is_transient(why):
             raise GhReadFailed(why, attempt)
         say(f"{label} failed transiently ({why}); retrying in {wait}s")

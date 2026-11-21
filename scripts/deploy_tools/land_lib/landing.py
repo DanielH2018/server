@@ -19,7 +19,7 @@ from typing import Any, NoReturn
 
 from deploy_tools.land_lib.ledger import Ledger
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import PrView, parse_view, rest_filter
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
@@ -116,9 +116,12 @@ class Landing:
         # Gives the landing turn up so the next ask waits for it again (`turn.held`). Set only
         # while this landing holds the turn, so never for a batch member, which the holder merges.
         self.give_back_turn: Callable[[], None] | None = None
-        # Set when `leave_turn` gave the turn back; the merge wait clears it and asks again
-        # before it merges.
-        self.gave_turn_back = False
+        # Gives the turn up for the length of the wait it is handed, then takes it again
+        # (`turn.held`). Set only while this landing holds the turn.
+        self.step_out_of_turn: Callable[[Callable[[], Any]], Any] | None = None
+        # Set once a wait stepped out of the turn, because master may have moved meanwhile;
+        # the merge wait clears it when it checks the head against master before its merge.
+        self.turn_interrupted = False
         # Raises `turn.HandOver` when this landing can pass its turn to a fresh checkout's
         # landing, and returns when it cannot; None outside the merge wait.
         self.hand_over_turn: Callable[[str], None] | None = None
@@ -164,21 +167,21 @@ class Landing:
     def read[T](self, call: Callable[[], T], label: str) -> T:
         """`call()`, a gh read retried and waited out as `gh_read.read` does.
 
-        Before a rate-limit wait, a landing that holds the landing turn gives it back, so no
-        landing behind it waits out the same limit. The merge wait asks for the turn again
-        before it merges (`merge.await_merge`).
+        Each rate-limit wait runs through `without_turn`.
 
         Raises:
             gh_read.GhReadFailed: GitHub did not answer, after `gh_read`'s retries and waits.
         """
-        return gh_read.read(call, self.tools.sleep, label, self.leave_turn)
+        return gh_read.read(call, self.tools.sleep, label, self.without_turn)
 
-    def leave_turn(self) -> None:
-        """Give the landing turn back before a rate-limit wait; a no-op when not holding it."""
-        if self.give_back_turn:
-            self.give_back_turn()
-            self.gave_turn_back = True
-            say("gave the landing turn back to wait out GitHub's rate limit")
+    def without_turn[T](self, wait: Callable[[], T]) -> T:
+        """`wait()`, with the landing turn given back for its length when this landing holds it.
+
+        A landing that holds the turn gives it back, so no landing behind it waits out the same
+        rate limit, and asks for it again once `wait` returns, so the work that waited goes on
+        in the turn. It then sets `turn_interrupted`.
+        """
+        return self.step_out_of_turn(wait) if self.step_out_of_turn else wait()
 
     def view(self, fields: str) -> PrView:
         """This PR's `fields`, in the shape `gh pr view --json <fields>` gives, or die.

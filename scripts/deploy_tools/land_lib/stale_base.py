@@ -11,7 +11,8 @@ landing turn. A head that has had no CI run gets its branch updated when the lan
 turn (`merge._start_run`, `update_branch`). A green head of a ready PR that master moved past
 is converted to draft and updated before the landing asks for the turn, so it waits in the
 line like any draft (`rejoin_line`). One that master moved past while it waited for the turn is
-rejoined once it takes the turn, and gives the turn back (`merge.await_merge`).
+rejoined once it takes the turn, and gives the turn back (`rejoin_in_turn`), as is one that
+master moved past while a rate-limit wait had the turn given up.
 
 A green head that reaches the merge with a stale base anyway merges as it stands, and master's
 own run tests it. The one exception is a head the landing policy admitted on an approval,
@@ -271,4 +272,23 @@ def rejoin_line(ln: Landing, head: str, conflicting: bool) -> bool:
         "converted it to draft and updated its branch, so it waits in the line for a run "
         f"on the {BRANCH} of its turn"
     )
+    return True
+
+
+def rejoin_in_turn(ln: Landing, head: str, conflicting: bool) -> bool:
+    """Give the landing turn back and rejoin the line when master moved past `head`.
+
+    For a landing that holds the turn and finds master moved after the run of `head`: while
+    it waited in line, or while a rate-limit wait had given the turn up
+    (`Landing.without_turn`).
+
+    Returns:
+        Whether the PR is now a draft at an updated head and the turn is given back; False,
+        changing nothing, for a landing that does not hold the turn or a head `rejoin_line`
+        leaves alone.
+    """
+    if not (ln.give_back_turn and rejoin_line(ln, head, conflicting)):
+        return False
+    ln.give_back_turn()
+    say("gave the landing turn back to wait in the line as a draft")
     return True

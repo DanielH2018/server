@@ -131,13 +131,17 @@ def test_a_rate_limited_merge_timeout_names_the_rate_limit(landing, ci_reads):
 
 
 def _turn_order(calls) -> list[str]:
-    """The turn's takes and releases, the sleeps and the merge, in the order they ran."""
+    """The turn's takes and releases, the sleeps and every write to the PR, in order."""
     order = []
     for name, args, _ in calls:
         if name in ("try_turn", "release_turn", "sleep"):
             order.append(name)
-        elif name == "gh" and args[-1].startswith("commit_title="):
-            order.append("merge")
+        elif name == "gh" and args[:3] == ("pr", "ready", "--undo"):
+            order.append("draft")
+        elif name == "gh" and args[:2] == ("pr", "ready"):
+            order.append("ready")
+        elif name == "gh" and "PUT" in args:
+            order.append("update" if args[3].endswith("/update-branch") else "merge")
     return order
 
 
@@ -146,26 +150,36 @@ SECONDARY_LIMIT = subprocess.CalledProcessError(
 )
 
 
-def test_a_read_refused_inside_the_turn_gives_the_turn_back_before_it_waits(landing):
+def _refuse_once(ln, field: str) -> None:
+    """Refuse the first `gh pr view --json <field>` read for the rate."""
+    real, refused = ln.tools.gh_json, []
+
+    def gh_json(*args, **kwargs):
+        if args[-1] == field and not refused:
+            refused.append(args)
+            raise SECONDARY_LIMIT
+        return real(*args, **kwargs)
+
+    ln.tools = replace(ln.tools, gh_json=gh_json)
+
+
+def test_a_read_refused_inside_the_turn_gives_the_turn_back_for_its_wait(landing):
     # The first read inside the draft's turn is the compare of its base with master.
-    ln, calls = turn_landing(
-        landing, polls=(OPEN, OPEN, MERGED), compare=[SECONDARY_LIMIT, []]
-    )
+    ln, calls = turn_landing(landing, compare=[SECONDARY_LIMIT, []])
     land_in_turn(ln)
     assert _turn_order(calls) == [
         "try_turn",
         "release_turn",
         "sleep",
         "try_turn",
+        "ready",
         "merge",
         "release_turn",
     ]
 
 
-def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_before_it_waits(
-    landing,
-):
-    ln, calls = turn_landing(landing, polls=(OPEN, OPEN, OPEN, MERGED))
+def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_for_its_wait(landing):
+    ln, calls = turn_landing(landing, polls=(OPEN, OPEN, MERGED))
     verdicts = iter([await_ci.RateLimitedError(MERGE_POLL_S)])
 
     def ci(sha, timeout):
@@ -178,6 +192,7 @@ def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_before_it_waits(
     land_in_turn(ln)
     assert _turn_order(calls) == [
         "try_turn",
+        "ready",
         "release_turn",
         "sleep",
         "try_turn",
@@ -187,11 +202,16 @@ def test_a_ci_read_refused_inside_the_turn_gives_the_turn_back_before_it_waits(
 
 
 def test_a_head_master_moved_past_during_the_wait_rejoins_the_line_unmerged(landing):
-    ln, calls = turn_landing(
-        landing,
-        polls=(OPEN, OPEN, MERGED),
-        compare=[SECONDARY_LIMIT, [], MASTER_MOVED[0]],
-    )
+    ln, calls = turn_landing(landing, compare=[[], MASTER_MOVED[0]])
+    _refuse_once(ln, "commits")
     land_in_turn(ln)
-    assert "merge" not in _turn_order(calls)
-    assert any(c[0] == "gh" and c[1][:3] == ("pr", "ready", "--undo") for c in calls)
+    assert _turn_order(calls) == [
+        "try_turn",
+        "ready",
+        "release_turn",
+        "sleep",
+        "try_turn",
+        "draft",
+        "update",
+        "release_turn",
+    ]

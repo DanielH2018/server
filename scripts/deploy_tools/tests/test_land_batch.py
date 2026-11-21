@@ -15,7 +15,7 @@ import pytest
 from dev import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
-from deploy_tools.land_lib import batch, gh_read, line, live_limit, turn
+from deploy_tools.land_lib import batch, line, live_limit, turn
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -322,21 +322,28 @@ def test_a_bug_in_the_batch_leaves_the_landing_its_own_pr(batch_of, capsys):
     )
 
 
-def test_a_holder_that_gave_the_turn_back_for_a_rate_limit_forms_no_batch(batch_of):
+def test_a_holder_stacks_its_batch_only_once_it_holds_the_turn_again(batch_of):
     ln, hub, _ = batch_of(drafts=("7",))
-    # The read before the turn fails for good, so the turn's rule reads the files again,
-    # and that read inside the turn is refused once more.
-    refusals = iter(range(gh_read.RATE_LIMIT_WAITS + 2))
     limited = subprocess.CalledProcessError(
         1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
     )
+    refused = []
 
     def gh_json(*args, **kwargs):
-        if "files,headRefOid" in args and next(refusals, None) is not None:
+        # The batch reads master's tip before it stacks on it, and GitHub refuses that once.
+        if "repos/{owner}/{repo}/git/ref/heads/master" in args and not refused:
+            refused.append(args)
             raise limited
+        if args[2:4] == ("POST", "repos/{owner}/{repo}/git/refs"):
+            hub.calls.append(("stack", (), {}))
         return hub.gh_json(*args, **kwargs)
 
     ln.tools = replace(ln.tools, gh_json=gh_json)
     land(ln)
-    assert hub.stacked == {} and hub.batch_prs == []
-    assert hub.merged == [OWN]
+    order = [
+        c[0]
+        for c in hub.calls
+        if c[0] in ("try_turn", "release_turn", "sleep", "stack")
+    ]
+    assert order[:5] == ["try_turn", "release_turn", "sleep", "try_turn", "stack"]
+    assert hub.merged == [OWN, "7"]

@@ -60,6 +60,7 @@ import contextlib
 import re
 import subprocess
 from collections.abc import Callable
+from functools import partial
 
 
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
@@ -500,11 +501,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     poll, counted as waited and cut short at `merge_timeout`. The sleep re-reads the quota and
     ends at its reset (`gh_rate_limit.sleep_until_reset`).
 
-    A landing that holds the turn gives it back before any rate-limit wait, its CI read's or
-    a gh read's (`Landing.leave_turn`), so the landings behind it do not wait out the same
-    limit. It then merges only after it has asked for the turn again, on a later green poll,
-    as a landing that has not asked yet: a head master moved past while it waited rejoins the
-    line instead (`stale_base.rejoin_line`).
+    A landing that holds the turn gives it back for the length of any rate-limit wait, its CI
+    read's or a gh read's, and asks for it again before it goes on (`Landing.without_turn`),
+    so the landings behind it do not wait out the same limit. Master may have moved while it
+    waited, so before its merge a head master moved past gives the turn back and rejoins the
+    line as a draft (`stale_base.rejoin_in_turn`).
     """
     o, t = ln.opts, ln.tools
     waited = 0
@@ -668,20 +669,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                     # DECIDED: a ready head master moved past while it waited gives the turn
                     # back and rejoins the line as a draft (the operator, 2026-11-15, amending
                     # D10 in docs/ci-throughput.md): merged as it stands, master sweeps in full.
-                    if (
-                        in_turn
-                        and ln.give_back_turn
-                        and stale_base.rejoin_line(
-                            ln, head, view.get("mergeable") == "CONFLICTING"
-                        )
+                    if stale_base.rejoin_in_turn(
+                        ln, head, view.get("mergeable") == "CONFLICTING"
                     ):
-                        ln.give_back_turn()
-                        say("gave the landing turn back to wait in the line as a draft")
                         in_turn = False
                         updated_from, rejoined, drafted = head, True, True
                     continue
             if rc == CI_GREEN and ln.direct_merge_subject:
-                slots.refuse_before_merge(ln, head, in_turn and not ln.gave_turn_back)
+                slots.refuse_before_merge(ln, head, in_turn)
                 if not (updated_from or stale_base.batch_tested(ln, head)):
                     stale_base.refuse_stale_approved(
                         ln, head, view.get("mergeable") == "CONFLICTING"
@@ -692,9 +687,11 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
                 else:
                     pin_gate.recheck_before_merge(ln, gated_pins)
                 commits = ln.view("commits").get("commits", [])
-                # The next poll asks for the turn as one that has not asked yet.
-                if ln.gave_turn_back:
-                    ln.gave_turn_back = in_turn = asked = False
+                interrupted, ln.turn_interrupted = ln.turn_interrupted, False
+                if interrupted and stale_base.rejoin_in_turn(
+                    ln, head, view.get("mergeable") == "CONFLICTING"
+                ):
+                    in_turn, updated_from, rejoined, drafted = False, head, True, True
                     continue
                 refusal = _merge_directly(ln, head, commits)
                 if not refusal:
@@ -733,12 +730,14 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
             )
         step = o.merge_poll
         if pause:
-            ln.leave_turn()
-            step = gh_rate_limit.sleep_until_reset(
-                spent,
-                max(step, min(pause, wait_ends_at - waited)),
-                t.sleep,
-                ln.read_quota,
+            step = ln.without_turn(
+                partial(
+                    gh_rate_limit.sleep_until_reset,
+                    spent,
+                    max(step, min(pause, wait_ends_at - waited)),
+                    t.sleep,
+                    ln.read_quota,
+                )
             )
         else:
             t.sleep(step)
