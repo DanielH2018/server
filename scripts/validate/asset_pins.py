@@ -78,6 +78,7 @@ from lib.cli_help import ArgumentParser
 from lib import yaml_fast
 from lib.renovate_annotations import annotations_in, is_annotation_manager
 from lib.repo_paths import K8S_ROLES, REPO
+from validate.validate_lib.host_specs import load_component
 
 DIGEST_KEYS = ("sha256", "md5")
 FETCH_TIMEOUT = 60.0
@@ -255,10 +256,8 @@ def defaults_sources(
         if isinstance(loaded, dict):
             yield path, text, loaded
     for path in sorted(components.glob("*/component.yml")):
-        text = path.read_text()
-        loaded = yaml_fast.safe_load(text)
-        if isinstance(loaded, dict) and isinstance(loaded.get("defaults"), dict):
-            yield path, text, loaded["defaults"]
+        spec = load_component(path)
+        yield path, spec.text, dict(spec.defaults)
 
 
 def annotated_dep_names(
