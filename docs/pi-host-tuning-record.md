@@ -14,7 +14,7 @@ heartbeat's Autonomous-role contract.
 The board is a Raspberry Pi Zero 2 W with 512 MB of RAM, so nearly every number here was
 picked against a memory ceiling rather than a CPU one.
 
-## Granular tag rules (Ansible era)
+## Granular tag rules, before H7.25
 
 Until H7.25 the role's tags let one section run without the whole role, and three cases made a
 task carry a tag it did not obviously belong to:

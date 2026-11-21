@@ -47,7 +47,7 @@ operator to skip the check, which is the one step a change to production state n
 daniel-pi's edge probe recorded `http=403` at 2026-10-19T01:07:09Z, two minutes after the LAPI
 pod started at 01:05:19. #5761 read it as a restart window, possibly AppSec answering with an
 error while it loaded rules, which `crowdsecAppsecFailureBlock` turns into a 403. The record
-measured on 2026-10-28 refutes that. The 403 was the Ansible ban gate's own ban on the Pi:
+measured on 2026-10-28 refutes that. The 403 was the slice-6 ban gate's own ban on the Pi:
 
 ```text
 time="2026-10-18T20:05:54-05:00" level=info msg="(localhost/cscli) slice6-gate by ip 10.0.0.139 : 15m ban on Ip 10.0.0.139" module=db
@@ -65,7 +65,7 @@ query found 15 there, every one of them to the Pi.
 The same mapping holds for every increment of the probe counter
 (`loki_process_custom_crowdsec_edge_probe_total{status="403"}`) from 2026-10-19 to 2026-10-28.
 Each one follows a ban on `10.0.0.139` in the LAPI log, issued either by `slice6-gate` (the
-Ansible gate) or by `crowdsec-verify` (the Job). The times are UTC, and a counter time is the
+deploy-time gate) or by `crowdsec-verify` (the Job). The times are UTC, and a counter time is the
 scrape after the probe line:
 
 | Ban issued | By | Probe 403 counted |

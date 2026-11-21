@@ -907,10 +907,10 @@ imported `CLAUDE.md` names (#4193, #4194, #4195). Each new operator tool reached
 when someone remembered to copy it.
 
 The dotfiles decide what an agent does not get (DanielH2018/dotfiles#809). Under the flag, they
-leave alone what Ansible owns for the agent: its login profile, git identity and signers, ssh,
+leave alone what the `claude-code` component owns for the agent: its login profile, git identity and signers, ssh,
 and its own `CLAUDE.md`. They render the user `CLAUDE.md` to `~/.claude/operator/CLAUDE.md`
 instead, which the agent's own file imports. They also skip the scripts that need sudo or a
-terminal, the uv and prek install that Ansible pins, and daniel-box's once-per-host timers. The
+terminal, the uv and prek install that `homelab-tools` pins, and daniel-box's once-per-host timers. The
 rendered `settings.json` drops `SUDO_ASKPASS`, names the `<host>-<user>` artifacts path and
 labels telemetry `process.owner=<user>`. Every guard hook stays. `chezmoi-guard` and
 `serve-artifacts` are off: the agent's source is a clone it only pulls, and the artifact port is

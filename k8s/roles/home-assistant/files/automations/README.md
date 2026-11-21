@@ -4,7 +4,7 @@ One file per topic. Home Assistant merges every `*.yaml` here into a single `aut
 list through `!include_dir_merge_list automations/` in `configuration.yaml`, so a file is a
 plain YAML list of automations and nothing else.
 
-Managed by Ansible. The init container copies these files into `/config/automations/` on
+Managed from git. The init container copies these files into `/config/automations/` on
 every pod start and sweeps the directory first, so git is the source of truth: a file
 removed here disappears from the pod, and an edit made in the HA UI does not survive a
 deploy. The UI shows these automations as read-only, because a directory include leaves the

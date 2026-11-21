@@ -59,7 +59,7 @@ named `default`.
 
 Recovery has three independent legs: **B2** holds the data, an **out-of-band age key**
 decrypts the secrets, and **GitHub** holds the only off-site copy of the encrypted
-`secrets.yml` + all the Ansible. The age key alone can't reconstruct `secrets.yml`, so a
+`secrets.yml` + every role and host package. The age key alone can't reconstruct `secrets.yml`, so a
 simultaneous loss of the hosts *and* the GitHub repo would strand the B2 credentials.
 Close that leg by keeping the complete kit in ONE off-site place: the age key plus a repo
 bundle refreshed whenever the key backup is (or after a `secrets.yml` change), with the
@@ -121,7 +121,7 @@ the per-volume map and each exclusion's rationale:
 - **No-backup** (the listed volumes plus every `longhorn-nobackup` PV): rebuilt, not
   restored. The notable rebuild paths:
   `scrutiny` (TSDB refills from collector runs),
-  Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), `livesync` (a client
+  Pi-hole (`pihole -g` rebuilds gravity; config is rendered from the repo), `livesync` (a client
   runs "Rebuild everything" — the vault's source of truth is the markdown on each
   Obsidian device), registry/caches/TSDBs (repopulate on use).
 - Restores are **crash-consistent** block snapshots: SQLite DBs recover as-of-last-
