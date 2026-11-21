@@ -19,7 +19,7 @@ templates/longhorn-backup-health.sh.j2, a timer every 10 minutes) exports every 
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
 LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (namespace and ages),
-LONGHORN_B2_DELETIONS_CRON_* and LONGHORN_B2_BUDGET_CRON_* (timer file, expected flag, fired
+LONGHORN_B2_DELETIONS_CRON_*, LONGHORN_B2_BUDGET_CRON_* and LONGHORN_B2_RETENTION_CRON_* (timer file, expected flag, fired
 stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
@@ -137,6 +137,12 @@ B2_BUDGET_CRON = cron_evidence.cron_state(
     _require_env("LONGHORN_B2_BUDGET_CRON_FILE"),
     _require_bool_env("LONGHORN_B2_BUDGET_CRON_EXPECTED"),
     _require_env("LONGHORN_B2_BUDGET_CRON_FIRED_STAMP"),
+)
+B2_RETENTION_CRON = cron_evidence.cron_state(
+    "b2-retention",
+    _require_env("LONGHORN_B2_RETENTION_CRON_FILE"),
+    _require_bool_env("LONGHORN_B2_RETENTION_CRON_EXPECTED"),
+    _require_env("LONGHORN_B2_RETENTION_CRON_FIRED_STAMP"),
 )
 # Check 12's drop-in. The schedule and the arm state are read from it each run.
 ETCD_DROP_IN = Path(_require_env("LONGHORN_ETCD_DROP_IN"))
@@ -609,7 +615,7 @@ def main(now: float | None = None) -> int:
             (4, "could not read the trim CronJob — a trim failure has no reader")
         )
     classes.close("trim")
-    for cron in (B2_DELETIONS_CRON, B2_BUDGET_CRON):
+    for cron in (B2_DELETIONS_CRON, B2_BUDGET_CRON, B2_RETENTION_CRON):
         problems.extend(
             cron_evidence.check_cron(journal, CRON_EVIDENCE_WINDOW_HOURS, cron, now_s)
         )

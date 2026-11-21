@@ -27,7 +27,13 @@ def _bucket(enabled: bool = True, retention: dict | None = SEVEN_DAYS) -> dict:
 
 
 GOVERNED = _bucket()
-WRITER = ["listBuckets", "writeFiles", "deleteFiles", "readBucketRetentions"]
+WRITER = [
+    "listBuckets",
+    "writeFiles",
+    "deleteFiles",
+    "readBucketRetentions",
+    "writeFileRetentions",
+]
 AUTH = {
     "accountId": "acct",
     "authorizationToken": "tok",
@@ -62,6 +68,11 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
             "no default retention",
         ),
         (GOVERNED, [*WRITER, "bypassGovernance"], "key bypasses governance"),
+        (
+            GOVERNED,
+            [c for c in WRITER if c != "writeFileRetentions"],
+            "key cannot extend retention",
+        ),
         ({"bucketName": "weekly"}, WRITER, "no lock config"),
         (
             _bucket(retention={**SEVEN_DAYS, "mode": "compliance"}),
@@ -88,6 +99,7 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
         "unreadable",
         "no default retention",
         "key bypasses governance",
+        "key cannot extend retention",
         "no lock config",
         "compliance",
         "as long as the prune",

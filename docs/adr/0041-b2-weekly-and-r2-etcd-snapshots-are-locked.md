@@ -72,6 +72,17 @@ a backup (`k3s_longhorn_weekly_backup_retain` weekly backups). The key Longhorn 
 must not hold `bypassGovernance`, so governance mode binds it, and the operator's master key
 keeps the one way to remove a mistaken lock.
 
+The same key holds `writeFileRetentions`. A daily sweep
+(`scripts/backup/b2_extend_retention.py`, run by the `homelab-b2-retention` timer on
+daniel-box) sets the retention of every current Longhorn object under
+`longhorn/backupstore/volumes/` to now plus the bucket's default period. That keeps every
+block a retained backup references locked, however old its upload. A key without
+`bypassGovernance` can extend a governance retention but never shorten it, so the capability
+gives a leaked key no way to unlock anything. Longhorn's own `full-backup-interval` would
+renew each lock by re-uploading every block, and was rejected: the replaced versions stay
+billed until the lifecycle rule removes them, so the bucket would hold about two copies of the
+referenced set. The bucket held 6.25 GB of B2's 10 GB free tier on 2026-11-21.
+
 The R2 bucket has one lock rule: an `Age` rule of 7 days over `etcd-snapshots/`. No rule
 covers `longhorn/`, the R2 daily tier, because R2 refuses a locked delete and Longhorn's
 prune would retry it.
@@ -83,7 +94,7 @@ monitor-bridge's `b2_object_lock` row
 (`k8s/roles/monitor-bridge/files/checks/b2.py:check_b2_object_lock`) reads the B2 setting
 once a day. It pages a warning when the bucket departs from this record: the lock off, no
 default retention, compliance mode, a retention as long as the weekly prune age, or a writer
-key that holds `bypassGovernance`.
+key that holds `bypassGovernance` or lacks `writeFileRetentions`.
 
 The R2 rule needs a standing reader too, and this record does not yet have one. Until it
 lands, the operator verifies the rule by hand with `wrangler r2 bucket lock list` after
@@ -96,14 +107,22 @@ operator's choice of where it runs.
 
 ## Consequences
 
-**The B2 lock protects only what was uploaded in the last 7 days.** B2 counts a version's
-retention from its upload. A Longhorn backup uploads only the blocks that changed, so the
-base blocks every weekly backup still references are months old and unlocked. A holder of
-the Longhorn key can delete those blocks, and every backup that references them can no
-longer be restored, even though its `.cfg` is locked. The lock defends against a prune bug and
-against a deletion of recent backups, not against a deliberate deletion of old blocks. The
-follow-up that would close this gap is
-[#9685](https://github.com/DanielH2018/server/issues/9685), filed and not decided.
+**The sweep keeps old blocks locked.** B2 counts a version's retention from its upload, and a
+Longhorn backup uploads only the blocks that changed, so the base blocks every weekly backup
+references would otherwise be months old and unlocked. The daily sweep renews each one, so a
+referenced block is always locked for at least the default period less a day. A pruned block
+leaves the listing when Longhorn hides it, so its lock lapses within one period, and the
+lifecycle rule then removes it as before. The sweep costs about four Class C calls a day,
+because each retention update is Class A, which B2 does not meter.
+
+**A deletion with the Longhorn key still hides a locked block.** The lock keeps the version
+but not the name, so a restore after such a deletion needs the operator to remove the hide
+markers with the master key first. The lock makes the deletion recoverable; it does not leave
+the backups restorable untouched.
+
+**The sweep depends on its timer.** If it stops, the locks on blocks older than the default
+period lapse within one period. Checks 9 and 10 of `longhorn-backup-health` read its journal
+tag `b2-retention`, and report `down` on a refused extension or on a day with no completed run.
 
 **The etcd snapshots are whole files**, so each locked snapshot restores on its own. The
 lock covers every snapshot younger than 7 days.

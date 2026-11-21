@@ -144,6 +144,10 @@ export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2
 export LONGHORN_B2_BUDGET_CRON_FILE="/usr/lib/systemd/system/homelab-b2-budget-listing.timer"
 export LONGHORN_B2_BUDGET_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
 export LONGHORN_B2_BUDGET_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-budget-listing"
+# The Object Lock sweep's timer and stamp. Without a daily run, the old blocks' locks lapse.
+export LONGHORN_B2_RETENTION_CRON_FILE="/usr/lib/systemd/system/homelab-b2-retention.timer"
+export LONGHORN_B2_RETENTION_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
+export LONGHORN_B2_RETENTION_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-retention"
 # Check 12's bound and arm state, which the `homelab-daniel-box` package writes here.
 export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 

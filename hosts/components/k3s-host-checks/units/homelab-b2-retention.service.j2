@@ -1,0 +1,17 @@
+# Shipped by the host package's k3s-host-checks component. Started by homelab-b2-retention.timer.
+[Unit]
+Description=Extend the Object Lock retention of every Longhorn object in the B2 weekly bucket
+After=network-online.target
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Check 10's fire stamp. `-`: a stamp that cannot be written must not stop the sweep.
+ExecStartPre=-/usr/bin/touch {{ k3s_cron_fired_stamp_dir }}/b2-retention
+ExecStart=/home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/backup/b2_extend_retention.py
+# Checks 9 and 10 read this tag from the journal, matching each line as written.
+SyslogIdentifier=b2-retention

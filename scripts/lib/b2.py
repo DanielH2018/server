@@ -1,4 +1,4 @@
-"""One Backblaze B2 native-API session: authorize, list a prefix, delete a version.
+"""One Backblaze B2 native-API session: authorize, list a prefix, delete a version, set a retention.
 
 WHY. `scripts/backup/b2_drain.py` and `scripts/diagnostics/probe_lib/b2_api.py` each carried a
 private B2 client: their own `b2_authorize_account`, their own pagination and their own
@@ -190,3 +190,36 @@ class B2Session:
     def delete(self, file_name: str, file_id: str) -> None:
         """Remove one file version. Class A, which B2 does not meter."""
         self._call("b2_delete_file_version", {"fileName": file_name, "fileId": file_id})
+
+    def bucket(self) -> dict:
+        """The session bucket's `b2_list_buckets` entry, lock configuration included. Class C."""
+        if not self.bucket_id:
+            raise B2Error(
+                "no bucket: the key is not bucket-scoped and none was looked up"
+            )
+        self.class_c += 1
+        listed = self._call(
+            "b2_list_buckets",
+            {"accountId": self.account_id, "bucketId": self.bucket_id},
+        )
+        buckets = listed.get("buckets") or []
+        if not buckets:
+            raise B2Error(f"B2 lists no bucket with id {self.bucket_id}")
+        return buckets[0]
+
+    def set_retention(
+        self, file_name: str, file_id: str, mode: str, until_ms: int
+    ) -> None:
+        """Set one file version's retention. Class A, which B2 does not meter.
+
+        B2 refuses to shorten a governance retention unless the key holds `bypassGovernance`
+        and the call asks for it, which this call never does.
+        """
+        self._call(
+            "b2_update_file_retention",
+            {
+                "fileName": file_name,
+                "fileId": file_id,
+                "fileRetention": {"mode": mode, "retainUntilTimestamp": until_ms},
+            },
+        )

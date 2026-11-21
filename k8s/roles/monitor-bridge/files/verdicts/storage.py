@@ -249,8 +249,9 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     """(ok, msg) for Object Lock on the B2 bucket Longhorn's weekly tier writes to.
 
     ADR-0041 records the choice: Object Lock on, a governance-mode default retention shorter than
-    `B2_PRUNE_AGE_DAYS`, and a writer key that cannot bypass governance. Compliance mode is
-    flagged because no key can shorten it.
+    `B2_PRUNE_AGE_DAYS`, and a writer key that cannot bypass governance but can extend a
+    retention, which `scripts/backup/b2_extend_retention.py` needs to keep old blocks locked.
+    Compliance mode is flagged because no key can shorten it.
 
     Args:
       bucket: One entry of a `b2_list_buckets` response.
@@ -310,6 +311,13 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
             "the key Longhorn writes with holds bypassGovernance, so governance mode does "
             "not bind it",
             ["key bypasses governance"],
+        )
+    if "writeFileRetentions" not in capabilities:
+        return CheckResult(
+            False,
+            "the key Longhorn writes with lacks writeFileRetentions, so the daily sweep cannot "
+            "renew the lock on blocks older than the default retention",
+            ["key cannot extend retention"],
         )
     return True, "Object Lock on %s: %s, %s %s" % (
         name,

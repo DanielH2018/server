@@ -363,6 +363,44 @@ next daily read. If it reads `key bypasses governance`, the Longhorn key holds
 `bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
 `longhorn_b2_application_key`.
 
+The row also reads `key cannot extend retention` until the Longhorn key holds
+`writeFileRetentions`. B2 cannot add a capability to a key, so mint a new one with the master
+key and rotate the same two secrets to it:
+
+```bash
+b2 key create --bucket daniel-server-kopia longhorn-weekly \
+  listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions,writeFileRetentions
+```
+
+The list leaves out `bypassGovernance` on purpose. With the new key in place, the
+`homelab-b2-retention` timer on daniel-box stops declining at its next 07:30 UTC run. To
+confirm, read its line with `journalctl -t b2-retention --since today`. It must read
+`b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.
+
+### What the daily sweep does
+
+B2 counts a version's retention from its upload, and a Longhorn backup uploads only the blocks
+that changed. Without help, the default retention would lock only the last 7 days of uploads,
+and the base blocks of every retained weekly backup would stay open to deletion.
+`scripts/backup/b2_extend_retention.py` closes that gap. Once a day it lists the current
+objects under `longhorn/backupstore/volumes/` and sets each one's governance retention to now
+plus the bucket's default period. It skips each backup's `locks/` files.
+
+- **It costs about four Class C calls a day:** the authorize, the bucket read and one listing
+  page per 1,000 objects. Each retention update is Class A, which B2 does not meter.
+- **It adds no storage.** It uploads nothing. A block that Longhorn prunes leaves the listing,
+  so its lock lapses within one period, and the lifecycle rule removes it as before.
+- **It declines and changes nothing** while the lock is off, the default retention is not
+  governance mode, or the key lacks `writeFileRetentions`. The `b2_object_lock` row reports
+  each of those states.
+- **Checks 9 and 10 watch it.** `longhorn-backup-health` reads the `b2-retention` journal
+  tag, and reports `down` on a `FAILED` line or on a day with no completed run.
+
+Longhorn's `full-backup-interval` was the other candidate, and ADR-0041 records why it was
+rejected: a full backup re-uploads every block as a new version, and the replaced versions
+stay billed for a week, so the bucket would carry about two copies of the referenced set
+against the 10 GB free tier.
+
 ### Step 3: lock the R2 etcd snapshot prefix
 
 ```bash
