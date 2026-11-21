@@ -778,10 +778,13 @@ carry no lock. A backup whose base blocks were deleted fails its restore even th
     wc -l hidden.txt
     ```
 
-    To read what survives in R2, list the etcd snapshots with the request in
-    [Listing while k3s is stopped](k3s-etcd-restore.md#listing-while-k3s-is-stopped). It
-    works whether or not k3s runs. If R2 holds none, list daniel-box's local snapshots in
-    `/var/lib/rancher/k3s/server/db/snapshots/`.
+    To read what survives in R2, open the bucket in the Cloudflare dashboard (kit item 5)
+    and browse the `etcd-snapshots/` prefix. Do not use the request in
+    [Listing while k3s is stopped](k3s-etcd-restore.md#listing-while-k3s-is-stopped) yet.
+    It reads `/etc/rancher/k3s/etcd-s3.env`, which holds the R2 key that step 1 revoked, so
+    it fails with a 403 until step 6 lands. A 403 does not mean that R2 holds no snapshots.
+    Fall back to daniel-box's local snapshots in
+    `/var/lib/rancher/k3s/server/db/snapshots/` only when the dashboard lists none.
 5. To make the hidden B2 versions current again, delete each hide marker with
     `b2 file unhide`. It takes one file per call, and each call spends one Class C
     transaction to find its marker, so check the daily caps in the Backblaze console and
