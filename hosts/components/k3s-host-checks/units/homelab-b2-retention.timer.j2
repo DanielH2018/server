@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=Extend the B2 weekly bucket's Object Lock retention once a day
+
+[Timer]
+OnCalendar=*-*-* {{ k3s_b2_retention_cron_hour }}:{{ k3s_b2_retention_cron_minute }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

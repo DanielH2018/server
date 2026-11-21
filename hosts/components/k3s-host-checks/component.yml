@@ -3,7 +3,7 @@
 # checks 9 and 10 and Loki match.
 #
 # A package that lists this component also lists `check-lib`, whose library each script sources,
-# `secrets-unit`, and the credential `healthchecks_ping_key`. The drill and the two B2 timers run
+# `secrets-unit`, and the credential `healthchecks_ping_key`. The drill and the three B2 timers run
 # from the primary checkout, so the host must hold one.
 files:
   - {src: templates/longhorn-backup-health.sh.j2, dst: /usr/lib/homelab/longhorn-backup-health.sh, mode: "0755"}
@@ -35,6 +35,8 @@ files:
   - {src: units/homelab-b2-deletion-accounting.timer.j2, dst: /usr/lib/systemd/system/homelab-b2-deletion-accounting.timer}
   - {src: units/homelab-b2-budget-listing.service.j2, dst: /usr/lib/systemd/system/homelab-b2-budget-listing.service}
   - {src: units/homelab-b2-budget-listing.timer.j2, dst: /usr/lib/systemd/system/homelab-b2-budget-listing.timer}
+  - {src: units/homelab-b2-retention.service.j2, dst: /usr/lib/systemd/system/homelab-b2-retention.service}
+  - {src: units/homelab-b2-retention.timer.j2, dst: /usr/lib/systemd/system/homelab-b2-retention.timer}
   - {src: units/homelab-etcd-restore-drill.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.service, when: k3s_etcd_restore_drill_armed}
   - {src: units/homelab-etcd-restore-drill.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.timer, when: k3s_etcd_restore_drill_armed}
 # What the restore runbook and the drill source. 0600 root: these are the R2 write credentials for
@@ -55,4 +57,5 @@ enable:
   homelab-etcd-token-drift.timer: timers.target
   homelab-b2-deletion-accounting.timer: timers.target
   homelab-b2-budget-listing.timer: timers.target
+  homelab-b2-retention.timer: timers.target
   homelab-etcd-restore-drill.timer: {target: timers.target, when: k3s_etcd_restore_drill_armed}
