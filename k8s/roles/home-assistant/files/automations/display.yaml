@@ -56,7 +56,7 @@
     # (lights on read ~600) is out of that band, so turning the lights on still casts at once.
     - condition: template
       value_template: >-
-        {% set dismissed = state_attr('automation.bedroom_display_dismiss', 'last_triggered') %}
+        {% set dismissed = state_attr('automation.bedroom_display_go_ambient_when_dark_or_sleeping', 'last_triggered') %}
         {{ dismissed is none or now() - dismissed > timedelta(minutes=15)
            or states('sensor.aqara_fp300_illuminance') | float(0) > 200 }}
     # The Hub must actually be reachable. When it's unavailable/unknown (powered off, off the
