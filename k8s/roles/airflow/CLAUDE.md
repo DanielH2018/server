@@ -145,7 +145,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   points once.
 - **`dns_daily_rollup`** loads `dns.counts_daily` from both Pi-hole instances' query
   databases, which keep 91 days: each day's total, blocked and client counts, every client's
-  queries, and the top
+  queries, permitted and blocked summed, and the top
   `k8s/roles/airflow/files/dags/homelab_warehouse/dns_history.py:TOP_DOMAINS` permitted and
   blocked domains, per instance. Task pods reach the API through netpol-baseline's `pihole`
   fence. Pi-hole v6 has no read-only credential, so only the `load` task holds the admin
