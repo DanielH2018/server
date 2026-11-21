@@ -33,6 +33,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
     uv run python scripts/dev/findings.py defer 688 --clear
     uv run python scripts/dev/findings.py manual 688 [--clear]
+    uv run python scripts/dev/findings.py remedy 688 --body-file remedy.md
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
@@ -165,12 +166,17 @@ releases any claim on it, because `reap` skips `manual` issues and would never c
 claim. `open --manual` labels an issue the dedup matched as well as a new one, so the flag is
 never dropped silently.
 
+RECORDING A RULED REMEDY. `open --no-vetted-remediation` labels a finding whose every proposed
+fix failed review. Once the operator rules on a remedy, `remedy <n> --body-file f.md` posts it
+as a `Vetted remedy:` comment, which a fan-out brief carries, and removes the label.
+
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 64 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry and a `--milestone` title no milestone has; 3 nothing was written because the issue refuses it — closed, `manual`,
 deferred to a later date, blocked by an open issue, outside the register, held by another worktree or milestone, reserved by another branch's open project, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
-birth, or because `manual` found the label already in the state it was asked for.
+birth, or because `manual` found the label already in the state it was asked for, or `remedy` found no
+`no-vetted-remediation` label.
 """
 
 import argparse
@@ -232,6 +238,7 @@ from dev.findings_lib.plans import (
     plan_defer,
     plan_manual,
     plan_release_held,
+    plan_remedy,
     plan_open,
     plan_sync_labels,
     plan_touch,
@@ -482,6 +489,27 @@ def cmd_manual(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+def cmd_remedy(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``remedy`` subcommand: records a ruled remedy and removes `no-vetted-remediation`.
+
+    Returns:
+        FINDINGS_BAD_ARGS if the body file is missing; 3 if the issue is closed, lacks the
+        label, or the remedy is refused as a comment; 0 otherwise.
+    """
+    if not args.body_file.is_file():
+        sys.stderr.write(f"remedy: body file not found: {args.body_file}\n")
+        return FINDINGS_BAD_ARGS
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_remedy(issue, args.body_file.read_text())
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
+        return 3
+    run(plans, args.dry_run, tools)
+    print(f"#{args.number} remedy recorded; no-vetted-remediation removed")
+    return 0
+
+
 def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``close`` subcommand: closes an issue as fixed, refuted or accepted.
 
@@ -724,6 +752,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "defer": cmd_defer,
         "block": cmd_block,
         "manual": cmd_manual,
+        "remedy": cmd_remedy,
         "claim": cmd_claim,
         "release": cmd_release,
         "claims": cmd_claims,

@@ -182,6 +182,34 @@ def plan_manual(issue: Issue, *, clear: bool) -> list[list[str]]:
     ]
 
 
+def plan_remedy(issue: Issue, remedy: str) -> list[list[str]]:
+    """Plans the gh argv that records a ruled remedy on ``issue`` and removes `no-vetted-remediation`.
+
+    The reverse of `open --no-vetted-remediation`. The remedy is posted as a comment the
+    fan-out brief carries (`fanout_lib/brief.py:operator_comments`), so the session that
+    picks the issue up reads what was ruled.
+
+    Raises:
+        ClaimRefused: the issue is closed, does not carry the label, or the remedy is
+            empty, or `plan_comment` refuses it.
+    """
+    if not issue.is_open:
+        raise ClaimRefused("closed — nothing to rule on")
+    if "no-vetted-remediation" not in issue.labels:
+        raise ClaimRefused("no `no-vetted-remediation` label to remove")
+    if not remedy.strip():
+        raise ClaimRefused("the remedy is empty")
+    comment = plan_comment(issue, f"Vetted remedy: {remedy.strip()}")
+    edit = [
+        "issue",
+        "edit",
+        str(issue.number),
+        "--remove-label",
+        "no-vetted-remediation",
+    ]
+    return [edit, *comment]
+
+
 def _flat(flag: str, values: list[str]) -> list[str]:
     return [arg for v in values for arg in (flag, v)]
 

@@ -333,6 +333,8 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   `uv run python scripts/dev/findings.py open --title "<one-line title>" --body-file <f> --severity
   <high|medium|low> --kind <gap|improvement|feature> --domain <step-1 name> --file <file:line>
   --source review-<date>`, adding `--no-vetted-remediation` when both remediations failed step 7.
+  Once the operator rules on a remedy, `findings.py remedy <n> --body-file <f>` posts it on the
+  issue and removes the label.
   The body file carries where, mechanism, fix, and the two verdicts. `open` dedupes by title and
   file, so a re-filed finding touches the existing issue instead of duplicating it; an exit of 3
   means a skeptic refuted it in an earlier run, and the issue holds the evidence — read it before
