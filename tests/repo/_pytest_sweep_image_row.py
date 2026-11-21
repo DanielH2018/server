@@ -2,21 +2,13 @@
 
 from collections.abc import Callable
 
-from _pytest_sweep_workflow_rows import RUN_STEP, SWEEP
+from _pytest_sweep_workflow_rows import RUN_STEP, SWEEP, sweep_job, sweep_step
 from _row_table import Census, Subject, tracked
 from _workflow_rows import Workflow, condition, jobs, judge, mutants, runs, steps
 
 IMAGE_STEP = "Run the image-marked tests"
 LIST_STEP = "List the modules that failed"
 IMAGE_LEG_PATHS = " tests/longhorn/ k8s/roles/crowdsec/tests/test_jobs_image.py"
-
-
-def _sweep_steps(wf: Workflow) -> list[dict]:
-    return steps(jobs(wf).get("sweep", {}))
-
-
-def _named(wf: Workflow, name: str) -> dict | None:
-    return next((s for s in _sweep_steps(wf) if s.get("name") == name), None)
 
 
 def _pytest_arguments(run: str) -> list[str]:
@@ -26,10 +18,10 @@ def _pytest_arguments(run: str) -> list[str]:
 
 
 def _image_step_problems(wf: Workflow) -> list[str]:
-    step = _named(wf, IMAGE_STEP)
+    step = sweep_step(wf, IMAGE_STEP)
     if step is None:
         return [f"the sweep job has no {IMAGE_STEP!r} step"]
-    run, order = runs(step), _sweep_steps(wf)
+    run, order = runs(step), steps(jobs(wf)["sweep"])
     words = _pytest_arguments(run)
     found = []
     if "-m image" not in " ".join(words):
@@ -42,7 +34,7 @@ def _image_step_problems(wf: Workflow) -> list[str]:
         found.append("the image step is skipped on every night the suite is red")
     if "tee -a" not in run or "sweep.log" not in run:
         found.append("the image step does not append to the log the list step reads")
-    suite, listing = _named(wf, RUN_STEP), _named(wf, LIST_STEP)
+    suite, listing = sweep_step(wf, RUN_STEP), sweep_step(wf, LIST_STEP)
     if suite is None or order.index(step) < order.index(suite):
         found.append(f"the image step does not run after {RUN_STEP!r}")
     if listing is None or order.index(step) > order.index(listing):
@@ -50,28 +42,26 @@ def _image_step_problems(wf: Workflow) -> list[str]:
     return found
 
 
-def _image_step(change: Callable[[dict], object]) -> Callable[[Workflow], object]:
-    def mutate(wf: Workflow) -> None:
-        step = _named(wf, IMAGE_STEP)
-        assert step is not None, f"the sweep job has no {IMAGE_STEP!r} step"
-        change(step)
-
-    return mutate
+def _image_step(job: dict) -> dict:
+    """The sweep job's image step, for a mutation that needs one to change."""
+    step = next((s for s in steps(job) if s.get("name") == IMAGE_STEP), None)
+    assert step is not None, f"the sweep job has no {IMAGE_STEP!r} step"
+    return step
 
 
 def _edit_image_run(find: str, replace: str) -> Callable[[Workflow], object]:
-    def change(step: dict) -> None:
+    def change(job: dict) -> None:
+        step = _image_step(job)
         assert find in step["run"], f"{IMAGE_STEP!r} no longer holds {find!r}"
         step["run"] = step["run"].replace(find, replace)
 
-    return _image_step(change)
+    return sweep_job(change)
 
 
-def _move_image_step_after_the_list(wf: Workflow) -> None:
-    order = jobs(wf)["sweep"]["steps"]
-    step = _named(wf, IMAGE_STEP)
-    order.remove(step)
-    order.append(step)
+def _move_image_step_after_the_list(job: dict) -> None:
+    step = _image_step(job)
+    job["steps"].remove(step)
+    job["steps"].append(step)
 
 
 PYTEST_SWEEP_RUNS_THE_IMAGE_TESTS = Census(
@@ -88,17 +78,19 @@ PYTEST_SWEEP_RUNS_THE_IMAGE_TESTS = Census(
     offence=judge(_image_step_problems),
     red=mutants(
         SWEEP,
-        a_sweep_with_no_image_step=lambda wf: jobs(wf)["sweep"]["steps"].remove(
-            _named(wf, IMAGE_STEP)
+        a_sweep_with_no_image_step=sweep_job(
+            lambda job: job["steps"].remove(_image_step(job))
         ),
         an_image_step_without_the_marker=_edit_image_run(" -m image", ""),
         an_image_step_on_xdist_workers=_edit_image_run(" -n 0", ""),
         an_image_step_over_a_path_list=_edit_image_run(
             "-m image", "-m image" + IMAGE_LEG_PATHS
         ),
-        an_image_step_skipped_after_a_red_suite=_image_step(lambda s: s.pop("if")),
+        an_image_step_skipped_after_a_red_suite=sweep_job(
+            lambda job: _image_step(job).pop("if")
+        ),
         an_image_step_that_overwrites_the_log=_edit_image_run("tee -a", "tee"),
-        an_image_step_after_the_list_step=_move_image_step_after_the_list,
+        an_image_step_after_the_list_step=sweep_job(_move_image_step_after_the_list),
     ),
     green=(Subject(SWEEP),),
     must_find=frozenset({SWEEP}),
