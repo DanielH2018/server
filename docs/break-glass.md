@@ -46,6 +46,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    no-op without it. Restoring onto daniel-box's own intact disk does not need it.
    On a daniel-box rebuild the token goes to that path. On a daniel-server rebuild it goes to
    the agent's env file, `/etc/systemd/system/k3s-agent.service.env`, which the installer writes.
+   The repo does not record the entry's title, so find the entry by its date and its shape:
+    - the entry dates from 2026-08-23, unless a later rotation re-copied it;
+    - the value is one line in k3s's full token format, `K10<64 hex digits>::server:<secret>`.
+      An age key starts `AGE-SECRET-KEY-`, so the entries of items 1 and 10 cannot pass for it.
    Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section) and *Rebuilding a cluster
    node* in `docs/host-packages.md`.
 
