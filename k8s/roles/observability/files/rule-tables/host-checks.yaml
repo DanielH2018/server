@@ -958,9 +958,8 @@ groups:
           summary: '${host}: the primary checkout sync has stopped reporting.'
           description: >-
             No checkout-sync verdict newer than 2 hours reached Prometheus from ${host}, so
-            nothing confirms the primary checkout follows master. A fetch that keeps failing or a
-            git-tree lock held for hours writes no verdict. Read `journalctl -t
-            homelab-checkout-sync` on ${host}.
+            nothing confirms the primary checkout follows master. A fetch that keeps failing writes
+            no verdict. Read `journalctl -t homelab-checkout-sync` on ${host}.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
       # One copy per host, so `service` stays a literal. The updater writes
       # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold

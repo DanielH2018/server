@@ -293,7 +293,7 @@ daniel-server, so that host's primary checkout is not following master.
 No `checkout-sync` verdict newer than 2 hours reached Prometheus from the host the alert names,
 so nothing confirms that its primary checkout follows master.
 
-- A fetch that keeps failing writes no verdict, and neither does a git-tree lock held for hours.
+- A fetch that keeps failing writes no verdict, and neither does a stopped timer.
 - Read `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync` on
   that host, then `checkout_sync.prom` in `/var/lib/node-exporter-textfile/`.
 
