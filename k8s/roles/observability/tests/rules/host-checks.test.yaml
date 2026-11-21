@@ -2534,8 +2534,8 @@ tests:
               description: >-
                 No checkout-sync verdict newer than 2 hours reached Prometheus from
                 daniel-server, so nothing confirms the primary checkout follows master. A fetch
-                that keeps failing or a git-tree lock held for hours writes no verdict. Read
-                `journalctl -t homelab-checkout-sync` on daniel-server.
+                that keeps failing writes no verdict. Read `journalctl -t homelab-checkout-sync`
+                on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
 
   # No checkout-sync series at all: the absent_over_time arm fires for every host whose package
@@ -2552,8 +2552,8 @@ tests:
               description: >-
                 No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box,
                 so nothing confirms the primary checkout follows master. A fetch that keeps
-                failing or a git-tree lock held for hours writes no verdict. Read `journalctl -t
-                homelab-checkout-sync` on daniel-box.
+                failing writes no verdict. Read `journalctl -t homelab-checkout-sync` on
+                daniel-box.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
           - exp_labels: {check: checkout-sync, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
@@ -2561,6 +2561,6 @@ tests:
               description: >-
                 No checkout-sync verdict newer than 2 hours reached Prometheus from
                 daniel-server, so nothing confirms the primary checkout follows master. A fetch
-                that keeps failing or a git-tree lock held for hours writes no verdict. Read
-                `journalctl -t homelab-checkout-sync` on daniel-server.
+                that keeps failing writes no verdict. Read `journalctl -t homelab-checkout-sync`
+                on daniel-server.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#checkoutsyncnotreporting
