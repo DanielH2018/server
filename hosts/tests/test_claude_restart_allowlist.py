@@ -11,6 +11,7 @@ Run: uv run pytest hosts/tests/test_claude_restart_allowlist.py
 
 import copy
 import json
+import re
 
 import pytest
 import yaml
@@ -23,6 +24,8 @@ from validate.alert_conventions import RULES_CONFIGMAP, _alerts, expression_jobs
 # The alert plane no rendered file states. Every pod resolves names through coredns,
 # Alertmanager's receivers included, so a failed coredns restart silences every page.
 UNSTATED_ALERT_PLANE = frozenset({"coredns"})
+# A host Alertmanager notifies: a URL's host, or the SMTP smarthost's.
+RECEIVER_HOST = re.compile(r"(?:https?://|smarthost:\s*)([\w.-]+)")
 NO_PROFILE = "none"
 # Every kind whose pods carry the role as their alerts' `service`.
 WORKLOADS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job"})
@@ -63,11 +66,39 @@ def _selected_jobs(expr: str) -> set[str]:
     }
 
 
+def _receiver_roles(docs: list[tuple]) -> set[str]:
+    """The roles rendering a Service that Alertmanager's config Secret names as a host."""
+    services = {}
+    for role, _, doc in docs:
+        if doc.get("kind") == "Service":
+            name, namespace = doc["metadata"]["name"], doc["metadata"].get("namespace")
+            qualified = f"{name}.{namespace}"
+            for host in (
+                qualified,
+                f"{qualified}.svc",
+                f"{qualified}.svc.cluster.local",
+            ):
+                services[(None, host)] = role
+            services[(namespace, name)] = role
+    roles = set()
+    for _, _, doc in docs:
+        values = doc.get("stringData") or {}
+        if doc.get("kind") != "Secret" or "alertmanager.yml" not in values:
+            continue
+        namespace = doc["metadata"].get("namespace")
+        for text in values.values():
+            for host in RECEIVER_HOST.findall(text):
+                role = services.get((None, host)) or services.get((namespace, host))
+                roles |= {role} if role else set()
+    return roles
+
+
 def alert_plane(docs: list[tuple]) -> frozenset[str]:
     """The roles whose failure hides another service's page.
 
     A role is in it when its rendered config sends alerts to Alertmanager: Prometheus's
-    `alerting.alertmanagers` or the Loki ruler's `alertmanager_url`. A role is in it too when
+    `alerting.alertmanagers` or the Loki ruler's `alertmanager_url`. It is in it when it
+    renders a Service that Alertmanager's config Secret names as a receiver's host. It is in it too when
     it owns a scrape job, by the literal `service` of that job's `ScrapeTargetDown` rule in
     `scrape-targets.yaml`, and a rule whose `service` is another, or comes from the series,
     reads that job. `UNSTATED_ALERT_PLANE` adds what no file states.
@@ -75,7 +106,7 @@ def alert_plane(docs: list[tuple]) -> frozenset[str]:
     Args:
         docs: `(role, template, doc)` for every rendered manifest.
     """
-    plane = set(UNSTATED_ALERT_PLANE)
+    plane = set(UNSTATED_ALERT_PLANE) | _receiver_roles(docs)
     rule_files = {}
     for role, name, key, value in _configmap_values(docs):
         if not isinstance(value, dict):
@@ -306,6 +337,33 @@ def test_a_role_that_sends_to_alertmanager_is_the_alert_plane(config) -> None:
 
     assert plane({"server": {}}) == frozenset()
     assert plane(config) == {"logs"}
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://ntfy:80/alerts",
+        "http://ntfy.alerts.svc/x",
+        "http://ntfy.alerts.svc.cluster.local/x",
+    ],
+    ids=["bare", "svc", "fqdn"],
+)
+def test_the_role_behind_an_alertmanager_receiver_is_the_alert_plane(url) -> None:
+    def plane(receiver_url: str) -> frozenset[str]:
+        service = {
+            "kind": "Service",
+            "metadata": {"name": "ntfy", "namespace": "alerts"},
+        }
+        secret = {
+            "kind": "Secret",
+            "metadata": {"name": "am", "namespace": "alerts"},
+            "stringData": {"alertmanager.yml": "receivers: []", "url": receiver_url},
+        }
+        docs = [("ntfy", "s.yaml.j2", service), ("o11y", "a.yaml.j2", secret)]
+        return alert_plane(docs) - UNSTATED_ALERT_PLANE
+
+    assert plane("https://discord.com/api/webhooks/1") == frozenset()
+    assert plane(url) == {"ntfy"}
 
 
 @pytest.mark.parametrize("service", [None, "web"], ids=["from-series", "other"])
