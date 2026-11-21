@@ -101,7 +101,8 @@ def _automation_reading(template: str, target: str = "automation.go_dark") -> di
 
 def test_resolution_errors_flags_an_automation_read_by_its_id():
     config = _automation_reading(
-        "{{ state_attr('automation.dismiss', 'last_triggered') }}"
+        "{{ state_attr('automation.dismiss', 'last_triggered') }} "
+        "{{ is_state('automation.go_dark', 'on') }}"
     )
     errs = hsm.resolution_errors(config, set())
     assert errs == [
@@ -113,11 +114,6 @@ def test_resolution_errors_flags_an_automation_read_by_its_id():
 def test_resolution_errors_flags_an_unknown_automation_entity_id_field():
     config = _automation_reading("{{ true }}", target="automation.dismiss")
     assert any("automation.dismiss" in e for e in hsm.resolution_errors(config, set()))
-
-
-def test_resolution_accepts_an_automation_read_by_its_alias_slug():
-    config = _automation_reading("{{ is_state('automation.go_dark', 'on') }}")
-    assert hsm.resolution_errors(config, set()) == []
 
 
 def test_referenced_services_collects_literals_skips_templated():
