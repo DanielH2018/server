@@ -1039,6 +1039,12 @@ the Pi gets no work daniel-box or daniel-server could do (operator ruling, 2026-
 arm64 Raspberry Pi image proves little about daniel-box. Each step is **operator-only**, apart from the
 matrix PR.
 
+The commands run in one of two shells. A command written with `sudo` runs from the operator's
+`ubuntu` shell. A command written without `sudo` between *Open a root shell* and the reboot runs
+in that held root shell. `kubectl` in the `ubuntu` shell uses the read-only kubeconfig at
+`~/.kube/config`, which reads nodes, Longhorn nodes and snapshot records and changes nothing.
+Every `k3s` subcommand needs root.
+
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
@@ -1062,15 +1068,21 @@ matrix PR.
       --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
     ```
 
-1. Open a root shell with `sudo -i` and keep it open. Every step up to the reboot runs from it.
-1. On daniel-box, take an etcd snapshot from the held root shell. daniel-box is the only
-   control-plane and etcd node, and the scheduled snapshots can be 12 hours old. The k3s binary
-   lives at `/usr/local/bin/k3s`, which no apt package owns, so the release upgrade leaves k3s at
-   the version that wrote the snapshot.
+1. On daniel-box, take an etcd snapshot from the `ubuntu` shell, before the root shell opens.
+   daniel-box is the only control-plane and etcd node, and the scheduled snapshots can be 12 hours
+   old. `k3s etcd-snapshot` reads the server token under `/var/lib/rancher/k3s/server/`, so it
+   needs root. Without `sudo` it looks under `~/.rancher/k3s/` and fails with
+   `open /home/ubuntu/.rancher/k3s/server/token: no such file or directory`. The k3s binary lives
+   at `/usr/local/bin/k3s`, which no apt package owns, so the release upgrade leaves k3s at the
+   version that wrote the snapshot.
 
     ```bash
-    k3s etcd-snapshot save
+    sudo k3s etcd-snapshot save
     ```
+
+    The save prints one `Unknown flag ... found in config.yaml, skipping` warning for each drop-in
+    key that `etcd-snapshot` has no flag for, such as `disable` and `kubelet-arg`. Those warnings
+    are expected.
 
     The save inherits the drop-in's `etcd-s3`, `etcd-s3-config-secret` and
     `etcd-snapshot-compress` keys, so k3s writes a compressed local copy and uploads a second
@@ -1080,7 +1092,8 @@ matrix PR.
     stopped* filters on the `offbox-` prefix, so that listing omits it.
 
     Confirm that both copies exist. The newest snapshot shows two rows with that name, one
-    `file://` and one `s3://`, and each reads `true`:
+    `file://` and one `s3://`, and each reads `true`. The read-only kubeconfig reads these records,
+    so this command needs no `sudo`:
 
     ```bash
     kubectl get etcdsnapshotfiles.k3s.cattle.io --sort-by=.status.creationTime \
@@ -1088,10 +1101,10 @@ matrix PR.
       | tail -2
     ```
 
-    Then, from a second session as the operator in `~/server`, not from the root shell, run the
-    restore runbook's gates against the name. They check that the weekly listing drill passed and
-    that the cluster token has an off-box baseline. Without that token no snapshot decrypts. The
-    script exits 0 when all three gates pass.
+    Then, from `~/server`, run the restore runbook's gates against the name. They check that the
+    weekly listing drill passed and that the cluster token has an off-box baseline. Without that
+    token no snapshot decrypts. The script exits 0 when all three gates pass. It runs as `ubuntu`
+    without `sudo`: run as root, `uv run` writes root-owned files into the checkout.
 
     ```bash
     uv run python scripts/deploy_tools/runbook_gates.py etcd-restore <snapshot-name>
@@ -1100,6 +1113,9 @@ matrix PR.
     Go on only when both `s3://` and `file://` rows read `true` and the gates exit 0. A restore
     follows *Restoring* in [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md): the S3 form passes
     the bare name, and the local form hard-links the file first.
+1. Open a root shell with `sudo -i` and keep it open. Every command from here up to the reboot
+   runs in it, without `sudo`, unless its step names the `ubuntu` shell. The upgrade replaces
+   sudo, so no step after this one depends on `sudo` working until the sudo check passes.
 1. Copy aside the apt sources the host's packages own. `do-release-upgrade` writes
    `Enabled: no` into every source whose URI is not an Ubuntu mirror. That covers
    `homelab.sources`, which `homelab-updater` reads as its only source list. It also covers daniel-pi's `docker.sources`
@@ -1171,12 +1187,14 @@ matrix PR.
     reboot
     ```
 
-1. Verify the host against the release. `lsb_release -rs` prints the target release, `dpkg --verify`
-   prints nothing, and the reconcile start exits 0.
+1. Verify the host against the release, from a new `ubuntu` shell. The reboot ended the root
+   shell, and the sudo check above proved `sudo` works. `lsb_release -rs` prints the target
+   release, `dpkg --verify` prints nothing, and the reconcile start exits 0. `dpkg --verify` needs
+   `sudo`: as `ubuntu` it reports every root-only file it cannot read as `missing`.
 
     ```bash
     lsb_release -rs
-    dpkg --verify homelab-tools homelab-updater homelab-<host>
+    sudo dpkg --verify homelab-tools homelab-updater homelab-<host>
     sudo systemctl start homelab-reconcile.service
     ```
 
