@@ -9,7 +9,7 @@ import pytest
 from _findings_fakes import operator_comment, typed
 
 from dev.findings_lib.issue_model import IssueState, claim_comment
-from dev.findings_lib.milestone import description_for
+from dev.findings_lib.milestone import GROUP_DESCRIPTION, description_for
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_claim,
@@ -26,6 +26,7 @@ PROJECT = "Backup hardening"
 LEAD = "worktree-backup-lead"
 PROJECT_MILESTONE = {
     "title": PROJECT,
+    "number": 9,
     "description": description_for(LEAD, project=True),
 }
 
@@ -148,7 +149,7 @@ def test_releasing_keeps_the_issue_in_a_project_milestone():
     assert [p[:2] for p in plans] == [["issue", "comment"]]
 
 
-def test_claiming_from_another_branch_closed_project_leaves_the_issue_in_it():
+def test_claiming_from_another_branch_closed_project_files_the_issue_under_yours():
     plans = plan_claim(
         _issue(milestone=PROJECT_MILESTONE),
         worktree=WT,
@@ -157,7 +158,7 @@ def test_claiming_from_another_branch_closed_project_leaves_the_issue_in_it():
         today=TODAY,
         milestone=FOCUS,
     )
-    assert [p[:2] for p in plans] == [["issue", "comment"]]
+    assert plans[1] == ["issue", "edit", "1132", "--milestone", FOCUS]
 
 
 def test_claiming_from_your_own_project_backlog_only_comments():
@@ -183,13 +184,40 @@ def test_claiming_from_your_own_project_backlog_only_comments():
 )
 def test_a_backlog_refuses_an_issue_nobody_could_pick_up_from_it(issue, reason):
     with pytest.raises(ClaimRefused, match=reason):
-        plan_milestone_add(issue, PROJECT_MILESTONE)
+        plan_milestone_add(issue, PROJECT_MILESTONE, frozenset())
 
 
 def test_adding_an_issue_already_in_the_backlog_plans_nothing():
-    assert (
-        plan_milestone_add(_issue(milestone=PROJECT_MILESTONE), PROJECT_MILESTONE) == []
-    )
+    issue = _issue(milestone=PROJECT_MILESTONE)
+    assert plan_milestone_add(issue, PROJECT_MILESTONE, frozenset({9})) == []
+
+
+def test_adding_an_issue_left_in_a_closed_milestone_moves_it():
+    left = {"title": "Old work", "number": 24, "description": description_for(LEAD)}
+    plans = plan_milestone_add(_issue(milestone=left), PROJECT_MILESTONE, frozenset())
+    assert plans == [["issue", "edit", "1132", "--milestone", PROJECT]]
+
+
+@pytest.mark.parametrize(
+    ("description", "remedy"),
+    [
+        (
+            description_for("worktree-b", project=True),
+            "`milestone remove 1132 --worktree worktree-b` frees it",
+        ),
+        (description_for("worktree-b"), "`worktree-b`'s claimed work; `release`"),
+        (GROUP_DESCRIPTION, '`milestone remove 1132 --group "Other"` frees it'),
+        ("the operator's own", "take it out by hand"),
+    ],
+    ids=["project", "session", "group", "operator"],
+)
+def test_adding_an_issue_an_open_milestone_holds_names_the_command_that_frees_it(
+    description, remedy
+):
+    other = {"title": "Other", "number": 24, "description": description}
+    with pytest.raises(ClaimRefused, match="in milestone `Other`") as refused:
+        plan_milestone_add(_issue(milestone=other), PROJECT_MILESTONE, frozenset({24}))
+    assert remedy in refused.value.reason
 
 
 def test_releasing_leaves_an_operator_milestone_alone():
