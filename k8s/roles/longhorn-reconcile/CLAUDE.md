@@ -3,7 +3,8 @@
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
 their tier names and sets each Volume's backup target
 (`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:plan`). It is the only writer of
-those labels.
+those labels. A patch that moves a volume into another tier also stamps the time it moved, which
+`longhorn-backup-health` reads.
 
 It does not touch the CSI sidecar Deployments
 (`k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment`,
