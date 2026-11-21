@@ -255,6 +255,10 @@ def test_a_refused_delete_stops_the_run_and_is_flagged(world, capsys):
     code, _, err = _prune(world, capsys)
     assert code == 1
     assert world.transport.deleted == []
+    assert [r for r in world.transport.requests if r[0] == "DELETE"] == [
+        ("DELETE", f"{forge.PACKAGE_VERSIONS_URL}/1")
+    ]
+    assert world.pauses == [forge.DELETE_PAUSE_S]
     assert "delete package version 1: HTTP 403: forced HTTP 403" in err
     assert world.run.verified == [digest_of(world.commits[2])]
 
