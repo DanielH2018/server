@@ -95,7 +95,7 @@ flux_prepull_timeout: 600s
 crowdsec_k8s_jobs_cpu_limit: "500m"
 crowdsec_k8s_jobs_mem_limit: 512Mi
 crowdsec_k8s_jobs_cpu_request: "10m"
-crowdsec_k8s_jobs_mem_request: 64Mi
+crowdsec_k8s_jobs_mem_request: 144Mi
 
 # The home public IPv4 and IPv6 /64 reach the `home-ips` allowlist in two halves. The
 # crowdsec-home-ips CronJob runs on daniel-box's host network, the only place the /64 is
