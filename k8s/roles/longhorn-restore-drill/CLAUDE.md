@@ -60,6 +60,18 @@ real, and tears everything down.
   `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_a_corrupt_database_fails_the_drill_and_stamps_no_success`,
   `tests/longhorn/test_longhorn_restore_drill_sqlite.py::test_the_probe_reports_a_corrupt_database_as_bad`.
 
+- **Postgres data directories must start and answer a catalog query.** The probe pod's second
+  container, `postgres`, runs the Airflow role's `airflow_k8s_postgres_image`, so a major upgrade
+  there moves the drill with it. It finds each data directory by its `global/pg_control` and
+  copies it into the scratch emptyDir, because the restore mounts read-only. Then it chowns the
+  copy, drops `postmaster.pid` and starts it with `postgres --single`. The check passes only on a
+  `pg_class` count. It never asserts a clean shutdown, because a snapshot of a running server
+  reads "in production" and recovers on start. The drill reads both containers' logs, and a
+  `postgres bad` line or a missing `postgres_checked=` summary fails the run before the success
+  stamps. No stamp records the result: the `PASS:` line carries `postgres_ok=<n>`. ENFORCED:
+  `tests/longhorn/test_longhorn_restore_drill_postgres.py::test_a_postgres_directory_that_does_not_start_fails_the_drill`,
+  `tests/longhorn/test_longhorn_restore_drill_postgres.py::test_a_truncated_pg_control_fails_the_drill`.
+
 - **Scope.** It creates and deletes the Volume, PV, PVC and probe pod named
   `restore-drill-<pvc>`, and patches the stamp ConfigMap. It never touches the live volume. It
   also deletes those objects for any `restore-drill-` Volume older than the Job's deadline plus

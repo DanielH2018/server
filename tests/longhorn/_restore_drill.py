@@ -39,8 +39,8 @@ from _shell_render import render_shell_script
 DRILL_TEMPLATE = ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2")
 DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
 
-# What the probe pod logs for a volume holding real data and no SQLite database.
-PASSING_PROBE = "files=3 bytes=4096\nsqlite_checked=0 sqlite_bad=0"
+# What the probe pod logs for a volume holding real data and no SQLite or Postgres database.
+PASSING_PROBE = "files=3 bytes=4096\nsqlite_checked=0 sqlite_bad=0\npostgres_checked=0 postgres_bad=0"
 
 STUB = r"""
 fixtures="$K3S_STUB_FIXTURES"

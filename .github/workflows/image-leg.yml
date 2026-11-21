@@ -21,6 +21,8 @@ on:
       - ".github/workflows/image-leg.yml"
       - "k8s/roles/longhorn-restore-drill/**"
       - "tests/longhorn/**"
+      # The restore drill's Postgres container runs the Airflow role's Postgres pin.
+      - "k8s/roles/airflow/defaults/main.yml"
       # crowdsec's two images: the role pins the jobs image, all.yml pins the engine image.
       - "k8s/roles/crowdsec/**"
       - "inventory/group_vars/all.yml"
