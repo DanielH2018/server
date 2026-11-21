@@ -6,7 +6,7 @@ databases, single-writer TSDBs, a Zigbee radio that accepts one client — and e
 says so in a comment. A comment is not a gate. The field comes from
 `spec_shell` in `k8s/templates/workload-shell.yml.j2`, whose `strategy` argument has no
 default, so every Deployment states its choice at the call, and
-`test_workload_shell_uses_the_macros.py` refuses a hand-written `strategy:`. The allowlist below is where the REASON for a Recreate is
+the `workload-shell-comes-from-the-macros` census row refuses a hand-written `strategy:`. The allowlist below is where the REASON for a Recreate is
 recorded, which the call cannot carry.
 
 Two guards:

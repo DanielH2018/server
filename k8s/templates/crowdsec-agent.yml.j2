@@ -25,8 +25,8 @@
   The root seeding containers are written out in full rather than built through
   hardened_security_context(), which refuses uid 0 by convention: each one's comment says which
   uid owns the files and why root is reached for.
-  tests/k8s/test_root_security_context_is_written_out_in_full.py scans this file for
-  that.
+  The root-security-context-is-written-out-in-full row of
+  tests/repo/test_census_rows_roles.py scans this file for that.
 
   Arguments:
     app         the host workload's name. It names the `<app>-crowdsec` Secret and selects the

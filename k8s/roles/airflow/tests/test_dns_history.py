@@ -31,6 +31,14 @@ ANSWERS = {
         "total_queries": 29160,
         "blocked_queries": 6379,
     },
+    "stats/database/top_clients?blocked=true": {
+        "clients": [
+            {"ip": "192.168.0.44", "name": "raspberrypi.lan", "count": 1200},
+            {"ip": "192.168.0.60", "name": "tv.lan", "count": 33},
+        ],
+        "total_queries": 29160,
+        "blocked_queries": 6379,
+    },
     "stats/database/top_domains": {
         "domains": [{"domain": "pi-hole.net", "count": 8516}],
         "total_queries": 29160,
@@ -58,7 +66,8 @@ class FakePihole:
             body = {}
         else:
             assert request.get_header("X-ftl-sid") == "s1d"
-            body = ANSWERS[path]
+            blocked = urllib.parse.parse_qs(url.query).get("blocked", [""])[0]
+            body = ANSWERS.get(f"{path}?blocked={blocked}", ANSWERS[path])
         return io.BytesIO(json.dumps(body).encode())
 
 
@@ -72,8 +81,9 @@ def test_a_day_gives_totals_clients_and_both_kinds_of_domain():
 
     assert rows[("total", "queries")] == ("", 29160)
     assert rows[("total", "blocked")] == ("", 6379)
-    assert rows[("client", "192.168.0.44")] == ("raspberrypi.lan", 5896)
+    assert rows[("client", "192.168.0.44")] == ("raspberrypi.lan", 7096)
     assert rows[("client", "192.168.0.52")] == ("", 210)
+    assert rows[("client", "192.168.0.60")] == ("tv.lan", 33)
     assert rows[("domain", "pi-hole.net")] == ("", 8516)
     assert rows[("blocked_domain", "pi-hole.net")] == ("", 8516)
 
@@ -88,6 +98,9 @@ def test_an_address_seen_under_two_names_gives_one_client_row(monkeypatch):
                 {"ip": "192.168.0.44", "name": "raspberrypi.lan", "count": 210},
             ]
         },
+    )
+    monkeypatch.setitem(
+        ANSWERS, "stats/database/top_clients?blocked=true", {"clients": []}
     )
 
     clients = [r[3:] for r in rows_through(FakePihole()) if r[2] == "client"]
@@ -105,10 +118,11 @@ def test_every_read_covers_the_utc_day_and_the_session_is_logged_out():
         q["from"] == [str(DAY_START)] and q["until"] == [str(DAY_START + 86400)]
         for q in reads
     )
-    assert [q["blocked"] for _, p, q in fake.calls if p.endswith("top_domains")] == [
-        ["false"],
-        ["true"],
-    ]
+    for top in ("top_clients", "top_domains"):
+        assert [q["blocked"] for _, p, q in fake.calls if p.endswith(top)] == [
+            ["false"],
+            ["true"],
+        ]
     assert fake.calls[0][:2] == ("POST", "auth")
     assert fake.calls[-1][:2] == ("DELETE", "auth")
 
@@ -139,7 +153,7 @@ def test_a_missing_instance_or_overcounted_clients_fail_the_check():
     )
 
     assert dh.quality_problems(DAY, rows) == [
-        f"{DAY}: pihole's clients sum to 36106, over its 29160 queries",
+        f"{DAY}: pihole's clients sum to 37339, over its 29160 queries",
         f"{DAY}: pihole-2 answered 0 queries, under 1000",
     ]
 

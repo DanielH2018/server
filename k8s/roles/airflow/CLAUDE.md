@@ -145,7 +145,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   points once.
 - **`dns_daily_rollup`** loads `dns.counts_daily` from both Pi-hole instances' query
   databases, which keep 91 days: each day's total, blocked and client counts, every client's
-  queries, and the top
+  queries, permitted and blocked summed, and the top
   `k8s/roles/airflow/files/dags/homelab_warehouse/dns_history.py:TOP_DOMAINS` permitted and
   blocked domains, per instance. Task pods reach the API through netpol-baseline's `pihole`
   fence. Pi-hole v6 has no read-only credential, so only the `load` task holds the admin
@@ -171,6 +171,11 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 
 - **To rerun a day**, clear its run in the UI. `catchup` already queues every day since
   `start_date` that the source still holds, at most four at once.
+- **A change to what a DAG loads reaches only the runs after it deploys.** Airflow never
+  reruns a run that succeeded, so every day loaded before keeps the old values. To reload
+  them, the operator runs `airflow tasks clear <dag_id> --yes` in the `airflow-scheduler`
+  container once the new image is live. A cleared day the source no longer wholly holds
+  skips its `load`, so its old rows stay as they were.
 - **A run's ID names the day after the one it loads.** `scheduled__2026-11-09T00:00:00+00:00`
   is the run whose `logical_date`, and so whose data day, is 2026-11-08.
 - **Read a task's state from Airflow, never from Loki.** The operator reads a run's task

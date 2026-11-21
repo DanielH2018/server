@@ -244,7 +244,7 @@ PROPERTIES = (
                 "scaled-to-zero ReplicaSets and `kubectl get rs -A` stops being readable. Rollbacks "
                 "go through `git revert` + a redeploy, so depth is not a reason to raise it. "
                 "`spec_shell` in k8s/templates/workload-shell.yml.j2 emits the pin and "
-                "test_workload_shell_uses_the_macros.py refuses a hand-written one; this row reads "
+                "the workload-shell-comes-from-the-macros census row refuses a hand-written one; this row reads "
                 "the RENDERED spec, which tells a template that never calls the macro from one that "
                 "does. A DaemonSet owns no ReplicaSets and is out of scope."
             ),
