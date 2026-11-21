@@ -65,6 +65,7 @@ from collections.abc import Callable
 import tempfile
 from pathlib import Path, PurePosixPath
 
+from validate.validate_lib.host_specs import load_package
 from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context
 from lib.repo_paths import K8S_ROLES
@@ -72,7 +73,6 @@ from renderer.renderer_lib import host as host_mode
 from lib.render_guard import (
     REPO,
     dump_numbered,
-    load_yaml,
 )
 
 HOSTS = host_mode.HOSTS
@@ -258,7 +258,7 @@ def host_unit_groups(
     listed = {
         component
         for spec in shared_specs + host_specs
-        for component in load_yaml(spec).get("components") or []
+        for component in load_package(spec).components
     }
     orphans = [
         render_component(spec.parent.name, hosts_root, scratch / spec.parent.name)

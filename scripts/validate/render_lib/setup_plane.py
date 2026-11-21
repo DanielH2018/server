@@ -46,6 +46,7 @@ from lib.render_guard import (
     make_env,
 )
 from lib.repo_paths import REPO, SECRETS
+from validate.validate_lib.host_specs import load_component
 from validate.validate_lib.shipped_render import render_shipped, template_loader
 
 COMPONENTS = REPO / "hosts" / "components"
@@ -192,12 +193,11 @@ def component_supplied(name: str, components: Path = COMPONENTS) -> frozenset[st
     """
     out: set[str] = set()
     for path in sorted(components.glob("*/component.yml")):
-        spec = yaml_fast.safe_load(path.read_text()) or {}
-        if name not in (spec.get("component"), path.parent.name):
+        spec = load_component(path)
+        if name not in (spec.borrows, spec.name):
             continue
-        out.update(spec.get("defaults") or {})
-        for output in spec.get("outputs") or []:
-            out.update(f"{key}_value" for key in output.get("keys") or [])
+        out.update(spec.defaults)
+        out.update(f"{key}_value" for key in spec.output_keys)
     return frozenset(out)
 
 
@@ -210,7 +210,7 @@ def component_context(directory: Path, overrides: dict) -> dict:
     ctx = render_context(directory, overrides=overrides)
     spec = directory / "component.yml"
     if spec.is_file():
-        for key, value in (load_yaml(spec).get("defaults") or {}).items():
+        for key, value in load_component(spec).defaults.items():
             ctx.setdefault(key, value)
     return ctx
 

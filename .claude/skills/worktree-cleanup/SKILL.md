@@ -19,7 +19,7 @@ Ask the pruner instead. `--check` runs the same four-layer ladder `--prune` dele
 ancestry, patch-id, content (`git merge-tree`), then the forge's record of which head it merged.
 
 ```bash
-~/.claude/hooks/prune-worktrees.py --check <branch>
+uv run ~/.claude/hooks/prune-worktrees.py --check <branch>
 ```
 
 It prints `<branch>: landed (<layer>)` and exits 0, or `<branch>: unlanded` and exits 1.
@@ -35,9 +35,9 @@ reads what this repo lets it do from `.claude/prune-worktrees.json` in the prima
 The package's `README.md` lists that file's keys. Run it from anywhere inside the repo:
 
 ```bash
-~/.claude/hooks/prune-worktrees.py            # report
-~/.claude/hooks/prune-worktrees.py --prune    # remove the merged, clean, unlocked
-~/.claude/hooks/prune-worktrees.py --gc       # the object-store repair alone
+uv run ~/.claude/hooks/prune-worktrees.py            # report
+uv run ~/.claude/hooks/prune-worktrees.py --prune    # remove the merged, clean, unlocked
+uv run ~/.claude/hooks/prune-worktrees.py --gc       # the object-store repair alone
 ```
 
 It applies the same content check `--check` does, so it collects exactly what `ExitWorktree`
@@ -63,7 +63,7 @@ The sweep never deletes a remote branch. To see what a sweep would delete and wh
 count of the branches it keeps under each reason, run `--check` with no branch:
 
 ```bash
-~/.claude/hooks/prune-worktrees.py --check
+uv run ~/.claude/hooks/prune-worktrees.py --check
 ```
 
 **A prune also repairs the shared object store.** Removing a worktree makes its branch's objects

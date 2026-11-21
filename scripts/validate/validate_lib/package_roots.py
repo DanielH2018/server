@@ -28,6 +28,7 @@ import tempfile
 from pathlib import Path
 
 from lib import yaml_fast
+from validate.validate_lib.host_specs import load_nfpm
 
 # The named set. Add a package here when it joins the scans. daniel-server joined in H4.2 and
 # daniel-box in H6.2.
@@ -52,7 +53,7 @@ def package_roots(
     """Each named package's root under `render`, and a `[FAIL]` line per member not found."""
     found = {}
     for spec in sorted(render.rglob("nfpm.yaml")):
-        name = (yaml_fast.safe_load(spec.read_text()) or {}).get("name")
+        name = load_nfpm(spec).name
         if name in names:
             found[name] = spec.parent / "root"
     problems = [
