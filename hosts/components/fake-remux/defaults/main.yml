@@ -7,8 +7,6 @@
 # (replacements.json), the scan seeding entries the reconciler acts on.
 #
 # Scripts and the config template live in THIS role's files/templates: one copy, no drift.
-# fake_remux_host lives in group_vars/all.yml — initial_setup.yml's role `when:` needs it before
-# this file is in scope.
 
 # Where the media PV is mounted on the node. Sonarr reports its own `/data` view; both /data/media
 # and /data/torrents live under this root, so one value covers the library and the download dir.

@@ -13,6 +13,7 @@ import re
 
 from docs.fragment_readers import hosts_listing_component
 from lib import yaml_fast
+from lib.inventory_lists import PI_HOST
 from lib.repo_paths import ALL_VARS, HOST_VARS
 from renderer.renderer_lib import host as host_mode
 
@@ -102,7 +103,7 @@ def test_the_use_table_agrees_with_the_inventory():
         flags[host] = merged
     assert set(hosts_listing_component("pi-docker")) <= USES["docker"]
     assert {h for h, v in flags.items() if v["has_github_cli"]} <= USES["github-cli"]
-    assert group["optimize_pi_host"] in USES["azlux"]
+    assert PI_HOST in USES["azlux"]
 
 
 def test_a_source_on_a_host_that_does_not_use_it_is_flagged():
