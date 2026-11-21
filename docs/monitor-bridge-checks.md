@@ -82,7 +82,7 @@ checks each gate suppresses.
   when a peer version field is present-but-empty, or when bazarr self-reports a health issue.
   **Bazarr is the *arr with no exporter, and that is the whole point.** It holds its OWN copies of
   Sonarr's and Radarr's API keys, in its config on the `bazarr-config` PVC and entered through its
-  UI, so no Ansible template carries them and no deploy updates them. The 2026-08-29 key rotation
+  UI, so no template carries them and no deploy updates them. The 2026-08-29 key rotation
   swept the eight templated consumers and missed bazarr, which reconnect-looped, leaked to its 1Gi
   cap and was OOM-killed, and the only signal was the `k3s Container OOM` tile (now `ContainerOOMKilled`), which clears one
   hour after the kill. Sonarr's and Radarr's own stale keys surface immediately as failing

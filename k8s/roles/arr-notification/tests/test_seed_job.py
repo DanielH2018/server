@@ -1,4 +1,5 @@
-"""arr-notification's seed as a Job in sonarr-verify, radarr-verify and lidarr-verify.
+"""arr-notification's seed as a Job in sonarr-verify, radarr-verify, lidarr-verify and
+prowlarr-verify.
 
 The render tests render each app's `templates/verify/` through `render_tag`, so the Job is
 checked as Flux receives it in `<app>-verify`. The run tests write out the rendered
@@ -28,9 +29,9 @@ from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
 from renderer.tests._job_census import problems
 
-APPS = ("sonarr", "radarr", "lidarr")
-# The path version each app's API serves; lidarr alone is v1.
-API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1"}
+APPS = ("sonarr", "radarr", "lidarr", "prowlarr")
+# The path version each app's API serves; lidarr and prowlarr are v1.
+API_VERSIONS = {"sonarr": "v3", "radarr": "v3", "lidarr": "v1", "prowlarr": "v1"}
 TEMPLATE = "templates/verify/notification.yaml.j2"
 DEFAULTS = yaml_fast.safe_load(
     (K8S_ROLES / "arr-notification/defaults/main.yml").read_text()
@@ -100,6 +101,7 @@ def test_the_apps_call_the_one_shared_seed_job():
 
 @pytest.mark.parametrize("app", APPS)
 def test_the_flipped_seed_job_passes_every_job_census_row(flipped, app):
+    _seed(flipped[app])
     assert problems({f"{app}-verify": flipped[app]}) == []
 
 
@@ -381,7 +383,7 @@ def test_the_apps_fence_admits_every_flipped_job(flipped, stubs, app):
         if doc and doc.get("kind") == "NetworkPolicy" and doc["metadata"]["name"] == app
     ]
     jobs = [doc for doc in flipped[app] if doc["kind"] == "Job"]
-    assert jobs
+    assert _seed(flipped[app]) in jobs
     refused = [
         job["metadata"]["name"]
         for job in jobs

@@ -59,6 +59,11 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   rendered NetworkPolicy and Deployment, so an edit to either makes Flux run it again.
   `job.yaml.j2` carries the caller census, and `tests/test_prowlarr_verify.py` renders the
   directory through the Job census and checks both fences against the pod.
+- **`templates/verify/notification.yaml.j2` declares the `Discord (health)` notification.**
+  It is arr-notification's seed Job (`k8s/roles/arr-notification/`), which writes the SOPS
+  `arr_discord_webhook_url` into the row on every rollout. Prowlarr's all-indexers-down error
+  reaches Discord only through that row. `ArrNotificationsFailing` in
+  `k8s/roles/observability/files/rules/arr-apps.yaml` pages when its sends fail.
 - **Both Deployments wait 780s, above the shared default.** A cold pull on daniel-server took 8m54s for the
   292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). The budget is the literal
   `k8s/roles/prowlarr/defaults/main.yml:manifests_rollout_timeout`, which Flux's

@@ -13,6 +13,8 @@ import subprocess
 import sys
 import types
 
+import pytest
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
 )
@@ -87,11 +89,12 @@ def test_master_moved_silent_on_nonzero_git_exit():
     assert _mod.master_moved_problems(lambda *a, **k: _result("", returncode=128)) == []
 
 
-def test_master_moved_silent_on_timeout():
+def test_master_moved_leaves_a_timeout_for_the_banner_to_name():
     def boom(*a, **k):
         raise subprocess.TimeoutExpired("git", 5)
 
-    assert _mod.master_moved_problems(boom) == []
+    with pytest.raises(subprocess.TimeoutExpired):
+        _mod.master_moved_problems(boom)
 
 
 def test_master_moved_silent_on_unparseable_output():

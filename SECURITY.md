@@ -20,7 +20,7 @@ like any other change, gated on CI.
 
 ## Scope
 
-The interesting parts are the Ansible roles, the rendered Kubernetes manifests, and the Python
+The interesting parts are the k3s roles, the host packages, the rendered Kubernetes manifests, and the Python
 under `scripts/`. Roles retired by the k3s migration were deleted from the tree and live only in
 git history, which is out of scope.
 
