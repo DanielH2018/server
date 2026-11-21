@@ -7,7 +7,9 @@ Three tables:
    route is named `<service>[-public|-monitoring|-push-monitoring|-read|-public-<path>]`, so
    the service is the name up to the first `ROUTE_WORDS` segment. Traefik creates a route's
    series only on its first request, so the live IngressRoutes seed every service at 0.
-2. Each container's memory request, limit and 7-day p95 working set.
+2. Each container's memory request, limit and 7-day p95 working set. A critical-tier
+   container's p95 is also recorded by `docs/reference/critical_memory.py`, and CI fails one
+   whose request is under `UNDER_REQUEST` of it.
 3. Each PVC's fill and its projected days to full.
 
 A report, not a verdict: it exits 0 once every query answered, and 75 when one did not.
@@ -19,6 +21,7 @@ import re
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.health_alerts import prom_query
 from diagnostics.probe_lib.metrics import SPAN_PROMQL, format_span
+from lib.container_entry import SERVICE_TIERS
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_json
 
 ROUTE_WORDS = frozenset({"public", "monitoring", "push", "read"})
@@ -49,6 +52,15 @@ REQUEST_QUERY = (
 LIMIT_QUERY = REQUEST_QUERY.replace("requests", "limits")
 NEAR_LIMIT = 0.80
 REQUEST_SLACK = 0.25
+UNDER_REQUEST = 0.5
+
+CRITICAL_PRIORITY_CLASS = SERVICE_TIERS["home-edge"]
+# A pod that ran in the window but is gone keeps its p95 series, so the join reads pod_info
+# over the same window rather than at the instant.
+CRITICAL_P95_QUERY = (
+    f"{P95_QUERY} and on (namespace, pod) max by (namespace, pod) (max_over_time("
+    f'kube_pod_info{{priority_class="{CRITICAL_PRIORITY_CLASS}"}}[{MEMORY_WINDOW}]))'
+)
 
 _PVC = "max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_{}_bytes)"
 USED_QUERY = _PVC.format("used")
@@ -154,7 +166,7 @@ def workload(pod):
     return pod
 
 
-def _by_container(series):
+def by_container(series):
     """`{(namespace, workload, container): max value}` over every pod of the workload."""
     out = {}
     for s in series:
@@ -184,6 +196,14 @@ def memory_flags(request, limit, p95):
     return flags
 
 
+def under_requested(request, p95):
+    """Whether a memory `request` is under `UNDER_REQUEST` of its `p95`. Pure.
+
+    The census in `tests/k8s/_memory_property_rows.py` fails a critical-tier container on it.
+    """
+    return p95 is not None and request < UNDER_REQUEST * p95
+
+
 def format_memory(p95_series, request_series, limit_series, show_all=False):
     """The memory table: a count line, then the flagged containers. Pure.
 
@@ -191,9 +211,9 @@ def format_memory(p95_series, request_series, limit_series, show_all=False):
     highest p95 of any pod of the same workload in the window, so a rollout does not reset it.
     `show_all` lists the unflagged rows too.
     """
-    p95s = _by_container(p95_series)
-    requests = _by_container(request_series)
-    limits = _by_container(limit_series)
+    p95s = by_container(p95_series)
+    requests = by_container(request_series)
+    limits = by_container(limit_series)
     rows = []
     for key in set(requests) | set(limits):
         req, lim, p95 = requests.get(key), limits.get(key), p95s.get(key)
