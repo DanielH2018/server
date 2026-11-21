@@ -74,7 +74,7 @@ MEMORY_PROPERTIES = (
         red=("pihole", {"request_mib": 128, "p95_mib": 304}),
         green=("pihole", {"request_mib": 152, "p95_mib": 304}),
         more_green=(("traefik", {"request_mib": 192, "p95_mib": 224}),),
-        min_matches=20,
+        min_matches=28,
         must_find=MUST_RECORD,
     ),
 )
