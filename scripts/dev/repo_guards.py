@@ -11,7 +11,8 @@ A fan-out brief and a hand-run session both call this script, so the list has on
 After the guards, the run prints advice for the branch: each instruction-file section that
 cites code the branch changed and whose prose it left unchanged, each name the branch
 removed that a doc or a comment still uses, and a count of what the branch adds with each
-new name that nothing outside tests calls. Advice changes no exit code.
+new name that nothing outside tests calls and each new function that takes or returns a raw
+dict. Advice changes no exit code.
 
 The whole suite is out of scope. It costs about five times this set, and the operator ruled it
 out for fan-out batches (`.claude/hooks/block-batch-full-suite.py`).

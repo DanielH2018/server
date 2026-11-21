@@ -94,7 +94,9 @@ refuses a raised entry.
 Two options from ADR-0038 wait on other work, and each has a finding that holds its design:
 
 - A census of raw-dict signatures outside parse modules waits on the parse-at-the-boundary
-  findings (#9393).
+  findings (#9393). Once they landed, the census was measured at 569 signatures, and fewer
+  than half of a 24-signature sample were a parsed value travelling past its parse. It became
+  `branch adds:` advice (`scripts/lib/branch_adds.py:added_advice`), not a ratchet.
 - A retirement manifest for a migration waits on the next migration (#9394). It is the only
   option that reaches the larger half of the rework, the code a migration made obsolete.
 

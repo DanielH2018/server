@@ -1,8 +1,12 @@
-"""What a branch adds to the tree: one count line, then each new name that nothing calls.
+"""What a branch adds to the tree: its counts, its uncalled names and its raw-dict signatures.
 
-`repo_guards.py` prints this as advice before a PR opens, so a session reads how much its
-change grew the tree while it can still shrink it. Every count is net of what the branch
-removes, so a move or a replacement counts as nothing.
+One count line comes first, then each new name that nothing calls, then each new function that
+takes or returns a raw dict. `repo_guards.py` prints this as advice before a PR opens, so a
+session reads how much its change grew the tree while it can still shrink it. Every count is
+net of what the branch removes, so a move or a replacement counts as nothing.
+
+The raw-dict list is advice, not a ratchet: fewer than half of the signatures it matches are a
+parsed value travelling past its parse. The rest build a payload or are the parse itself.
 """
 
 import ast
@@ -66,18 +70,69 @@ def _top_level(source: str) -> set[str]:
     return {node.name for node in body if isinstance(node, kinds)}
 
 
-def _uncalled(repo: Path, base: str, changes: list[tuple[str, str, str]]) -> list[str]:
+def _raw_dict_functions(source: str) -> set[str]:
+    """The functions and methods whose parameters or return annotate a raw dict."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = node.args
+        params = [
+            *args.posonlyargs,
+            *args.args,
+            *args.kwonlyargs,
+            args.vararg,
+            args.kwarg,
+        ]
+        notes = [param.annotation for param in params if param] + [node.returns]
+        if any(note and _is_raw_dict(ast.unparse(note)) for note in notes):
+            found.add(node.name)
+    return found
+
+
+def _is_raw_dict(annotation: str) -> bool:
+    return annotation in ("dict", "dict[str, Any]") or (
+        annotation.rpartition(".")[2] == "JsonValue"
+    )
+
+
+def _sources(
+    repo: Path, base: str, changes: list[tuple[str, str, str]]
+) -> list[tuple[str, str, str]]:
+    """Each module the branch adds or changes, as (path, its text at ``base``, its text now)."""
+    return [
+        (
+            path,
+            "" if status == "A" else git("show", f"{base}:{before}", cwd=repo).stdout,
+            (repo / path).read_text(),
+        )
+        for status, before, path in changes
+        if status != "D" and _is_module(path)
+    ]
+
+
+def _raw_dicts(sources: list[tuple[str, str, str]]) -> list[str]:
+    """Each function the branch adds a raw-dict annotation to, as ``path:name``."""
+    return [
+        f"{path}:{name}"
+        for path, old, new in sources
+        for name in sorted(_raw_dict_functions(new) - _raw_dict_functions(old))
+    ]
+
+
+def _uncalled(repo: Path, sources: list[tuple[str, str, str]]) -> list[str]:
     """Each top-level name the branch adds that no file outside tests and docs uses.
 
     A use is the name as a whole word in a tracked file, so a caller in YAML, a shell script
     or a hook table counts. The definition is itself one use.
     """
     found = []
-    for status, before, path in changes:
-        if status == "D" or not _is_module(path):
-            continue
-        old = "" if status == "A" else git("show", f"{base}:{before}", cwd=repo).stdout
-        added = _top_level((repo / path).read_text()) - _top_level(old) - {"main"}
+    for path, old, new in sources:
+        added = _top_level(new) - _top_level(old) - {"main"}
         for name in sorted(added):
             hits = git("grep", "-c", "-w", "-F", "-e", name, cwd=repo, check=False)
             counts = (line.rpartition(":") for line in hits.stdout.splitlines())
@@ -96,7 +151,7 @@ def _count(number: int, noun: str) -> str:
 
 
 def added_advice(repo: Path, since: str) -> str | None:
-    """The count line for what the branch adds, then the new names with no caller.
+    """The count line, the new names with no caller, and the new raw-dict signatures.
 
     Empty when the branch adds nothing, and None when ``since`` and HEAD share no merge base.
     """
@@ -117,8 +172,12 @@ def added_advice(repo: Path, since: str) -> str | None:
         else:
             flags += sign * bool(_FLAG.search(text))
     code, test_lines = _net_lines(repo, base)
-    uncalled = _uncalled(repo, base, changes)
-    if max(modules, flags, tests, code, test_lines) <= 0 and not uncalled:
+    sources = _sources(repo, base, changes)
+    uncalled = _uncalled(repo, sources)
+    raw_dicts = _raw_dicts(sources)
+    if max(modules, flags, tests, code, test_lines) <= 0 and not (
+        uncalled or raw_dicts
+    ):
         return ""
     lines = [
         f"branch adds: {_count(modules, 'module')}, {_count(flags, 'flag')}, "
@@ -129,5 +188,11 @@ def added_advice(repo: Path, since: str) -> str | None:
         lines.append(
             "  no caller outside tests. Delete each, or say in the PR body what calls it: "
             + ", ".join(uncalled)
+        )
+    if raw_dicts:
+        lines.append(
+            "  a raw dict in the signature. Parse the value into a typed one where it is "
+            "read, as scripts/lib/k8s_objects.py and scripts/lib/container_entry.py do, "
+            "and pass that on: " + ", ".join(raw_dicts)
         )
     return "\n".join(lines)
