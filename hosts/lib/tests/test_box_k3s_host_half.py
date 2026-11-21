@@ -37,6 +37,7 @@ TIMERS = {
     "etcd-token-drift": ("homelab-etcd-token-drift", "*-*-* 2:45:00"),
     "b2-deletion-accounting": ("homelab-b2-deletion-accounting", "*-*-* 7:10:00"),
     "b2-budget-listing": ("homelab-b2-budget-listing", "*-*-* 7:20:00"),
+    "b2-retention": ("homelab-b2-retention", "*-*-* 7:30:00"),
     "etcd-restore-drill": ("homelab-etcd-restore-drill", "Mon *-*-* 10:20:00"),
 }
 
@@ -94,6 +95,7 @@ def test_each_timer_keeps_its_crons_schedule(package, manifest, cron):
         ("homelab-etcd-token-drift", "etcd-snapshot-offbox"),
         ("homelab-b2-deletion-accounting", "b2-deletions"),
         ("homelab-b2-budget-listing", "b2-budget"),
+        ("homelab-b2-retention", "b2-retention"),
     ],
 )
 def test_a_service_logs_under_the_tag_its_readers_match(package, unit, identifier):
@@ -122,6 +124,7 @@ def test_a_check_imports_the_ping_key(package, unit):
     [
         ("homelab-b2-deletion-accounting", "b2-deletion-accounting", "B2_DELETIONS"),
         ("homelab-b2-budget-listing", "b2-budget-listing", "B2_BUDGET"),
+        ("homelab-b2-retention", "b2-retention", "B2_RETENTION"),
     ],
 )
 def test_a_b2_timer_touches_the_stamp_check_10_reads(package, unit, stamp, env):

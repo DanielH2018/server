@@ -33,8 +33,8 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
-# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` and
-# `b2-budget` journal tags. Both timers run daily, so 26h holds the last run under either DST
+# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions`,
+# `b2-budget` and `b2-retention` journal tags. All three timers run daily, so 26h holds the last run under either DST
 # offset with a couple of hours of jitter to spare. It is also how long a reported fault stays
 # RED: an UNPRICED deletion — a permanent event, not a state — ages out after this window, and an
 # OVER BUDGET projection clears within it once a clean run lands. The trim's arms read Longhorn's
@@ -92,6 +92,12 @@ k3s_b2_deletion_accounting_cron_hour: "7"
 k3s_b2_deletion_accounting_cron_minute: "10"
 k3s_b2_budget_cron_hour: "7"
 k3s_b2_budget_cron_minute: "20"
+
+# The Object Lock sweep (scripts/backup/b2_extend_retention.py). It renews every Longhorn object's
+# lock to now plus the bucket's default period, so a daily run keeps each referenced block locked
+# for at least that period less a day. Any hour clear of the 03:30 and 04:30 backup windows works.
+k3s_b2_retention_cron_hour: "7"
+k3s_b2_retention_cron_minute: "30"
 
 # Daily-backup-volume budget. B2 exposes no cap-headroom API, so nothing can measure the
 # remaining allowance directly; what CAN be watched is the input that grows, the count of

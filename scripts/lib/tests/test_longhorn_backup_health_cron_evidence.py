@@ -396,3 +396,83 @@ def test_budget_check_is_flagged_as_not_reporting_without_a_summary_line():
     assert len(problems) == 1
     assert "b2-budget has logged nothing in the last 26h" in problems[0][1]
     assert "homelab-b2-budget-listing.timer" in problems[0][1]
+
+
+# ── checks 9 and 10 for the b2-retention sweep ─────────────────────────────────────────────
+
+_RETENTION = _B2._replace(
+    tag="b2-retention", path="/usr/lib/systemd/system/homelab-b2-retention.timer"
+)
+
+
+def _retention_line(refuse: bool = False, can_extend: bool = True) -> str:
+    """The summary line `b2_extend_retention.run` prints over one listed block."""
+    from backup import b2_extend_retention
+    from lib.b2 import B2Error, B2Session
+
+    lock = {
+        "isClientAuthorizedToRead": True,
+        "value": {
+            "isFileLockEnabled": True,
+            "defaultRetention": {
+                "mode": "governance",
+                "period": {"duration": 7, "unit": "days"},
+            },
+        },
+    }
+    answers = {
+        "b2_authorize_account": {
+            "apiInfo": {
+                "storageApi": {
+                    "apiUrl": "https://api.example",
+                    "bucketId": "bid",
+                    "capabilities": ["writeFileRetentions"] if can_extend else [],
+                }
+            },
+            "authorizationToken": "tok",
+        },
+        "b2_list_buckets": {"buckets": [{"fileLockConfiguration": lock}]},
+        "b2_list_file_names": {"files": [{"fileName": "a/pvc-a/x.blk", "fileId": "1"}]},
+        "b2_update_file_retention": {},
+    }
+
+    def transport(url, headers, payload, timeout):
+        api = url.rsplit("/", 1)[-1]
+        if refuse and api == "b2_update_file_retention":
+            raise B2Error("HTTP 401: unauthorized", code="unauthorized")
+        return answers[api]
+
+    session = B2Session("k", "s", transport=transport)
+    return b2_extend_retention.run(session, _NOW)[1]
+
+
+def test_retention_check_is_clean_on_a_completed_sweep():
+    """The coupling test: the summary line the sweep prints is the line check 10 accepts."""
+    journal = {"b2-retention": [_retention_line(refuse=False)]}.get
+    assert logic.check_cron(journal, 26, _RETENTION, _NOW) == []
+
+
+def test_retention_check_is_flagged_when_b2_refused_an_extension():
+    journal = {"b2-retention": [_retention_line(refuse=True)]}.get
+    problems = logic.check_cron(journal, 26, _RETENTION, _NOW)
+    assert len(problems) == 1
+    assert "b2-retention reported FAILED in the last 26h" in problems[0][1]
+
+
+def test_retention_check_is_flagged_as_not_reporting_after_an_error():
+    """An authorize or listing failure prints only an `error:` line, so the run never completed."""
+    journal = {
+        "b2-retention": ["b2-retention: error: HTTP 403 from b2_list_file_names"]
+    }.get
+    problems = logic.check_cron(journal, 26, _RETENTION, _NOW)
+    assert len(problems) == 1
+    assert "b2-retention has logged nothing in the last 26h" in problems[0][1]
+
+
+def test_retention_check_is_flagged_as_not_reporting_when_the_key_cannot_extend():
+    """A locked bucket and a key without writeFileRetentions extends nothing, so it never completed."""
+    line = _retention_line(can_extend=False)
+    assert line == "b2-retention: blocked: the key lacks writeFileRetentions"
+    problems = logic.check_cron({"b2-retention": [line]}.get, 26, _RETENTION, _NOW)
+    assert len(problems) == 1
+    assert "b2-retention has logged nothing in the last 26h" in problems[0][1]
