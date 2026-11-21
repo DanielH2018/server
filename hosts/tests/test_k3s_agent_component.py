@@ -221,7 +221,7 @@ def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
     )
 
 
-def _run_wifi_copy(tmp_path, generate_rc: int):
+def _run_wifi_copy(tmp_path, get_rc: int = 0, generate_rc: int = 0):
     rendered = (
         tmp_path / "var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
     )
@@ -229,27 +229,45 @@ def _run_wifi_copy(tmp_path, generate_rc: int):
     rendered.write_text("rendered\n")
     (tmp_path / "etc/netplan").mkdir(parents=True)
     (tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml").write_text("old\n")
+    netplan = tmp_path / "netplan"
+    write_exec(netplan, f"#!/bin/sh\nexit {get_rc}\n")
     generate = tmp_path / "generate"
-    write_exec(generate, f"#!/bin/sh\nexit {generate_rc}\n")
+    argv = tmp_path / "generate.argv"
+    write_exec(generate, f'#!/bin/sh\necho "$0 $*" > {argv}\nexit {generate_rc}\n')
     return run(
         [str(COMPONENT / "files" / "homelab-netplan-wifi")],
         env={
             **os.environ,
             "HOMELAB_ROOT": str(tmp_path),
+            "NETPLAN": str(netplan),
             "NETPLAN_GENERATE": str(generate),
         },
     )
 
 
 def test_a_rendered_file_netplan_accepts_replaces_the_old_one(tmp_path):
-    assert _run_wifi_copy(tmp_path, 0).returncode == 0
+    assert _run_wifi_copy(tmp_path).returncode == 0
     installed = tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml"
     assert installed.read_text() == "rendered\n"
     assert installed.stat().st_mode & 0o777 == 0o600
 
 
-def test_a_rendered_file_netplan_refuses_leaves_the_old_one(tmp_path):
-    result = _run_wifi_copy(tmp_path, 1)
+def test_the_generator_runs_as_a_systemd_generator_into_the_scratch_root(tmp_path):
+    """netplan 1.2's generator aborts unless it runs with boot's three output dirs."""
+    assert _run_wifi_copy(tmp_path).returncode == 0
+    command, flag, root, *dirs = (tmp_path / "generate.argv").read_text().split()
+    assert flag == "--root-dir"
+    assert command == f"{root}/usr/lib/systemd/system-generators/netplan"
+    assert dirs == [f"{root}/run/systemd/generator{s}" for s in ("", ".early", ".late")]
+
+
+@pytest.mark.parametrize(
+    ("get_rc", "generate_rc"), [(1, 0), (0, 1)], ids=["parse", "generate"]
+)
+def test_a_rendered_file_netplan_refuses_leaves_the_old_one(
+    tmp_path, get_rc, generate_rc
+):
+    result = _run_wifi_copy(tmp_path, get_rc, generate_rc)
     assert result.returncode == 1
     assert "netplan refuses" in result.stderr
     assert (
