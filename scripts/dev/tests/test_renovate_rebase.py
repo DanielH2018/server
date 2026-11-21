@@ -28,7 +28,7 @@ BODY = f"This PR contains the following updates:\n\n---\n\n{UNTICKED}\n\nSome te
 # the soak is a `StatusContext` with `context`/`state`.
 CI_RUN = {
     "__typename": "CheckRun",
-    "name": "pytest (shard 1 of 6)",
+    "name": "pytest (shard 1)",
     "status": "COMPLETED",
     "conclusion": "SUCCESS",
 }
