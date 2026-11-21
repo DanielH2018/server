@@ -219,6 +219,14 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "--clear", action="store_true", help="remove `manual`; `next` offers it again"
     )
 
+    rm = sub.add_parser(
+        "remedy", help="record a ruled remedy and remove `no-vetted-remediation`"
+    )
+    _add_dry_run(rm, suppress=True)
+    _add_repo(rm)
+    rm.add_argument("number", type=int)
+    rm.add_argument("--body-file", required=True, type=Path)
+
     t = sub.add_parser(
         "touch",
         help="record a re-observation; the third adds escalated",
