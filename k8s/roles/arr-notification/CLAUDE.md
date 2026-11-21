@@ -63,8 +63,9 @@ name, so a CustomScript that happened to share the name is left alone
 - **The API version is per app, inside the script.** `ARR_API_VERSIONS` maps sonarr and radarr
   to `v3` and lidarr and prowlarr to `v1`, keyed like `ARR_PORTS`, so no caller passes it. Lidarr's
   notification carries `onHealthIssue`, `onHealthRestored` and `includeHealthWarnings` under
-  the same names (Lidarr v3.1.6.5079, `NotificationResource`), so the health-only default
-  applies unchanged.
+  the same names (Lidarr v3.1.6.5079, `NotificationResource`), and so does Prowlarr's (Prowlarr
+  `develop` on 2026-11-21, `Prowlarr.Api.V1` `NotificationResource`), so the health-only
+  default applies unchanged. Prowlarr's `onGrab` and `onApplicationUpdate` are set false.
 - **Every trigger the app carries is set, not just the true ones.** `trigger_keys` derives the
   set from the object the API returned, because the apps do not carry the same keys
   and upstream adds more. Declaring only the true half would let a trigger enabled in the UI
