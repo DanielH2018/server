@@ -145,15 +145,17 @@ def _render_copy(tree, stubs, edit_policy=False) -> cluster.RenderedTag:
     return cluster.render_tag(TAG, stubs, roles=roles)
 
 
-# arr-notification's seed Job, which `k8s/roles/arr-notification/tests/` covers.
+# The seed Jobs beside the verify Job, which their own tests cover: arr-notification's in
+# `k8s/roles/arr-notification/tests/`, the app-keys seed in `test_seed_prowlarr_app_keys.py`.
 SEED = "notification.yaml"
+SEEDS = (SEED, "app-keys.yaml")
 
 
 def _docs(texts: dict[str, str]) -> list[dict]:
     return [
         doc
         for name, text in sorted(texts.items())
-        if name not in ("kustomization.yaml", SEED)
+        if name not in ("kustomization.yaml", *SEEDS)
         for doc in yaml_fast.safe_load_all(text)
         if doc
     ]
@@ -340,7 +342,11 @@ def test_the_verify_job_reads_no_other_roles_file():
         for path in (K8S_ROLES / TAG / "templates" / "verify").glob("*.j2")
         if path.name != f"{SEED}.j2"
     )
-    assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
+    assert [p.name for p in staged] == [
+        "app-keys.yaml.j2",
+        "job.yaml.j2",
+        "rbac.yaml.j2",
+    ]
     assert [
         (path.name, role)
         for path in staged
