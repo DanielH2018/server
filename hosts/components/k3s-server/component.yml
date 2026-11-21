@@ -192,6 +192,18 @@ files:
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
   - {src: templates/cpu-weight.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf}
   - {src: templates/system-slice-cpu-weight.conf.j2, dst: /usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf}
+  # kubelet reads its config only at start, so the first shutdown it governs is the one after the
+  # restart homelab-k3s-restart makes in its next window.
+  - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s.service"}
+  # Without this file kubelet's shutdown manager never starts: logind keeps the 30 s that
+  # unattended-upgrades sets, and kubelet logs `Failed to start node shutdown manager` once at
+  # start. The reload makes the delay live at install; the manager starts at k3s's next start.
+  # DECIDED: a name that sorts last, not a same-name /etc file that masks unattended-upgrades' own.
+  # A mask stops working silently if the package renames its file.
+  - {src: templates/logind-kubelet-shutdown.conf.j2, dst: /usr/lib/systemd/logind.conf.d/zz-homelab-kubelet-shutdown.conf, activate: "reload:systemd-logind.service"}
+  - {src: files/kubelet-shutdown-lock-check.sh, dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
+  - {src: units/homelab-kubelet-shutdown-lock.service, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
+  - {src: units/homelab-kubelet-shutdown-lock.timer, dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
   - {src: templates/logrotate-k3s.j2, dst: /etc/logrotate.d/k3s}
   - {src: templates/tmpfiles-k3s.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-server.conf}
   # An empty marker: the deploy controller skips an addon file whose name ends `.skip`, which
@@ -238,6 +250,7 @@ outputs:
     when: "k3s_node_wifi_link | length > 0"
 enable:
   homelab-k3s-kubeconfig.service: multi-user.target
+  homelab-kubelet-shutdown-lock.timer: timers.target
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Emptying a link is the way back from the pin or the fallback: the next package drops the file
