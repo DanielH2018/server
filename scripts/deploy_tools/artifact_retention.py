@@ -14,7 +14,7 @@ THE RULE. A version is deleted only when it is older than RETENTION_DAYS and is 
     cosign bundle whose `subject` is that digest, or the index tagged `sha256-<hex>` that
     cosign writes on a registry without the referrers API.
 Everything else stays, however old: the versions tagged `prod`, `last-good`, `held`,
-`superseding` and `verify-drill`, every walk candidate, because each descends from `prod`'s
+`superseding`, `verify-drill` and `publishing`, every walk candidate, because each descends from `prod`'s
 commit, and every signature of a surviving digest. When `prod` is absent, or any fact the selection needs
 failed, nothing is deleted. A listing that lacks `prod`'s or `last-good`'s version counts as
 failed, because a short listing would make their signatures look orphaned.

@@ -81,6 +81,9 @@ from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
+
 
 # How long a head whose every CI run skipped as a draft waits for a ready run before the PR is
 # read for its draft state. GitHub registers the ready run seconds after the flip, and the
@@ -299,16 +302,12 @@ def _ready_run_on(ln: Landing, head: str) -> str:
         return as_list(got, "gh api ci.yml runs")
 
     try:
-        runs = ln.read(call, "gh api ci.yml runs")
+        runs = [WorkflowRun.parse(r) for r in ln.read(call, "gh api ci.yml runs")]
     except (gh_read.GhReadFailed, ValueError) as exc:
         return f"its CI runs could not be read ({exc})"
     for run in runs:
-        if not isinstance(run, dict):
-            return f"its CI runs read as {runs!r}"
-        if run.get("status") != "completed" or run.get("conclusion") != "skipped":
-            return (
-                f"run {run.get('id')} is {run.get('conclusion') or run.get('status')}"
-            )
+        if run.status != "completed" or run.conclusion != "skipped":
+            return f"run {run.id} is {run.conclusion or run.status}"
     return ""
 
 

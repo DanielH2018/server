@@ -22,6 +22,8 @@ session works, what the Discord digest measures, and the exit codes behind the a
 - `renovate_identity.py`, copied in from `hosts/lib/` — Renovate's two GitHub logins,
   `app/renovate` and `renovate[bot]`. The census, the author check in `land_renovate_pr.py`
   and both floor checks read them there, as `hosts/components/renovate-notify/` does.
+- `ci_verdict.py`, copied in from `hosts/lib/` — `CommitStatus`, the parsed commit status the
+  lander hands the soak-status check.
 
 `component.yml` names each module in `files:`. The list is not derived from the directory, so a
 module in `files/` and not on the list is one the host never receives.
@@ -221,7 +223,7 @@ RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
 ```
 
 The `PYTHONPATH` stands in for the package's copies. `component.yml` installs
-`host_lib.py` and `renovate_identity.py` from `hosts/lib/` and the `gitops_*` modules from `gitops_deploy/files/` beside
+`host_lib.py`, `renovate_identity.py` and `ci_verdict.py` from `hosts/lib/` and the `gitops_*` modules from `gitops_deploy/files/` beside
 the script in `/usr/lib/homelab/renovate-agent/`, so a run from the repo cannot import them without it.
 
 The override exists for exactly this. Without it the first armed tick would be the first time this

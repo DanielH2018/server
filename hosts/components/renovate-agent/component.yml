@@ -56,6 +56,7 @@ files:
   - {src: files/land_renovate_pr.py, dst: /usr/lib/homelab/renovate-agent/land_renovate_pr.py, mode: "0755"}
   - {src: files/renovate_floor.py, dst: /usr/lib/homelab/renovate-agent/renovate_floor.py}
   - {src: files/t2-approval-floor, dst: /usr/lib/homelab/t2-approval-floor}
+  - {lib: ci_verdict.py, dst: /usr/lib/homelab/renovate-agent/ci_verdict.py}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
   - {lib: renovate_identity.py, dst: /usr/lib/homelab/renovate-agent/renovate_identity.py}
   - {lib: claude_config_lock.py, dst: /usr/lib/homelab/renovate-agent/claude_config_lock.py}

@@ -26,9 +26,14 @@ def login(account: dict | None) -> str | None:
     return (account or {}).get("login")
 
 
+def is_renovate_login(name: str | None) -> bool:
+    """Whether `name`, in either spelling GitHub gives it, is Renovate's login."""
+    return name in _LOGINS
+
+
 def is_renovate(account: dict | None) -> bool:
-    """Whether `account`, a PR's author or user, an event's actor or a status's creator, is Renovate."""
-    return login(account) in _LOGINS
+    """Whether `account`, a PR's author or user, or an event's actor, is Renovate."""
+    return is_renovate_login(login(account))
 
 
 class PayloadError(ValueError):
@@ -79,7 +84,7 @@ class RenovatePR:
     @property
     def is_renovate(self) -> bool:
         """Whether Renovate authored the PR. The branch name proves nothing: anyone can push one."""
-        return self.author in _LOGINS
+        return is_renovate_login(self.author)
 
     @property
     def on_renovate_branch(self) -> bool:

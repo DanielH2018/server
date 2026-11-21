@@ -165,29 +165,29 @@ def test_the_leg_spread_takes_the_hardware_out_of_each_legs_wall():
     a = FILES[0]
     spread = shard_weight_gate.leg_spread(
         {
-            "pytest (shard 2 of 3)": _leg_log(2.4, {a: 1.0}) + _summary(200.0),
-            "pytest (shard 1 of 3)": _leg_log(1.2, {a: 1.0}) + _summary(100.0),
-            "pytest (shard 3 of 3)": _leg_log(1.2, {a: 1.0}) + _summary(120.0),
+            "pytest (shard 2)": _leg_log(2.4, {a: 1.0}) + _summary(200.0),
+            "pytest (shard 1)": _leg_log(1.2, {a: 1.0}) + _summary(100.0),
+            "pytest (shard 3)": _leg_log(1.2, {a: 1.0}) + _summary(120.0),
         }
     )
     assert spread.splitlines() == [
         "3 pytest legs: normalised gap 28.3s, raw gap 100.0s",
-        "pytest (shard 1 of 3): 100.00s wall, leg_speed 0.706, 141.67s normalised",
-        "pytest (shard 2 of 3): 200.00s wall, leg_speed 1.412, 141.67s normalised",
-        "pytest (shard 3 of 3): 120.00s wall, leg_speed 0.706, 170.00s normalised",
+        "pytest (shard 1): 100.00s wall, leg_speed 0.706, 141.67s normalised",
+        "pytest (shard 2): 200.00s wall, leg_speed 1.412, 141.67s normalised",
+        "pytest (shard 3): 120.00s wall, leg_speed 0.706, 170.00s normalised",
     ]
 
 
 def test_the_leg_spread_refuses_a_leg_with_no_pytest_summary():
     """A leg cut off before its summary has no wall; reading 0s would invent the fastest leg."""
-    with pytest.raises(ValueError, match=r"pytest \(shard 1 of 2\): no pytest summary"):
-        shard_weight_gate.leg_spread({"pytest (shard 1 of 2)": _leg_log(1.2, {})})
+    with pytest.raises(ValueError, match=r"pytest \(shard 1\): no pytest summary"):
+        shard_weight_gate.leg_spread({"pytest (shard 1)": _leg_log(1.2, {})})
     with pytest.raises(ValueError, match="no green pytest leg"):
         shard_weight_gate.leg_spread({})
 
 
-_LEG = [("pytest (shard 1 of 2)", "success")]
-_SKIPPED = [("pytest (shard ${{ matrix.shard }} of 2)", "skipped")]
+_LEG = [("pytest (shard 1)", "success")]
+_SKIPPED = [("pytest (shard ${{ matrix.shard }})", "skipped")]
 
 
 def _oid(number: int) -> str:
@@ -268,8 +268,8 @@ def test_the_runner_fetch_reads_green_pytest_legs_of_the_newest_runs_that_ran_th
             7: [*_LEG, ("prek", "success")],
             6: _SKIPPED,
             8: [
-                ("pytest (shard 2 of 2)", "success"),
-                ("pytest (shard 1 of 2)", "skipped"),
+                ("pytest (shard 2)", "success"),
+                ("pytest (shard 1)", "skipped"),
             ],
             9: _LEG,
         },

@@ -1,7 +1,8 @@
 """Whether a commit's CI is green, and which ancestor a gate may choose when the tip is not.
 
-Every reader parses GitHub's check-runs into `CheckRun` and its check suites into `CheckSuite`
-where it fetches them. `ci_verdict`
+Every reader parses GitHub's check-runs into `CheckRun`, its check suites into `CheckSuite`,
+its commit statuses into `CommitStatus` and its workflow runs into `WorkflowRun` where it
+fetches them. `ci_verdict`
 reduces ONE commit's runs to a `CIVerdict` over the required contexts, and `CheckRun.state` is
 the one rule for what a single run says. `ci_walk_candidates` bounds the ancestor walk that runs
 when the tip is not green. Stdlib only and importing nothing first-party, because the host
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
@@ -95,6 +97,11 @@ CI_BUILD_READER_JOBS = frozenset(
 
 def _legs(prefix: str) -> frozenset[str]:
     return frozenset(n for n in CI_GATE_NEEDS_JOBS if n.startswith(prefix))
+
+
+def _leg_number(leg: str) -> int:
+    """The N of a `CI_PYTEST_LEGS` name, `pytest (shard N)`."""
+    return int(leg.removeprefix("pytest (shard ").removesuffix(")"))
 
 
 # GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
@@ -321,6 +328,104 @@ def parse_check_suites(raw: list) -> list[CheckSuite]:
     return [CheckSuite.parse(entry) for entry in raw]
 
 
+def _text(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
+@dataclass(frozen=True)
+class CommitStatus:
+    """One commit status, parsed from GitHub's REST statuses listing or its combined status.
+
+    Attributes:
+        context: the name the status reports under; "" when absent.
+        state: `pending`, `success`, `failure` or `error`; "" when absent.
+        creator: the login of the account that posted it, or None when GitHub names none.
+        description: "" when absent.
+        target_url: "" when absent.
+        updated_at: the earliest time when missing or malformed, so an age bound refuses it.
+    """
+
+    context: str
+    state: str
+    creator: str | None
+    description: str
+    target_url: str
+    updated_at: datetime
+
+    @classmethod
+    def parse(cls, raw: object) -> CommitStatus:
+        """One entry of the REST `statuses` listing, or of the combined status's `statuses`.
+
+        Raises:
+            ValueError: the entry is not a JSON object.
+        """
+        if not isinstance(raw, dict):
+            raise ValueError(f"a commit status is not an object: {raw!r}")
+        creator = raw.get("creator")
+        login = creator.get("login") if isinstance(creator, dict) else None
+        try:
+            updated_at = datetime.fromisoformat(str(raw.get("updated_at")))
+        except ValueError:
+            updated_at = datetime.min.replace(tzinfo=UTC)
+        return cls(
+            context=_text(raw.get("context")),
+            state=_text(raw.get("state")),
+            creator=login if isinstance(login, str) else None,
+            description=_text(raw.get("description")),
+            target_url=_text(raw.get("target_url")),
+            updated_at=updated_at,
+        )
+
+
+def parse_commit_statuses(raw: list) -> list[CommitStatus]:
+    """Every entry of a REST `statuses` listing, parsed; a non-object entry raises ValueError."""
+    return [CommitStatus.parse(entry) for entry in raw]
+
+
+@dataclass(frozen=True)
+class WorkflowRun:
+    """One GitHub Actions workflow run, from REST or from `gh run list --json`.
+
+    Attributes:
+        id: the run's id, or None when the source carries none.
+        status: lowercase; `completed` once the run finished.
+        conclusion: lowercase, or None while the run has none.
+        head_sha: the commit the run tested; "" when absent.
+        url: the run's page; "" when absent.
+    """
+
+    id: int | None
+    status: str
+    conclusion: str | None
+    head_sha: str
+    url: str
+
+    @classmethod
+    def parse(cls, raw: object) -> WorkflowRun:
+        """One run, named the REST way (`head_sha`, `html_url`) or `gh`'s (`headSha`, `url`).
+
+        Raises:
+            ValueError: the run is not a JSON object.
+        """
+        if not isinstance(raw, dict):
+            raise ValueError(f"a workflow run is not an object: {raw!r}")
+        run_id = raw.get("id")
+        return cls(
+            id=run_id if type(run_id) is int else None,
+            status=_text(raw.get("status")).lower(),
+            conclusion=_text(raw.get("conclusion")).lower() or None,
+            head_sha=_text(raw.get("head_sha") or raw.get("headSha")),
+            url=_text(raw.get("html_url") or raw.get("url")),
+        )
+
+    @property
+    def no_verdict(self) -> bool:
+        """Whether the run completed in a conclusion that says nothing about the SHA."""
+        return (
+            self.status == "completed" and self.conclusion in _CI_NO_VERDICT_CONCLUSIONS
+        )
+
+
 def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     """The gate job's own pass condition, applied to the check-runs of the jobs it aggregates.
 
@@ -336,8 +441,10 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it. A run starts only the `pytest` legs `pytest_plan` planned.
-    The legs share one `if:` and start together, so once one leg has run, a leg with no run
-    of its own was not planned and is left out, as the gate's aggregate result leaves it out.
+    The legs share one `if:` and start together, and every plan starts legs 1..k. Once one
+    leg has run, a leg numbered past the highest leg with a run of its own was not planned and
+    is left out, as the gate's aggregate result leaves it out. A missing leg below it is a gap
+    no plan produces, so it stays required and the verdict is `pending`.
     """
     states: dict[str, set[str]] = {}
     for run in check_runs:
@@ -362,9 +469,12 @@ def jobs_verdict(check_runs: list[CheckRun]) -> CIVerdict:
     # A draft run's job-level skip names every leg without being a run of any of them.
     own = {run.name for run in check_runs}
     planned = any(n in own and states[n] - {RunState.SKIPPED} for n in CI_PYTEST_LEGS)
+    last_planned = len(CI_PYTEST_LEGS)
+    if planned:
+        last_planned = max(_leg_number(n) for n in CI_PYTEST_LEGS if n in own)
     for name in CI_GATE_NEEDS_JOBS:
         job = states.get(name)
-        if planned and name in CI_PYTEST_LEGS and name not in own:
+        if name in CI_PYTEST_LEGS and _leg_number(name) > last_planned:
             continue
         if job is None or RunState.PENDING in job:
             return CIVerdict.PENDING

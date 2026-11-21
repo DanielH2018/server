@@ -243,6 +243,60 @@ def test_the_deploys_annotation_still_reads_the_homelab_loki():
             assert a["datasource"]["uid"] == LOKI_HOMELAB_UID, (name, a.get("name"))
 
 
+# A raw sum of the per-session cost counter drops each session once its series goes stale, and
+# `increase()` misses each series' first sample, so both read a fraction of the range's spend.
+# Every api_request event carries its own `cost_usd`, and Loki keeps them all.
+COST_PANELS = frozenset(
+    {
+        "Cost estimate (USD)",
+        "Cost by model (USD, estimated)",
+        "Cost by entrypoint (USD, estimated)",
+        "Cost by node (USD, estimated)",
+        "Top sessions by cost (USD, estimated)",
+    }
+)
+EVENT_COST = "| event_name=`api_request` | unwrap cost_usd [$__range]"
+
+
+def cost_panels(board: Path) -> dict[str, bool]:
+    """Each panel titled for cost, mapped to whether it sums the range's api_request events."""
+    doc = json.loads(board.read_text())
+    return {
+        panel["title"]: panel.get("datasource", {}).get("uid") == "loki"
+        and all(EVENT_COST in t.get("expr", "") for t in panel["targets"])
+        for panel in _panels(doc)
+        if "cost" in panel.get("title", "").lower() and panel.get("targets")
+    }
+
+
+def test_every_claude_cost_panel_sums_api_request_events_is_clean():
+    panels = {}
+    for name in CLAUDE_BOARDS:
+        panels.update(cost_panels(DASHBOARDS / "AI" / name))
+    assert COST_PANELS <= panels.keys()
+    assert [title for title, sums_events in panels.items() if not sums_events] == []
+
+
+def test_a_cost_panel_summing_the_counter_is_flagged(tmp_path):
+    board = tmp_path / "counter.json"
+    board.write_text(
+        json.dumps(
+            {
+                "panels": [
+                    {
+                        "title": "Cost by node (USD, estimated)",
+                        "datasource": {"type": "prometheus", "uid": "EGdsQqhVk"},
+                        "targets": [
+                            {"expr": "sum by (node) (claude_code_cost_usage_USD_total)"}
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    assert cost_panels(board) == {"Cost by node (USD, estimated)": False}
+
+
 def test_a_board_that_broke_each_rule_would_be_reported(tmp_path):
     """The rejecting half. Without it a rule that stopped matching still reads green."""
     planted = tmp_path / "planted.json"
