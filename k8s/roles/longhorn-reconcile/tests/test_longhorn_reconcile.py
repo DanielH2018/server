@@ -29,6 +29,7 @@ from _reconcile_world import (
     _pvc,
     _volume,
 )
+from lib.longhorn_lib import longhorn_backups
 from renderer.template_filters.longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
@@ -241,6 +242,11 @@ def test_a_patch_that_moves_no_tier_stamps_nothing(env):
     assert len(world.writes()) == 1
     assert f"{P}default" in world.volumes["pvc-1"]["metadata"]["labels"]
     assert TIER_SINCE not in world.volumes["pvc-1"]["metadata"].get("annotations", {})
+
+
+def test_the_tier_since_annotation_is_the_one_the_health_reader_reads():
+    """The health reader asks kubectl for this key; a mismatch reads every volume as unstamped."""
+    assert lr.TIER_SINCE == TIER_SINCE == longhorn_backups.TIER_SINCE_ANNOTATION
 
 
 def test_the_target_names_are_the_ones_setup_k3s_and_the_readers_use():

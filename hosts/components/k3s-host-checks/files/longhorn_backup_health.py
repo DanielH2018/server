@@ -488,7 +488,8 @@ def main(now: float | None = None) -> int:
             'jsonpath={range .items[*]}{.metadata.name}{"\\t"}{.metadata.creationTimestamp}'
             '{"\\t"}{.status.kubernetesStatus.namespace}/{.status.kubernetesStatus.pvcName}'
             '{"\\t"}{.spec.backupTargetName}'
-            '{"\\t"}{.metadata.annotations.homelab/tier-since}{"\\n"}{end}',
+            '{"\\t"}{.metadata.annotations.%s}{"\\n"}{end}'
+            % backups.TIER_SINCE_ANNOTATION,
         )
         if rows_raw is None:
             continue

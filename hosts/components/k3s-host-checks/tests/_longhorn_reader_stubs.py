@@ -408,7 +408,8 @@ def _grace_pair_stub_kubectl(
     """Two daily-tier volumes: `pvc-old` already backed up, `pvc-new` created at `created_ts`.
 
     `pvc-new` carries `new_target` as its backup target and `tier_since` as its
-    `homelab/tier-since` annotation, each blank when empty.
+    `homelab/tier-since` annotation, each blank when empty. Like live kubectl, the stub prints
+    the annotation only when the fetch's jsonpath names that key.
 
     `pvc-old` has a matching coverage row so checks 2/3/5/6 stay clean regardless of the cron
     parse — only `pvc-new`'s fate (graced silently vs. paged as uncovered) depends on whether
@@ -452,10 +453,13 @@ elif args[:1] == ["logs"]:
     emit("")
 elif args[:2] == ["get", "volumes.longhorn.io"] and "-l" in args:
     sel = args[args.index("-l") + 1]
+    asks_stamp = "{{.metadata.annotations.homelab/tier-since}}" in args[-1]
     if sel == "recurring-job-group.longhorn.io/default=enabled":
         emit(
             "pvc-old\\t{old_backup_ts}\\tdefault/old-data\\tdefault\\t\\n"
-            "pvc-new\\t{created_ts}\\tdefault/new-data\\t{new_target}\\t{tier_since}\\n"
+            "pvc-new\\t{created_ts}\\tdefault/new-data\\t{new_target}\\t"
+            + ("{tier_since}" if asks_stamp else "")
+            + "\\n"
         )
     else:
         emit("")
