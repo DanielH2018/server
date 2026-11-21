@@ -277,23 +277,25 @@ writes it on every run, so either its textfile never arrived or the timer stoppe
 
 ### `CheckoutSyncFailed`
 
-`homelab-checkout-sync` on daniel-box refused its last run, so the primary checkout is not
-following master.
+`homelab-checkout-sync` refused its last run on the host the alert names, daniel-box or
+daniel-server, so that host's primary checkout is not following master.
 
 - `homelab_checkout_sync_refused` names the reason: a dirty tree (an untracked file counts), a
   branch other than master, a HEAD that origin/master does not descend from, an empty CI
   context set or walk bound, or a missing or refused GitHub token.
-- Read `journalctl -t homelab-checkout-sync` on daniel-box for the run's message.
+- Read `journalctl -t homelab-checkout-sync` on that host for the run's message.
 - One untracked file parks the sync until it moves.
+- On daniel-server a refused token means its SOPS file lacks `homelab_builder_github_token`:
+  `host_secrets.py sync daniel-server` is the repair, and it is operator-only.
 
 ### `CheckoutSyncNotReporting`
 
-No `checkout-sync` verdict newer than 2 hours reached Prometheus, so nothing confirms that the
-primary checkout follows master.
+No `checkout-sync` verdict newer than 2 hours reached Prometheus from the host the alert names,
+so nothing confirms that its primary checkout follows master.
 
 - A fetch that keeps failing writes no verdict, and neither does a git-tree lock held for hours.
 - Read `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync` on
-  daniel-box, then `checkout_sync.prom` in `/var/lib/node-exporter-textfile/`.
+  that host, then `checkout_sync.prom` in `/var/lib/node-exporter-textfile/`.
 
 ### `SystemdUnitsFailed`
 
@@ -354,6 +356,9 @@ Alertmanager repeats it daily and `WarningUnresolved` never pages it.
   and checked nothing, or when the previous week's run still held the lock.
 - Review every unexplained path before you accept it. `sudo /usr/lib/homelab/aide-check
   --accept` records the new baseline.
+- A reason ending in `original unavailable` means the run could not fetch the package copy of a
+  conffile the lines arm edits. `sudo journalctl -t aide-check --since -7d | grep 'not kept:'`
+  names why; `docs/security-tools.md` has the rest.
 - `sudo systemctl start homelab-aide-check.service` re-runs the check. A pass clears this
   alert. A DOWN run exits 0, so the unit fails only when the run could not write its verdict.
 

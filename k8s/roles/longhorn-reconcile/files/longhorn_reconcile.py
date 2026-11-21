@@ -41,6 +41,12 @@ Then one more step sets the trim label:
 The run writes ONE merge patch per changed volume: the net of the steps, labels and target
 together. A converged cluster writes nothing.
 
+A patch that moves a volume into another tier, a different set of group labels or another
+backup target, also stamps the annotation `homelab/tier-since` with the time of the run.
+`longhorn-backup-health` grants a volume with no backup from its tier's job a grace until that
+job's first run after the later of its creation and this stamp. A volume with no group label
+sits in `default`, so the trim step's explicit `default` label is no move and stamps nothing.
+
 It does not touch the CSI sidecar Deployments. Their memory request is the `longhorn` role's
 `system-managed-csi-components-resource-limits` Setting, which longhorn-manager enforces and
 which clears any request another writer sets.
@@ -66,6 +72,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -104,6 +111,9 @@ B2_TARGET = "default"
 R2_TARGET = "r2"
 
 MERGE_PATCH = "application/merge-patch+json"
+
+# The annotation that records when a volume joined its tier. `longhorn_backup_health.py` reads it.
+TIER_SINCE = "homelab/tier-since"
 
 
 class Failed(Exception):
@@ -325,12 +335,26 @@ def label_keys() -> set[str]:
     return group_keys() | {TRIM_LABEL}
 
 
-def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[dict]:
+def tier_of(labels: Mapping[str, str], target: str) -> tuple[frozenset[str], str]:
+    """The tier a volume sits in: its group label keys, and its backup target.
+
+    No group label reads as `default`, the group Longhorn applies to a volume with none, and a
+    blank target reads as `default`, the B2 target.
+    """
+    groups = frozenset(k for k in group_keys() if labels.get(k) == ENABLED)
+    return groups or frozenset({label(DEFAULT)}), target or B2_TARGET
+
+
+def plan(
+    volumes: list[dict], class_claims: set[str], tiers: Mapping, now: str
+) -> list[dict]:
     """One merge patch per volume whose group labels or backup target must change, by name.
 
-    Each entry is `{"name", "claim", "labels", "target"}`. `labels` maps a group label key to
-    its new value, or to None to remove it, and is empty when only the target moves. `target`
-    is the new `spec.backupTargetName`, or None when the volume keeps its own.
+    Each entry is `{"name", "claim", "labels", "target", "tier_since"}`. `labels` maps a group
+    label key to its new value, or to None to remove it, and is empty when only the target
+    moves. `target` is the new `spec.backupTargetName`, or None when the volume keeps its own.
+    `tier_since` is `now`, an RFC 3339 UTC time, when the patch moves the volume into another
+    tier, and None otherwise.
     """
     keys = label_keys()
     out = []
@@ -343,6 +367,9 @@ def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[di
             if after.get(key) != before.get(key):
                 delta[key] = after.get(key)
         target = desired_target(target_of(volume), claim, tiers["r2"])
+        moved = tier_of(before, target_of(volume)) != tier_of(
+            after, target or target_of(volume)
+        )
         if delta or target:
             out.append(
                 {
@@ -350,6 +377,7 @@ def plan(volumes: list[dict], class_claims: set[str], tiers: Mapping) -> list[di
                     "claim": claim,
                     "labels": delta,
                     "target": target,
+                    "tier_since": now if moved else None,
                 }
             )
     return out
@@ -386,11 +414,12 @@ def class_claims_of(pvcs: list[dict]) -> set[str]:
 
 
 def reconcile_labels(
-    kube: Kube, namespace: str, tiers: Mapping, report_only: bool
+    kube: Kube, namespace: str, tiers: Mapping, report_only: bool, now: str
 ) -> list[str]:
     """Plan the volume changes from two list reads, then write them. One report line per change.
 
-    Both reads happen before the first write, so a failed read changes nothing.
+    Both reads happen before the first write, so a failed read changes nothing. `now` is the
+    RFC 3339 UTC time a tier move stamps.
     """
     volumes_path = f"/apis/longhorn.io/v1beta2/namespaces/{namespace}/volumes"
     volumes = _ok(*kube.call("GET", volumes_path), "listing volumes").get("items") or []
@@ -400,13 +429,18 @@ def reconcile_labels(
         )
         or []
     )
-    changes = plan(volumes, class_claims_of(pvcs), tiers)
+    changes = plan(volumes, class_claims_of(pvcs), tiers, now)
     lines = []
     for change in changes:
         if not report_only:
             body: dict = {}
+            metadata: dict = {}
             if change["labels"]:
-                body["metadata"] = {"labels": change["labels"]}
+                metadata["labels"] = change["labels"]
+            if change["tier_since"]:
+                metadata["annotations"] = {TIER_SINCE: change["tier_since"]}
+            if metadata:
+                body["metadata"] = metadata
             if change["target"]:
                 body["spec"] = {"backupTargetName": change["target"]}
             status, answer = kube.call(
@@ -422,20 +456,21 @@ def reconcile_labels(
     return lines
 
 
-def run(kube: Kube, env: Mapping[str, str], report_only: bool) -> list[str]:
+def run(kube: Kube, env: Mapping[str, str], report_only: bool, now: str) -> list[str]:
     """The whole reconcile. Returns the report lines.
 
     Raises:
         Failed: A read or a write failed, or the tier input is unusable.
     """
     tiers = load_tiers(env.get("RECONCILE_TIERS_FILE", TIERS_FILE))
-    return reconcile_labels(kube, env["RECONCILE_NAMESPACE"], tiers, report_only)
+    return reconcile_labels(kube, env["RECONCILE_NAMESPACE"], tiers, report_only, now)
 
 
 def main(
     argv: list[str] | None = None,
     env: Mapping[str, str] | None = None,
     kube: Kube | None = None,
+    now: str | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -447,7 +482,12 @@ def main(
     if kube is None:
         kube = Kube(API, Path(TOKEN_FILE).read_text().strip())
     try:
-        lines = run(kube, os.environ if env is None else env, args.report_only)
+        lines = run(
+            kube,
+            os.environ if env is None else env,
+            args.report_only,
+            now or datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
     except Failed as err:
         print(f"longhorn-reconcile: {err}", file=sys.stderr)
         return 1

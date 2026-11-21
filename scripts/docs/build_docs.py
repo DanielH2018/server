@@ -189,7 +189,7 @@ def _timeout(seconds: int):
     its lifetime -- rather than costing one stale page.
     """
 
-    def fire(signum, frame):
+    def fire(_signum, _frame):
         raise TimeoutError(f"generator exceeded {seconds}s")
 
     try:

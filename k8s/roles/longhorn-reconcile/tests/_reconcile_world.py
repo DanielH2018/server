@@ -2,7 +2,8 @@
 
 Not a test module: `test_longhorn_reconcile.py` and the cases beside it import this. `World`
 answers the script's reads from dicts, applies its merge patches the way the API server does (a
-patch of `metadata.labels` and of `spec`), and records every call. Any other call fails the test.
+patch of `metadata.labels`, `metadata.annotations` and `spec`), and records every call. Any
+other call fails the test.
 """
 
 from collections.abc import Mapping
@@ -84,6 +85,9 @@ class World(lr.Kube):
                     labels.pop(key, None)
                 else:
                     labels[key] = value
+            volume["metadata"].setdefault("annotations", {}).update(
+                body.get("metadata", {}).get("annotations", {})
+            )
             volume.setdefault("spec", {}).update(body.get("spec", {}))
             return 200, {}
         raise AssertionError(f"unexpected call {method} {path}")

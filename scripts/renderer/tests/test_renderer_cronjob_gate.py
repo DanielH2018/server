@@ -34,7 +34,8 @@ from renderer.renderer_lib.cronjob_gate import (
 from renderer.renderer_lib.cronjob_gate import is_gate_copy
 from renderer.renderer_lib.digest8 import job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.ordering import Ordering, cronjob_gates, verify_timeout
+from lib.k8s_roles import role_defaults
+from renderer.renderer_lib.ordering import Ordering, verify_timeout
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
 TAG = "pi-peer-backup"
@@ -263,7 +264,7 @@ def test_a_malformed_opt_in_is_a_problem(tmp_path, gates):
     defaults = tmp_path / "sync" / "defaults" / "main.yml"
     defaults.parent.mkdir(parents=True)
     defaults.write_text(json.dumps({"flux_cronjob_gates": gates}))
-    found, problems_ = cronjob_gates(["sync"], tmp_path)
+    found, problems_ = role_defaults(["sync"], tmp_path)
     assert found == {}
     assert len(problems_) == 1 and problems_[0].startswith("sync's flux_cronjob_gates")
 

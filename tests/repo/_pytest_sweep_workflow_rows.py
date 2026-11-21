@@ -6,8 +6,18 @@ with one property broken.
 
 from collections.abc import Callable
 
+from _ci_job_rows import RESTORE, SAVE, rewrite_step
 from _row_table import Census, Subject, tracked
-from _workflow_rows import Workflow, jobs, judge, mutants, runs, steps, triggers
+from _workflow_rows import (
+    Workflow,
+    condition,
+    jobs,
+    judge,
+    mutants,
+    runs,
+    steps,
+    triggers,
+)
 from ci_verdict import CI_GATE_NAME
 
 SWEEP = ".github/workflows/pytest-sweep.yml"
@@ -67,6 +77,29 @@ def _sweep_report_problems(wf: Workflow) -> list[str]:
         found.append("the report job does not stop at master")
     if "always()" not in condition:
         found.append("a red sweep does not reach the report")
+    return found
+
+
+def _sweep_save_problems(wf: Workflow) -> list[str]:
+    job = jobs(wf).get("sweep", {})
+    save = rewrite_step(job, SAVE)
+    if save is None:
+        return [f"the sweep job has no {SAVE} step for pytest's rewritten modules"]
+    found = []
+    suite = _sweep_step(wf, RUN_STEP)
+    if suite is None or steps(job).index(save) < steps(job).index(suite):
+        found.append(f"the save step does not run after {RUN_STEP!r}")
+    gate = condition(save)
+    if "github.ref == 'refs/heads/master'" not in gate:
+        found.append(f"the save gate {gate!r} saves a branch's entry")
+    if "!cancelled()" not in gate:
+        found.append(f"the save gate {gate!r} saves nothing after a red sweep")
+    if "github.run_id" not in str(save["with"].get("key")):
+        found.append("the save key repeats across runs, so a later save writes nothing")
+    if rewrite_step(job, RESTORE) is not None:
+        found.append(
+            "the sweep restores an earlier entry and carries its stale files on"
+        )
     return found
 
 
@@ -148,6 +181,28 @@ def _edit_run(name: str, find: str, replace: str) -> Callable[[Workflow], None]:
         step["run"] = step["run"].replace(find, replace)
 
     return mutate
+
+
+def _save_step(job: dict) -> dict:
+    """The sweep job's rewrite-cache save step, for a mutation that needs one to change."""
+    save = rewrite_step(job, SAVE)
+    assert save is not None, "the sweep job has no rewrite-cache save step"
+    return save
+
+
+def _move_save_before_the_suite(job: dict) -> None:
+    save = _save_step(job)
+    job["steps"].remove(save)
+    job["steps"].insert(0, save)
+
+
+def _restore_before_the_suite(job: dict) -> None:
+    save = _save_step(job)
+    job["steps"].insert(0, {**save, "uses": save["uses"].replace(SAVE, RESTORE)})
+
+
+def _edit_save(**fields: object) -> Callable[[Workflow], object]:
+    return _sweep_job(lambda job: _save_step(job).update(fields))
 
 
 def _row(path: str, **row) -> dict:
@@ -292,6 +347,36 @@ PYTEST_SWEEP_ROWS = (
                     INSTALL_STEP,
                     'apt-get -q "${private[@]}" update',
                     "sudo apt-get update -q",
+                ),
+            ),
+        )
+    ),
+    Census(
+        **_row(
+            SWEEP,
+            name="pytest-sweep-saves-the-rewrite-cache-ci-restores",
+            reason=(
+                "The sweep is the one writer of ci.yml's rewrite cache: it collects every "
+                "module, so its entry holds whatever a leg's shard runs, and an entry saved on "
+                "master is readable by every branch. It saves after the suite has written the "
+                "files, on a red sweep too, under a key unique to the run. It restores nothing, "
+                "so an entry never carries a deleted module's file or one named for an older "
+                "pytest."
+            ),
+            offence=judge(_sweep_save_problems),
+            red=mutants(
+                SWEEP,
+                a_save_on_every_branch=_edit_save(**{"if": "${{ !cancelled() }}"}),
+                a_save_only_after_a_green_sweep=_edit_save(
+                    **{"if": "${{ github.ref == 'refs/heads/master' }}"}
+                ),
+                a_save_under_a_fixed_key=_edit_save(
+                    **{"with": {"path": "**/__pycache__/*-pytest-*.pyc", "key": "k"}}
+                ),
+                a_save_before_the_suite=_sweep_job(_move_save_before_the_suite),
+                a_restore_before_the_suite=_sweep_job(_restore_before_the_suite),
+                a_sweep_with_no_save=_sweep_job(
+                    lambda job: job["steps"].remove(_save_step(job))
                 ),
             ),
         )

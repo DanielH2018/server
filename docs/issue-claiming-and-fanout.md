@@ -625,9 +625,9 @@ reads the run as cleaned (#4907).
 (`scripts/dev/fanout_lib/clean.py:remote_clean_command`). The leg fetches master, archives
 `origin/master`'s `scripts/` into a temporary directory, runs `fanout.py place clean-one` from
 that snapshot and removes the directory. So the code that judges a batch is master's on both
-hosts, whatever commit the host's primary checkout stands at. Only daniel-box has
-`homelab-checkout-sync`, and daniel-server's primary checkout lags master by hundreds of
-commits. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
+hosts, whatever commit the host's primary checkout stands at. `homelab-checkout-sync` moves
+each host's primary checkout only to a green commit, and a parked sync leaves it further
+behind. The snapshot costs about 0.1 seconds and 30 MB of temporary space per leg, and adds
 no ssh call. The sweep that the server-batch lander runs (`clean.sweep_runs`) uses the same leg.
 
 ### A batch whose landing conflicts with master
@@ -866,6 +866,12 @@ Three rules give the tree that shape:
   so a restarted sub-coordinator reuses the same worktree and branch. While the project is
   open, its backlog is reserved for that branch (*An open project reserves its backlog*):
   an orchestrator outside the tree is not offered a project's issue and cannot claim one.
+
+**A session is sized, not inherited.** On 2026-11-20 a root on the top model started about
+forty sessions, and every one inherited that model, including drills, doc edits and
+sub-coordinators that only orchestrate. Every `start_session` call now sets `model` and
+`effort` from the tiers in the skill's *Root* section, which reuse the rungs of
+`scripts/dev/fanout_lib/sizing.py:LADDER`. The skill holds the table and how to raise a tier.
 
 Four changes on master carry the tree. Launches are serialised and gated across runs
 (*One launch at a time, and files held across runs*,

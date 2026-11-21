@@ -28,22 +28,19 @@ Every edge is generated, never hand-written, from an `Ordering` the caller reads
 `substitution` decides which Kustomizations substitute, and so which take the `cluster-vars`
 edge. `bundle.py` adds that edge and fails the render on a cycle, because Flux would
 hold every Kustomization on it at `DependencyNotReady`. Beside the per-tag kinds' suffixes,
-`verify_files` and `cronjob_gates` read which roles call for `<tag>-verify`, `verify_after`
-which other tags it waits on, `prepull_timeouts` which call for `<tag>-prepull`,
-`prepull_workloads` which scope it to named workloads, and `precheck_files` which call for
-`<tag>-precheck`. Like `bundle.py`, this module imports
+`verify_files` reads which roles call for `<tag>-verify` and `precheck_files` which call for
+`<tag>-precheck`. A role's `flux_cronjob_gates`, `flux_verify_after`, `flux_prepull_timeout`
+and `flux_prepull_workloads` are `lib.k8s_roles.RoleDefaults` fields. Like `bundle.py`, this module imports
 neither Ansible nor Jinja. The plan is docs/archive/deploy/d4-ordering.md, *The
 renderer writes `dependsOn`*.
 """
 
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
 
-from lib import yaml_fast
+from lib.k8s_roles import WHOLE_DURATION
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.documents import parse_documents
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
@@ -70,11 +67,6 @@ TAG_KIND_SUFFIXES = (
     PRECHECK_SUFFIX,
     VERIFY_SUFFIX,
 )
-# The role default that calls for `<tag>-prepull` and sets its Kustomization's `timeout`.
-PREPULL_TIMEOUT = "flux_prepull_timeout"
-# The role default that scopes `<tag>-prepull` to the named workloads instead of all of them.
-PREPULL_WORKLOADS = "flux_prepull_workloads"
-_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 # How far a `<tag>-verify` or `<tag>-precheck` timeout sits above its Jobs' longest `activeDeadlineSeconds`, so a
 # hung Job fails on its own deadline before Flux reports a bare timeout.
 VERIFY_DEADLINE_MARGIN_S = 60
@@ -88,13 +80,6 @@ VERIFY_TEMPLATES_DIR = "verify"
 # depends on, so a check that fails holds the role at its previous revision. Ansible
 # never renders them, as it never renders `templates/verify/`.
 PRECHECK_TEMPLATES_DIR = "precheck"
-# The role default that opts a role's CronJobs into gate Jobs in `<tag>-verify`, and the two
-# classes a gate takes (`cronjob_gates`).
-CRONJOB_GATES = "flux_cronjob_gates"
-GATE_KINDS = frozenset({"verify", "mutation"})
-# The role default that names the other tags whose rolled workload `<tag>-verify` probes
-# (`verify_after`).
-VERIFY_AFTER = "flux_verify_after"
 
 
 # Lists, comma-separated and sorted, the edges a Kustomization's `dependsOn` leaves out because
@@ -134,7 +119,7 @@ class Ordering:
             `homelab-namespace` creates. A tag with a document in it depends on that kind.
             None generates no such edge.
         verify_after: Each tag mapped to the other tags its `<tag>-verify` waits on, from
-            its role's `flux_verify_after` (`verify_after`).
+            its role's `flux_verify_after` (`RoleDefaults.verify_after`).
     """
 
     deps: Mapping[str, Iterable[str]] = field(default_factory=dict)
@@ -157,7 +142,7 @@ def verify_files(
     A role ships them as `templates/verify/<name>.j2`, and a non-empty list calls for
     `<tag>-verify`. The renderer (`renderer_lib/cluster.py`) and the publish census
     (`deploy_tools/bundle_census.py`) read this one function, so the directory the renderer
-    writes and the Kustomization the census allows cannot disagree. `cronjob_gates` is the
+    writes and the Kustomization the census allows cannot disagree. `RoleDefaults.cronjob_gates` is the
     other input that calls for `<tag>-verify`. `directory` names another role-owned
     directory of `templates/` read the same way (`precheck_files`).
     """
@@ -181,175 +166,6 @@ def precheck_files(
     return verify_files(tags, roles, PRECHECK_TEMPLATES_DIR)
 
 
-def prepull_timeouts(
-    tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, str], list[str]]:
-    """Each tag whose role sets `flux_prepull_timeout` mapped to it, and one line per problem.
-
-    The value calls for `<tag>-prepull` and is that Kustomization's `timeout`. The
-    renderer (`prepull.py`, `bundle.bundle_files`) and the publish census read this one
-    function, as they read `verify_files`. A value must be a literal Go duration, as
-    `role_fields` requires of `manifests_rollout_timeout`; any other value is a problem and
-    its tag is left out.
-    """
-    found, problems = {}, []
-    for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not read {tag}'s {PREPULL_TIMEOUT}: {err}")
-            continue
-        value = (defaults or {}).get(PREPULL_TIMEOUT)
-        if value is None:
-            continue
-        if not (isinstance(value, str) and value and _DURATION.fullmatch(value)):
-            problems.append(
-                f"{tag}'s {PREPULL_TIMEOUT} is {value!r}, not a literal duration such as "
-                "3600s, so its pre-pull Kustomization timeout cannot be read"
-            )
-            continue
-        found[tag] = value
-    return found, problems
-
-
-def prepull_workloads(
-    tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, tuple[str, ...]], list[str]]:
-    """Each tag whose role sets `flux_prepull_workloads` mapped to it, and one line per problem.
-
-    The value names the workloads `<tag>-prepull` pulls for; unset pulls for all.
-    It must be a non-empty list sitting beside `flux_prepull_timeout`.
-    """
-    found, problems = {}, []
-    for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = (
-                yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-            ) or {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not read {tag}'s {PREPULL_WORKLOADS}: {err}")
-            continue
-        value = defaults.get(PREPULL_WORKLOADS)
-        if value is None:
-            continue
-        if not (
-            isinstance(value, list)
-            and value
-            and all(isinstance(name, str) and name for name in value)
-        ):
-            problems.append(
-                f"{tag}'s {PREPULL_WORKLOADS} is {value!r}, not a non-empty list of workload "
-                "names, so its pre-pull cannot be scoped"
-            )
-            continue
-        if PREPULL_TIMEOUT not in defaults:
-            problems.append(
-                f"{tag} sets {PREPULL_WORKLOADS} and no {PREPULL_TIMEOUT}, so no pre-pull "
-                "renders for the names to scope"
-            )
-            continue
-        found[tag] = tuple(value)
-    return found, problems
-
-
-def cronjob_gates(
-    tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, dict[str, dict]], list[str]]:
-    """Each tag whose role sets `flux_cronjob_gates` mapped to its gates, and one line per problem.
-
-    The value maps a CronJob the role renders to its gate's class, R1's census row for it:
-    `{kind: verify}`, or `{kind: mutation, rerun_safe: <path>::<function>}`. A gate calls for
-    `<tag>-verify`, which holds the gate Job `cronjob_gate.py` copies from the CronJob (D5,
-    *`cronjob-gate`'s gate Job*). The renderer and the publish census read this one function,
-    as they read `verify_files`. A value must be a literal of that shape; any other value is a
-    problem and its tag is left out.
-    """
-    found, problems = {}, []
-    for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not read {tag}'s {CRONJOB_GATES}: {err}")
-            continue
-        value = (defaults or {}).get(CRONJOB_GATES)
-        if value is None:
-            continue
-        wrong = _gate_problems(value)
-        if wrong:
-            problems += [f"{tag}'s {CRONJOB_GATES}: {line}" for line in wrong]
-            continue
-        found[tag] = {str(name): dict(gate) for name, gate in value.items()}
-    return found, problems
-
-
-def verify_after(
-    tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, list[str]], list[str]]:
-    """Each tag whose role sets `flux_verify_after` mapped to it, and one line per problem.
-
-    The value lists the other tags whose rolled workload the role's verify Jobs probe, so
-    `<tag>-verify` waits on each one's last Kustomization as well as on its own tag's.
-    crowdsec's `crowdsec-verify` names `traefik`: its ban proof reads the edge's
-    answer, and without the edge it can pass against the Traefik pod a `Recreate` roll is
-    about to replace. A value must be a literal non-empty list of tag names; any other value
-    is a problem and its tag is left out.
-    """
-    found, problems = {}, []
-    for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not read {tag}'s {VERIFY_AFTER}: {err}")
-            continue
-        value = (defaults or {}).get(VERIFY_AFTER)
-        if value is None:
-            continue
-        if not (
-            isinstance(value, list)
-            and value
-            and all(isinstance(name, str) and name and name != tag for name in value)
-        ):
-            problems.append(
-                f"{tag}'s {VERIFY_AFTER} is {value!r}, not a literal non-empty list of "
-                "other tags' names"
-            )
-            continue
-        found[tag] = sorted(set(value))
-    return found, problems
-
-
-def _gate_problems(value: object) -> list[str]:
-    """Why `value` is not a literal `flux_cronjob_gates` mapping, empty when it is one."""
-    if not isinstance(value, dict) or not value:
-        return [
-            f"{value!r} is not a non-empty mapping of CronJob names to gate classes"
-        ]
-    problems = []
-    for name, gate in value.items():
-        if not isinstance(gate, dict) or gate.get("kind") not in GATE_KINDS:
-            problems.append(f"{name}: {gate!r} names no kind of {sorted(GATE_KINDS)}")
-            continue
-        extra = set(gate) - {"kind", "rerun_safe"}
-        rerun = gate.get("rerun_safe")
-        if extra:
-            problems.append(f"{name}: unknown keys {sorted(extra)}")
-        elif gate["kind"] == "mutation" and not (
-            isinstance(rerun, str) and "::" in rerun
-        ):
-            problems.append(
-                f"{name}: a mutation gate names its rerun_safe test as <path>::<function>"
-            )
-        elif gate["kind"] == "verify" and rerun is not None:
-            problems.append(
-                f"{name}: a verify gate never re-runs, so takes no rerun_safe"
-            )
-    return problems
-
-
 def verify_timeout(files: Mapping[str, str], default: str) -> str:
     """`<tag>-verify`'s or `<tag>-precheck`'s Kustomization `timeout`, given its files.
 
@@ -368,7 +184,7 @@ def verify_timeout(files: Mapping[str, str], default: str) -> str:
     if not deadlines:
         return default
     floor = max(deadlines) + VERIFY_DEADLINE_MARGIN_S
-    match = _DURATION.fullmatch(default)
+    match = WHOLE_DURATION.fullmatch(default)
     if not default or match is None:
         raise ValueError(f"{default!r} is not a duration of h, m and s")
     hours, minutes, secs = (int(g or 0) for g in match.groups())

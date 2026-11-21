@@ -32,8 +32,8 @@ Flux follows the promoted artifact and applies every service's render, so no Ans
 deploys a workload. [The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it
 reports.
 
-`homelab-checkout-sync.timer` fast-forwards daniel-box's primary checkout to the newest green
-master commit. It applies nothing. `hosts/components/checkout-sync/component.yml` holds its
+`homelab-checkout-sync.timer` fast-forwards the primary checkout on daniel-box and on
+daniel-server to the newest green master commit. It applies nothing. `hosts/components/checkout-sync/component.yml` holds its
 contract.
 
 ### A change under `hosts/` is the builder's

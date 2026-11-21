@@ -201,6 +201,7 @@ pythonpath = [
   # gh_quota.py is the ledger scripts/lib/gh.py records each call into, so every test that
   # imports lib.gh needs it, as does the component's own test.
   "hosts/components/gh-quota/files",
+  "hosts/components/aide-scan/files",
   # `scripts` is the one import root (docs/adr/0039-scripts-is-installed-in-place.md): every
   # module under it imports dotted, `from lib.git import git`. No subdirectory is listed, because
   # a listed one would let a bare sibling import pass here and fail in the cron or hook that runs
@@ -232,7 +233,7 @@ extend-exclude = [
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
+per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/aide-scan/files/aide_originals.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -346,31 +347,12 @@ select = [
 
 # The files that held an unused parameter when ARG001 and ARG002 were selected. The list only
 # shrinks: delete the parameter or give the slot a leading underscore, then delete the line.
-".claude/hooks/hooklib/read_only_agents.py" = ["ARG001"]
-".claude/hooks/session-health.py" = ["ARG001"]
 "hosts/components/deploy-ui/files/deploy_ui.py" = ["ARG002"]
 "hosts/lib/reconcile_lib/lines.py" = ["ARG001"]
 "k8s/roles/crowdsec/files/remote_allowlist.py" = ["ARG001"]
 "k8s/roles/monitor-bridge/files/bridge/config_io.py" = ["ARG001"]
 "k8s/roles/monitor-bridge/files/checks/service.py" = ["ARG001"]
 "k8s/roles/monitor-bridge/files/checks/wan.py" = ["ARG001"]
-"scripts/deploy_tools/land_lib/merge.py" = ["ARG001"]
-"scripts/deploy_tools/runbook_gates_lib/etcd_restore.py" = ["ARG001"]
-"scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py" = ["ARG001"]
-"scripts/deploy_tools/runbook_gates_lib/metallb_upgrade.py" = ["ARG001"]
-"scripts/dev/fanout_lib/place.py" = ["ARG001"]
-"scripts/diagnostics/probe_lib/longhorn_budget.py" = ["ARG001"]
-"scripts/diagnostics/probe_lib/shed_set.py" = ["ARG001"]
-"scripts/docs/build_docs.py" = ["ARG001"]
-"scripts/docs/catalog_lib/catalog_backup.py" = ["ARG001"]
-"scripts/docs/_mkdocs_freshness.py" = ["ARG001"]
-"scripts/docs/_mkdocs_repo_links.py" = ["ARG001"]
-"scripts/home_assistant/ha_state_model.py" = ["ARG002"]
-"scripts/home_assistant/validate_ha_config.py" = ["ARG001"]
-"scripts/renderer/renderer_lib/jinja_filters.py" = ["ARG001"]
-"scripts/renderer/template_filters/flux_components.py" = ["ARG002"]
-"scripts/secrets_mgmt/host_secrets.py" = ["ARG001"]
-"scripts/secrets_mgmt/secret_rotation.py" = ["ARG001"]
 
 # The `vulture` prek hook reads this and fails on any name nothing uses: delete the name, or
 # list it below under a comment that says what calls it. It scans every tracked Python root,
@@ -483,6 +465,7 @@ extra-paths = [
   "tests",
   "hosts/components/worktree-holders/files",
   "hosts/components/gh-quota/files",
+  "hosts/components/aide-scan/files",
   "hosts/lib",
   "hosts/components/deploy-ui/files",
   "k8s/roles/monitor-bridge/files",

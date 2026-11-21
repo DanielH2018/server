@@ -21,7 +21,7 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:0
 # failing at 20 minutes rather than 10. A cached image rolls in seconds, so the budget costs time
 # only on a real hang or a cold pull.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# Kustomization `timeout` only from a literal role default (`role_fields` in
+# Kustomization `timeout` only from a literal role default (`role_defaults` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 1200s
 karakeep_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"

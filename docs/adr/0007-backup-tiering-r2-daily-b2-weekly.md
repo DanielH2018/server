@@ -109,6 +109,10 @@ suppressed behind a green monitor.
 **A volume that moves tiers waits a shard week for coverage**, and a seed backup does not
 count: the rotation check matches the tier's RecurringJob label, which a seed never carries.
 Both are enforced by tests rather than left to memory.
+`longhorn-reconcile` stamps the annotation `homelab/tier-since` in the patch that moves a
+volume, and `longhorn-backup-health` graces the wait until the tier's first run after that
+stamp (`scripts/lib/longhorn_lib/longhorn_backup_health_logic.py:check_tier`), so the wait
+does not page.
 
 **A cap denial reads as data loss.** A class-B 403 surfaces as "cannot find … in
 backupstore," which is indistinguishable from a missing backup until the caps are checked.

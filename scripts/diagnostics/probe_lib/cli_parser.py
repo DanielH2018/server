@@ -260,13 +260,6 @@ def _build_parser():
     b2b.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
     )
-    b2b.add_argument(
-        "--retain",
-        type=int,
-        default=None,
-        help="weekly retain to spot backups no job will prune; default: the `spec.retain` "
-        "of the live weekly RecurringJobs, and a failed read exits non-zero",
-    )
     b2s = sub.add_parser(
         "b2-spend",
         help="MEASURED Class B spend from Longhorn's own logs (b2-budget projects Class C; "

@@ -11,6 +11,7 @@ than private to the validator.
 ``K8S_ROLES`` comes from ``lib.repo_paths`` rather than being derived a second time here.
 """
 
+import dataclasses
 import functools
 import os
 import re
@@ -30,6 +31,8 @@ __all__ = [
     "CLAIM_TEMPLATE",
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
+    "RoleDefaults",
+    "RoleDefaultsError",
     "MANIFESTS_PRUNE_DEFAULT",
     "ROLLOUT_TIMEOUT_DEFAULT",
     "SHARED_MANIFEST_DEFAULTS",
@@ -46,6 +49,7 @@ __all__ = [
     "non_manifest_documents",
     "role_callers",
     "resolved_manifest_files",
+    "role_defaults",
     "role_dirs",
     "RENDER_KEYS",
     "SECRET_TEMPLATE",
@@ -494,163 +498,263 @@ def claim_contexts(ctx: dict) -> list[dict]:
     return [{**ctx, "manifests_claim": claim} for claim in ctx.get("k8s_claims") or []]
 
 
-def snapshot_claims(
-    tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, list[str]], list[str]]:
-    """The snapshot claims each tag declares, and one line per tag it could not judge.
+class RoleDefaultsError(ValueError):
+    """A role's `defaults/main.yml` that cannot be read, or sets a field to a non-literal."""
 
-    A tag declares them in its role's `defaults/main.yml` as `k8s_autodeploy_snapshot_pvcs`,
-    which the manifests role snapshots before each apply. A non-empty list also calls for
-    `<tag>-snapshot` (D5.2a), so `digests.json`'s `claims` (`renderer_lib/bundle.py`) and the
-    publish census (`deploy_tools/bundle_census.py`) read this one function and cannot
-    disagree. A value that is not a literal list is a problem rather
-    than a guess, and its tag is left out of the mapping.
 
-    Returns:
-        Each judged tag mapped to its sorted claim names, empty for a tag that declares none.
+@dataclasses.dataclass(frozen=True)
+class RoleDefaults:
+    """The fields a role's `defaults/main.yml` sets on its Flux Kustomizations.
+
+    C3 *Per-role fields* lets a role set them (H1.1a). `flux_files` in
+    `renderer_lib/bundle.py` decides which Kustomization each one reaches.
+
+    Attributes:
+        prune: `flux_prune`; False renders `prune: false` on `<tag>` alone. A plumbing tag
+            sets it, so a render that drops an object leaves it serving (H1 *Plumbing tags
+            are never pruned*).
+        suspend: `flux_suspend`; True renders `suspend: true` on every kind (C3
+            *Suspension*, D5.1b), because a suspended role runs none of its Jobs either.
+        timeout: `flux_timeout`, else `manifests_rollout_timeout`, rendered as `timeout` on
+            `<tag>` and `<tag>-deferred`; None takes the bundle's default. The manifests
+            role's own rollout wait reads `manifests_rollout_timeout` too, and `flux_timeout`
+            is for a role whose Kustomization waits longer than its rollout does (H6.1b).
+        snapshot_pvcs: `k8s_autodeploy_snapshot_pvcs`, sorted: the claims the manifests role
+            snapshots before each apply. A non-empty tuple calls for `<tag>-snapshot`
+            (D5.2a), so `digests.json`'s `claims` and the publish census
+            (`deploy_tools/bundle_census.py`) read this one field.
+        health_check_exprs: `flux_health_check_exprs`, each string rendered as Jinja against
+            the role's own defaults, so an expression follows the pin it compares with.
+            Written as `spec.healthCheckExprs` on `<tag>` alone (H6.1b).
+        prepull_timeout: `flux_prepull_timeout`, which alone calls for `<tag>-prepull` and
+            is that Kustomization's `timeout`; None renders no pre-pull.
+        prepull_workloads: `flux_prepull_workloads`, the workloads `<tag>-prepull` pulls
+            for; None pulls for all. A role sets it only beside `flux_prepull_timeout`.
+        cronjob_gates: `flux_cronjob_gates`, each CronJob the role renders mapped to its
+            gate's class, `{kind: verify}` or `{kind: mutation, rerun_safe:
+            <path>::<function>}`. A gate calls for `<tag>-verify`, which holds the gate Job
+            `cronjob_gate.py` copies from the CronJob.
+        verify_after: `flux_verify_after`, sorted: the other tags whose rolled workload the
+            role's verify Jobs probe, so `<tag>-verify` waits on each one's last
+            Kustomization too. crowdsec names `traefik`, because its ban proof reads the edge.
     """
-    found: dict[str, list[str]] = {}
-    problems = []
-    for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
-        try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not tell whether {tag} snapshots claims: {err}")
-            continue
-        value = (defaults or {}).get("k8s_autodeploy_snapshot_pvcs")
-        if value is not None and not isinstance(value, list):
-            problems.append(
-                f"could not tell whether {tag} snapshots claims: its "
-                f"k8s_autodeploy_snapshot_pvcs is {value!r}, not a literal list"
-            )
-            continue
-        found[tag] = sorted(str(claim) for claim in value or [])
-    return found, problems
+
+    prune: bool = True
+    suspend: bool = False
+    timeout: str | None = None
+    snapshot_pvcs: tuple[str, ...] = ()
+    health_check_exprs: tuple[dict, ...] = ()
+    prepull_timeout: str | None = None
+    prepull_workloads: tuple[str, ...] | None = None
+    cronjob_gates: dict[str, dict] = dataclasses.field(default_factory=dict)
+    verify_after: tuple[str, ...] = ()
 
 
 # A Go duration as Flux parses `spec.timeout`, such as `600s` or `1h30m`.
 _DURATION = re.compile(r"(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+")
 
 
+# A duration of whole hours, minutes and seconds, the form `chained_timeout.seconds` reads.
+WHOLE_DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+
+
 _CHECK_KEYS = frozenset({"apiVersion", "kind", "inProgress", "failed", "current"})
 
 
-def _health_check_exprs(defaults: dict) -> tuple[list[dict], str | None]:
-    """The role's `flux_health_check_exprs`, each string rendered against its defaults.
+_GATE_KINDS = frozenset({"verify", "mutation"})
 
-    Returns:
-        The list (empty when the role sets none) and the problem, or None. A string renders
-        under `StrictUndefined`, so a name the defaults lack is a problem and not an empty string.
+
+def _bool(defaults: dict, key: str, default: bool) -> bool:
+    value = defaults.get(key, default)
+    if not isinstance(value, bool):
+        raise RoleDefaultsError(f"{key} is {value!r}, not a literal bool")
+    return value
+
+
+def _duration(
+    defaults: dict, key: str, example: str, grammar: re.Pattern = _DURATION
+) -> str | None:
+    value = defaults.get(key)
+    if value is not None and not (
+        isinstance(value, str) and value and grammar.fullmatch(value)
+    ):
+        raise RoleDefaultsError(
+            f"{key} is {value!r}, not a literal duration such as {example}, so its "
+            "Kustomization timeout cannot be read"
+        )
+    return value
+
+
+def _snapshot_pvcs(defaults: dict) -> tuple[str, ...]:
+    value = defaults.get("k8s_autodeploy_snapshot_pvcs")
+    if value is not None and not isinstance(value, list):
+        raise RoleDefaultsError(
+            f"k8s_autodeploy_snapshot_pvcs is {value!r}, not a literal list"
+        )
+    return tuple(sorted(str(claim) for claim in value or []))
+
+
+def _health_check_exprs(defaults: dict) -> tuple[dict, ...]:
+    """The role's `flux_health_check_exprs`, each string rendered under `StrictUndefined`.
+
+    So a name the defaults lack is a problem and not an empty string.
     """
     raw = defaults.get("flux_health_check_exprs")
     if raw is None:
-        return [], None
+        return ()
     if not (isinstance(raw, list) and all(isinstance(item, dict) for item in raw)):
-        return [], f"flux_health_check_exprs is {raw!r}, not a list of mappings"
+        raise RoleDefaultsError(
+            f"flux_health_check_exprs is {raw!r}, not a list of mappings"
+        )
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     rendered = []
     for item in raw:
         if not {"apiVersion", "current"} <= set(item) or set(item) - _CHECK_KEYS:
-            return (
-                [],
-                f"flux_health_check_exprs item {sorted(item)} is not a CustomHealthCheck",
+            raise RoleDefaultsError(
+                f"flux_health_check_exprs item {sorted(item)} is not a CustomHealthCheck"
             )
         try:
             rendered.append(
                 {k: env.from_string(str(v)).render(defaults) for k, v in item.items()}
             )
         except jinja2.TemplateError as err:
-            return [], f"flux_health_check_exprs does not render: {err}"
-    return rendered, None
+            raise RoleDefaultsError(
+                f"flux_health_check_exprs does not render: {err}"
+            ) from err
+    return tuple(rendered)
 
 
-def role_fields(
+def _prepull_workloads(defaults: dict) -> tuple[str, ...] | None:
+    value = defaults.get("flux_prepull_workloads")
+    if value is None:
+        return None
+    if not (
+        isinstance(value, list)
+        and value
+        and all(isinstance(name, str) and name for name in value)
+    ):
+        raise RoleDefaultsError(
+            f"flux_prepull_workloads is {value!r}, not a non-empty list of workload names, "
+            "so its pre-pull cannot be scoped"
+        )
+    if "flux_prepull_timeout" not in defaults:
+        raise RoleDefaultsError(
+            "flux_prepull_workloads is set with no flux_prepull_timeout, so no pre-pull "
+            "renders for the names to scope"
+        )
+    return tuple(value)
+
+
+def _gate_problems(value: object) -> list[str]:
+    """Why `value` is not a literal `flux_cronjob_gates` mapping, empty when it is one."""
+    if not isinstance(value, dict) or not value:
+        return [
+            f"{value!r} is not a non-empty mapping of CronJob names to gate classes"
+        ]
+    problems = []
+    for name, gate in value.items():
+        if not isinstance(gate, dict) or gate.get("kind") not in _GATE_KINDS:
+            problems.append(f"{name}: {gate!r} names no kind of {sorted(_GATE_KINDS)}")
+            continue
+        extra = set(gate) - {"kind", "rerun_safe"}
+        rerun = gate.get("rerun_safe")
+        if extra:
+            problems.append(f"{name}: unknown keys {sorted(extra)}")
+        elif gate["kind"] == "mutation" and not (
+            isinstance(rerun, str) and "::" in rerun
+        ):
+            problems.append(
+                f"{name}: a mutation gate names its rerun_safe test as <path>::<function>"
+            )
+        elif gate["kind"] == "verify" and rerun is not None:
+            problems.append(
+                f"{name}: a verify gate never re-runs, so takes no rerun_safe"
+            )
+    return problems
+
+
+def _cronjob_gates(defaults: dict) -> dict[str, dict]:
+    value = defaults.get("flux_cronjob_gates")
+    if value is None:
+        return {}
+    wrong = _gate_problems(value)
+    if wrong:
+        raise RoleDefaultsError(
+            "; ".join(f"flux_cronjob_gates: {line}" for line in wrong)
+        )
+    return {str(name): dict(gate) for name, gate in value.items()}
+
+
+def _verify_after(defaults: dict, tag: str) -> tuple[str, ...]:
+    value = defaults.get("flux_verify_after")
+    if value is None:
+        return ()
+    if not (
+        isinstance(value, list)
+        and value
+        and all(isinstance(name, str) and name and name != tag for name in value)
+    ):
+        raise RoleDefaultsError(
+            f"flux_verify_after is {value!r}, not a literal non-empty list of other "
+            "tags' names"
+        )
+    return tuple(sorted(set(value)))
+
+
+@functools.cache
+def _role_defaults(roles: Path, tag: str) -> RoleDefaults:
+    """`tag`'s `RoleDefaults`, loaded once per role tree; a role with no file sets none.
+
+    Raises:
+        RoleDefaultsError: The file does not parse, or a field is not a literal of its type.
+    """
+    path = roles / tag / "defaults" / "main.yml"
+    try:
+        defaults = (
+            yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        ) or {}
+    except (OSError, yaml.YAMLError) as err:
+        raise RoleDefaultsError(f"defaults cannot be read: {err}") from err
+    own_timeout = _duration(defaults, "flux_timeout", "100m")
+    rollout_timeout = _duration(defaults, "manifests_rollout_timeout", "900s")
+    return RoleDefaults(
+        prune=_bool(defaults, "flux_prune", True),
+        suspend=_bool(defaults, "flux_suspend", False),
+        timeout=own_timeout or rollout_timeout,
+        snapshot_pvcs=_snapshot_pvcs(defaults),
+        health_check_exprs=_health_check_exprs(defaults),
+        prepull_timeout=_duration(
+            defaults, "flux_prepull_timeout", "3600s", WHOLE_DURATION
+        ),
+        prepull_workloads=_prepull_workloads(defaults),
+        cronjob_gates=_cronjob_gates(defaults),
+        verify_after=_verify_after(defaults, tag),
+    )
+
+
+def role_defaults(
     tags: Iterable[str], roles: Path = K8S_ROLES
-) -> tuple[dict[str, dict], list[str]]:
-    """The per-role fields each tag's defaults set on its Kustomization, and one line per problem.
+) -> tuple[dict[str, RoleDefaults], list[str]]:
+    """Each tag's `RoleDefaults`, and one line per tag whose defaults cannot be read.
 
-    C3 *Per-role fields* lets a role set them from its `defaults/main.yml` (H1.1a):
-
-    - `flux_prune: false` renders `prune: false`. A plumbing tag sets it, so a render that
-      drops an object leaves it serving (H1 *Plumbing tags are never pruned*);
-    - `manifests_rollout_timeout` renders as `timeout`. The manifests role's own rollout
-      wait reads the same defaults key, though an include var of that name overrides it there;
-    - `flux_suspend: true` renders `suspend: true` (C3 *Suspension*, D5.1b);
-    - `flux_timeout` renders as `timeout` and wins over `manifests_rollout_timeout`, for a
-      role whose Kustomization waits longer than its rollout does (H6.1b);
-    - `flux_health_check_exprs` renders as `spec.healthCheckExprs` on `<tag>` alone, for a role
-      whose custom resources Flux must judge (H6.1b). Each string renders as Jinja against the
-      role's own defaults, so an expression follows the pin it compares with.
-
-    `prune` goes on `<tag>` alone, and `<tag>-deferred` keeps `prune: true`, as H1 states it:
-    "prune: false on that Kustomization, and prune: true everywhere else". The operator ruled
-    so for D5 step 29, where `flux-deferred`'s prune deletes the `verify-drill`
-    OCIRepository once the drill is off. A plumbing role that adds deferred files later
-    therefore gets deferred objects that Flux prunes. `bundle.flux_files` makes the split, and
-    its decision marker carries the reasoning. `timeout` goes on both `<tag>` and
-    `<tag>-deferred`, the Kustomizations that apply the role's own manifests. The renderer's
-    `-snapshot` kind keeps the defaults, and `-verify` rises above its Jobs' deadlines
-    (`ordering.verify_timeout`). `suspend` goes on every kind,
-    because a suspended role runs none of its Jobs either. A value must be a literal, a bool
-    for `flux_prune` and `flux_suspend` and a Go duration for the timeout. A Jinja expression
-    is a problem rather than a guess, as `snapshot_claims` treats a non-literal list, and its
-    tag is left out of the mapping.
+    A value must be a literal: a bool for `flux_prune` and `flux_suspend`, a Go duration
+    for either timeout and a whole h/m/s one for `flux_prepull_timeout`, a list for
+    `k8s_autodeploy_snapshot_pvcs`, a list of CustomHealthCheck mappings for
+    `flux_health_check_exprs`, a non-empty list of names for `flux_prepull_workloads` and
+    `flux_verify_after`, and a mapping of gate classes for `flux_cronjob_gates`. A Jinja expression is a
+    problem rather than a guess, and its tag is left out of the mapping.
 
     Returns:
-        Each tag whose defaults set a field mapped to the fields it sets, from
-        `{"prune": False, "timeout": ..., "suspend": True, "health_check_exprs": [...]}`; a
-        tag that sets none is left out.
+        Each readable tag mapped to its `RoleDefaults`, the class defaults for a tag whose
+        role sets none, and one problem per tag left out, starting `<tag>'s `.
     """
-    found: dict[str, dict] = {}
+    found: dict[str, RoleDefaults] = {}
     problems = []
     for tag in sorted(set(tags)):
-        path = roles / tag / "defaults" / "main.yml"
         try:
-            defaults = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
-        except (OSError, yaml.YAMLError) as err:
-            problems.append(f"could not read {tag}'s Kustomization fields: {err}")
-            continue
-        defaults = defaults or {}
-        fields: dict = {}
-        prune = defaults.get("flux_prune", True)
-        if not isinstance(prune, bool):
-            problems.append(f"{tag}'s flux_prune is {prune!r}, not a literal bool")
-            continue
-        if not prune:
-            fields["prune"] = False
-        suspend = defaults.get("flux_suspend", False)
-        if not isinstance(suspend, bool):
-            problems.append(f"{tag}'s flux_suspend is {suspend!r}, not a literal bool")
-            continue
-        if suspend:
-            fields["suspend"] = True
-        timeout = defaults.get("manifests_rollout_timeout")
-        if timeout is not None:
-            if not (isinstance(timeout, str) and _DURATION.fullmatch(timeout)):
-                problems.append(
-                    f"{tag}'s manifests_rollout_timeout is {timeout!r}, not a literal "
-                    "duration such as 900s, so its Kustomization timeout cannot be read"
-                )
-                continue
-            fields["timeout"] = timeout
-        own_timeout = defaults.get("flux_timeout")
-        if own_timeout is not None:
-            if not (isinstance(own_timeout, str) and _DURATION.fullmatch(own_timeout)):
-                problems.append(
-                    f"{tag}'s flux_timeout is {own_timeout!r}, not a literal duration "
-                    "such as 100m, so its Kustomization timeout cannot be read"
-                )
-                continue
-            fields["timeout"] = own_timeout
-        exprs, error = _health_check_exprs(defaults)
-        if error:
-            problems.append(f"{tag}'s {error}")
-            continue
-        if exprs:
-            fields["health_check_exprs"] = exprs
-        if fields:
-            found[tag] = fields
+            found[tag] = _role_defaults(roles, tag)
+        except RoleDefaultsError as err:
+            problems.append(f"{tag}'s {err}")
     return found, problems
 
 

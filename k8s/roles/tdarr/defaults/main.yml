@@ -20,7 +20,7 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.08.00@sha256:84743e5ae433a5b49cb463
 # only the container start and the `vaapi-encode` initContainer, and a stuck tdarr holds a Flux
 # worker for 10 minutes.
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
-# Kustomization `timeout` only from a literal role default (`role_fields` in
+# Kustomization `timeout` only from a literal role default (`role_defaults` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default.
 manifests_rollout_timeout: 600s
 tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"

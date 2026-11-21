@@ -109,7 +109,7 @@ def cmd_consumers(args) -> int:
     return 0
 
 
-def cmd_sync(args, tools: RotationTools) -> int:
+def cmd_sync(_args, tools: RotationTools) -> int:
     """Reconcile the registry with secrets.yml, save it, and print what changed."""
     reg = tools.load_registry()
     added, stale = sync(reg, tools.sops_names(), tools.today(), tools.tier_days)

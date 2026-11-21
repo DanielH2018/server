@@ -3,7 +3,8 @@
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
 their tier names and sets each Volume's backup target
 (`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:plan`). It is the only writer of
-those labels.
+those labels. A patch that moves a volume into another tier also stamps the time it moved, which
+`longhorn-backup-health` reads.
 
 It does not touch the CSI sidecar Deployments
 (`k8s/roles/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment`,
@@ -56,11 +57,16 @@ authority is written here to keep a later edit from widening it.
 
 - **Writes, and nothing else.**
     - A JSON merge patch on a `volumes.longhorn.io` object. It touches only the label keys
-      `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup-d0..d6}`
-      and `spec.backupTargetName`. One patch per volume that must move, labels and target
-      together.
+      `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup-d0..d6}`,
+      `spec.backupTargetName` and the annotation below. One patch per volume that must move,
+      labels, target and annotation together.
     - The same patch carries the per-job label `recurring-job.longhorn.io/trim`. The
       script never writes a `recurring-job-group.longhorn.io/trim` key.
+    - A patch that moves a volume into another tier, a different set of group labels or
+      another backup target, also sets the annotation `homelab/tier-since` to the run's
+      time (`k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py:tier_of`).
+      `longhorn-backup-health` anchors the volume's first-run grace to it. The trim arm's
+      explicit `default` on an unlabelled volume is no move and stamps nothing.
 - **The trim arm labels an attached volume that a ReplicaSet or StatefulSet runs.** The volume's
   `status.state` is `attached` and `status.kubernetesStatus.workloadsStatus` holds a
   `Running` ReplicaSet or StatefulSet. The arm removes the label when either stops holding, so

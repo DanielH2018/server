@@ -173,12 +173,38 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   `start_date` that the source still holds, at most four at once.
 - **A run's ID names the day after the one it loads.** `scheduled__2026-11-09T00:00:00+00:00`
   is the run whose `logical_date`, and so whose data day, is 2026-11-08.
-- **Read a task's state from Airflow, never from Loki.** A task pod's stdout reaches
-  loki-homelab only when the pod outlives Alloy's tail; a 0.3-second `check` often leaves no
-  line there, so a missing line is not a failure. The operator reads a run's task states
-  with `airflow tasks states-for-dag-run <dag_id> <run_id>`, run by `kubectl exec`
-  in the `airflow-scheduler` container, or in the UI's Runs tab. The UI's log view reads only
-  the pod's own file, which goes when the pod does (#9202).
+- **Read a task's state from Airflow, never from Loki.** The operator reads a run's task
+  states with `airflow tasks states-for-dag-run <dag_id> <run_id>`, run by `kubectl exec`
+  in the `airflow-scheduler` container, or in the UI's Runs tab.
+- **A task's log lives in loki-homelab, not in Airflow.** The task's supervisor writes every
+  log line, the exception and its frames included, to the pod's stdout as JSON. The scheduler
+  deletes the pod as soon as it exits, and the UI's log view reads only the pod's own file, so
+  the view is empty for a finished task. A task that fails still exits 0, so its pod goes too;
+  `AIRFLOW__KUBERNETES_EXECUTOR__DELETE_WORKER_PODS_ON_FAILURE` keeps only a pod whose
+  container crashed.
+- **Every task pod lingers 15 seconds after its task exits.** Alloy publishes discovered pods
+  at most once every 5 seconds and re-globs their log files every 10. Kubelet removes a
+  pod's log file when the pod is deleted, so a pod gone before Alloy opens its file leaves
+  nothing in Loki. The `base` container's command in
+  `k8s/roles/airflow/templates/pod-template.yaml.j2` runs the image's entrypoint, sleeps,
+  then exits with the task's status
+  (`tests/services/test_airflow_task_log_linger.py::test_the_task_pod_outlives_alloys_file_sync_after_the_task_exits`,
+  `tests/services/test_airflow_task_log_linger.py::test_the_executors_args_reach_the_entrypoint_and_its_status_is_the_pods`).
+- **To read one task attempt's log in Grafana**, open Explore on the `loki-homelab`
+  datasource. A task's pod is named for its DAG and task, with `_` written as `-`, and each
+  attempt has its own pod. First find the attempt's pod: its `Executing workload` line names
+  the run and the attempt in its `log_path`.
+
+  ```logql
+  {namespace="homelab", container="base", pod=~"dns-daily-rollup-load-.+"}
+    |= "run_id=scheduled__2026-11-12T01:25:00+00:00/task_id=load/attempt=2.log"
+  ```
+
+  Then read that pod's whole stream, which holds the entrypoint's and the supervisor's lines
+  as well as the task's: `{namespace="homelab", pod="dns-daily-rollup-load-8a92tku8"}`.
+  Loki keeps it for `loki_homelab_retention`
+  (`k8s/roles/loki-homelab/defaults/main.yml:loki_homelab_retention`). A filter such as
+  `| json | run_id="…"` drops the lines that carry no `run_id`.
 - **The Postgres init script runs only on an empty data directory.** To rotate
   `airflow_postgres_password`, `airflow_warehouse_writer_password` or
   `airflow_warehouse_reader_password`, the operator runs `ALTER ROLE … PASSWORD` in the pod

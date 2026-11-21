@@ -29,6 +29,9 @@ files:
   # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only.
   - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
   - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
+  # Imports reconcile_lib from its own directory, which the reconcile component ships in every
+  # host package.
+  - {src: files/aide_originals.py, dst: /usr/lib/homelab/aide-originals, mode: "0755"}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
   - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
 enable:
