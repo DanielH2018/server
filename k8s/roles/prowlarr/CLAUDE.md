@@ -53,7 +53,8 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   revision that rolls prowlarr. `flux_verify_after` holds `prowlarr-verify` until sonarr,
   radarr and lidarr are Ready.
 - **A `prowlarr-config` revert can leave a stale key until the next prowlarr revision.** The
-  revert changes no render, so the seed does not run after it.
+  revert changes no render, so the seed does not run after it. A rerun after a revert is
+  [#9789](https://github.com/DanielH2018/server/issues/9789).
   `ProwlarrAppSyncFailing` in `k8s/roles/observability/files/rules/arr-apps.yaml` pages once
   Prowlarr's `ApplicationLongTermStatusCheck` has reported an app for 6 hours, read from the
   exportarr sidecar's `prowlarr_system_health_issues` series. To repair it, paste the app's
