@@ -39,6 +39,6 @@ k8s_claims:
 wg_easy_k8s_cpu_limit: 500m
 wg_easy_k8s_mem_limit: 256Mi
 wg_easy_k8s_cpu_request: 50m
-wg_easy_k8s_mem_request: 32Mi
+wg_easy_k8s_mem_request: 80Mi
 
 manifests_rollout: wg-easy
