@@ -1063,6 +1063,43 @@ matrix PR.
     ```
 
 1. Open a root shell with `sudo -i` and keep it open. Every step up to the reboot runs from it.
+1. On daniel-box, take an etcd snapshot from the held root shell. daniel-box is the only
+   control-plane and etcd node, and the scheduled snapshots can be 12 hours old. The k3s binary
+   lives at `/usr/local/bin/k3s`, which no apt package owns, so the release upgrade leaves k3s at
+   the version that wrote the snapshot.
+
+    ```bash
+    k3s etcd-snapshot save
+    ```
+
+    The save inherits the drop-in's `etcd-s3`, `etcd-s3-config-secret` and
+    `etcd-snapshot-compress` keys, so k3s writes a compressed local copy and uploads a second
+    copy to R2. The drop-in's `etcd-snapshot-name: offbox` names scheduled snapshots only. An
+    on-demand save is named `on-demand-daniel-box-<unix-timestamp>.zip`. Record that name in the
+    issue that tracks the upgrade: a restore takes it, and the runbook's *Listing while k3s is
+    stopped* filters on the `offbox-` prefix, so that listing omits it.
+
+    Confirm that both copies exist. The newest snapshot shows two rows with that name, one
+    `file://` and one `s3://`, and each reads `true`:
+
+    ```bash
+    kubectl get etcdsnapshotfiles.k3s.cattle.io --sort-by=.status.creationTime \
+      -o custom-columns=NAME:.spec.snapshotName,LOCATION:.spec.location,READY:.status.readyToUse \
+      | tail -2
+    ```
+
+    Then, from a second session as the operator in `~/server`, not from the root shell, run the
+    restore runbook's gates against the name. They check that the weekly listing drill passed and
+    that the cluster token has an off-box baseline. Without that token no snapshot decrypts. The
+    script exits 0 when all three gates pass.
+
+    ```bash
+    uv run python scripts/deploy_tools/runbook_gates.py etcd-restore <snapshot-name>
+    ```
+
+    Go on only when both `s3://` and `file://` rows read `true` and the gates exit 0. A restore
+    follows *Restoring* in [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md): the S3 form passes
+    the bare name, and the local form hard-links the file first.
 1. Copy aside the apt sources the host's packages own. `do-release-upgrade` writes
    `Enabled: no` into every source whose URI is not an Ubuntu mirror. That covers
    `homelab.sources`, which `homelab-updater` reads as its only source list. It also covers daniel-pi's `docker.sources`
