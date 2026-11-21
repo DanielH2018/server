@@ -207,7 +207,8 @@ def plan_remedy(issue: Issue, remedy: str) -> list[list[str]]:
         "--remove-label",
         "no-vetted-remediation",
     ]
-    return [edit, *comment]
+    # Comment first: once the label is gone a rerun refuses, so a failed comment would be lost.
+    return [*comment, edit]
 
 
 def _flat(flag: str, values: list[str]) -> list[str]:

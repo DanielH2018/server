@@ -13,11 +13,12 @@ from dev.findings_lib.plans import ClaimRefused, plan_remedy
 _LABEL = "no-vetted-remediation"
 
 
-def test_remedy_removes_the_label_and_posts_the_remedy():
+def test_remedy_posts_the_remedy_before_removing_the_label():
+    """A rerun refuses once the label is gone, so a comment that failed after it is lost."""
     plans = plan_remedy(typed(make_issue(9116, labels=[_LABEL])), "Cap the retries.\n")
     assert plans == [
-        ["issue", "edit", "9116", "--remove-label", _LABEL],
         ["issue", "comment", "9116", "--body", "Vetted remedy: Cap the retries."],
+        ["issue", "edit", "9116", "--remove-label", _LABEL],
     ]
 
 
@@ -38,8 +39,8 @@ def test_remedy_refuses_when_there_is_nothing_to_record(issue, remedy, reason):
 def test_the_remedy_comment_reaches_a_fanout_brief():
     """The session that picks the issue up has to read what the operator ruled."""
     plans = plan_remedy(typed(make_issue(9116, labels=[_LABEL])), "Cap the retries.")
-    issue = typed(make_issue(9116, comments=[plans[1][-1]]))
-    assert [c.body for c in operator_comments(issue)] == [plans[1][-1]]
+    issue = typed(make_issue(9116, comments=[plans[0][-1]]))
+    assert [c.body for c in operator_comments(issue)] == [plans[0][-1]]
 
 
 def test_remedy_cli_writes_the_label_removal_and_the_comment(
