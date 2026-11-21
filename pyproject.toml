@@ -233,7 +233,7 @@ extend-exclude = [
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
 # user's home, which root must not execute from; hosts/components/claude-code/tests/test_rootq.py
 # parses it with the 3.12 grammar.
-per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/aide-scan/files/aide_originals.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312" }
+per-file-target-version = { "hosts/components/gh-quota/files/gh_quota.py" = "py312", "hosts/components/aide-scan/files/aide_originals.py" = "py312", "hosts/components/gh-quota/files/gh_quota_cli.py" = "py312", "hosts/components/claude-code/files/homelab_rootq.py" = "py312", "hosts/components/claude-code/files/homelab_rootq_socket.py" = "py312", "hosts/components/claude-code/files/rootq_socket.py" = "py312", "hosts/lib/homelab-reconcile" = "py312", "hosts/lib/reconcile_lib/*.py" = "py312", "hosts/lib/ci_verdict.py" = "py312", "hosts/lib/k3s_gates.py" = "py312", "hosts/lib/homelab-k3s-restart" = "py312", "hosts/lib/homelab_repo_sign.py" = "py312", "hosts/lib/host_lib.py" = "py312", "scripts/lib/k8s_conditions.py" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -407,8 +407,9 @@ ignore_names = [
   "server_hostname", "ua",
   # Fixtures a test requests for their effect and never reads.
   "restore_sigint", "ssh_here",
-  # Called from the extensionless hosts/lib/homelab-reconcile, which vulture does not read.
-  "refresh_pending",
+  # Read from the extensionless hosts/lib/homelab-reconcile and homelab-k3s-restart, which
+  # vulture does not read.
+  "refresh_pending", "last_heartbeat",
   # Guard libraries: a guard under a tests/ directory is the designed caller.
   # citations.py: FORMS is the grammar .claude/rules/facts.md cites; the rest feed
   # test_documented_paths_exist.py, test_census_rows_text.py, test_failure_class_detectors.py.
@@ -426,8 +427,6 @@ ignore_names = [
   "historical_names", "undeclared_departures", "revived_departures",
   # kubectl.py: test_every_named_node_is_a_host_in_the_inventory.
   "RETIRED_CLUSTER_NODES",
-  # review_metrics.py: evals/tests/test_review_outcomes.py and the committed-ledger check.
-  "validate_row", "COVERAGE_DIR",
   # secret_registry.py: the live-registry check in test_secret_registry.py.
   "record_names",
   # dialect.py: test_renderer_dialect.py's census of every template and variable value.

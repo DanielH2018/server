@@ -38,7 +38,7 @@ from lib import gh_rate_limit
 
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
 from lib import host_modules  # noqa: F401
-from ci_verdict import CheckRun, parse_check_runs
+from ci_verdict import CheckRun, CommitStatus, parse_check_runs
 from host_lib import github_token
 from deploy_tools.forge_transport import (
     TIMEOUT_S,
@@ -47,7 +47,6 @@ from deploy_tools.forge_transport import (
     Transport,
     _api_message,
     _json,
-    _updated,
     urllib_post as urllib_post,
     urllib_transport,
 )
@@ -260,10 +259,9 @@ class GitHub:
                 more than STATUS_PAGES_MAX pages, or no answer.
         """
         return {
-            entry["context"]: entry["state"]
-            for entry in self._combined_statuses(sha)
-            if isinstance(entry.get("state"), str)
-            and (since is None or _updated(entry) >= since)
+            status.context: status.state
+            for status in self._combined_statuses(sha)
+            if status.state and (since is None or status.updated_at >= since)
         }
 
     def status(self, sha: str, context: str) -> tuple[str, datetime] | None:
@@ -276,14 +274,14 @@ class GitHub:
         Raises:
             ForgeError: as `statuses` does.
         """
-        for entry in self._combined_statuses(sha):
-            if entry["context"] == context:
-                return str(entry.get("state")), _updated(entry)
+        for status in self._combined_statuses(sha):
+            if status.context == context:
+                return status.state, status.updated_at
         return None
 
-    def _combined_statuses(self, sha: str) -> list[dict]:
+    def _combined_statuses(self, sha: str) -> list[CommitStatus]:
         """Each context's newest status on `sha`, from every page up to the first short one."""
-        seen: dict[str, dict] = {}
+        seen: dict[str, CommitStatus] = {}
         for page in range(1, STATUS_PAGES_MAX + 1):
             url = (
                 f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
@@ -300,9 +298,14 @@ class GitHub:
             if not isinstance(found, list):
                 raise ForgeError(f"statuses for {sha}: the body has no statuses list")
             for entry in found:
-                k = entry.get("context") if isinstance(entry, dict) else None
-                if isinstance(k, str) and _updated(entry) >= _updated(seen.get(k, {})):
-                    seen[k] = entry
+                if not isinstance(entry, dict):
+                    continue
+                status = CommitStatus.parse(entry)
+                held = seen.get(status.context)
+                if status.context and (
+                    held is None or status.updated_at >= held.updated_at
+                ):
+                    seen[status.context] = status
             if len(found) < STATUS_PAGE_SIZE:
                 return list(seen.values())
         raise ForgeError(f"statuses for {sha}: more than {STATUS_PAGES_MAX} pages")

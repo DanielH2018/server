@@ -16,7 +16,7 @@ calendars, one feed each, for the Homepage calendar widget. See repo-root `CLAUD
   The role's defaults still name the in-cluster registry. The image is built
   from `templates/Dockerfile.j2`, with the Flask app in `files/ical_proxy.py`, shipped into the
   image as `app.py`.
-- **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
+- **Host:** daniel-server, by the preferred node affinity in `k8s/roles/ical-proxy/templates/deployment.yaml.j2`
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it.** Its `containers_list` entry is
   in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when

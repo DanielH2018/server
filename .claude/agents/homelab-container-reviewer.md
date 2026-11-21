@@ -51,10 +51,11 @@ highest-signal findings.
 ## Tools (read-only)
 - `Grep` across `hosts/components/pi-compose/services/*/compose.yaml.j2` to audit the Pi's
   coverage at a glance — e.g. a service missing a `deploy.resources` cap or a `healthcheck`.
-- `uv run python scripts/validate/render_templates.py` (renders all → catches malformed YAML;
-  `scripts/validate/render_lib/compose.py:run`),
-  `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy;
+- `uv run python scripts/diagnostics/probe.py health <svc>` (running + healthy;
   `scripts/diagnostics/probe_lib/health.py:run_health`). Never run a command that writes.
+- The renderer, `scripts/validate/render_templates.py`, is outside the Bash hook's
+  read-only set (`.claude/hooks/hooklib/read_only_commands.py`). Name the render check a
+  finding needs in the report, for the dispatcher to run.
 - Read the role's CLAUDE.md before flagging — most deviations are documented decisions.
 
 ## Method

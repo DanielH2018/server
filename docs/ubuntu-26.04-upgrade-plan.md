@@ -102,6 +102,62 @@ drop-in that skips obsolete removal. The notes below cover what is specific to e
   Before the upgrade, stop every session and fan-out, and confirm no `promote` or builder
   run is in flight.
 - The reboot takes the control plane and Pi-hole down for as long as the weekly reboot does.
+- Take an etcd snapshot first. The procedure's *On daniel-box, take an etcd snapshot* step
+  holds the command and its confirmation. The datastore is embedded etcd (`cluster-init: true`
+  in `hosts/components/k3s-server/component.yml`), and k3s already snapshots it at 00:00 and
+  12:00 UTC, locally and to R2. The on-demand snapshot moves the recovery point to the minute
+  before the upgrade. [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md) is the restore
+  runbook. It says no drill exercises the agent rejoin or the Longhorn reattach after a real
+  restore.
+
+#### The daniel-box kernel moves from 6.8 to 7.0
+
+daniel-box boots 6.8.0-149 and moves to the release's 7.0 kernel. daniel-server has run the
+24.04 HWE 7.0 kernel since at least 2026-10-02, and it booted 7.0.0-43 on 2026-11-20. That is the noble
+build, not the `resolute` one, so read daniel-server's `uname -r` after its own upgrade for the exact
+version.
+
+Measured on both hosts on 2026-11-21:
+
+- Neither host has `dkms` installed, so no out-of-tree module needs a rebuild.
+- Nothing under `hosts/` or `inventory/` pins a kernel version or package.
+- Both hosts load the modules Longhorn uses, `iscsi_tcp` and `dm_multipath`, and Longhorn
+  reports the NFS client installed on both. daniel-server's 7.0 `linux-modules` package ships
+  `iscsi_tcp`, `nfs` and `nfsv4`, and daniel-server runs its Longhorn iSCSI sessions on that
+  kernel. The one `ReadWriteMany`
+  claim, `media-data`, is a local PV on `/srv/media`, not a Longhorn share.
+
+daniel-server's time on 7.0 covers some of daniel-box's hardware and not the rest:
+
+- **Covered.** The node address rides `eno1`, an Intel I226-V on the `igc` driver.
+  daniel-server's link also uses `igc`. Both root disks use the `nvme` driver, from different
+  vendors.
+- **Not covered.** The Wi-Fi fallback link `wlp4s0` (`k3s_node_wifi_link`) is a MediaTek MT7922
+  on `mt7921e`, where daniel-server has Intel `iwlwifi`. The graphics are AMD Phoenix on
+  `amdgpu`, where daniel-server has Intel `xe` and `i915`. No workload uses daniel-box's GPU.
+
+Before the reboot, `ls /boot/vmlinuz-6.8*` shows whether a 6.8 kernel stays installed as a
+GRUB fallback entry.
+
+After the reboot, check the kernel, then the node:
+
+1. `uname -r` prints a 7.0 kernel.
+1. `ip -br addr show dev eno1` shows `10.0.0.215`. k3s pins `node-ip` to that address. If the
+   link comes up under another name, the netplan pin misses it and k3s hangs at start; the
+   comment on `node-ip` in `hosts/components/k3s-server/component.yml` describes the failure.
+1. `systemctl is-active iscsid multipathd` prints `active` twice, and
+   `lsmod | grep -E '^(iscsi_tcp|dm_multipath|wireguard) '` lists all three modules.
+1. `kubectl get nodes` shows both nodes `Ready`.
+1. Longhorn's node conditions match the baseline. Run the command below and compare it with
+   daniel-server's lines. Before the upgrade, both nodes read `True` for every condition except
+   two. `KernelModulesLoaded` is `False` and names `dm_crypt`, which no volume uses.
+   `Multipathd` is `False` with Longhorn's known `multipathd` warning, which
+   `multipath-longhorn.conf` in the k3s-server component answers. A new
+   `False` is the finding.
+
+    ```bash
+    kubectl -n longhorn-system get nodes.longhorn.io -o jsonpath='{range .items[*]}{.metadata.name}: {range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}{end}'
+    ```
 
 ### daniel-pi
 

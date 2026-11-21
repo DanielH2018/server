@@ -334,10 +334,11 @@ def _ghread_check(is_scratch):
 # subcommand: `probe.py` is the read-only diagnostics entry point by design.
 READ_SCRIPTS = {
     "scripts/diagnostics/probe.py": None,
-    "scripts/dev/fact_status.py": frozenset({"lint", "notice"}),
+    "scripts/dev/fact_status.py": frozenset({"lint", "notice", "report"}),
     "scripts/dev/findings.py": frozenset(
         {"list", "show", "history", "claims", "next", "verify"}
     ),
+    "scripts/secrets_mgmt/secret_rotation.py": frozenset({"audit", "consumers"}),
 }
 
 
@@ -360,13 +361,14 @@ def script_problem(script, args, repo_root, own_checkout):
 
 def checks(is_scratch):
     """Command name -> its check. A command absent from the mapping is not a read."""
+    # rootq and rootq-socket take only reading verbs: `homelab_rootq.py:COMMANDS` and `TIER1`.
     plain = (
         "cat head tail less more grep egrep fgrep wc cut tr paste join comm tac nl fold fmt "
         "expand unexpand rev column seq basename dirname realpath readlink pwd printf echo "
         "true false test [ [[ ]] ls tree stat file du df diff cmp sha256sum sha1sum md5sum "
         "base64 od hexdump strings jq id whoami hostname uname uptime free ps pgrep nproc "
         "lscpu lsblk which type date printenv ss netstat dig nslookup host ping traceroute "
-        "tracepath getent cd :"
+        "tracepath getent cd : rootq rootq-socket"
     ).split()
     table: dict[str, Callable[[list[str]], str | None]] = {
         name: _allowed for name in plain

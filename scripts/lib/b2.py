@@ -1,4 +1,4 @@
-"""One Backblaze B2 native-API session: authorize, list a prefix, delete a version.
+"""One Backblaze B2 native-API session: authorize, list a prefix, delete a version, set a retention.
 
 WHY. `scripts/backup/b2_drain.py` and `scripts/diagnostics/probe_lib/b2_api.py` each carried a
 private B2 client: their own `b2_authorize_account`, their own pagination and their own
@@ -27,12 +27,54 @@ import json
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from typing import NamedTuple
 
 AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
 PAGE_SIZE = 1000
 
 # (url, headers, JSON payload or None for a GET, timeout) -> the parsed JSON response.
 Transport = Callable[[str, dict[str, str], dict | None, float], dict]
+
+
+_PERIOD_DAYS = {"days": 1, "years": 365}
+
+
+class BucketLock(NamedTuple):
+    """A bucket's Object Lock setting, as `b2_list_buckets` reports it.
+
+    Attributes:
+        readable: whether the key may read the setting, which takes `readBucketRetentions`.
+        enabled: whether Object Lock is on.
+        mode: the default retention's mode, `governance` or `compliance`, or None when unset.
+        period_days: the default retention period in days, or None when unset or in a unit
+            B2 did not document.
+    """
+
+    readable: bool
+    enabled: bool
+    mode: str | None
+    period_days: int | None
+
+
+def parse_bucket_lock(bucket: dict) -> BucketLock:
+    """The lock setting of one `b2_list_buckets` entry."""
+    lock = bucket.get("fileLockConfiguration") or {}
+    value = lock.get("value") or {}
+    retention = value.get("defaultRetention") or {}
+    period = retention.get("period") or {}
+    duration = period.get("duration")
+    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
+    days = (
+        duration * unit_days
+        if isinstance(duration, int) and duration > 0 and unit_days
+        else None
+    )
+    return BucketLock(
+        readable=lock.get("isClientAuthorizedToRead") is True,
+        enabled=value.get("isFileLockEnabled") is True,
+        mode=retention.get("mode"),
+        period_days=days,
+    )
 
 
 class B2Error(Exception):
@@ -190,3 +232,36 @@ class B2Session:
     def delete(self, file_name: str, file_id: str) -> None:
         """Remove one file version. Class A, which B2 does not meter."""
         self._call("b2_delete_file_version", {"fileName": file_name, "fileId": file_id})
+
+    def bucket_lock(self) -> BucketLock:
+        """The session bucket's Object Lock setting. Class C."""
+        if not self.bucket_id:
+            raise B2Error(
+                "no bucket: the key is not bucket-scoped and none was looked up"
+            )
+        self.class_c += 1
+        listed = self._call(
+            "b2_list_buckets",
+            {"accountId": self.account_id, "bucketId": self.bucket_id},
+        )
+        buckets = listed.get("buckets") or []
+        if not buckets:
+            raise B2Error(f"B2 lists no bucket with id {self.bucket_id}")
+        return parse_bucket_lock(buckets[0])
+
+    def set_retention(
+        self, file_name: str, file_id: str, mode: str, until_ms: int
+    ) -> None:
+        """Set one file version's retention. Class A, which B2 does not meter.
+
+        B2 refuses to shorten a governance retention unless the key holds `bypassGovernance`
+        and the call asks for it, which this call never does.
+        """
+        self._call(
+            "b2_update_file_retention",
+            {
+                "fileName": file_name,
+                "fileId": file_id,
+                "fileRetention": {"mode": mode, "retainUntilTimestamp": until_ms},
+            },
+        )

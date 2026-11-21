@@ -173,15 +173,19 @@
                 tag: zigbee_bridge
                 alert_class: alert_chain
                 watch: true
-      # from:"off" -> "on" recovery edge only (the remaining default case). Same tag replaces the alert.
+      # Recovery only after an outage of >= 2 min, the offline alert's `for:`; a shorter flap sent no alert.
       default:
-        - service: script.bedroom_notify
-          data:
-            title: "✅ Zigbee bridge online"
-            message: "Zigbee2MQTT is back; devices are reconnecting."
-            tag: zigbee_bridge
-            alert_class: alert_chain
-            recovery: true
+        - if: >-
+            {{ trigger.from_state is not none and trigger.to_state is not none
+               and (as_timestamp(trigger.to_state.last_changed) - as_timestamp(trigger.from_state.last_changed)) >= 120 }}
+          then:
+            - service: script.bedroom_notify
+              data:
+                title: "✅ Zigbee bridge online"
+                message: "Zigbee2MQTT is back; devices are reconnecting."
+                tag: zigbee_bridge
+                alert_class: alert_chain
+                recovery: true
 
 # HA automation-engine heartbeat: stamp input_datetime.ha_heartbeat with now() every minute so its
 # last_changed stays fresh ONLY while the automation scheduler is executing. monitor-bridge polls it

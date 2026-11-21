@@ -128,7 +128,7 @@ k8s_claims: >-
 traefik_k8s_cpu_limit: "1"
 traefik_k8s_mem_limit: 512Mi
 traefik_k8s_cpu_request: "100m"
-traefik_k8s_mem_request: 128Mi
+traefik_k8s_mem_request: 192Mi
 
 # The CrowdSec bouncer plugin and the log-tailing agent sidecar. The sidecar parses this pod's
 # access log locally and ships signals to the in-cluster LAPI, so its collections are the
@@ -154,7 +154,7 @@ traefik_k8s_agent_parsers: crowdsecurity/jellyfin-whitelist
 traefik_k8s_agent_cpu_limit: "0.5"
 traefik_k8s_agent_mem_limit: 256Mi
 traefik_k8s_agent_cpu_request: 50m
-traefik_k8s_agent_mem_request: 64Mi
+traefik_k8s_agent_mem_request: 128Mi
 # The access log lives on an emptyDir shared between traefik, the crowdsec-agent sidecar, and
 # the access-log-rotate sidecar below. sizeLimit is a BACKSTOP: the sidecar copytruncates the
 # file well before it is reached, so hitting it means rotation itself has stopped working.

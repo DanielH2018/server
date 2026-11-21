@@ -1,7 +1,6 @@
 ---
-# Managed by Ansible (k8s/roles/home-assistant/files/rest.yaml).
-# Source of truth — copied to ./config (NOT templated: the {{ value_json }} / {{ state_attr }}
-# Jinja would be mangled by Ansible's templater) and included via `rest: !include rest.yaml`.
+# Source of truth — shipped verbatim in the role's ConfigMap and included via
+# `rest: !include rest.yaml`.
 # HA UI edits are NOT persistent. To change, edit this file and redeploy home-assistant.
 #
 # Open-Meteo Air Quality (free, NO API key). resource_template reads zone.home lat/long so the

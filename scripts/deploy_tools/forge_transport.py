@@ -13,7 +13,6 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Protocol
 
 # Seconds for one HTTP request or one subprocess. A timeout is an error, never an absence.
@@ -120,14 +119,6 @@ def _api_message(response: Response) -> str:
         return ""
     message = body.get("message") if isinstance(body, dict) else None
     return f": {message}" if isinstance(message, str) and message else ""
-
-
-def _updated(entry: dict) -> datetime:
-    """A commit status's `updated_at`, or the earliest time when it is missing or malformed."""
-    try:
-        return datetime.fromisoformat(str(entry.get("updated_at")))
-    except ValueError:
-        return datetime.min.replace(tzinfo=UTC)
 
 
 def _error_codes(response: Response) -> set[str]:

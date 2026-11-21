@@ -130,7 +130,9 @@ one pass with
 (`k8s/roles/monitor-bridge/tests/test_check_cli.py::test_check_flag_names_one_row_without_its_gate`).
 A session's `kubectl` cannot exec, so it reads the live pass's result with `probe.py monitors`.
 `probe.py monitors --checks [name]` prints each row's value, last-run age and note: a held
-streak, a skip behind a down gate, staleness, or a missing rule
+streak, a skip behind a down gate, staleness, or a missing rule. A down row names each alert
+that selects it. A live row that the probe's own checkout lacks reads `not in this checkout`,
+because that checkout's rules file predates the row
 (`scripts/diagnostics/probe_lib/monitor_checks.py:report`).
 
 ## Traps

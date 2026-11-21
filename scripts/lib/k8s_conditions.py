@@ -4,9 +4,12 @@ A condition's status is the string `True`, `False` or `Unknown`, and a compare a
 misspelt literal reads as a condition that never holds. A reader parses the conditions here and
 compares the status with `is ConditionStatus.TRUE`.
 
-The module imports the stdlib alone and no first-party module, because the soak Job carries it
-beside `flux_soak.py` and imports it by bare name. `lib.k8s_objects` cannot ride there: it
-imports `lib.longhorn_lib`, which reaches `host_lib`.
+The module imports the stdlib alone and no first-party module, because it ships beside the scripts
+that read it: the soak Job carries it next to `flux_soak.py`, the host packages install it under
+a `lib/` beside `k3s_gates.py`, the backup-health reader and the restart broker, and configarr's
+health CronJob mounts it. `lib.k8s_objects` cannot ride there: it imports `lib.longhorn_lib`,
+which reaches `host_lib`. It also parses on the hosts' system Python 3.12, which runs
+`homelab-k3s-restart`, so a forward reference stays quoted.
 
 Typical usage example:
 
@@ -28,7 +31,7 @@ class ConditionStatus(StrEnum):
     UNKNOWN = "Unknown"
 
     @classmethod
-    def _missing_(cls, value: object) -> ConditionStatus:
+    def _missing_(cls, value: object) -> "ConditionStatus":
         return cls.UNKNOWN
 
 
@@ -41,6 +44,8 @@ class Condition:
         reason: `reason`, or "".
         message: `message`, or "".
         last_transition: `lastTransitionTime`, unparsed RFC3339, or "".
+        last_heartbeat: `lastHeartbeatTime`, unparsed RFC3339, or "". Only a Node's conditions
+            carry one.
         observed_generation: `observedGeneration`, or None when the entry has no integer one.
     """
 
@@ -48,10 +53,11 @@ class Condition:
     reason: str
     message: str
     last_transition: str
+    last_heartbeat: str
     observed_generation: int | None
 
 
-NO_CONDITION = Condition(ConditionStatus.UNKNOWN, "", "", "", None)
+NO_CONDITION = Condition(ConditionStatus.UNKNOWN, "", "", "", "", None)
 
 
 def parse_conditions(item: Mapping) -> dict[str, Condition]:
@@ -75,6 +81,7 @@ def parse_conditions(item: Mapping) -> dict[str, Condition]:
                 reason=str(raw.get("reason") or ""),
                 message=str(raw.get("message") or ""),
                 last_transition=str(raw.get("lastTransitionTime") or ""),
+                last_heartbeat=str(raw.get("lastHeartbeatTime") or ""),
                 observed_generation=generation
                 if isinstance(generation, int) and not isinstance(generation, bool)
                 else None,

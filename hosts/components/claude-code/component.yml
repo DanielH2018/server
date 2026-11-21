@@ -26,8 +26,8 @@
 #
 # Templates, scripts and defaults sit beside this file (`templates/`, `files/` and
 # `defaults/main.yml`); the renderer loads defaults/main.yml beneath the `defaults:` below. Each
-# template that names a sibling unit takes that name from a variable, which the `defaults:` below
-# set to the packaged name; defaults/main.yml sets the two failure pages'. Each host's
+# template that names a sibling unit takes that name from a variable, which defaults/main.yml
+# sets to the packaged name. Each host's
 # package.yml reaches them with `component: claude-code`.
 #
 # DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
@@ -48,9 +48,6 @@
 #
 # Not shipped: the operator's own Claude Code install, which the dotfiles repo owns.
 defaults:
-  # The packaged unit names the templates read (see the header).
-  claude_code_rc_unit: homelab-claude-rc.service
-  claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
   # What the role computes in tasks: the agents switched on, and the group initial_setup names.
   claude_code_agents_present: [claude]
   claude_code_worktree_holders_group: worktree-holders
@@ -235,6 +232,7 @@ files:
   - {src: templates/50-claude-restart.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-restart.rules, when: "claude_code_restart_enabled and claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_restart.py, dst: /opt/claude-restart/claude_restart.py, when: "claude_code_restart_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-restart/host_lib.py, when: "claude_code_restart_enabled"}
+  - {shared: k8s_conditions.py, dst: /opt/claude-restart/lib/k8s_conditions.py, when: "claude_code_restart_enabled"}
   - {lib: weekly_window.py, dst: /opt/claude-restart/weekly_window.py, when: "claude_code_restart_enabled"}
   - {src: templates/claude-restart-config.json.j2, dst: /etc/claude-restart/config.json, when: "claude_code_restart_enabled"}
   - {src: templates/claude-restart@.service.j2, dst: /usr/lib/systemd/system/homelab-claude-restart@.service, when: "claude_code_restart_enabled"}
