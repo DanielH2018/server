@@ -147,7 +147,8 @@ export LONGHORN_B2_BUDGET_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-bu
 # Check 12's bound and arm state, which the `homelab-daniel-box` package writes here.
 export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
-# The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
+# The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line, after one
+# `detail<TAB><class>` line per problem class, and always exits 0,
 # having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
 # would leave the monitor to time out with no explanation.
@@ -165,6 +166,7 @@ export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 # A mktemp failure is checked: an empty ERR_FILE would make `2>"$ERR_FILE"` below fail
 # the whole command substitution (a full or read-only /tmp), which would read as RC nonzero —
 # STATUS=down and a /fail push for a backup plane that never got a chance to run.
+DETAILS=()
 if ! ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX); then
   STATUS=down
   MSG="longhorn backup health reader failed: mktemp could not create a stderr capture file"
@@ -178,10 +180,14 @@ else
   # last line. A verdict whose message carried a newline leaves its `(+N more ...)` tail as the
   # last line, and the verdict reads "unrecognized status:" with the real cause cut off. With no
   # such line, the last line still decides and is flagged below.
+  # A `detail<TAB><class>` line names one problem class. The class is a slug the reader fixes,
+  # and the pattern refuses anything else, so no label value needs escaping.
   LAST_LINE="${OUT##*$'\n'}"
   while IFS= read -r line; do
     if [[ "$line" == up$'\t'* || "$line" == down$'\t'* ]]; then
       LAST_LINE="$line"
+    elif [[ "$line" =~ ^detail$'\t'([a-z0-9-]+)$ ]]; then
+      DETAILS+=("${BASH_REMATCH[1]}")
     fi
   done <<< "$OUT"
   # STATUS must be `up` or `down` before anything downstream trusts it: a reader that
@@ -191,6 +197,7 @@ else
   # string nothing defines. Treat that the same as a reader crash.
   if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
     STATUS=down
+    DETAILS=()
     MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"
     # The reader logs its own verdict on a normal run; on THIS path it never got that far, so log
     # here instead — otherwise the one failure mode where the local trail matters most (the reader
@@ -206,6 +213,7 @@ else
       logger -t longhorn-backup-health "status=down reader printed an unrecognized status: ${FLAT_OUT}"
       MSG="longhorn backup health reader printed an unrecognized status: ${FLAT_OUT}"
       STATUS=down
+      DETAILS=()
     elif [[ -n "$ERR" ]]; then
       # A green run's stderr is not necessarily empty — a kubectl RBAC warning or a uv resolution
       # warning can land here on an otherwise-successful tick. Only the failure branch used to
@@ -220,7 +228,19 @@ fi
 # writes the file atomically. A failed write logs and the run goes on to its ping.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1
-write_check_textfile longhorn-backup-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+# One series per problem class on a down verdict, so LonghornBackupHealthFailed fires once per
+# class: a second problem during a red window opens its own alert instead of hiding in the first.
+DETAIL_LINES=()
+if [[ "$STATUS" == "down" && -n "${DETAILS[*]}" ]]; then
+  DETAIL_LINES+=(
+    "# HELP homelab_check_detail 1 for each problem class the check's last down verdict named."
+    "# TYPE homelab_check_detail gauge"
+  )
+  for detail in "${DETAILS[@]}"; do
+    DETAIL_LINES+=("homelab_check_detail{check=\"longhorn-backup-health\",detail=\"${detail}\"} 1")
+  done
+fi
+write_check_textfile longhorn-backup-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" "${DETAIL_LINES[@]}" \
   || logger -t longhorn-backup-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
 # Off-premises dead-man's switch. The textfile above is read by Prometheus, which runs ON the

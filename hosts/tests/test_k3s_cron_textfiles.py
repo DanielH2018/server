@@ -162,3 +162,25 @@ def test_a_reader_verdict_is_written_and_a_boot_grace_run_writes_nothing(tmp_pat
         skipped, "longhorn-backup-health", uv_body=reader, env={"BOOT_GRACE": "1"}
     )
     assert list(textfile_dir.iterdir()) == []
+
+
+def test_each_problem_class_the_reader_names_is_a_detail_series(tmp_path):
+    reader = (
+        "printf 'detail\\ttier-coverage\\ndetail\\tetcd-s3\\n"
+        "down\\tvolume uncovered; etcd snapshot stale\\n'\n"
+    )
+    textfile_dir = _run(tmp_path, "longhorn-backup-health", uv_body=reader)
+    series = _series(textfile_dir, "longhorn-backup-health")
+    details = {k: v for k, v in series.items() if k.startswith("homelab_check_detail")}
+    assert details == {
+        'homelab_check_detail{check="longhorn-backup-health",detail="tier-coverage"}': "1",
+        'homelab_check_detail{check="longhorn-backup-health",detail="etcd-s3"}': "1",
+    }
+
+
+def test_a_crashed_reader_writes_red_with_no_detail_series(tmp_path):
+    reader = "printf 'detail\\ttier-coverage\\n'\nexit 1\n"
+    textfile_dir = _run(tmp_path, "longhorn-backup-health", uv_body=reader)
+    series = _series(textfile_dir, "longhorn-backup-health")
+    assert series['homelab_check_success{check="longhorn-backup-health"}'] == "0"
+    assert not any(k.startswith("homelab_check_detail") for k in series)
