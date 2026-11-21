@@ -181,3 +181,15 @@ def test_a_failed_listing_errors_without_a_summary_line(capsys):
     assert code == 75
     assert out.out == ""
     assert out.err.startswith("b2-retention: error: HTTP 403")
+
+
+def test_an_update_b2_never_answered_stops_the_sweep(capsys):
+    def update(payload):
+        raise B2Error("B2 request failed: timed out")
+
+    transport = FakeTransport(_auth(), _bucket(), _listing(BLOCK, CFG), update=update)
+    code, out, err = _run(transport, capsys)
+    assert code == 75
+    assert out == ""
+    assert err == "b2-retention: error: B2 request failed: timed out"
+    assert len(transport.updates()) == 1

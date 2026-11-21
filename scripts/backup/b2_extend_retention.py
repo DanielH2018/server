@@ -21,7 +21,8 @@ objects, all Class C: about four a day. Each `b2_update_file_retention` is Class
 does not meter.
 
 EXIT CODES. 0 after a sweep or a decline, 1 when B2 refused an update, 75 when the credentials,
-the authorize, the bucket read or the listing failed and nothing was extended. Checks 9 and 10
+the authorize, the bucket read or the listing failed, or an update got no answer from B2. A run
+stops at the first unanswered call rather than wait out the timeout on every object. Checks 9 and 10
 of longhorn-backup-health read the summary line, not the code.
 
 WHEN IT DECLINES. It changes nothing, prints a `declined:` line and exits 0 while the bucket's
@@ -74,6 +75,9 @@ def extend(
     Returns:
         (extended, gone, failures): the count updated, the count a prune removed after the
         listing, and one `name: error` line per other refusal.
+
+    Raises:
+        B2Error: a call that B2 never answered, which ends the sweep.
     """
     extended = gone = 0
     failures = []
@@ -81,6 +85,9 @@ def extend(
         try:
             session.set_retention(f["fileName"], f["fileId"], "governance", until_ms)
         except B2Error as exc:
+            # No code means B2 never answered; each further call would wait out the timeout.
+            if exc.code is None:
+                raise
             if exc.code == FILE_NOT_PRESENT:
                 gone += 1
             else:
