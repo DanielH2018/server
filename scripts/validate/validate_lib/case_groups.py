@@ -1,6 +1,6 @@
 """Run the host package cases' groups concurrently, each in its own scratch directory.
 
-`host_package_cases.main()` hands `run_groups` the eleven case groups: the three `Cases` methods
+`host_package_cases.main()` hands `run_groups` the twelve case groups: the three `Cases` methods
 and each case module's `run`. Every group boots its own containers, and their names differ, but
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
@@ -31,6 +31,7 @@ from validate.validate_lib import bootstrap_age_case
 from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
 from validate.validate_lib import (
     conffile_case,
+    node_package_case,
     node_units_case,
     repos_case,
     secrets_case,
@@ -80,13 +81,15 @@ def groups(cases_class) -> list[tuple[str, Callable]]:
     """Every case group but bootstrap_case, longest first by CI run 42575480365's 24.04 leg.
 
     `bootstrap_case` is left out: it runs alone under `host_package_cases.py --bootstrap`, in a
-    CI job of its own.
+    CI job of its own. That run predates `node_package_case`, which sits second unmeasured
+    because it installs two nodes' whole packages in turn.
 
     Each is looked up when this runs, so a stub set on a module or on `cases_class` is the one
     the group list holds.
     """
     return [
         ("upgrade_path", cases_class.upgrade_path),
+        ("node_package_case", node_package_case.run),
         ("bootstrap_age_case", bootstrap_age_case.run),
         ("engine_case", engine_case.run),
         ("by_hand", cases_class.by_hand),
