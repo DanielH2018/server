@@ -307,14 +307,13 @@ def test_a_client_that_lists_tags_is_flagged(tmp_path, monkeypatch, capsys):
 def test_the_shared_ci_verdict_module_imports_nothing_that_reaches_a_forge():
     """`promote.py` imports `hosts/lib/ci_verdict.py` bare, so the module is held to the boundary.
 
-    It must import only the standard library's `collections.abc`, `dataclasses`, `datetime`,
-    `enum` and `__future__`, and `forbidden_imports` finds no HTTP library, `subprocess` or `os` exec in it.
+    It must import only the standard library's `collections.abc`, `dataclasses`, `datetime`
+    and `enum`, and `forbidden_imports` finds no HTTP library, `subprocess` or `os` exec in it.
     """
     path = Path(promote.__file__).parents[2] / "hosts" / "lib" / "ci_verdict.py"
     source = path.read_text(encoding="utf-8")
     assert forbidden_imports(source) == set()
     assert imported_modules(source) == {
-        "__future__",
         "collections.abc",
         "dataclasses",
         "datetime",
