@@ -59,6 +59,7 @@ on:
       - "scripts/lib/exit_codes.py"
       - "scripts/lib/git.py"
       - "scripts/lib/guard_jinja_env.py"
+      - "scripts/lib/host_modules.py"
       - "scripts/lib/inventory_lists.py"
       - "scripts/lib/jinja_comments.py"
       - "scripts/lib/k8s_conditions.py"
