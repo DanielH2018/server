@@ -177,53 +177,24 @@ def _text(node: ast.expr, env: dict[str, str]) -> str:
 def findings_labels(path: _Path) -> list[tuple[str, str, str]]:
     """`(name, colour, description)` for every label `findings.py sync-labels` creates.
 
-    The literal in `LABELS` gives most of them. The module then adds one `domain/<name>` label
-    per entry of `DOMAINS` in a loop, which is read here as the loop's own subscript and tuple.
+    Read from the `LABELS` literal without importing the module.
 
     Raises:
-        KeyError: when `LABELS` or the domain loop is missing.
+        KeyError: when `LABELS` is missing.
     """
-    tree = ast.parse(path.read_text())
-    labels: list[tuple[str, str, str]] = []
-    domains: list[str] = []
-    loop: ast.For | None = None
-    for node in tree.body:
+    for node in ast.parse(path.read_text()).body:
         if (
             isinstance(node, ast.AnnAssign)
             and getattr(node.target, "id", "") == "LABELS"
         ):
             assert isinstance(node.value, ast.Dict)
+            labels = []
             for key, value in zip(node.value.keys, node.value.values, strict=True):
                 assert key is not None, "LABELS holds a ** unpack"
                 colour, description = ast.literal_eval(value)
                 labels.append((ast.literal_eval(key), colour, description))
-        elif isinstance(node, ast.Assign) and any(
-            getattr(t, "id", "") == "DOMAINS" for t in node.targets
-        ):
-            domains = list(ast.literal_eval(node.value))
-        elif isinstance(node, ast.For) and getattr(node.iter, "id", "") == "DOMAINS":
-            loop = node
-    if not labels:
-        raise KeyError(f"{path.name}: no `LABELS` dict")
-    if loop is None or not domains:
-        raise KeyError(
-            f"{path.name}: no `for _d in DOMAINS` loop adding `domain/` labels"
-        )
-    assign = loop.body[0]
-    assert isinstance(assign, ast.Assign) and isinstance(assign.value, ast.Tuple)
-    name_node = assign.targets[0].slice  # ty: ignore[missing-attribute]
-    colour_node, description_node = assign.value.elts
-    var = loop.target.id  # ty: ignore[missing-attribute]
-    for domain in domains:
-        env = {var: domain}
-        labels.append(
-            (
-                _text(name_node, env),
-                _text(colour_node, env),
-                _text(description_node, env),
-            )
-        )
-    return labels
+            return labels
+    raise KeyError(f"{path.name}: no `LABELS` dict")
 
 
 def render_findings_labels(labels: list[tuple[str, str, str]]) -> str:

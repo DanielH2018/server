@@ -21,9 +21,9 @@ GONE = "worktree-gone"
 
 def _register():
     return [
-        make_issue(1, labels=("severity/high", "domain/cicd")),
-        make_issue(2, labels=("severity/low", "domain/cicd")),
-        make_issue(3, labels=("severity/low", "domain/security")),
+        {**make_issue(1, labels=("severity/high",)), "fields": {"Domain": "cicd"}},
+        {**make_issue(2, labels=("severity/low",)), "fields": {"Domain": "cicd"}},
+        {**make_issue(3, labels=("severity/low",)), "fields": {"Domain": "security"}},
     ]
 
 

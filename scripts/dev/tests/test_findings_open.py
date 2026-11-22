@@ -98,16 +98,16 @@ def test_open_with_a_fixed_match_reopens_then_comments(issue):
     assert "regression" in plans[1][plans[1].index("--body") + 1].lower()
 
 
-def test_open_adds_no_vetted_remediation_and_domain_labels():
+def test_open_adds_the_no_vetted_remediation_label():
     _, _, plans = plan_open(
         None,
         title="T",
         body="B",
-        labels=_LABELS + ["domain/network", "no-vetted-remediation"],
+        labels=_LABELS + ["no-vetted-remediation"],
         fp="f" * 12,
         source="s",
     )
-    assert "no-vetted-remediation" in plans[0] and "domain/network" in plans[0]
+    assert "no-vetted-remediation" in plans[0]
 
 
 def test_open_with_verify_by_stores_it_in_the_created_body():
@@ -298,6 +298,33 @@ def test_open_cli_types_the_new_issue_and_labels_no_kind(tmp_path, make_tools):
     assert not any(a.startswith("kind/") for a in create)
     [write] = _mutations(calls)
     assert 'issueTypeId: "IT_Gap"' in write and '"o_Low"' in write
+
+
+def test_open_cli_writes_the_domain_into_the_field_and_labels_no_domain(
+    tmp_path, make_tools
+):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools()
+    assert findings.main(_open_argv(body) + ["--domain", "network"], tools) == 0
+    create = next(c for c in calls.gh if c[:2] == ["issue", "create"])
+    assert not any(a.startswith("domain/") for a in create)
+    [write] = _mutations(calls)
+    assert '"IF_dom"' in write and '"o_network"' in write
+
+
+def test_open_cli_fills_the_domain_a_matched_issue_lacks(tmp_path, make_tools):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    matched = {
+        **make_issue(3, fp=fingerprint("T", None)),
+        "fields": {"Severity": "High"},
+        "issueType": {"name": "Improvement"},
+    }
+    tools, calls = make_tools(Fakes(issues=[matched], view=matched))
+    assert findings.main(_open_argv(body) + ["--domain", "cicd"], tools) == 0
+    [write] = _mutations(calls)
+    assert '"o_cicd"' in write and '"o_Low"' not in write
 
 
 def test_open_cli_fills_the_type_and_severity_a_matched_issue_lacks(
