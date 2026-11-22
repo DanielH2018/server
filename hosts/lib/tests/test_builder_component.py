@@ -47,7 +47,7 @@ _BOTH = {
 SANDBOX = {
     BUILDER: {
         **_BOTH,
-        "ReadWritePaths": ["/var/lib/homelab-builder", "/var/lib/gh-quota"],
+        "ReadWritePaths": ["/var/lib/homelab-builder", "-/var/lib/gh-quota"],
     },
     SIGNER: {
         **_BOTH,
