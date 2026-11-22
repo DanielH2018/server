@@ -534,15 +534,18 @@ B3 lands in four steps, each one exercised before the next:
    from.
 
    When the batch's run is red or gives no verdict in 45 minutes, the holder forms no
-   second batch and gets a run of its own PR, which it owes in any case. When that run is
-   red, the red PR was the holder's, and the members stay in the line unanswered for the
-   next holder to stack. When it is green, or the holder's landing ends another way, the
+   second batch and gets a run of its own PR, which it owes in any case. Until that run
+   decides, each member's place reads `split`, which no holder stacks. When the run is red,
+   the red PR was the holder's, and the holder clears each member's answer, so the next
+   holder can stack them. When it is green, or the holder's landing ends another way, the
    holder writes `alone` into each member's place. A member's own landing reads it on its
    next poll, leaves the line, and waits on for the turn as a ready PR does. When it takes
    the turn it forms no batch and gets its own run, which says whether it was the red one. A
    place that carries an answer is not listed as waiting, so the next landing to take the
    turn does not stack that PR again in the seconds before it leaves. A place keeps its
-   first answer, so a later one cannot turn `merged` into `alone`.
+   first answer other than `split`, so a later one cannot turn `merged` into `alone`. A
+   member that takes the turn while its place reads `split`, because the holder stepped out
+   of the turn for a rate-limit wait, lands alone.
 
    **HISTORY —** Before any answer, the members stayed in the line, and each later landing
    stacked the red one again: a batch of four whose last PR is red cost three red batches

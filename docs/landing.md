@@ -338,7 +338,7 @@ jobs. Every landing that merges its PR directly takes the turn.
   the reason, and each merge. A landing whose PR another landing merged this way prints
   `the landing that holds the turn merged PR #N with its own` and goes on to the deploy.
   A batch that is not green is split by its holder's own run. When that run is red too,
-  the holder prints `PR #N's own run is red too, so ... stay in the line`, and the other
+  the holder prints `PR #N's own run is red too, so ... go back to the line`, and the other
   drafts wait in the line for the next holder to stack. Otherwise each of them prints `a
   batch that tested PR #N was not green; it lands alone`, leaves the line and gets a run of
   its own.

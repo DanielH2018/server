@@ -261,6 +261,15 @@ def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
     batch_of, run, opts, github, verdict, merged, told
 ):
     ln, hub, the_line = batch_of(drafts=("7", "9"), run=run, opts=opts, **github)
+    read = hub.await_ci
+    while_own_run = []
+
+    def await_ci(sha, timeout):
+        if sha == head_of(OWN) and not hub.prs[OWN]["isDraft"]:
+            while_own_run.append(answers(the_line, "7", "9"))
+        return read(sha, timeout)
+
+    ln.tools = replace(ln.tools, await_ci=await_ci)
     if verdict:
         with pytest.raises(Outcome) as ended:
             land(ln)
@@ -272,7 +281,11 @@ def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
     assert hub.labels_at_ready == {OWN: set()}
     assert hub.labels == {OWN: set(), "7": set(), "9": set()}
     assert hub.branches == {}
-    # Only a red run of the holder's own PR clears the members: they stay in the line.
+    # The members wait on the holder's own run, and no other holder may stack them meanwhile.
+    assert while_own_run and all(
+        seen == [line.SPLIT, line.SPLIT] for seen in while_own_run
+    )
+    # Only a red run of the holder's own PR clears the members: they go back to the line.
     waiting = the_line("waiting", str(line.FRESH_S)).split()
     assert waiting == ([] if told else ["7", head_of("7"), "9", head_of("9")])
     assert answers(the_line, "7", "9") == [told, told]
@@ -286,10 +299,11 @@ def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
         pytest.param([False, True], id="read-on-taking-the-turn"),
     ],
 )
-def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn):
+@pytest.mark.parametrize("told", [line.ALONE, line.SPLIT])
+def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn, told):
     ln, hub, the_line = batch_of(drafts=("7",), fakes=Fakes(turn=turn))
     nap = ln.tools.sleep
-    answers = [line.ALONE]
+    answers = [told]
 
     def sleep(seconds: float) -> None:
         # The landing that holds the turn answers once, during this landing's first wait.

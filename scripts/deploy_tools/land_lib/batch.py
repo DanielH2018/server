@@ -37,8 +37,9 @@ holder's own landing goes on with its own PR either way.
 
 A batch whose run is not green splits in two: the holder's PR and its members. The holder
 forms no second batch, so its next run tests its PR alone, and that run says which side
-holds the red PR (`_settle`). When it is red, the red PR was the holder's own, and the
-members stay in the line for the next holder to stack. Otherwise the red PR is among the
+holds the red PR (`_settle`). Until it does, each member's place reads `split`, so no
+other holder stacks it. When the run is red, the red PR was the holder's own, and the
+members go back to the line for the next holder to stack. Otherwise the red PR is among the
 members, or the run's verdict was never read, and each member lands alone. The split costs
 no run the members landing alone would not: the holder's own run happens either way. A
 member goes back to the line only behind a holder whose own run is red, so a red member is
@@ -389,6 +390,8 @@ def form(ln: Landing, head: str) -> int:
                     "the red PR is its own or one of the others"
                 )
                 ln.lands_alone, ln.split_members = True, members
+                for member in members:
+                    _answer(ln, member, line.SPLIT)
                 return waited
             _label(ln, pr)
         finally:
@@ -407,26 +410,26 @@ def _answer(ln: Landing, member: Member, what: str) -> None:
     try:
         turn.line_of(ln)("answer", pr, member.head, what)
     except OSError as exc:
-        say(f"could not tell PR #{pr}'s landing that it is {what} ({exc})")
+        say(f"could not write {what or 'no answer'} into PR #{pr}'s place ({exc})")
 
 
 def _settle(ln: Landing, own_red: bool) -> None:
     """Answer the members of this landing's batch that was not green, by its own run.
 
     Args:
-        own_red: Whether this landing's PR ended with its own run red. The members then stay
-            in the line unanswered, and the next holder may stack them.
+        own_red: Whether this landing's PR ended with its own run red. The members' places
+            then go back to no answer, and the next holder may stack them.
     """
     members, ln.split_members = ln.split_members, []
     if not members:
         return
     named = " ".join(f"#{member.ln.opts.pr}" for member in members)
     if own_red:
-        say(f"PR #{ln.opts.pr}'s own run is red too, so {named} stay in the line")
-        return
-    say(f"PR #{ln.opts.pr}'s own run was not red, so {named} each land alone")
+        say(f"PR #{ln.opts.pr}'s own run is red too, so {named} go back to the line")
+    else:
+        say(f"PR #{ln.opts.pr}'s own run was not red, so {named} each land alone")
     for member in members:
-        _answer(ln, member, line.ALONE)
+        _answer(ln, member, "" if own_red else line.ALONE)
 
 
 def _merge_commit(ln: Landing) -> str:
