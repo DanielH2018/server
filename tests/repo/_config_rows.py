@@ -135,7 +135,7 @@ ACCEPTED_DESIGNS_HOLD_EACH_POINTED_DOMAIN = Census(
 ACCEPTED_DESIGNS_SECTIONS_ARE_DOMAINS = Census(
     name="accepted-designs-sections-are-findings-domains",
     reason=(
-        "A section heading is a `domain/<name>` label, so the register and the file group "
+        "A section heading is a Domain field option, so the register and the file group "
         "alike. " + _AGENT_REASON
     ),
     files=lambda: tracked(_DESIGNS),

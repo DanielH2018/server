@@ -110,6 +110,36 @@ def test_log2ram_runs_the_packaged_copy_and_no_live_restart_follows_a_change(pac
     assert package.policies["log2ram.service"] == "manual"
 
 
+def test_log2ram_is_held_at_every_boot_and_reconcile_once_it_is_installed(package):
+    unit = "homelab-log2ram-hold.service"
+    text = _text(package, f"/usr/lib/systemd/system/{unit}")
+    assert "/usr/lib/systemd/system/multi-user.target.wants/" + unit in package.links
+    # Reconcile starts an enabled unit only while it is inactive and not manual.
+    assert unit not in package.policies
+    assert not re.search(r"^RemainAfterExit=", text, re.M)
+    assert "Type=oneshot\n" in text
+    assert "ConditionPathExists=/var/lib/dpkg/info/log2ram.list\n" in text
+    assert re.search(r"^ExecStart=/usr/bin/apt-mark .*\bhold log2ram$", text, re.M)
+
+
+def test_the_log2ram_hold_is_reapplied_daily_before_the_unattended_upgrade(package):
+    """The updater runs reconcile only when a package changes, so a timer re-applies the hold."""
+    timer = _text(package, "/usr/lib/systemd/system/homelab-log2ram-hold.timer")
+    assert "homelab-log2ram-hold.timer" in package.enable_links()
+
+    def minute(text: str) -> int:
+        found = re.findall(r"^OnCalendar=\*-\*-\* (\d\d):(\d\d)", text, re.M)
+        assert len(found) == 1, text
+        return int(found[0][0]) * 60 + int(found[0][1])
+
+    hold = minute(timer)
+    update = minute(_text(package, APT_DROPINS["apt-daily.timer"]))
+    upgrade = minute(_text(package, APT_DROPINS["apt-daily-upgrade.timer"]))
+    # apt-daily's RandomizedDelaySec=10min plus its four-minute run.
+    assert update + 14 < hold < upgrade
+    assert re.search(r"^RandomizedDelaySec=0$", timer, re.M)
+
+
 # The line arm: each edit adopts what Ansible wrote.
 
 # (path, the line Ansible's task wrote or the stock line it replaces, the action)
@@ -506,7 +536,7 @@ def test_the_component_directories_hold_only_files_the_specs_ship():
         p.resolve()
         for name in ("pi-tuning", "pi-node-exporter", "pi-peer-backup-target")
         for p in (COMPONENTS / name).rglob("*")
-        if p.is_file() and p.name != "component.yml"
+        if p.is_file() and p.name not in ("component.yml", "CLAUDE.md")
     }
     assert {p.name for p in on_disk - shipped} == {
         "log2ram-1.7.2",

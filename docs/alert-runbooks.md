@@ -340,8 +340,9 @@ bad or stale, or `/var/log` is not log2ram's tmpfs.
 - A `/var/log` that is not a tmpfs means log2ram is not mounted, for one of two reasons.
   Either log2ram refused to start at boot, or a `log2ram` package upgrade stopped it: the
   package's `prerm` stops the unit and its `postinst` waits for a reboot. A `log2ram` line in
-  `/var/log/dpkg.log` since the last boot names the second (#9940). Fix the cause if there
-  is one, then reboot.
+  `/var/log/dpkg.log` since the last boot names the second. The package is held, so that
+  upgrade ran by hand outside a planned window (#9940). Fix the cause if there is one, then
+  reboot.
 
 ### `PiSdHealthNotReporting`
 

@@ -73,8 +73,6 @@ KIND_TYPES = {"gap": "Gap", "improvement": "Improvement", "feature": "Feature"}
 NOT_BEFORE_PREFIX = "not-before:"
 SEVERITY_PREFIX = "severity/"
 KIND_PREFIX = "kind/"
-for _d in DOMAINS:
-    LABELS[f"domain/{_d}"] = ("b4befe", f"Reviewer domain: {_d}")
 
 # DECIDED: the underscore-prefixed names below, and `_prefixed` further down, cross a module
 # boundary on purpose. They moved out of findings.py byte-for-byte, changing no behaviour;
@@ -521,7 +519,7 @@ def cited_paths(body: str, tracked: Collection[str] = ()) -> list[str]:
 
     This is the one answer to "which files does this issue touch". The fan-out's two
     shared-file gates, the brief and the `paths` field of `next --json` all read it, so two
-    issues that cite one script are one batch, whatever their `domain` label says. The
+    issues that cite one script are one batch, whatever their Domain field says. The
     `--file` an issue was filed with lands only in the fingerprint, so the body's own
     citations are the record.
 
@@ -842,7 +840,7 @@ def issue_rows(issues: list[Issue], tracked: Collection[str] = ()) -> list[dict]
                 "state": issue.state.value,
                 "severity": issue.severity,
                 "kind": issue.kind,
-                "domain": _prefixed(names, "domain/"),
+                "domain": issue.fields.get(DOMAIN_FIELD),
                 "escalated": seen >= ESCALATED_AT,
                 "refuted": "refuted" in names,
                 "accepted": "accepted" in names,
