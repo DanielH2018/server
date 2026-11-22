@@ -641,13 +641,13 @@ def main(argv=None, tools: Tools | None = None) -> int:
     clean_one_parser.add_argument("--repo", default=SERVER)
     clean_one_parser.set_defaults(fn=cmd_clean_one)
     args = p.parse_args(argv)
-    # The manifest-reading subcommands, checked here rather than caught as a
-    # FileNotFoundError around the call: a mistyped run-id is a usage error and deserves a
-    # line, while an FileNotFoundError raised deeper inside one of them is a real fault and
-    # must keep its traceback. `launch` refuses with "run clean <run-id> first", so a
-    # mistyped id at that prompt is the likely way in.
+    # The manifest-reading subcommands, checked here rather than caught around the call: a
+    # mistyped run-id or a manifest `load` refuses deserves a line, while the same error
+    # raised deeper inside one of them is a real fault and must keep its traceback. `launch`
+    # refuses with "run clean <run-id> first", so a mistyped id at that prompt is the likely
+    # way in.
     if args.cmd in run_parsers:
-        if not manifest_mod.exists(args.run_id, args.manifest_root):
-            error(f"no manifest for run {args.run_id} under {args.manifest_root}")
+        if refused := manifest_mod.unreadable(args.run_id, args.manifest_root):
+            error(refused)
             return FANOUT_PLACE_BAD_ARGS
     return args.fn(args, tools or Tools())
