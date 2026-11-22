@@ -30,6 +30,7 @@ EXPECTED_MODULES = frozenset(
         "arr",
         "b2_ledger",
         "builder",
+        "claude_spend",
         "flux",
         "ha",
         "health",
@@ -71,7 +72,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(subcommands.SUBCOMMANDS) == 30
+    assert len(lines) == len(subcommands.SUBCOMMANDS) == 31
     for name, description, _module, _func in subcommands.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

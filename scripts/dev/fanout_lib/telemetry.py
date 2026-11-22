@@ -18,6 +18,8 @@ from pathlib import Path
 class SessionKind(StrEnum):
     """The `session.kind` values. A session no launcher labels carries no such label.
 
+    `probe.py claude-spend` splits the unlabelled desktop sessions by a Loki join.
+
     `REMOTE_CONTROL` and `BG_RESUME` are set by the claude-code host component's
     `claude-rc.service.j2` and `claude-bg-resume.service.j2`.
     """
