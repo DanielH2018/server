@@ -11,20 +11,32 @@ from validate.validate_lib import case_groups, node_package_case
 from validate.validate_lib.node_package_case import (
     NODES,
     STUBBED_UNITS,
-    failed_units,
+    unit_problems,
 )
 
 
-def test_an_empty_failed_listing_is_clean():
-    assert failed_units("") == []
+RUNNING = "Id=nut-monitor.service\nActiveState=active\nSubState=running\nNRestarts=0\n"
+TIMER = "Id=homelab-updater.timer\nActiveState=active\nSubState=waiting\n"
 
 
-def test_each_failed_unit_is_flagged_by_name():
-    listing = (
-        "homelab-reconcile.service loaded failed failed Reconcile the homelab package\n"
-        "nut-monitor.service       loaded failed failed Network UPS Tools - power device monitor\n"
+def test_running_and_waiting_units_are_clean():
+    assert unit_problems(f"{RUNNING}\n{TIMER}") == {}
+
+
+def test_a_failed_unit_is_flagged():
+    failed = "Id=homelab-reconcile.service\nActiveState=failed\nSubState=failed\nNRestarts=0\n"
+    assert unit_problems(f"{RUNNING}\n{failed}") == {
+        "homelab-reconcile.service": "failed"
+    }
+
+
+def test_a_service_in_a_restart_loop_is_flagged():
+    looping = RUNNING.replace("SubState=running", "SubState=auto-restart").replace(
+        "NRestarts=0", "NRestarts=3"
     )
-    assert failed_units(listing) == ["homelab-reconcile.service", "nut-monitor.service"]
+    assert unit_problems(f"{looping}\n{TIMER}") == {
+        "nut-monitor.service": "restarted itself 3 times"
+    }
 
 
 def test_every_stubbed_unit_is_one_a_node_package_ships():

@@ -12,8 +12,10 @@ preinst requires, and:
   * seeds the host state a container lacks (`seed_node_host`);
   * installs homelab-tools, homelab-updater and the sealed package with apt, which pulls the
     package's `Depends` from the release's archive, and joins the reconcile the postinst queued;
-  * asserts `systemctl --failed` is empty. Reconcile exits 1 when a unit it starts fails, so its
-    own unit is among the ones listed then.
+  * waits SETTLE_SECONDS, then asserts no unit is failed and no service has restarted itself.
+    A long-running service's start returns once it forks, so one that crashes a second later,
+    or loops through `Restart=` without reaching its start limit, shows only after the wait.
+    Reconcile exits 1 when a unit it starts fails, so its own unit is flagged then too.
 """
 
 import base64
@@ -33,6 +35,9 @@ SERVER_PACKAGES = ("netplan.io", "nftables")
 # The operator's per-user tools, which the dotfiles repo installs and the package does not.
 DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude")
 EXIT_0 = "#!/bin/sh\nexit 0\n"
+# Long enough for a forked service that dies, or a restart loop's RestartSec, to show.
+SETTLE_SECONDS = 30
+UNIT_PROPERTIES = "Id,ActiveState,SubState,NRestarts"
 # Each unit whose start needs something only the real host has, and that thing. A drop-in swaps
 # its ExecStart= for `sleep`, so its other lines still load and its enable link still starts it.
 STUBBED_UNITS = {
@@ -46,9 +51,25 @@ STUB_DROPIN = (
 )
 
 
-def failed_units(listing: str) -> list[str]:
-    """The unit names in `systemctl --failed --plain --no-legend` output, in its order."""
-    return [line.split()[0] for line in listing.splitlines() if line.strip()]
+def unit_problems(show: str) -> dict[str, str]:
+    """Each unit that failed or restarted itself, mapped to which, from `systemctl show` output.
+
+    Args:
+        show: `systemctl show -p` UNIT_PROPERTIES for every loaded unit: one block of
+            `property=value` lines per unit, blocks separated by a blank line.
+    """
+    problems = {}
+    for block in show.split("\n\n"):
+        unit = dict(line.split("=", 1) for line in block.splitlines() if "=" in line)
+        if unit.get("ActiveState") == "failed":
+            problems[unit["Id"]] = "failed"
+        elif (
+            unit.get("SubState") == "auto-restart" or unit.get("NRestarts", "0") != "0"
+        ):
+            problems[unit["Id"]] = (
+                f"restarted itself {unit.get('NRestarts', '?')} times"
+            )
+    return problems
 
 
 def _put(c: Container, path: str, text: str, mode: str) -> None:
@@ -94,11 +115,15 @@ def _install(cases, c: Container, host: str) -> None:
     c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs} < /dev/null")
     # Joins the reconcile the postinst queued, and returns once it ends.
     c.sh("systemctl start homelab-reconcile.service")
-    failed = failed_units(c.ok("systemctl --failed --plain --no-legend"))
-    for unit in failed:
+    c.ok(f"sleep {SETTLE_SECONDS}")
+    problems = unit_problems(c.ok(f"systemctl show -p {UNIT_PROPERTIES} '*'"))
+    for unit in problems:
         journal = c.sh(f"journalctl -u {unit} -n 40 --no-pager -o short-monotonic")
         print(f"::group::{unit} journal\n{journal.stdout}::endgroup::", file=sys.stderr)
-    expect(not failed, f"failed units: {', '.join(failed)}")
+    expect(
+        not problems,
+        "; ".join(f"{unit} {problem}" for unit, problem in problems.items()),
+    )
 
 
 def run(cases) -> None:
