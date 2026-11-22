@@ -9,6 +9,7 @@ Run: uv run pytest tests/repo/test_census_rows_workflows.py
 """
 
 import pytest
+from _ci_bundle_scan_row import BUNDLE_SCAN_MATCHES_PROMOTE
 from _ci_handoff_workflow_rows import HANDOFF_ROWS
 from _ci_job_rows import CI_JOB_ROWS
 from _ci_script_cache_row import SCRIPT_DOWNLOADS_ARE_CACHED
@@ -41,6 +42,7 @@ ROWS = (
     PYTEST_SWEEP_RUNS_THE_IMAGE_TESTS,
     K3S_DOWNLOAD_LEG_DOES_NOT_GATE,
     SCRIPT_DOWNLOADS_ARE_CACHED,
+    BUNDLE_SCAN_MATCHES_PROMOTE,
     *SETUP_ACTION_ROWS,
 )
 _IDS = [row.name for row in ROWS]

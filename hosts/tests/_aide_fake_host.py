@@ -81,9 +81,9 @@ LINE_EDITS = [
 ]
 # The conffile LINE_EDITS makes line edits to.
 DEFS = "/etc/tool.defs"
-# Where aide-originals keeps the installed tool package's copy of a conffile, under the
-# directory the harness repoints ORIGINALS at.
-TOOL_COPIES = ("tool", "1.0")
+# Where aide-originals keeps the installed tool version's copy of DEFS, under the directory
+# the harness repoints ORIGINALS at.
+TOOL_COPY = "tool/1.0/etc/tool.defs"
 # The host package's manifest, whose users arm declares claude and a service user svc.
 HOST_MANIFEST = "/usr/lib/homelab/manifest.json"
 # homelab-reconcile's record, whose users arm has expired oldsvc.

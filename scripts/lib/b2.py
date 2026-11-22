@@ -36,44 +36,25 @@ PAGE_SIZE = 1000
 Transport = Callable[[str, dict[str, str], dict | None, float], dict]
 
 
-_PERIOD_DAYS = {"days": 1, "years": 365}
-
-
 class BucketLock(NamedTuple):
     """A bucket's Object Lock setting, as `b2_list_buckets` reports it.
 
     Attributes:
         readable: whether the key may read the setting, which takes `readBucketRetentions`.
         enabled: whether Object Lock is on.
-        mode: the default retention's mode, `governance` or `compliance`, or None when unset.
-        period_days: the default retention period in days, or None when unset or in a unit
-            B2 did not document.
     """
 
     readable: bool
     enabled: bool
-    mode: str | None
-    period_days: int | None
 
 
 def parse_bucket_lock(bucket: dict) -> BucketLock:
     """The lock setting of one `b2_list_buckets` entry."""
     lock = bucket.get("fileLockConfiguration") or {}
     value = lock.get("value") or {}
-    retention = value.get("defaultRetention") or {}
-    period = retention.get("period") or {}
-    duration = period.get("duration")
-    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
-    days = (
-        duration * unit_days
-        if isinstance(duration, int) and duration > 0 and unit_days
-        else None
-    )
     return BucketLock(
         readable=lock.get("isClientAuthorizedToRead") is True,
         enabled=value.get("isFileLockEnabled") is True,
-        mode=retention.get("mode"),
-        period_days=days,
     )
 
 

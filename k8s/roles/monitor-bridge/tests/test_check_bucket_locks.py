@@ -9,14 +9,13 @@ import pytest
 import checks.b2
 from _fake_sources import FakeSources
 from bridge.types import CheckResult
-from lib import yaml_fast
-from lib.repo_paths import K8S_ROLES
-from verdicts.storage import B2_PRUNE_AGE_DAYS, b2_lock_verdict
+from verdicts.storage import b2_lock_verdict
 
+NO_DEFAULT = {"mode": None, "period": None}
 SEVEN_DAYS = {"mode": "governance", "period": {"duration": 7, "unit": "days"}}
 
 
-def _bucket(enabled: bool = True, retention: dict | None = SEVEN_DAYS) -> dict:
+def _bucket(enabled: bool = True, retention: dict | None = NO_DEFAULT) -> dict:
     return {
         "bucketName": "weekly",
         "fileLockConfiguration": {
@@ -26,7 +25,7 @@ def _bucket(enabled: bool = True, retention: dict | None = SEVEN_DAYS) -> dict:
     }
 
 
-GOVERNED = _bucket()
+FILE_LOCKED = _bucket()
 WRITER = ["listBuckets", "writeFiles", "deleteFiles", "readBucketRetentions"]
 AUTH = {
     "accountId": "acct",
@@ -41,10 +40,10 @@ AUTH = {
 }
 
 
-def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
-    ok, msg = b2_lock_verdict(GOVERNED, WRITER)
+def test_file_lock_with_no_default_retention_and_a_key_without_bypass_is_clean():
+    ok, msg = b2_lock_verdict(FILE_LOCKED, WRITER)
     assert ok
-    assert "governance, 7 days" in msg
+    assert "no default retention" in msg
 
 
 @pytest.mark.parametrize(
@@ -52,46 +51,29 @@ def test_a_governed_bucket_and_a_key_without_bypass_is_clean():
     [
         (_bucket(enabled=False), WRITER, "lock off"),
         (
-            {**GOVERNED, "fileLockConfiguration": {"isClientAuthorizedToRead": False}},
+            {
+                **FILE_LOCKED,
+                "fileLockConfiguration": {"isClientAuthorizedToRead": False},
+            },
             WRITER,
             "lock unreadable",
         ),
-        (
-            _bucket(retention={"mode": None, "period": None}),
-            WRITER,
-            "no default retention",
-        ),
-        (GOVERNED, [*WRITER, "bypassGovernance"], "key bypasses governance"),
+        (_bucket(retention=SEVEN_DAYS), WRITER, "default retention set"),
+        (FILE_LOCKED, [*WRITER, "bypassGovernance"], "key bypasses governance"),
         ({"bucketName": "weekly"}, WRITER, "no lock config"),
         (
             _bucket(retention={**SEVEN_DAYS, "mode": "compliance"}),
             WRITER,
-            "compliance mode",
-        ),
-        (
-            _bucket(
-                retention={**SEVEN_DAYS, "period": {"duration": 14, "unit": "days"}}
-            ),
-            WRITER,
-            "retention outlasts the prune",
-        ),
-        (
-            _bucket(
-                retention={**SEVEN_DAYS, "period": {"duration": 1, "unit": "years"}}
-            ),
-            WRITER,
-            "retention outlasts the prune",
+            "default retention set",
         ),
     ],
     ids=[
         "lock off",
         "unreadable",
-        "no default retention",
+        "governance default",
         "key bypasses governance",
         "no lock config",
-        "compliance",
-        "as long as the prune",
-        "a year",
+        "compliance default",
     ],
 )
 def test_a_bucket_that_does_not_bind_the_writer_is_flagged(
@@ -110,7 +92,7 @@ def b2_cfg(cfg):
 def test_the_b2_row_lists_the_keys_bucket_and_holds_the_verdict_a_day(b2_cfg):
     src = FakeSources(
         get_json=lambda url, headers: AUTH,
-        post_json=lambda url, payload, headers: {"buckets": [GOVERNED]},
+        post_json=lambda url, payload, headers: {"buckets": [FILE_LOCKED]},
     )
     ok, _ = checks.b2.check_b2_object_lock(b2_cfg, src, now=1000.0)
     assert ok
@@ -140,10 +122,3 @@ def test_a_b2_refusal_is_cached_because_b2_billed_it(b2_cfg):
     later = FakeSources(state=src.state)
     assert not checks.b2.check_b2_object_lock(b2_cfg, later, now=1060.0)[0]
     assert later.calls == []
-
-
-def test_the_b2_bound_is_the_age_the_weekly_prune_deletes_at():
-    defaults = yaml_fast.safe_load(
-        (K8S_ROLES / "longhorn-backup" / "defaults" / "main.yml").read_text()
-    )
-    assert B2_PRUNE_AGE_DAYS == 7 * defaults["k3s_longhorn_weekly_backup_retain"]

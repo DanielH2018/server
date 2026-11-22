@@ -406,6 +406,35 @@ def test_agent_unit_without_a_uid_fails_the_package_render(tmp_path) -> None:
         render_daniel_server_with(tmp_path, claude_code_user="claude")
 
 
+def test_agent_sessions_carry_both_the_owner_and_the_remote_control_kind(
+    tmp_path,
+) -> None:
+    """The agent's settings.json env replaces the unit's OTEL_RESOURCE_ATTRIBUTES wholesale.
+
+    Only a --settings file outranks it, so the agent's unit must pass one that carries
+    process.owner beside session.kind, and the package must ship that file.
+    """
+    package = render_daniel_server_with(
+        tmp_path, claude_code_user="claude", claude_code_user_uid=AGENT_UID
+    )
+    unit_text = package.files["/usr/lib/systemd/system/homelab-claude-rc.service"][
+        0
+    ].decode()
+    flags = directive(unit_text, "ExecStart")[0].split()
+    path = flags[flags.index("--settings") + 1]
+    settings = json.loads(package.files[path][0])
+    assert settings["env"]["OTEL_RESOURCE_ATTRIBUTES"] == (
+        f"process.owner=claude,session.kind={SessionKind.REMOTE_CONTROL}"
+    )
+
+
+def test_operator_unit_passes_no_settings_file(unit: str, tmp_path) -> None:
+    """--settings drops Remote Control's auto-compact and auto mode, so the operator keeps none."""
+    assert "--settings" not in directive(unit, "ExecStart")[0]
+    package = render_daniel_server_with(tmp_path)
+    assert "/usr/lib/homelab/claude-rc/settings.json" not in package.files
+
+
 @pytest.mark.parametrize("uid", [1000, 1500])
 def test_operator_sessions_reach_the_operators_user_bus(uid: int) -> None:
     """A system unit gets no user-bus variables, so `systemctl --user` reads "No medium found".

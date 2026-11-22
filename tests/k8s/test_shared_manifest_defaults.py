@@ -183,27 +183,29 @@ def _own_template_digests(basename: str) -> dict[str, list[str]]:
     return by_digest
 
 
+def duplicate_roles(by_digest: dict[str, list[str]]) -> list[list[str]]:
+    """Each group of two or more roles sharing one digest, sorted."""
+    return sorted(sorted(roles) for roles in by_digest.values() if len(roles) > 1)
+
+
 @pytest.mark.parametrize("basename", sorted(SHARED_DEFAULT_CENSUS))
 def test_no_two_roles_ship_a_byte_identical_template(basename):
     """The verify-by. A duplicate pair is a pair the shared default should render."""
     template, _census = SHARED_DEFAULT_CENSUS[basename]
     by_digest = _own_template_digests(basename)
     assert by_digest, f"no role ships a {basename}.j2 at all — has the tree moved?"
-    duplicates = {d: roles for d, roles in by_digest.items() if len(roles) > 1}
+    duplicates = duplicate_roles(by_digest)
     assert not duplicates, (
         f"these roles ship byte-identical {basename}.j2 files: "
-        f"{sorted(sorted(r) for r in duplicates.values())}. Delete them and let "
+        f"{duplicates}. Delete them and let "
         f"k8s/templates/{template} render it, moving whatever they differed on onto the "
         "containers_list entry."
     )
 
 
-def test_the_duplicate_check_rejects_a_duplicate_pair():
-    """Control: prove the grouping above can go red rather than passing on an empty set."""
-    poisoned = defaultdict(list)
-    poisoned["same"] = ["alpha", "beta"]
-    duplicates = {d: roles for d, roles in poisoned.items() if len(roles) > 1}
-    assert duplicates == {"same": ["alpha", "beta"]}
+def test_two_roles_sharing_a_digest_are_flagged():
+    by_digest = {"aa": ["sonarr", "radarr"], "bb": ["bazarr"], "cc": ["lidarr"]}
+    assert duplicate_roles(by_digest) == [["radarr", "sonarr"]]
 
 
 @pytest.mark.parametrize(

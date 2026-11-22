@@ -19,13 +19,17 @@ class SessionKind(StrEnum):
     """The `session.kind` values. A session no launcher labels carries no such label.
 
     `REMOTE_CONTROL` and `BG_RESUME` are set by the claude-code host component's
-    `claude-rc.service.j2` and `claude-bg-resume.service.j2`.
+    `claude-rc.service.j2` and `claude-bg-resume.service.j2`. `TRIAGE` and `RENOVATE` are set
+    by the unattended sessions' settings overlays, `claude-triage-settings-overlay.json` and
+    the renovate-agent component's `claude-settings-overlay.json`.
     """
 
     FANOUT_BATCH = "fanout-batch"
     FANOUT_REVIEW = "fanout-review"
     REMOTE_CONTROL = "remote-control"
     BG_RESUME = "bg-resume"
+    TRIAGE = "triage"
+    RENOVATE = "renovate"
 
 
 def batch_attributes(batch: str) -> str:

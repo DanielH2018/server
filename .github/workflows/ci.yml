@@ -1301,6 +1301,34 @@ jobs:
       - name: Check the named package roots' placeholders against their SOPS keys
         run: uv run python scripts/validate/host_packages.py placeholders "$RUNNER_TEMP/render/head"
 
+      # The cluster bundle promote publishes, scanned the way promote's `Scan the bundle for
+      # secrets` step scans it. The renderer drops YAML comments, so a template line's
+      # `# gitleaks:allow` satisfies the prek hook and not this scan. Without it such a line
+      # merges green and fails every promotion after it. It reuses the gitleaks binary
+      # the step above verified, which is the release promote's GITLEAKS_URL names, because one
+      # Renovate group moves both pins. The render writes `out/` at the workspace root, the
+      # layout `.gitleaks.toml`'s bundle allowlists name. The
+      # host-package-bundle-scan-matches-promote row of tests/repo/_ci_sweep_workflow_rows.py
+      # holds the build script and the scan's arguments equal to promote's.
+      - name: Render the cluster bundle as promote does
+        id: bundle
+        run: |
+          set -euo pipefail
+          # A command substitution, so set -e stops the step when the read fails.
+          listed="$(uv run python scripts/deploy_tools/promote.py published-tags)"
+          if [ -z "$listed" ]; then
+            uv run python scripts/renderer/homelab_render.py cluster --out out --shared-only --all-images
+          else
+            roles=()
+            while read -r tag; do roles+=(--role "$tag"); done <<< "$listed"
+            uv run python scripts/renderer/homelab_render.py cluster --out out --all-images "${roles[@]}"
+          fi
+
+      - name: Scan the cluster bundle for secrets
+        id: bundle-gitleaks
+        run: |
+          "$RUNNER_TEMP/leaks/gitleaks" dir out --config .gitleaks.toml --no-banner --redact
+
       # homelab-tools renders pins and no bytes. The builder's own `install_tools`
       # fetches each pinned file, checks its sha256 and places it under the tree's root/, so a
       # wrong digest or a 404 URL fails here, and a Renovate bump of a pin reaches master only

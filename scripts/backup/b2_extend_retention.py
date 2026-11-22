@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Extend the Object Lock retention of every Longhorn object in the B2 weekly bucket.
 
-WHY THIS EXISTS. B2 counts a version's retention from its upload, and a Longhorn backup uploads
-only the blocks that changed. The base blocks every retained weekly backup still references are
-therefore months old, and the bucket's 7-day default lock no longer covers them. This sweep
-sets each current object's retention to now plus the bucket's default period, once a day, so
-every block a retained backup references stays locked (ADR-0041, *Consequences*).
+WHY THIS EXISTS. The bucket has Object Lock enabled with no default retention, because a
+default retention makes B2 demand a Content-MD5 header on every upload and Longhorn's S3 client
+sends none (ADR-0041). Nothing locks a version at upload, so this sweep sets each current
+object's governance retention to now plus `RETENTION_DAYS`, once a day. A new block is locked
+by the next run, and a base block that every retained weekly backup still references stays
+locked however old its upload is.
 
 WHY NOT FULL BACKUPS. Longhorn's `full-backup-interval` re-uploads every block, which renews
 its lock too, but the re-upload is a new version of a content-addressed name. The version it
@@ -27,8 +28,9 @@ stops at the first unanswered call rather than wait out the timeout on every obj
 of longhorn-backup-health read the summary line, not the code.
 
 WHEN IT DECLINES. It changes nothing, prints a `declined:` line and exits 0 while the bucket's
-lock is off or its default retention is not governance mode. monitor-bridge's `b2_object_lock`
-row reports both, so check 10 counts the run as completed.
+lock is off or unreadable. monitor-bridge's `b2_object_lock` row reports both, so check 10
+counts the run as completed. A bucket default retention does not stop the sweep, because the
+period is the sweep's own; the row reports the default as the fault.
 
 WHEN IT IS BLOCKED. With the bucket locked but a key that lacks `writeFileRetentions`, it
 prints a `blocked:` line and exits 1. Check 10 does not count that line as a completed run, so
@@ -51,19 +53,19 @@ BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
 # A backup's lock file lives seconds; locking its version only keeps a hidden marker billed.
 LOCKS_SEGMENT = "/locks/"
 CAPABILITY = "writeFileRetentions"
+# Shorter than the weekly prune age, so a pruned block's hidden version stays billed at most this long.
+RETENTION_DAYS = 7
 # B2's error code for a version that a prune removed between the listing and the update.
 FILE_NOT_PRESENT = "file_not_present"
 TAG = "b2-retention"
 
 
 def lock_problem(lock: BucketLock) -> str:
-    """Why the bucket's lock is not a governance lock the sweep can extend, or ""."""
+    """Why the bucket cannot take a per-object retention, or ""."""
     if not lock.readable:
         return "the key cannot read the bucket's Object Lock setting"
     if not lock.enabled:
         return "Object Lock is off on the bucket"
-    if lock.mode != "governance":
-        return "the bucket's default retention is not governance mode"
     return ""
 
 
@@ -107,15 +109,10 @@ def run(session: B2Session, now_s: float) -> tuple[int, str]:
     lock = session.bucket_lock()
     if reason := lock_problem(lock):
         return OK, f"{TAG}: declined: {reason}"
-    if (days := lock.period_days) is None:
-        return (
-            OK,
-            f"{TAG}: declined: the bucket's default retention has no readable period",
-        )
     if CAPABILITY not in session.capabilities:
         return FAILED, f"{TAG}: blocked: the key lacks {CAPABILITY}"
     files = lockable(session.list_files(BACKUPSTORE_PREFIX))
-    until_s = int(now_s) + days * 86400
+    until_s = int(now_s) + RETENTION_DAYS * 86400
     extended, gone, failures = extend(session, files, until_s * 1000)
     until = datetime.fromtimestamp(until_s, timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     line = (

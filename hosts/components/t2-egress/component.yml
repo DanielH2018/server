@@ -1,8 +1,8 @@
 # The T2 session users' egress fence and proxy on daniel-box. daniel-box's package.yml lists it,
 # because the triage and Renovate sessions run only there.
 #
-# `table inet t2_egress` lets uids 901 and 907 reach squid on t2_egress_proxy and refuses every
-# other connection they open. It also records each new connection in two dynamic sets, refused
+# `table inet t2_egress` lets uids 901 and 907 reach squid on t2_egress_proxy and the Claude Code
+# telemetry collector on 127.0.0.1:4317, and refuses every other connection they open. It also records each new connection in two dynamic sets, refused
 # ones included. Read them with `rootq nft`, or as root `nft list set inet t2_egress seen4` and
 # `seen6`. A reboot empties the sets.
 #

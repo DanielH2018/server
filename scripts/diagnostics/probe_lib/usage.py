@@ -7,8 +7,8 @@ Three tables:
    route is named `<service>[-public|-monitoring|-push-monitoring|-read|-public-<path>]`, so
    the service is the name up to the first `ROUTE_WORDS` segment. Traefik creates a route's
    series only on its first request, so the live IngressRoutes seed every service at 0.
-2. Each container's memory request, limit and 7-day p95 working set. A critical-tier
-   container's p95 is also recorded by `docs/reference/critical_memory.py`, and CI fails one
+2. Each container's memory request, limit and 7-day p95 working set. The p95 of a
+   container at a `CENSUS_PRIORITY_CLASSES` class is also recorded by `docs/reference/critical_memory.py`, and CI fails one
    whose request is under `UNDER_REQUEST` of it.
 3. Each PVC's fill and its projected days to full.
 
@@ -54,12 +54,13 @@ NEAR_LIMIT = 0.80
 REQUEST_SLACK = 0.25
 UNDER_REQUEST = 0.5
 
-CRITICAL_PRIORITY_CLASS = SERVICE_TIERS["home-edge"]
+CENSUS_PRIORITY_CLASSES = frozenset(SERVICE_TIERS.values())
 # A pod that ran in the window but is gone keeps its p95 series, so the join reads pod_info
 # over the same window rather than at the instant.
 CRITICAL_P95_QUERY = (
     f"{P95_QUERY} and on (namespace, pod) max by (namespace, pod) (max_over_time("
-    f'kube_pod_info{{priority_class="{CRITICAL_PRIORITY_CLASS}"}}[{MEMORY_WINDOW}]))'
+    f'kube_pod_info{{priority_class=~"{"|".join(sorted(CENSUS_PRIORITY_CLASSES))}"}}'
+    f"[{MEMORY_WINDOW}]))"
 )
 
 _PVC = "max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_{}_bytes)"
@@ -199,7 +200,8 @@ def memory_flags(request, limit, p95):
 def under_requested(request, p95):
     """Whether a memory `request` is under `UNDER_REQUEST` of its `p95`. Pure.
 
-    The census in `tests/k8s/_memory_property_rows.py` fails a critical-tier container on it.
+    The census in `tests/k8s/_memory_property_rows.py` fails a container at a
+    `CENSUS_PRIORITY_CLASSES` class on it.
     """
     return p95 is not None and request < UNDER_REQUEST * p95
 
