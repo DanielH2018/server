@@ -208,9 +208,11 @@ def test_the_zram_swappiness_prefers_swap(package):
 # The log RAM budget.
 
 
-def _journal_caps(package: host_mode.Package) -> tuple[float, float, float]:
-    """The journal's SystemMaxUse, SystemMaxFiles x SystemMaxFileSize, and SystemMaxFileSize."""
-    text = _text(package, JOURNALD_CAP)
+def journal_caps(text: str) -> tuple[float, float, float]:
+    """The journal's SystemMaxUse, SystemMaxFiles x SystemMaxFileSize, and SystemMaxFileSize.
+
+    `text` is a journald drop-in. Raises AssertionError when it lacks one of the three keys.
+    """
     use = re.search(r"^SystemMaxUse=(\d+[KMG])$", text, re.M)
     size = re.search(r"^SystemMaxFileSize=(\d+[KMG])$", text, re.M)
     files = re.search(r"^SystemMaxFiles=(\d+)$", text, re.M)
@@ -242,7 +244,7 @@ def _edit_value(package: host_mode.Package, path: str, key: str) -> str:
 
 def sd_copy_worst_mb(package: host_mode.Package) -> float:
     """The largest the log2ram SD copy grows to under the package's caps, in MB."""
-    _, journal_archives, file_mb = _journal_caps(package)
+    _, journal_archives, file_mb = journal_caps(_text(package, JOURNALD_CAP))
     journal = journal_archives + JOURNAL_ACTIVE_FILES * file_mb
     # savelog leaves pacct.0 uncompressed and gzips the generations after it.
     generations = int(_edit_value(package, "/etc/default/acct", "ACCT_LOGGING"))
@@ -256,11 +258,17 @@ def sd_copy_worst_mb(package: host_mode.Package) -> float:
 
 def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
     tmpfs = _mb(_edits(package, LOG2RAM_CONF)["SIZE=128M"]["line"].split("=")[1])
-    use, _, _ = _journal_caps(package)
+    use, _, _ = journal_caps(_text(package, JOURNALD_CAP))
     assert use < tmpfs
     # log2ram's boot guard `du`s the SD copy against SIZE and refuses to start when it is over.
     # `--sparse` is patched out, so every archive lands there at its full size.
     assert sd_copy_worst_mb(package) <= tmpfs
+
+
+def test_a_journal_cap_without_system_max_files_is_flagged():
+    """Without SystemMaxFiles the archive count, and so the SD copy, has no bound."""
+    with pytest.raises(AssertionError, match="SystemMaxFiles"):
+        journal_caps("[Journal]\nSystemMaxUse=48M\nSystemMaxFileSize=8M\n")
 
 
 # The apt timers.
