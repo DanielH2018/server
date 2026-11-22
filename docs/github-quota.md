@@ -297,9 +297,11 @@ spends that user's one quota. It prints one count line per joined window, named 
 identities joined with `+`, and that line's spend beyond the ledger subtracts the recorded
 calls of every identity in it. The builder token's reads therefore count as recorded on the
 operator's line. The other host's calls still count as beyond the ledger, so a figure for
-both hosts still needs the join on GitHub's reset epoch described above. Two different users
-whose windows happen to reset within `RESET_DRIFT_S` are joined too, because no sample names
-a token's owner. An anonymous read spends the source IP's limit, so it is not
+both hosts still needs the join on GitHub's reset epoch described above. A window joins only
+while its sample reads the same counter as the others: one user's count only rises within a
+window, so a later sample that counts less than an earlier one belongs to another user. Two
+different users whose windows reset within `RESET_DRIFT_S` and whose samples happen to rise
+with time are still joined, because no sample names a token's owner. An anonymous read spends the source IP's limit, so it is not
 recorded. `github_rest` loads the module from `/usr/lib/homelab/gh_quota.py` by path,
 because a component's copy sits beside its own script, where a bare import cannot find the
 module. A host without the gh-quota component therefore records nothing.

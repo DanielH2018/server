@@ -333,6 +333,21 @@ def test_tokens_whose_windows_share_a_reset_report_one_window(recording):
     }
 
 
+def test_a_later_sample_counting_less_is_another_users_window(recording):
+    operator, clock, gh = recording
+    builder = _with_builder_token(operator)
+    operator.record(["pr", "list"])
+    clock.t += 31
+    gh.graphql_reset, gh.graphql_used = RESET + 30, 60
+    builder.record(["pr", "list"])
+
+    windows = builder.windows()
+
+    assert sorted((w.identity, w.used) for w in windows) == sorted(
+        [(identity_of("gho_operator"), 100), (identity_of("builder-token"), 60)]
+    )
+
+
 def test_the_json_row_of_a_shared_window_sums_each_tokens_writes(recording, capsys):
     operator, _clock, _gh = recording
     operator.record(["pr", "ready", "1"])

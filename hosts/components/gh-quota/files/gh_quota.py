@@ -257,10 +257,11 @@ class _Sample:
 def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
     """Join the windows of a bucket whose limits match and whose resets chain within RESET_DRIFT_S.
 
-    Takes each window with the time of its sample. A joined window carries GitHub's count from
-    the freshest sample and the recorded calls of every member. Two users whose windows
-    happen to reset within RESET_DRIFT_S of each other are joined too: no sample names a
-    token's owner.
+    Takes each window with the time of its sample. A member joins only while every sample in
+    the group reads one counter: a later sample never counts less than an earlier one. A
+    joined window carries GitHub's count from the freshest sample and the recorded calls of
+    every member. Two users whose windows reset within RESET_DRIFT_S of each other and whose
+    samples happen to rise with time are still joined: no sample names a token's owner.
     """
     groups: list[list[tuple[float, Window]]] = []
     ordered = sorted(
@@ -272,6 +273,7 @@ def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
             last is not None
             and (last.bucket, last.quota) == (window.bucket, window.quota)
             and window.reset - last.reset <= RESET_DRIFT_S
+            and all(_one_counter(member, (sampled, window)) for member in groups[-1])
         ):
             groups[-1].append((sampled, window))
         else:
@@ -286,6 +288,13 @@ def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
         identities = tuple(sorted(i for _, w in group for i in w.identities))
         joined.append(replace(freshest, identities=identities, sessions=sessions))
     return joined
+
+
+def _one_counter(a: tuple[float, Window], b: tuple[float, Window]) -> bool:
+    # One user's counter only rises within a window, so a later sample below an earlier one
+    # is another user's.
+    (_, earlier), (_, later) = sorted((a, b), key=lambda sw: sw[0])
+    return earlier.used <= later.used
 
 
 @contextmanager
