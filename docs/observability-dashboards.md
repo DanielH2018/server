@@ -1,6 +1,6 @@
 # observability record
 
-Evidence and history behind `k8s/roles/observability/CLAUDE.md`, which keeps the rules a session loads on every touch of the role (#2925, #2993). The first half covers the Grafana boards: how the two community boards are seeded, the panel-query traps a 2026-09-10 audit measured, and the B2 usage board that was removed. The second half covers the Grafana OIDC measurements, the four behaviours that make an idle telemetry stack look broken, and the commands that exercise the pipeline end to end.
+Evidence and history behind `k8s/roles/observability/CLAUDE.md`, which keeps the rules a session loads on every touch of the role (#2925, #2993). The first half covers the Grafana boards: how the two community boards are seeded, the panel-query traps a 2026-09-10 audit measured, and the B2 usage board that was removed. The second half covers the Grafana OIDC measurements, the four behaviours that make an idle telemetry stack look broken, the commands that exercise the pipeline end to end, and how Claude spend splits by session kind.
 
 Nothing tests the board half. `k8s/roles/observability/templates/grafana-dashboards.yaml.j2`, the board lists in `k8s/roles/observability/defaults/main.yml:observability_dashboard_folders` and the JSON under `k8s/roles/observability/files/` are the authority on what is provisioned; where a paragraph here disagrees with them, the tree is right.
 
@@ -285,3 +285,27 @@ curl -s -G http://<tempo>:3200/api/search --data-urlencode 'tags=' --data-urlenc
 Healthy output after one probe session: metric names `session_count`, `token_usage_tokens`,
 `cost_usage_USD`, `active_time_seconds`; the five content event types above, with `user_prompt`
 carrying the prompt verbatim (`OTEL_LOG_USER_PROMPTS=1`); and one `claude_code.interaction` trace.
+
+## Splitting Claude spend by session kind
+
+`uv run python scripts/diagnostics/probe.py claude-spend [--since 7d]` prints Claude Code
+spend per session kind. A launcher this repo owns sets `session_kind` on its sessions
+(`scripts/dev/fanout_lib/telemetry.py:SessionKind`). The desktop app starts a session with no
+environment, so the root coordinator, every sub-coordinator and the operator's own desktop
+sessions reach Prometheus with no `session_kind` label.
+
+The probe splits that bucket with a join on `session_id`, which both the cost counter and
+every Loki event carry. An unlabelled desktop session is `desktop-coordinator` when Loki holds
+a `tool_result` from it, inside the window, for the `coordinate` skill or the app's
+`start_session` tool (`scripts/diagnostics/probe_lib/claude_spend.py:coordinator_logql`). Every
+other unlabelled desktop session is `desktop-interactive`. That bucket includes a worker session
+a coordinator started, since a worker calls neither tool.
+
+The join undercounts coordinators in two cases:
+
+- A coordinator that called neither tool inside the window reads as interactive.
+- A resumed session gets a new `session_id`, so its spend after the resume reads as
+  interactive until it calls one of the two tools again.
+
+The split is therefore a Loki join and never a Prometheus label: no
+`sum by (session_kind)` query alone separates the two desktop kinds.
