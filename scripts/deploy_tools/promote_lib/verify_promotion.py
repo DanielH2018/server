@@ -85,10 +85,12 @@ from typing import assert_never
 import yaml
 
 
+from lib import host_modules  # noqa: F401
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
+from ci_verdict import WorkflowRun
 from deploy_tools import forge
 from deploy_tools.artifact_retention import (
     HELD_TAG,
@@ -629,7 +631,7 @@ def wait_settled(
     clock: Callable[[], float],
     revert_rule: bool,
     supersedable: Callable[[str], bool] | None = None,
-    other_runs: Callable[[], list[dict]] | None = None,
+    other_runs: Callable[[], list[WorkflowRun]] | None = None,
     prod_commit: Callable[[], str | None] | None = None,
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
@@ -710,7 +712,7 @@ def wait_settled(
 
 
 def _other_runs_live(
-    other_runs: Callable[[], list[dict]], sleep: Callable[[float], None]
+    other_runs: Callable[[], list[WorkflowRun]], sleep: Callable[[float], None]
 ) -> bool:
     """Whether another promote run is in progress, reading True when the listing fails.
 

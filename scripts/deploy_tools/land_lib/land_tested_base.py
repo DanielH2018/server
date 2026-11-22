@@ -11,7 +11,10 @@ import subprocess
 
 
 from lib.gh import gh as run_gh, gh_json as run_gh_json
-from lib.json_types import as_list
+from lib.json_types import as_list, as_object
+
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
 
 # The line `actions/checkout` logs when a pull_request run checks out `refs/pull/N/merge`:
 # GitHub names that merge commit "Merge <head> into <base>", and <base> is the master commit
@@ -31,16 +34,25 @@ def tested_base(head: str, gh_json=run_gh_json, gh=run_gh) -> str | None:
     falls back to the merge base, which only ever updates a branch it did not need to.
     """
     try:
-        run_ids = as_list(
+        listing = as_object(
             gh_json(
                 "api",
                 f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs"
                 f"?head_sha={head}&event=pull_request",
-                "--jq",
-                '[.workflow_runs[] | select(.conclusion == "success") | .id]',
             ),
             "gh api ci.yml runs",
         )
+        runs = [
+            WorkflowRun.parse(run)
+            for run in as_list(listing.get("workflow_runs"), "ci.yml workflow_runs")
+        ]
+        run_ids = [
+            run.id
+            for run in runs
+            if run.id is not None
+            and run.status == "completed"
+            and run.conclusion == "success"
+        ]
         if not run_ids:
             return None
         job_ids = as_list(

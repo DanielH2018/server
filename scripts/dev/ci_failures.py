@@ -51,6 +51,9 @@ from lib.gh import gh
 from lib.gh_rate_limit import is_rate_limited
 from lib.repo_paths import REPO
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
+
 ACTIONS = "repos/{owner}/{repo}/actions"
 SEARCH_CAP = 1000
 START_WINDOW = timedelta(hours=12)
@@ -78,20 +81,21 @@ def _stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def runs_between(start: datetime, end: datetime, listing: str) -> list[dict[str, Any]]:
+def runs_between(start: datetime, end: datetime, listing: str) -> list[WorkflowRun]:
     """List the runs `listing` returns created from `start` to `end`, splitting past the cap.
 
     `listing` is a runs endpoint whose query already holds its filters. Both bounds are
     inclusive.
     """
     pages = _api_pages(f"{listing}&created={_stamp(start)}..{_stamp(end)}")
+    runs = [WorkflowRun.parse(run) for page in pages for run in page["workflow_runs"]]
     if pages[0]["total_count"] < SEARCH_CAP:
-        return [run for page in pages for run in page["workflow_runs"]]
+        return runs
     if end - start <= ONE_SECOND:
         warn(
             f"{_stamp(start)} reaches the {SEARCH_CAP}-run search cap; runs may be missing"
         )
-        return [run for page in pages for run in page["workflow_runs"]]
+        return runs
     middle = (start + (end - start) / 2).replace(microsecond=0)
     return runs_between(start, middle, listing) + runs_between(
         middle + ONE_SECOND, end, listing
@@ -100,7 +104,7 @@ def runs_between(start: datetime, end: datetime, listing: str) -> list[dict[str,
 
 def runs_in_range(
     since: date, until: date, branch: str | None = None, workflow: str | None = None
-) -> list[dict[str, Any]]:
+) -> list[WorkflowRun]:
     """List every run created from the start of `since` to the end of `until`.
 
     A `branch` keeps only the runs of that head branch, and a `workflow` file name, such as
@@ -110,27 +114,27 @@ def runs_in_range(
     listing += "?per_page=100" + (f"&branch={branch}" if branch else "")
     start = datetime.combine(since, time.min, UTC)
     last = datetime.combine(until, time.max, UTC).replace(microsecond=0)
-    runs: dict[int, dict[str, Any]] = {}
+    runs: dict[int | None, WorkflowRun] = {}
     while start <= last:
         end = min(start + START_WINDOW - ONE_SECOND, last)
-        runs.update((run["id"], run) for run in runs_between(start, end, listing))
+        runs.update((run.id, run) for run in runs_between(start, end, listing))
         start = end + ONE_SECOND
     return list(runs.values())
 
 
-def red_attempts(run: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the run's red attempts as run objects; the search result is its latest attempt."""
+def red_attempts(run: WorkflowRun) -> list[WorkflowRun]:
+    """Return the run's red attempts as runs; the search result is its latest attempt."""
     earlier = [
-        _api_pages(f"{ACTIONS}/runs/{run['id']}/attempts/{number}")[0]
-        for number in range(1, run["run_attempt"])
+        WorkflowRun.parse(_api_pages(f"{ACTIONS}/runs/{run.id}/attempts/{number}")[0])
+        for number in range(1, run.attempt)
     ]
-    return [attempt for attempt in [*earlier, run] if attempt["conclusion"] in RED]
+    return [attempt for attempt in [*earlier, run] if attempt.conclusion in RED]
 
 
-def failed_steps(attempt: dict[str, Any]) -> list[tuple[str, dict[str, Any] | None]]:
+def failed_steps(attempt: WorkflowRun) -> list[tuple[str, dict[str, Any] | None]]:
     """Return (job name, failed step) pairs; a red job with no failed step carries None."""
     pages = _api_pages(
-        f"{ACTIONS}/runs/{attempt['id']}/attempts/{attempt['run_attempt']}/jobs?per_page=100"
+        f"{ACTIONS}/runs/{attempt.id}/attempts/{attempt.attempt}/jobs?per_page=100"
     )
     found: list[tuple[str, dict[str, Any] | None]] = []
     for job in (job for page in pages for job in page["jobs"]):
@@ -141,14 +145,14 @@ def failed_steps(attempt: dict[str, Any]) -> list[tuple[str, dict[str, Any] | No
     return found
 
 
-def read_log(attempt: dict[str, Any]) -> dict[str, Logged] | None:
+def read_log(attempt: WorkflowRun) -> dict[str, Logged] | None:
     """Return each job's (step label, log text) lines, or None when `gh` cannot read the log."""
     done = gh(
         "run",
         "view",
-        str(attempt["id"]),
+        str(attempt.id),
         "--attempt",
-        str(attempt["run_attempt"]),
+        str(attempt.attempt),
         "--log-failed",
         check=False,
         cwd=REPO,
@@ -202,7 +206,7 @@ def failing_modules(lines: Iterable[str]) -> set[str]:
     return modules
 
 
-def read_attempt(attempt: dict[str, Any]) -> tuple[list[tuple[str, str, str]], bool]:
+def read_attempt(attempt: WorkflowRun) -> tuple[list[tuple[str, str, str]], bool]:
     """Return the attempt's (job, step, module) rows, and whether its log was readable."""
     log = read_log(attempt)
     rows: list[tuple[str, str, str]] = []
@@ -218,7 +222,7 @@ def read_attempt(attempt: dict[str, Any]) -> tuple[list[tuple[str, str, str]], b
 
 
 def _tally(
-    attempts: Iterable[dict[str, Any]],
+    attempts: Iterable[WorkflowRun],
     read: Iterable[tuple[list[tuple[str, str, str]], bool]],
 ) -> list[str]:
     """Return one line per (job, step, module) row: its count, branches and last-seen date."""
@@ -226,10 +230,10 @@ def _tally(
     branches: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     last_seen: dict[tuple[str, str, str], str] = {}
     for attempt, (rows, _) in zip(attempts, read, strict=True):
-        day = attempt["run_started_at"][:10]
+        day = attempt.started_at.date().isoformat()
         for row in rows:
             counts[row] += 1
-            branches[row].add(attempt["head_branch"])
+            branches[row].add(attempt.head_branch)
             last_seen[row] = max(last_seen.get(row, ""), day)
     return [
         f"{count:>5}  {len(branches[row]):>8}  {last_seen[row]}  {' / '.join(row)}"
@@ -237,28 +241,25 @@ def _tally(
     ]
 
 
-def _passed_on_rerun(attempt: dict[str, Any], final: dict[str, Any]) -> bool:
+def _passed_on_rerun(attempt: WorkflowRun, final: WorkflowRun) -> bool:
     """Whether a later attempt of the same run, so the same commit, ended green."""
-    return (
-        final["run_attempt"] > attempt["run_attempt"]
-        and final["conclusion"] == "success"
-    )
+    return final.attempt > attempt.attempt and final.conclusion == "success"
 
 
 def render(
     since: date,
     until: date,
     scanned: int,
-    attempts: list[dict[str, Any]],
+    attempts: list[WorkflowRun],
     read: list[tuple[list[tuple[str, str, str]], bool]],
-    latest: dict[int, dict[str, Any]],
+    latest: dict[int | None, WorkflowRun],
     show_all: bool = False,
 ) -> list[str]:
     """Render the report: a count line, the tally, the flake tally, then a `CI-FAILURES:` line.
 
     `show_all` adds each red attempt and its own rows before the `CI-FAILURES:` line.
     """
-    runs = {attempt["id"] for attempt in attempts}
+    runs = {attempt.id for attempt in attempts}
     unread = sum(not readable for _, readable in read)
     hint = "; --all to list each" if attempts and not show_all else ""
     out = [
@@ -273,7 +274,7 @@ def render(
     flaky = [
         (attempt, entry)
         for attempt, entry in zip(attempts, read, strict=True)
-        if _passed_on_rerun(attempt, latest[attempt["id"]])
+        if _passed_on_rerun(attempt, latest[attempt.id])
     ]
     out += ["", f"{len(flaky)} flaky: red, then green on a re-run of the same commit"]
     if flaky:
@@ -285,27 +286,27 @@ def render(
 
 
 def _attempt_lines(
-    attempts: list[dict[str, Any]],
+    attempts: list[WorkflowRun],
     read: list[tuple[list[tuple[str, str, str]], bool]],
-    latest: dict[int, dict[str, Any]],
+    latest: dict[int | None, WorkflowRun],
 ) -> list[str]:
     """Return one line per red attempt, oldest first, each followed by its own rows."""
     out: list[str] = []
     ordered = sorted(
         zip(attempts, read, strict=True),
-        key=lambda entry: (entry[0]["run_started_at"], entry[0]["id"]),
+        key=lambda entry: (entry[0].started_at, entry[0].id or 0),
     )
     for attempt, (rows, _) in ordered:
-        final = latest[attempt["id"]]
+        final = latest[attempt.id]
         later = (
-            f"  {final['conclusion']} on attempt {final['run_attempt']}"
-            if final["run_attempt"] != attempt["run_attempt"]
+            f"  {final.conclusion} on attempt {final.attempt}"
+            if final.attempt != attempt.attempt
             else ""
         )
         out.append(
-            f"run {attempt['id']} attempt {attempt['run_attempt']}"
-            f"  {attempt['run_started_at'][:10]}  {attempt['head_branch']}"
-            f"  {attempt['name']}{later}"
+            f"run {attempt.id} attempt {attempt.attempt}"
+            f"  {attempt.started_at.date().isoformat()}  {attempt.head_branch}"
+            f"  {attempt.name}{later}"
         )
         out += [f"    {' / '.join(row)}" for row in rows]
     return out
@@ -329,8 +330,8 @@ def gh_failure(exc: subprocess.CalledProcessError | subprocess.TimeoutExpired) -
 def survey(
     since: date, until: date, branch: str | None = None, workflow: str | None = None
 ) -> tuple[
-    list[dict[str, Any]],
-    list[dict[str, Any]],
+    list[WorkflowRun],
+    list[WorkflowRun],
     list[tuple[list[tuple[str, str, str]], bool]],
 ]:
     """Return the runs in the range, their red attempts, and each attempt's rows and readability.
@@ -342,7 +343,7 @@ def survey(
     or jobs fails.
     """
     runs = runs_in_range(since, until, branch, workflow)
-    needing_a_read = [r for r in runs if r["run_attempt"] > 1 or r["conclusion"] in RED]
+    needing_a_read = [r for r in runs if r.attempt > 1 or r.conclusion in RED]
     with ThreadPoolExecutor(READERS) as pool:
         attempts = [
             a for found in pool.map(red_attempts, needing_a_read) for a in found
@@ -387,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(gh_failure(exc), file=sys.stderr)
         return FAILED
-    latest = {run["id"]: run for run in runs}
+    latest = {run.id: run for run in runs}
     report = render(args.since, args.until, len(runs), attempts, read, latest, args.all)
     print("\n".join(report))
     return OK
