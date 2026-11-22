@@ -4,7 +4,7 @@
 # Owners, from `dpkg -S` and `dpkg-query -W -f='${Conffiles}'` on the live Pi. Each path takes the
 # mechanism its owner allows:
 #
-# - conffiles, so the line arm: /etc/sysctl.conf (procps), /etc/default/zramswap (zram-tools),
+# - conffiles, so the line arm: /etc/default/zramswap (zram-tools),
 #   /etc/watchdog.conf (watchdog), /etc/log2ram.conf (log2ram), /etc/sysstat/sysstat (sysstat),
 #   /etc/default/acct (acct), /etc/audit/auditd.conf (auditd);
 # - unowned, so the line arm: /boot/firmware/config.txt and /etc/hosts (the latter is in
@@ -87,6 +87,11 @@ files:
   # apt deletes each deb once it is installed, and the daily apt run empties the archive cache
   # apt rereads its config on every run, so no activation is needed.
   - {src: templates/apt-archives.conf, dst: /etc/apt/apt.conf.d/60homelab-pi-archives}
+  # vm.swappiness above 100 is valid on kernel 5.8 and later: it tells reclaim that compressing an
+  # idle anonymous page is cheaper than re-reading a hot file page from the SD card. The cluster
+  # nodes run 10 for the opposite reason. vm.page-cluster=0 disables swap readahead, which wastes
+  # decompression on zram.
+  - {src: templates/90-homelab-pi-tuning.conf, dst: /etc/sysctl.d/90-homelab-pi-tuning.conf, activate: sysctl}
 lines:
   # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
   # Ubuntu 24.04, which has no /boot/config.txt.
@@ -95,12 +100,6 @@ lines:
   # zram. PERCENT is the device's uncompressed capacity, not its RAM cost (about 4.6:1).
   - {path: /etc/default/zramswap, line: "PERCENT=100", regexp: '^PERCENT=', activate: reboot}
   - {path: /etc/default/zramswap, line: "ALGO=zstd", regexp: '^#?ALGO=', activate: reboot}
-  # vm.swappiness above 100 is valid on kernel 5.8 and later: it tells reclaim that compressing an
-  # idle anonymous page is cheaper than re-reading a hot file page from the SD card. The cluster
-  # nodes run 10 for the opposite reason. vm.page-cluster=0 disables swap readahead, which wastes
-  # decompression on zram.
-  - {path: /etc/sysctl.conf, line: "vm.swappiness=130", regexp: '^\s*vm\.swappiness\s*=', activate: sysctl}
-  - {path: /etc/sysctl.conf, line: "vm.page-cluster=0", regexp: '^\s*vm\.page-cluster\s*=', activate: sysctl}
   # Log2Ram's four declared values. The installed conffile already holds them, so the first run
   # writes nothing. The `^#?` anchor matters: an unanchored `SIZE=` also matches LOG_DISK_SIZE=.
   - {path: /etc/log2ram.conf, line: "SIZE=128M", regexp: '^#?SIZE=', activate: reboot}
