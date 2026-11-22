@@ -2,8 +2,7 @@
 
 Used by checkout_sync.py, the builder, renovate_notify.py and the repo's await_ci.py and forge.
 A host component's package ships a copy beside its script (a ``lib:`` entry in its
-``component.yml``), as it does ``host_lib.py``. Stdlib only, and kept to the 3.12 grammar,
-because the builder imports it under the host's interpreter.
+``component.yml``), as it does ``host_lib.py``. Stdlib only.
 
 Typical usage example:
 

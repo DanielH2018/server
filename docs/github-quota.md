@@ -291,7 +291,11 @@ measurement predates slice 3's recording, so the host REST readers are part of t
 **`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
 checkout-sync therefore shows under its own service name, and the builder's token gets a
-ledger file of its own. An anonymous read spends the source IP's limit, so it is not
+ledger file of its own. `gh-quota status` prints one line per identity, and each line's
+spend beyond the ledger subtracts only that identity's recorded calls. The builder token's
+reads therefore show on that token's line, while the operator's line still counts them as
+beyond the ledger, as it counts the other host's calls. Only a join over every identity's
+file on both hosts, on GitHub's reset epoch, attributes them. An anonymous read spends the source IP's limit, so it is not
 recorded. `github_rest` loads the module from `/usr/lib/homelab/gh_quota.py` by path,
 because a component's copy sits beside its own script, where a bare import cannot find the
 module. A host without the gh-quota component therefore records nothing.
