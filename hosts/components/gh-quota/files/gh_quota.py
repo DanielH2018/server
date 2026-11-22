@@ -29,9 +29,9 @@ import sqlite3
 import subprocess
 import time
 from collections import Counter
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 LEDGER_DIR = Path("/var/lib/gh-quota")
@@ -40,7 +40,8 @@ BUCKETS = ("graphql", "core")
 SAMPLE_EVERY_S = 30
 KEEP_S = 8 * 24 * 3600
 # GitHub's reported reset for one core window moves by up to 45 s between samples, and its
-# two graphql counters for one token reset about 21 minutes apart.
+# two graphql counters for one token reset about 21 minutes apart. Two tokens of one user
+# report resets within this of each other too, because they spend one quota.
 RESET_DRIFT_S = 120
 # How long a ledger write waits for another writer before the call goes unrecorded. Every
 # counted `gh` call can wait this long, so it stays a few seconds.
@@ -164,23 +165,32 @@ def session_key(
 
 @dataclass(frozen=True)
 class Window:
-    """One identity's spend in one bucket, for the quota window GitHub has open.
+    """The spend in one bucket of the quota window GitHub has open, across the tokens sharing it.
+
+    Every token one GitHub user owns spends that user's one quota, so the ledger joins the
+    identities whose windows share a reset and a limit.
 
     Attributes:
-        identity: `tok-<fingerprint>` of the token `gh` used, or `uid-<n>` when it had none.
+        identities: each `tok-<fingerprint>` of a token `gh` used, or `uid-<n>` when it had
+            none, sorted.
         bucket: `graphql` or `core`.
-        used: what GitHub counted at the last sample.
+        used: what GitHub counted at the freshest sample of any of the identities.
         quota: GitHub's limit for the bucket.
         reset: the epoch second the window ends.
-        sessions: each session's recorded calls by call class.
+        sessions: each session's recorded calls by call class, under every identity.
     """
 
-    identity: str
+    identities: tuple[str, ...]
     bucket: str
     used: int
     quota: int
     reset: int
     sessions: dict[str, Counter[str]]
+
+    @property
+    def identity(self) -> str:
+        """The identities joined by `+`, the name `status` prints."""
+        return "+".join(self.identities)
 
     @property
     def recorded(self) -> int:
@@ -242,6 +252,49 @@ class _Sample:
     counts: list[tuple[str, int, int, int]] = field(default_factory=list)
     caller: tuple[str, str, str] = ("", "", "")
     process: tuple[str, str] = ("", "")
+
+
+def _shared(windows: Iterable[tuple[float, Window]]) -> list[Window]:
+    """Join the windows of a bucket whose limits match and whose resets chain within RESET_DRIFT_S.
+
+    Takes each window with the time of its sample. A member joins only while every sample in
+    the group reads one counter: a later sample never counts less than an earlier one. A
+    joined window carries GitHub's count from the freshest sample and the recorded calls of
+    every member. Two users whose windows reset within RESET_DRIFT_S of each other and whose
+    samples happen to rise with time are still joined: no sample names a token's owner.
+    """
+    groups: list[list[tuple[float, Window]]] = []
+    ordered = sorted(
+        windows, key=lambda sw: (BUCKETS.index(sw[1].bucket), sw[1].quota, sw[1].reset)
+    )
+    for sampled, window in ordered:
+        last = groups[-1][-1][1] if groups else None
+        if (
+            last is not None
+            and (last.bucket, last.quota) == (window.bucket, window.quota)
+            and window.reset - last.reset <= RESET_DRIFT_S
+            and all(_one_counter(member, (sampled, window)) for member in groups[-1])
+        ):
+            groups[-1].append((sampled, window))
+        else:
+            groups.append([(sampled, window)])
+    joined = []
+    for group in groups:
+        _, freshest = max(group, key=lambda sw: sw[0])
+        sessions: dict[str, Counter[str]] = {}
+        for _, window in group:
+            for session, calls in window.sessions.items():
+                sessions.setdefault(session, Counter()).update(calls)
+        identities = tuple(sorted(i for _, w in group for i in w.identities))
+        joined.append(replace(freshest, identities=identities, sessions=sessions))
+    return joined
+
+
+def _one_counter(a: tuple[float, Window], b: tuple[float, Window]) -> bool:
+    # One user's counter only rises within a window, so a later sample below an earlier one
+    # is another user's.
+    (_, earlier), (_, later) = sorted((a, b), key=lambda sw: sw[0])
+    return earlier.used <= later.used
 
 
 @contextmanager
@@ -328,27 +381,31 @@ class Ledger:
             self._failed(exc)
 
     def windows(self) -> list[Window]:
-        """Every identity's open window per bucket, after a fresh sample of the caller's own."""
+        """The open window per bucket of each group of identities sharing one.
+
+        Takes a fresh sample of the caller's own identity first.
+        """
         with closing(self._open()) as db:
             sample = self._take_sample(db)
             with _write(db):
                 self._store_sample(db, sample)
         now = self.now()
-        found: dict[tuple[str, str], Window] = {}
+        found: dict[tuple[str, str], tuple[float, Window]] = {}
         for identity, db in self._read_each():
             with closing(db):
                 for bucket in BUCKETS:
                     truth = db.execute(
-                        "SELECT window, used, quota FROM truth WHERE bucket = ? AND window > ? "
+                        "SELECT window, used, quota, sampled FROM truth "
+                        "WHERE bucket = ? AND window > ? "
                         "ORDER BY sampled DESC LIMIT 1",
                         (bucket, now),
                     ).fetchone()
                     if truth is None:
                         continue
-                    reset, used, quota = truth
-                    window = found.setdefault(
+                    reset, used, quota, sampled = truth
+                    _, window = found.setdefault(
                         (identity, bucket),
-                        Window(identity, bucket, used, quota, reset, {}),
+                        (sampled, Window((identity,), bucket, used, quota, reset, {})),
                     )
                     # Every window that has not ended, so a call recorded under the hour's
                     # end while no sample had named GitHub's reset still counts.
@@ -358,7 +415,7 @@ class Ledger:
                     )
                     for session, argv_class, n in rows:
                         window.sessions.setdefault(session, Counter())[argv_class] += n
-        return list(found.values())
+        return _shared(found.values())
 
     def writes(self) -> list[Writes]:
         """Each identity's recorded writes in the last minute and hour, for those with any."""
