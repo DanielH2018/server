@@ -227,3 +227,57 @@ def test_the_sub_bound_check_rejects_a_plane_larger_than_the_fleet() -> None:
 def test_the_package_ships_the_parent_drop_in(tmp_path) -> None:
     drop_in = "/usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf"
     assert drop_in in render_daniel_server_with(tmp_path).files
+
+
+# kubelet's ceiling for a burstable pod (pkg/kubelet/qos/policy.go). A best-effort pod gets 1000.
+BURSTABLE_POD_MAX_OOM_SCORE_ADJ = 999
+OOM_CARRIERS = (
+    RC_UNIT,
+    "claude-bg-resume.service.j2",
+    "fleet-user-manager-oom.conf.j2",
+)
+
+
+def user_manager_drop_in(uid: int) -> str:
+    return f"/usr/lib/systemd/system/user@{uid}.service.d/homelab-claude-fleet-oom.conf"
+
+
+def oom_score_adjust(rendered: str) -> int:
+    (value,) = re.findall(r"^OOMScoreAdjust=(-?\d+)$", rendered, re.M)
+    return int(value)
+
+
+@pytest.mark.parametrize("template", OOM_CARRIERS)
+def test_a_global_oom_ranks_each_fleet_process_above_every_burstable_pod(
+    template: str,
+) -> None:
+    """At 0 the kernel's badness score favours a pod as the victim of fleet pressure."""
+    assert oom_score_adjust(render(template)) > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
+    assert oom_score_adjust(render(template, claude_code_fleet_oom_score_adjust=7)) == 7
+
+
+# daniel-box's claude_code_login_uids is empty, so only its agent (900) is in the fleet there.
+@pytest.mark.parametrize(
+    ("host", "uids"), [("daniel-server", (1000, 900)), ("daniel-box", (900,))]
+)
+def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
+    host: str, uids: tuple[int, ...]
+) -> None:
+    """A user unit, such as a fan-out batch, inherits its user manager's value.
+
+    Named anything but 50-homelab.conf, so reconcile takes it without restarting the manager,
+    which would end every session that user runs.
+    """
+    import json
+
+    from renderer.renderer_lib import host as host_mode
+
+    files = host_mode.render_host(host).files
+    for uid in uids:
+        drop_in = user_manager_drop_in(uid)
+        assert drop_in in files, f"{host} ships no {drop_in}"
+        text = files[drop_in][0].decode()
+        assert re.search(r"^\[Service\]\nOOMScoreAdjust=", text, re.M)
+        assert oom_score_adjust(text) > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
+    units = json.loads(files["/usr/lib/homelab/manifest.json"][0])["units"]
+    assert not {f"user@{uid}.service" for uid in uids} & set(units)

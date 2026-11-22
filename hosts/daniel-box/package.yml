@@ -187,3 +187,7 @@ files:
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
     when: claude_code_agent_user_enabled
+  # The agent's user manager, so its units are OOM-killed before a pod (claude-code component).
+  - src: "component:templates/fleet-user-manager-oom.conf.j2"
+    dst: /usr/lib/systemd/system/user@900.service.d/homelab-claude-fleet-oom.conf
+    when: claude_code_agent_user_enabled
