@@ -24,6 +24,7 @@ COMMANDS = (
     "systemctl",
     "sysctl",
     "systemd-tmpfiles",
+    "locale-gen",
     "sshd",
     "fail2ban-client",
     "squid",
