@@ -1,10 +1,12 @@
 """The path root, the logger and the command runners every reconcile module shares."""
 
 import os
+import socket
 import subprocess
 import sys
 import time
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
 
@@ -54,12 +56,29 @@ def under_root(path: Path) -> Path:
     return ROOT / path.relative_to("/")
 
 
+def _timing_file() -> Path | None:
+    named = os.environ.get("HOMELAB_RECONCILE_TIMING_LOG")
+    return under_root(Path(named)) if named else None
+
+
+# A host whose journal no agent can read names a file for a copy of the timing lines.
+TIMING_FILE = _timing_file()
+
+
 def _log_timing(message: str) -> None:
     try:
         log(message)
     except OSError:
         # The unwritten text stays buffered and the shutdown flush would exit 120; devnull drops it.
         sys.stderr = open(os.devnull, "w")
+    if TIMING_FILE is None:
+        return
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    try:
+        with TIMING_FILE.open("a") as out:
+            out.write(f"{stamp} {socket.gethostname()} homelab-reconcile: {message}\n")
+    except OSError:
+        pass
 
 
 def timed(action: str, call: Callable[[], T]) -> T:
@@ -67,7 +86,8 @@ def timed(action: str, call: Callable[[], T]) -> T:
 
     systemd's start timeout kills the run mid-call, so the line before the call is the one that
     names the action a timed-out run was in. Both lines carry no level, which stores them at the
-    SyslogLevel=notice homelab-reconcile.service sets.
+    SyslogLevel=notice homelab-reconcile.service sets. When TIMING_FILE is set, each line is also
+    appended there and the file closed before the call starts, so a killed run's last line lands too.
     """
     _log_timing(f"{action} starts")
     started = time.monotonic()
