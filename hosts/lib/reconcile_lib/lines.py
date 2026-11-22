@@ -4,7 +4,7 @@ The design is docs/archive/host/h7-delete-ansible.md, *Reconcilers for state dpk
 does not hold*. A host package's manifest lists "lines" in `reconcilers` and carries:
 
     "lines": {"edits": [
-        {"path": "/etc/sysctl.conf", "line": "vm.swappiness=10", "regexp": "^\\s*vm\\.swappiness\\s*="},
+        {"path": "/etc/audit/auditd.conf", "line": "num_logs = 3", "regexp": "^num_logs\\s*="},
         {"path": "/etc/zsh/zshenv", "block": "export X=1", "marker": "# {mark} MANAGED BLOCK"}]}
 
 A line edit has the contract of Ansible's `lineinfile` with a `regexp`, and a block edit that of

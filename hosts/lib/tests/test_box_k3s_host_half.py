@@ -216,10 +216,12 @@ def test_a_netplan_file_goes_live_at_the_next_boot(package, path):
     assert package.files[path][1] == 0o600
 
 
-def test_the_inotify_key_and_the_zshenv_block_use_the_line_arm(package):
-    (inotify,) = [e for e in package.lines if "inotify" in e.get("line", "")]
-    assert inotify["path"] == "/etc/sysctl.conf"
-    assert inotify["line"] == "fs.inotify.max_user_instances=1024"
+def test_the_inotify_key_ships_in_sysctl_d_and_the_zshenv_block_uses_the_line_arm(
+    package,
+):
+    inotify = "/etc/sysctl.d/90-homelab-k3s-node.conf"
+    assert package.files[inotify][0] == b"fs.inotify.max_user_instances=1024\n"
+    assert package.activations[inotify] == "sysctl"
     (block,) = [e for e in package.lines if e["path"] == "/etc/zsh/zshenv"]
     # The Ansible task's marker, so the first run adopts its block and adds no second copy.
     assert block["marker"] == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"

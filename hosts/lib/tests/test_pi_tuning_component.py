@@ -124,8 +124,6 @@ ADOPTED = [
     (LOG2RAM_CONF, "COMP_ALG=lz4", "reboot"),
     ("/etc/watchdog.conf", "#watchdog-device\t= /dev/watchdog", "reboot"),
     ("/etc/watchdog.conf", "max-load-1 = 24", "reboot"),
-    ("/etc/sysctl.conf", "vm.swappiness=130", "sysctl"),
-    ("/etc/sysctl.conf", "vm.page-cluster=0", "sysctl"),
     (AUDITD_CONF, "max_log_file = 8", "try-restart:auditd.service"),
     (AUDITD_CONF, "num_logs = 5", "try-restart:auditd.service"),
     (AUDITD_CONF, "space_left = 75", "try-restart:auditd.service"),
@@ -201,14 +199,10 @@ def test_the_size_anchor_leaves_log_disk_size_alone(package):
     assert re.search(size, "#SIZE=40M") and not re.search(size, "LOG_DISK_SIZE=256M")
 
 
-def test_the_zram_swappiness_prefers_swap_and_no_drop_in_overrides_it(package):
-    edits = _edits(package, "/etc/sysctl.conf")
-    assert int(edits["vm.swappiness=130"]["line"].split("=")[1]) > 100
-    # /etc/sysctl.conf is read last, so a sysctl.d file declaring a key would be overridden.
-    drop_ins = [
-        dst for dst in package.files if re.match(r"/(etc|usr/lib)/sysctl\.d/", dst)
-    ]
-    assert not any("vm." in _text(package, dst) for dst in drop_ins), drop_ins
+def test_the_zram_swappiness_prefers_swap(package):
+    text = _text(package, "/etc/sysctl.d/90-homelab-pi-tuning.conf")
+    swappiness = re.search(r"^vm\.swappiness=(\d+)$", text, re.M)
+    assert swappiness and int(swappiness[1]) > 100
 
 
 # The log RAM budget.
