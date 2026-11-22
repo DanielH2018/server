@@ -45,7 +45,10 @@ _BOTH = {
     "CapabilityBoundingSet": [""],
 }
 SANDBOX = {
-    BUILDER: {**_BOTH, "ReadWritePaths": ["/var/lib/homelab-builder"]},
+    BUILDER: {
+        **_BOTH,
+        "ReadWritePaths": ["/var/lib/homelab-builder", "/var/lib/gh-quota"],
+    },
     SIGNER: {
         **_BOTH,
         "PrivateNetwork": ["yes"],

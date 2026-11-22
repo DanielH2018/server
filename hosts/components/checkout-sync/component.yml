@@ -24,6 +24,7 @@ files:
   - {lib: ci_verdict.py, dst: /usr/lib/homelab/checkout-sync/ci_verdict.py, mode: "0644"}
   - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/checkout-sync/builder_ci_grade.py, mode: "0644"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/checkout-sync/host_lib.py, mode: "0644"}
+  - {lib: github_rest.py, dst: /usr/lib/homelab/checkout-sync/github_rest.py, mode: "0644"}
   - {src: units/homelab-checkout-sync.service.j2, dst: /usr/lib/systemd/system/homelab-checkout-sync.service}
   - {src: units/homelab-checkout-sync.timer, dst: /usr/lib/systemd/system/homelab-checkout-sync.timer}
 enable:

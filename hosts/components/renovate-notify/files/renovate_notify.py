@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renovate manual-action notifier — runs once per daily systemd-timer tick.
 
-Queries the GitHub REST API (authenticated through host_lib.github_token when a token is
+Queries the GitHub REST API (authenticated through github_rest.github_token when a token is
 found, anonymous otherwise) for open Renovate PRs, classifies each (notify_logic), and posts a Discord digest ONLY
 when the actionable set changes. Writes a last_run timestamp for the monitor-bridge
 "Renovate Notifier — Alive" monitor.
@@ -64,14 +64,8 @@ from pending_logic import (
     stale_pending,
     update_pending_seen,
 )
-from host_lib import (
-    atomic_write,
-    discord_post,
-    github_get,
-    github_token,
-    log,
-    parse_env_file,
-)
+from github_rest import github_get, github_token
+from host_lib import atomic_write, discord_post, log, parse_env_file
 
 CONFIG = "/etc/renovate-notify/config.env"
 USER_AGENT = "renovate-notify"
@@ -94,7 +88,7 @@ def cfg() -> dict[str, str]:
 
 
 def get(path: str):
-    """GET one REST path with the token `main` looked up once; see host_lib.github_get."""
+    """GET one REST path with the token `main` looked up once; see github_rest.github_get."""
     return github_get(path, _token, user_agent=USER_AGENT)
 
 

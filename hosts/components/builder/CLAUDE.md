@@ -23,7 +23,7 @@ repository (daniel-box)* holds the design.
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
   `homelab-tools` step below), `builder_ci_grade.py`, `ci_verdict.py`, `builder_rollout_gate.py`, `prom_envelope.py`,
-  `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
+  `builder_python.py`, `homelab_repo_sign.py`, `host_lib.py`, `github_rest.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the CI contexts the builder grades a
   commit on, its walk bound, the repo and the Prometheus URLs, and no secret.
@@ -251,8 +251,9 @@ replace the contents of `staged/` (`hosts/lib/tests/test_builder_component.py::t
 `homelab-repo-sign.service` may sign and publish what was staged
 (`hosts/lib/tests/test_builder_component.py::test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_one`), so every host's updater installs it at its next fire.
 
-- **Scope / exclusions:** the builder writes `/var/lib/homelab-builder/` alone, which its
-  unit's `ReadWritePaths=` enforces (`hosts/lib/tests/test_builder_component.py::test_each_unit_carries_the_plans_sandbox`), plus
+- **Scope / exclusions:** the builder writes `/var/lib/homelab-builder/` and its own GitHub
+  spend ledger file under `/var/lib/gh-quota`, which its unit's `ReadWritePaths=` enforces
+  (`hosts/lib/tests/test_builder_component.py::test_each_unit_carries_the_plans_sandbox`), plus
   its metric through `publish-textfile`. It **never**
   signs, publishes or touches `/var/lib/homelab-signer/`, and never builds a commit off
   master's first-parent chain (`hosts/lib/tests/test_host_package_builder.py::test_a_green_second_parent_is_never_chosen`) or one

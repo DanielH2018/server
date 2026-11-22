@@ -13,7 +13,7 @@ decision. The ledger records and refuses nothing.
 |---|---|---|
 | 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Deployed on 2026-11-14: [server#8717](https://github.com/DanielH2018/server/pull/8717) for the module and `lib/gh.py`, and [dotfiles#1336](https://github.com/DanielH2018/dotfiles/pull/1336) for `ghread`, `cc-wait` and the claude-guard rule. Its week of measurement ends on 2026-11-21. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
-| 3 | The REST readers that do not run `gh` record and obey the same ledger | Planned |
+| 3 | The REST readers that do not run `gh` record and obey the same ledger | Recording built: `github_rest.github_get` records each authenticated read. `admit` and `If-None-Match` are planned. |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
 | Identity | Agent sessions stop spending the operator's quota | Owned by [slice 6 of the agent-user plan](claude-agent-user.md#status) |
 
@@ -23,7 +23,7 @@ Every figure is a measurement from 2026-11-14 on daniel-box, with 39 live sessio
 
 - **The exhausted quota is GraphQL, not REST.** At 15:00 UTC the operator account showed
   `graphql` at 5000 of 5000 points used and `core` at 3158 of 5000 requests used. `gh pr` and
-  `gh issue` read through GraphQL. `gh api` and `hosts/lib/host_lib.py:github_get` read through
+  `gh issue` read through GraphQL. `gh api` and `hosts/lib/github_rest.py:github_get` read through
   REST.
 - **Agent sessions spend the operator's quota.** A session that starts as `ubuntu` reads
   `~ubuntu/.config/gh/hosts.yml`, which holds the login of `DanielH2018`. Fan-out batches,
@@ -117,7 +117,7 @@ Three paths reach GitHub from a host, and each already has one owner.
 |---|---|---|
 | A read from a session's shell | `ghread`, the one GitHub shim, shipped by the dotfiles repo | every session, with no permission prompt |
 | A `gh` call from a repo Python tool | `scripts/lib/gh.py` | `findings.py`, fan-out, `land_lib`, the probes. The `git-and-gh-go-through-lib` census row in `tests/repo/test_census_rows_python.py` refuses a bare `["gh", …]` elsewhere. |
-| A REST read with no `gh` | `hosts/lib/host_lib.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify` |
+| A REST read with no `gh` | `hosts/lib/github_rest.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify` |
 
 **The design adds no shim.** The operator ruled on 2026-11-14 that GitHub gets one shim, and
 `ghread` is it. The budget is a library that those three owners call.
@@ -150,7 +150,7 @@ below applies.
 ```text
 session shell read ── ghread ──────────────┐
 repo Python tool ──── lib/gh.py ───────────┼── gh_quota: record, and admit from slice 2
-host REST reader ──── host_lib.github_get ─┘       │
+host REST reader ─ github_rest.github_get ─┘       │
                                                    └── ledger under /var/lib/gh-quota/
 cc-wait gh-pr, gh-ci ─ ghread, from slice 1 on
 
@@ -285,9 +285,19 @@ explains 33 points, because daniel-box makes most of the spend. One busy hour sh
 shape: the window that reset at 02:34 UTC on 2026-11-19 counted 4,447 calls, of which
 daniel-box recorded 1,298 and daniel-server 43, which leaves 3,106 (70%) beyond both ledgers.
 A single `gh-quota status` snapshot can read far lower: 31% on 2026-11-20 was one window
-part-way through, and that window ended at 25% once both hosts were subtracted. The host REST
-readers are unrecorded until slice 3 ships, because `host_lib.github_get` does not call the
-ledger.
+part-way through, and that window ended at 25% once both hosts were subtracted. The
+measurement predates slice 3's recording, so the host REST readers are part of that 59%.
+
+**`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
+read sends and against the caller's session key. A systemd timer such as the builder or
+checkout-sync therefore shows under its own service name, and the builder's token gets a
+ledger file of its own. An anonymous read spends the source IP's limit, so it is not
+recorded. `github_rest` loads the module from `/usr/lib/homelab/gh_quota.py` by path,
+because a component's copy sits beside its own script, where a bare import cannot find the
+module. A host without the gh-quota component therefore records nothing.
+`homelab-builder.service` lists `/var/lib/gh-quota` in its `ReadWritePaths=`, because its
+sandbox would otherwise refuse the write. `renovate-notify` reads once a day under a sandbox
+that writes only its state directory, so its reads stay beyond the ledger.
 
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
@@ -343,7 +353,7 @@ change of their own.
 
 ### REST readers that do not run `gh`
 
-`host_lib.github_get` is the one request shape every host REST reader shares. It calls
+`github_rest.github_get` is the one request shape every host REST reader shares. It calls
 `admit` and `record` itself, so those readers obey the same rules and appear in the ledger.
 
 `github_get` also sends `If-None-Match` with the `ETag` of its last answer for the same path,
@@ -536,7 +546,7 @@ every session at once.
 ### Slice 3: the REST readers
 
 ```diff
- hosts/lib/host_lib.py          github_get: admit, record, If-None-Match
+ hosts/lib/github_rest.py       github_get: admit, record, If-None-Match
  scripts/deploy_tools/await_ci.py   - its own rate-limit wrapper
 ```
 
