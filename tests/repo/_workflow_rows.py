@@ -181,7 +181,12 @@ def _package_build_download_offences(text: str) -> list[str]:
 
 DRAFT_SKIPPING = tuple(
     f".github/workflows/{name}"
-    for name in ("flux-deletion-drill.yml", "image-smoke.yml")
+    for name in (
+        "flux-deletion-drill.yml",
+        "image-smoke.yml",
+        "bootstrap-drill.yml",
+        "render-diff.yml",
+    )
 )
 _PR_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"]
 _DRAFT_ARM = "github.event.pull_request.draft != true"
@@ -364,11 +369,11 @@ WORKFLOW_ROWS = (
     Census(
         name="pr-workflows-skip-draft-pushes",
         reason=(
-            "Both jobs are required contexts outside ci.yml, and both triggered on every push "
-            "to a draft, about three runs a merge. A job-level draft skip takes no runner and "
-            "reads as a pass, which merges nothing because GitHub refuses a draft. Without "
-            "`ready_for_review` in `types`, marking the PR ready starts no run, and the skip "
-            "on the draft head would be the only check the landing reads."
+            "Each workflow beside ci.yml triggered on every push to a draft, about three runs "
+            "a merge. A job-level draft skip takes no runner and reads as a pass, which merges "
+            "nothing because GitHub refuses a draft. Without `ready_for_review` in `types`, "
+            "marking the PR ready starts no run: a required context would read only the draft "
+            "head's skip, and an advisory one would never run on the ready head."
         ),
         files=lambda: tracked(*DRAFT_SKIPPING),
         offence=judge(draft_skip_problems),

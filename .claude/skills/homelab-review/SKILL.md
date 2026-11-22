@@ -122,7 +122,7 @@ domain's reviewer, run `findings.py list --domain <domain>`, or add `--severity 
 `--limit <n>`: a cut-off list ends with how many findings it left out. `list --json` prints the
 same rows, filtered the same way, on one line. A finding a reviewer surfaces that matches an
 open issue is a **recurrence**: record it with `findings.py touch <n> --source review-<date>`
-(the third sighting adds `escalated`), never as a new row or a new issue. The list is only as
+(the third sighting marks it escalated), never as a new row or a new issue. The list is only as
 fresh as the last close, so still confirm each item at a cited `file:line` before reporting it.
 To check whether a finding was settled before, run `findings.py history <terms>` or
 `findings.py history --file <path>`. It searches closed findings too and prints how each one

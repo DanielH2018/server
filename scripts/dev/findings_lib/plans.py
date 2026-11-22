@@ -1,7 +1,7 @@
 """What `findings.py` decides to do, as gh argv nobody has run yet.
 
 Every command in `findings.py` plans first and runs second, so the decision — file, touch,
-reopen, refuse, escalate, close — is a pure function of the issue it was handed. `--dry-run`
+reopen, refuse, close — is a pure function of the issue it was handed. `--dry-run`
 prints what these return; `gh_calls.run` is the only thing that executes them.
 """
 
@@ -216,21 +216,17 @@ def _flat(flag: str, values: list[str]) -> list[str]:
 
 
 def plan_touch(issue: Issue, source: str) -> list[list[str]]:
-    """A re-observation is a comment; the third one adds `escalated`."""
-    n = str(issue.number)
-    seen = reobservations(issue) + 1
-    plans = [
+    """A re-observation is one comment; `issue_rows` derives `escalated` from their count."""
+    sighting = reobservations(issue) + 2
+    return [
         [
             "issue",
             "comment",
-            n,
+            str(issue.number),
             "--body",
-            f"{_REOBSERVED} by {source} (sighting {seen + 1}).",
+            f"{_REOBSERVED} by {source} (sighting {sighting}).",
         ]
     ]
-    if seen >= 2 and "escalated" not in issue.labels:
-        plans.append(["issue", "edit", n, "--add-label", "escalated"])
-    return plans
 
 
 def plan_comment(issue: Issue, body: str) -> list[list[str]]:
