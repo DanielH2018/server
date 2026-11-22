@@ -6,8 +6,6 @@ through `scripts/validate/host_packages.py fetch-tools`, so a pin that does not 
 CI before it reaches master. Stdlib only, because the builder ships beside it with nothing else.
 """
 
-from __future__ import annotations
-
 import hashlib
 import http.client
 import json

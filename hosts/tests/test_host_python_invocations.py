@@ -93,17 +93,15 @@ def _pinned_uv_lines():
 # not reach it. Keyed by template basename.
 _SYSTEM_INTERPRETER_EXEMPT = {
     "homelab-apt-repo.service.j2": (
-        "runs only the stdlib's `http.server`, so no repo code meets the 3.12 parser; the unit "
+        "runs only the stdlib's `http.server`, so no repo code runs under it; the unit "
         "is DynamicUser with ProtectHome=yes, which cannot reach the uv-installed interpreters "
         "under a user's home"
     ),
     "homelab-repo-sign.service.j2": (
         "the signer cannot read the builder's pinned interpreter under its 0700 state "
         "directory, and a second uv install would be one more task that can fail the attended "
-        "apply. The script is stdlib-only, pyproject.toml formats it and the host_lib.py it "
-        "imports for py312, and homelab_builder/tests/test_repo_signer.py and "
-        "hosts/lib/tests/test_host_lib.py parse them with the 3.12 grammar, as "
-        "homelab-reconcile is held"
+        "apply. The script and the host_lib.py it imports are stdlib-only, and the package's "
+        "python3 (>= 3.14) dependency is the floor they keep, as homelab-reconcile's is"
     ),
 }
 
@@ -268,7 +266,7 @@ def _shebang_runs(text: str, installed: list[str]) -> list[str]:
 
 
 def test_no_installed_script_runs_by_its_shebang():
-    """A role script's `#!/usr/bin/env python3` is the host's system 3.12, so running it by path
+    """A role script's `#!/usr/bin/env python3` is the host's system python3, so running it by path
     escapes the pin the tests above enforce on command strings."""
     installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
     # Non-vacuous: a script the backup-health timer runs must be in the census this scans for.
@@ -305,7 +303,8 @@ def test_a_script_run_through_uv_is_clean():
 
 
 # A bare `python3` word, wherever it sits: PATH picks it, and under cron's PATH that is the system
-# 3.12. The two needles above are absolute paths, so `python3 -c …` slipped past them.
+# python3, not the pin. The two needles above are absolute paths, so `python3 -c …` slipped past
+# them.
 # DECIDED: match the word, not a command position. `_COMMAND_POSITION` misses `if`/`then`/`!`,
 # an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list
 # of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag

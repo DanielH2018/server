@@ -8,7 +8,6 @@ exist, so an attempt to run one would answer exit 3 instead of exit 2.
 Run: uv run pytest hosts/components/claude-code/tests/test_rootq_socket.py
 """
 
-import ast
 import hashlib
 import json
 import os
@@ -263,13 +262,6 @@ def test_the_helpers_verbs_are_exactly_rootqs() -> None:
     assert helper.HEX64.pattern == rootq.HEX64.pattern
     assert helper.ARITY["matches"] == 2
     assert all(helper.ARITY[verb] == 0 for verb in rootq.COMMANDS)
-
-
-def test_the_root_helper_and_the_client_parse_with_the_3_12_grammar() -> None:
-    # Root runs both under /usr/bin/python3, and pyproject.toml holds them to the py312 floor of
-    # the host-run files.
-    for name in ("homelab_rootq_socket.py", "rootq_socket.py"):
-        ast.parse((FILES / name).read_text(), feature_version=(3, 12))
 
 
 def test_the_helper_runs_only_from_a_socket_on_stdin(capsys) -> None:

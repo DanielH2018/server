@@ -1,7 +1,6 @@
 """A fake daniel-pi for `hosts/lib/homelab-reconcile`: stub state, a manifest, and a runner.
 
-`_reconcile_stub.py` documents the stub's state. Reconcile runs under this interpreter, which
-is newer than the 3.12 the hosts run; `test_reconcile_component.py` holds its syntax to 3.12.
+`_reconcile_stub.py` documents the stub's state. Reconcile runs under this interpreter.
 """
 
 import io

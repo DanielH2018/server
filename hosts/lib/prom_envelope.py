@@ -11,8 +11,6 @@ Typical usage example:
         print(series.get("metric"))
 """
 
-from __future__ import annotations
-
 
 class PromAnswerError(ValueError):
     """A Prometheus answer that is not a successful `{data: {result: [...]}}` envelope."""

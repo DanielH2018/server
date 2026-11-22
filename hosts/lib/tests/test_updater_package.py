@@ -56,7 +56,7 @@ def test_the_package_renders_its_named_members(package):
         0o755,
     )
     assert sorted(package.scripts) == ["postinst", "prerm"]
-    assert package.depends == ["python3 (>= 3.12)"]
+    assert package.depends == ["python3 (>= 3.14)"]
 
 
 def test_the_source_names_daniel_box_and_the_keyring_path(package):
