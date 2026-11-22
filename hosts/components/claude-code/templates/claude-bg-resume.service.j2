@@ -29,6 +29,7 @@ KillMode=process
 Slice={{ claude_code_fleet_slice }}
 MemoryHigh={{ claude_code_rc_memory_high }}
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
+OOMScoreAdjust={{ claude_code_fleet_oom_score_adjust }}
 
 # A session's worker takes these from the supervisor. A session dispatched later from a
 # terminal gets that terminal's PATH instead, so these matter for the respawned sessions most.
