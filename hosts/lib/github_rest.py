@@ -10,8 +10,6 @@ Typical usage example:
     runs = github_get("repos/o/n/actions/runs?head_sha=abc", token, user_agent="await-ci")
 """
 
-from __future__ import annotations
-
 import functools
 import importlib.util
 import json

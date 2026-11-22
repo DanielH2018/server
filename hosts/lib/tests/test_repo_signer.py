@@ -8,7 +8,6 @@ refusal rule and its Valid-Until rule.
 Run: uv run pytest hosts/lib/tests/test_repo_signer.py
 """
 
-import ast
 import email.utils
 import json
 import os
@@ -126,21 +125,6 @@ class Lab:
 @pytest.fixture
 def lab(tmp_path, keyhome) -> Lab:
     return Lab(tmp_path, keyhome)
-
-
-def test_the_signer_parses_with_the_3_12_grammar():
-    # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
-    # Holds pyproject.toml's py312 floor for the host-run files, which formats this file. A
-    # 3.14-only construct, such as an unparenthesised `except A, B:`, breaks it.
-    ast.parse(SCRIPT.read_text(), feature_version=(3, 12))
-
-
-def test_a_3_14_only_construct_fails_the_3_12_grammar():
-    with pytest.raises(SyntaxError):
-        ast.parse(
-            "try:\n    pass\nexcept OSError, ValueError:\n    pass\n",
-            feature_version=(3, 12),
-        )
 
 
 def test_a_staged_package_at_the_chosen_commit_is_published_and_signed(lab):

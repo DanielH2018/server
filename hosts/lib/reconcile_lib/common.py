@@ -27,7 +27,7 @@ def _is_journal(stream) -> bool:
         dev, ino = os.environ["JOURNAL_STREAM"].split(":")
         st = os.fstat(stream.fileno())
         return (st.st_dev, st.st_ino) == (int(dev), int(ino))
-    except (KeyError, ValueError, OSError, AttributeError):
+    except KeyError, ValueError, OSError, AttributeError:
         return False
 
 

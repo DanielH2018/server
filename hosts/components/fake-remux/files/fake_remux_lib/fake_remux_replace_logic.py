@@ -1,8 +1,7 @@
 """Pure decision core for the fake-remux reconciler (fake_remux_replace.py).
 
-Stdlib-only, 3.12-clean (single-exception except only), no network so it is unit-testable without
-Sonarr/docker. Split from the I/O shell exactly like fake_remux_logic.py is split from
-fake_remux_scan.py.
+Stdlib-only, no network so it is unit-testable without Sonarr/docker. Split from the I/O shell
+exactly like fake_remux_logic.py is split from fake_remux_scan.py.
 """
 
 import os

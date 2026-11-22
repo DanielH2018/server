@@ -14,11 +14,7 @@ with its ``logfmt`` fields and crash hook, the node-exporter textfile write, and
 session's oneshot unit with the guarded read of what it left. Stdlib only.
 
 The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3.
-Like the other host-run files it keeps to the 3.12 grammar: pyproject.toml formats it for
-py312, and tests/test_host_lib.py parses it with that grammar.
 """
-
-from __future__ import annotations
 
 import datetime as _dt
 import errno
@@ -89,14 +85,14 @@ def _fd_is_journal(fd: int) -> bool:
         dev, ino = os.environ["JOURNAL_STREAM"].split(":")
         st = os.fstat(fd)
         return (st.st_dev, st.st_ino) == (int(dev), int(ino))
-    except (KeyError, ValueError, OSError):
+    except KeyError, ValueError, OSError:
         return False
 
 
 def _stream_is_journal(stream) -> bool:
     try:
         return _fd_is_journal(stream.fileno())
-    except (AttributeError, OSError, ValueError):  # pytest's capture has no fd
+    except AttributeError, OSError, ValueError:  # pytest's capture has no fd
         return False
 
 
@@ -613,7 +609,7 @@ def journal_reader(binary, window_hours, timeout):
                 text=True,
                 timeout=timeout,
             )
-        except (subprocess.SubprocessError, OSError):
+        except subprocess.SubprocessError, OSError:
             return None
         if proc.returncode != 0:
             return None

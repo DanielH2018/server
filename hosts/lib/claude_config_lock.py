@@ -9,8 +9,6 @@ each script that imports it (a `lib:` entry). Stdlib only: each importer runs wi
 `uv run --no-project`.
 """
 
-from __future__ import annotations
-
 import fcntl
 import os
 from collections.abc import Generator

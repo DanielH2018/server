@@ -40,8 +40,6 @@ Exit codes: 0 the verb ran, or `matches` matched; 1 its command exited non-zero,
 differed; 2 the request was refused; 3 the host lacks the command.
 """
 
-from __future__ import annotations
-
 import fnmatch
 import grp
 import hashlib

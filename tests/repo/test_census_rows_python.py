@@ -20,11 +20,7 @@ from pathlib import PurePosixPath
 import pytest
 from _helpers import REPO
 from _condition_status_row import CONDITION_STATUS_IS_PARSED
-from _future_annotations_row import (
-    NO_FUTURE_ANNOTATIONS,
-    host_shipped,
-    uv_pinned_programs,
-)
+from _future_annotations_row import NO_FUTURE_ANNOTATIONS
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _rendered_documents_row import RENDERED_OBJECTS_ARE_PARSED
 from _row_table import (
@@ -454,42 +450,8 @@ def test_every_pythonpath_root_is_a_real_directory():
     )
 
 
-def test_the_future_annotations_exemption_finds_the_host_shipped_modules():
-    """An exemption that matched nothing would gate host scripts on a rule their 3.12 cannot take."""
-    exempt = {rel for rel in tracked("*.py") if host_shipped(rel)}
-    assert len(exempt) >= 20
-    assert {
-        "hosts/lib/host_lib.py",
-        "hosts/lib/ci_verdict.py",
-        "hosts/components/claude-code/files/homelab_rootq.py",
-        "hosts/components/gh-quota/files/gh_quota.py",
-    } <= exempt
-    assert not any(rel.startswith("scripts/lib/longhorn_lib/") for rel in exempt)
-    assert not any(host_shipped(rel) for rel in tracked("hosts/lib/tests/*.py"))
-
-
-def test_the_exemption_covers_every_component_program_on_the_distro_python():
-    """A `#!/usr/bin/python3` component program runs on 3.12, so the census must exempt it."""
-    distro = {
-        rel
-        for rel in tracked("hosts/components/*.py")
-        if "/tests/" not in rel
-        and (REPO / rel).read_text().startswith("#!/usr/bin/python3")
-    }
-    assert {
-        "hosts/components/claude-code/files/homelab_rootq.py",
-        "hosts/components/worktree-holders/files/worktree_holders.py",
-    } <= distro
-    assert not sorted(rel for rel in distro if not host_shipped(rel))
-
-
-def test_the_exemption_covers_no_program_started_on_the_pinned_python():
-    """A program `uv run --python {{ host_python_version }}` starts runs on 3.15, where the import is dead."""
-    launched = uv_pinned_programs()
-    assert {
-        "hosts/components/claude-code/files/bg_session_resume.py",
-        "hosts/components/fake-remux/files/state_push.py",
-        "hosts/components/renovate-notify/files/renovate_notify.py",
-        "hosts/lib/host_package_builder.py",
-    } <= launched
-    assert not sorted(rel for rel in launched if host_shipped(rel))
+def test_the_future_annotations_exemption_covers_only_the_pod_image_modules():
+    """An exemption that matched nothing would gate pod scripts on a rule their image's python cannot take."""
+    exempt = set(tracked("*.py")) - set(NO_FUTURE_ANNOTATIONS.files())
+    assert "k8s/roles/qbittorrent/files/apply_prefs.py" in exempt
+    assert not sorted(rel for rel in exempt if not rel.startswith("k8s/roles/"))

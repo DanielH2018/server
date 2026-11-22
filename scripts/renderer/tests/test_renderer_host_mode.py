@@ -43,7 +43,7 @@ def test_a_host_package_is_written_in_the_c1_layout(hosts, tmp_path):
     assert stat.S_IMODE(installed.stat().st_mode) == 0o755
     spec = yaml_fast.safe_load((out / "hosts" / "daniel-pi" / "nfpm.yaml").read_text())
     assert (spec["name"], spec["arch"]) == ("homelab-daniel-pi", "all")
-    assert spec["depends"] == ["python3 (>= 3.12)"]
+    assert spec["depends"] == ["python3 (>= 3.14)"]
     # The builder supplies the version, so two commits with one tree render the same spec.
     assert spec["version"] == "${HOMELAB_VERSION}"
     assert spec["contents"] == [

@@ -107,7 +107,7 @@ SECRETS = SECRETS_DIR / "secrets.yml"
 HOST_SOPS = SECRETS_DIR / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
-HOST_DEPENDS = ("python3 (>= 3.12)",)
+HOST_DEPENDS = ("python3 (>= 3.14)",)
 PACKAGE_KEYS = frozenset(
     {
         "component",
