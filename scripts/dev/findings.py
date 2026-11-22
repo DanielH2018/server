@@ -339,6 +339,12 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         )
     if blockers:
         plans += plan_add_blockers(existing.number, blockers)
+    if args.no_vetted_remediation and "no-vetted-remediation" not in existing.labels:
+        # Not re-added: `remedy` may have removed it on purpose.
+        sys.stderr.write(
+            f"open: #{existing.number} matched without `no-vetted-remediation`;"
+            " --no-vetted-remediation applies only to a new issue\n"
+        )
     if args.manual and "manual" not in existing.labels:
         # A matched issue would otherwise drop the flag silently. A reopened one is open by
         # the time these run, and its claim was released just above.

@@ -102,23 +102,25 @@ claude_code_fleet_slice: user.slice
 # ceiling shares elastically — either plane may take up to its own 14G, and the two together
 # are held to 20G by the parent.
 #
-# The cap is derived from a floor of about 8 GiB of host RAM available on every node, worked
-# backward. MemAvailable already nets out the homelab plane's anon and the kernel, so neither is
-# a term below. Re-derive all of it if you change this:
-#   Available without Valheim (2.5 GiB, parked separately): about 17.4 GiB.
-#   Spendable above the floor: 17.4 - 8 = 9.4 GiB.
-#   Cap: the fleet's own use (10.9 GiB) + 9.4 GiB spendable = 20.3 GiB, rounded down to 20G.
-#   Worst case: if every byte the fleet adds up to the cap stays unreclaimable, available
-#     falls to 17.4 - (20 - 10.9) = 8.3 GiB. Page cache the fleet adds is reclaimable, so
-#     8.3 GiB is a lower bound.
-# The floor moves one for one with the homelab plane. If k3s grows, re-check kubepods.slice
-# and system.slice anon first: growth of 0.3 GiB takes the worst case under 8 GiB. The
-# throttle stalls whichever cgroup loses the race for reclaim, which must not be the homelab
-# plane.
+# The cap was meant to hold a floor of 8 GiB of MemAvailable on every node. It does not hold it
+# when the fleet's memory is anon. MemAvailable is about MemTotal minus the anon and kernel
+# memory of user.slice, kubepods.slice and system.slice, since their page cache counts as
+# available. memory.high bounds the fleet's anon, file and kernel together, so the worst-case
+# floor is MemTotal - homelab (anon + kernel) - this cap. claude_host_plane_memory_bytes reports
+# each term. Measured on daniel-box on 2026-11-22:
+#   MemTotal 27.7 GiB. Homelab anon + kernel 12.6 GiB at its peak: kubepods.slice anon 9.2
+#     (the 14-day peak of cAdvisor's rss), its kernel 0.9, system.slice anon 2.1 and kernel 0.4.
+#   Worst-case floor at 20G: 27.7 - 12.6 - 20 = -4.9 GiB, so reclaim and swap take the gap.
+#   A cap that holds 8 GiB with all-anon fleet memory: 27.7 - 12.6 - 8 = 7.1 GiB, or 10.6 GiB
+#     against the homelab plane's median.
+# The 2026-11-18 episode fits this model. The fleet held 17.3 GiB, nearly all of it unreclaimable,
+# and MemAvailable fell to 2.7 GiB. The floor holds on an ordinary busy day only because much of
+# the fleet's memory is page cache: on 2026-11-20 the fleet peaked at 15.9 GiB and MemAvailable
+# stayed at or above 9.8 GiB. docs/claude-code-rc-caps.md has the full record.
 #
 # memory.high counts PAGE CACHE as well as anon, so an ordinary multi-agent pytest fan-out
 # will touch this bound and reclaim cache. That is the cheap half of reclaim and it is
-# intended; the floor above is what the number is derived from, not what it throttles on.
+# intended.
 claude_code_fleet_memory_high: 20G
 
 # The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
