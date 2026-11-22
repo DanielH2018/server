@@ -1,0 +1,13 @@
+# udev applies only the first matching .link file, so this one replaces 99-default.link for eno1.
+# The three policy lines are 99-default.link's: NamePolicy's `onboard` is what names the port eno1,
+# which netplan, k3s_node_static_link and the wired-gateway check all name.
+[Match]
+Path=pci-0000:02:00.0
+
+[Link]
+NamePolicy=keep kernel database onboard slot path
+AlternativeNamesPolicy=database onboard slot path mac
+MACAddressPolicy=persistent
+AutoNegotiationFlowControl=no
+RxFlowControl=no
+TxFlowControl=no
