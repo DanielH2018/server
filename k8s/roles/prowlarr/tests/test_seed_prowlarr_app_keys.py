@@ -9,6 +9,7 @@ Run: uv run pytest k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -147,12 +148,35 @@ def test_the_gate_is_a_rerun_safe_mutation(bundle):
     }
 
 
+def _period_hours(schedule: str) -> int | None:
+    """The hours between runs of `schedule`, or None for a shape with no fixed period.
+
+    Only `M * * * *` and `M */N * * *` have one; a fixed hour or a list runs at set times.
+    """
+    match = re.fullmatch(r"\d+ \*(?:/(\d+))? \* \* \*", schedule)
+    return int(match[1] or 1) if match else None
+
+
+@pytest.mark.parametrize(
+    ("schedule", "period"),
+    [
+        ("23 * * * *", 1),
+        ("23 */4 * * *", 4),
+        ("23 2 * * *", None),
+        ("23 0,12 * * *", None),
+        ("23 * * * 0", None),
+    ],
+)
+def test_period_hours_reads_only_a_fixed_period(schedule, period):
+    assert _period_hours(schedule) == period
+
+
 def test_the_seed_reruns_on_a_schedule_inside_the_long_term_status_window(bundle):
     """A revert changes no render, so only a scheduled run rewrites the key it restored."""
-    minute, hour, *days = _cronjob(bundle)["spec"]["schedule"].split()
-    assert minute.isdigit() and days == ["*"] * 3
-    period_hours = 1 if hour == "*" else int(hour.removeprefix("*/"))
-    assert period_hours < LONG_TERM_STATUS_HOURS
+    schedule = _cronjob(bundle)["spec"]["schedule"]
+    period = _period_hours(schedule)
+    assert period is not None, f"{schedule!r} has no fixed period"
+    assert period < LONG_TERM_STATUS_HOURS
 
 
 def test_the_job_reads_each_key_from_its_apps_exportarr_secret(bundle, stubs):
