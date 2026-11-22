@@ -71,7 +71,7 @@ starting the stopped containers.
 Until 2026-09-24 the four pins read GitHub releases, and Docker packages a release days-to-weeks
 after upstream tags it: PR #2327 offered containerd 2.4.0 while the index topped out at 2.3.5, so
 the Ansible-era upgrade play would have failed at apt *after* stopping every Compose project on the Pi
-(#2341). Reading `download.docker.com`'s own noble/arm64 index means the PR opens only once the Pi
+(#2341). Reading `download.docker.com`'s own arm64 index for the Pi's release means the PR opens only once the Pi
 can install the version.
 
 One limit survives that. The manager strips the Debian revision apt carries, so `2.3.4-1` and `2.3.4-2` are
