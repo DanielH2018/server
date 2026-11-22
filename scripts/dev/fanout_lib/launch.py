@@ -15,6 +15,7 @@ from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.notify import stop_post
 from dev.fanout_lib.placement import RESERVATION_BYTES
 from dev.fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
+from dev.fanout_lib.telemetry import batch_attributes
 from dev.fanout_lib.sizing import DEFAULT, Rung
 from dev.fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
 from dev.fanout_lib.transport import REPO, Tools
@@ -302,22 +303,33 @@ def write_brief_command(batch: str, target: Target = SERVER_TARGET) -> str:
 
 
 def claude_args(
-    target: Target, worktree: str, home: str | None = None, rung: Rung = DEFAULT
+    target: Target,
+    batch: str,
+    home: str | None = None,
+    rung: Rung = DEFAULT,
 ) -> str:
-    """The `claude -p` command line a batch in `target`, working in `worktree`, runs at `rung`.
+    """The `claude -p` command line `batch` in `target` runs at `rung`.
 
     The system prompt file is relative to the worktree for this repo, whose worktree always
     carries it. Another repo's worktree does not, so there it is read from the batch's
     snapshot of this repo (`snapshot_root`). Another repo's batch also gets the `fanout-stop`
     hook through `--settings`, because its worktree carries no `.claude/settings.json` to
-    register it. Both carry `fanout_lib.prompt_tool`'s flags for the user at `home`.
+    register it. Every batch carries `batch_attributes` in both its environment and its
+    `--settings` env, which `held_hooks.labelled` explains, and `fanout_lib.prompt_tool`'s
+    flags for the user at `home`.
     """
-    if target.is_server:
-        return f"{claude_prefix(rung, SYSTEM_PROMPT_FILE)} {prompt_tool_flags(home)}"
-    root = snapshot_root(worktree)
-    prefix = claude_prefix(rung, f"{root}/{SYSTEM_PROMPT_FILE}")
-    settings = json.dumps(stop_hook_settings(root))
-    return f"{prefix} --settings {shlex.quote(settings)} {prompt_tool_flags(home)}"
+    attributes = batch_attributes(batch)
+    settings: dict = {"env": {"OTEL_RESOURCE_ATTRIBUTES": attributes}}
+    prompt = SYSTEM_PROMPT_FILE
+    if not target.is_server:
+        root = snapshot_root(worktree_path(batch, target))
+        prompt = f"{root}/{SYSTEM_PROMPT_FILE}"
+        settings |= stop_hook_settings(root)
+    return (
+        f"env {shlex.quote(f'OTEL_RESOURCE_ATTRIBUTES={attributes}')} "
+        f"{claude_prefix(rung, prompt)} --settings {shlex.quote(json.dumps(settings))} "
+        f"{prompt_tool_flags(home)}"
+    )
 
 
 def review_script(
@@ -395,7 +407,7 @@ def systemd_run_command(
     """The shim check, then the `systemd-run` step; `home` defaults to the launcher's."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
-    command = claude_args(target, wt, home, rung)
+    command = claude_args(target, batch, home, rung)
     if review:
         command = review_command(batch, target, rung, resume)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
