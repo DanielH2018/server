@@ -120,8 +120,10 @@ class FakeBucket:
             "apiInfo": {
                 "storageApi": {
                     "apiUrl": "https://api",
-                    "bucketId": "bid",
-                    "capabilities": ["listFiles", "deleteFiles"],
+                    "allowed": {
+                        "buckets": [{"id": "bid", "name": "bucket"}],
+                        "capabilities": ["listFiles", "deleteFiles"],
+                    },
                 }
             },
             "authorizationToken": "t",
@@ -198,7 +200,13 @@ def test_a_dry_run_deletes_nothing(run):
 
 
 def test_a_key_that_is_not_bucket_scoped_is_refused_by_the_drain(run, capsys):
-    bucket = FakeBucket([], auth={"apiUrl": "https://api", "authorizationToken": "t"})
+    bucket = FakeBucket(
+        [],
+        auth={
+            "apiInfo": {"storageApi": {"apiUrl": "https://api", "allowed": {}}},
+            "authorizationToken": "t",
+        },
+    )
     assert run(bucket, "--apply") == 2
     assert "not bucket-scoped" in capsys.readouterr().err
 

@@ -29,7 +29,9 @@ import urllib.request
 from collections.abc import Callable
 from typing import NamedTuple
 
-AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
+# v4: B2 refuses an earlier version for a key created with v4's `bucketIds`, as the CLI does.
+API_VERSION = "v4"
+AUTHORIZE_URL = f"https://api.backblazeb2.com/b2api/{API_VERSION}/b2_authorize_account"
 PAGE_SIZE = 1000
 
 # (url, headers, JSON payload or None for a GET, timeout) -> the parsed JSON response.
@@ -112,7 +114,7 @@ def http_json(
 class B2Session:
     """An authorized B2 session. Construction makes the `b2_authorize_account` call.
 
-    `bucket_id` is set when the key is bucket-scoped and None otherwise. Only a caller that
+    `bucket_id` is set when the key is scoped to exactly one bucket and None otherwise. Only a caller that
     accepts an account-wide key resolves a bucket by name, through `lookup_bucket`; the drain
     refuses such a key rather than gaining reach over every bucket in the account.
 
@@ -135,23 +137,23 @@ class B2Session:
             AUTHORIZE_URL, {"Authorization": f"Basic {basic}"}, None, timeout
         )
         storage = (auth.get("apiInfo") or {}).get("storageApi") or {}
-        api_url = storage.get("apiUrl") or auth.get("apiUrl")
+        allowed = storage.get("allowed") or {}
+        api_url = storage.get("apiUrl")
         token = auth.get("authorizationToken")
         if not api_url or not token:
             raise B2Error("B2 authorize returned no apiUrl/authorizationToken")
         self.api_url = api_url.rstrip("/")
         self.token = token
         self.account_id = auth.get("accountId", "")
-        self.bucket_id = storage.get("bucketId") or (auth.get("allowed") or {}).get(
-            "bucketId"
-        )
-        self.capabilities = storage.get("capabilities") or []
+        buckets = allowed.get("buckets") or []
+        self.bucket_id = buckets[0].get("id") if len(buckets) == 1 else None
+        self.capabilities = allowed.get("capabilities") or []
         self.class_c = 1
         self.list_calls = 0
 
     def _call(self, api: str, payload: dict) -> dict:
         return self._transport(
-            f"{self.api_url}/b2api/v3/{api}",
+            f"{self.api_url}/b2api/{API_VERSION}/{api}",
             {"Authorization": self.token},
             payload,
             self.timeout,
