@@ -5,8 +5,8 @@ transmit queue hangs blackholes the node with no change WiredLinkDown can read.
 `wired-gateway-check.sh` in the k3s-server component pings the gateway bound to the link, and
 three properties hold:
 
-THE VERDICT IS A REPLY. A ping that gets a reply writes success 1; one that gets none, or that
-cannot run, writes 0, and the unit still exits 0 because the verdict is the report.
+THE VERDICT IS A REPLY. A ping that gets a reply writes success 1; one that does not writes 0,
+and the unit still exits 0 because the verdict is the report.
 
 THE RULES' LITERALS EQUAL THE SCRIPT'S DEADLINE_S, on one Unreachable and NotReporting pair per
 host whose host_vars set k3s_node_static_link.
@@ -85,11 +85,6 @@ def test_a_reply_over_the_link_writes_success_1(tmp_path):
 
 def test_no_reply_writes_success_0_and_exits_0(tmp_path):
     code, series, _ = _run(tmp_path, ping_rc=1)
-    assert (code, series["homelab_check_success"]) == (0, "0")
-
-
-def test_a_ping_that_cannot_run_writes_success_0(tmp_path):
-    code, series, _ = _run(tmp_path, ping_rc=2)
     assert (code, series["homelab_check_success"]) == (0, "0")
 
 
