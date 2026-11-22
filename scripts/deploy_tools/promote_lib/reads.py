@@ -15,11 +15,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
+from lib import host_modules  # noqa: F401
 from lib import removes_object
 from lib.git import git
 from validate import cluster_pins
 from validate.cluster_pins import Pin
 
+from ci_verdict import WorkflowRun
 from deploy_tools import forge
 from deploy_tools.artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from deploy_tools.promote_lib import forward_only, reboot_window, wait
@@ -93,7 +95,7 @@ class Reads:
     pulls: Callable[[str], list[dict]]
     gate_status: Callable[[str], tuple[str, datetime] | None]
     statuses: Callable[[str], dict[str, str]]
-    other_runs: Callable[[], list[dict]]
+    other_runs: Callable[[], list[WorkflowRun]]
     reboot: Callable[[], reboot_window.Schedule]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     sleep: Callable[[float], None] = time.sleep
@@ -121,7 +123,7 @@ def prod_commit(manifest: dict | None) -> str | None:
     return match.group(1)
 
 
-def runs_past_decide(f: forge.Forge) -> list[dict]:
+def runs_past_decide(f: forge.Forge) -> list[WorkflowRun]:
     """The other in-progress promote runs whose `promote` job has completed.
 
     A later run whose `promote` job is queued behind this `decide`, on the job's concurrency
@@ -131,10 +133,10 @@ def runs_past_decide(f: forge.Forge) -> list[dict]:
     return [
         run
         for run in f.github.runs(WORKFLOW, "in_progress")
-        if str(run.get("id")) != own
+        if str(run.id) != own
         and any(
             job.get("name") == "promote" and job.get("status") == "completed"
-            for job in f.github.run_jobs(run.get("id"))
+            for job in f.github.run_jobs(run.id)
         )
     ]
 

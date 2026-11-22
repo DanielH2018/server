@@ -22,6 +22,9 @@ from dev import tested_tree
 from lib import gh as gh_mod
 from lib.repo_paths import REPO
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
+
 # A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
 # up to the first pair of colons, is the test file this weight belongs to.
 _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
@@ -491,18 +494,18 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
     }
 
 
-def _tested_run(run: dict, gh) -> int | None:
+def _tested_run(run: WorkflowRun, gh) -> int | None:
     """The id of the run that tested master run `run`'s tree before it merged, or None.
 
     A push to master runs no pytest leg when a pull-request run already tested its tree, so
     that run's logs are the tree's measurement. `tested_tree.tested_run` finds it from the
-    record the push itself was proven by. `run` is one row of GitHub's workflow-runs listing.
+    record the push itself was proven by.
     """
     url, _ = tested_tree.tested_run(
         lambda path: json.loads(gh("api", path, cwd=REPO).stdout),
-        run["repository"]["full_name"],
-        run["head_sha"],
-        (run.get("head_commit") or {}).get("tree_id", ""),
+        run.repository,
+        run.head_sha,
+        run.head_tree,
     )
     return int(url.rsplit("/", 1)[1]) if url else None
 
@@ -528,7 +531,10 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
         f"repos/{{owner}}/{{repo}}/actions/workflows/{CI_WORKFLOW}/runs"
         f"?branch={CI_BRANCH}&event=push&status=success&per_page={RUN_WINDOW}"
     )
-    listed = json.loads(gh("api", listing, cwd=REPO).stdout)["workflow_runs"]
+    listed = [
+        WorkflowRun.parse(run)
+        for run in json.loads(gh("api", listing, cwd=REPO).stdout)["workflow_runs"]
+    ]
     seen: set[int] = set()
 
     def measured(run_id: int | None) -> list[str]:
@@ -543,7 +549,7 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
     for run in listed:
         if len(reports) == runs:
             break
-        logs = measured(run["id"]) or measured(_tested_run(run, gh))
+        logs = measured(run.id) or measured(_tested_run(run, gh))
         if logs:
             reports.append(logs)
     if len(reports) < runs:

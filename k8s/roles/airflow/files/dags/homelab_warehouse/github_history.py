@@ -178,6 +178,8 @@ def pr_rows(day: date, prs: Sequence[Mapping]) -> list[tuple]:
 
 def run_rows(day: date, runs: Sequence[Mapping]) -> list[tuple]:
     """`ci_runs` rows: one per workflow and conclusion, with the seconds each attempt ran."""
+    # DECIDED: the loader reads raw workflow runs, not `ci_verdict.WorkflowRun`. The DAG image
+    # ships only this role's dags/, and a warehouse row keeps GitHub's fields as GitHub sends them.
     return _summed(
         day,
         "ci_runs",

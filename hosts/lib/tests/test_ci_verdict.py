@@ -197,21 +197,53 @@ def test_a_commit_status_with_no_readable_time_reads_as_the_earliest(updated_at)
             "conclusion": "failure",
             "head_sha": "b" * 40,
             "html_url": "https://github.com/o/r/actions/runs/7",
+            "run_attempt": 2,
+            "head_branch": "claude/x",
+            "name": "CI",
+            "created_at": "2026-11-21T10:00:00Z",
+            "run_started_at": "2026-11-21T10:05:00Z",
         },
         {
-            "id": 7,
+            "databaseId": 7,
             "status": "COMPLETED",
             "conclusion": "FAILURE",
             "headSha": "b" * 40,
             "url": "https://github.com/o/r/actions/runs/7",
+            "attempt": 2,
+            "headBranch": "claude/x",
+            "name": "CI",
+            "createdAt": "2026-11-21T10:00:00Z",
+            "startedAt": "2026-11-21T10:05:00Z",
         },
     ],
     ids=["rest", "gh-run-list"],
 )
 def test_a_workflow_run_parses_alike_from_rest_and_from_gh(raw):
     assert WorkflowRun.parse(raw) == WorkflowRun(
-        7, "completed", "failure", "b" * 40, "https://github.com/o/r/actions/runs/7"
+        id=7,
+        status="completed",
+        conclusion="failure",
+        head_sha="b" * 40,
+        url="https://github.com/o/r/actions/runs/7",
+        attempt=2,
+        head_branch="claude/x",
+        name="CI",
+        created_at=datetime(2026, 11, 21, 10, 0, tzinfo=UTC),
+        started_at=datetime(2026, 11, 21, 10, 5, tzinfo=UTC),
     )
+
+
+def test_a_rest_workflow_run_names_its_repository_and_head_tree():
+    run = WorkflowRun.parse(
+        {"repository": {"full_name": "o/r"}, "head_commit": {"tree_id": "c" * 40}}
+    )
+    assert (run.repository, run.head_tree) == ("o/r", "c" * 40)
+
+
+def test_a_workflow_run_missing_its_attempt_and_times_reads_as_attempt_one_and_earliest():
+    run = WorkflowRun.parse({"id": 7, "run_attempt": None, "created_at": "soon"})
+    earliest = datetime.min.replace(tzinfo=UTC)
+    assert (run.attempt, run.created_at, run.started_at) == (1, earliest, earliest)
 
 
 @pytest.mark.parametrize(
