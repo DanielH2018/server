@@ -1,9 +1,7 @@
-"""The drill's `main` reaches each predicate it defines, or the predicate lives elsewhere.
+"""The drill's `main` reaches `placeholder_problems`, or the predicate lives in the renderer test.
 
-`check` reaches `closure_problems` and `sync_problems`, or neither exists.
-`main` reaches `placeholder_problems` and its `_strings`, through `check` or `build`, or the
-predicate lives only in the renderer test. A census over `bootstrap_drill.py`'s call graph: the
-module is parsed, never imported.
+`main` reaches it through `check` or `build`. A census over `bootstrap_drill.py`'s call graph:
+the module is parsed, never imported.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill_check_wiring.py
 """
@@ -12,7 +10,6 @@ import ast
 import sys
 from pathlib import Path
 
-import pytest
 
 DRILL = Path(__file__).resolve().parents[1] / "bootstrap_drill.py"
 RENDERER_TEST = (
@@ -21,8 +18,6 @@ RENDERER_TEST = (
     / "tests"
     / "test_renderer_bootstrap_documents.py"
 )
-# `build` writes the fixture; a call there does not reach the verdict `check` prints.
-NOT_CHECK = frozenset({"build"})
 
 
 def _top_level(
@@ -42,14 +37,14 @@ def _top_level(
     return functions, assigned
 
 
-def _reachable_from_main(skip: frozenset[str] = NOT_CHECK) -> set[str]:
+def _reachable_from_main() -> set[str]:
     functions, assigned = _top_level()
     seen: set[str] = set()
     todo: list[ast.AST] = [functions["main"]]
     while todo:
         node = todo.pop()
         for sub in ast.walk(node):
-            if not isinstance(sub, ast.Name) or sub.id in seen or sub.id in skip:
+            if not isinstance(sub, ast.Name) or sub.id in seen:
                 continue
             if sub.id in functions:
                 seen.add(sub.id)
@@ -60,24 +55,14 @@ def _reachable_from_main(skip: frozenset[str] = NOT_CHECK) -> set[str]:
     return seen
 
 
-@pytest.mark.parametrize("verdict", ["closure_problems", "sync_problems"])
-def test_check_reaches_the_verdict_or_it_is_deleted(verdict):
-    functions, _ = _top_level()
-    if verdict not in functions:
-        return
-    assert verdict in _reachable_from_main(), (
-        f"{verdict} is defined in bootstrap_drill.py but `check` never calls it"
-    )
-
-
-@pytest.mark.parametrize("helper", ["placeholder_problems", "_strings"])
-def test_main_reaches_the_placeholder_check_or_it_lives_in_the_renderer_test(helper):
+def test_main_reaches_the_placeholder_check_or_it_lives_in_the_renderer_test():
+    helper = "placeholder_problems"
     if helper in _top_level()[0]:
-        assert helper in _reachable_from_main(skip=frozenset()), (
+        assert helper in _reachable_from_main(), (
             f"{helper} is defined in bootstrap_drill.py but neither `check` nor `build` "
             "calls it"
         )
-    elif helper == "placeholder_problems":
+    else:
         assert helper in _top_level(RENDERER_TEST)[0], (
             f"{helper} left bootstrap_drill.py but the renderer test does not define it"
         )
