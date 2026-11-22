@@ -77,7 +77,6 @@ def io_config(
     _int: Callable[..., int],
     _num: Callable[..., float],
     _env_file: Callable[..., str],
-    interval: int,
     problems: list[str],
 ) -> IoConfig:
     """The storage, log and alerting fields, read through `load_config`'s parsers."""

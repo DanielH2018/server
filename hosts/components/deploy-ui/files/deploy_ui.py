@@ -42,7 +42,7 @@ import urllib.parse
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, override
 
 from deploy_ui_lib import deploy_ui_games as game_reads
 from deploy_ui_lib.deploy_ui_game_control import GameControl
@@ -512,6 +512,7 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
                 "application/json" if status == 202 else "text/plain; charset=utf-8",
             )
 
+        @override
         def log_request(self, code="-", size="-") -> None:
             status = code if isinstance(code, int) else 0
             method = getattr(self, "command", None) or "-"

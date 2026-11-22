@@ -201,7 +201,7 @@ def apply(edit: dict, refusals: dict[str, str | None]) -> bool:
     return True
 
 
-def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, None, int]:
+def reconcile(section: dict | None, _prev: dict | None) -> tuple[bool, None, int]:
     """Run the arm. Return whether every edit applied; it keeps no record and counts no drift."""
     edits = section["edits"] if section else []
     found = owners(sorted({edit["path"] for edit in edits}))
