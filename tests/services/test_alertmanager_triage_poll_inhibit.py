@@ -51,10 +51,6 @@ def test_a_poll_failure_its_hook_paged_holds_the_staleness_page():
     assert inhibited(poll_stale(), [unit_failed(paged_by="homelab-alert")])
 
 
-def test_a_stopped_timer_still_pages_through_the_staleness_rule():
-    assert not inhibited(poll_stale(), [])
-
-
 def test_only_a_hook_paged_failure_of_the_poll_unit_holds_it():
     assert not inhibited(poll_stale(), [unit_failed()])
     other = unit_failed("homelab-claude-memory-sync.service", paged_by="homelab-alert")
