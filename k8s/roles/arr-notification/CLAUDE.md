@@ -46,9 +46,12 @@ A missing row is created from the app's schema
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:schema_for`), and a row someone adds
 by hand under the declared name first is adopted instead.
 
-sonarr also carries an `Episode Trimmer` CustomScript notification (id 2, `onDownload` +
-`onUpgrade`). This role never touches it — `find_notification` matches on implementation AND
-name, so a CustomScript that happened to share the name is left alone
+**HISTORY —** sonarr carried an `Episode Trimmer` CustomScript notification (id 2,
+`onDownload` + `onUpgrade`) that ran `/config/sonarr-episode-trimmer.py`, a file the pod never
+had. The operator deleted the row in the UI on 2026-11-22 (#9737).
+
+`find_notification` matches on implementation AND name, so a CustomScript that shares the
+declared name is left alone
 (`k8s/roles/arr-notification/files/seed_arr_notification.py:find_notification`,
 `k8s/roles/arr-notification/tests/test_seed_arr_notification.py::test_a_same_named_notification_of_another_kind_is_not_adopted`).
 
