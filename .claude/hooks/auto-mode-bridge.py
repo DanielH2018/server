@@ -5,8 +5,7 @@
 #   timeout: 10
 #   order: 10
 #   args: --project
-# TODO: https://github.com/DanielH2018/server/issues/9759 - filter the failure event to
-# Bash(git push*) too once both gen-hooks parsers accept if: on PostToolUseFailure.
+#   if: Bash(git push*)
 # gen-hooks: register
 #   event: PostToolUse
 #   matcher: Bash
@@ -17,11 +16,8 @@
 """A narrow bridge between auto mode and this repo, on two events one script serves.
 
 Usage: Claude Code runs this hook on the PostToolUseFailure:Bash and PostToolUse:Bash events,
-passing `--project`; the second only for a `git push`. The first runs on every failed Bash call
-and prints nothing unless the call was a push: the gen-hooks grammar this repo shares with
-dotfiles refuses an `if:` rule on PostToolUseFailure, so that registration cannot carry the
-filter. It reads the hook JSON payload on stdin. It
-prints one `hookSpecificOutput` JSON object carrying an `additionalContext` note, or nothing, and
+passing `--project`, and an `if:` rule on each limits both to a `git push`. It reads the hook
+JSON payload on stdin. It prints one `hookSpecificOutput` JSON object carrying an `additionalContext` note, or nothing, and
 it always exits 0. `-h` or `--help` prints this text and exits 0 without reading stdin.
 
 `PostToolUseFailure` and `PostToolUse` on a `git push` — GitHub prints `- Cannot update this
