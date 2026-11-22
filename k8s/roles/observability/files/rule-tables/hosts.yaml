@@ -100,6 +100,24 @@ groups:
           description: >-
             {{ $labels.origin }} has less than 10% of its memory available. Per-container OOM kills
             are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host.
+      # DECIDED: the 8 GiB MemAvailable floor is a typical-day floor, and this alert is its check
+      # (operator ruling, 2026-11-22). HostMemoryHigh fires near 2.8 GiB available on daniel-box,
+      # so a dip under the floor went unseen.
+      - alert: HostMemoryAvailableLow
+        hosts: {job: node}
+        expr: |
+          node_memory_MemAvailable_bytes{origin="${host}"} < 8 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: '{{ $labels.origin }}: {{ $value | humanize1024 }}B of memory is available.'
+          description: >-
+            {{ $labels.origin }} has had under 8 GiB of memory available for 10 minutes. The fleet's
+            anon memory is past what MemoryLow can protect against. Read `free -h` and the top
+            memory cgroups on the host.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostmemoryavailablelow
       # The bridge's Claude Code cgroup arm of check_mem (with_claude_cgroups), arm 1: a watched
       # memory.events counter rose within CLAUDE_CGROUP_EVENT_WINDOW (10m). `for: 5m`, not
       # CLAUDE_CGROUP_CONSECUTIVE (2) x 300s, because the 10m window holds one event for only two
