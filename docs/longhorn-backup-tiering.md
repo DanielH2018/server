@@ -276,8 +276,8 @@ the drain's `b2_list_file_versions` above, one level up.
 with per-object Object Lock retentions and the R2 etcd snapshots with a bucket lock rule. It
 leaves the R2 daily tier unlocked. The B2 bucket has file lock enabled and **no default
 retention**: the daily sweep sets each object's retention. monitor-bridge's `b2_object_lock`
-row reads the B2 setting once a day and fires `B2ObjectLockOff`, a warning, until step 2 is
-done. The R2 rule has no standing reader until
+row reads the B2 setting once a day and fires `B2ObjectLockOff`, a warning, until steps 2 and
+2a are both done. The R2 rule has no standing reader until
 [#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 4 verifies it by hand.
 
 Every step is **operator-only**. A session holds no credential that can change a bucket, a
@@ -318,11 +318,35 @@ b2 bucket get daniel-server-kopia
 ```
 
 The second command's `fileLockConfiguration` must read `"isFileLockEnabled": true` and a
-`defaultRetention` whose `mode` is `null`. `B2ObjectLockOff` clears at the next daily read. If
-it reads `key bypasses governance`, the Longhorn key holds `bypassGovernance`: mint a key
-without it, then rotate `longhorn_b2_key_id` and `longhorn_b2_application_key`. If it reads
+`defaultRetention` whose `mode` is `null`. `B2ObjectLockOff` clears at the next daily read
+only once the Longhorn key can read the setting, which is step 2a. If the row reads
+`key bypasses governance`, the Longhorn key holds `bypassGovernance`: mint a key without it,
+then rotate `longhorn_b2_key_id` and `longhorn_b2_application_key`. If it reads
 `default retention set`, remove the default at once with
 `b2 bucket update --default-retention-mode none daniel-server-kopia`.
+
+### Step 2a: let the Longhorn key read the bucket's lock setting
+
+The `b2_object_lock` row and the daily sweep both read the lock setting with the Longhorn key
+(`longhorn_b2_key_id`, which monitor-bridge mounts as `B2_PROBE_KEY_ID`). That key lacks
+`readBucketRetentions`, so the row reads `lock unreadable` and the sweep prints
+`declined: the key cannot read the bucket's Object Lock setting` whatever the bucket's state.
+B2 cannot add a capability to a key, so mint a new one and rotate both SOPS keys to it.
+
+When step 2b picks the Longhorn key for the sweep, do both steps with one key and one
+rotation: add `writeFileRetentions` to the list below. Compare the list with the live key's
+capabilities first, which `b2 key list --long` prints, and add any it holds that the list
+lacks. The list is the set the step 1 scratch key held, under which Longhorn backed up and
+deleted without error:
+
+```bash
+b2 key create --bucket daniel-server-kopia longhorn-weekly listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions
+```
+
+Then set `longhorn_b2_key_id` and `longhorn_b2_application_key` to the printed pair with
+`sops`, and run `cluster_vars.py write` so Flux carries them to the cluster
+([Secret rotation](secret-rotation.md)). Delete the old key with `b2 key delete` only after a
+weekly backup has completed with the new one.
 
 ### Step 2b: give the daily sweep a key that can extend retention
 
