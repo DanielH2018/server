@@ -76,6 +76,6 @@ MEMORY_PROPERTIES = (
         green=("pihole", {"request_mib": 152, "p95_mib": 304}),
         more_green=(("traefik", {"request_mib": 192, "p95_mib": 224}),),
         min_matches=28,
-        must_find=MUST_RECORD | {"homelab/zigbee2mqtt/zigbee2mqtt"},
+        must_find=MUST_RECORD,
     ),
 )

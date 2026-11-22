@@ -51,6 +51,7 @@ MUST_RECORD = frozenset(
         "homelab/pihole-2/pihole",
         "homelab/traefik/traefik",
         "homelab/crowdsec-node-agent/crowdsec-agent",
+        "homelab/zigbee2mqtt/zigbee2mqtt",
     }
 )
 
