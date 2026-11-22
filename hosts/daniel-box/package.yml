@@ -179,6 +179,10 @@ depends:
   - zsh-syntax-highlighting
 files:
   - {src: tmpfiles.d/homelab-media-volume.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-media-volume.conf}
+  # Ethernet flow control off on eno1: the I226-V neither honours nor sends PAUSE frames. udev
+  # applies a .link file when the device appears, so a change goes live at the next boot, which
+  # the weekly reboot makes happen within 7 days. A live apply would bounce the wired link.
+  - {src: network/50-homelab-eno1.link, dst: /usr/lib/systemd/network/50-homelab-eno1.link, activate: reboot}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf

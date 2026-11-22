@@ -278,7 +278,17 @@ gateway stops answering on it keeps the wired default route, so the node loses t
 and WiFi carries nothing. On 2026-11-22 from about 01:44 to 02:00 UTC, daniel-box's I226-V
 (`igc`) hit seven `NETDEV WATCHDOG: transmit queue timed out` resets on `eno1`, and the
 gateway's neighbour entry on `eno1` stayed `INCOMPLETE`. The same signature appeared on
-2026-10-18 and 2026-10-28. Each node's `homelab-wired-gateway.timer` pings `lan_router_ip`
+2026-10-18 and 2026-10-28, under kernels 6.8 and 7.0. daniel-box's package turns Ethernet
+flow control off on `eno1`, because the switch sends the port PAUSE frames, and a stream of
+them stalls transmit while carrier stays up. Nothing has confirmed that PAUSE frames caused
+the hangs: the measure is no `igc` watchdog line for 30 days after the change goes live (#9932).
+The `.link` file applies when the NIC appears, so it goes live at the first boot after the
+package installs. The weekly reboot, Sunday 07:30 UTC, makes that boot happen within 7 days.
+The 30 days count from that boot: the first one at which `ethtool -a eno1` reads `RX: off`.
+Applying the file to the running link renegotiates it and drops carrier for a moment on the
+control-plane node, which is why no unattended path applies it live.
+The kernel exposes no ASPM control for the port's PCIe link, so the issue's first candidate,
+`l1_aspm`, cannot be set there. Each node's `homelab-wired-gateway.timer` pings `lan_router_ip`
 bound to its static link every minute (`hosts/components/k3s-server/files/wired-gateway-check.sh`),
 and `WiredGatewayUnreachable` pages once three minutes of runs get no reply while the link
 keeps carrier.
