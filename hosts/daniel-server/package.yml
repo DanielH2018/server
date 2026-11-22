@@ -53,6 +53,9 @@
 # packages; `rsyslog-filter` ships the info filter; `loki-route-witness` ships the witness timer.
 # No file needs a credential. The `unattended-upgrades` component above applies the regular
 # updates pocket, this host has no Docker to hold, and no homelab origin is allowed.
+#
+# `pi-ssh-name` gives every user `ssh daniel-pi`: the /etc/hosts line and the Pi's pinned host
+# key, as on daniel-box.
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files.
@@ -60,13 +63,7 @@ component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down.
   - {name: claude, uid: 900, gid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-# daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi`
-# fail here for every user. The regexp anchors on the NAME, so a new Pi address rewrites the
-# line rather than adding a second one. The arm never removes a line: dropping this entry leaves
-# the live line until it is deleted by hand.
-lines:
-  - {path: /etc/hosts, line: "{{ hosts['daniel-pi'].server_ip }} daniel-pi", regexp: '^\S+\s+daniel-pi(\s|$)', mode: "0644"}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, k3s-apparmor, apparmor-who, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, checkout-sync, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, k3s-apparmor, apparmor-who, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, checkout-sync, uv, vale, worktree-holders, gh-quota, host-hardening, rsyslog-filter, loki-route-witness, pi-ssh-name]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:
@@ -79,9 +76,6 @@ enable:
 depends:
   - libyaml-dev
 files:
-  # The Pi's pinned host key, under the name the /etc/hosts line above gives it. Without it
-  # `ssh daniel-pi` ends "Host key verification failed" for every user.
-  - {src: ssh_known_hosts.j2, dst: /etc/ssh/ssh_known_hosts}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf

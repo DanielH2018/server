@@ -118,6 +118,8 @@ components:
   - gh-quota
   - host-hardening
   - rsyslog-filter
+  # `ssh daniel-pi` for every user: the /etc/hosts line and the Pi's pinned host key.
+  - pi-ssh-name
 units:
   k3s.service: {policy: windowed}
 credentials:
