@@ -27,12 +27,15 @@ name: Flux deletion drill
 # The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
 # The private keys are generated here and discarded with the runner; the kit's private half
 # never reaches CI. The merge gate requires this check (`github_expected_ruleset_contexts` in
-# hosts/components/github-checks/defaults/main.yml). It runs on every pull request and
-# skips itself when no in-scope path changed, so the required context never sticks at
-# "Expected".
+# hosts/components/github-checks/defaults/main.yml). It triggers on every pull request and
+# skips its steps when no in-scope path changed, so the required context never sticks at
+# "Expected". On a draft the job skips at job level, which takes no runner and reads as a
+# pass; GitHub refuses to merge a draft, and `ready_for_review` starts the run that counts
+# (docs/ci-throughput.md, *When a job may skip at job level*).
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -45,6 +48,7 @@ concurrency:
 jobs:
   drill:
     name: flux-deletion-drill
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     env:

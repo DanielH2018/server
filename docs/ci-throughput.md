@@ -39,6 +39,40 @@ succeeded, and the build's output said `false` for it: `run-cases` for the cases
 `arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
 skipped required job as a pass.
 
+**A required context in its own workflow may skip at job level on a draft only.** The
+`flux-deletion-drill` and `pull + boot changed images` jobs are required contexts with no
+gate in front of them, so their skip is the pass GitHub reads. On a draft that pass merges
+nothing: GitHub refuses to merge a draft, every landing marks the PR ready first
+(`merge._mark_ready`), and the `ready_for_review` event in each workflow's `types` starts
+the run that counts. `ci_verdict` takes the worst outcome per check name, so once the ready
+run registers, the draft run's skip no longer decides. On a ready PR both jobs still start a
+runner and scope themselves out step by step. A `paths:` filter would leave the required
+context waiting as `Expected`. A job-level skip would need an earlier job to decide the scope, and
+that job takes the same slot.
+
+### The workflows beside `ci.yml`, counted
+
+Four workflows beside `ci.yml` held 17.7% of the slots while the cap bound, from 17:00 UTC
+on 2026-11-19 to 02:30 on 2026-11-20
+([#9650](https://github.com/DanielH2018/server/issues/9650)). The count below reads each
+run's job from GitHub's jobs listing. A flux-deletion-drill run found nothing to do when its
+`Fetch the pinned flux CLI` step skipped. An image-smoke run found nothing to do when its
+`Pull + boot each image` step skipped.
+
+| Workflow | Runs | Runs with nothing to do | Their slot-seconds | All slot-seconds |
+|---|---|---|---|---|
+| Flux deletion drill | 292 | 216 (74%) | 3,207 | 20,181 |
+| image-smoke | 292 | 277 (95%) | 4,261 | 5,009 |
+| Bootstrap drill | 78 | 0 | 0 | 29,661 |
+| render-diff | 169 | 0 | 0 | 9,707 |
+
+- **flux-deletion-drill and image-smoke skip a draft at job level.** Both triggered on every
+  push to a draft, about three runs a merge. A run on a draft takes no runner.
+- **Bootstrap drill and render-diff have no run with nothing to do.** Each has a `paths:`
+  filter and no step that scopes the job out, so every run that starts does its work. They
+  still run on a draft's pushes, which
+  [#9949](https://github.com/DanielH2018/server/issues/9949) tracks.
+
 ## A pull request runs the test modules its diff can affect
 
 A pull-request run's `pytest` legs run a selection (#8458, ruled by the operator on
