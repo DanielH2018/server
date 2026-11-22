@@ -342,7 +342,8 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     Raises:
         FileNotFoundError: no manifest for `run_id` under `root`, live or retired. The error
             names the live path, so a mistyped run id reads as it always did.
-        ValueError: the file is not JSON, or holds a field that is not a plain word.
+        ValueError: the file is not JSON, lacks a field, has the wrong shape, or holds a
+            field that is not a plain word.
     """
     try:
         text = path(run_id, root).read_text()
@@ -351,7 +352,23 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
             text = retired_path(run_id, root).read_text()
         except FileNotFoundError:
             raise missing from None
-    return Manifest.from_json(json.loads(text))
+    try:
+        return Manifest.from_json(json.loads(text))
+    except KeyError as absent:
+        raise ValueError(f"no {absent} field") from absent
+    except TypeError as shape:
+        raise ValueError(f"wrong shape: {shape}") from shape
+
+
+def unreadable(run_id: str, root: Path = MANIFEST_DIR) -> str:
+    """Why `load` refuses `run_id`, as one line naming the run and the cause; "" if it reads."""
+    try:
+        load(run_id, root)
+    except FileNotFoundError:
+        return f"no manifest for run {run_id} under {root}"
+    except ValueError as refused:
+        return f"fan-out run {run_id}: {refused}; repair or remove its manifest under {root}"
+    return ""
 
 
 def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:

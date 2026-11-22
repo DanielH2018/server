@@ -18,7 +18,6 @@ A process started outside this tree, such as through `systemd-run --user`, is no
 """
 
 import ctypes
-import json
 import os
 import signal
 import subprocess
@@ -30,40 +29,6 @@ PR_SET_CHILD_SUBREAPER = 36
 
 # One process boundary for claude, git and gh: argv and stdin in, the finished process out.
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
-
-
-def otel_attributes(batch: str, phase: str) -> str:
-    """The `OTEL_RESOURCE_ATTRIBUTES=` assignment one phase's `claude -p` runs under.
-
-    Claude Code's telemetry reaches Prometheus with each resource attribute as a label, so
-    `fanout_batch` and `fanout_phase` make spend, tokens and tool failures readable per batch
-    and phase. Before this, those lived only in the review records, split across both hosts.
-    An attribute the unit's own environment or the user's settings already carries is kept
-    ahead of them. The settings value matters because Claude Code applies a settings `env`
-    over the process environment and replaces the whole string:
-    the agent user's `process.owner=claude` would otherwise displace the batch labels. The
-    caller therefore passes this same value through the phase's `--settings` as well.
-    """
-    config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
-    try:
-        from_settings = json.loads((config / "settings.json").read_text())["env"][
-            "OTEL_RESOURCE_ATTRIBUTES"
-        ]
-    except OSError, ValueError, KeyError, TypeError:
-        from_settings = ""
-    attributes: dict[str, str] = {}
-    for pair in (
-        *str(from_settings).split(","),
-        *os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","),
-        f"fanout.batch={batch}",
-        f"fanout.phase={phase}",
-    ):
-        key, _, value = pair.partition("=")
-        if key.strip():
-            attributes[key.strip()] = value
-    return "OTEL_RESOURCE_ATTRIBUTES=" + ",".join(
-        f"{k}={v}" for k, v in attributes.items()
-    )
 
 
 def run_process(argv: list[str], stdin: str | None) -> subprocess.CompletedProcess:
