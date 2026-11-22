@@ -193,7 +193,8 @@ from you. `place status` names the ones that do.
 - **A PR the lander's rule held** reads `needs-input: the server lander will not land #N`
   in `place status`, with the next step and the lander's ruling. An operator step goes
   under `asks:`. Every other such PR is yours to land, by the step the line names: one held
-  for the lander's own surface, one whose head moved since the review, one whose CI gate did
+  for the lander's own surface, which is a draft with no CI until your `land.sh` marks it
+  ready, one whose head moved since the review, one whose CI gate did
   not pass, and one whose review did not complete. `done (awaiting the server lander:
   <ruling>)` is the lander's to clear. After 30 minutes with no landing started, it reads
   `needs-input: the server lander has not taken #N`, and the PR is yours.
