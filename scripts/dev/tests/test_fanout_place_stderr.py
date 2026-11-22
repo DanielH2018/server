@@ -227,3 +227,34 @@ def test_every_stderr_line_carries_the_prefix(case, tmp_path, capsys, monkeypatc
     for message in expected:
         assert message in err
     assert [ln for ln in err.splitlines() if not ln.startswith(PREFIXES)] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        ("not json", "Expecting value"),
+        (f'{{"run_id": "{RUN_ID}", "batches": []}}', "no 'orchestrator_branch' field"),
+        (None, "batch worktree '/w 1' is not a plain word"),
+    ],
+    ids=["not-json", "missing-field", "worktree-with-a-space"],
+)
+def test_a_refused_manifest_is_one_line_rather_than_a_traceback(
+    tmp_path, capsys, monkeypatch, text, reason
+):
+    monkeypatch.setattr("sys.argv", ["fanout.py"])
+    batch = Batch("1", "daniel-box", "/w1", "b", "fanout-1", [1], "t")
+    manifest = save(Manifest(RUN_ID, "worktree-orch", [batch]), root=tmp_path)
+    manifest.write_text(text or manifest.read_text().replace('"/w1"', '"/w 1"'))
+    tools, calls = fake_tools()
+    for command, *rest in (
+        ["status"],
+        ["stop"],
+        ["clean"],
+        ["abandon", "1"],
+        ["resume", "1"],
+    ):
+        argv = [command, RUN_ID, *rest, "--manifest-root", str(tmp_path)]
+        assert main(argv, tools) == 64
+        assert not calls.calls
+        [line] = capsys.readouterr().err.splitlines()
+        assert line.startswith(f"fanout.py: error: fan-out run {RUN_ID}: {reason}")
