@@ -11,6 +11,7 @@ Run: uv run pytest hosts/tests/test_claude_bg_resume_unit.py
 import re
 
 from _setup_render import render_component_text
+from dev.fanout_lib.telemetry import SessionKind
 
 COMPONENT = "claude-code"
 UNIT = "claude-bg-resume.service.j2"
@@ -45,6 +46,17 @@ def test_respawned_sessions_get_a_path_with_kubectl_and_uv() -> None:
     assert len(path) == 1 and "/usr/local/bin" in path[0].split(":"), (
         "PATH must name /usr/local/bin, or a respawned session loses kubectl and uv and "
         f"reports an empty cluster. Got: {path}"
+    )
+
+
+def test_respawned_sessions_carry_the_bg_resume_session_kind() -> None:
+    attributes = [
+        v.split("=", 1)[1]
+        for v in directive(render(), "Environment")
+        if v.startswith("OTEL_RESOURCE_ATTRIBUTES=")
+    ]
+    assert attributes[-1:] == [f"session.kind={SessionKind.BG_RESUME}"], (
+        f"respawned sessions must carry session.kind=bg-resume; got {attributes}"
     )
 
 

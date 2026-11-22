@@ -43,6 +43,9 @@ Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 Environment=CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 {% endif %}
 Environment=PYTHONDONTWRITEBYTECODE=1
+# A respawned session reports session_kind="bg-resume", a value from
+# scripts/dev/fanout_lib/telemetry.py:SessionKind.
+Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=bg-resume
 
 # The DNS wait is up to 5 minutes and each respawn up to 3.
 TimeoutStartSec=30min
