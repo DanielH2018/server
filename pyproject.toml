@@ -348,15 +348,6 @@ select = [
 "**/test_*.py" = ["D205", "D209", "ARG001", "ARG002"]
 "**/conftest.py" = ["D205", "D209", "ARG001", "ARG002"]
 
-# The files that held an unused parameter when ARG001 and ARG002 were selected. The list only
-# shrinks: delete the parameter or give the slot a leading underscore, then delete the line.
-"hosts/components/deploy-ui/files/deploy_ui.py" = ["ARG002"]
-"hosts/lib/reconcile_lib/lines.py" = ["ARG001"]
-"k8s/roles/crowdsec/files/remote_allowlist.py" = ["ARG001"]
-"k8s/roles/monitor-bridge/files/bridge/config_io.py" = ["ARG001"]
-"k8s/roles/monitor-bridge/files/checks/service.py" = ["ARG001"]
-"k8s/roles/monitor-bridge/files/checks/wan.py" = ["ARG001"]
-
 # The `vulture` prek hook reads this and fails on any name nothing uses: delete the name, or
 # list it below under a comment that says what calls it. It scans every tracked Python root,
 # so a caller outside scripts/, hosts/lib and the role files/ trees still counts. Every name

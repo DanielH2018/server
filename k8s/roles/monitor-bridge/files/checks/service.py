@@ -289,7 +289,7 @@ def check_prowlarr_indexers(cfg: Config, src: Sources) -> tuple[bool, str]:
 
 
 def check_etcd_restore_drill(
-    cfg: Config, src: Sources, now: float | None = None
+    cfg: Config, _src: Sources, now: float | None = None
 ) -> tuple[bool, str]:
     """Is the off-box etcd snapshot still PROVABLY restorable?
 
