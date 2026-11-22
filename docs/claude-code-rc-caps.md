@@ -118,8 +118,10 @@ measurement per plane.
   fleet's memory is page cache.
 - **The swap in the daniel-box episode was not the pods'.** Host swap reached 7.6 GiB. The
   fleet held its 2 GiB, and cAdvisor reports at most 2 MiB of swap in `kubepods.slice`.
-  The other 5.6 GiB was in `system.slice` or outside every slice, which nothing measured
-  then.
+  The other 5.6 GiB was mostly in `system.slice`. MemAvailable bottomed out between 20:00
+  and 22:00 UTC. systemd's stop records in daniel-box's journal give three units' swap
+  peaks in that window: `homelab-docs-refresh.service` 2.8 GiB, `k3s.service` 1.2 GiB and
+  `homelab-aide-check.service` 0.76 GiB. Together they account for about 4.8 GiB.
 
 `claude-cgroup-metrics.sh` writes `claude_host_plane_memory_bytes{plane, kind}` for each
 plane, with `kind` one of `anon`, `file`, `kernel` and `swap`. cAdvisor reports
@@ -127,6 +129,71 @@ plane, with `kind` one of `anon`, `file`, `kernel` and `swap`. cAdvisor reports
 for the `system` plane. It is a separate family from `claude_cgroup_*` because the
 `ClaudeCgroup*` rules select that prefix with no `cgroup` filter, and a homelab plane in
 it would page as the fleet.
+
+### Protecting the homelab plane with `MemoryLow`
+
+The operator ruled on 2026-11-22
+([#9890](https://github.com/DanielH2018/server/issues/9890)) to keep both fleet caps. The
+homelab plane is protected directly instead. The k3s-server component ships a `MemoryLow=`
+drop-in for `kubepods.slice`, `system.slice` and the k3s unit (`k3s.service` on daniel-box,
+`k3s-agent.service` on daniel-server). k3s-agent ships the same files.
+
+The kernel reclaims a cgroup below its `memory.low` only after it has reclaimed every
+unprotected cgroup. `user.slice` sets no `memory.low`, so under pressure the fleet's pages go
+first. Each value is the plane's 14-day peak of anon plus kernel memory, rounded up to
+0.5 GiB. A larger value would also protect page cache that the fleet needs more.
+
+| Cgroup | daniel-box | daniel-server | Measured peak (box / server) |
+|---|---|---|---|
+| `kubepods.slice` | 10G | 8G | cAdvisor `rss` 9.2 + kernel 0.8 / 7.3 + 0.4 GiB |
+| the k3s unit | 2560M | 1G | cAdvisor `rss` 2.2 / 0.76 GiB |
+| `system.slice` | 3G | 1536M | the k3s value + the other units' steady 0.5 / 0.25 GiB |
+
+`k3s_kubepods_memory_low` in `hosts/components/k3s-server/defaults/main.yml` holds
+daniel-box's derivation. daniel-server's values are in its host_vars. The `system` term had
+less than a day of `claude_host_plane_memory_bytes` behind it on 2026-11-22. The 14-day
+re-read of the issue's Verify-by query is the check on it.
+
+- **The k3s unit has its own claim.** cgroup2 is mounted with `memory_recursiveprot` on both
+  hosts. Under that option a parent's protection is shared among the children that claim
+  none, in proportion to their usage. Without its own claim, k3s would share `system.slice`'s
+  3G with the docs-refresh run's pytest, which peaked at 8.5 GiB on 2026-11-22. A child's
+  effective protection never exceeds its parent's, so `system.slice` stays at or above the
+  k3s value.
+- **kubelet resets `kubepods.slice` at each start.** kubelet owns `kubepods.slice` as a
+  transient unit and runs set-property with `MemoryLow=0` and `MemoryMin=0`. systemd writes
+  those to `/run/systemd/transient/kubepods.slice.d/50-*.conf` and applies them at once.
+  The homelab drop-in is `60-homelab-memory-low.conf`, which sorts later, so it wins at
+  every `daemon-reload`. `homelab-kubepods-memory-low.path` watches kubelet's
+  `50-MemoryLow.conf` and runs that reload whenever kubelet rewrites it. The reload is
+  deliberately not set-property, which would rewrite the watched file and trigger itself.
+- **No `MemoryMin=`.** A hard floor on the homelab plane turns fleet pressure that reclaim
+  cannot absorb into a global OOM.
+
+`MemoryLow` does not guarantee the 8 GiB floor:
+
+- It decides which cgroup gives up pages first. It creates no `MemAvailable`. The fleet's
+  anon can leave RAM only through its 2G swap share, so all-anon fleet memory past
+  `MemTotal - homelab - 8 GiB` still breaks the floor.
+- It does not steer the OOM killer. kubelet gives burstable and best-effort pods a high
+  `oom_score_adj`, so a global OOM still tends to pick a pod
+  ([#9989](https://github.com/DanielH2018/server/issues/9989)).
+
+So no `MemoryLow` value meets the ruling's condition that the protected slices keep the
+floor with the fleet at its cap. With all-anon fleet memory at the cap, daniel-box gives
+27.7 - 13 - 20 = -5.3 GiB and daniel-server gives 30.5 - 9.5 - 24 = -3 GiB, and a larger
+protection only widens the gap. The floor stays a typical-day floor until the operator
+re-rules on it ([#9993](https://github.com/DanielH2018/server/issues/9993)).
+
+To verify a deploy, read the configured value and the kernel's value. Read
+`kubepods.slice` again after the next k3s start, which is when kubelet resets it:
+
+```bash
+systemctl is-active homelab-kubepods-memory-low.path
+systemctl show -p MemoryLow -p DropInPaths kubepods.slice system.slice
+systemctl show -p MemoryLow k3s.service   # k3s-agent.service on daniel-server
+cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.low
+```
 
 ## The fleet's CPU weight
 

@@ -191,6 +191,26 @@ k3s_cpu_weight: 1000
 # k3s, but k3s_cpu_weight keeps them to a small part of the slice.
 k3s_system_slice_cpu_weight: 1000
 
+# DECIDED: MemoryLow on the homelab plane, not a lower claude_code_fleet_memory_high. Under
+# memory pressure the kernel reclaims a cgroup below its memory.low only after every unprotected
+# cgroup, so the Claude fleet in user.slice, which sets none, gives up its pages first. Each value
+# is the plane's 14-day peak of anon + kernel memory rounded up to 0.5 GiB: protection above the
+# working set would shield cache the fleet needs. daniel-server's values are in its host_vars.
+# The limits: MemoryLow picks the reclaim victim and creates no MemAvailable, so fleet anon past
+# its 2G swap share still breaks the 8 GiB floor; and it does not steer the OOM killer. No size
+# here holds the floor with the fleet at its cap, and the doc below names the open re-ruling.
+# docs/claude-code-rc-caps.md has the derivation. No MemoryMin: a hard floor turns fleet pressure
+# into a global OOM. Measured on daniel-box on 2026-11-22:
+#   kubepods.slice: cAdvisor's 14-day rss peak 9.2 GiB + kernel 0.8 = 10.0 -> 10G.
+k3s_kubepods_memory_low: 10G
+#   k3s.service: cAdvisor's 14-day rss peak 2.2 GiB -> 2560M. Without its own claim, k3s shares
+#   system.slice's protection with the docs-refresh run's pytest (8.5 GiB peak) in proportion to
+#   usage (cgroup2 is mounted memory_recursiveprot).
+k3s_memory_low: 2560M
+#   system.slice: k3s's 2560M + the other units' steady anon + kernel 0.5 GiB -> 3G. A child's
+#   effective protection never exceeds its parent's, so this stays >= k3s_memory_low.
+k3s_system_slice_memory_low: 3G
+
 # Kubelet's graceful node shutdown, rendered into kubelet.conf.d on both k3s nodes. Here rather
 # than in component.yml's `defaults:`, because k3s-agent ships the same files and a borrowing
 # component reads only this file. Without it every shutdown of a node logs out Longhorn's iSCSI
