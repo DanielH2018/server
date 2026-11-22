@@ -238,19 +238,14 @@ def r2_usage_verdict(
     return True, msg
 
 
-# How old a weekly backup gets before its prune deletes it, which the B2 lock must stay under
-# (ADR-0041): `k3s_longhorn_weekly_backup_retain` weekly backups. test_check_bucket_locks.py
-# derives it from that default.
-B2_PRUNE_AGE_DAYS = 14
-_PERIOD_DAYS = {"days": 1, "years": 365}
-
-
 def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     """(ok, msg) for Object Lock on the B2 bucket Longhorn's weekly tier writes to.
 
-    ADR-0041 records the choice: Object Lock on, a governance-mode default retention shorter than
-    `B2_PRUNE_AGE_DAYS`, and a writer key that cannot bypass governance. Compliance mode is
-    flagged because no key can shorten it.
+    ADR-0041 records the choice: Object Lock on with no default retention, so the daily sweep
+    sets each object's governance retention, and a writer key that cannot bypass governance. Any
+    default retention is flagged, because B2 then refuses every upload that carries no
+    Content-MD5, which is every Longhorn upload. The row reads the bucket, not the sweep:
+    longhorn-backup-health's checks 9 and 10 own whether the sweep ran.
 
     Args:
       bucket: One entry of a `b2_list_buckets` response.
@@ -276,33 +271,14 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
     if value.get("isFileLockEnabled") is not True:
         return CheckResult(False, "Object Lock is off on %s" % name, ["lock off"])
     retention = value.get("defaultRetention") or {}
-    mode = retention.get("mode")
-    period = retention.get("period") or {}
-    duration = period.get("duration")
-    if mode not in ("governance", "compliance") or not duration:
+    if retention.get("mode") not in (None, "none"):
+        period = retention.get("period") or {}
         return CheckResult(
             False,
-            "%s has no default retention, so new uploads are not locked" % name,
-            ["no default retention"],
-        )
-    if mode == "compliance":
-        return CheckResult(
-            False,
-            "%s retains in compliance mode, which no key can shorten; ADR-0041 picks governance"
-            % name,
-            ["compliance mode"],
-        )
-    unit_days = _PERIOD_DAYS.get(str(period.get("unit")))
-    if (
-        not isinstance(duration, int)
-        or unit_days is None
-        or duration * unit_days >= B2_PRUNE_AGE_DAYS
-    ):
-        return CheckResult(
-            False,
-            "%s retains for %s %s, not less than the %d days the weekly prune waits"
-            % (name, duration, period.get("unit"), B2_PRUNE_AGE_DAYS),
-            ["retention outlasts the prune"],
+            "%s has a %s default retention of %s %s, which makes B2 refuse every Longhorn "
+            "upload; ADR-0041 sets none"
+            % (name, retention.get("mode"), period.get("duration"), period.get("unit")),
+            ["default retention set"],
         )
     if "bypassGovernance" in capabilities:
         return CheckResult(
@@ -311,9 +287,8 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
             "not bind it",
             ["key bypasses governance"],
         )
-    return True, "Object Lock on %s: %s, %s %s" % (
-        name,
-        mode,
-        period.get("duration"),
-        period.get("unit"),
+    return (
+        True,
+        "Object Lock on %s with no default retention; the daily sweep locks each object"
+        % name,
     )

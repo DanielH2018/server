@@ -93,9 +93,10 @@ k3s_b2_deletion_accounting_cron_minute: "10"
 k3s_b2_budget_cron_hour: "7"
 k3s_b2_budget_cron_minute: "20"
 
-# The Object Lock sweep (scripts/backup/b2_extend_retention.py). It renews every Longhorn object's
-# lock to now plus the bucket's default period, so a daily run keeps each referenced block locked
-# for at least that period less a day. Any hour clear of the 03:30 and 04:30 backup windows works.
+# The Object Lock sweep (scripts/backup/b2_extend_retention.py). The bucket has no default
+# retention, so this run sets every Longhorn object's lock to now plus the sweep's RETENTION_DAYS;
+# a new block stays unlocked until the next run. Any hour clear of the 03:30 and 04:30 backup
+# windows works.
 k3s_b2_retention_cron_hour: "7"
 k3s_b2_retention_cron_minute: "30"
 

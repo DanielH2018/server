@@ -724,14 +724,17 @@ key. No part of it has been drilled.
 What survives depends on the locks
 [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) sets.
 The operator applies them by hand, in
-[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2 and 3
+[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2, 2b and 4
 ([#9699](https://github.com/DanielH2018/server/issues/9699)), so check that they exist
 before you count on them:
 
-- **B2.** In the Backblaze console, the bucket's settings show *Object Lock: Enabled* and a
-  governance default retention of 7 days. Every version uploaded in the last 7 days is
-  locked. A delete that names no version only writes a hide marker over it, and a delete of
-  the version itself is refused.
+- **B2.** In the Backblaze console, the bucket's settings show *Object Lock: Enabled* and no
+  default retention. The daily sweep sets a 7-day governance retention on every current
+  Longhorn object, so a version is locked from the first 07:30 UTC sweep after its upload. A
+  version uploaded since the last sweep is not locked. To see a version's lock, run
+  `b2 file info b2id://<fileId>` and read `fileRetention`. A delete that names no version
+  only writes a hide marker over a locked version, and a delete of the version itself is
+  refused.
 - **B2, even without a lock.** The bucket's lifecycle rule, `daysFromHidingToDeleting: 7`,
   keeps every hidden version for 7 days after its hide. A delete through Longhorn or the S3
   API writes hide markers, so the data stays recoverable for those 7 days. A delete that
