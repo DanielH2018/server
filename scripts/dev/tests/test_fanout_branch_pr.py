@@ -14,9 +14,11 @@ import subprocess
 from _review_fakes import BRANCH, _finding, _pipeline, _report
 from dev.fanout_lib.branch_pr import (
     BranchPrs,
+    OpenPr,
     own_pr,
     parse_branch_prs,
     parse_merged_before,
+    parse_open_pr,
 )
 from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.status import parse_status, with_own_pr
@@ -242,3 +244,21 @@ def test_a_pr_past_the_listed_files_is_read_whole_only_for_a_named_branch():
 def test_a_pr_whose_remaining_files_cannot_be_read_makes_the_open_prs_unreadable():
     gh, _ = _gh_listing_one_file_of_150(subprocess.CompletedProcess([], 1, "", "502"))
     assert open_pr_files("o/r", {BRANCH}, run=gh) is None
+
+
+def test_an_open_prs_failed_checks_are_listed_and_a_cancelled_or_passing_one_is_not():
+    rollup = [
+        {"name": "pytest", "conclusion": "FAILURE", "detailsUrl": "https://ci/1"},
+        {"name": "prek", "conclusion": "CANCELLED", "detailsUrl": "https://ci/2"},
+        {"name": "lint", "conclusion": "SUCCESS", "detailsUrl": "https://ci/3"},
+        {"context": "netlify", "state": "ERROR", "targetUrl": "https://n/4"},
+    ]
+    stdout = json.dumps([{"url": OWN, "isDraft": True, "statusCheckRollup": rollup}])
+    assert parse_open_pr(stdout) == OpenPr(
+        OWN, draft=True, failing=("pytest https://ci/1", "netlify https://n/4")
+    )
+
+
+def test_a_branch_with_no_open_pr_reads_none_and_garbage_reads_a_reason():
+    assert parse_open_pr("[]") is None
+    assert isinstance(parse_open_pr("not json"), str)

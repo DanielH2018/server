@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-21 15:45 UTC
-generated_sha: 7a64823b9
+generated_at: 2026-11-22 06:17 UTC
+generated_sha: 0d03adcb5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,29 +18,26 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#7490](https://github.com/DanielH2018/server/issues/7490) | medium | gap | cicd | The Pi's reconcile reaches its 30-minute timeout and holds its updates | 2026-11-06 | 0 | - | ✓ |
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | medium | gap | backup-observability | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems | 2026-11-13 | 0 | - | ✓ |
-| [#8511](https://github.com/DanielH2018/server/issues/8511) | medium | gap | backup-observability | No backup or etcd snapshot has an immutability window, so one bucket credential can delete every copy — *no vetted remediation* | 2026-11-14 | 0 | - | ✓ |
+| [#8511](https://github.com/DanielH2018/server/issues/8511) | medium | gap | backup-observability | No backup or etcd snapshot has an immutability window, so one bucket credential can delete every copy | 2026-11-14 | 0 | - | ✓ |
 | [#8929](https://github.com/DanielH2018/server/issues/8929) | medium | feature | security | Guardrails B3-4: re-arm the Renovate agent once its egress chain enforces | 2026-11-15 | 0 | - | ✓ |
-| [#9199](https://github.com/DanielH2018/server/issues/9199) | medium | gap | - | The fleet memory cap did not hold the 8 GiB MemAvailable floor on daniel-box (2026-11-18) or daniel-server (2026-11-14) — *no vetted remediation* | 2026-11-19 | 0 | - | ✓ |
+| [#9199](https://github.com/DanielH2018/server/issues/9199) | medium | gap | - | The fleet memory cap did not hold the 8 GiB MemAvailable floor on daniel-box (2026-11-18) or daniel-server (2026-11-14) | 2026-11-19 | 0 | - | ✓ |
 | [#9387](https://github.com/DanielH2018/server/issues/9387) | medium | feature | security | Build triage slice 3: the claude-restart@ broker and its allowlist | 2026-11-19 | 0 | - | ✓ |
-| [#9584](https://github.com/DanielH2018/server/issues/9584) | medium | gap | cicd | fanout-stop demands a land.sh VERDICT from a review batch whose quoted issue text mentions land.sh | 2026-11-20 | 0 | - | ✓ |
-| [#9635](https://github.com/DanielH2018/server/issues/9635) | medium | gap | cicd | A relaunched fan-out batch pushes to the orchestrator's branch when its own remote branch survives an earlier launch | 2026-11-20 | 1 | - | ✓ |
-| [#9651](https://github.com/DanielH2018/server/issues/9651) | medium | improvement | cicd | CI runs per merge read 1.89 over 217 merges, against the batch plan's 0.3 to 0.4 — *no vetted remediation* | 2026-11-20 | 0 | - | ✓ |
+| [#9651](https://github.com/DanielH2018/server/issues/9651) | medium | improvement | cicd | CI runs per merge read 1.89 over 217 merges, against the batch plan's 0.3 to 0.4 | 2026-11-20 | 0 | - | ✓ |
 | [#9667](https://github.com/DanielH2018/server/issues/9667) | medium | improvement | cicd | The landing turn takes 80% of a landing's time from arm to merge under load | 2026-11-20 | 0 | - | ✓ |
 | [#9699](https://github.com/DanielH2018/server/issues/9699) | medium | gap | backup-observability | Apply ADR-0041's bucket locks: B2 Object Lock and the R2 etcd lock rule | 2026-11-20 | 0 | - | ✓ |
 | [#9725](https://github.com/DanielH2018/server/issues/9725) | medium | improvement | container | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined | 2026-11-21 | 0 | - | ✓ |
 | [#9732](https://github.com/DanielH2018/server/issues/9732) | medium | gap | security | Run the restart broker's first real restart and count the docs ReplicaSets | 2026-11-21 | 0 | - | ✓ |
 | [#9733](https://github.com/DanielH2018/server/issues/9733) | medium | feature | security | Let a triage run ask the restart broker for a restart through its result | 2026-11-21 | 0 | - | ✓ |
 | [#9787](https://github.com/DanielH2018/server/issues/9787) | medium | gap | backup-observability | The Longhorn B2 key needs writeFileRetentions for the Object Lock sweep | 2026-11-21 | 0 | - | ✓ |
-| [#9801](https://github.com/DanielH2018/server/issues/9801) | medium | gap | cicd | PR CI never scans the rendered bundle, so a template line with gitleaks:allow passes review and fails every promote — *no vetted remediation* | 2026-11-21 | 0 | - | ✓ |
-| [#9809](https://github.com/DanielH2018/server/issues/9809) | medium | feature | docs | Upgrade daniel-server to Ubuntu 26.04 | 2026-11-21 | 0 | - | - |
-| [#9810](https://github.com/DanielH2018/server/issues/9810) | medium | feature | docs | Upgrade daniel-box to Ubuntu 26.04 | 2026-11-21 | 0 | - | - |
-| [#9811](https://github.com/DanielH2018/server/issues/9811) | medium | feature | docs | Upgrade daniel-pi to Ubuntu 26.04 | 2026-11-21 | 0 | - | - |
-| [#9812](https://github.com/DanielH2018/server/issues/9812) | medium | feature | container | Move daniel-pi's Docker apt source to resolute once the Pi runs Ubuntu 26.04 | 2026-11-21 | 0 | - | - |
-| [#9818](https://github.com/DanielH2018/server/issues/9818) | medium | gap | docs | Runbook commands that need root are written without sudo, and the operator runs as ubuntu | 2026-11-21 | 0 | - | - |
+| [#9801](https://github.com/DanielH2018/server/issues/9801) | medium | gap | cicd | PR CI never scans the rendered bundle, so a template line with gitleaks:allow passes review and fails every promote | 2026-11-21 | 0 | - | ✓ |
 | [#9822](https://github.com/DanielH2018/server/issues/9822) | medium | gap | cicd | A cancelled ready run beside a draft-skipped run stalls land.sh's merge wait silently until merge-timeout | 2026-11-21 | 0 | - | ✓ |
+| [#9827](https://github.com/DanielH2018/server/issues/9827) | medium | gap | cicd | host_packages cases never start a cluster node's units, so release-specific breakage reaches the host | 2026-11-21 | 0 | - | ✓ |
+| [#9866](https://github.com/DanielH2018/server/issues/9866) | medium | improvement | backup-observability | Coordinator and desktop sessions' Claude spend carries no session kind | 2026-11-22 | 0 | - | ✓ |
+| [#9869](https://github.com/DanielH2018/server/issues/9869) | medium | gap | backup-observability | Triage and Renovate agent Claude sessions export no telemetry | 2026-11-22 | 0 | - | ✓ |
+| [#9878](https://github.com/DanielH2018/server/issues/9878) | medium | gap | backup-observability | logrotate fails daily on the 26.04 nodes: the upgrade left a duplicate cloud-init logrotate file | 2026-11-22 | 0 | - | ✓ |
+| [#9879](https://github.com/DanielH2018/server/issues/9879) | medium | gap | network | daniel-box lost its wired gateway for 16 minutes with carrier up, and no alert fired | 2026-11-22 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
-| [#7645](https://github.com/DanielH2018/server/issues/7645) | low | gap | security | Record what sudo-rs does with the timestamp drop-in at the first 26.04 host upgrade | 2026-11-08 | 0 | - | ✓ |
 | [#7989](https://github.com/DanielH2018/server/issues/7989) | low | gap | cicd | Install the commit-msg prek shim in existing checkouts and the agent's clone | 2026-11-11 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | feature | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
@@ -64,20 +61,13 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9181](https://github.com/DanielH2018/server/issues/9181) | low | gap | security | Name the T2 session caller that connects to cafe.github.com | 2026-11-19 | 0 | - | ✓ |
 | [#9390](https://github.com/DanielH2018/server/issues/9390) | low | improvement | cicd | Re-measure the share of rework that removes wrong-shape code, 30 days after the 2026-11-19 gates | 2026-11-19 | 0 | - | ✓ |
 | [#9394](https://github.com/DanielH2018/server/issues/9394) | low | improvement | cicd | Give the next multi-PR migration a retirement manifest that fails while a retired name remains | 2026-11-19 | 0 | - | ✓ |
-| [#9585](https://github.com/DanielH2018/server/issues/9585) | low | improvement | backup-observability | checkout-sync's 2h not-reporting deadline was sized for an eval-run lock hold that no longer exists | 2026-11-20 | 0 | - | ✓ |
 | [#9625](https://github.com/DanielH2018/server/issues/9625) | low | improvement | cicd | Thirty server branches and twenty-seven dotfiles branches are stale, and nothing sweeps them | 2026-11-20 | 0 | - | ✓ |
 | [#9626](https://github.com/DanielH2018/server/issues/9626) | low | gap | network | daniel-box reaches daniel-pi through a per-user ssh alias and known_hosts entry that no package owns | 2026-11-20 | 0 | - | ✓ |
 | [#9627](https://github.com/DanielH2018/server/issues/9627) | low | gap | cicd | Auto-merge is enabled in the repo and allowed in the Claude settings, while CLAUDE.md says never to arm it | 2026-11-20 | 0 | - | ✓ |
-| [#9630](https://github.com/DanielH2018/server/issues/9630) | low | improvement | backup-observability | Claude spend cannot be split by session kind: coordinators, fan-out batches, crons and reviews share two labels | 2026-11-20 | 0 | - | ✓ |
 | [#9631](https://github.com/DanielH2018/server/issues/9631) | low | gap | cicd | gh-quota's ledger misses a third of core calls, and a malformed rate_limit reply crashes its parser | 2026-11-20 | 0 | - | ✓ |
 | [#9636](https://github.com/DanielH2018/server/issues/9636) | low | improvement | cicd | Re-measure the bootstrap shard count now that an offline build takes about 60 s, not 242 s | 2026-11-20 | 0 | - | ✓ |
-| [#9640](https://github.com/DanielH2018/server/issues/9640) | low | improvement | cicd | The single-predicate refusal row reads only tests/repo and tests/services; tests/deploy, tests/k8s and tests/longhorn hold 33 more candidates | 2026-11-20 | 0 | - | ✓ |
-| [#9650](https://github.com/DanielH2018/server/issues/9650) | low | improvement | cicd | Four per-PR workflows beside ci.yml held 17.7% of the hosted slots at the 20-job cap — *no vetted remediation* | 2026-11-20 | 0 | - | ✓ |
-| [#9654](https://github.com/DanielH2018/server/issues/9654) | low | gap | cicd | ci_slot_cost.py reports negative queue waits for jobs a re-run attempt carries over | 2026-11-20 | 0 | - | ✓ |
+| [#9650](https://github.com/DanielH2018/server/issues/9650) | low | improvement | cicd | Four per-PR workflows beside ci.yml held 17.7% of the hosted slots at the 20-job cap | 2026-11-20 | 0 | - | ✓ |
 | [#9657](https://github.com/DanielH2018/server/issues/9657) | low | improvement | cicd | Find what keeps the pytest legs' setup median above 25s once the apt-tools cache hits | 2026-11-20 | 0 | - | ✓ |
-| [#9669](https://github.com/DanielH2018/server/issues/9669) | low | improvement | cicd | A fan-out command prints a traceback for a run manifest it refuses | 2026-11-20 | 0 | - | ✓ |
-| [#9677](https://github.com/DanielH2018/server/issues/9677) | low | gap | cicd | No findings.py verb removes the no-vetted-remediation label once a remedy is ruled | 2026-11-20 | 0 | - | - |
-| [#9681](https://github.com/DanielH2018/server/issues/9681) | low | gap | home-assistant | probe.py ha verify-entities fails on two Pixel Watch sensors that no longer exist live | 2026-11-20 | 0 | - | ✓ |
 | [#9691](https://github.com/DanielH2018/server/issues/9691) | low | improvement | cicd | Clear the ARG002 per-file ignore on deploy-ui's deploy_ui.py | 2026-11-20 | 0 | - | ✓ |
 | [#9692](https://github.com/DanielH2018/server/issues/9692) | low | improvement | cicd | Clear the ARG001 per-file ignore on reconcile_lib/lines.py | 2026-11-20 | 0 | - | ✓ |
 | [#9693](https://github.com/DanielH2018/server/issues/9693) | low | improvement | cicd | Clear the ARG001 per-file ignore on crowdsec's remote_allowlist.py | 2026-11-20 | 0 | - | ✓ |
@@ -90,28 +80,27 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#9704](https://github.com/DanielH2018/server/issues/9704) | low | gap | security | kmod's rare-network blacklist is missing on daniel-box and daniel-server | 2026-11-20 | 0 | - | - |
 | [#9705](https://github.com/DanielH2018/server/issues/9705) | low | gap | security | A conffile upgrade under --force-confold leaves a line-edited conffile the AIDE replay cannot explain | 2026-11-20 | 0 | - | - |
 | [#9709](https://github.com/DanielH2018/server/issues/9709) | low | gap | cicd | Nothing fails when a ci.yml pytest leg saves the rewrite cache the nightly sweep owns | 2026-11-20 | 0 | - | ✓ |
-| [#9711](https://github.com/DanielH2018/server/issues/9711) | low | gap | cicd | A batch member's rate-limit wait holds the batch holder's landing turn — *no vetted remediation* | 2026-11-20 | 0 | - | ✓ |
-| [#9714](https://github.com/DanielH2018/server/issues/9714) | low | gap | backup-observability | A poller that fails every tick still pages twice: its own hook, then ClaudeTriagePollNotReporting — *no vetted remediation* | 2026-11-20 | 0 | - | ✓ |
+| [#9711](https://github.com/DanielH2018/server/issues/9711) | low | gap | cicd | A batch member's rate-limit wait holds the batch holder's landing turn | 2026-11-20 | 0 | - | ✓ |
+| [#9714](https://github.com/DanielH2018/server/issues/9714) | low | gap | backup-observability | A poller that fails every tick still pages twice: its own hook, then ClaudeTriagePollNotReporting | 2026-11-20 | 0 | - | ✓ |
 | [#9716](https://github.com/DanielH2018/server/issues/9716) | low | improvement | backup-observability | Drop DELETE_WORKER_PODS_ON_FAILURE once Loki holds every Airflow task log | 2026-11-20 | 1 | - | ✓ |
-| [#9727](https://github.com/DanielH2018/server/issues/9727) | low | improvement | cicd | Rule on 13 borderline tests that pin one removed thing, from the 2026-11-20 test read | 2026-11-21 | 0 | - | - |
 | [#9728](https://github.com/DanielH2018/server/issues/9728) | low | improvement | cicd | Check 22 tests the 2026-11-20 test read reported as unable to fail | 2026-11-21 | 0 | - | ✓ |
 | [#9729](https://github.com/DanielH2018/server/issues/9729) | low | improvement | cicd | Rule on the ansible import census and the flux shadow test, which stayed after the 2026-11-20 prune | 2026-11-21 | 0 | - | - |
 | [#9730](https://github.com/DanielH2018/server/issues/9730) | low | improvement | cicd | Decide whether to sweep single not-in assertions that pin one removed name inside live tests | 2026-11-21 | 0 | - | - |
-| [#9737](https://github.com/DanielH2018/server/issues/9737) | low | gap | container | Sonarr's Episode Trimmer notification runs a script that is missing from the pod | 2026-11-21 | 0 | - | ✓ |
-| [#9739](https://github.com/DanielH2018/server/issues/9739) | low | gap | cicd | No fan-out command can finish an abandoned batch's open PR: launch cannot continue its branch, and resume cannot reach another coordinator's run | 2026-11-21 | 0 | - | ✓ |
-| [#9742](https://github.com/DanielH2018/server/issues/9742) | low | gap | cicd | milestone close leaves each returned issue's milestone field set, so milestone add refuses it for the next project | 2026-11-21 | 0 | - | ✓ |
-| [#9744](https://github.com/DanielH2018/server/issues/9744) | low | improvement | cicd | Components' files/*.py stay exempt from no-future-annotations though several run under uv 3.15 | 2026-11-21 | 0 | - | ✓ |
-| [#9749](https://github.com/DanielH2018/server/issues/9749) | low | gap | cicd | image-leg's paths: list misses modules the image tests import, so a PR that breaks one starts no image run | 2026-11-21 | 0 | - | ✓ |
 | [#9750](https://github.com/DanielH2018/server/issues/9750) | low | gap | backup-observability | The restore drill's Postgres check has not yet run against a live airflow-postgres-data restore | 2026-11-21 | 0 | - | ✓ |
 | [#9759](https://github.com/DanielH2018/server/issues/9759) | low | gap | cicd | gen-hooks refuses an if: rule on PostToolUseFailure and PermissionDenied, which the harness evaluates | 2026-11-21 | 0 | - | ✓ |
-| [#9767](https://github.com/DanielH2018/server/issues/9767) | low | gap | backup-observability | dns_daily_rollup client rows count only permitted queries | 2026-11-21 | 0 | - | ✓ |
-| [#9775](https://github.com/DanielH2018/server/issues/9775) | low | improvement | cicd | Measure how much of gh-quota's unattributed core spend is the other host | 2026-11-21 | 0 | - | ✓ |
-| [#9788](https://github.com/DanielH2018/server/issues/9788) | low | gap | container | No check fails when a critical-tier memory request drifts under its p95 | 2026-11-21 | 0 | - | ✓ |
 | [#9789](https://github.com/DanielH2018/server/issues/9789) | low | gap | container | A prowlarr-config revert leaves Prowlarr's app API keys stale until the next prowlarr revision | 2026-11-21 | 0 | - | ✓ |
 | [#9794](https://github.com/DanielH2018/server/issues/9794) | low | improvement | container | pihole and authelia's crowdsec-agent still flag 'request off' after the critical-tier request raise | 2026-11-21 | 0 | - | ✓ |
-| [#9803](https://github.com/DanielH2018/server/issues/9803) | low | improvement | cicd | Parse workflow runs into WorkflowRun in the readers #9671 left raw | 2026-11-21 | 0 | - | ✓ |
+| [#9803](https://github.com/DanielH2018/server/issues/9803) | low | improvement | cicd | Parse workflow runs into WorkflowRun in the readers #9671 left raw | 2026-11-21 | 0 | claude/eager-keller-32cd04 | ✓ |
 | [#9813](https://github.com/DanielH2018/server/issues/9813) | low | improvement | cicd | Retire Ubuntu 24.04 from CI and the tree once all three hosts run 26.04 | 2026-11-21 | 0 | - | - |
-| [#9817](https://github.com/DanielH2018/server/issues/9817) | low | gap | home-assistant | Only the state_attr form of the automation-reference regex is pinned by a test | 2026-11-21 | 0 | - | ✓ |
+| [#9829](https://github.com/DanielH2018/server/issues/9829) | low | gap | - | nut-monitor on Ubuntu 26.04 supervises upsmon's unprivileged child as its main process | 2026-11-21 | 0 | - | ✓ |
+| [#9835](https://github.com/DanielH2018/server/issues/9835) | low | gap | security | Ubuntu 26.04's who AppArmor profile denies the host's who reading /etc/passwd, once a minute on both nodes | 2026-11-21 | 0 | - | - |
+| [#9841](https://github.com/DanielH2018/server/issues/9841) | low | gap | cicd | findings.py open drops --no-vetted-remediation silently when the dedup matches an existing issue | 2026-11-21 | 0 | - | - |
+| [#9847](https://github.com/DanielH2018/server/issues/9847) | low | improvement | container | zigbee2mqtt requests under half its memory p95, and the critical-tier census does not cover homelab-automation | 2026-11-21 | 0 | - | ✓ |
+| [#9854](https://github.com/DanielH2018/server/issues/9854) | low | gap | backup-observability | Reload dns_daily_rollup's days loaded before blocked queries joined the client rows | 2026-11-21 | 0 | - | ✓ |
+| [#9855](https://github.com/DanielH2018/server/issues/9855) | low | gap | cicd | 59 percent of gh-quota core spend is attributed to neither host's ledger | 2026-11-21 | 0 | - | ✓ |
+| [#9864](https://github.com/DanielH2018/server/issues/9864) | low | gap | cicd | place clean leaves a landed fan-out batch's branch on origin | 2026-11-22 | 0 | - | ✓ |
+| [#9867](https://github.com/DanielH2018/server/issues/9867) | low | improvement | backup-observability | Remote Control and background-resume sessions carry no session.kind label | 2026-11-22 | 0 | - | ✓ |
+| [#9874](https://github.com/DanielH2018/server/issues/9874) | low | gap | - | Every login on daniel-pi warns that setlocale cannot set LC_ALL to en_US.UTF-8 | 2026-11-22 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -121,10 +110,10 @@ Open findings carrying a Not Before date, soonest first. `findings.py next` with
 |---|---|---|---|
 | 2026-11-17 | date passed | [#8901](https://github.com/DanielH2018/server/issues/8901) | Read the pytest-leg setup median and the per-worker rewrite count on master after the apt-tools cache lands |
 | 2026-11-21 | date passed | [#8931](https://github.com/DanielH2018/server/issues/8931) | Read the dotfiles mirror's first week of status lines after 2026-11-21 |
-| 2026-11-22 | withheld | [#7490](https://github.com/DanielH2018/server/issues/7490) | The Pi's reconcile reaches its 30-minute timeout and holds its updates |
-| 2026-11-22 | withheld | [#8234](https://github.com/DanielH2018/server/issues/8234) | daniel-pi runs saturated: load at 4.7 times its cores, memory down to 12 percent, and a critical SD-health page on 2026-11-12 |
-| 2026-11-22 | withheld | [#8582](https://github.com/DanielH2018/server/issues/8582) | Drop the ExtraProbeFailed:wg-easy triage pin once its 30s probe timeout holds for a week |
-| 2026-11-22 | withheld | [#8610](https://github.com/DanielH2018/server/issues/8610) | daniel-pi's remaining load spikes follow each homelab-daniel-pi publish, through the updater poll |
+| 2026-11-22 | date passed | [#7490](https://github.com/DanielH2018/server/issues/7490) | The Pi's reconcile reaches its 30-minute timeout and holds its updates |
+| 2026-11-22 | date passed | [#8234](https://github.com/DanielH2018/server/issues/8234) | daniel-pi runs saturated: load at 4.7 times its cores, memory down to 12 percent, and a critical SD-health page on 2026-11-12 |
+| 2026-11-22 | date passed | [#8582](https://github.com/DanielH2018/server/issues/8582) | Drop the ExtraProbeFailed:wg-easy triage pin once its 30s probe timeout holds for a week |
+| 2026-11-22 | date passed | [#8610](https://github.com/DanielH2018/server/issues/8610) | daniel-pi's remaining load spikes follow each homelab-daniel-pi publish, through the updater poll |
 | 2026-11-23 | withheld | [#9725](https://github.com/DanielH2018/server/issues/9725) | Roll out the kubelet's default seccomp profile to daniel-box, then census explicit Unconfined |
 | 2026-11-24 | withheld | [#9716](https://github.com/DanielH2018/server/issues/9716) | Drop DELETE_WORKER_PODS_ON_FAILURE once Loki holds every Airflow task log |
 | 2026-11-28 | withheld | [#8567](https://github.com/DanielH2018/server/issues/8567) | The restore drill's 300-second probe bound may not fit a large SQLite integrity check |
@@ -146,15 +135,12 @@ Open findings with an open "blocked by" issue. `findings.py next` withholds each
 
 | # | Blocked by | Finding |
 |---|---|---|
+| [#8511](https://github.com/DanielH2018/server/issues/8511) | #9699 | No backup or etcd snapshot has an immutability window, so one bucket credential can delete every copy |
 | [#8539](https://github.com/DanielH2018/server/issues/8539) | #8193 | Add Explo: ListenBrainz discovery playlists in Navidrome |
-| [#9631](https://github.com/DanielH2018/server/issues/9631) | #9775 | gh-quota's ledger misses a third of core calls, and a malformed rate_limit reply crashes its parser |
 | [#9702](https://github.com/DanielH2018/server/issues/9702) | #9699 | No standing check reads the R2 etcd snapshot lock rule |
+| [#9711](https://github.com/DanielH2018/server/issues/9711) | #9667 | A batch member's rate-limit wait holds the batch holder's landing turn |
 | [#9733](https://github.com/DanielH2018/server/issues/9733) | #9732 | Let a triage run ask the restart broker for a restart through its result |
 | [#9787](https://github.com/DanielH2018/server/issues/9787) | #9699 | The Longhorn B2 key needs writeFileRetentions for the Object Lock sweep |
-| [#9810](https://github.com/DanielH2018/server/issues/9810) | #9809 | Upgrade daniel-box to Ubuntu 26.04 |
-| [#9811](https://github.com/DanielH2018/server/issues/9811) | #9809 | Upgrade daniel-pi to Ubuntu 26.04 |
-| [#9812](https://github.com/DanielH2018/server/issues/9812) | #9811 | Move daniel-pi's Docker apt source to resolute once the Pi runs Ubuntu 26.04 |
-| [#9813](https://github.com/DanielH2018/server/issues/9813) | #9809, #9810, #9811 | Retire Ubuntu 24.04 from CI and the tree once all three hosts run 26.04 |
 
 ## Settled findings — do not re-flag
 

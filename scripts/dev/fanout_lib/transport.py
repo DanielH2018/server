@@ -21,8 +21,11 @@ from dev.fanout_lib import signing
 from dev.fanout_lib.branch_pr import (
     branch_pr_argv,
     BranchPrs,
+    OpenPr,
+    open_pr_argv,
     parse_branch_prs,
     parse_merged_before,
+    parse_open_pr,
 )
 from dev.fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
 from dev.fanout_lib.manifest import Batch
@@ -327,6 +330,17 @@ def open_pr_files(
         return None
 
 
+def open_branch_pr(branch: str, repo: str = SERVER) -> OpenPr | None | str:
+    """The open PR of `branch` in `repo`, None when it has none, a reason when GitHub did not answer."""
+    try:
+        out = gh(*open_pr_argv(branch, repo)[1:], check=False, timeout=GH_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return f"`gh pr list --head {branch}` timed out"
+    if out.returncode != 0:
+        return f"`gh pr list --head {branch}` failed: {out.stderr.strip()[-200:]}"
+    return parse_open_pr(out.stdout)
+
+
 def earlier_pr_urls(branch: str, repo: str, launched_at: str) -> list[str]:
     """The PR urls of `branch` in `repo` that merged before `launched_at`; [] when unreadable."""
     try:
@@ -390,6 +404,8 @@ class Tools:
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
         branch_prs: the open and merged PRs of a branch in a repo, or None when unreadable.
         earlier_prs: the PR urls of a branch in a repo that merged before a launch time.
+        open_pr: the open PR of a branch in a repo, None when it has none, a reason when
+            unreadable.
         open_pr_files: the files each open PR in a repo changes, by head branch, complete
             for the branches named; None when unreadable.
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
@@ -406,6 +422,7 @@ class Tools:
     merged_pr: Callable[[str, str], str] = merged_pr_url
     branch_prs: Callable[[str, str], BranchPrs | None] = branch_pr_urls
     earlier_prs: Callable[[str, str, str], list[str]] = earlier_pr_urls
+    open_pr: Callable[[str, str], OpenPr | None | str] = open_branch_pr
     open_pr_files: Callable[..., dict[str, frozenset[str]] | None] = open_pr_files
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref

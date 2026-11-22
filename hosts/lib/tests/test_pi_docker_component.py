@@ -51,7 +51,7 @@ UPDATER_DROPIN = "/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.con
 QUIET_WINDOW = (15 * 60, 59 * 60 + 59)
 _DAY = date(2026, 11, 3)
 CONTAINERD_CONFIG = "/etc/containerd/config.toml"
-SUFFIX = "~ubuntu.24.04~noble"
+SUFFIX = "~ubuntu.26.04~resolute"
 # `grep -v '^#' /etc/containerd/config.toml` on daniel-pi, with the
 # markers the Ansible task wrote around its block.
 LIVE_CONTAINERD = """disabled_plugins = ["cri"]

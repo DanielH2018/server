@@ -65,7 +65,8 @@ services:
     # NET_ADMIN to create the wg interface + apply rules; NET_RAW because wg-quick runs
     # iptables (the iptables CLI opens a raw socket to init the 'nat' table — fails with
     # "can't initialize iptables table `nat`: Permission denied" without it). SYS_MODULE
-    # not needed (wireguard module loaded on host). Verify on deploy (docker logs wg-easy).
+    # not needed: the host loads wireguard (host-hardening) and the legacy iptables tables
+    # (pi-compose's modules-load.d/wg-easy.conf). Verify on deploy (docker logs wg-easy).
     cap_drop:
       - ALL
     cap_add:

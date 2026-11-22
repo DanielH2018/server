@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-21 15:45 UTC
-generated_sha: 7a64823b9
+generated_at: 2026-11-22 06:17 UTC
+generated_sha: 0d03adcb5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -22,7 +22,7 @@ k3s server / control-plane node. The host-package builder, the docs build, landi
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.215` |
-| Host package | `homelab-daniel-box` (45 components) |
+| Host package | `homelab-daniel-box` (46 components) |
 | Services declared | 71 |
 | Has Docker | no |
 
@@ -44,6 +44,6 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.161` |
-| Host package | `homelab-daniel-server` (30 components) |
+| Host package | `homelab-daniel-server` (31 components) |
 | Services declared | 0 |
 | Has Docker | no |

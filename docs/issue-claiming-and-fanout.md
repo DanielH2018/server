@@ -705,7 +705,7 @@ so the two share one prompt and one review.
   manifest read to the manifest save, and through the placement gates a launch passes: the
   signing check, the memory headroom and the live-batch cap. The unit runs master's copy
   of the pipeline from a fresh snapshot in the worktree's `.fanout/server`
-  (`scripts/dev/fanout_lib/launch.py:resume_command`), because the worktree's own copy is
+  (`scripts/dev/fanout_lib/resume.py:resume_command`), because the worktree's own copy is
   as old as the batch's branch and holds what the implementer left.
 - **Who lands it.** The pipeline lands the PR when it would have at first: a daniel-box
   batch, or a daniel-server PR that passes `server_lands`. It does not land a PR that check
@@ -718,6 +718,18 @@ so the two share one prompt and one review.
 
 `status`, `place runs` and `cc-wait fanout` read the unit's state, so a resumed batch reads
 `running` and then the state of its new report.
+
+A batch whose worktree is gone cannot be resumed: `place abandon` removed it, or the batch
+belongs to another coordinator's closed run. Its open PR is finished by a relaunch instead.
+`place launch` asks GitHub for an open PR on the batch's branch before it adds the tree
+(`scripts/dev/fanout_lib/launch.py:pr_to_continue`). When one is there, the tree checks out
+`origin/<branch>` with `--track`
+(`scripts/dev/fanout_lib/launch.py:worktree_add_command`). The brief names the PR and the
+checks that failed on its head, and tells the implementer to merge master and push to that PR
+rather than open one (`scripts/dev/fanout_lib/brief.py:CONTINUING_HEADING`). The batch keeps
+its review phase and its landing. The branch name comes from the batch id, so relaunch the
+abandoned batch's exact issues. A GitHub read that fails refuses the batch and releases its
+claims. `resume` names this relaunch when it refuses a cleaned batch or a gone worktree.
 
 ### A parked batch
 

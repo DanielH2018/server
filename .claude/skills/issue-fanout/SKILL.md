@@ -289,8 +289,12 @@ again. A wait that spends its 35 minutes with no verdict also ends `needs input:
 head's checks are still running, which extends it to 60 minutes. Only this repo's daniel-server batches wait; a daniel-box batch
 reads its run from its landing, and another repo's batch has no wait. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
-Each phase's Claude Code telemetry also carries `fanout_batch` and `fanout_phase` labels in
-Prometheus (`fanout_lib/review/processes.py:otel_attributes`), so spend per batch and phase is one query across both hosts.
+Each phase's Claude Code telemetry also carries `session_kind`, `fanout_batch` and
+`fanout_phase` labels in Prometheus (`scripts/dev/fanout_lib/telemetry.py:otel_attributes`),
+so spend per batch and phase is one query across both hosts. A plain batch carries
+`session_kind="fanout-batch"` and `fanout_batch`
+(`scripts/dev/fanout_lib/telemetry.py:batch_attributes`), and a review phase carries
+`session_kind="fanout-review"`.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
 taken out (`scripts/dev/fanout_lib/review/base_check.py`). The reviewer is told which still pass, and
 the PR comment counts them.
@@ -445,7 +449,17 @@ whatever the agent committed. It then records the removal in the manifest and re
 batch's claims, so the relaunch is free to place. A landing or detached deploy the agent
 started runs in its own scope and is not stopped; check
 `systemctl --user list-units 'land*' 'deploy-*'` on that host first. The PR, if the agent
-opened one, stays open on GitHub; close it with `gh pr close`.
+opened one, stays open on GitHub. Close it with `gh pr close` to discard it, or leave it open
+for a relaunch to finish.
+
+**A relaunch finishes an open PR on the batch's branch.** `launch` asks GitHub for an open PR
+on `worktree-fanout-<batch>` before it adds the tree
+(`scripts/dev/fanout_lib/launch.py:pr_to_continue`). When one is there, the tree checks out that
+PR's head and tracks it, and the brief names the PR and the checks that failed on it. The
+implementer then merges master, fixes the checks and pushes to the same PR. The batch keeps its
+review phase and its landing. Relaunch the abandoned batch's exact issues, so the batch id, and
+with it the branch name, is the same. A GitHub read that fails refuses the batch and releases
+its claims, because a fresh branch would orphan the PR.
 
 **daniel-server is refused as a host until its signing key is registered.** The repo ruleset
 requires a verified commit signature, and `launch` drops a host whose `user.signingkey` is not
