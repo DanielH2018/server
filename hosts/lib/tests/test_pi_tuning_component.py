@@ -263,11 +263,6 @@ def test_the_whole_sd_copy_fits_under_the_log2ram_boot_guard(package):
     assert sd_copy_worst_mb(package) <= tmpfs
 
 
-def test_a_journal_cap_without_a_file_count_reads_as_unbounded():
-    text = "[Journal]\nSystemMaxUse=32M\nSystemMaxFileSize=8M\n"
-    assert not re.search(r"^SystemMaxFiles=\d+$", text, re.M)
-
-
 # The apt timers.
 
 

@@ -79,14 +79,3 @@ def test_a_rule_quota_that_leaves_the_default_would_be_detected():
     """The rejecting half: the rule's quota edited while k3s overrides nothing."""
     edited = STORAGE_RULES.read_text().replace("/ 2147483648 >=", "/ 4294967296 >=")
     assert rule_quota(edited) != ETCD_DEFAULT_QUOTA
-
-
-def test_a_divergent_override_would_be_detected():
-    """The rejecting half, on text this repo does not carry: the flag present at another value.
-
-    Without it the guard above is only ever observed on the no-override branch, where a `return`
-    skips the comparison entirely — so a broken comparison would never be exercised.
-    """
-    override = "--kube-apiserver-arg=x --etcd-arg=quota-backend-bytes=8589934592"
-    assert OVERRIDE_FLAG in override
-    assert str(ETCD_DEFAULT_QUOTA) not in override

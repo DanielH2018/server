@@ -130,6 +130,26 @@ with no host change used a median 1,414 slot-seconds, about 1,020 of them in the
 its push run skips as proven. The nightly sweep costs one runner for about ten minutes a
 day. `scripts/dev/ci_slot_cost.py --recent 20` prints the measured figure.
 
+**A pytest leg's setup is spread over many short steps, and the apt cache is not one of the
+costs.** On 2026-11-22, `ci_slot_cost.py --recent 10` read a median 26.0s per leg outside
+`Run the test suite` over 41 master legs, and `--pull-requests` read 25.0s over 35 legs. The
+master medians per step were these:
+
+- checkout: 7s;
+- the setup action: 5s;
+- `Set up job`: 4s;
+- the tool installs: 3s;
+- the runner's time before the first step and after the last: 3s;
+- the select step: 2s.
+
+Four leg logs from runs 44969299707, 44842751621 and 44952060308 print
+`age and apt-utils: cached`, so the apt install takes about 0.02s. Of checkout's 7s, between
+4.6s and 5.4s is the `fetch-depth: 0` fetch of every branch. That is the only step whose cost
+stays above 3s on every leg. #9905 measures a narrower fetch before anyone changes it. No
+other step justifies its own work. The `$/` tarball in `Set up job` is a `DECIDED:` in
+`.github/actions/setup/action.yml`. `uv sync` restores a warm cache and installs 42 packages
+in 23ms. A step change cannot remove the runner's start and teardown time.
+
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
 `run-cases` output is true on a `workflow_dispatch` run, and when the render reports `changed`
 or `cases`. The eight cases legs and `k3s_download` skip at job level on it.

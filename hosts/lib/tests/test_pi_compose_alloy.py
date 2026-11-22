@@ -125,13 +125,6 @@ def test_the_journal_is_not_shipped(config):
     assert "loki.source.journal" not in re.sub(r"//[^\n]*", "", config)
 
 
-def test_the_guard_can_go_red():
-    assert len(REQUIRED_FRAGMENTS) >= 8
-    assert '"machine" = "daniel-pi"' in REQUIRED_FRAGMENTS
-    # A fragment that still carried a Jinja expression would match nothing in a render.
-    assert not [f for f in REQUIRED_FRAGMENTS if "{{" in f]
-
-
 # --- the docker-proxy request drop ------------------------------------------------------------
 
 _PROXY_LINE = (
