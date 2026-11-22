@@ -374,6 +374,16 @@ verdict at all.
 refused to start showed up only as an empty `/var/hdd.log` at the next daily sweep, 18 hours
 after the boot that left `/var/log` on the card.
 
+**A `log2ram` package upgrade unmounts `/var/log` too, with no boot involved** (#8234).
+The package's `prerm` runs `deb-systemd-invoke stop log2ram.service` on `upgrade`, and its
+`postinst` only enables the unit and prints `Reboot to activate log2ram`. `/var/log` then stays
+on the card until the next boot. The Ubuntu 26.04 upgrade did this on 2026-11-21 at 22:32 UTC,
+when it replaced Azlux's `log2ram 1.7.2` with Ubuntu's `1.7.2+ds-1build1`. `PiSdHealthFailed`
+then paged three times between 22:37 and 00:40 with `errors_count=0` on every line, until the
+00:35 reboot remounted the tmpfs. The 2026-11-12 page had the same leg but a different cause:
+log2ram's size guard refused at boot. #9940 tracks the upgrade path, and #9941 tracks the two
+apt sources that both offer the package.
+
 Three things about the integrity verdict:
 
 - **`/var/hdd.log` is the load-bearing tree.** `/var/log` is the RAM tmpfs, rewritten from RAM
