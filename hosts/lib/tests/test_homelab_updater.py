@@ -109,6 +109,43 @@ def test_a_held_host_installs_nothing_and_reports_reconcile_ok_0(host):
     assert _ok(host.metrics()) == "0"
 
 
+UPDATER_LOG = "/var/log/pi-health/updater.log"
+
+
+def _held(host: Host) -> None:
+    host.state_dir.mkdir(parents=True)
+    host.hold.write_text("held\n")
+
+
+def test_a_held_hosts_line_is_also_appended_to_the_log_file(host):
+    _held(host)
+    log = host.root / UPDATER_LOG.lstrip("/")
+    log.parent.mkdir(parents=True)
+    log.write_text("an earlier line\n")
+
+    result = host.run(log=UPDATER_LOG)
+
+    assert result.returncode == 0, result.stderr
+    earlier, line = log.read_text().splitlines()
+    assert earlier == "an earlier line"
+    # A timestamp leads, because Alloy stamps a file line when it reads it, not when it was written.
+    assert line.startswith(
+        "2026-10-13T12:00:00+00:00 daniel-pi homelab-updater: held since"
+    )
+    assert line.split(" ", 2)[2] in result.stderr
+
+
+def test_a_log_file_that_cannot_be_opened_leaves_the_exit_and_the_stderr_line(host):
+    _held(host)
+    (host.root / UPDATER_LOG.lstrip("/")).mkdir(parents=True)
+
+    result = host.run(log=UPDATER_LOG)
+
+    assert result.returncode == 0, result.stderr
+    lines = result.stderr.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("homelab-updater: held since"), lines
+
+
 def test_a_host_killed_after_its_install_runs_reconcile_on_the_next_common_path(host):
     # The install landed V2 and the run died before step 7, so the record still names V1.
     host.state["installed"] = {

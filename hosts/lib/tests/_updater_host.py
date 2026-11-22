@@ -99,7 +99,8 @@ class Host:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.last_success.write_text(f"{EARLIER}\n")
 
-    def run(self, *args: str):
+    def run(self, *args: str, log: str | None = None):
+        """Run the updater; `log` is the HOMELAB_UPDATER_LOG a host's drop-in sets."""
         (self.stub / "state.json").write_text(json.dumps(self.state))
         (self.stub / "calls.jsonl").write_text("")
         env = {
@@ -107,6 +108,8 @@ class Host:
             "HOMELAB_ROOT": str(self.root),
             "STUB_STATE": str(self.stub),
         }
+        if log:
+            env["HOMELAB_UPDATER_LOG"] = log
         result = run(["/bin/sh", str(UPDATER), *args], env=env)
         self.state = json.loads((self.stub / "state.json").read_text())
         return result
