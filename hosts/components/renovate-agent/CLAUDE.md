@@ -39,6 +39,8 @@ which the runner carries out with its own token after the session ends (`files/r
 It reaches the network only through the T2 egress proxy, `hosts/components/t2-egress/`: the
 nftables fence refuses every other connection its uid opens, squid admits only the hosts its
 config lists, and the session unit refuses to start unless the fence holds its uid's rules.
+The fence's one other opening is the loopback OTLP collector, where the session's telemetry
+goes with `session.kind=renovate`.
 It lands nothing: it nominates a PR with a `land` request, and after the session ends the
 runner starts `renovate-agent-land@<n>.service` for each nomination, which runs `land.sh` as
 `sys_user` on a PR the lander re-checks itself.
@@ -61,7 +63,8 @@ permission-request guard, and `protect-secrets` on the file tools. It also denie
 edits to the session's own settings, hooks and claude_guard, and it disables bypass mode. The
 render adds the operator's deny list and, because the wrapper runs the session in auto mode, the
 operator's `autoMode` deny rules, environment and `classifyAllShell`. The file holds no allow
-rules and no `env`, because the operator's carry `/home` paths that `ProtectHome=` hides. A
+rules, because the operator's carry `/home` paths that `ProtectHome=` hides. Its `env` is the
+overlay's own: Claude Code telemetry to `127.0.0.1:4317` with no prompt or tool content. A
 dotfiles change reaches the session at the next tag the operator signs, never from `main`. The
 claude-code component's `CLAUDE.md` has the render's contract.
 `homelab-renovate-agent-setup.service` runs the setup at

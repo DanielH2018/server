@@ -23,15 +23,15 @@ from lib.repo_paths import ALL_VARS
 from deploy_tools import await_ci
 
 
-def _workflow_job_names() -> set[str]:
-    """The check-run name of every job in ci.yml: its `name:`, or its id when it has none.
+def _workflow_job_names(workflow: str | None = None) -> set[str]:
+    """The check-run name of every job in `workflow`: its `name:`, or its id when it has none.
 
-    Read from the parsed workflow, so a step's `name:` can never enter the set however the
-    file is indented (#3663).
+    `workflow` is a workflow file's text, ci.yml's by default. Read from the parsed workflow,
+    so a step's `name:` can never enter the set however the file is indented (#3663).
     """
-    jobs = yaml_fast.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())[
-        "jobs"
-    ]
+    if workflow is None:
+        workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text()
+    jobs = yaml_fast.safe_load(workflow)["jobs"]
     return {str(job.get("name", job_id)) for job_id, job in jobs.items()}
 
 
@@ -67,18 +67,25 @@ def test_every_required_context_names_a_real_job():
     assert not missing, f"required contexts naming no ci.yml job: {sorted(missing)}"
 
 
-def test_a_bogus_context_would_be_flagged():
-    """The reject half.
-
-    Without this, a parser that returned every string in the file would pass the check above while
-    proving nothing.
-    """
-    assert "not-a-real-job" not in _workflow_job_names()
-
-
 def test_the_workflow_parse_actually_finds_jobs():
     """A regex that matched nothing would make the coverage test vacuously true."""
     assert _workflow_job_names(), "parsed no job names out of ci.yml"
+
+
+def test_a_steps_name_never_enters_the_job_names():
+    workflow = (
+        "jobs:\n"
+        "  lint:\n"
+        "    name: ruff\n"
+        "    steps:\n"
+        "      - name: Run ruff\n"
+        "        run: ruff check\n"
+        "  pytest:\n"
+        "    steps:\n"
+        "    - name: Run pytest\n"
+        "      run: pytest\n"
+    )
+    assert _workflow_job_names(workflow) == {"ruff", "pytest"}
 
 
 def test_a_reference_in_place_of_the_list_is_flagged(tmp_path):

@@ -20,9 +20,9 @@
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
 #
 # The host baseline is the same components as daniel-pi and daniel-server: `host-hardening` ships
-# the sudo cache, auditd's rules, the module blacklist, the core-dump drop-in, the login banner
-# and the base packages, and `rsyslog-filter` ships the info filter. No file needs a credential,
-# and `has_igpu` is false here, so no i915 option ships.
+# the sudo cache, auditd's rules, the module blacklist, the core-dump drop-in, the apport drop-in,
+# the login banner and the base packages, and `rsyslog-filter` ships the info filter. No file needs
+# a credential, and `has_igpu` is false here, so no i915 option ships.
 #
 # The k3s server's host half: `k3s-server` carries Longhorn's packages, the read-only
 # kubeconfig, the inotify key, the join rules declared `keep` and the address pin, whose wifi half
@@ -118,6 +118,8 @@ components:
   - gh-quota
   - host-hardening
   - rsyslog-filter
+  # `ssh daniel-pi` for every user: the /etc/hosts line and the Pi's pinned host key.
+  - pi-ssh-name
 units:
   k3s.service: {policy: windowed}
 credentials:

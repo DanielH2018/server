@@ -147,7 +147,6 @@ def test_the_checked_in_defaults_name_each_expression():
 # `--expect red --plan k3s-redproof`), copied from its rehearsal-verdict.txt. This is Flux's
 # reading of the Plan. The evaluator here cannot produce it, so the tests below hold only the
 # parts of it that the repo's own files determine.
-OBSERVED_REASON = "HealthCheckFailed"
 OBSERVED_MESSAGE = (
     "health check failed after 5m5.044785708s: failed early due to stalled resources: "
     "[Plan/system-upgrade/k3s-redproof status: 'Failed']"
@@ -168,7 +167,6 @@ def _drill() -> dict:
 
 def test_the_observed_red_names_the_drill_plan_and_the_failed_expression():
     meta = _drill()["metadata"]
-    assert OBSERVED_REASON == "HealthCheckFailed"
     assert (
         f"Plan/{meta['namespace']}/{meta['name']} status: 'Failed'" in OBSERVED_MESSAGE
     )

@@ -350,7 +350,10 @@ daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=
   only the operator import line of the older copied subset, which the component does not ship.
   The
   agent's telemetry carries the resource attribute `process.owner=claude`, so its metrics carry
-  the label `process_owner="claude"` and the operator's carry none.
+  the label `process_owner="claude"` and the operator's carry none. That settings `env` replaces
+  the whole `OTEL_RESOURCE_ATTRIBUTES` value, so the agent's Remote Control unit passes
+  `claude rc --settings` a root-owned file that carries `process.owner` beside
+  `session.kind=remote-control` (`hosts/components/claude-code/templates/claude-rc-settings.json.j2`).
 - **The memory store is re-copied after every stint as the operator.** `claude-agent-home`
   copies the operator's store into the agent's while the agent's `MEMORY.md` does not exist. It
   also copies it on the first run as the agent after a run as the operator, if the two stores
@@ -737,12 +740,19 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   session can write a syslog line with any tag, so any rule that counts log lines, whatever it
   filters on, would let it open the next episode.
   `test_no_routed_alert_counts_log_lines_a_session_can_write` in
-  `hosts/tests/test_claude_triage.py` runs once per routed alert. It fails when a
+  `hosts/tests/test_claude_triage_alert_inputs.py` runs once per routed alert. It fails when a
   `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
   it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
   `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
   the one exemption, because an added line can only keep it from firing. `HostLogErrors`,
   `HostOutOfMemoryKill` and `WorkloadLogErrors` are counting rules, so none can be routed.
+- **No routed alert reads a metric a session can send.** The T2 egress fence admits the
+  loopback OTLP collector, so each session's telemetry reaches Prometheus. The collector
+  forwards any metric name it receives, and `K8sDeploymentZeroAvailable` selects its series by
+  name alone. Prometheus therefore keeps only the `claude_code_*` names from the
+  `otel-collector` job, and
+  `hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`
+  fails a routed rule that reads one of them.
 - **A storm is one run.** More than three routed keys of one profile falling in one poll make
   a single storm episode that lists them all. Unrouted falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window

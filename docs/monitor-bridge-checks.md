@@ -184,11 +184,12 @@ checks each gate suppresses.
   two tiles. Runbook: `longhorn-backup-tiering`.)
 - **`b2_object_lock`** (`files/checks/b2.py:check_b2_object_lock`. One `b2_authorize_account` and
   one `b2_list_buckets` for the bucket the `B2_PROBE_*` key is scoped to, two Class C calls.
-  `down` when the bucket's Object Lock is off, has no default retention, or cannot be read
-  because the key lacks `readBucketRetentions`. `down` too when the retention is in compliance
-  mode, which no key can shorten, or is not shorter than `B2_PRUNE_AGE_DAYS` (14), the age the
-  weekly prune deletes a backup at. `down` when the key, the one Longhorn writes with, holds
-  `bypassGovernance`. Any answer from B2 is cached for `B2_LOCK_PROBE_INTERVAL_S` (a day), a
+  `down` when the bucket's Object Lock is off, or cannot be read because the key lacks
+  `readBucketRetentions`. `down` too when the bucket has any default retention, governance or
+  compliance: B2 then demands a Content-MD5 header on every upload, and Longhorn's S3 client
+  sends none, so every weekly backup fails. `down` when the key, the one Longhorn writes with,
+  holds `bypassGovernance`. `up` means the bucket is set up for the daily sweep, not that any
+  object is locked: longhorn-backup-health's checks 9 and 10 report whether the sweep ran. Any answer from B2 is cached for `B2_LOCK_PROBE_INTERVAL_S` (a day), a
   refusal included, because B2 billed it. A transport failure raises and the next cycle
   probes again. Behind `b2_reachable`, and its rule shares the gate's `for: 10m`, because the
   row reads 0 whenever the gate does. The record is ADR-0041.)

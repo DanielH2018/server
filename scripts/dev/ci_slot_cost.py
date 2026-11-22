@@ -16,7 +16,9 @@ For each run it prints:
 - the slot-seconds, summed over every job that ran, then per job family (the name before
   ` (`, so the `pytest (shard N)` legs are one `pytest` row);
 - the queue wait at p50 and p90 over the run's jobs, and each family's median wait;
-- the median time a pytest leg spent outside `Run the test suite`, and that time per step;
+- the median time a pytest leg spent outside `Run the test suite`, and that time per step,
+  with the time no step covers as its own line: the runner holds the job for a few seconds
+  before `Set up job` starts and after `Complete job` ends;
 - how many pytest legs ran empty, and the slot-seconds they held.
 
 A job's queue wait is `started_at - created_at`. GitHub creates a job's record when the jobs
@@ -56,6 +58,7 @@ CI_WORKFLOW = "ci.yml"
 CI_BRANCH = "master"
 PYTEST_PREFIX = "pytest (shard"
 SUITE_STEP = "Run the test suite"
+NO_STEP = "(no step: runner start and teardown)"
 # How many green master runs `--recent` lists to find N that ran pytest. A push whose tree a
 # landing already proved skips every leg, so most of the newest runs ran no pytest
 # and the window has to be wide.
@@ -125,6 +128,7 @@ def leg_is_empty(span: dict) -> bool:
 def leg_setup(span: dict) -> tuple[float, dict[str, float]] | None:
     """A pytest leg's seconds outside `Run the test suite`, and each other step's seconds.
 
+    The step seconds carry a `NO_STEP` entry for the part of the leg's span no step covers.
     Returns None for a leg whose suite step never ran or was skipped, since it measured no
     setup.
     """
@@ -142,7 +146,9 @@ def leg_setup(span: dict) -> tuple[float, dict[str, float]] | None:
             steps[name] = steps.get(name, 0.0) + ended - began
     if suite is None:
         return None
-    return span["finished"] - span["started"] - suite, steps
+    outside = span["finished"] - span["started"] - suite
+    steps[NO_STEP] = max(0.0, outside - sum(steps.values()))
+    return outside, steps
 
 
 def _waits(spans: list[dict]) -> list[float]:

@@ -23,10 +23,3 @@ def test_the_roots_point_at_the_real_tree():
 )
 def test_image_tag_drops_a_pinned_digest(ref, tag):
     assert image_tag(ref) == tag
-
-
-def test_image_tag_still_sees_a_version_move_behind_a_digest():
-    # The version guards built on it exist to fail when the pin moves; a digest must not hide it.
-    assert image_tag("ghcr.io/bigboot/autokuma:2.2.0@sha256:12ed0e50") not in {
-        "2.1.0-rc.2"
-    }

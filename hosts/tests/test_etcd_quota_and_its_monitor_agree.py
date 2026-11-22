@@ -50,43 +50,42 @@ def rule_quota(text: str | None = None) -> int:
     return int(match.group(1))
 
 
-def k3s_overrides_the_quota() -> bool:
-    """True when `k3s_server_config` passes etcd a `quota-backend-bytes` of its own."""
-    return OVERRIDE_FLAG in K3S_SERVER_COMPONENT.read_text()
+def quota_problem(component: str, quota: int) -> str | None:
+    """Why a rule dividing by `quota` misreads the quota `component` puts in force, else None.
 
-
-def test_the_threshold_matches_the_quota_actually_in_force():
-    if k3s_overrides_the_quota():
-        override = [
-            line.strip()
-            for line in K3S_SERVER_COMPONENT.read_text().splitlines()
-            if OVERRIDE_FLAG in line
-        ]
-        assert str(rule_quota()) in " ".join(override), (
-            f"k3s_server_config now sets {OVERRIDE_FLAG} ({override}) and "
-            f"EtcdDBNearQuota still divides by {rule_quota()} — the rule measures "
-            "against a quota the cluster does not have"
+    `component` is the text of `k3s_server_config`'s component file. When it passes etcd a
+    `quota-backend-bytes` of its own, that line must carry `quota`; otherwise `quota` must be
+    etcd's default.
+    """
+    override = [
+        line.strip() for line in component.splitlines() if OVERRIDE_FLAG in line
+    ]
+    if override:
+        if str(quota) in " ".join(override):
+            return None
+        return (
+            f"k3s_server_config sets {OVERRIDE_FLAG} ({override}) and EtcdDBNearQuota "
+            f"divides by {quota}: the rule measures against a quota the cluster does not have"
         )
-        return
-    assert rule_quota() == ETCD_DEFAULT_QUOTA, (
+    if quota == ETCD_DEFAULT_QUOTA:
+        return None
+    return (
         f"k3s_server_config sets no etcd-arg {OVERRIDE_FLAG}, so etcd's own "
-        f"{ETCD_DEFAULT_QUOTA}-byte default is in force, but EtcdDBNearQuota divides by "
-        f"{rule_quota()}"
+        f"{ETCD_DEFAULT_QUOTA}-byte default is in force, but EtcdDBNearQuota divides by {quota}"
     )
 
 
-def test_a_rule_quota_that_leaves_the_default_would_be_detected():
-    """The rejecting half: the rule's quota edited while k3s overrides nothing."""
+def test_the_threshold_matches_the_quota_actually_in_force():
+    assert quota_problem(K3S_SERVER_COMPONENT.read_text(), rule_quota()) is None
+
+
+def test_a_rule_quota_that_leaves_the_default_is_flagged():
+    """The rule's quota edited while k3s overrides nothing."""
     edited = STORAGE_RULES.read_text().replace("/ 2147483648 >=", "/ 4294967296 >=")
-    assert rule_quota(edited) != ETCD_DEFAULT_QUOTA
+    assert quota_problem("", rule_quota(edited)) is not None
 
 
-def test_a_divergent_override_would_be_detected():
-    """The rejecting half, on text this repo does not carry: the flag present at another value.
-
-    Without it the guard above is only ever observed on the no-override branch, where a `return`
-    skips the comparison entirely — so a broken comparison would never be exercised.
-    """
-    override = "--kube-apiserver-arg=x --etcd-arg=quota-backend-bytes=8589934592"
-    assert OVERRIDE_FLAG in override
-    assert str(ETCD_DEFAULT_QUOTA) not in override
+def test_an_override_at_another_quota_than_the_rules_is_flagged():
+    component = 'etcd-arg:\n  - "quota-backend-bytes=8589934592"\n'
+    assert quota_problem(component, ETCD_DEFAULT_QUOTA) is not None
+    assert quota_problem(component, 8589934592) is None

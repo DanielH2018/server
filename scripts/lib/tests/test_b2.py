@@ -13,9 +13,7 @@ from lib.b2 import (
     AUTHORIZE_URL,
     B2Error,
     B2Session,
-    BucketLock,
     http_json,
-    parse_bucket_lock,
 )
 
 AUTH = {
@@ -141,25 +139,3 @@ def test_a_2xx_json_body_is_parsed(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", answer)
     assert http_json("https://api/x", {}, {"a": 1}, 5) == {"files": []}
     assert seen == {"method": "POST", "type": "application/json"}
-
-
-@pytest.mark.parametrize(
-    ("period", "days"),
-    [
-        ({"duration": 7, "unit": "days"}, 7),
-        ({"duration": 1, "unit": "years"}, 365),
-        ({"duration": 7, "unit": "weeks"}, None),
-        ({"duration": None, "unit": "days"}, None),
-    ],
-)
-def test_the_bucket_lock_period_reads_in_days(period, days):
-    bucket = {
-        "fileLockConfiguration": {
-            "isClientAuthorizedToRead": True,
-            "value": {
-                "isFileLockEnabled": True,
-                "defaultRetention": {"mode": "governance", "period": period},
-            },
-        }
-    }
-    assert parse_bucket_lock(bucket) == BucketLock(True, True, "governance", days)

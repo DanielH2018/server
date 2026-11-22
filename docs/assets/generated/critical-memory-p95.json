@@ -17,7 +17,9 @@
     "homelab/dockerhub-mirror/dockerhub-mirror": 48,
     "homelab/ghcr-mirror/ghcr-mirror": 32,
     "homelab/ghcr-mirror/ghcr-resume": 80,
+    "homelab/home-assistant/home-assistant": 1360,
     "homelab/monitor-bridge/monitor-bridge": 48,
+    "homelab/mosquitto/mosquitto": 16,
     "homelab/nut/nut": 16,
     "homelab/pihole-2/pihole": 304,
     "homelab/pihole-2/unbound": 48,
@@ -29,6 +31,8 @@
     "homelab/traefik/crowdsec-config-install": 16,
     "homelab/traefik/traefik": 224,
     "homelab/wg-easy/wg-easy": 128,
+    "homelab/zigbee2mqtt/mqtt-broker-wait": 16,
+    "homelab/zigbee2mqtt/zigbee2mqtt": 144,
     "observability/alertmanager/alertmanager": 64,
     "observability/prometheus/prometheus": 2448,
     "system-upgrade/system-upgrade-controller/system-upgrade-controller": 64
