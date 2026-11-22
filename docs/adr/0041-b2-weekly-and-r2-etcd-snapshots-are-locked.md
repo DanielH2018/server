@@ -97,9 +97,10 @@ daniel-box) sets the governance retention of every current Longhorn object under
 because the bucket carries none. That locks a new block by the next run, and keeps every
 block a retained backup references locked, however old its upload. The period is shorter
 than the age at which the weekly prune deletes a backup (`k3s_longhorn_weekly_backup_retain`
-weekly backups), so a pruned block's hidden version stays billed for at most 7 days. The sweep needs a key with
-`writeFileRetentions`, and which key holds it is open: see the *Consequences* below and
-[#9787](https://github.com/DanielH2018/server/issues/9787). Longhorn's own `full-backup-interval` would
+weekly backups), so a pruned block's hidden version stays billed for at most 7 days. The sweep reads the Longhorn key, which
+holds `writeFileRetentions`: the operator chose it over a separate sweep key on 2026-11-22
+([#9787](https://github.com/DanielH2018/server/issues/9787)), and the *Consequences* below
+weigh the two. Longhorn's own `full-backup-interval` would
 renew each lock by re-uploading every block, and was rejected: the replaced versions stay
 billed until the lifecycle rule removes them, so the bucket would hold about two copies of the
 referenced set. The bucket held 6.25 GB of B2's 10 GB free tier on 2026-11-21.
@@ -137,8 +138,7 @@ lifecycle rule keeps a hidden version for 7 days.
 
 **Nothing is locked until the sweep holds a key that can extend retention.** A green
 `b2_object_lock` row means the bucket is set up, not that any object is locked. Step 2b of the
-runbook, and [#9787](https://github.com/DanielH2018/server/issues/9787)'s choice of key, make
-the lock real.
+runbook, which gives the Longhorn key `writeFileRetentions`, makes the lock real.
 
 **The sweep keeps old blocks locked.** B2 counts a version's retention from its upload, and a
 Longhorn backup uploads only the blocks that changed, so the base blocks every weekly backup
@@ -161,14 +161,13 @@ only way out. A holder of the Longhorn key could therefore lock objects in compl
 up to 3,000 days and keep them billed for that long. Switching an existing governance
 retention to compliance takes `bypassGovernance`, so the exposure is mainly objects whose lock
 has lapsed. The bound is the bucket's stored bytes plus whatever the key uploads, which a B2
-storage cap limits if the account sets one. The alternative is a separate sweep key with only
-`listBuckets`, `listFiles`, `readBucketRetentions` and `writeFileRetentions`. It would be held
-in SOPS for the host and never rendered into a cluster Secret, so a leaked cluster credential
-would not carry the capability. The sweep reads the Longhorn key until
-[#9787](https://github.com/DanielH2018/server/issues/9787) decides, and choosing the separate
-key means pointing the sweep at the new SOPS keys. Until a key that can extend retention is in
-place, the sweep on a locked bucket prints a `blocked:` line, and check 10 of
-`longhorn-backup-health` reports it as not completing. Either choice clears that report.
+storage cap limits if the account sets one. The rejected alternative was a separate sweep key with only
+`listBuckets`, `listFiles`, `readBucketRetentions` and `writeFileRetentions`, held in SOPS for
+the host and never rendered into a cluster Secret, so a leaked cluster credential would not
+carry the capability. It needed a code change to point the sweep at new SOPS keys and a second
+key to rotate. The operator accepted the exposure on 2026-11-22
+([#9787](https://github.com/DanielH2018/server/issues/9787)) in exchange for one key, one
+rotation and a sweep that locks from the next run.
 
 **The sweep depends on its timer.** If it stops, every lock lapses within 7 days, and no new
 block is locked at all. Checks 9 and 10 of `longhorn-backup-health` read its journal

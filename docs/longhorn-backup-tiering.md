@@ -333,15 +333,19 @@ The `b2_object_lock` row and the daily sweep both read the lock setting with the
 `declined: the key cannot read the bucket's Object Lock setting` whatever the bucket's state.
 B2 cannot add a capability to a key, so mint a new one and rotate both SOPS keys to it.
 
-When step 2b picks the Longhorn key for the sweep, do both steps with one key and one
-rotation: add `writeFileRetentions` to the list below. Compare the list with the live key's
-capabilities first, which `b2 key list --long` prints, and add any it holds that the list
-lacks. The list is the set the step 1 scratch key held, under which Longhorn backed up and
-deleted without error:
+Steps 2a and 2b share one key and one rotation, so the new key also holds
+`writeFileRetentions`. The 2026-11-22 rotation copied the live key's capabilities, which
+`b2 key list --long` prints, and added the two the lock needs. That keeps every reader of the
+key working through the rotation:
 
 ```bash
-b2 key create --bucket daniel-server-kopia longhorn-weekly listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions
+b2 key create --bucket daniel-server-kopia longhorn-weekly listBuckets,writeBuckets,readBuckets,listFiles,readFiles,shareFiles,writeFiles,deleteFiles,readBucketEncryption,writeBucketEncryption,readBucketLogging,writeBucketLogging,readBucketReplications,writeBucketReplications,readBucketNotifications,writeBucketNotifications,readBucketLifecycleRules,writeBucketLifecycleRules,readBucketRetentions,writeFileRetentions
 ```
+
+Longhorn needs far fewer: the step 1 scratch key backed up and deleted with
+`listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions`.
+[#9934](https://github.com/DanielH2018/server/issues/9934) trims the key once the old one is
+deleted.
 
 Then set `longhorn_b2_key_id` and `longhorn_b2_application_key` to the printed pair with
 `sops`, and run `cluster_vars.py write` so Flux carries them to the cluster
@@ -353,22 +357,11 @@ weekly backup has completed with the new one.
 **Until this step is done, no B2 object is locked.** With no default retention, the sweep is
 the only thing that sets a lock, and it is blocked until the key it reads holds
 `writeFileRetentions`. A green `b2_object_lock` row means the bucket is set up, not that any
-object is locked. The choice of key stays open in
-[#9787](https://github.com/DanielH2018/server/issues/9787). Read
-*`writeFileRetentions` lets a leaked key lock objects for good* in ADR-0041's *Consequences*
-before choosing. The two options:
-
-- **The Longhorn key.** The sweep reads it unchanged. B2 cannot add a capability to a key, so
-  mint a new key with the master key, then rotate `longhorn_b2_key_id` and
-  `longhorn_b2_application_key` to it. That key sits in a cluster Secret.
-- **A separate sweep key** with `listBuckets`, `listFiles`, `readBucketRetentions` and
-  `writeFileRetentions`, held in SOPS for the host and never rendered into a cluster Secret.
-  The sweep then needs a code change to read the new SOPS keys.
-
-Either new key must not hold `bypassGovernance`. To mint the Longhorn key, start from the live
-key's capabilities, which `b2 key list --long` prints, because Longhorn breaks after the
-rotation if the new key lacks one it uses. Add `writeFileRetentions` to that list and pass it
-to `b2 key create --bucket daniel-server-kopia longhorn-weekly`.
+object is locked. The sweep reads the Longhorn key: the operator chose it over a separate
+sweep key on 2026-11-22 ([#9787](https://github.com/DanielH2018/server/issues/9787)), and
+ADR-0041's *`writeFileRetentions` lets a leaked key lock objects for good* records the cost.
+So step 2b is step 2a with `writeFileRetentions` added to the new key's list: one key and one
+rotation. The new key must not hold `bypassGovernance`.
 
 With the key in place, the `homelab-b2-retention` timer on daniel-box stops being blocked at its
 next 07:30 UTC run. To confirm, read its line:

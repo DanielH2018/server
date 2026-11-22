@@ -42,7 +42,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from host_lib import ERR, atomic_write, github_get, github_token, parse_env_file
+from github_rest import github_get, github_token
+from host_lib import ERR, atomic_write, parse_env_file
 from host_lib import log as host_log
 import homelab_tool_fetch as tools
 from builder_ci_grade import CiSettings, read_check_pages, token_refused

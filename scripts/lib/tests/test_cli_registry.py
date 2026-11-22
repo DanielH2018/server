@@ -64,6 +64,7 @@ def test_package_entry_points_finds_run_and_main_modules():
         "arr",
         "b2_ledger",
         "builder",
+        "claude_spend",
         "flux",
         "ha",
         "health",

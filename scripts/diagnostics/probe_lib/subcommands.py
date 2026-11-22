@@ -24,6 +24,7 @@ from diagnostics.probe_lib.b2_ledger import (
     run_b2_spend,
 )
 from diagnostics.probe_lib.builder import run_builder
+from diagnostics.probe_lib.claude_spend import run_claude_spend
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.flux import run_flux
 from diagnostics.probe_lib.lander import run_lander
@@ -208,6 +209,13 @@ SUBCOMMANDS = [
         "the 7d p95, and PVC fill with days to full",
         "usage",
         run_usage,
+    ),
+    (
+        "claude-spend",
+        "Claude Code spend per session kind over --since, unlabelled desktop sessions split "
+        "into coordinator and interactive",
+        "claude_spend",
+        run_claude_spend,
     ),
 ]
 
