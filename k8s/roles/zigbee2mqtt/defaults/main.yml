@@ -21,7 +21,7 @@ zigbee2mqtt_k8s_init_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e08478
 zigbee2mqtt_k8s_cpu_limit: "500m"
 zigbee2mqtt_k8s_mem_limit: 256Mi
 zigbee2mqtt_k8s_cpu_request: "50m"
-zigbee2mqtt_k8s_mem_request: 64Mi
+zigbee2mqtt_k8s_mem_request: 144Mi
 
 # In-cluster the broker is one Service hop away; the shared config template defaults to the
 # LAN VIP.
