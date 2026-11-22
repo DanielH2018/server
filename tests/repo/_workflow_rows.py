@@ -179,6 +179,36 @@ def _package_build_download_offences(text: str) -> list[str]:
     return offences
 
 
+DRAFT_SKIPPING = tuple(
+    f".github/workflows/{name}"
+    for name in ("flux-deletion-drill.yml", "image-smoke.yml")
+)
+_PR_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"]
+_DRAFT_ARM = "github.event.pull_request.draft != true"
+
+
+def draft_skip_problems(wf: Workflow) -> list[str]:
+    """What keeps a workflow from skipping a draft's pushes and running once it is ready."""
+    found = []
+    if (triggers(wf).get("pull_request") or {}).get("types") != _PR_TYPES:
+        found.append(f"pull_request types are not {_PR_TYPES}")
+    found += [
+        f"job {name} runs on a draft"
+        for name, job in jobs(wf).items()
+        if _DRAFT_ARM not in condition(job)
+    ]
+    return found
+
+
+def _drop_ready_type(wf: Workflow) -> None:
+    triggers(wf)["pull_request"]["types"].remove("ready_for_review")
+
+
+def _drop_job_if(wf: Workflow) -> None:
+    for job in jobs(wf).values():
+        job.pop("if")
+
+
 WORKFLOW_ROWS = (
     Census(
         name="workflow-runners-are-pinned",
@@ -330,5 +360,26 @@ WORKFLOW_ROWS = (
             ),
         ),
         must_find=frozenset({".github/workflows/ci.yml"}),
+    ),
+    Census(
+        name="pr-workflows-skip-draft-pushes",
+        reason=(
+            "Both jobs are required contexts outside ci.yml, and both triggered on every push "
+            "to a draft, about three runs a merge. A job-level draft skip takes no runner and "
+            "reads as a pass, which merges nothing because GitHub refuses a draft. Without "
+            "`ready_for_review` in `types`, marking the PR ready starts no run, and the skip "
+            "on the draft head would be the only check the landing reads."
+        ),
+        files=lambda: tracked(*DRAFT_SKIPPING),
+        offence=judge(draft_skip_problems),
+        red=tuple(
+            m
+            for rel in DRAFT_SKIPPING
+            for m in mutants(
+                rel, no_ready_type=_drop_ready_type, no_job_if=_drop_job_if
+            )
+        ),
+        green=tuple(Subject(rel) for rel in DRAFT_SKIPPING),
+        must_find=frozenset(DRAFT_SKIPPING),
     ),
 )

@@ -4,13 +4,16 @@ name: image-smoke
 # path-filtered workflow that never triggers would leave the PR's required check stuck at
 # "Expected — waiting for status". The job self-scopes instead: the "Collect changed image
 # refs" step diffs only the k8s role defaults and group_vars/all.yml, so a PR that changes no
-# image ref there yields an empty list and the boot step is skipped (a fast green).
+# image ref there yields an empty list and the boot step is skipped (a fast green). On a draft
+# the job skips at job level, which takes no runner and reads as a pass; GitHub refuses to
+# merge a draft, and `ready_for_review` starts the run that counts.
 #
 # workflow_dispatch takes an explicit list instead of the diff. It is the only way to exercise
 # a change to the check itself, because a PR that edits this file changes no image pin and the
 # diff is empty. It also sweeps refs the PR path has not seen.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   # Inert: merge queues are not offered on this user-owned repository (see the note in
   # ci.yml). Kept because `pull + boot changed images` is a required status context, and if
   # a queue ever existed every required context would have to report on its entries. On this
@@ -36,6 +39,7 @@ permissions:
 jobs:
   smoke:
     name: pull + boot changed images
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a hung docker pull / image that never reaches healthy (per-container boot is already bounded)
     steps:
