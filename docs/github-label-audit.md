@@ -320,26 +320,28 @@ between.
 Once no live session runs a pre-slice-2 checkout, the same date #9120 waits for:
 
 1. Run `fill-domain` a last time, then delete the subcommand.
-2. Delete the 14 `domain/*` labels, the 6 `severity/*`, the 6 `kind/*` and the 41
-   `not-before:*` labels across both repositories, and the readers' fallbacks.
-3. Add a test that fails when `LABELS` names a key under `domain/`, `severity/`, `kind/` or
-   `not-before:`, or when a planned `gh` argv adds one.
+2. Delete the 14 `domain/*` labels, the 6 `severity/*`, the 6 `kind/*`, the 41
+   `not-before:*` and the 2 `escalated` labels across both repositories, and the readers'
+   fallbacks.
+3. Add a test that fails when `LABELS` names `escalated` or a key under `domain/`,
+   `severity/`, `kind/` or `not-before:`, or when a planned `gh` argv adds one.
 
 After the deletion GitHub itself refuses a re-add: `gh issue create --label domain/cicd`
 and `gh issue edit --add-label` fail on a label the repository lacks, and `LABELS` is the
 only code that creates labels. The test covers that one path.
 
-- **Complexity:** removes three fallbacks, the backfill command and 67 labels.
+- **Complexity:** removes three fallbacks, the backfill command and 69 labels.
 
 ### Slice 4: derive escalated
 
 `issue_rows` computes `escalated` from `reobservations`; `touch` stops adding the label;
-`escalated` leaves `LABELS`; the label is deleted from both repositories. The slice 3 test
-adds `escalated` to the names `LABELS` must not hold.
+`escalated` leaves `LABELS`. The label itself waits for slice 3: a session on an older
+checkout recreates every label its `LABELS` names on each `open`, so deleting it earlier
+would not stick.
 
 - **Exercise:** `findings.py list --json` shows `escalated: true` on an issue with two
   `Re-observed` comments and no label.
-- **Complexity:** removes one write path and one label.
+- **Complexity:** removes one write path.
 
 ### Slice 5: delete the unread labels
 

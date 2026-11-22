@@ -6,7 +6,7 @@
 | `block` | withhold an issue from `next` and `claim` until other issues close, or clear that |
 | `manual` | reserve an issue for the operator, releasing any claim on it, or clear that |
 | `remedy` | record a ruled remedy and remove `no-vetted-remediation` |
-| `touch` | record a re-observation; the third adds escalated |
+| `touch` | record a re-observation; the third sighting marks it escalated |
 | `comment` | post a plain comment: no label, no re-observation; a correction to an issue's body, say |
 | `claim` | claim issues for a worktree |
 | `release` | release this worktree's claim |

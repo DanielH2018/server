@@ -85,7 +85,7 @@ def test_reobservations_counts_only_reobserved_comments(issue):
 def test_issue_rows_reads_labels_into_fields(issue):
     one = issue(
         9,
-        labels=("claude", "severity/high", "kind/gap", "domain/network", "escalated"),
+        labels=("claude", "severity/high", "kind/gap", "domain/network"),
         fp="f",
     )
     (row,) = issue_rows([typed(one)])
@@ -94,16 +94,25 @@ def test_issue_rows_reads_labels_into_fields(issue):
         and row["kind"] == "gap"
         and row["domain"] == "network"
     )
-    assert row["escalated"] is True and row["no_vetted_remediation"] is False
+    assert row["no_vetted_remediation"] is False
     assert row["first_seen"] == "2026-08-15" and row["number"] == 9
 
 
+def test_issue_rows_marks_the_third_sighting_escalated_without_a_label(issue):
+    twice = issue(1, comments=("Re-observed by a", "Re-observed by b"))
+    once = issue(2, labels=("escalated",), comments=("Re-observed by a",))
+    rows = {r["number"]: r for r in issue_rows([typed(twice), typed(once)])}
+    assert rows[1]["escalated"] is True
+    assert rows[2]["escalated"] is False
+
+
 def test_sort_key_puts_escalated_high_before_plain_high_before_medium(issue):
+    seen_thrice = ("Re-observed by a", "Re-observed by b")
     rows = issue_rows(
         [
             typed(issue(1, labels=("severity/medium",))),
             typed(issue(2, labels=("severity/high",))),
-            typed(issue(3, labels=("severity/high", "escalated"))),
+            typed(issue(3, labels=("severity/high",), comments=seen_thrice)),
             typed(issue(4, labels=())),
         ]
     )
@@ -138,10 +147,10 @@ def test_sync_labels_with_everything_present_plans_nothing():
 
 
 def test_sync_labels_plans_exactly_the_missing_label():
-    existing = set(LABELS) - {"escalated"}
+    existing = set(LABELS) - {"manual"}
     plans = plan_sync_labels(existing)
     assert len(plans) == 1
-    assert plans[0][:3] == ["label", "create", "escalated"]
+    assert plans[0][:3] == ["label", "create", "manual"]
     assert "--force" not in plans[0]
 
 
@@ -239,26 +248,6 @@ def test_touch_names_the_sighting_this_run_makes(issue):
     )
     plans = plan_touch(typed(seen_three_times), "d")
     assert "sighting 5" in plans[0][-1]
-
-
-def test_touch_third_sighting_escalates(issue):
-    plans = plan_touch(typed(issue(1, comments=("Re-observed by a",))), "b")
-    assert [p[:2] for p in plans] == [["issue", "comment"], ["issue", "edit"]]
-    assert plans[1][-1] == "escalated"
-
-
-def test_touch_already_escalated_does_not_add_the_label_again(issue):
-    plans = plan_touch(
-        typed(
-            issue(
-                1,
-                labels=("escalated",),
-                comments=("Re-observed by a", "Re-observed by b"),
-            )
-        ),
-        "c",
-    )
-    assert [p[:2] for p in plans] == [["issue", "comment"]]
 
 
 def test_touch_cli_loads_the_issue_by_number(capsys, issue, make_tools):
