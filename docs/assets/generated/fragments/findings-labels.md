@@ -7,10 +7,3 @@
 | `no-vetted-remediation` | `#585b70` | Every proposed fix failed the fix-skeptic |
 | `manual` | `#6c7086` | Reserved for the operator; no Claude session claims or fans this out |
 | `review-leftover` | `#fab387` | Left after a fan-out fix round; next ranks it last |
-| `domain/backup-observability` | `#b4befe` | Reviewer domain: backup-observability |
-| `domain/cicd` | `#b4befe` | Reviewer domain: cicd |
-| `domain/container` | `#b4befe` | Reviewer domain: container |
-| `domain/docs` | `#b4befe` | Reviewer domain: docs |
-| `domain/network` | `#b4befe` | Reviewer domain: network |
-| `domain/security` | `#b4befe` | Reviewer domain: security |
-| `domain/home-assistant` | `#b4befe` | Reviewer domain: home-assistant |
