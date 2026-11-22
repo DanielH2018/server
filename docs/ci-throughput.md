@@ -479,8 +479,8 @@ Four facts about the workflows shaped those steps:
   has one, which is usually the batch's last and so the tree the batch's run tested. A
   landing of a middle commit already waits for a promotion of a later commit to cover it.
 
-What the queue is worth is an estimate. The measured row is one afternoon's counts on
-2026-11-12, and the batch row assumes the 3.7% red rate above, with a red batch run again in
+What the queue is worth is an estimate. The first measured row is one afternoon's counts on
+2026-11-12, before any batch ran, so every run it counts is a full run. The batch row assumes the 3.7% red rate above, with a red batch run again in
 halves:
 
 | Configuration | Full runs per merge on the hosted pool |
@@ -623,7 +623,8 @@ ruling on anything from it.
 - **Full CI runs per merge: 2.0, against 1.76.** Under B4, 18 pull-request runs ran jobs and
   no master run swept, for 9 merges. The baseline had 29 and 15 for 25 merges. Every full
   run moved to the pull-request side. One session's branch, which two of the 9 PRs shared,
-  ran 8 of the 18; the other 7 merges took 10, or 1.43 each.
+  ran 8 of the 18; the other 7 merges took 10, or 1.43 each. Neither window held a
+  batch member's three-job proof run, so both figures count full runs only.
 - **Master runs that skipped as tested: 10 of 10, against 10 of 25.** A run counts as
   skipped when it ran 2 or fewer jobs.
 - **The waits.** In the landing logs on both hosts, 9 landings took the turn: 8 after 0 s
@@ -664,9 +665,11 @@ merge (#8887), which changed how daniel-server batches land. It held 37 merges a
 landings, against 9 merges in the window B4 first measured. The counts come from GitHub's run
 and job listings and from the landing logs of both hosts, as before.
 
-- **Full CI runs per merge: 1.78.** 57 pull-request runs ran more than two jobs, and 9
-  master runs swept in full. Four of the 57 were batch runs, and three belong to PRs merged
-  after the window.
+- **Runs with more than two jobs per merge: 1.78.** 57 pull-request runs ran more than two
+  jobs, and 9 master runs swept in full. Four of the 57 were batch runs, and three belong to
+  PRs merged after the window. A recount from GitHub's job listings found 9 three-job proof
+  runs of batch members in the window, which *Runs per merge on 2026-11-19 and 2026-11-20,
+  attributed* explains. If all 9 are among the 57, full runs per merge read 1.54.
 - **Master runs that skipped as tested: 28 of 37.** The 9 sweeps came from two docs-refresh
   PRs (#8848, #8880), three daniel-server fan-out PRs the server lander merged (#8858, #8862,
   #8865), one Renovate PR (#8828), two ready session PRs that master moved past while they
@@ -699,8 +702,10 @@ job listings. Batches are counted from their `queue/` pull requests, because the
 daniel-server's landing logs collected none. The per-landing counts in the section above read
 daniel-box's logs only, and its batch count matches GitHub's.
 
-- **Full CI runs per merge: 1.75**, against 1.78 under load. 47 pull-request runs ran more than
-  two jobs, and 2 master runs swept.
+- **Runs with more than two jobs per merge: 1.75**, against 1.78 under load. 47 pull-request
+  runs ran more than two jobs, and 2 master runs swept. The recount found 6 three-job proof
+  runs in the window. If all 6 are among the 47, full runs per merge read 1.54, the same as
+  under load.
 - **Master runs that skipped as tested: 25 of 27**, against 28 of 37. The sweeps left are
   Renovate's digest bumps, whose PRs open ready.
 - **Batches: three**, of two PRs each: #8911 with #8903, #8909 with #8913, and #8923 with
