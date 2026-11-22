@@ -102,9 +102,27 @@ def _env(service: dict) -> dict[str, str]:
 # --- labels -----------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fragment", REQUIRED_FRAGMENTS)
-def test_config_carries_the_fragment(config, fragment):
-    assert fragment in config, fragment
+def fragment_problems(config: str) -> list[str]:
+    """Each Jinja delimiter left in the rendered `config`, then each fragment it lacks.
+
+    A fragment that carries a Jinja expression could only match such an unrendered span.
+    """
+    problems = [f"unrendered {d!r}" for d in ("{{", "{%") if d in config]
+    return problems + [f"missing {f!r}" for f in REQUIRED_FRAGMENTS if f not in config]
+
+
+def test_config_carries_every_fragment_is_clean(config):
+    assert fragment_problems(config) == []
+
+
+@pytest.mark.parametrize("span", ["{{ alloy_extra }}", "{% if alloy_extra %}"])
+def test_a_config_with_an_unrendered_jinja_span_is_flagged(config, span):
+    assert fragment_problems(f"{config}\n{span}\n") == [f"unrendered {span[:2]!r}"]
+
+
+def test_a_config_missing_a_fragment_is_flagged(config):
+    dropped = config.replace('"machine" = "daniel-pi"', '"machine" = "pi"')
+    assert fragment_problems(dropped) == ['missing \'"machine" = "daniel-pi"\'']
 
 
 def test_container_streams_are_job_pi_on_machine_daniel_pi(config):
