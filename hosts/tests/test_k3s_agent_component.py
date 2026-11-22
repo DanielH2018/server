@@ -139,13 +139,9 @@ def test_the_join_rules_are_kept_and_match_the_ports_the_server_side_mirrors(pac
 
 def test_the_longhorn_packages_and_the_inotify_key_ship_in_the_package(package):
     assert {"open-iscsi", "nfs-common", "multipath-tools"} <= set(package.depends)
-    assert {
-        "path": "/etc/sysctl.conf",
-        "line": "fs.inotify.max_user_instances=1024",
-        "regexp": r"^\s*fs\.inotify\.max_user_instances\s*=",
-    }.items() <= next(
-        edit for edit in package.lines if edit.get("line", "").startswith("fs.inotify")
-    ).items()
+    inotify = "/etc/sysctl.d/90-homelab-k3s-node.conf"
+    assert text(package, inotify) == "fs.inotify.max_user_instances=1024\n"
+    assert package.activations[inotify] == "sysctl"
     assert (
         package.activations["/etc/multipath/conf.d/50-homelab-longhorn.conf"]
         == "reload:multipathd.service"
