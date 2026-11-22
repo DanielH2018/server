@@ -99,6 +99,7 @@ components:
   - host-tuning
   - k3s-server
   - k3s-apparmor
+  - apparmor-who
   - k3s-host-dns
   - k3s-host-checks
   - claude-code
