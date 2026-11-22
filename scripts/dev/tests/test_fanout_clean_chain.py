@@ -486,3 +486,28 @@ def test_an_unescaped_line_break_in_an_answer_is_flagged(tmp_path, sock):
     answer = f"ok\n42\tcwd\t{odd}/sub\nend\n".encode()
 
     assert _busy_with_helper(sock, odd, answer).startswith("unknown")
+
+
+def _origin_heads(repo):
+    return git(repo, "ls-remote", "--heads", "origin", BRANCH).stdout
+
+
+def test_a_merged_branchs_origin_copy_is_deleted(tmp_path):
+    """The ruleset blocks GitHub's delete-on-merge, so the chain removes origin's copy."""
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    git(repo, "push", "-q", "origin", BRANCH)
+    proc = _run_chain(repo, worktree, _stub_bin(tmp_path, f"{tip}\n"))
+    assert proc.stdout.strip() == f"removed: {worktree} (already gone)"
+    assert _origin_heads(repo) == ""
+    assert BRANCH not in _branches(repo)
+
+
+def test_an_origin_copy_that_has_not_landed_keeps_both_branches(tmp_path):
+    """Origin's tip is neither the landed local tip nor a merged head: work nothing landed."""
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    git(repo, "push", "-q", "origin", f"master:refs/heads/{BRANCH}")
+    proc = _run_chain(repo, worktree, _stub_bin(tmp_path, f"{tip}\n"))
+    assert proc.stdout.startswith(f"kept: {worktree} — branch {BRANCH} not deleted: ")
+    assert "has not landed" in proc.stdout
+    assert BRANCH in _origin_heads(repo)
+    assert BRANCH in _branches(repo)

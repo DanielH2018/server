@@ -59,12 +59,69 @@ def lock(repo: str, path: str, reason: str) -> None:
     git("worktree", "lock", "--reason", reason, path, cwd=repo, check=False)
 
 
-def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
-    """Force-delete `branch` in `repo`, returning `(ok, git's first stderr line)`.
+def delete_origin_branch(
+    repo: str, branch: str, tip: str, landed=is_merged
+) -> tuple[bool, str]:
+    """Delete origin's copy of the landed `branch`, returning `(ok, why it stayed)`.
+
+    The "Default branch" ruleset blocks GitHub's delete-on-merge for `worktree-fanout-*`,
+    so nothing else removes it. Origin's tip is deleted only when it is `tip`, the local tip
+    already judged landed, or `landed` says it landed too (the merged head after `land.sh`
+    merged master into the branch). The push leases on that tip, so a push that lands after
+    the read keeps the branch. A checkout with no `origin` remote has nothing to delete.
+
+    Args:
+        repo: the checkout whose `origin` holds the branch.
+        branch: the branch name.
+        tip: the local branch's tip, or "" when there is none.
+        landed: `is_merged`-shaped, asked about origin's tip when it differs from `tip`.
+    """
+    if git("remote", "get-url", "origin", cwd=repo, check=False).returncode != 0:
+        return True, ""
+    listed = git(
+        "ls-remote", "--heads", "origin", f"refs/heads/{branch}", cwd=repo, check=False
+    )
+    if listed.returncode != 0:
+        return False, f"origin unreadable: {_first_line(listed, 'git ls-remote')}"
+    origin_tip = next(iter(listed.stdout.split()), "")
+    if not origin_tip:
+        return True, ""
+    if origin_tip != tip and not landed(repo, origin_tip, branch):
+        return False, f"origin copy at {origin_tip[:12]} has not landed"
+    pushed = git(
+        "push",
+        "--quiet",
+        "origin",
+        f"--force-with-lease=refs/heads/{branch}:{origin_tip}",
+        "--delete",
+        branch,
+        cwd=repo,
+        check=False,
+    )
+    if pushed.returncode != 0:
+        return False, f"origin copy: {_first_line(pushed, 'git push --delete')}"
+    return True, ""
+
+
+def delete_branch(repo: str, branch: str, landed=is_merged) -> tuple[bool, str]:
+    """Force-delete `branch` and its origin copy, returning `(ok, why it stayed)`.
 
     `-D`, not `-d`: a squash- or rebase-landed branch is never an ancestor of master, and
-    the caller only reaches this for a branch `is_merged` has already settled.
+    the caller only reaches this for a branch `is_merged` has already settled. The origin
+    copy goes first, so a refused origin delete keeps the local branch and the next `clean`
+    retries both. `landed` is `delete_origin_branch`'s.
     """
+    tip = git(
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"refs/heads/{branch}",
+        cwd=repo,
+        check=False,
+    ).stdout.strip()
+    ok, err = delete_origin_branch(repo, branch, tip, landed)
+    if not ok:
+        return False, err
     deleted = git("branch", "-D", branch, cwd=repo, check=False)
     if deleted.returncode == 0:
         return True, ""
@@ -324,6 +381,29 @@ def busy_refusal(wt: str) -> str:
 CLEAN_SNAPSHOT_PATHS = ("scripts",)
 
 
+def _origin_delete_leg(repo: str, branch: str) -> str:
+    """Shell that deletes origin's copy of the landed `branch`, as `delete_origin_branch` does.
+
+    It reads `$tip`, the local tip, and `$heads`, the merged PRs' heads, and leaves
+    `$origin_kept` empty once origin holds no copy, or set to why the copy stayed. Origin's tip
+    goes only when it is `$tip` or one of `$heads`, and the push leases on it.
+    """
+    return (
+        "origin_kept=; "
+        f"if ! git -C {repo} remote get-url origin >/dev/null 2>&1; then :; "
+        f"elif ! listed=$(git -C {repo} ls-remote --heads origin refs/heads/{branch} "
+        "2>/dev/null); then origin_kept='origin unreadable'; "
+        "else otip=${listed%%[[:space:]]*}; "
+        'if [ -z "$otip" ]; then :; '
+        'elif [ "$otip" != "$tip" ] && ! printf \'%s\\n\' "$heads" | grep -q -x "$otip"; '
+        'then origin_kept="origin copy at $otip has not landed"; '
+        f"elif ! git -C {repo} push --quiet origin "
+        f'"--force-with-lease=refs/heads/{branch}:$otip" --delete {branch} 2>/dev/null; '
+        "then origin_kept='origin copy refused to delete'; "
+        "fi; fi; "
+    )
+
+
 def remote_clean_command(
     b: Batch,
     repo: str | None = None,
@@ -427,6 +507,10 @@ def remote_clean_command(
     Every local commit is then in the merged PR. A diverged tip, a tip never pushed, or a failed
     `gh` keeps the branch.
 
+    A merged branch's origin copy is deleted before the local branch, by `_origin_delete_leg`,
+    because the ruleset keeps GitHub's delete-on-merge from removing it. A copy that stays
+    reads `kept:` with the local branch left, so the next pass retries both.
+
     The stale registration goes FIRST, before anything looks at the branch. Git refuses
     `branch -D` for a branch a registered worktree still holds, and a `rm -rf`'d directory
     leaves that registration behind — so deleting the branch first could never work. It
@@ -504,20 +588,22 @@ def remote_clean_command(
         f"if ! git -C {repo} show-ref --verify --quiet refs/heads/{branch}; then "
         f"{gone_branch}; "
         f"else tip=$(git -C {repo} rev-parse refs/heads/{branch} 2>/dev/null); "
-        f"merged=$(cd {repo} && gh pr list --state merged --head {branch} "
-        f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null "
-        f'| grep -c -x "${{tip:-none}}"); '
+        f"heads=$(cd {repo} && gh pr list --state merged --head {branch} "
+        f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null); "
+        f'merged=$(printf \'%s\\n\' "$heads" | grep -c -x "${{tip:-none}}"); '
         f"case \"${{merged}}\" in ''|*[!0-9]*) merged=0;; esac; "
         f'if [ "${{merged}}" -eq 0 ] && [ -n "${{tip}}" ]; then '
-        f"for h in $(cd {repo} && gh pr list --state merged --head {branch} "
-        f"--json headRefOid --jq '.[].headRefOid' 2>/dev/null); do "
+        f"for h in $(printf '%s\\n' \"$heads\"); do "
         f"st=$(cd {repo} && gh api "
         f'"repos/{{owner}}/{{repo}}/compare/${{tip}}...${{h}}" --jq .status 2>/dev/null); '
         f'case "${{st}}" in ahead|identical) merged=1;; esac; '
         f"done; fi; "
         f'if [ "${{merged}}" -gt 0 ]; then '
-        f"git -C {repo} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
-        f'|| echo "kept: {wt} — branch {branch} not deleted"; '
+        f"{_origin_delete_leg(repo, branch)}"
+        f'if [ -n "$origin_kept" ]; then '
+        f'echo "kept: {wt} — branch {branch} not deleted: $origin_kept"; '
+        f"else git -C {repo} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
+        f'|| echo "kept: {wt} — branch {branch} not deleted"; fi; '
         f'else echo "kept: {wt} — branch {branch} unmerged, tree gone"; '
         f"fi; "
         f"fi; "

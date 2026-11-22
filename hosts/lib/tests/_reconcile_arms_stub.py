@@ -14,7 +14,9 @@ keys are the ones the three arms read:
         "refuse": [name, ...], "fail": ["net-define", ...]}. `refuse` names the objects libvirt
         will not undefine, as for a filter a running guest references. `fail` names the verbs that
         exit 1. A define reads the object's name from the `<name>` element of the file it is given.
-    conffiles: {package: [path, ...]}. What `dpkg-query -W -f '${Conffiles}'` lists. `owned`
+    conffiles: {package: [path, ...]}. What `dpkg-query -W -f '${Conffiles}'` lists; a path also in
+        `obsolete` carries dpkg's `obsolete` flag, and "dpkg-query -W" in `fail` makes the
+        listing exit 2. `owned`
         in `_reconcile_stub.py` names the paths `dpkg -S` reports as owned by `some-package`.
 """
 
@@ -96,8 +98,12 @@ def virsh(state: dict, args: list[str]) -> int:
 
 
 def conffiles(state: dict, package: str) -> int:
+    if "dpkg-query -W" in state["fail"]:
+        print("dpkg-query: error: the database is locked", file=sys.stderr)
+        return 2
     for path in state.get("conffiles", {}).get(package, []):
-        print(f" {path} 0123456789abcdef0123456789abcdef")
+        flag = " obsolete" if path in state.get("obsolete", []) else ""
+        print(f" {path} 0123456789abcdef0123456789abcdef{flag}")
     return 0
 
 

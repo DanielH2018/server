@@ -479,8 +479,8 @@ Four facts about the workflows shaped those steps:
   has one, which is usually the batch's last and so the tree the batch's run tested. A
   landing of a middle commit already waits for a promotion of a later commit to cover it.
 
-What the queue is worth is an estimate. The measured row is one afternoon's counts on
-2026-11-12, and the batch row assumes the 3.7% red rate above, with a red batch run again in
+What the queue is worth is an estimate. The first measured row is one afternoon's counts on
+2026-11-12, before any batch ran, so every run it counts is a full run. The batch row assumes the 3.7% red rate above, with a red batch run again in
 halves:
 
 | Configuration | Full runs per merge on the hosted pool |
@@ -488,6 +488,10 @@ halves:
 | After Phase A, measured | 2.1: 1.5 pull-request runs and 0.7 full master runs |
 | A queue of one | About 1.0 |
 | Batches of four | About 0.3 to 0.4 |
+| Batches of 2.8 on average, measured 2026-11-19 to 2026-11-20 | 1.38: 1.01 pull-request runs, 0.23 batch runs, 0.11 Renovate runs and 0.03 master runs |
+
+*Runs per merge on 2026-11-19 and 2026-11-20, attributed* says where the measured row's
+runs went.
 
 The decisions, all the operator's:
 
@@ -619,7 +623,8 @@ ruling on anything from it.
 - **Full CI runs per merge: 2.0, against 1.76.** Under B4, 18 pull-request runs ran jobs and
   no master run swept, for 9 merges. The baseline had 29 and 15 for 25 merges. Every full
   run moved to the pull-request side. One session's branch, which two of the 9 PRs shared,
-  ran 8 of the 18; the other 7 merges took 10, or 1.43 each.
+  ran 8 of the 18; the other 7 merges took 10, or 1.43 each. Neither window held a
+  batch member's three-job proof run, so both figures count full runs only.
 - **Master runs that skipped as tested: 10 of 10, against 10 of 25.** A run counts as
   skipped when it ran 2 or fewer jobs.
 - **The waits.** In the landing logs on both hosts, 9 landings took the turn: 8 after 0 s
@@ -660,9 +665,11 @@ merge (#8887), which changed how daniel-server batches land. It held 37 merges a
 landings, against 9 merges in the window B4 first measured. The counts come from GitHub's run
 and job listings and from the landing logs of both hosts, as before.
 
-- **Full CI runs per merge: 1.78.** 57 pull-request runs ran more than two jobs, and 9
-  master runs swept in full. Four of the 57 were batch runs, and three belong to PRs merged
-  after the window.
+- **Runs with more than two jobs per merge: 1.78.** 57 pull-request runs ran more than two
+  jobs, and 9 master runs swept in full. Four of the 57 were batch runs, and three belong to
+  PRs merged after the window. A recount from GitHub's job listings found 9 three-job proof
+  runs of batch members in the window, which *Runs per merge on 2026-11-19 and 2026-11-20,
+  attributed* explains. If all 9 are among the 57, full runs per merge read 1.54.
 - **Master runs that skipped as tested: 28 of 37.** The 9 sweeps came from two docs-refresh
   PRs (#8848, #8880), three daniel-server fan-out PRs the server lander merged (#8858, #8862,
   #8865), one Renovate PR (#8828), two ready session PRs that master moved past while they
@@ -695,8 +702,10 @@ job listings. Batches are counted from their `queue/` pull requests, because the
 daniel-server's landing logs collected none. The per-landing counts in the section above read
 daniel-box's logs only, and its batch count matches GitHub's.
 
-- **Full CI runs per merge: 1.75**, against 1.78 under load. 47 pull-request runs ran more than
-  two jobs, and 2 master runs swept.
+- **Runs with more than two jobs per merge: 1.75**, against 1.78 under load. 47 pull-request
+  runs ran more than two jobs, and 2 master runs swept. The recount found 6 three-job proof
+  runs in the window. If all 6 are among the 47, full runs per merge read 1.54, the same as
+  under load.
 - **Master runs that skipped as tested: 25 of 27**, against 28 of 37. The sweeps left are
   Renovate's digest bumps, whose PRs open ready.
 - **Batches: three**, of two PRs each: #8911 with #8903, #8909 with #8913, and #8923 with
@@ -720,6 +729,68 @@ and then updated its branch, so the flip started a run on the stale head. The up
 cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:07:11 before
 the run it merged on started. The landing now updates the branch first, waits up to
 60 s for GitHub to show the new head, and then marks the draft ready.
+
+#### Runs per merge on 2026-11-19 and 2026-11-20, attributed
+
+The window is the one *What 2026-11-20 measured* reads: 04:00 UTC on 2026-11-19 to 20:00 on
+2026-11-20, with 217 pushes to master. The counts come from GitHub's run and job listings,
+each pull request's timeline of `ready_for_review` and `convert_to_draft` events, the
+`queue/` pull requests' member lists, the landing verdicts of both hosts, and the fan-out
+review records of both hosts. A recount listed 332 pull-request runs, 28 Renovate runs and
+416 runs in all that ran more than two jobs, against the 328, 26 and 410 of the first count;
+the six are runs that finished after the first listing.
+
+**Full runs per merge: 1.38, not 1.89.** A batch member's own run has exactly three jobs:
+`prek`, `prove the pushed tree was tested` and `renovate config validator`. It uses about
+30 slot-seconds, against 1,408 for a full pull-request run at the median. The count of runs
+with more than two jobs takes in 117 of these proof runs, 112 on pull requests and 5 on
+Renovate's, and that count rises as batching improves. With them left out, 299 full runs
+ran for the 217 merges: 220 on pull requests, 49 batch runs, 23 on Renovate's pull requests
+and 7 on master. Measure a change to the queue by full runs.
+
+**Batches formed for 119 merges.** 49 batches ran, of 2 PRs (19), 3 (20) and 4 (10), and 43
+were green. 94 of 208 session and fan-out PRs and 4 of 9 Renovate PRs landed alone. Batch members are
+counted from the `queue/` pull requests' titles.
+
+The 220 full pull-request runs, each given one cause:
+
+| Cause | Runs | Share of their slot-seconds |
+|---|---|---|
+| A held daniel-server fan-out PR was marked ready at the end of its review, and its run went stale before a person landed it | 52 | 26.7% |
+| The landing run of a PR that took the turn with no other draft in the line | 50 | 19.9% |
+| A green run on a ready PR went stale, and `stale_base.rejoin_line` converted the PR back to a draft | 36 | 16.3% |
+| The landing run of a held daniel-server fan-out PR that landed alone | 18 | 9.1% |
+| A red run, after which the PR was fixed and run again | 16 | 8.0% |
+| A run that a later push cancelled | 13 | 6.7% |
+| The landing run of a member of a red batch | 15 | 6.7% |
+| The landing run of a PR whose landing code was older than master's | 7 | 2.8% |
+| A PR opened ready: its runs before the landing, and its landing run | 8 | 2.8% |
+| A green run followed by another run before the merge | 3 | 1.1% |
+| A PR that merged after the window or not at all | 2 | under 1% |
+
+The rows read in three groups:
+
+- **93 runs are the one run a PR that lands alone owes.** The plan's estimate assumed few
+  of them, and the queue formed batches for little more than half the merges. Most PRs that
+  landed alone took the turn with no other draft waiting.
+- **125 runs are extra: a PR's second run or later.** None of them tested the tree that
+  merged.
+- **2 runs belong to PRs outside the window.**
+
+**The largest cause is a held PR, at 70 runs and 35.8% of the slot-seconds**
+([#9896](https://github.com/DanielH2018/server/issues/9896)). 39 of the 70 daniel-server
+fan-out PRs that merged in the window were held for a person. 38 of them were held because
+they change a path the server lander never lands unattended (`own_surface.pr_problems`), and
+one because it changed 100 files. `review_ci.ready_gate` marks a held PR ready when its
+review ends, so it gets a full run at once. By the time a person lands it, master has moved,
+and the landing's `stale_base.rejoin_line` converts it back to a draft. The 39 held PRs
+spent 79 full runs, 2.0 a PR, counting 9 red or cancelled runs. 24 of them still merged as
+batch members, whose own run is a proof run, so their early run bought nothing. Had each
+held PR stayed a draft until its landing, about 55 fewer runs would have run, which is
+about 1.12 per merge. The operator rules on the fix with these numbers.
+
+Two of the plan's candidates were small. PRs opened ready cost 8 runs. Holders whose landing
+code was older than master's cost 7.
 
 ## Phase C, not planned: runner pods for `hooks` and `pytest`
 
@@ -758,10 +829,11 @@ hours would have spent most of an hour of the API quota that live landings share
   Bootstrap drill 8.3%, the Flux deletion drill 5.0%, `render-diff` 2.9% and `image-smoke`
   1.5% ([#9650](https://github.com/DanielH2018/server/issues/9650)). `promote` held 4.8%
   and master pushes under 1%.
-- **Runs per merge: 1.89.** 410 runs ran more than two jobs for the 217 merges: 328
-  pull-request runs, 49 batch runs, 26 Renovate runs and 7 master runs. The estimate for
-  batches of four was 0.3 to 0.4
-  ([#9651](https://github.com/DanielH2018/server/issues/9651)). A run costs less than it did:
+- **Runs per merge: 1.89, and full runs per merge 1.38.** 410 runs ran more than two jobs
+  for the 217 merges: 328 pull-request runs, 49 batch runs, 26 Renovate runs and 7 master
+  runs. 117 of a recount's 416 were a batch member's three-job proof run. The estimate for batches of
+  four was 0.3 to 0.4. *Runs per merge on 2026-11-19 and 2026-11-20, attributed* gives each
+  run its cause. A run costs less than it did:
   the median pull-request run used 1,039 slot-seconds, against 1,414 for a run with no host
   change on 2026-11-14.
 - **The heavy jobs' share fell.** `hooks` and the `pytest` legs were 57.9% of CI's

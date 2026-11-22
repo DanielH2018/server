@@ -190,6 +190,25 @@ def test_open_review_leftover_labels_a_fixed_issue_it_reopens(
     assert ["issue", "edit", "3", "--add-label", "review-leftover"] in calls.gh
 
 
+def test_open_cli_says_when_a_match_drops_no_vetted_remediation(
+    tmp_path, capsys, issue, make_tools
+):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    matched = issue(3, fp=fingerprint("T", "a.py:1"))
+    tools, calls = make_tools(Fakes(issues=[matched]))
+    argv = [*_open_argv(body), "--file", "a.py:1", "--no-vetted-remediation"]
+    assert findings.main(argv, tools) == 0
+    assert "#3 matched without `no-vetted-remediation`" in capsys.readouterr().err
+    assert [
+        "issue",
+        "edit",
+        "3",
+        "--add-label",
+        "no-vetted-remediation",
+    ] not in calls.gh
+
+
 def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
     """Exit 3 is what the review skill reads as 'already decided'; 0 would be silent."""
     body = tmp_path / "b.md"
