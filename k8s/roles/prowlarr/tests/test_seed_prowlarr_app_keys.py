@@ -1,4 +1,4 @@
-"""prowlarr's app-keys seed: it writes only a key Prowlarr rejects, and its Job reruns on a rotation.
+"""prowlarr's app-keys seed: it writes only a key Prowlarr rejects, and reruns hourly and on a rotation.
 
 The run tests write out the rendered ConfigMap's two files, the seed and its
 `flux_job_connect.py` copy, and run them as the Job's container does, against a local server
@@ -9,6 +9,7 @@ Run: uv run pytest k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -20,13 +21,19 @@ import pytest
 import seed_prowlarr_app_keys as seed
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import SECRETS
+from lib.repo_paths import REPO, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.cronjob_gate import GATE_INFIX, RERUN_SAFE, attach_gates
 from renderer.tests._job_census import problems
 
 TAG = "prowlarr"
+VERIFY = f"{TAG}-verify"
+CRONJOB = "prowlarr-app-keys"
+# Prowlarr raises `ApplicationLongTermStatusCheck`, which `ProwlarrAppSyncFailing` reads, after
+# six hours of failed syncs.
+LONG_TERM_STATUS_HOURS = 6
 APPS = ("sonarr", "radarr", "lidarr")
 MASK = "********"
 PROWLARR_KEY = "prowlarr-key"
@@ -43,40 +50,55 @@ def stubs(tmp_path_factory):
     return load_stubs(path)
 
 
-def _docs(rendered: cluster.RenderedTag) -> list[dict]:
+def _docs(texts: dict[str, str]) -> list[dict]:
     return [
         doc
-        for name, text in sorted(rendered.verify.items())
+        for name, text in sorted(texts.items())
         if name != "kustomization.yaml"
         for doc in yaml_fast.safe_load_all(text)
         if doc
     ]
 
 
+def _render(stubs, roles=K8S_ROLES) -> dict[str, list[dict]]:
+    """`cluster/prowlarr/` and `cluster/prowlarr-verify/` with the gate Jobs attached."""
+    (tag,) = attach_gates([cluster.render_tag(TAG, stubs, roles=roles)], [TAG], roles)
+    return {TAG: _docs(tag.files), VERIFY: _docs(tag.verify)}
+
+
 @pytest.fixture(scope="module")
-def verify_docs(stubs) -> list[dict]:
-    return _docs(cluster.render_tag(TAG, stubs))
+def bundle(stubs) -> dict[str, list[dict]]:
+    return _render(stubs)
 
 
-def _job(docs: list[dict]) -> dict:
+def _job(bundle: dict[str, list[dict]]) -> dict:
     (job,) = [
         doc
-        for doc in docs
+        for doc in bundle[VERIFY]
         if doc["kind"] == "Job"
-        and doc["metadata"]["name"].startswith("prowlarr-app-keys-")
+        and doc["metadata"]["name"].startswith(f"{CRONJOB}{GATE_INFIX}")
     ]
     return job
 
 
-def _container(docs: list[dict]) -> dict:
-    (container,) = _job(docs)["spec"]["template"]["spec"]["containers"]
+def _cronjob(bundle: dict[str, list[dict]]) -> dict:
+    (cronjob,) = [
+        doc
+        for doc in bundle[TAG]
+        if doc["kind"] == "CronJob" and doc["metadata"]["name"] == CRONJOB
+    ]
+    return cronjob
+
+
+def _container(bundle: dict[str, list[dict]]) -> dict:
+    (container,) = _job(bundle)["spec"]["template"]["spec"]["containers"]
     return container
 
 
-def _secret_refs(docs: list[dict]) -> dict[str, tuple[str, str]]:
+def _secret_refs(bundle: dict[str, list[dict]]) -> dict[str, tuple[str, str]]:
     return {
         e["name"]: (ref["name"], ref["key"])
-        for e in _container(docs)["env"]
+        for e in _container(bundle)["env"]
         if (ref := (e.get("valueFrom") or {}).get("secretKeyRef"))
     }
 
@@ -111,14 +133,55 @@ def test_find_application_refuses_none_or_two(count):
         seed.find_application(entries, "Sonarr")
 
 
-def test_the_seed_job_passes_every_job_census_row(verify_docs):
-    _job(verify_docs)
-    assert problems({f"{TAG}-verify": verify_docs}) == []
+def test_the_seed_gate_passes_every_job_census_row(bundle):
+    # The CronJob's directory comes too: `is_gate_copy` exempts the gate from the script
+    # delivery rows only when its pod template equals a CronJob's there.
+    _job(bundle)
+    assert problems(bundle) == []
 
 
-def test_the_job_reads_each_key_from_its_apps_exportarr_secret(verify_docs, stubs):
+def test_the_gate_is_a_rerun_safe_mutation(bundle):
+    assert _job(bundle)["metadata"]["annotations"] == {
+        "homelab/job-kind": "mutation",
+        RERUN_SAFE: "k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py"
+        "::test_a_second_run_writes_nothing",
+    }
+
+
+def _period_hours(schedule: str) -> int | None:
+    """The hours between runs of `schedule`, or None for a shape with no fixed period.
+
+    Only `M * * * *` and `M */N * * *` have one; a fixed hour or a list runs at set times.
+    """
+    match = re.fullmatch(r"\d+ \*(?:/(\d+))? \* \* \*", schedule)
+    return int(match[1] or 1) if match else None
+
+
+@pytest.mark.parametrize(
+    ("schedule", "period"),
+    [
+        ("23 * * * *", 1),
+        ("23 */4 * * *", 4),
+        ("23 2 * * *", None),
+        ("23 0,12 * * *", None),
+        ("23 * * * 0", None),
+    ],
+)
+def test_period_hours_reads_only_a_fixed_period(schedule, period):
+    assert _period_hours(schedule) == period
+
+
+def test_the_seed_reruns_on_a_schedule_inside_the_long_term_status_window(bundle):
+    """A revert changes no render, so only a scheduled run rewrites the key it restored."""
+    schedule = _cronjob(bundle)["spec"]["schedule"]
+    period = _period_hours(schedule)
+    assert period is not None, f"{schedule!r} has no fixed period"
+    assert period < LONG_TERM_STATUS_HOURS
+
+
+def test_the_job_reads_each_key_from_its_apps_exportarr_secret(bundle, stubs):
     """Each Secret is one the named app's own render applies, filled from `<app>_api_key`."""
-    refs = _secret_refs(verify_docs)
+    refs = _secret_refs(bundle)
     assert refs == {
         f"{app.upper()}_API_KEY": (f"{app}-exportarr", "api_key")
         for app in (TAG, *APPS)
@@ -135,11 +198,10 @@ def test_the_job_reads_each_key_from_its_apps_exportarr_secret(verify_docs, stub
         assert secret["stringData"]["api_key"] == stubs[f"{app}_api_key"]
 
 
-def test_prowlarr_verify_waits_on_every_app_whose_secret_the_job_reads(verify_docs):
+def test_prowlarr_verify_waits_on_every_app_whose_secret_the_job_reads(bundle):
     """`flux_verify_after` holds the Job until each app's Secret is applied and its pod rolled."""
     read = {
-        name.removesuffix("-exportarr")
-        for name, _key in _secret_refs(verify_docs).values()
+        name.removesuffix("-exportarr") for name, _key in _secret_refs(bundle).values()
     }
     waits = set(cluster.bundle_ordering().verify_after.get(TAG, ()))
     assert read - {TAG} <= waits
@@ -147,17 +209,22 @@ def test_prowlarr_verify_waits_on_every_app_whose_secret_the_job_reads(verify_do
 
 def _render_tree_copy(
     tree, stubs, rotate: str | None = None, edit_deployment: bool = False
-) -> list[dict]:
-    """`prowlarr-verify` rendered from a copy of the roles it reads and `cluster-vars.source`.
+) -> dict[str, list[dict]]:
+    """`_render` over a copy of the roles it reads and `cluster-vars.source`.
 
     With `rotate`, that key's ciphertext digest is replaced first, as a rotation replaces it.
-    With `edit_deployment`, prowlarr's Deployment template gains a line.
+    With `edit_deployment`, prowlarr's Deployment renders another log level.
     """
     for role in (TAG, "arr-notification"):
         shutil.copytree(K8S_ROLES / role, tree / "k8s" / "roles" / role)
+    helper = tree / cluster.FLUX_JOB_CONNECT.relative_to(REPO)
+    helper.parent.mkdir(parents=True)
+    shutil.copy(cluster.FLUX_JOB_CONNECT, helper)
     if edit_deployment:
         deployment = tree / "k8s" / "roles" / TAG / "templates" / "deployment.yaml.j2"
-        deployment.write_text(deployment.read_text() + "# a Deployment-only edit\n")
+        text = deployment.read_text()
+        assert "{{ prowlarr_k8s_log_level }}" in text
+        deployment.write_text(text.replace("{{ prowlarr_k8s_log_level }}", "trace"))
     (tree / "secrets").mkdir()
     source = tree / "secrets" / "cluster-vars.source"
     shutil.copy(SECRETS / "cluster-vars.source", source)
@@ -167,7 +234,7 @@ def _render_tree_copy(
         key, _digest, *rest = lines[row].split()
         lines[row] = " ".join([key, "0" * 64, *rest])
         source.write_text("\n".join(lines) + "\n")
-    return _docs(cluster.render_tag(TAG, stubs, roles=tree / "k8s" / "roles"))
+    return _render(stubs, roles=tree / "k8s" / "roles")
 
 
 @pytest.mark.parametrize("app", APPS)
@@ -179,7 +246,7 @@ def test_a_key_rotation_alone_renames_the_seed_job(stubs, tmp_path, app):
 
 
 def test_a_prowlarr_deployment_change_renames_the_seed_job(stubs, tmp_path):
-    """A revert leaves no render change, so the next revision that rolls prowlarr reruns the seed."""
+    """The gate's role digest covers the Deployment, so a revision that rolls prowlarr reseeds."""
     before = _job(_render_tree_copy(tmp_path / "a", stubs))
     after = _job(_render_tree_copy(tmp_path / "b", stubs, edit_deployment=True))
     assert before["metadata"]["name"] != after["metadata"]["name"]
@@ -284,7 +351,7 @@ def _run(docs, directory, prowlarr: _Prowlarr) -> subprocess.CompletedProcess:
     (volume,) = _job(docs)["spec"]["template"]["spec"]["volumes"]
     (configmap,) = [
         doc
-        for doc in docs
+        for doc in docs[TAG]
         if doc["kind"] == "ConfigMap"
         and doc["metadata"]["name"] == volume["configMap"]["name"]
     ]
@@ -306,14 +373,14 @@ def _run(docs, directory, prowlarr: _Prowlarr) -> subprocess.CompletedProcess:
     )
 
 
-def test_a_second_run_writes_nothing(verify_docs, tmp_path):
+def test_a_second_run_writes_nothing(bundle, tmp_path):
     """`homelab/rerun-safe` names this test: stale keys are written once, then left alone."""
     prowlarr = _Prowlarr(
         {"Sonarr": "stale", "Radarr": "stale", "Lidarr": KEYS["Lidarr"]}
     )
     try:
-        first = _run(verify_docs, tmp_path, prowlarr)
-        second = _run(verify_docs, tmp_path, prowlarr)
+        first = _run(bundle, tmp_path, prowlarr)
+        second = _run(bundle, tmp_path, prowlarr)
     finally:
         prowlarr.close()
     assert first.returncode == 0, first.stderr
@@ -335,10 +402,10 @@ def test_a_second_run_writes_nothing(verify_docs, tmp_path):
     assert not any(key in output for key in KEYS.values())
 
 
-def test_a_failure_other_than_the_key_writes_nothing(verify_docs, tmp_path):
+def test_a_failure_other_than_the_key_writes_nothing(bundle, tmp_path):
     prowlarr = _Prowlarr({app: "stale" for app in KEYS}, failure=URL_FAILURE)
     try:
-        result = _run(verify_docs, tmp_path, prowlarr)
+        result = _run(bundle, tmp_path, prowlarr)
     finally:
         prowlarr.close()
     assert result.returncode != 0
@@ -346,10 +413,10 @@ def test_a_failure_other_than_the_key_writes_nothing(verify_docs, tmp_path):
     assert prowlarr.writes == []
 
 
-def test_a_missing_application_fails_the_job(verify_docs, tmp_path):
+def test_a_missing_application_fails_the_job(bundle, tmp_path):
     prowlarr = _Prowlarr({"Sonarr": KEYS["Sonarr"], "Radarr": KEYS["Radarr"]})
     try:
-        result = _run(verify_docs, tmp_path, prowlarr)
+        result = _run(bundle, tmp_path, prowlarr)
     finally:
         prowlarr.close()
     assert result.returncode != 0
