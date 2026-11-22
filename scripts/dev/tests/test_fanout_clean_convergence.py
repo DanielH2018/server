@@ -63,7 +63,7 @@ def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
     cmd = as_operator(remote_clean_command(B1))
     assert "merge-base" not in cmd
     assert (
-        "merged=$(cd /home/ubuntu/server && gh pr list --state merged "
+        "heads=$(cd /home/ubuntu/server && gh pr list --state merged "
         "--head worktree-fanout-1 --json headRefOid --jq '.[].headRefOid' 2>/dev/null"
         in cmd
     )
