@@ -65,7 +65,7 @@ from renderer.renderer_lib.cluster import RenderRefused
 _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 # The actions `hosts/lib/reconcile_lib/activate.py:ACTION` reads.
 ACTION = re.compile(
-    rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
+    rf"none|sysctl|tmpfiles|modules-load|locale-gen|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
 # A file here gets the `tmpfiles` action unasked, so a new line applies on install.
 TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
@@ -120,7 +120,7 @@ def add_activation(package: Package, directory: Path, dst: str, action: object) 
     if not isinstance(action, str) or not ACTION.fullmatch(action):
         raise RenderRefused(
             f"{directory}: {dst} activate {action!r} is not none, sysctl, tmpfiles, "
-            "modules-load, reboot, or try-restart, reload or manual followed by :<unit>"
+            "modules-load, locale-gen, reboot, or try-restart, reload or manual followed by :<unit>"
         )
     package.activations[dst] = action
 

@@ -10,6 +10,7 @@ live*), and the renderer writes the entries into the manifest's `activations` ma
     sysctl                       sysctl --system, after parsing the changed files
     tmpfiles                     systemd-tmpfiles --create on the changed files
     modules-load                 restart systemd-modules-load.service
+    locale-gen                   locale-gen, which rebuilds the locale archive from /etc/locale.gen
     reboot                       mark the host reboot-pending
     manual:<unit>                mark the unit pending and change nothing live
 
@@ -34,7 +35,7 @@ REBOOT_PENDING = RUN_DIR / "reboot-pending"
 
 _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 ACTION = re.compile(
-    rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
+    rf"none|sysctl|tmpfiles|modules-load|locale-gen|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
 # The commands that check a service's configuration before reconcile reloads or restarts it.
 COMMANDS = {
@@ -131,6 +132,8 @@ def perform(
         return run("sysctl", "--system").returncode == 0
     if kind == "tmpfiles":
         return run("systemd-tmpfiles", "--create", *paths).returncode == 0
+    if kind == "locale-gen":
+        return run("locale-gen").returncode == 0
     verb = kind
     if kind == "modules-load":
         unit, verb = MODULES_UNIT, "restart"

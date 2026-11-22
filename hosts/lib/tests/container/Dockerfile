@@ -32,7 +32,7 @@ ENV container=docker
 # exists. The Ubuntu lists stay, so `tree`, which the Depends case's fixture needs, resolves
 # with no fetch. Its deb is downloaded here too, because snapshot.ubuntu.com answers 5xx
 # often enough to fail a case that fetches from it. The Pi package Depends on zram-tools,
-# watchdog and earlyoom (H7.25), so their debs and recommends are downloaded the same way. It
+# watchdog and earlyoom (H7.25), and on locales, so their debs and recommends are downloaded the same way. It
 # also Depends on fail2ban, sysstat, acct, rkhunter, aide and aide-common (H7.30); aide-common
 # pulls in postfix as its mail transport agent. The Pi cases unmount /etc/resolv.conf before the
 # install (`pi_host_seed`), so the container has no DNS and an apt that needs a fetch retries
@@ -65,7 +65,7 @@ RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
         systemd systemd-sysv python3 ca-certificates age git gnupg curl \
         gcc libc6-dev libyaml-dev; \
-    apt-get install -y --download-only tree zram-tools watchdog earlyoom \
+    apt-get install -y --download-only tree zram-tools watchdog earlyoom locales \
         fail2ban sysstat acct rkhunter aide aide-common \
         auditd debsums jq libpam-tmpdir unattended-upgrades unzip update-notifier-common rsyslog \
         gh; \
