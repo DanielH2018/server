@@ -338,3 +338,48 @@ def test_a_batch_stopping_mid_scan_leaves_its_other_series_and_the_file(
     assert 'kind="anon"' not in out, out
     assert 'claude_fanout_batch_memory_bytes{batch="77",kind="peak"} 6121443328' in out
     assert 'claude_fanout_batch_pids_current{batch="77"} 12' in out, out
+
+
+def _write_plane(cgroot: Path, slice_name: str, anon: int) -> None:
+    d = cgroot / slice_name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "memory.stat").write_text(f"anon {anon}\nfile 2000\nkernel 300\nshmem 7\n")
+    (d / "memory.swap.current").write_text("40\n")
+
+
+def test_each_plane_reports_anon_file_kernel_and_swap(tmp_path: Path) -> None:
+    """The fleet cap is derived from these: MemAvailable nets out each plane's anon and kernel."""
+    cgroot = tmp_path / "cgroup"
+    for slice_name, anon in (
+        ("user.slice", 11),
+        ("kubepods.slice", 22),
+        ("system.slice", 33),
+    ):
+        _write_plane(cgroot, slice_name, anon)
+    out = _run_batches(tmp_path)
+    for plane, anon in (("user", 11), ("kubepods", 22), ("system", 33)):
+        for kind, value in (
+            ("anon", anon),
+            ("file", 2000),
+            ("kernel", 300),
+            ("swap", 40),
+        ):
+            line = f'claude_host_plane_memory_bytes{{plane="{plane}",kind="{kind}"}} {value}'
+            assert line in out, out
+    assert 'kind="shmem"' not in out, out
+
+
+def test_the_homelab_planes_stay_out_of_the_alerted_cgroup_families(
+    tmp_path: Path,
+) -> None:
+    """The ClaudeCgroup* rules select claude_cgroup_* with no cgroup filter, so a pod's
+    oom_kill reported there would page as the fleet's. A missing plane is skipped."""
+    cgroot = tmp_path / "cgroup"
+    _write_cgroup_fixture(cgroot, "kubepods.slice")
+    _write_plane(cgroot, "kubepods.slice", 22)
+    out = _run_batches(tmp_path)
+    assert 'claude_host_plane_memory_bytes{plane="kubepods",kind="anon"} 22' in out, out
+    assert 'plane="system"' not in out, out
+    assert "kubepods" not in "".join(
+        line for line in out.splitlines() if line.startswith("claude_cgroup_")
+    ), out
