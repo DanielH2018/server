@@ -84,6 +84,30 @@ tests:
             exp_annotations:
               summary: 'daniel-box: memory is 95% used.'
               description: "daniel-box has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's. Read `free -h` and the top memory cgroups on the host."
+  # HostMemoryAvailableLow. box has 6 GiB available for 15m and fires; server has 9 GiB and does not.
+  - interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '6442450944x15'
+      - series: 'node_memory_MemAvailable_bytes{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '9663676416x15'
+    alert_rule_test:
+      - alertname: HostMemoryAvailableLow
+        eval_time: 5m
+        exp_alerts: []
+      - alertname: HostMemoryAvailableLow
+        eval_time: 12m
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: daniel-box
+              severity: warning
+            exp_annotations:
+              summary: 'daniel-box: 6GiB of memory is available.'
+              description: "daniel-box has had under 8 GiB of memory available for 10 minutes. The fleet's anon memory is past what MemoryLow can protect against. Read `free -h` and the top memory cgroups on the host."
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostmemoryavailablelow
   # HostMetricsMissing. box is scraped and publishes / and memory but not /boot, /boot/efi, the
   # Processor cooling devices or the timex series, so those four arms fire after 15m. server's exporter is
   # dead (up 0) and publishes nothing: that is ScrapeTargetDown's, so no arm fires for it.
