@@ -913,6 +913,105 @@ tests:
         alertname: WiredLinkDown
         exp_alerts: []
 
+  # daniel-box's NIC hangs at minute 3: eno1 keeps carrier and operstate, but the gateway stops
+  # answering the pings bound to it, so the wired-gateway check reads 0. WiredGatewayUnreachable
+  # is pending at 5 minutes and fires at 7, past its 3-minute hold. WiredLinkDown stays quiet.
+  # The check's timestamp keeps moving, so WiredGatewayCheckNotReporting stays quiet too.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="wired-gateway", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x10'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="wired-gateway", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x12'
+      - series: 'node_network_carrier{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+      - series: 'node_network_up{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: WiredGatewayUnreachable
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: WiredLinkDown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: WiredGatewayCheckNotReporting
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: WiredGatewayUnreachable
+        exp_alerts:
+          - exp_labels:
+              check: wired-gateway
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+            exp_annotations:
+              summary: >-
+                daniel-box: the gateway does not answer over the wired link eno1, which still
+                has carrier.
+              description: >-
+                The gateway has not answered a ping over eno1 for 3 minutes while the link
+                keeps carrier, and the wired route still wins, so daniel-box is offline. Read
+                `journalctl -k -g eno1` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewayunreachable
+
+  # The cable to daniel-box's eno1 is pulled, so the gateway check fails beside carrier 0, and
+  # daniel-server's enp88s0 is set administratively down, so it serves no carrier series and
+  # only node_network_up reads 0. WiredLinkDown owns both pages, and WiredGatewayUnreachable
+  # stays quiet for each.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="wired-gateway", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x10'
+      - series: 'node_network_carrier{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x10'
+      - series: 'node_network_up{device="eno1", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+      - series: 'homelab_check_success{check="wired-gateway", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 0x10'
+      - series: 'node_network_carrier{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 stale'
+      - series: 'node_network_up{device="enp88s0", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: WiredGatewayUnreachable
+        exp_alerts: []
+
+  # daniel-box's wired-gateway check stops writing at minute 2 while node_exporter stays up.
+  # Its timestamp is past the 180s deadline from minute 6, so WiredGatewayCheckNotReporting
+  # fires through the stale arm. daniel-server has never written the file, so its copy's
+  # absent arm stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="wired-gateway", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0 60 120x10'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: WiredGatewayCheckNotReporting
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: WiredGatewayCheckNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: wired-gateway
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: 'daniel-box: the wired gateway check has stopped reporting.'
+              description: >-
+                No wired-gateway verdict newer than 180s reached Prometheus from daniel-box, so
+                nothing reads whether the gateway answers over eno1. Read `systemctl status
+                homelab-wired-gateway.timer` and `journalctl -t wired-gateway` on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewaychecknotreporting
+
   # A FREE session on daniel-server, beside a logged-in one on daniel-box. IscsiSessionStale
   # fires for the FREE one after its 15m `for:` and never for the logged-in one. Both nodes'
   # check files stay fresh, so IscsiSessionsNotReporting stays quiet.

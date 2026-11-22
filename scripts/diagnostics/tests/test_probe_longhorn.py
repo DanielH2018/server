@@ -32,7 +32,10 @@ def test_b2_longhorn_lines_strips_the_prefix_and_pages():
     pages = [
         {
             "apiInfo": {
-                "storageApi": {"apiUrl": "https://api.example", "bucketId": "b"}
+                "storageApi": {
+                    "apiUrl": "https://api.example",
+                    "allowed": {"buckets": [{"id": "b", "name": "bucket"}]},
+                }
             },
             "authorizationToken": "tok",
             "accountId": "acct",
@@ -84,7 +87,12 @@ def test_b2_longhorn_lines_reports_pages_plus_the_authorize_as_class_c():
         if not calls:
             calls.append(1)
             return {
-                "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "bid"}},
+                "apiInfo": {
+                    "storageApi": {
+                        "apiUrl": "https://api",
+                        "allowed": {"buckets": [{"id": "bid", "name": "bucket"}]},
+                    }
+                },
                 "authorizationToken": "t",
             }
         return pages.pop(0)
@@ -98,7 +106,12 @@ def test_b2_longhorn_lines_exits_on_a_b2_error_rather_than_returning_a_partial_l
     """A cap refusal on page two must not read as a store holding only page one."""
     responses = [
         {
-            "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "bid"}},
+            "apiInfo": {
+                "storageApi": {
+                    "apiUrl": "https://api",
+                    "allowed": {"buckets": [{"id": "bid", "name": "bucket"}]},
+                }
+            },
             "authorizationToken": "t",
         },
         {
@@ -368,8 +381,9 @@ def _bucket_b2_was_asked_for(monkeypatch, tmp_path, subcommand):
                 {
                     "accountId": "acct",
                     "authorizationToken": "tok",
-                    "apiInfo": {"storageApi": {"apiUrl": "https://api.example"}},
-                    "allowed": {},
+                    "apiInfo": {
+                        "storageApi": {"apiUrl": "https://api.example", "allowed": {}}
+                    },
                 }
             ).encode()
 

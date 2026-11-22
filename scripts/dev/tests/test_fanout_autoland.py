@@ -201,6 +201,13 @@ def test_a_pr_touching_the_landing_paths_own_surface_is_refused_with_that_reason
     assert "ineligible, it changes the lander's own surface" in text
 
 
+def test_a_held_draft_with_no_ci_gate_is_ruled_on_the_landers_surface():
+    """The review pipeline leaves such a PR a draft for a person, so it has no CI gate."""
+    rec = _record(ci_gate="")
+    pr = _pr(isDraft=True, files=[{"path": "scripts/deploy_tools/land.sh"}])
+    assert autoland.problems(rec, pr).startswith("it changes the lander's own surface")
+
+
 PYPROJECT = """\
 [project]
 dependencies = ["pyyaml"]

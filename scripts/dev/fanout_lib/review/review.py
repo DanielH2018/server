@@ -20,7 +20,8 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    the rest are carried unverified and hold nothing. A finding of medium severity or
    worse left by it earns one more fix and delta review, and no more.
 4b. ready — on a host that does not land, `review_ci.ready_gate` marks a draft PR ready and
-   waits for its CI run.
+   waits for its CI run. A PR the server lander's rule holds for a person stays a draft, and
+   that person's `land.sh` marks it ready at its turn.
 5. land — on the deploy host, the pipeline lands the PR as the draft it is
    (`review_ci.land_draft`, which runs `land.sh` through `review_land`). The landing marks it
    ready or tests it in a landing batch, so its first CI run is the one it merges on. A landing
@@ -178,14 +179,16 @@ class Pipeline(BatchRun):
             last = fix_rounds(self, issues, base, head, last)
 
         held = held_for_findings(self.record, self.state_dir)
-        # A PR this pipeline lands stays a draft for `land_draft`. Any other is marked ready,
-        # a held one included, since a PR left a draft gets no CI.
+        # A PR this pipeline lands stays a draft for `land_draft`, and so does one a person
+        # lands: their `land.sh` gives it its one CI run. Any other is marked ready, a PR held
+        # for its findings included, since a PR left a draft gets no CI.
         lands_it = held is None and (
             lands(self.host, self.target.repo) or server_lands(self, self.record.head)
         )
-        ready = None if lands_it else ready_gate(self)
+        waits = not lands_it and not self.record.person_lands
+        ready = ready_gate(self) if waits else None
         final = held or ready
-        if final is None and not lands_it and awaits_ci(self.host, self.target):
+        if final is None and waits and awaits_ci(self.host, self.target):
             # Before the comment, so the comment carries the CI gate beside the others.
             last, final = ci_gate(self, last)
         comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]

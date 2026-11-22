@@ -129,6 +129,7 @@ ADOPTED = [
     (AUDITD_CONF, "space_left = 75", "try-restart:auditd.service"),
     (AUDITD_CONF, "admin_space_left = 50", "try-restart:auditd.service"),
     (AUDITD_CONF, "admin_space_left_action = SUSPEND", "try-restart:auditd.service"),
+    ("/etc/locale.gen", "# en_US.UTF-8 UTF-8", "locale-gen"),
 ]
 
 
@@ -166,6 +167,24 @@ def test_no_apt_hook_runs_apt_check_and_a_second_run_changes_nothing(package):
     for edit in edits:
         twice = lines.with_line(twice, edit)
     assert twice == once
+
+
+# The en_US block of the stock /etc/locale.gen on daniel-pi's Ubuntu 26.04.
+STOCK_LOCALE_GEN = (
+    "# en_SG.UTF-8 UTF-8\n"
+    "# en_US ISO-8859-1\n"
+    "# en_US.ISO-8859-15 ISO-8859-15\n"
+    "# en_US.UTF-8 UTF-8\n"
+    "# en_ZA ISO-8859-1\n"
+)
+
+
+def test_locale_gen_enables_only_en_us_utf8_and_a_second_run_changes_nothing(package):
+    (edit,) = [e for e in package.lines if e["path"] == "/etc/locale.gen"]
+    once = lines.with_line(STOCK_LOCALE_GEN, edit)
+    assert once == STOCK_LOCALE_GEN.replace("# en_US.UTF-8 UTF-8", "en_US.UTF-8 UTF-8")
+    assert lines.with_line(once, edit) == once
+    assert "locales" in package.depends
 
 
 def test_needrestart_skips_its_kernel_check_and_keeps_its_service_restarts(package):

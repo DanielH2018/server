@@ -35,7 +35,10 @@ _AUTH = {
     "accountId": "a1",
     "authorizationToken": "t",
     "apiInfo": {
-        "storageApi": {"downloadUrl": "https://f000.example", "bucketName": "bkt"}
+        "storageApi": {
+            "downloadUrl": "https://f000.example",
+            "allowed": {"buckets": [{"id": "b1", "name": "bkt"}]},
+        }
     },
 }
 

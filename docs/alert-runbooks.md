@@ -337,7 +337,11 @@ bad or stale, or `/var/log` is not log2ram's tmpfs.
 
 - The `pi-sd-health` line in `/var/log/pi-health/health.log` names the failing leg.
 - Only a nonzero `errors_count` calls for an `fsck` and a card replacement.
-- A `/var/log` that is not a tmpfs means log2ram refused to start. Fix its cause, then reboot.
+- A `/var/log` that is not a tmpfs means log2ram is not mounted, for one of two reasons.
+  Either log2ram refused to start at boot, or a `log2ram` package upgrade stopped it: the
+  package's `prerm` stops the unit and its `postinst` waits for a reboot. A `log2ram` line in
+  `/var/log/dpkg.log` since the last boot names the second (#9940). Fix the cause if there
+  is one, then reboot.
 
 ### `PiSdHealthNotReporting`
 
@@ -402,6 +406,37 @@ I/O errors, so ext4 aborts its journal and remounts the volume read-only.
   recovering its own storage. Run `ip -br link` on both nodes at the first check.
 - Once the link has carrier, `grep -E ' ro,' /proc/mounts` on each node lists any Longhorn
   mount still read-only. Restart the pod that holds one.
+- This rule reads carrier and the link's up state only. A link that keeps carrier while the gateway
+  stops answering on it pages as `WiredGatewayUnreachable` instead.
+
+### `WiredGatewayUnreachable`
+
+The node has pinged the LAN gateway over its wired link for 3 minutes with no reply, while the
+link keeps carrier. The wired default route (metric 100) still outranks the WiFi one (metric
+600), so the node has no internet. Its traffic to the other node may fail too, and the WiFi
+fallback never engages.
+
+- Read the kernel journal for the link first: `journalctl -k -g eno1` on daniel-box,
+  `journalctl -k -g enp88s0` on daniel-server. A run of `NETDEV WATCHDOG: ... transmit queue
+  ... timed out` and `Reset adapter` lines from `igc` means the NIC's transmit queue hung. That
+  was the cause on daniel-box on 2026-11-22, 2026-10-18 and 2026-10-28.
+- `journalctl -t wired-gateway` shows each failed run's ping output and the gateway's
+  neighbour entry. `INCOMPLETE` means ARP got no answer over the link.
+- If both nodes fire at once, the gateway itself is down, not either node's link.
+- The verdict reaches Prometheus only while Prometheus can scrape the node. If the outage cuts
+  the scrape path, the node's `up` reads 0 instead, and `ScrapeTargetDown` pages after its own
+  10 minutes. Alertmanager can run on the node that lost its gateway, in which case the page
+  arrives after the link recovers.
+
+### `WiredGatewayCheckNotReporting`
+
+No `wired-gateway` verdict newer than 180 seconds has reached Prometheus from the node, so
+nothing reads whether the gateway answers over the wired link.
+
+- `systemctl status homelab-wired-gateway.timer` on the node shows whether the timer fires.
+  The k3s-server and k3s-agent components ship it on each node whose host_vars set
+  `k3s_node_static_link`.
+- `journalctl -t wired-gateway` shows a run that could not write its textfile.
 
 ### `ClaudeMemorySyncNotReporting`
 

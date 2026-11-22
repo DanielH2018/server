@@ -273,6 +273,16 @@ has been down, for 5 minutes. `docs/alert-runbooks.md` says why it pages. The ru
 `scripts/dev/gen_host_rules.py` renders them from each node's `k3s_node_static_link`, so a
 node that pins a new link gains its rule at the next render (#5124).
 
+The fallback needs the wired link to lose carrier. A link that keeps carrier while the
+gateway stops answering on it keeps the wired default route, so the node loses the internet
+and WiFi carries nothing. On 2026-11-22 from about 01:44 to 02:00 UTC, daniel-box's I226-V
+(`igc`) hit seven `NETDEV WATCHDOG: transmit queue timed out` resets on `eno1`, and the
+gateway's neighbour entry on `eno1` stayed `INCOMPLETE`. The same signature appeared on
+2026-10-18 and 2026-10-28. Each node's `homelab-wired-gateway.timer` pings `lan_router_ip`
+bound to its static link every minute (`hosts/components/k3s-server/files/wired-gateway-check.sh`),
+and `WiredGatewayUnreachable` pages once three minutes of runs get no reply while the link
+keeps carrier.
+
 The same ARP behaviour has a cost with the cable in. Both links answer a broadcast ARP
 request, so a client can learn the WiFi MAC for an address the wired link carries. MetalLB's
 speaker builds an ARP responder on every link that is up, `wlo1` included, so on daniel-box
