@@ -96,8 +96,8 @@ def test_the_live_discord_notification_is_found_by_name() -> None:
 
 
 def test_a_same_named_notification_of_another_kind_is_not_adopted() -> None:
-    # sonarr also carries an "Episode Trimmer" CustomScript. Matching on name alone would let a
-    # renamed script be overwritten with a Discord spec, silently retiring the script hook.
+    # Matching on name alone would let a CustomScript sharing the name be overwritten with a
+    # Discord spec, silently retiring the script hook.
     # fact: k8s/roles/arr-notification/CLAUDE.md#The before-state it adopts (measured 2026-09-06)
     script = {"id": 2, "name": NAME, "implementation": "CustomScript", "fields": []}
     assert seed.find_notification([script], NAME) is None
