@@ -1,0 +1,11 @@
+# Shipped by the host package's k3s-server component. Started by homelab-wired-gateway.timer.
+[Unit]
+Description=Check that the LAN gateway answers over {{ k3s_node_static_link }} and write the textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=wired-gateway
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+Environment=WIRED_LINK={{ k3s_node_static_link }} WIRED_GATEWAY={{ lan_router_ip }}
+ExecStart=/usr/lib/homelab/wired-gateway-check

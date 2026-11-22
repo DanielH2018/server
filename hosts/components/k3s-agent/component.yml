@@ -99,6 +99,9 @@ files:
   - {src: "component:files/kubelet-shutdown-lock-check.sh", dst: /usr/lib/homelab/kubelet-shutdown-lock-check, mode: "0755"}
   - {src: "component:units/homelab-kubelet-shutdown-lock.service", dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.service}
   - {src: "component:units/homelab-kubelet-shutdown-lock.timer", dst: /usr/lib/systemd/system/homelab-kubelet-shutdown-lock.timer}
+  - {src: "component:files/wired-gateway-check.sh", dst: /usr/lib/homelab/wired-gateway-check, mode: "0755", when: "k3s_node_static_link | length > 0"}
+  - {src: "component:units/homelab-wired-gateway.service.j2", dst: /usr/lib/systemd/system/homelab-wired-gateway.service, when: "k3s_node_static_link | length > 0"}
+  - {src: "component:units/homelab-wired-gateway.timer", dst: /usr/lib/systemd/system/homelab-wired-gateway.timer, when: "k3s_node_static_link | length > 0"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The older block in the
@@ -140,6 +143,7 @@ outputs:
 enable:
   homelab-k3s-kubeconfig.service: multi-user.target
   homelab-kubelet-shutdown-lock.timer: timers.target
+  homelab-wired-gateway.timer: {target: timers.target, when: "k3s_node_static_link | length > 0"}
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Emptying a link is the way back from the pin: the next package drops the file and this retires

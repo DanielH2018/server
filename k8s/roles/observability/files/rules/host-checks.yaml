@@ -1314,6 +1314,92 @@ groups:
         Longhorn replicas over WiFi, and volumes on the other node get I/O errors. Restore the wire first:
         check the cable and the switch port, then run `ip -br link` on daniel-server.
       runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredlinkdown
+  - alert: WiredGatewayUnreachable
+    expr: |
+      homelab_check_success{check="wired-gateway",origin="daniel-box"} == 0
+      unless on (origin)
+        (
+            node_network_carrier{device="eno1",origin="daniel-box"} == 0
+          or
+            node_network_up{device="eno1",origin="daniel-box"} == 0
+        )
+    for: 3m
+    labels:
+      severity: critical
+      service: daniel-box
+    annotations:
+      summary: >-
+        daniel-box: the gateway does not answer over the wired link eno1, which still has carrier.
+      description: >-
+        The gateway has not answered a ping over eno1 for 3 minutes while the link keeps carrier, and
+        the wired route still wins, so daniel-box is offline. Read `journalctl -k -g eno1` on daniel-box.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewayunreachable
+  - alert: WiredGatewayUnreachable
+    expr: |
+      homelab_check_success{check="wired-gateway",origin="daniel-server"} == 0
+      unless on (origin)
+        (
+            node_network_carrier{device="enp88s0",origin="daniel-server"} == 0
+          or
+            node_network_up{device="enp88s0",origin="daniel-server"} == 0
+        )
+    for: 3m
+    labels:
+      severity: critical
+      service: daniel-server
+    annotations:
+      summary: >-
+        daniel-server: the gateway does not answer over the wired link enp88s0, which still has carrier.
+      description: >-
+        The gateway has not answered a ping over enp88s0 for 3 minutes while the link keeps carrier, and
+        the wired route still wins, so daniel-server is offline. Read `journalctl -k -g enp88s0` on daniel-server.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewayunreachable
+  - alert: WiredGatewayCheckNotReporting
+    expr: |
+      (
+          time() - homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-box"} > 180
+        or
+          (
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-box"}[180s])
+            and on ()
+              present_over_time(homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-box"}[2419200s])
+          )
+      )
+      unless on (origin) (up{job="node"} == 0)
+    labels:
+      severity: warning
+      service: daniel-box
+    annotations:
+      summary: 'daniel-box: the wired gateway check has stopped reporting.'
+      description: >-
+        No wired-gateway verdict newer than 180s reached Prometheus from daniel-box, so nothing reads
+        whether the gateway answers over eno1. Read `systemctl status homelab-wired-gateway.timer` and
+        `journalctl -t wired-gateway` on daniel-box.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewaychecknotreporting
+  - alert: WiredGatewayCheckNotReporting
+    expr: |
+      (
+          time() - homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-server"} > 180
+        or
+          (
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-server"}[180s])
+            and on ()
+              present_over_time(homelab_check_last_run_timestamp_seconds{check="wired-gateway",origin="daniel-server"}[2419200s])
+          )
+      )
+      unless on (origin) (up{job="node"} == 0)
+    labels:
+      severity: warning
+      service: daniel-server
+    annotations:
+      summary: 'daniel-server: the wired gateway check has stopped reporting.'
+      description: >-
+        No wired-gateway verdict newer than 180s reached Prometheus from daniel-server, so nothing reads
+        whether the gateway answers over enp88s0. Read `systemctl status homelab-wired-gateway.timer`
+        and `journalctl -t wired-gateway` on daniel-server.
+      runbook_url: >-
+        https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewaychecknotreporting
   - alert: CheckoutSyncFailed
     expr: homelab_check_success{check="checkout-sync",origin="daniel-box"} == 0
     labels:
