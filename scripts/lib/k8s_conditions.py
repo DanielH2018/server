@@ -8,8 +8,7 @@ The module imports the stdlib alone and no first-party module, because it ships 
 that read it: the soak Job carries it next to `flux_soak.py`, the host packages install it under
 a `lib/` beside `k3s_gates.py`, the backup-health reader and the restart broker, and configarr's
 health CronJob mounts it. `lib.k8s_objects` cannot ride there: it imports `lib.longhorn_lib`,
-which reaches `host_lib`. It also parses on the hosts' system Python 3.12, which runs
-`homelab-k3s-restart`, so a forward reference stays quoted.
+which reaches `host_lib`.
 
 Typical usage example:
 

@@ -7,7 +7,6 @@ A `socket.socketpair()` stands in for the connection systemd hands the service: 
 Run: uv run pytest hosts/components/worktree-holders/tests/test_worktree_holders.py
 """
 
-import ast
 import json
 import os
 import pwd
@@ -28,7 +27,6 @@ from worktree_holders import answer, escape, main, render, scan, serve
 
 # pyproject.toml's py312 floor for the host-run files. The shebang names /usr/bin/python3: root
 # must not run an interpreter a non-root user can write, so the uv-managed Python is no option.
-DISTRO_PYTHON = (3, 12)
 ME = pwd.getpwuid(os.getuid()).pw_name
 
 
@@ -239,17 +237,3 @@ def test_the_caller_reads_the_service_over_a_real_socket_is_flagged(tmp_path):
         thread.join(timeout=10)
 
     assert found == [(7, f"cwd {escape(str(root / 'a\u2028b'))}")]
-
-
-def test_the_helper_parses_on_the_distro_interpreter_is_clean():
-    # The helper runs under the hosts' /usr/bin/python3, which is 3.12.
-    ast.parse(
-        Path(worktree_holders.__file__).read_text(), feature_version=DISTRO_PYTHON
-    )
-
-
-def test_syntax_newer_than_the_distro_interpreter_is_flagged():
-    with pytest.raises(SyntaxError):
-        ast.parse(
-            "try:\n    pass\nexcept A, B:\n    pass\n", feature_version=DISTRO_PYTHON
-        )

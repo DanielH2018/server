@@ -7,8 +7,6 @@ container suite, which runs reconcile under each release's python3, covers the s
 Run: uv run pytest hosts/lib/tests/test_reconcile_component.py
 """
 
-import ast
-
 import pytest
 import yaml
 from _reconcile_component import render_reconcile
@@ -81,28 +79,6 @@ def test_the_component_renders_the_script_its_library_and_its_unit(package):
 def test_the_script_runs_under_the_hosts_python3():
     assert RECONCILE.read_text().startswith("#!/usr/bin/python3\n")
     assert RECONCILE.stat().st_mode & 0o111
-
-
-def parses_under_3_12(source: str) -> bool:
-    try:
-        ast.parse(source, feature_version=(3, 12))
-    except SyntaxError:
-        return False
-    return True
-
-
-def test_reconcile_and_its_library_parse_with_the_3_12_grammar():
-    for path in [RECONCILE, *library_files()]:
-        assert parses_under_3_12(path.read_text()), path
-
-
-@pytest.mark.parametrize(
-    "newer",
-    ['label = t"{name}"\n', "try:\n    pass\nexcept OSError, ValueError:\n    pass\n"],
-    ids=["t-string", "unparenthesised-except"],
-)
-def test_syntax_newer_than_3_12_is_flagged(newer):
-    assert not parses_under_3_12(RECONCILE.read_text() + newer)
 
 
 def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):

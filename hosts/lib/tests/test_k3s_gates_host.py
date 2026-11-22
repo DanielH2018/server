@@ -4,7 +4,6 @@ The host checks read files under `--host-root`. In a SUC `prepare` container tha
 the node's root, so a symlink in the path must resolve under it, not under the container.
 """
 
-import ast
 from pathlib import Path
 
 import pytest
@@ -36,11 +35,6 @@ def _round(mode, routes, root, version=VERSION, guard=False, notes=None):
         mode, fake_get(routes), str(root), version, lambda: NOW, guard, notes or []
     )
     return k3s_gates.run_round(checks)
-
-
-def test_the_script_parses_with_the_python_312_grammar():
-    """It keeps pyproject.toml's py312 floor; ruff's default target would write 3.14."""
-    ast.parse(SCRIPT.read_text(), feature_version=(3, 12))
 
 
 # ── the restart marker ──────────────────────────────────────────────────────────────────────

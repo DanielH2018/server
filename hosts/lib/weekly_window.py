@@ -11,8 +11,6 @@ Typical usage example:
     muted = in_weekly_window(time.time(), 0, 7 * 60 + 30, before_min=5, after_min=45)
 """
 
-from __future__ import annotations
-
 import datetime as dt
 
 WEEK_MIN = 7 * 1440

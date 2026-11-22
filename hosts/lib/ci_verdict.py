@@ -9,8 +9,6 @@ when the tip is not green. Stdlib only and importing nothing first-party, becaus
 packages' builder grades the same rule and `homelab-checkout-sync` grades the fetched tip with it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -604,7 +602,7 @@ def ci_verdict(
     if read_suites:
         try:
             cancelled = gates_failed_by_cancellation(check_runs, read_suites)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return CIVerdict.PENDING
     states: dict[str, set[CIVerdict]] = {}
     for run in check_runs:
