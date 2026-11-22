@@ -23,7 +23,7 @@ import pytest
 from lib import yaml_fast
 from lib.k8s_lookups import cross_role_files
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import SECRETS
+from lib.repo_paths import SCRIPTS, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -174,12 +174,14 @@ def _verify_docs(rendered) -> list[dict]:
 def _render_tree_copy(tree, stubs, app: str, rotate: bool) -> list[dict]:
     """`<app>-verify` rendered from a copy of the two roles and of `cluster-vars.source`.
 
-    `render_tag` sets `role_path` to the copy, so the Job's lookups read the copy. With
-    `rotate`, the copy's `arr_discord_webhook_url` digest is replaced first, as a rotation
-    replaces it, and nothing else in the tree changes.
+    `render_tag` sets `role_path` to the copy, so the Job's lookups read the copy. `scripts/`
+    links to the tree's, for a template that ships a renderer job file through `repo_file`, as
+    prowlarr's app-keys ConfigMap does. With `rotate`, the copy's `arr_discord_webhook_url`
+    digest is replaced first, as a rotation replaces it, and nothing else in the tree changes.
     """
     for role in (app, "arr-notification"):
         shutil.copytree(K8S_ROLES / role, tree / "k8s" / "roles" / role)
+    (tree / "scripts").symlink_to(SCRIPTS)
     (tree / "secrets").mkdir()
     source = tree / "secrets" / "cluster-vars.source"
     shutil.copy(SECRETS / "cluster-vars.source", source)

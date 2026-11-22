@@ -178,6 +178,7 @@ regex	k8s/roles/pihole/defaults/main.yml	pihole/pihole	docker	digest	-
 regex	k8s/roles/prowlarr/defaults/main.yml	ghcr.io/flaresolverr/flaresolverr	docker	digest	-
 regex	k8s/roles/prowlarr/defaults/main.yml	ghcr.io/onedr0p/exportarr	docker	digest	-
 regex	k8s/roles/prowlarr/defaults/main.yml	lscr.io/linuxserver/prowlarr	docker	digest	-
+regex	k8s/roles/prowlarr/defaults/main.yml	python	docker	digest	-
 regex	k8s/roles/qbittorrent/defaults/main.yml	lscr.io/linuxserver/qbittorrent	docker	digest	-
 regex	k8s/roles/qbittorrent/defaults/main.yml	lscr.io/linuxserver/wireguard	docker	digest	-
 regex	k8s/roles/qbittorrent/defaults/main.yml	python	docker	digest	-
