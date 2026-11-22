@@ -80,6 +80,7 @@ ROUTED = [
     ("container-checks.yaml", 4, set()),
     ("edge.yaml", 7, {"CertExpiringSoon"}),
     ("extra-probes.yaml", 5, {"ExtraProbeFailedCritical"}),
+    ("flux.yaml", 5, {"FluxControllerDown"}),
     ("gitops-checks.yaml", 4, set()),
     (
         "host-checks.yaml",
