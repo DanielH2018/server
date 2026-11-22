@@ -204,17 +204,16 @@ def _rewrite_cache_problems(wf: Workflow) -> list[str]:
     return saves + link
 
 
-def _add_leg_save(wf: Workflow) -> None:
-    restore = ci_rewrite_restore(wf)
-    assert restore is not None
-    save = {**restore, "uses": restore["uses"].replace(RESTORE, SAVE)}
-    steps(wf["jobs"][PYTEST_JOB]).append(save)
+def _add_leg_save(action: str) -> Callable[[Workflow], None]:
+    """A mutation that appends a copy of the restore step that uses `action` instead."""
 
+    def mutate(wf: Workflow) -> None:
+        restore = ci_rewrite_restore(wf)
+        assert restore is not None
+        save = {**restore, "uses": restore["uses"].replace(RESTORE, action)}
+        steps(wf["jobs"][PYTEST_JOB]).append(save)
 
-def _restore_through_the_combined_action(wf: Workflow) -> None:
-    restore = ci_rewrite_restore(wf)
-    assert restore is not None
-    restore["uses"] = restore["uses"].replace(RESTORE, CACHE)
+    return mutate
 
 
 def _edit_restore(**fields: object) -> Callable[[Workflow], None]:
@@ -423,10 +422,8 @@ CI_JOB_ROWS = (
                 ),
                 a_restore_with_no_restore_keys=_drop_restore_keys,
                 a_restore_of_another_path=_edit_restore(path="**/__pycache__/*.pyc"),
-                a_leg_that_saves_the_cache=_add_leg_save,
-                a_leg_that_restores_and_saves_through_actions_cache=(
-                    _restore_through_the_combined_action
-                ),
+                a_leg_that_saves_the_cache=_add_leg_save(SAVE),
+                a_leg_that_also_caches_through_actions_cache=_add_leg_save(CACHE),
             ),
         )
     ),
