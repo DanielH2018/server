@@ -10,6 +10,11 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
+**Prometheus keeps only the `claude_code_*` names from the collector.** The fenced triage and
+Renovate sessions export here, and they read untrusted text. A metric they forged under any
+other name could fire a routed triage alert
+(`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
+
 Flux applies the role (its entry is in `cluster/services.yml`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
@@ -223,6 +228,11 @@ mid-failure, because a changed label set would resolve the firing alert. A black
 takes that label, so the unit pages once, and `WarningUnresolved` drops the label so its
 escalation still pages
 (`tests/services/test_alertmanager_routing.py::test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole`).
+The triage poll's hook-paged `SystemdUnitsFailed` also inhibits `ClaudeTriagePollNotReporting`
+on the same `origin`, and that rule's `for: 5m` lets the source fire first, so a poll that
+fails every tick pages once (`tests/services/test_alertmanager_triage_poll_inhibit.py`). A
+pair with a `for:` is pending when `HostCheckOverdue` would fire, so `HostCheckOverdue` skips
+a check whose pair is pending, and fires 2 minutes after the pair, held by it.
 A check that writes a
 verdict exits 0 on a DOWN, as the weekly scans and `systemd-units` itself do, so its unit fails
 only when no verdict was written and the verdict never pages twice. The per-check literals and their pin tests stay, for the

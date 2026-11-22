@@ -562,12 +562,12 @@ dotfiles apply has not completed a clean run.
 
 ### `ClaudeTriagePollNotReporting`
 
-No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus, so the monitor
-triage
-poll has not completed a clean run.
+No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus for 5 minutes, so the
+monitor triage poll has not completed a clean run.
 
-- The timer stopped firing, or every run since failed and its `OnFailure` unit posted to
-  Discord.
+- The timer most likely stopped firing. A run that fails pages through its `OnFailure` unit,
+  and its `SystemdUnitsFailed` holds this alert through an Alertmanager inhibit. This alert
+  alone therefore means no run failed the unit.
 - Read `systemctl status homelab-claude-triage-poll.timer` and `journalctl -u
   homelab-claude-triage-poll` on daniel-box.
 - If `claude_code_triage_enabled` is false on purpose, delete this rule.

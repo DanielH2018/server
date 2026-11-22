@@ -740,12 +740,19 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   session can write a syslog line with any tag, so any rule that counts log lines, whatever it
   filters on, would let it open the next episode.
   `test_no_routed_alert_counts_log_lines_a_session_can_write` in
-  `hosts/tests/test_claude_triage.py` runs once per routed alert. It fails when a
+  `hosts/tests/test_claude_triage_alert_inputs.py` runs once per routed alert. It fails when a
   `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
   it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
   `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
   the one exemption, because an added line can only keep it from firing. `HostLogErrors`,
   `HostOutOfMemoryKill` and `WorkloadLogErrors` are counting rules, so none can be routed.
+- **No routed alert reads a metric a session can send.** The T2 egress fence admits the
+  loopback OTLP collector, so each session's telemetry reaches Prometheus. The collector
+  forwards any metric name it receives, and `K8sDeploymentZeroAvailable` selects its series by
+  name alone. Prometheus therefore keeps only the `claude_code_*` names from the
+  `otel-collector` job, and
+  `hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`
+  fails a routed rule that reads one of them.
 - **A storm is one run.** More than three routed keys of one profile falling in one poll make
   a single storm episode that lists them all. Unrouted falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
