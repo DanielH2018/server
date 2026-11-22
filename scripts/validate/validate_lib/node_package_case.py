@@ -7,6 +7,7 @@ unit or script that leans on a release-specific path or tool fails here before a
 that release. For each node it boots a container with the node's hostname, which the package's
 preinst requires, and:
 
+  * masks the gettys the runner's shared consoles start (`mask_gettys`);
   * seals the real package with a throwaway age key (`secrets_case.seal_host`), as the Pi's
     by-hand case does, so `homelab-secrets` decrypts and reconcile can run;
   * seeds the host state a container lacks (`seed_node_host`);
@@ -16,6 +17,11 @@ preinst requires, and:
     A long-running service's start returns once it forks, so one that crashes a second later,
     or loops through `Restart=` without reaching its start limit, shows only after the wait.
     Reconcile exits 1 when a unit it starts fails, so its own unit is flagged then too.
+
+The failure pages (`homelab-alert@`, `homelab-claude-rc-alert`) start only when another unit
+fails, so a green run never delivers one. CI run 45027731473 showed curl 8.5 on 24.04 exiting 26
+on their `--variable` file reads while curl 8.18 on 26.04 read them; issue #9924 records that
+break.
 """
 
 import base64
@@ -30,26 +36,55 @@ from validate.validate_lib.secrets_case import seal_host
 
 NODES = ("daniel-server", "daniel-box")
 NAME = "install {host}'s real package, and no unit fails"
-# What a real node has from its Ubuntu server install and the image lacks.
-SERVER_PACKAGES = ("netplan.io", "nftables")
+# What a real node has from its Ubuntu server install and the image lacks. claude-agent-home
+# runs openssh-client's ssh-keygen.
+SERVER_PACKAGES = ("netplan.io", "nftables", "openssh-client")
 # The operator's per-user tools, which the dotfiles repo installs and the package does not.
 DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude")
 EXIT_0 = "#!/bin/sh\nexit 0\n"
+# The agent's dotfiles source and repo clone. claude-agent-setup clones each from GitHub only
+# while its .git is missing, and no name resolves once the seed has run.
+AGENT_CLONES = (
+    "/var/lib/claude/.local/share/chezmoi/.git",
+    "/var/lib/claude/server/.git",
+)
+# The image masks systemd-udevd, so that no case reaches the runner's devices through
+# --privileged. A node runs udevd, which reconcile's udev arm reloads when a shipped rule changes.
+UDEVADM_STUB = "/usr/local/sbin/udevadm"
+# Every container shares the runner's virtual consoles through --privileged, so logind starts a
+# getty on each console another case's container touches, and they trip each other's start
+# limits. The image masks getty@tty1 for that reason; a node container masks the rest.
+GETTY_TEMPLATES = ("getty@.service", "autovt@.service")
 # Long enough for a forked service that dies, or a restart loop's RestartSec, to show.
 SETTLE_SECONDS = 30
 # Under `Container.sh`'s 900-second default, which kills the exec and drops its output.
 STEP_SECONDS = 840
 UNIT_PROPERTIES = "Id,ActiveState,SubState,NRestarts"
-# Each unit whose start needs something only the real host has, and that thing. A drop-in swaps
-# its ExecStart= for `sleep`, so its other lines still load and its enable link still starts it.
+# Each unit whose start needs something only the real host has, and that thing. A drop-in clears
+# what runs or changes directory before its ExecStart= and swaps that for `sleep`, so its other
+# lines still load and its enable link still starts it.
 STUBBED_UNITS = {
     "coredns-host.service": "daniel-box's LAN address, which its listener binds",
     "homelab-apt-repo.service": "daniel-box's LAN address, which its listener binds",
-    "deploy-ui.service": "the Python uv runs it with, which the dotfiles repo installs",
+    "deploy-ui.service": "the operator's checkout, its working directory, and the uv the"
+    " dotfiles repo installs",
+    "homelab-claude-rc.service": "the operator's checkout, its working directory, and a"
+    " logged-in Claude Code",
 }
 STUB_DROPIN = (
-    "[Service]\nExecStart=\nExecStart=/bin/sleep infinity\n"
-    "ExecReload=\nExecReload=/bin/true\n"
+    "[Service]\nWorkingDirectory=/\nBindPaths=\nExecStartPre=\n"
+    "ExecStart=\nExecStart=/bin/sleep infinity\nExecReload=\nExecReload=/bin/true\n"
+)
+# The same for each oneshot unit, whose ExecStart= becomes `true` so that its start returns.
+STUBBED_ONESHOTS = {
+    "homelab-builder.service": "a Python download, and no name resolves once the seed has run",
+    "homelab-renovate-agent-setup.service": "a Claude Code download from claude.ai, and no name"
+    " resolves once the seed has run",
+    "homelab-claude-guardrail-audit.service": "the kernel's audit control, which it refuses"
+    " outside the initial PID namespace",
+}
+ONESHOT_DROPIN = (
+    "[Service]\nWorkingDirectory=/\nExecStartPre=\nExecStart=\nExecStart=/bin/true\n"
 )
 
 
@@ -88,23 +123,37 @@ def seed_node_host(c: Container) -> None:
     The nodes ship the Pi's sshd, ufw, auditd, postfix, hosts and modules-load subjects, so they
     get `seed_pi_host`, which unmounts /etc/resolv.conf: no name resolves after it, so every
     fetch from the archive comes first. A node adds the Ubuntu server packages in
-    SERVER_PACKAGES, the dotfiles tools in DOTFILES_TOOLS as stubs that exit 0, and a drop-in on
-    each STUBBED_UNITS unit.
+    SERVER_PACKAGES, the dotfiles tools in DOTFILES_TOOLS and `udevadm` as stubs that exit 0,
+    the agent's clones in AGENT_CLONES, and a drop-in on each STUBBED_UNITS and
+    STUBBED_ONESHOTS unit.
     """
     c.ok(
         "DEBIAN_FRONTEND=noninteractive apt-get install -y"
         f" {' '.join(SERVER_PACKAGES)} < /dev/null"
     )
     seed_pi_host(c)
-    for path in DOTFILES_TOOLS:
+    for path in (*DOTFILES_TOOLS, UDEVADM_STUB):
         _put(c, path, EXIT_0, "0755")
     c.ok("chown -R ubuntu:ubuntu /home/ubuntu/.local")
-    for unit in STUBBED_UNITS:
-        _put(c, f"/etc/systemd/system/{unit}.d/10-test.conf", STUB_DROPIN, "0644")
+    c.ok(f"install -d {' '.join(AGENT_CLONES)}")
+    for units, dropin in (
+        (STUBBED_UNITS, STUB_DROPIN),
+        (STUBBED_ONESHOTS, ONESHOT_DROPIN),
+    ):
+        for unit in units:
+            _put(c, f"/etc/systemd/system/{unit}.d/10-test.conf", dropin, "0644")
     c.ok("systemctl daemon-reload")
 
 
+def mask_gettys(c: Container) -> None:
+    """Mask the GETTY_TEMPLATES in container `c`, and clear what their instances did before."""
+    patterns = " ".join(f"'{t.replace('@.', '@*.')}'" for t in GETTY_TEMPLATES)
+    c.ok(f"systemctl mask {' '.join(GETTY_TEMPLATES)}")
+    c.ok(f"systemctl stop {patterns} && systemctl reset-failed {patterns}")
+
+
 def _install(cases, c: Container, host: str) -> None:
+    mask_gettys(c)
     seal_dir = seal_host(cases, c, host)
     head = seal_dir.parent / "head"
     host_mode.write_packages([host_mode.render_host(host, sops_dir=seal_dir)], head)
