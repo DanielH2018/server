@@ -22,8 +22,7 @@
 #      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
 #   5  create the users homelab-<hostname> declares in sysusers.d, then install homelab-tools,
 #      homelab-updater and homelab-<hostname>, then systemd-sysusers and systemd-tmpfiles --create
-#      (--local-build builds the three .deb files from the clone, then installs them);
-#      on the Pi, then log2ram from the Azlux source its package ships
+#      (--local-build builds the three .deb files from the clone, then installs them)
 #   6  the Pi and daniel-box: stop and disable systemd-resolved, and on the Pi start
 #      homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
@@ -139,7 +138,6 @@ SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
 HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
-AZLUX_APT="-o Dir::Etc::sourcelist=sources.list.d/azlux.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
 
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
@@ -698,21 +696,6 @@ systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
 if [ -n "$k3s_unit" ]; then
     echo "bootstrap-host: $k3s_unit stays stopped until the operator starts it, as docs/host-packages.md, Rebuilding a cluster node, says"
-fi
-# The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
-# the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
-# would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.
-if [ "$host" = daniel-pi ] &&
-    ! dpkg-query -W -f='${Status}' log2ram 2> /dev/null | grep -q 'install ok installed'; then
-    # Azlux's host is outside the kit, and an outage must not keep step 6 from starting wg-easy.
-    # shellcheck disable=SC2086
-    if apt-get update --error-on=any $AZLUX_APT &&
-        apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confnew log2ram; then
-        rm -f "$ROOT/etc/log2ram.conf.dpkg-old"
-        echo "bootstrap-host: installed log2ram, which mounts /var/log at the next boot"
-    else
-        echo "bootstrap-host: warning: log2ram is not installed, so /var/log stays on the SD card; rerun this script once packages.azlux.fr answers" >&2
-    fi
 fi
 stop_after 5
 

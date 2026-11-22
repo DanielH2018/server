@@ -212,6 +212,33 @@ package carries its own copy of `ci_verdict.py`. An older copy reads a skipped b
 `pending` and waits for the gate job's own conclusion, which costs the wait for a runner that
 `jobs_verdict` exists to remove.
 
+## The bootstrap legs run two shards per release
+
+**Three package builds on one 4-CPU runner cost about 15 s per leg, and no leg ends last.**
+`host_packages_bootstrap` runs two shards per release, and
+`scripts/validate/validate_lib/bootstrap_plan.py` deals three builds and one kit red to each.
+On 2026-11-22, before the cut from three shards to two, 19 pull-request runs measured these
+figures:
+
+- each leg ran two builds at once, and each build took 55 to 61 s;
+- the bootstrap case step took 57 to 83 s;
+- the last bootstrap leg ended 100 to 448 s before the last `host_packages` leg.
+
+The five pull-request runs after the cut that ran host legs on both releases are 45053197910,
+45054223562, 45056306349, 45061101940 and 45068121495. Each had four bootstrap legs, and
+their 20 legs measured these figures:
+
+- the bootstrap case step took 71 to 100 s, and 8 of the 20 legs ran past 83 s;
+- each bootstrap leg ended 320 to 441 s before the last `host_packages` leg.
+
+The smallest margin, 320 s, is larger than a 198 s wait for a runner, so a bootstrap leg
+still ends before the `host_packages` legs after a wait that long. Restore three shards per
+release if a bootstrap case step grows past about 120 s or a bootstrap leg ends last.
+
+A pull request that edits the test image's Dockerfile builds the image in each bootstrap leg.
+In run 45069920787 that build took about 120 s of a 230 s leg, while the case step took 88 to
+91 s.
+
 ## The plan
 
 The phases run in order, and each slice is one pull request.

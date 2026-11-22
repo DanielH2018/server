@@ -234,6 +234,17 @@ A host filesystem is over 90% full.
 - Longhorn stops scheduling replicas on a node at 75%, so a node root this full already
   refuses new replicas.
 
+### `HostMemoryAvailableLow`
+
+`MemAvailable` on daniel-box or daniel-server stayed under 8 GiB for 10 minutes. The floor is
+a typical-day floor, and this alert is its check (`docs/claude-code-rc-caps.md`).
+
+- Read `free -h`, then the top memory cgroups. A fleet whose memory is mostly anon explains it,
+  because `MemoryLow` cannot move anon pages out of RAM.
+- Record whether a pod was evicted or OOM-killed during the episode. The operator's 2026-12-06
+  re-read of the 14-day `MemAvailable` minimum uses that to decide on systemd-oomd for
+  `user.slice` (#9989).
+
 ### `LonghornBackupHealthNotReporting`
 
 No `longhorn-backup-health` verdict newer than 25 minutes reached Prometheus, so nothing

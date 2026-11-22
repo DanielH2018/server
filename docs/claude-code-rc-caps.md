@@ -185,6 +185,13 @@ floor with the fleet at its cap. With all-anon fleet memory at the cap, daniel-b
 protection only widens the gap. The floor stays a typical-day floor until the operator
 re-rules on it ([#9993](https://github.com/DanielH2018/server/issues/9993)).
 
+The operator ruled on 2026-11-22 (option 1 of #9993) that the floor is a typical-day floor,
+with both fleet caps unchanged and no systemd-oomd kill. The `HostMemoryAvailableLow` alert is
+its check: it warns when `node_memory_MemAvailable_bytes` stays under 8 GiB for 10 minutes on
+daniel-box or daniel-server. If it fires during an episode in which a pod was evicted or
+OOM-killed, the next step is systemd-oomd on `user.slice`
+([#9989](https://github.com/DanielH2018/server/issues/9989)).
+
 To verify a deploy, read the configured value and the kernel's value. Read
 `kubepods.slice` again after the next k3s start, which is when kubelet resets it:
 
