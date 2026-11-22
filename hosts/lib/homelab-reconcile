@@ -98,6 +98,7 @@ that work.
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """
 
+import enum
 import fcntl
 import hashlib
 import json
@@ -450,25 +451,56 @@ def stop(units: list[str]) -> set[str]:
 OWNERS: dict[str, set[str] | None] = {}
 
 
-def owned(path: Path) -> bool | None:
-    """True when a package owns `path`, False when none does, None when dpkg cannot say."""
+class Ownership(enum.Enum):
+    """How the installed packages own a legacy path."""
+
+    NONE = "none"
+    FILE = "file"  # dpkg removes it when its package drops it
+    CONFFILE = "conffile"  # a live conffile, which a later upgrade can leave behind as obsolete
+
+
+def ownership(path: Path) -> Ownership | None:
+    """How packages own `path`, or None when dpkg cannot say.
+
+    An owner that lists `path` as an obsolete conffile does not count: dpkg never writes that
+    file again, so a legacy entry may remove it.
+    """
     key = str(path)
     owners = OWNERS[key] if key in OWNERS else lines.owners([key])[key]
-    return None if owners is None else bool(owners)
+    if owners is None:
+        return None
+    kinds = set()
+    for owner in owners:
+        listed = lines.conffiles(owner)
+        if listed is None:
+            return None
+        if key not in listed:
+            kinds.add(Ownership.FILE)
+        elif not listed[key]:
+            kinds.add(Ownership.CONFFILE)
+    for kind in (Ownership.CONFFILE, Ownership.FILE):
+        if kind in kinds:
+            return kind
+    return Ownership.NONE
 
 
-def retire_path(path: Path) -> bool:
+def retire_path(path: Path) -> bool | None:
     """Remove an unowned legacy path, and say whether the entry is retired.
 
-    A directory goes only when it is empty, through `rmdir`. A non-empty one stays and fails
-    the entry, so a package lists a directory after the files in it, and reconcile never
-    deletes contents nothing named.
+    Returns True when the entry is retired, False when it failed, and None when it stays
+    pending without failing the run: a live conffile, which a release upgrade can later leave
+    behind as obsolete. A directory goes only when it is empty, through `rmdir`. A non-empty
+    one stays and fails the entry, so a package lists a directory after the files in it, and
+    reconcile never deletes contents nothing named.
     """
-    owner = owned(path)
+    owner = ownership(path)
     if owner is None:
-        log(f"dpkg -S {path} failed; not removing it", ERR)
+        log(f"dpkg cannot say who owns {path}; not removing it", ERR)
         return False
-    if owner:
+    if owner is Ownership.CONFFILE:
+        log(f"keeping {path}: a package ships it as a conffile")
+        return None
+    if owner is Ownership.FILE:
         log(f"{path} is owned by a package; leaving it")
         return True
     target = under_root(path)
@@ -519,7 +551,8 @@ def template_unit(unit: str) -> bool:
     return TEMPLATE_NAME.fullmatch(unit) is not None
 
 
-def retire(entry: Legacy) -> bool:
+def retire(entry: Legacy) -> bool | None:
+    """Whether `entry` is retired; None while it waits on its path's owner, as retire_path says."""
     match entry:
         case LegacyCron(cron, user):
             return retire_cron(cron, user)
@@ -850,10 +883,12 @@ def act(manifest: Manifest, prev: AppliedState) -> tuple[bool, dict]:
             ok = False
         elif key in kept_for:
             log(f"keeping {key}: {kept_for[key]} failed to start")
-        elif retire(entry):
-            retired.append(key)
         else:
-            ok = False
+            outcome = retire(entry)
+            if outcome:
+                retired.append(key)
+            elif outcome is False:
+                ok = False
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest.unknown_arms:
