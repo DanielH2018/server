@@ -31,7 +31,7 @@ PrivateTmp=yes
 SyslogLevel=notice
 SyslogIdentifier=claude-restart
 # The lock wait, the rollout wait in the config (600s) and the reads around it.
-TimeoutStartSec=15min
+TimeoutStartSec={{ pins.restart_timeout_s }}
 ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
 # One restart at a time: the rate limit reads the log the restart before it wrote.
 ExecStart=/usr/bin/flock -w 120 {{ pins.restart_state_dir }}/lock \
