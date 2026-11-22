@@ -231,8 +231,8 @@ takes that label, so the unit pages once, and `WarningUnresolved` drops the labe
 escalation still pages
 (`tests/services/test_alertmanager_routing.py::test_a_unit_failure_its_hook_already_paged_reaches_only_the_blackhole`).
 The triage poll's hook-paged `SystemdUnitsFailed` also inhibits `ClaudeTriagePollNotReporting`
-on the same `origin`, and that rule's `for: 5m` lets the source fire first, so a poll that
-fails every tick pages once (`tests/services/test_alertmanager_triage_poll_inhibit.py`). A
+on the same `origin`, and that rule's `for: 7m` lets the source fire first at every phase of the
+5-minute check, so a poll that fails every tick pages once (`tests/services/test_alertmanager_triage_poll_inhibit.py`). A
 pair with a `for:` is pending when `HostCheckOverdue` would fire, so `HostCheckOverdue` skips
 a check whose pair is pending, and fires 2 minutes after the pair, held by it.
 A check that writes a

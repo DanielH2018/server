@@ -843,11 +843,13 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudememorysyncnotreporting
       # DECIDED: one page per fault. A poll that fails pages through its own OnFailure hook, and
       # its SystemdUnitsFailed, carrying paged_by="homelab-alert", inhibits this rule on the same
-      # origin (alertmanager-secret.yaml.j2). The `for: 5m` lets that source fire first: the poll
-      # fails about 2m after its last clean run, SystemdUnitsFailed fires 10m after the 5-minute
-      # check first sees the failure, and this rule fires 5m after the 660s deadline. The source
-      # therefore leads unless the check sees the failure more than about 4m after it happens.
-      # A stopped or disabled timer never fails the unit, so this rule alone pages it, 5m later
+      # origin (alertmanager-secret.yaml.j2). The `for: 7m` lets that source fire first at every
+      # phase of the 5-minute systemd-units check. Take the last clean run as 0: the poll fails
+      # at about 2m, the check sees it between 2m and 7m, and SystemdUnitsFailed fires 10m after
+      # that sighting, so by 17m at the latest. This rule fires 7m after its 660s deadline
+      # crosses, at 19m, so the source leads even for a check that sees the failure last. A
+      # `for: 5m` fired at 17m and could page twice in that last phase.
+      # A stopped or disabled timer never fails the unit, so this rule alone pages it, 7m later
       # than with no hold.
       - alert: ClaudeTriagePollNotReporting
         hosts: [daniel-box]
@@ -858,7 +860,7 @@ groups:
               absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="${host}"}[660s])
           )
           unless on (origin) (up{job="${job}"} == 0)
-        for: 5m
+        for: 7m
         labels:
           severity: warning
           service: ${host}
