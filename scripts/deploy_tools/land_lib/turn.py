@@ -22,8 +22,8 @@ turn back for the wait's length and asks for it again before it goes on
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
 reads `merged` stops waiting: the holder merged its PR. One whose place reads `alone` leaves
-the line and waits on for the turn: a batch that tested its PR was not green, and it forms no
-batch of its own (`batch.py`).
+the line and waits on for the turn: a batch that tested its PR was not green and the holder's
+own run was not red, and it forms no batch of its own (`batch.py`).
 
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.

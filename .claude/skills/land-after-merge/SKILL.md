@@ -60,8 +60,9 @@ the rule.
 holds the turn tests the drafts standing in line with its own in one CI run and merges them
 in order (`land_lib/batch.py`). Your landing then prints `the landing that holds the turn
 merged PR #N with its own` and goes on to the deploy and its verdict as usual. If that
-batch's run was red it prints `a batch that tested PR #N was not green; it lands alone` and
-gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing forming a
+batch's run was red and the holder's own PR then passed alone, it prints `a batch that
+tested PR #N was not green; it lands alone` and gets a run of its own. When the holder's own
+PR was the red one, your landing waits on in the line. Neither is a fault. `LAND_BATCH=0` stops one landing forming a
 batch.
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only

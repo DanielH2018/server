@@ -42,6 +42,10 @@ class Ledger:
     # answer. `tags_label` cannot give the owner, since it holds every tag the promotion carried.
     hold_sha: str = ""
     hold_owner: str = ""
+    # Seconds `merge.await_merge` waited for the landing turn, its batch's run excluded.
+    turn_wait: int | None = None
+    # PRs the run this landing gave its draft in the turn tested, its own included (`batch.form`).
+    batch: int | None = None
 
     def __setattr__(self, name: str, value: object) -> None:
         """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
@@ -89,6 +93,10 @@ def _phase(a: float | None, b: float | None) -> str:
     return "" if a is None or b is None else str(int(b - a))
 
 
+def _count(n: int | None) -> str:
+    return "" if n is None else str(n)
+
+
 def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
     """The logfmt record, quoted by `host_lib.logfmt`; an unreached stamp leaves its field empty."""
     return logfmt(
@@ -104,5 +112,7 @@ def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
             "deploy": _phase(ledger.t_ci, ledger.t_deploy),
             "total": int(total),
             "tags": ledger.tags_label or "none",
+            "turn_wait": _count(ledger.turn_wait),
+            "batch": _count(ledger.batch),
         }
     )

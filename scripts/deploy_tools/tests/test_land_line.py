@@ -44,6 +44,14 @@ def test_an_answer_reaches_the_landing_that_stands_with_that_head(the_line):
     assert _waiting(the_line) == [f"7 {MOVED}"]
 
 
+def test_a_second_answer_leaves_the_first_in_place(the_line):
+    # A holder whose split members another holder stacked and merged meanwhile.
+    the_line("join", "7", HEAD)
+    the_line("answer", "7", HEAD, line.MERGED)
+    the_line("answer", "7", HEAD, line.ALONE)
+    assert the_line("stand", "7", HEAD) == line.MERGED
+
+
 def test_a_landing_that_joins_never_reads_an_answer_left_for_an_earlier_one(the_line):
     the_line("join", "7", HEAD)
     the_line("answer", "7", HEAD, line.MERGED)

@@ -33,7 +33,8 @@ DIR = Path("/run/lock/homelab-land-line")
 FRESH_S = 120
 # What the holder of the turn writes into a place once it has merged that PR.
 MERGED = "merged"
-# What it writes once a batch that tested that PR was not green: the PR lands by itself.
+# What it writes once a batch that tested that PR was not green and the holder's own run
+# was not red: the PR lands by itself.
 ALONE = "alone"
 _SSH_TIMEOUT_S = 30
 
@@ -53,7 +54,8 @@ def _op(directory: str, op: str, *args: str) -> str:
     - `leave <pr>` removes the place.
     - `waiting <fresh_s>` returns a `<pr> <head>` line for each place of this user that is
       fresh and has no answer, and removes this user's stale places.
-    - `answer <pr> <head> <what>` writes `what` into the place, if it still names `head`.
+    - `answer <pr> <head> <what>` writes `what` into the place, if it still names `head`
+      and holds no answer yet.
 
     Raises:
         ValueError: The PR is not a number, or the operation has no such name.
@@ -122,7 +124,7 @@ def _op(directory: str, op: str, *args: str) -> str:
                 found.append(f"{name} {words[0]}")
         return "\n".join(found)
     pr, head, what = args
-    if mine(pr)[:1] == [head]:
+    if mine(pr) == [head]:
         write(pr, head, what)
     return ""
 

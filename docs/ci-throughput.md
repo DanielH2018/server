@@ -350,7 +350,7 @@ The slices:
    request that holds the batch's heads stacked on master, and that PR's run is the batch's
    one full run. Its gate rebuilds each stacked tree from master and the heads and records
    it on each head. Each member then merges in turn, and its own run and master's prove the
-   recorded tree and skip. Every member of a red batch lands alone.
+   recorded tree and skip. The holder's own run splits a red batch (*A red batch* below).
 1. **B4, landed.** D10 below rules its shape, in five pull requests, each landed before
    the next:
     1. A green ready PR that master moved past goes back in the line as a draft
@@ -528,20 +528,33 @@ B3 lands in four steps, each one exercised before the next:
    The first batch ran on 2026-11-14. The landing of PR 8546 stacked PRs 8547 and 8552
    behind it. One run of 7 min 54 s tested the three, they merged within 90 seconds of
    each other, and master's run after each merge took 13 to 17 seconds.
-1. **A red batch.** Every member of a red batch lands alone. With a red rate of 3.7% a batch
-   of four is red about one time in seven, which is where the estimate of 0.3 to 0.4 runs a
-   merge comes from.
+1. **A red batch.** The holder's own run splits a red batch in two: the holder's PR and
+   its members (`land_lib/batch.py:_settle`). With a red rate of 3.7% a batch of four is red
+   about one time in seven, which is where the estimate of 0.3 to 0.4 runs a merge comes
+   from.
 
-   The landing that held the turn writes `alone` into each member's place when the batch's
-   run is red or gives no verdict in 45 minutes. A member's own landing reads it on its next
-   poll, leaves the line, and waits on for the turn as a ready PR does. When it takes the
-   turn it forms no batch and gets its own run, which says whether it was the red one. A
+   When the batch's run is red or gives no verdict in 45 minutes, the holder forms no
+   second batch and gets a run of its own PR, which it owes in any case. When that run is
+   red, the red PR was the holder's, and the members stay in the line unanswered for the
+   next holder to stack. When it is green, or the holder's landing ends another way, the
+   holder writes `alone` into each member's place. A member's own landing reads it on its
+   next poll, leaves the line, and waits on for the turn as a ready PR does. When it takes
+   the turn it forms no batch and gets its own run, which says whether it was the red one. A
    place that carries an answer is not listed as waiting, so the next landing to take the
-   turn does not stack that PR again in the seconds before it leaves.
+   turn does not stack that PR again in the seconds before it leaves. A place keeps its
+   first answer, so a later one cannot turn `merged` into `alone`.
 
-   Without the answer the members stayed in the line, and each later landing stacked the
-   red one again: a batch of four whose last PR is red cost three red batches and four
-   runs alone. With it the same batch costs its one run and four runs alone.
+   **HISTORY —** Before any answer, the members stayed in the line, and each later landing
+   stacked the red one again: a batch of four whose last PR is red cost three red batches
+   and four runs alone. Telling every member `alone` cut that to the batch's one run and
+   four runs alone, the holder's included. On 2026-11-20, 6 PRs paid that way
+   ([#9667](https://github.com/DanielH2018/server/issues/9667)).
+
+   The split never costs a run more than every member landing alone would. A batch of four
+   whose red PR is the holder's costs its run and the holder's, and its three members go
+   back to the line to be stacked again. One whose red PR is a member costs what it cost
+   before. A member goes back to the line only behind a holder whose own run is red, so a
+   red member is stacked again only while every holder it is stacked behind is red too.
 
 Four facts about the workflows shaped those steps:
 
