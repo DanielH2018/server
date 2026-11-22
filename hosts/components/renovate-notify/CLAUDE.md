@@ -120,7 +120,7 @@ An empty `last_notified` means nothing needs a human — not that the notifier i
 - **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
   link from a package version, or reverting this component, stops the timer on the install that
   drops it.
-- **Authoritative sources:** GitHub's REST API, as host_lib.github_get reads it.
+- **Authoritative sources:** GitHub's REST API, as github_rest.github_get reads it.
 - **Abort valves:** the fingerprint gate, which keeps a standing problem to one page, and the updater's
   hold (docs/host-packages.md).
 - **Required evidence, every run:** renovate-notify.prom in node_exporter's textfile directory, which
