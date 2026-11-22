@@ -5,6 +5,7 @@ import subprocess
 import pytest
 
 from dev.ci_slot_cost import (
+    NO_STEP,
     empty_leg_line,
     head_line,
     main,
@@ -102,10 +103,12 @@ def test_a_legs_setup_is_its_span_outside_the_suite_step_with_action_shas_folded
     cost = run_cost([_leg(1, 0, 5, (20, 140)), _leg(2, 0, 9, (30, 150))])
 
     # Leg 1 holds its runner 5..142 and its suite 20..140; leg 2 holds 9..152, suite 30..150.
+    # Leg 2's steps end at 150, so its last 2s belong to no step.
     assert cost["leg_outside_s"] == [17, 23]
     assert cost["leg_steps"][1] == {
         "Run actions/checkout@v7.0.1": 6,
         "Run DanielH2018/server/.github/actions/setup": 15,
+        NO_STEP: 2,
     }
     assert cost["families"]["pytest"]["jobs"] == 2
 
