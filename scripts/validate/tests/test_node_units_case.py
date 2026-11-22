@@ -28,12 +28,13 @@ RUNNING = {
     "Result": "success",
     "ExecMainStatus": "0",
     "NRestarts": "0",
+    "MainPID": "1404",
 }
 
 
-def test_a_running_upsmon_daemon_is_clean():
-    assert nut_monitor_problems(RUNNING, "/usr/sbin/upsmon") == []
-    assert nut_monitor_problems(RUNNING, "/usr/lib/nut/upsmon") == []
+def test_a_running_upsmon_parent_is_clean():
+    assert nut_monitor_problems(RUNNING, "/usr/sbin/upsmon", "0") == []
+    assert nut_monitor_problems(RUNNING, "/usr/lib/nut/upsmon", "0") == []
 
 
 def test_a_daemon_that_never_executed_is_flagged():
@@ -43,20 +44,35 @@ def test_a_daemon_that_never_executed_is_flagged():
         "SubState": "failed",
         "Result": "exit-code",
         "ExecMainStatus": "203",
+        "MainPID": "0",
     }
-    assert nut_monitor_problems(failed, "") == [
+    assert nut_monitor_problems(failed, "", "") == [
         "nut-monitor is failed/failed (result exit-code, exit status 203)",
         "nut-monitor's main process runs nothing, not upsmon",
     ]
 
 
 def test_the_mode_wrapper_or_a_restart_loop_is_flagged():
-    assert nut_monitor_problems(RUNNING, "/usr/bin/dash") == [
+    assert nut_monitor_problems(RUNNING, "/usr/bin/dash", "0") == [
         "nut-monitor's main process runs /usr/bin/dash, not upsmon"
     ]
-    assert nut_monitor_problems({**RUNNING, "NRestarts": "2"}, "/usr/sbin/upsmon") == [
-        "nut-monitor restarted 2 times"
+    assert nut_monitor_problems(
+        {**RUNNING, "NRestarts": "2"}, "/usr/sbin/upsmon", "0"
+    ) == ["nut-monitor restarted 2 times, not 0"]
+
+
+def test_the_unprivileged_child_as_main_process_is_flagged():
+    assert nut_monitor_problems(RUNNING, "/usr/sbin/upsmon", "107") == [
+        "nut-monitor's main process runs as uid 107, not root"
     ]
+
+
+def test_a_unit_that_did_not_restart_after_its_child_died_is_flagged():
+    assert nut_monitor_problems(RUNNING, "/usr/sbin/upsmon", "0", restarts=1) == [
+        "nut-monitor restarted 0 times, not 1"
+    ]
+    restarted = {**RUNNING, "NRestarts": "1"}
+    assert nut_monitor_problems(restarted, "/usr/sbin/upsmon", "0", restarts=1) == []
 
 
 def test_an_installer_that_sorts_every_wifi_file_is_clean():
