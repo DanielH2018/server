@@ -102,27 +102,22 @@ def _env(service: dict) -> dict[str, str]:
 # --- labels -----------------------------------------------------------------------------------
 
 
-def fragment_problems(
-    config: str, fragments: tuple[str, ...] = REQUIRED_FRAGMENTS
-) -> list[str]:
-    """Each fragment the rendered `config` lacks, and each that carries a Jinja expression.
+def fragment_problems(config: str) -> list[str]:
+    """Each Jinja delimiter left in the rendered `config`, then each fragment it lacks.
 
-    A fragment holding `{{` matches an unrendered template, so it is flagged even when
-    `config` carries it.
+    A fragment that carries a Jinja expression could only match such an unrendered span.
     """
-    problems = [f"Jinja in {f!r}" for f in fragments if "{{" in f]
-    return problems + [f"missing {f!r}" for f in fragments if f not in config]
+    problems = [f"unrendered {d!r}" for d in ("{{", "{%") if d in config]
+    return problems + [f"missing {f!r}" for f in REQUIRED_FRAGMENTS if f not in config]
 
 
 def test_config_carries_every_fragment_is_clean(config):
     assert fragment_problems(config) == []
 
 
-def test_a_fragment_with_a_jinja_expression_is_flagged(config):
-    """Even against a config that left the same expression unrendered."""
-    jinja = '"machine" = "{{ inventory_hostname }}"'
-    unrendered = config.replace('"machine" = "daniel-pi"', jinja)
-    assert fragment_problems(unrendered, (jinja,)) == [f"Jinja in {jinja!r}"]
+@pytest.mark.parametrize("span", ["{{ alloy_extra }}", "{% if alloy_extra %}"])
+def test_a_config_with_an_unrendered_jinja_span_is_flagged(config, span):
+    assert fragment_problems(f"{config}\n{span}\n") == [f"unrendered {span[:2]!r}"]
 
 
 def test_a_config_missing_a_fragment_is_flagged(config):
