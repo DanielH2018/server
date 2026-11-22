@@ -105,9 +105,21 @@ def test_log2ram_runs_the_packaged_copy_and_no_live_restart_follows_a_change(pac
     # Each assignment resets the packaged command first, or systemd would run both.
     assert dropin.count("ExecStart=\n") == dropin.count("ExecStop=\n") == 1
     assert package.files["/usr/lib/homelab/log2ram"][1] == 0o755
-    assert "/usr/local/bin/log2ram" not in package.files
+    assert "/usr/bin/log2ram" not in package.files
     # Restarting log2ram unmounts /var/log under whatever is writing to it.
     assert package.policies["log2ram.service"] == "manual"
+
+
+def test_the_package_depends_on_ubuntu_s_log2ram_and_reconcile_removes_azlux_s_source(
+    package,
+):
+    assert "log2ram" in package.depends
+    legacy = {entry["path"] for entry in package.legacy if "path" in entry}
+    assert {
+        "/etc/apt/sources.list.d/azlux.sources",
+        "/etc/apt/sources.list.d/azlux.sources.distUpgrade",
+        "/usr/share/keyrings/azlux-archive-keyring.gpg",
+    } <= legacy
 
 
 def test_log2ram_is_held_at_every_boot_and_reconcile_once_it_is_installed(package):

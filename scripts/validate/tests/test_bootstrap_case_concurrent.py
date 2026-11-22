@@ -71,10 +71,9 @@ def _green_output(item: case.Planned) -> tuple[str, str]:
     packages = ("homelab-tools", "homelab-updater", f"homelab-{item.host}")
     debs = " ".join(f"/tmp/w/debs/{p}_0.1+gabc_all.deb" for p in packages)
     calls = f"install -y {debs}\n"
-    if item.host == "daniel-pi":
-        calls += "update -o x=sources.list.d/azlux.sources\ninstall -y log2ram\n"
+    simulated = (*packages, "log2ram") if item.host == "daniel-pi" else packages
     stdout = f"{item.marker}\n" + "".join(
-        f"Inst {p} (0.1+gabc local-deb [all])\n" for p in packages
+        f"Inst {p} (0.1+gabc local-deb [all])\n" for p in simulated
     )
     return stdout, calls
 

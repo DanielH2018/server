@@ -48,9 +48,9 @@ turns off readahead on a random-access device, worth about 8× lower swap-in lat
 
 ## Log2Ram, and why `--sparse` is patched out
 
-`homelab-daniel-pi` ships the Azlux source, and step 5 of `hosts/bootstrap-host.sh` installs
-`log2ram` from it to spare the SD card from log writes. A rebuilt Pi moves `/var/log` to RAM at
-its first reboot after that step.
+`homelab-daniel-pi` depends on Ubuntu's `log2ram` package, so step 5 of `hosts/bootstrap-host.sh`
+installs it with the host package to spare the SD card from log writes. A rebuilt Pi moves
+`/var/log` to RAM at its first reboot after that step.
 **The package runs a copy with `--sparse` patched out of both of Log2Ram's `rsync` command lines**, because
 `--sparse` with `--inplace` corrupts any file whose content ends in NUL bytes. rsync seeks
 over the source's NUL run rather than writing it, and `--inplace` writes into the live
@@ -381,8 +381,8 @@ on the card until the next boot. The Ubuntu 26.04 upgrade did this on 2026-11-21
 when it replaced Azlux's `log2ram 1.7.2` with Ubuntu's `1.7.2+ds-1build1`. `PiSdHealthFailed`
 then paged three times between 22:37 and 00:40 with `errors_count=0` on every line, until the
 00:35 reboot remounted the tmpfs. The 2026-11-12 page had the same leg but a different cause:
-log2ram's size guard refused at boot. #9941 tracks the two apt sources that both offer the
-package.
+log2ram's size guard refused at boot. Ubuntu's archive is the package's only source on the Pi,
+so no second source can offer a higher version.
 
 **The `log2ram` package stays held, so it upgrades only in a planned window that ends in a
 reboot** (#9940). `homelab-log2ram-hold.service`, from the `pi-tuning` component, runs

@@ -154,8 +154,8 @@ nodes.
 
 ## The deb822 repo migration
 
-The APT repo is a deb822 `.sources` file, the same shape as `hosts/components/apt-azlux/`'s Log2Ram
-repo. `hosts/components/apt-docker/` ships the source and its key as package files.
+The APT repo is a deb822 `.sources` file. `hosts/components/apt-docker/` ships the source and
+its key as package files.
 
 ## The `default-address-pools` derivation
 

@@ -9,7 +9,7 @@
 #   /etc/default/acct (acct), /etc/audit/auditd.conf (auditd);
 # - unowned, so the line arm: /boot/firmware/config.txt, /etc/locale.gen (written by locales'
 #   postinst) and /etc/hosts (the latter is in pi-resolver);
-# - owned and not a conffile: /usr/local/bin/log2ram (log2ram). It takes the homelab copy below.
+# - owned and not a conffile: /usr/bin/log2ram (log2ram). It takes the homelab copy below.
 #   No path needs a divert.
 # - /etc/default/earlyoom (earlyoom, a conffile) becomes a drop-in for earlyoom.service that
 #   clears EnvironmentFile= and sets EARLYOOM_ARGS.
@@ -26,11 +26,10 @@
 #
 # What the package does not carry, and why:
 #
-# - The package installs zram-tools, watchdog and earlyoom through `depends:`. It cannot depend
-#   on log2ram: Azlux's apt source arrives in the same package (apt-azlux), so a rebuilt Pi
-#   could not resolve the dependency on first install. Step 5 of hosts/bootstrap-host.sh installs
-#   the log2ram package after this one, under --force-confnew, because reconcile may already have
-#   written the four lines below to /etc/log2ram.conf. log2ram mounts at the next boot.
+# - The package installs zram-tools, watchdog, earlyoom and log2ram through `depends:`, all from
+#   Ubuntu's archive. dpkg configures log2ram before this package's postinst starts reconcile, so
+#   the four lines below edit the conffile log2ram already installed. log2ram mounts at the next
+#   boot.
 # - The debloat purge (Open vSwitch, snapd, fwupd, appstream) and rsyslog's and wpa_supplicant's
 #   mask are one-time state. They persist on the live Pi, and step 4 of hosts/bootstrap-host.sh
 #   carries them for a rebuild. Step 4 also removes rsyslog's text logs, and step 7 removes the
@@ -45,6 +44,7 @@ depends:
   - zram-tools
   - watchdog
   - earlyoom
+  - log2ram
   - locales
 units:
   log2ram.service: {policy: manual}
@@ -69,7 +69,7 @@ files:
   # tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole
   # in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds
   # with SystemMaxFiles=. Log2Ram 1.7.2 is the installed version. The script stays at
-  # /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a
+  # /usr/lib/homelab/log2ram because the log2ram package owns /usr/bin/log2ram, and a
   # package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the
   # upstream script; test_pi_tuning_component.py holds the difference between the two to the two
   # `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so
@@ -149,3 +149,9 @@ lines:
   # on every run, so no activation is needed.
   - {path: /etc/apt/apt.conf.d/99update-notifier, line: "// DPkg::Post-Invoke hook removed by homelab-daniel-pi: it ran apt-check", regexp: '^\s*(//\s*)?DPkg::Post-Invoke\b'}
   - {path: /etc/apt/apt.conf.d/99update-notifier, line: "// APT::Update::Post-Invoke-Success hook removed by homelab-daniel-pi: it ran apt-check", regexp: '^\s*(//\s*)?APT::Update::Post-Invoke-Success\b'}
+legacy:
+  # Azlux's retired log2ram source. dpkg removes the two files this package once shipped; the
+  # release upgrade's unowned .distUpgrade backup stays unless reconcile removes it.
+  - {path: /etc/apt/sources.list.d/azlux.sources}
+  - {path: /etc/apt/sources.list.d/azlux.sources.distUpgrade}
+  - {path: /usr/share/keyrings/azlux-archive-keyring.gpg}
