@@ -171,7 +171,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
     return Config(
         **vars(host_config(_env, _int, _num, _env_file)),
         **vars(service_config(_env, _int, _num, _env_file)),
-        **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
+        **vars(io_config(_env, _int, _num, _env_file, problems)),
         INTERVAL=INTERVAL,
         # Touched after every completed cycle; the container healthcheck compares its mtime
         # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
