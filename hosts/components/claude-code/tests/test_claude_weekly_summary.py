@@ -197,6 +197,30 @@ def test_a_mention_in_a_diagnosis_or_an_episode_is_defused(tmp_path):
     assert "second line" in post.splitlines()[-1]
 
 
+def test_a_run_that_asked_for_a_restart_shows_the_brokers_verdict(tmp_path):
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-weekly-summary`, one post a week about the unattended runs)
+    world = World(tmp_path)
+    for episode_id, restart in (
+        ("e-1", {"name": "docs", "verdict": "restarted", "cause": "", "detail": "x"}),
+        ("e-2", {"name": "<@123>", "verdict": "refused", "cause": "not-listed"}),
+    ):
+        record = triage_record(
+            episode_id,
+            {"monitor": "IngressProbeFailed", "service": "sonarr"},
+            "diagnosed",
+            "2026-11-10 10:00 UTC",
+            {"summary": "s"},
+        )
+        world.triage({**record, "restart": restart})
+
+    world.run()
+
+    [post] = world.posts
+    assert "IngressProbeFailed:sonarr diagnosed; restart docs restarted: s" in post
+    assert "refused not-listed: s" in post
+    assert "<@" not in post
+
+
 def test_an_unparseable_record_is_counted_and_the_run_stays_up(tmp_path):
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-weekly-summary`, one post a week about the unattended runs)
     world = World(tmp_path)

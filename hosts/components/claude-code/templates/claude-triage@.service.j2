@@ -22,9 +22,10 @@ Environment=UV_PYTHON_INSTALL_DIR={{ pins.ctl_home }}/python
 SyslogLevel=notice
 # The session runs in homelab-claude-triage-session.service, which this runner starts and waits
 # for, and which holds the Claude credential. Its TimeoutStartSec, run_timeout_s
-# ({{ pins.run_timeout_s }}s), trips first, so this script still writes the record, the report
-# and the page.
-TimeoutStartSec={{ pins.run_timeout_s + 900 }}
+# ({{ pins.run_timeout_s }}s), trips first. A restart the result asks for then runs inside this
+# unit's clock too, bounded by the broker's own TimeoutStartSec ({{ pins.restart_timeout_s }}s),
+# so this script still writes the record, the report and the page.
+TimeoutStartSec={{ pins.run_timeout_s + pins.restart_timeout_s + 900 }}
 NoNewPrivileges=yes
 # DECIDED: UMask=0027, as claude-rc.service.j2 sets it. homelab-claude-triage.conf gives the
 # operator's group traverse on the state directory, so under systemd's default 0022 a record, a log or a
