@@ -158,7 +158,9 @@ files:
   # 1000; each host's package.yml caps its agent's uid.
   - {src: templates/fleet-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf}
   - {src: templates/login-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "1000 in claude_code_login_uids"}
-  - {src: templates/fleet-user-manager-oom.conf.j2, dst: /usr/lib/systemd/system/user@1000.service.d/homelab-claude-fleet-oom.conf, when: "1000 in claude_code_login_uids"}
+  # Not gated on claude_code_login_uids: fan-out and background jobs run as uid 1000 on every
+  # host, daniel-box included, whose login caps leave user-1000.slice.
+  - {src: templates/fleet-user-manager-oom.conf.j2, dst: /usr/lib/systemd/system/user@1000.service.d/homelab-claude-fleet-oom.conf}
   # Every user manager on the host reads it.
   - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf}
   - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service}

@@ -256,12 +256,11 @@ def test_a_global_oom_ranks_each_fleet_process_above_every_burstable_pod(
     assert oom_score_adjust(render(template, claude_code_fleet_oom_score_adjust=7)) == 7
 
 
-# daniel-box's claude_code_login_uids is empty, so only its agent (900) is in the fleet there.
-@pytest.mark.parametrize(
-    ("host", "uids"), [("daniel-server", (1000, 900)), ("daniel-box", (900,))]
-)
+# daniel-box's claude_code_login_uids is empty, yet its fan-out and background jobs still run
+# as 1000, so 1000 is in the fleet on both hosts.
+@pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
 def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
-    host: str, uids: tuple[int, ...]
+    host: str,
 ) -> None:
     """A user unit, such as a fan-out batch, inherits its user manager's value.
 
@@ -273,6 +272,7 @@ def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
     from renderer.renderer_lib import host as host_mode
 
     files = host_mode.render_host(host).files
+    uids = (1000, 900)
     for uid in uids:
         drop_in = user_manager_drop_in(uid)
         assert drop_in in files, f"{host} ships no {drop_in}"

@@ -211,8 +211,10 @@ cannot carry, so the value reaches the fleet by three paths:
 
 - `homelab-claude-rc.service` and `homelab-claude-bg-resume.service` set `OOMScoreAdjust=`, and
   the sessions they start inherit it.
-- A drop-in on `user@<uid>.service` for each fleet uid sets the user manager's value. Its
-  units, among them every fan-out batch `systemd-run --user` starts, inherit it.
+- A drop-in on `user@<uid>.service` sets the user manager's value for the agent's uid 900 and
+  the operator's uid 1000. Its units, among them every fan-out batch `systemd-run --user`
+  starts, inherit it. uid 1000 gets it on daniel-box too: its login caps leave
+  `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
 - The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
   login inherits sshd's 0. Raising the value needs no privilege.
 
