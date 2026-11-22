@@ -705,9 +705,20 @@ jobs:
       # every module the commit left unchanged, and a changed module is rewritten again.
       # DECIDED: no leg saves. The nightly sweep in pytest-sweep.yml saves one entry over every
       # module on master, a 9 MB archive a day, and every leg of every event restores the newest
-      # one, whatever its shard packed. A leg restores it in 1 to 2 seconds. A pull-request run reads master's entries. The key names
+      # one, whatever its shard packed. A pull-request run reads master's entries. The key names
       # the commit only so that it misses, and `restore-keys` then takes the newest sweep entry.
       # The path and the key prefix must match the sweep's save step byte for byte.
+      #
+      # DECIDED: the restore is not gated on the selection's size.
+      # A runner rewrites a module in 20 to 30 ms, so the restore saves that much for each selected module the entry
+      # holds. The restore step took 0 to 3 seconds, median 1, over 190 pull-request legs on
+      # 2026-11-22. The smallest selection a change makes is still tens of modules, because every
+      # module with no current row in the affected table is selected: a 2-path change selected 65.
+      # That leg restored in 2.5s and rewrote 13 to 14 modules in 0.3 to 0.4s, where 65 cold
+      # modules cost about 1.6s. At that floor the restore and its saving are within a second of
+      # each other, and from about 80 modules up the restore wins. A size gate would save under a
+      # second on the rare one-leg run and add a threshold that drifts with runner speed. Revisit
+      # if a leg's `count` routinely falls below about 50 modules.
       - name: Restore pytest's rewritten test modules
         if: steps.select.outputs.count != '0'
         uses: actions/cache/restore@v6.1.0
