@@ -487,8 +487,11 @@ open a PR for them. A batch `clean` never reaches falls to the weekly worktree s
 as dead once the unit is inactive and the lock is a day old (`scripts/lib/fanout_lock.py`). It
 removes each worktree once its branch is merged into `origin/master` (or its tip is an ancestor of
 the head GitHub merged, as after `land.sh` merged master into the branch, #6365) and the tree is clean,
-then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
-branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
+then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. It
+deletes the branch's origin copy first, because the "Default branch" ruleset blocks GitHub's
+delete-on-merge for it, and only when origin's tip is the landed local tip or a merged PR's head
+(`scripts/dev/fanout_lib/clean.py:delete_origin_branch`). A branch or origin copy that refuses
+to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
 later pass skips a batch it already removed rather than reading a host for a worktree that is
 gone, and `status` shows such a batch as `cleaned`. Once every batch is removed, `clean` and
 `abandon` move the manifest into `~/.claude/fanout/retired/`. `runs`, the launch gates and the
