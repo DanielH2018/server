@@ -378,18 +378,31 @@ def _ready_toggles(calls):
     return [c[1] for c in calls if c[0] == "gh" and c[1][:2] == ("pr", "ready")]
 
 
+_DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
+
+
+@pytest.mark.parametrize(
+    "head_runs",
+    [
+        [_DRAFT_RUN],
+        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "cancelled"}],
+    ],
+    ids=["draft-run", "cancelled-ready-run"],
+)
 def test_a_ready_pr_whose_head_skipped_as_a_draft_is_converted_once_and_the_wait_goes_on(
-    landing, capsys
+    landing, capsys, head_runs
 ):
     """GitHub starts no run on the ready flip, so the landing converts the PR to draft
     and back itself. The second poll after the toggle reads a run, so the wait proceeds to the
-    merge instead of ending merge-timeout."""
+    merge instead of ending merge-timeout. A ready run the draft run cancelled is past
+    cancelling, so it does not stop the conversion."""
     states = ["OPEN MERGEABLE dead"] * 5 + ["MERGED MERGEABLE dead"]
     # One skipped poll per third of the grace, then the run the toggle started goes green.
     ln, calls = _skipped_landing(
         landing,
         gh_views={"state,mergeable,headRefOid": _wait(states)},
         await_ci=[(75, _SKIPPED)] * 4 + [(0, "dead1234: green")],
+        head_runs=head_runs,
     )
     merge.await_merge(ln)
     assert _ready_toggles(calls) == [
@@ -428,20 +441,17 @@ def test_a_toggle_a_secondary_limit_refuses_says_to_wait_not_to_toggle_by_hand(
     assert ("is left as a draft" in exc.value.error) is left_draft
 
 
-_DRAFT_RUN = {"id": 1, "status": "completed", "conclusion": "skipped"}
-
-
 @pytest.mark.parametrize(
     "head_runs",
     [
         [_DRAFT_RUN, {"id": 2, "status": "queued", "conclusion": None}],
         [_DRAFT_RUN, {"id": 2, "status": "in_progress", "conclusion": None}],
-        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "cancelled"}],
+        [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "failure"}],
         subprocess.CalledProcessError(1, "gh", stderr="HTTP 404: Not Found"),
         {"workflow_runs": []},
         ["not a run"],
     ],
-    ids=["queued", "in-progress", "cancelled", "gh-fails", "not-a-list", "not-a-run"],
+    ids=["queued", "in-progress", "failed", "gh-fails", "not-a-list", "not-a-run"],
 )
 def test_a_ready_run_or_an_unreadable_run_list_stops_the_conversion(landing, head_runs):
     """The ready run's gate has no check run until its jobs finish, so await_ci reads

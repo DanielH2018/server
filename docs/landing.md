@@ -391,6 +391,13 @@ PR #6069 was marked ready at 01:39:31 on 2026-10-24, its head's only run was cre
 01:39:35 with every job skipped, and `land.sh` waited out its 1740s budget (#6077). No run was
 cancelled, so `ci.yml`'s concurrency group did not cause it.
 
+A head whose ready run was cancelled by a draft run created in the same second reads the same
+way. On 2026-11-21, PR #9819's update and ready flip made two runs on one head. The draft run
+cancelled the ready run through `ci.yml`'s concurrency group, and the ready run's `always()`
+gate failed on the cancelled jobs. A cancelled run is no verdict, so `await_ci.draft_skipped`
+counts a gate that `ci_verdict.gates_failed_by_cancellation` names like a skipped one (#9822).
+At least one gate must have skipped: a head whose runs were all cancelled is not a draft case.
+
 - The merge wait prints the cause on the first poll that reads such a head.
 - Once the head has stayed so for `DRAFT_SKIPPED_GRACE_S` (180s), the wait reads the PR's
   draft state. A PR still a draft keeps waiting, because marking it ready starts its run.
@@ -399,8 +406,10 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
   line saying it did, and the toggled run's verdict then arrives inside the existing
   `merge_timeout` budget (#6546). A re-run of the skipped run would replay its draft event and
   skip again, which is why the landing toggles instead.
-- The landing does not toggle while the head has a `ci.yml` run that did not skip: one queued,
-  in progress, or finished with any other conclusion. It prints why and restarts the grace.
+- The landing does not toggle while the head has a `ci.yml` run that can still give a
+  verdict: one queued, in progress, or finished with a verdict. A run that finished `skipped`
+  or with no verdict, such as `cancelled`, is past cancelling and allows the toggle. The
+  landing prints why it waits and restarts the grace.
   The ready run's `prek` gate gets its check run only once every job it needs has finished,
   so for those minutes `await_ci` reads only the draft run's skipped gate. A toggle then
   cancels the ready run: on PR 6443 it cancelled a run 32 seconds old, and on PR 6531 one 20

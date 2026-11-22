@@ -264,16 +264,19 @@ def _draft_skipped_dead_end(ln: Landing, head: str, retriggered: bool = False) -
     The reason carries no remedy: `_toggle_by_hand` is the manual one, and a rate-limited
     toggle replaces it with the wait (`_retrigger_ready_run`).
 
-    A PR marked ready right after its push can get only the push's draft-era run. No run
-    follows the ready flip, so nothing would ever supply a verdict. A PR still a draft gets its run once someone marks it ready, so the wait goes on.
+    A PR marked ready right after its push can get only the push's draft-era run, or a ready
+    run that the draft-era run cancelled. No other run follows the ready flip, so nothing would
+    ever supply a verdict. A PR still a draft gets its run once someone marks it ready, so the
+    wait goes on.
     """
     if ln.view("isDraft").get("isDraft") is not False:
         return ""
     pr = ln.opts.pr
     return (
-        f"PR #{pr} is ready, but {head[:8]}'s only CI ran while it was a draft and skipped "
-        "every job, and GitHub started no run on the ready flip; a re-run replays the draft "
-        f"event and skips again.{' ' + _RETRIGGER_DONE if retriggered else ''}"
+        f"PR #{pr} is ready, but every CI run on {head[:8]} either ran while it was a draft "
+        "and skipped every job, or was cancelled, and GitHub started no other run; a re-run "
+        "of the draft run replays the draft event and skips again."
+        f"{' ' + _RETRIGGER_DONE if retriggered else ''}"
     )
 
 
@@ -285,13 +288,14 @@ def _toggle_by_hand(pr: str) -> str:
 
 
 def _ready_run_on(ln: Landing, head: str) -> str:
-    """Why the PR's `ci.yml` runs on `head` forbid the draft toggle; "" when every one skipped.
+    """Why the PR's `ci.yml` runs on `head` forbid the draft toggle; "" when none can give a verdict.
 
-    A run that is not completed, or that completed with any conclusion but `skipped`, ran
-    while the PR was ready. Its `prek` gate `needs` every other job, so the gate gets no check
-    run until they finish, and for those minutes `await_ci` reads only the draft run's skipped
-    gate. Converting to draft then cancels the ready run. A failed read also forbids
-    it, because the toggle is the one action here that can cancel a run.
+    A run that is not completed, or that completed with a verdict, ran while the PR was
+    ready. Its `prek` gate `needs` every other job, so the gate gets no check run until they
+    finish, and for those minutes `await_ci` reads only the draft run's skipped gate.
+    Converting to draft then cancels the ready run. A run that completed `skipped` or with no
+    verdict, such as `cancelled`, is past cancelling, so it allows the toggle. A failed read
+    forbids it, because the toggle is the one action here that can cancel a run.
     """
     url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
 
@@ -306,7 +310,8 @@ def _ready_run_on(ln: Landing, head: str) -> str:
     except (gh_read.GhReadFailed, ValueError) as exc:
         return f"its CI runs could not be read ({exc})"
     for run in runs:
-        if run.status != "completed" or run.conclusion != "skipped":
+        skipped = run.status == "completed" and run.conclusion == "skipped"
+        if not (skipped or run.no_verdict):
             return f"run {run.id} is {run.conclusion or run.status}"
     return ""
 
@@ -324,7 +329,7 @@ def _retrigger_ready_run(ln: Landing, head: str, dead_end: str) -> str:
     """
     pr = str(ln.opts.pr)
     say(
-        f"PR #{pr} is ready but {head[:8]}'s only CI skipped as a draft; converting it to draft and back"
+        f"PR #{pr} is ready but {head[:8]}'s CI skipped as a draft or was cancelled; converting it to draft and back"
     )
     for step, args, by_hand in (
         ("to draft", ("pr", "ready", "--undo", pr), _toggle_by_hand(pr)),
@@ -364,7 +369,8 @@ def _start_run(
 ) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
-    A head with no CI run that ran jobs takes the landing turn first (`turn.py`), so that the
+    A head with no CI run that ran jobs, or whose only such runs were cancelled
+    (`_ready_run_on`), takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
     for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
     master when master is ahead of it, and only then is a draft marked ready, because a
@@ -374,7 +380,8 @@ def _start_run(
     turn. A flip before the update started a run on the stale head, which the update's push
     cancels after it has held runners for minutes.
 
-    A head with a CI run that ran jobs keeps it and takes no turn here: `await_merge` takes
+    A head with a CI run that ran jobs and was not cancelled keeps it and takes no turn
+    here: `await_merge` takes
     the turn once that head is green, so no landing holds the turn while a run that started
     before it finishes. The branch is also left as it is for a head that moved after the
     landing policy pinned it, a head admitted on an approval, a PR GitHub reads as
@@ -486,11 +493,13 @@ def await_merge(ln: Landing, take_turn: TakeTurn = _no_turn) -> None:
     (`stale_base.batch_tested`). The seconds of the batch's run reach this wait with the
     seconds in line for the turn, and the wait then ends inside the two merge budgets.
 
-    A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
+    A head whose every CI run skipped as a draft, or was cancelled, is named on the poll that
+    first reads it (`await_ci.draft_skipped`). Once
     it has stayed so for `DRAFT_SKIPPED_GRACE_S`, a PR that is no longer a draft is converted
     to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
     If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
-    happens while a ready `ci.yml` run exists on the head (`_ready_run_on`); the grace restarts.
+    happens while a `ci.yml` run that can still give a verdict exists on the head
+    (`_ready_run_on`); the grace restarts.
 
     A head the wait has sat on for `stuck_checks.AFTER_S` has its checks read on a poll where
     await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
