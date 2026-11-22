@@ -143,7 +143,7 @@ def test_memory_pressure_alone_marks_a_container_stalled():
     assert lines[2].endswith("30%  stalled")
 
 
-def test_a_container_with_no_throttled_window_shows_a_dash_and_is_not_flagged():
+def test_a_container_with_no_throttled_window_is_counted_but_not_listed():
     lines = _cpu({"app": (0.1, None, 0.05, None, 0.01, 0.0)})
     assert lines[0].startswith("CPU: 1 containers, 0 flagged")
     assert len(lines) == 2
