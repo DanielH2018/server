@@ -584,7 +584,7 @@ def main(argv: list[str] | None = None) -> int:
         "--bootstrap-shard",
         type=shard_arg,
         metavar="K/N",
-        help="run only the K-th of N shares of the bootstrap cases, one offline build each",
+        help="run only the K-th of N shares of the bootstrap cases",
     )
     parser.add_argument(
         "--all", action="store_true", help="also print a [PASS] line per passing case"
