@@ -8,6 +8,7 @@ line-arm edits that adopt them.
 Run: uv run pytest hosts/lib/tests/test_pi_host_hardening.py
 """
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,11 +16,13 @@ from pathlib import Path
 import pytest
 from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
+from renderer.renderer_lib.host_manifest import MANIFEST
 
 SUDOERS = "/etc/sudoers.d/10-timestamp"
 BLACKLIST = "/etc/modprobe.d/blacklist-rare-network.conf"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-hardening.conf"
 KEEP_CONFFILES = "/etc/apt/apt.conf.d/53homelab-keep-conffiles"
+APPORT_DROPIN = "/usr/lib/systemd/system/apport.service.d/50-homelab.conf"
 BANNER = (
     "WARNING: Unauthorized access to this system is prohibited.\n"
     "All connections are monitored and recorded.\n"
@@ -192,3 +195,33 @@ def test_the_tmpfiles_lines_cover_the_ssh_directory_and_every_restricted_path(pa
 
 def test_the_package_depends_on_what_the_package_tasks_installed(package):
     assert INSTALLED <= set(package.depends)
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_every_host_drops_in_on_apport_and_reconcile_restarts_it(host):
+    # A unit with a drop-in and no policy is restarted when the drop-in lands, so apport's stop
+    # writes fs.suid_dumpable 0 without waiting for a reboot.
+    rendered = host_mode.render_host(host)
+    assert APPORT_DROPIN in rendered.files
+    units = json.loads(rendered.files[MANIFEST][0])["units"]
+    assert units["apport.service"] == {}
+
+
+@pytest.mark.skipif(not shutil.which("systemd-analyze"), reason="needs systemd-analyze")
+def test_the_apport_dropin_condition_never_holds(package):
+    conditions = [
+        line
+        for line in package.files[APPORT_DROPIN][0].decode().splitlines()
+        if line.startswith("Condition")
+    ]
+    result = subprocess.run(
+        ["systemd-analyze", "condition", *conditions],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert conditions
+    # A line systemd cannot parse also exits 1, so each condition must be reported as failed.
+    for condition in conditions:
+        assert f"{condition} failed." in result.stderr, result.stderr

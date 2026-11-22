@@ -49,8 +49,9 @@
 # (docs/github-quota.md), as on daniel-box.
 #
 # The host baseline and the Loki witness: `host-hardening` ships the sudo cache, auditd's rules,
-# the module blacklist, the core-dump drop-in, the login banner, the i915 option and the base
-# packages; `rsyslog-filter` ships the info filter; `loki-route-witness` ships the witness timer.
+# the module blacklist, the core-dump drop-in, the apport drop-in, the login banner, the i915 option
+# and the base packages; `rsyslog-filter` ships the info filter; `loki-route-witness` ships the
+# witness timer.
 # No file needs a credential. The `unattended-upgrades` component above applies the regular
 # updates pocket, this host has no Docker to hold, and no homelab origin is allowed.
 description: daniel-server's homelab host package
