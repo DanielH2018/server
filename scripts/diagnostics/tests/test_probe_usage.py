@@ -1,10 +1,14 @@
-"""Tests for `probe.py usage`: route grouping, the memory flags and the PVC projection."""
+"""Tests for `probe.py usage`: route grouping, the memory and CPU flags and the PVC projection."""
 
 import pytest
 
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import usage
+from lib import yaml_fast
+from lib.repo_paths import K8S_ROLES
+
+RULES = K8S_ROLES / "observability/files/rules/container-checks.yaml"
 
 NAMESPACES = {"homelab", "longhorn-system", "observability"}
 HASH = "0123456789abcdef0123"
@@ -103,6 +107,63 @@ def test_a_container_matching_its_request_is_counted_but_listed_only_under_all()
     assert lines[0].startswith("Memory: 1 containers, 0 flagged")
     assert len(lines) == 2
     assert len(_memory(100 * mib, 512 * mib, [("xk2vq", 110 * mib)], True)) == 3
+
+
+def _cpu(containers):
+    """`format_cpu` over `{container: (request, limit, p95, throttle, cpu_psi, mem_psi)}`."""
+    columns = [[] for _ in range(6)]
+    for container, cells in containers.items():
+        labels = {"namespace": "homelab", "pod": "app-6b4f9c8d7-xk2vq"}
+        for column, value in zip(columns, cells, strict=True):
+            if value is not None:
+                column.append(_series(value, container=container, **labels))
+    request, limit, p95, throttle, cpu_psi, memory_psi = columns
+    return usage.format_cpu(p95, request, limit, throttle, cpu_psi, memory_psi)
+
+
+def test_a_container_throttled_and_stalled_is_listed_before_one_only_throttled():
+    lines = _cpu(
+        {
+            "a-throttled": (0.1, 1.0, 0.1, 0.46, 0.02, 0.0),
+            "b-stalled": (0.1, 2.0, 0.99, 0.99, 0.12, 0.08),
+        }
+    )
+    assert lines[0].startswith("CPU: 2 containers, 2 flagged")
+    assert lines[2].split()[1:] == ["0.10", "2.00", "0.99", "99%", "12%", "8%"] + [
+        "throttled,",
+        "stalled",
+    ]
+    assert lines[3].startswith("  homelab/app/a-throttled") and lines[3].endswith(
+        "  throttled"
+    )
+
+
+def test_memory_pressure_alone_marks_a_container_stalled():
+    lines = _cpu({"app": (0.1, 1.0, 0.1, None, 0.0, 0.3)})
+    assert lines[2].endswith("30%  stalled")
+
+
+def test_a_container_with_no_throttled_window_shows_a_dash_and_is_not_flagged():
+    lines = _cpu({"app": (0.1, None, 0.05, None, 0.01, 0.0)})
+    assert lines[0].startswith("CPU: 1 containers, 0 flagged")
+    assert len(lines) == 2
+
+
+def test_a_cpu_p95_near_its_limit_is_flagged():
+    lines = _cpu({"app": (0.1, 0.5, 0.45, None, 0.0, 0.0)})
+    assert lines[2].split()[4] == "-" and lines[2].endswith("near limit")
+
+
+def test_the_throttle_query_carries_both_gates_of_the_throttle_alert():
+    [rule] = [
+        r["expr"]
+        for group in yaml_fast.safe_load(RULES.read_text())["groups"]
+        for r in group["rules"]
+        if r.get("alert") == "ContainerCPUThrottled"
+    ]
+    gates = f"> {usage.THROTTLED}", f"> {usage.THROTTLED_CORES}"
+    assert all(gate in rule and gate in usage.THROTTLE_QUERY for gate in gates)
+    assert f"[{usage.CPU_WINDOW}]" in rule
 
 
 def test_a_pvc_filling_inside_the_horizon_is_listed_with_its_days_to_full():
