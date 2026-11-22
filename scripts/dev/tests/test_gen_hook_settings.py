@@ -184,7 +184,8 @@ def test_library_block_is_accepted_with_a_reason():
             register(
                 "#   event: Stop\n#   timeout: 5\n#   order: 1\n#   if: Bash(git *)"
             ),
-            "if: is evaluated only on .*; on Stop",
+            "if: is evaluated only on PreToolUse, PostToolUse, PostToolUseFailure, "
+            "PermissionRequest, PermissionDenied; on Stop",
         ),
         (
             "library without reason",
