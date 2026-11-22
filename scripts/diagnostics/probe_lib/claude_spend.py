@@ -26,7 +26,10 @@ from diagnostics.probe_lib.obs_api import loki_query_url
 DESKTOP = "claude-desktop"
 COORDINATOR = "desktop-coordinator"
 INTERACTIVE = "desktop-interactive"
-COORDINATOR_TOOLS = ("coordinate", "start_session")
+COORDINATOR_PARAMETERS = (
+    r'\{"skill_name":"coordinate"(,.*)?\}',
+    r'\{"mcp_server_name":"ccd_session","mcp_tool_name":"start_session"(,.*)?\}',
+)
 
 
 def cost_query(window_s: int) -> str:
@@ -41,13 +44,14 @@ def coordinator_logql(window_s: int) -> str:
     """The desktop sessions that called a coordinator tool in the last `window_s` seconds.
 
     The `coordinate` skill reaches Loki as `{"skill_name":"coordinate"}` and the app's tool as
-    `{"mcp_server_name":"ccd_session","mcp_tool_name":"start_session"}`.
+    `{"mcp_server_name":"ccd_session","mcp_tool_name":"start_session"}`. Loki anchors `=~` at
+    both ends, so a word quoted inside another call's parameters does not match.
     """
-    names = "|".join(COORDINATOR_TOOLS)
+    shapes = "|".join(COORDINATOR_PARAMETERS)
     return (
         'sum by (session_id) (count_over_time({service_name="claude-code"} '
         f'| app_entrypoint="{DESKTOP}" | event_name="tool_result" '
-        f'| tool_parameters=~`.*"({names})".*` [{window_s}s]))'
+        f"| tool_parameters=~`({shapes})` [{window_s}s]))"
     )
 
 

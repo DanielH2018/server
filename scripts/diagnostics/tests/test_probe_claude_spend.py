@@ -72,6 +72,9 @@ def test_the_coordinator_filter_matches_the_skill_and_start_session_calls_only()
     assert matches('{"skill_name":"coordinate"}')
     assert matches('{"mcp_server_name":"ccd_session","mcp_tool_name":"start_session"}')
     assert not matches('{"skill_name":"pr-authoring"}')
+    assert not matches('{"full_command":"grep -rn \\"start_session\\" .claude/skills"}')
+    assert not matches('{"skill_name":"issue-fanout","args":"coordinate"}')
+    assert not matches('{"mcp_server_name":"other","mcp_tool_name":"start_session"}')
     assert not matches(
         '{"mcp_server_name":"ccd_session_mgmt","mcp_tool_name":"list_sessions"}'
     )
