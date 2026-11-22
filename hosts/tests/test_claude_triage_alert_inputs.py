@@ -141,10 +141,15 @@ def test_a_rule_reading_a_name_the_collector_job_keeps_is_flagged(
     [zero_available] = [
         expr for name, _, expr in alert_rules() if name == "K8sDeploymentZeroAvailable"
     ]
-    keeps_all = {
-        k: v for k, v in collector_job.items() if k != "metric_relabel_configs"
+    keeps_all = collector_job | {
+        "metric_relabel_configs": [
+            {"source_labels": ["__name__"], "regex": ".*", "action": "keep"}
+        ]
     }
-    assert forgeable_names(zero_available, keeps_all)
+    assert {
+        "kube_deployment_status_replicas_available",
+        "kube_deployment_spec_replicas",
+    } <= set(forgeable_names(zero_available, keeps_all))
     assert forgeable_names(
         "increase(claude_code_cost_usage_USD_total[1h]) > 10", collector_job
     ) == ["claude_code_cost_usage_USD_total"]
