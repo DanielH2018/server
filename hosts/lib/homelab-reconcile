@@ -451,10 +451,16 @@ OWNERS: dict[str, set[str] | None] = {}
 
 
 def owned(path: Path) -> bool | None:
-    """True when a package owns `path`, False when none does, None when dpkg cannot say."""
+    """True when a package owns `path`, False when none does, None when dpkg cannot say.
+
+    An owner that lists `path` only as an obsolete conffile does not count: dpkg never writes
+    that file again, so a legacy entry may remove it.
+    """
     key = str(path)
     owners = OWNERS[key] if key in OWNERS else lines.owners([key])[key]
-    return None if owners is None else bool(owners)
+    if owners is None:
+        return None
+    return any(not lines.conffiles(owner).get(key, False) for owner in owners)
 
 
 def retire_path(path: Path) -> bool:

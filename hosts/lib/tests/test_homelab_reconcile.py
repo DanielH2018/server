@@ -324,6 +324,27 @@ def test_a_path_dpkg_reports_as_owned_is_never_removed_and_an_unowned_one_is(nod
     assert not (node.root / "usr/local/bin/stray").exists()
 
 
+def legacy_conffile(node, *, obsolete: bool):
+    path = node.root / "etc/logrotate.d/cloud-init"
+    path.parent.mkdir(parents=True)
+    path.write_text("")
+    node.manifest["legacy"].append({"path": "/etc/logrotate.d/cloud-init"})
+    node.state["owned"] = ["/etc/logrotate.d/cloud-init"]
+    node.state["conffiles"] = {"some-package": ["/etc/logrotate.d/cloud-init"]}
+    node.state["obsolete"] = ["/etc/logrotate.d/cloud-init"] if obsolete else []
+    result = node.run()
+    assert result.returncode == 0, result.stderr
+    return path
+
+
+def test_a_legacy_path_its_owner_lists_as_an_obsolete_conffile_is_removed(node):
+    assert not legacy_conffile(node, obsolete=True).exists()
+
+
+def test_a_legacy_path_its_owner_still_ships_as_a_conffile_is_kept(node):
+    assert legacy_conffile(node, obsolete=False).exists()
+
+
 def test_an_empty_legacy_directory_listed_after_its_files_is_removed(node):
     interim = node.root / "etc/homelab/interim"
     interim.mkdir(parents=True)

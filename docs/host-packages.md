@@ -131,6 +131,14 @@ design is [the H4 plan](archive/host/h4-secrets-unit.md), *The restart contract*
   `/etc/systemd/system`, because reconcile removes it without a daemon-reload or a restart of the
   packaged unit it shadows. Renaming a unit that holds a port, or retiring an `/etc` copy of a
   unit, needs that hand-off added to reconcile first. `dpkg` removes a package's own files.
+- **A legacy path a package owns.** Reconcile leaves a path that `dpkg -S` names an owner for,
+  and counts the entry retired. An owner that lists the path only as an `obsolete` conffile
+  does not count, because `dpkg` never writes that file again. A release upgrade leaves such a
+  file when it moves a conffile to another package: 26.04 moved `/etc/logrotate.d/cloud-init`
+  to `cloud-init-base`, and the `host-maintenance` component's legacy entry removes the
+  leftover. `owned()` in `hosts/lib/homelab-reconcile` decides it, and
+  `hosts/lib/tests/test_homelab_reconcile.py::test_a_legacy_path_its_owner_lists_as_an_obsolete_conffile_is_removed`
+  holds it.
 - **A toggle-gated legacy entry.** A `legacy:` entry may carry `when:`, and ships only while it
   holds. The claude-code component uses it to remove the textfile metrics a disarmed timer
   wrote: the toggle that drops the timer adds the entry. Step 1 stops the dropped timer and service before step 4
