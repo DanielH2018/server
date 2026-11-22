@@ -1,0 +1,11 @@
+# Shipped by the host package's k3s-server component with its enable link. Every minute;
+# wired-gateway-check.sh's DEADLINE_S is three runs.
+[Unit]
+Description=Check the LAN gateway over the wired link every minute
+
+[Timer]
+OnCalendar=*:0/1
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

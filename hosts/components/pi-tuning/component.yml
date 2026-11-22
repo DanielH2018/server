@@ -7,8 +7,8 @@
 # - conffiles, so the line arm: /etc/default/zramswap (zram-tools),
 #   /etc/watchdog.conf (watchdog), /etc/log2ram.conf (log2ram), /etc/sysstat/sysstat (sysstat),
 #   /etc/default/acct (acct), /etc/audit/auditd.conf (auditd);
-# - unowned, so the line arm: /boot/firmware/config.txt and /etc/hosts (the latter is in
-#   pi-resolver);
+# - unowned, so the line arm: /boot/firmware/config.txt, /etc/locale.gen (written by locales'
+#   postinst) and /etc/hosts (the latter is in pi-resolver);
 # - owned and not a conffile: /usr/local/bin/log2ram (log2ram). It takes the homelab copy below.
 #   No path needs a divert.
 # - /etc/default/earlyoom (earlyoom, a conffile) becomes a drop-in for earlyoom.service that
@@ -42,6 +42,7 @@ depends:
   - zram-tools
   - watchdog
   - earlyoom
+  - locales
 units:
   log2ram.service: {policy: manual}
 files:
@@ -106,6 +107,10 @@ lines:
   - {path: /etc/log2ram.conf, line: "ZL2R=false", regexp: '^#?ZL2R=', activate: reboot}
   - {path: /etc/log2ram.conf, line: "LOG_DISK_SIZE=256M", regexp: '^#?LOG_DISK_SIZE=', activate: reboot}
   - {path: /etc/log2ram.conf, line: "COMP_ALG=lz4", regexp: '^#?COMP_ALG=', activate: reboot}
+  # en_US.UTF-8, the locale the other hosts generate. An operator's ssh client sends
+  # LC_ALL=en_US.UTF-8 and sshd accepts LC_*, so without it every login warns from setlocale.
+  # The anchor matches only the UTF-8 line, not `# en_US ISO-8859-1` or `# en_US.ISO-8859-15`.
+  - {path: /etc/locale.gen, line: "en_US.UTF-8 UTF-8", regexp: '^#?\s*en_US\.UTF-8 UTF-8\s*$', activate: locale-gen}
   # The hardware watchdog.
   - {path: /etc/watchdog.conf, line: "watchdog-device = /dev/watchdog", regexp: '^#?watchdog-device', activate: reboot}
   - {path: /etc/watchdog.conf, line: "max-load-1 = 24", regexp: '^#?max-load-1\s=', activate: reboot}

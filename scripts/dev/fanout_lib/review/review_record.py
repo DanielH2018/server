@@ -101,6 +101,9 @@ class Record:
     # Why a daniel-server pipeline left its PR for the server lander rather than landing it
     # (`review_ci.server_lands`): "" when it landed it, or on daniel-box.
     land_hold: str = ""
+    # True when the server lander's PR rule (`own_surface.pr_problems`) made that hold. The PR
+    # then stays a draft with no CI until a person's `land.sh` marks it ready at its turn.
+    person_lands: bool = False
     # The CI wait a batch that does not land runs: "" when it ran none, else its
     # result in words, whether the implementer was resumed for a red verdict, and whether
     # the failed jobs were re-run after a resume that pushed nothing.
@@ -265,6 +268,10 @@ def comment_body(record: Record) -> str:
         lines.append(f"CI gate: {record.ci_gate}.")
     if record.land_hold:
         lines.append(f"Not landed by the pipeline: {record.land_hold}.")
+    if record.person_lands:
+        lines.append(
+            "It stays a draft: `land.sh` marks it ready and runs its CI at its turn."
+        )
     if record.base_tests:
         lines.append(
             f"{len(record.base_passing)} of the PR's {record.base_tests} new tests pass with "

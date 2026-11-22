@@ -62,21 +62,28 @@ def test_verdict_treats_a_truncated_walk_as_failure():
     assert "FLOOR" in msg
 
 
-def test_storage_api_reads_the_v3_shape():
-    auth = {
+def _v4_auth(*buckets):
+    return {
         "authorizationToken": "tok",
-        "apiInfo": {"storageApi": {"apiUrl": "https://api", "bucketId": "b1"}},
+        "apiInfo": {
+            "storageApi": {
+                "apiUrl": "https://api",
+                "allowed": {"buckets": [{"id": b, "name": b} for b in buckets]},
+            }
+        },
     }
-    assert checks.b2.b2_storage_api(auth) == ("https://api", "tok", "b1")
 
 
-def test_storage_api_reads_the_older_top_level_shape():
-    auth = {
-        "authorizationToken": "tok",
-        "apiUrl": "https://api",
-        "allowed": {"bucketId": "b1"},
-    }
-    assert checks.b2.b2_storage_api(auth) == ("https://api", "tok", "b1")
+def test_storage_api_reads_the_one_bucket_of_a_v4_key():
+    assert checks.b2.b2_storage_api(_v4_auth("b1")) == ("https://api", "tok", "b1")
+
+
+def test_a_key_scoped_to_several_buckets_names_no_bucket():
+    assert checks.b2.b2_storage_api(_v4_auth("b1", "b2")) == (
+        "https://api",
+        "tok",
+        None,
+    )
 
 
 def test_storage_disabled_without_credentials(cfg):

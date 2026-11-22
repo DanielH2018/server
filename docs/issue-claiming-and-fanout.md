@@ -1148,7 +1148,7 @@ at its PR, and a review batch whose PR the rule holds.
 | Server batch outcome | Who acts |
 |---|---|
 | A review batch whose PR passes the rule | The batch, through its own `land.sh`. A park reaches the sub-coordinator as it does for a daniel-box batch. |
-| A review batch whose PR the rule holds | The batch marks the PR ready and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, or passes an operator step to the operator. |
+| A review batch whose PR the rule holds | The batch leaves the PR a draft with no CI and stops, and its review comment says `Not landed by the pipeline:` with the reason. After the next lander pass, `place status` reads `needs-input: the server lander will not land #N` with the next step: the sub-coordinator lands the PR, and `land.sh` marks it ready at its turn, or passes an operator step to the operator. |
 | A PR the lander rules ineligible for a reason it clears itself (a draft) | Nobody yet. `place status` reads `done (awaiting the server lander: <ruling>)`, for 30 minutes at most. |
 | A PR whose head moved since the review | The sub-coordinator. It reads the commits pushed since the review, then lands the PR with `land.sh`. |
 | A PR whose CI gate did not pass | The sub-coordinator. It reads the PR's checks, then lands the PR with `land.sh` once they pass. |

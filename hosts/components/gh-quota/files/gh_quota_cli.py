@@ -40,7 +40,8 @@ def render(
 ) -> list[str]:
     """The lines `gh-quota status` prints.
 
-    A count line per window with the sessions to look at under it, then each identity's
+    A count line per window, naming every identity that shares it, with the sessions to look
+    at under it, then each identity's
     recent writes against GitHub's secondary limits, then the ledger's failures.
     """
     lines = [] if windows else ["no GitHub call recorded in an open quota window"]
@@ -106,7 +107,7 @@ def main(argv: Sequence[str] | None = None, ledger: Ledger | None = None) -> int
     if not opts.json:
         print("\n".join(render(windows, writes, ledger.failures(), every=opts.all)))
         return 0
-    recent = {w.identity: (w.minute, w.hour) for w in writes}
+    recent = {w.identity: w for w in writes}
     rows = [
         {
             "identity": w.identity,
@@ -117,8 +118,8 @@ def main(argv: Sequence[str] | None = None, ledger: Ledger | None = None) -> int
             "recorded": w.recorded,
             "beyond": w.beyond,
             "sessions": w.sessions,
-            "writes_minute": recent.get(w.identity, (0, 0))[0],
-            "writes_hour": recent.get(w.identity, (0, 0))[1],
+            "writes_minute": sum(recent[i].minute for i in w.identities if i in recent),
+            "writes_hour": sum(recent[i].hour for i in w.identities if i in recent),
         }
         for w in windows
     ]

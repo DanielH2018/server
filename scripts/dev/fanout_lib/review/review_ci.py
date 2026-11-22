@@ -11,12 +11,14 @@ WHERE THE RUN COMES FROM. A batch that lands its PR lands it as a draft (`land_d
 `land.sh` marks it ready, or a landing batch tests it with other drafts, so no run is spent
 before the landing (`docs/ci-throughput.md`, D9). A landing that ends `pr-ci-red` is that
 batch's red run. Every daniel-box batch lands, and a daniel-server batch lands when
-`server_lands` passes it. A daniel-server batch it holds waits for its PR's own run here
-(`ready_gate`, then `ci_gate`), and the server lander leaves the PR for a person.
+`server_lands` passes it. A daniel-server batch the server lander's PR rule holds stays a
+draft with no run, and the server lander leaves it for a person, whose `land.sh` marks it ready
+at its turn. A batch held for another reason waits for its PR's own run here (`ready_gate`,
+then `ci_gate`).
 
 THE DRAFT. This repo's review batch opens its PR as a draft, and `ci.yml` runs no job on
-a draft. On daniel-server, `ready_gate` marks the PR ready once the review and its fix round are
-done. It then waits for the run that marking ready starts, before any wait reads the head's
+a draft. On daniel-server, `ready_gate` marks a PR that no landing will mark ready once the
+review and its fix round are done. It then waits for the run that marking ready starts, before any wait reads the head's
 checks.
 
 THE WAIT is `cc-wait gh-ci --pr <n>`, the waiter every other wait in this repo uses. It reads
@@ -414,8 +416,9 @@ def server_lands(pipe: BatchRun, head: str) -> bool:
     A batch on a host that does not land, this repo's own, lands its draft as a daniel-box
     batch does, but only a PR the server lander would land unattended
     (`own_surface.pr_problems`), still at `head` (option B in `docs/ci-throughput.md`). A PR
-    that check holds after the review is marked ready and waits for its run, and the server
-    lander leaves it for a person.
+    that rule holds sets `person_lands`: it stays a draft, and the server lander leaves it
+    for a person. A PR held because it could not be read or its head moved is marked ready
+    and waits for its run.
     """
     if not awaits_ci(pipe.host, pipe.target):
         return False
@@ -429,6 +432,7 @@ def server_lands(pipe: BatchRun, head: str) -> bool:
         pr = json.loads(out.stdout)
     except ValueError:
         pr = None
+    record.person_lands = False
     if not isinstance(pr, dict):
         record.land_hold = "the PR could not be read"
     elif str(pr.get("headRefOid") or "") != head:
@@ -437,6 +441,7 @@ def server_lands(pipe: BatchRun, head: str) -> bool:
         record.land_hold = own_surface.pr_problems(
             pr, pipe.batch, own_surface.live_testpaths_only
         )
+        record.person_lands = bool(record.land_hold)
     return not record.land_hold
 
 

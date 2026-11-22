@@ -33,8 +33,10 @@ AUTH = {
     "apiInfo": {
         "storageApi": {
             "apiUrl": "https://api",
-            "bucketId": "b1",
-            "capabilities": WRITER,
+            "allowed": {
+                "buckets": [{"id": "b1", "name": "weekly"}],
+                "capabilities": WRITER,
+            },
         }
     },
 }
@@ -97,7 +99,7 @@ def test_the_b2_row_lists_the_keys_bucket_and_holds_the_verdict_a_day(b2_cfg):
     ok, _ = checks.b2.check_b2_object_lock(b2_cfg, src, now=1000.0)
     assert ok
     assert src.calls[1][1][:2] == (
-        "https://api/b2api/v3/b2_list_buckets",
+        "https://api/b2api/v4/b2_list_buckets",
         {"accountId": "acct", "bucketId": "b1"},
     )
     later = FakeSources(state=src.state)

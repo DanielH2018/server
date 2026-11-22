@@ -101,7 +101,7 @@ def github_get(
         TimeoutError, OSError: the socket failed.
         ValueError: the body was not JSON.
     """
-    _count_github_call(path.lstrip("/"), token)
+    count_github_call("GET", path.lstrip("/"), token)
     req = urllib.request.Request(
         "%s/%s" % (GITHUB_API, path.lstrip("/")),
         headers={
@@ -114,18 +114,26 @@ def github_get(
         return json.load(resp)
 
 
-def _count_github_call(path: str, token: str | None) -> None:
-    """Count one REST read in the host's gh-quota ledger, under the token that sends it.
+def count_github_call(method: str, path: str, token: str | None) -> None:
+    """Count one REST request in the host's gh-quota ledger, under the token that sends it.
 
-    An anonymous read spends the source IP's limit, not a token owner's, so it is not counted.
-    A host without the gh-quota component counts nothing, and a ledger module that fails to
-    load counts nothing too: the ledger must never be why a GitHub read fails.
+    Call it just before sending. A GET records as `api rest`, any other method as `api write`.
+    An anonymous request spends the source IP's limit, not a token owner's, so it is not
+    counted. A host without the gh-quota component counts nothing, and a ledger module that
+    fails to load counts nothing too: the ledger must never be why a GitHub request fails.
+
+    Args:
+        method: the HTTP method, such as ``GET`` or ``DELETE``.
+        path: the part after the API root, as ``github_get`` takes it.
+        token: the bearer token the request sends, or None for an anonymous one.
     """
     if not token:
         return
     ledger = _gh_quota(os.environ.get("GH_QUOTA_MODULE") or GH_QUOTA_MODULE)
     if ledger is not None:
-        ledger.record(["api", path], env={**os.environ, "GH_TOKEN": token})
+        ledger.record(
+            ["api", "-X", method, path], env={**os.environ, "GH_TOKEN": token}
+        )
 
 
 @functools.cache
