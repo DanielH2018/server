@@ -54,6 +54,9 @@ SCHEMA = {
         },
         "proposed_fix": {"type": "string"},
         "follow_up": {"type": "string"},
+        # A key of the restart allowlist. The runner checks it and starts the broker; the
+        # session has no start right of its own.
+        "restart": {"type": "string"},
     },
     "required": ["summary", "root_cause", "confidence", "evidence", "proposed_fix"],
 }

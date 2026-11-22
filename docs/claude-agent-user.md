@@ -602,7 +602,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 |---|---|---|
 | 1 | `claude-triage@<episode>.service`, one diagnose-only run started by hand | Built, and running on daniel-box |
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
-| 3 | The `claude-restart@` broker and its allowlist | The broker is built, its allowlist holds `docs`, and the triage controller may start it. The triage run's request for a restart is planned; see [The restart allowlist](#the-restart-allowlist). |
+| 3 | The `claude-restart@` broker and its allowlist | Built. The allowlist holds `docs`, and a triage run asks for a restart through its result, which the runner hands to the broker; see [The restart allowlist](#the-restart-allowlist). |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs a visible agent account (#5126). |
 | 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
@@ -875,7 +875,18 @@ whose interactive sessions read untrusted text and hold no write to a workload.
 `templates/50-claude-restart.rules.j2` lets the controller start
 `homelab-claude-restart@<name>.service` and nothing else, in the script's name shape. The triage
 session user has no start right, so a run asks for a restart through its result, which the
-runner reads. That request is not built.
+runner reads.
+
+The result's optional `restart` field names one allowlist key, and the prompt lists the keys
+from the pins. The runner starts the broker only when the diagnosis has medium or high
+confidence and the name is a key of the allowlist the config carries. A request from a
+low-confidence diagnosis, or for a name off the list, starts nothing, and the record says
+which. The runner waits for the broker inside the run's wall clock, then reads the verdict
+line. The broker replaces `/var/lib/claude-restart/verdict` on every start, so the runner
+takes the line only when the file changed during its request and the line names the same
+workload; otherwise the record reads `verdict=unknown`. The record, the report and the
+weekly summary carry the verdict. A run's state and its page are unchanged, because the
+broker posts every restart to Discord itself.
 
 A caller of the broker can restart each listed Deployment once a day, and three a day in
 all. It cannot name a namespace, a kind or a flag, scale or delete anything, change an image,
