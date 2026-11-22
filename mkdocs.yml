@@ -261,6 +261,7 @@ nav:
           - Claude memory store copy: claude-memory-sync.md
           - Claude Code root helpers: claude-code-root-helpers.md
           - Issue claiming and fan-out: issue-claiming-and-fanout.md
+          - GitHub label audit: github-label-audit.md
           - Failure classes: failure-classes.md
       # Each page below takes the working-out of one role CLAUDE.md: drill records, measured
       # traps, board provenance and design records. The role doc keeps the operating rules,
