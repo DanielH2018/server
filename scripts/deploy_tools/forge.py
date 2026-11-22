@@ -39,7 +39,7 @@ from lib import gh_rate_limit
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
 from lib import host_modules  # noqa: F401
 from ci_verdict import CheckRun, CommitStatus, WorkflowRun, parse_check_runs
-from github_rest import github_token
+from github_rest import GITHUB_API, count_github_call, github_token
 from deploy_tools.forge_transport import (
     TIMEOUT_S,
     ForgeError,
@@ -176,7 +176,7 @@ class GitHub:
                 f"https://api.github.com/repos/{self.repository}/commits/{sha}/check-runs"
                 f"?per_page={CHECK_RUN_PAGE_SIZE}&page={page}"
             )
-            response = self._transport("GET", url, self._rest_headers())
+            response = self._rest("GET", url)
             if response.status != 200:
                 raise ForgeError(
                     f"check-runs for {sha}: HTTP {response.status}"
@@ -216,7 +216,7 @@ class GitHub:
             f"https://api.github.com/repos/{self.repository}/actions/workflows/{workflow}"
             f"/runs?status={status}&per_page=100"
         )
-        response = self._transport("GET", url, self._rest_headers())
+        response = self._rest("GET", url)
         if response.status != 200:
             raise ForgeError(f"{workflow} runs: HTTP {response.status}")
         runs = _json(response, f"{workflow} runs")
@@ -240,7 +240,7 @@ class GitHub:
             f"https://api.github.com/repos/{self.repository}/actions/runs/{run_id}/jobs"
             "?per_page=100"
         )
-        response = self._transport("GET", url, self._rest_headers())
+        response = self._rest("GET", url)
         if response.status != 200:
             raise ForgeError(f"run {run_id} jobs: HTTP {response.status}")
         jobs = _json(response, f"run {run_id} jobs")
@@ -291,7 +291,7 @@ class GitHub:
                 f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
                 f"?per_page={STATUS_PAGE_SIZE}&page={page}"
             )
-            response = self._transport("GET", url, self._rest_headers())
+            response = self._rest("GET", url)
             if response.status != 200:
                 raise ForgeError(
                     f"statuses for {sha}: HTTP {response.status}"
@@ -324,7 +324,7 @@ class GitHub:
             f"https://api.github.com/repos/{self.repository}/commits/{sha}/pulls"
             "?per_page=100"
         )
-        response = self._transport("GET", url, self._rest_headers())
+        response = self._rest("GET", url)
         if response.status != 200:
             raise ForgeError(
                 f"pull requests for {sha}: HTTP {response.status}{_api_message(response)}"
@@ -365,7 +365,7 @@ class GitHub:
             url = (
                 f"{PACKAGE_VERSIONS_URL}?per_page={self._versions_per_page}&page={page}"
             )
-            response = self._transport("GET", url, self._rest_headers())
+            response = self._rest("GET", url)
             if response.status != 200:
                 raise ForgeError(
                     f"package versions page {page}: HTTP {response.status}"
@@ -398,7 +398,7 @@ class GitHub:
         url = f"{PACKAGE_VERSIONS_URL}/{version_id}"
         self._sleep(DELETE_PAUSE_S)
         for tries_left in range(DELETE_TRIES - 1, -1, -1):
-            response = self._transport("DELETE", url, self._rest_headers())
+            response = self._rest("DELETE", url)
             if response.status == 204:
                 return True
             if response.status == 404:
@@ -411,18 +411,20 @@ class GitHub:
             f"{_api_message(response)}"
         )
 
-    def _rest_headers(self) -> dict[str, str]:
+    def _rest(self, method: str, url: str) -> Response:
         self._token = self._token or self._lookup_token()
         if not self._token:
             raise ForgeError(
                 "no GitHub token, and a REST read never goes out anonymous: "
                 "set GITHUB_TOKEN or GH_TOKEN, or run `gh auth login`"
             )
-        return {
+        count_github_call(method, url.removeprefix(f"{GITHUB_API}/"), self._token)
+        headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "Authorization": f"Bearer {self._token}",
         }
+        return self._transport(method, url, headers)
 
 
 class Cosign:
