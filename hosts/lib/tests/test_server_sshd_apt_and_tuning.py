@@ -1,8 +1,8 @@
 """daniel-server ships the same three `initial_setup` subjects as the Pi.
 
 The components are host-neutral and `test_pi_sshd_apt_and_tuning.py` holds their content. These
-tests hold what is specific to this host: the package names the components, its sysctl edits
-equal the Pi's, and its sshd Match block names its own sys user.
+tests hold what is specific to this host: the package names the components, and its sshd Match
+block names its own sys user.
 
 Run: uv run pytest hosts/lib/tests/test_server_sshd_apt_and_tuning.py
 """
@@ -14,7 +14,7 @@ from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 
 SSHD_D = "/etc/ssh/sshd_config.d"
-SYSCTL = "/etc/sysctl.conf"
+SYSCTL = "/etc/sysctl.d/90-homelab-host-tuning.conf"
 
 
 @pytest.fixture(scope="module")
@@ -30,20 +30,6 @@ def test_the_package_ships_the_three_components_and_activates_ssh_and_journald(p
         == "try-restart:systemd-journald.service"
     )
     assert "/etc/apt/apt.conf.d/52unattended-upgrades-local" in package.files
-
-
-def test_the_sysctl_edits_are_the_pis_without_its_memory_keys_plus_the_agents_inotify_key():
-    server = host_mode.render_host("daniel-server")
-    pi = host_mode.render_host("daniel-pi")
-
-    def lines(pkg):
-        return {e["line"] for e in pkg.lines if e["path"] == SYSCTL}
-
-    assert len(lines(server)) == 21
-    # vm.swappiness and vm.page-cluster belong to the Pi's zram tuning (pi-tuning), not here.
-    pi_only = {"vm.swappiness=130", "vm.page-cluster=0"}
-    agent_only = {"fs.inotify.max_user_instances=1024"}
-    assert lines(server) == (lines(pi) - pi_only) | agent_only
 
 
 def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):

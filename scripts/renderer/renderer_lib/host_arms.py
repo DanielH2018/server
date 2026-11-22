@@ -44,8 +44,8 @@ The renderer writes each user to `/usr/lib/sysusers.d/homelab.conf` as a `g` and
 A `lines:` key declares edits in files dpkg does not overwrite (`hosts/lib/reconcile_lib/lines.py`)::
 
     lines:
-      - {path: /etc/sysctl.conf, line: "vm.swappiness=10", regexp: '^\s*vm\.swappiness\s*=',
-         activate: sysctl}
+      - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=',
+         activate: "try-restart:auditd.service"}
       - {path: /etc/zsh/zshenv, block: "export X=1", marker: "# {mark} MANAGED BLOCK"}
 
 `activate:` joins the manifest's `activations` map under the edited path, so reconcile runs the

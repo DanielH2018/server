@@ -24,7 +24,10 @@ from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
 SSHD_D = "/etc/ssh/sshd_config.d"
-SYSCTL = "/etc/sysctl.conf"
+SYSCTL_FILES = (
+    "/etc/sysctl.d/90-homelab-host-tuning.conf",
+    "/etc/sysctl.d/90-homelab-pi-tuning.conf",
+)
 # The twenty keys initial_setup's two `ansible.posix.sysctl` tasks set on the Pi, and the two
 # zram keys from optimize_pi.
 SYSCTL_KEYS = {
@@ -158,25 +161,14 @@ def test_sshd_accepts_both_drop_ins_and_widens_forwarding_only_for_the_sys_user(
     }
 
 
-def test_the_sysctl_edits_cover_exactly_the_keys_ansible_set_and_each_adopts_its_line(
-    package,
-):
-    edits = _edits(package, SYSCTL)
-    assert {e["line"] for e in edits} == {f"{k}={v}" for k, v in SYSCTL_KEYS.items()}
-    for edit in edits:
-        # The first run adopts the `<key>=<value>` line ansible.posix.sysctl wrote.
-        assert re.search(edit["regexp"], edit["line"])
-        assert not re.search(edit["regexp"], "x" + edit["line"])
-        assert package.activations[SYSCTL] == "sysctl"
-    keys = [e["line"].split("=")[0] for e in edits]
-    assert len(keys) == len(set(keys))
-
-
-def test_a_sysctl_regexp_matches_only_its_own_key(package):
-    for edit in _edits(package, SYSCTL):
-        key = edit["line"].split("=")[0]
-        others = [k for k in SYSCTL_KEYS if k != key]
-        assert not any(re.search(edit["regexp"], f"{k}=0") for k in others), key
+def test_the_sysctl_files_hold_exactly_the_keys_ansible_set(package):
+    shipped = [
+        line
+        for path in SYSCTL_FILES
+        for line in package.files[path][0].decode().splitlines()
+    ]
+    assert sorted(shipped) == sorted(f"{k}={v}" for k, v in SYSCTL_KEYS.items())
+    assert {package.activations[path] for path in SYSCTL_FILES} == {"sysctl"}
 
 
 def test_ufw_and_login_defs_edits_keep_the_anchors_of_the_tasks_they_replace(package):
@@ -277,6 +269,6 @@ def test_the_pis_real_manifest_reconciles_clean_and_reloads_sysctl_once(
     result = node.run()
 
     assert result.returncode == 0, result.stderr
-    # The sysctl edits share one file, so its changed hash reloads sysctl once.
+    # Both sysctl files share one action, so their changed hashes reload sysctl once.
     assert len(node.calls("sysctl")) == 1
     assert node.applied()["result"]["ok"] is True
