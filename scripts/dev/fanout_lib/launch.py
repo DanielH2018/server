@@ -5,12 +5,14 @@ import re
 import shlex
 import subprocess
 from datetime import UTC, datetime
+from enum import Enum
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path as _Path
 
 
+from dev.fanout_lib.branch_pr import OpenPr
 from dev.fanout_lib.manifest import Batch
 from dev.fanout_lib.notify import stop_post
 from dev.fanout_lib.placement import RESERVATION_BYTES
@@ -113,20 +115,9 @@ SNAPSHOT_PATHS = (
 # Both sit under the launching user's HOME, which is /var/lib/claude for the agent user.
 # systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too.
 RESUME_FLAG = "--resume-conflict"
-# Where `resume_command` writes the PR and the landing's `VERDICT:` line for the unit it
+# Where `resume.resume_command` writes the PR and the landing's `VERDICT:` line for the unit it
 # starts, relative to the worktree. Not `conflict.json`, which is the `conflict` phase's report.
 RESUME_REQUEST = ".fanout/resume.json"
-# What a `place resume` unit's snapshot holds beyond `SNAPSHOT_PATHS`: the files a pipeline
-# of this repo reads from its own source root at start (`batch_run.BatchRun.__init__`), and
-# the trees its held hooks read (`held_hooks.HELD_TREES`).
-RESUME_SNAPSHOT_PATHS = (
-    *SNAPSHOT_PATHS,
-    ".claude/settings.json",
-    ".claude/rules",
-    ".claude/agents",
-    "inventory",
-    "CLAUDE.md",
-)
 
 
 def unit_path(home: str) -> str:
@@ -179,6 +170,14 @@ def exists_check_command(batch: str, target: Target = SERVER_TARGET) -> str:
     )
 
 
+class OriginBranch(Enum):
+    """What origin holds under the batch's branch name, which decides how the tree is made."""
+
+    ABSENT = "absent"  # a new branch from the base; an origin copy refuses the launch
+    MERGED = "merged"  # its PR merged, so the origin copy is deleted first
+    OPEN_PR = "open-pr"  # the tree checks out and tracks the open PR's head
+
+
 def remote_branch_command(
     batch: str, target: Target = SERVER_TARGET, merged: bool = False
 ) -> str:
@@ -225,24 +224,56 @@ def exclude_fanout_command(target: Target) -> str:
     )
 
 
+def worktree_add_command(
+    batch: str, target: Target = SERVER_TARGET, adopt: bool = False
+) -> str:
+    """The `worktree add` step: a new branch from `target.base`, or the batch's open PR's head.
+
+    An adopted branch tracks `origin/<branch>`, so a plain `git push` updates the open PR.
+    """
+    branch, wt = branch_name(batch), worktree_path(batch, target)
+    base = f"--track {wt} origin/{branch}" if adopt else f"{wt} {target.base}"
+    return _step(
+        f"git -C {target.checkout} worktree add -b {branch} {base}", "worktree add"
+    )
+
+
+def pr_to_continue(tools: Tools, batch: str, target: Target) -> OpenPr | None:
+    """The open PR on `batch`'s branch, which its launch continues; None when there is none.
+
+    The branch name comes from the batch id, so an open PR there is an earlier launch's
+    unfinished work, and a fresh branch from the base would orphan it.
+
+    Raises:
+        LaunchError: GitHub did not answer, so whether to continue a PR is unknown.
+    """
+    found = tools.open_pr(branch_name(batch), target.repo)
+    if isinstance(found, str):
+        raise LaunchError(
+            f"could not read the open PR of {branch_name(batch)}: {found}"
+        )
+    return found
+
+
 def create_worktree_command(
-    batch: str, target: Target = SERVER_TARGET, merged: bool = False
+    batch: str,
+    target: Target = SERVER_TARGET,
+    origin: OriginBranch = OriginBranch.ABSENT,
 ) -> str:
     # The lock keeps the worktree pruner off this tree while the batch's unit runs: its
     # `--reason` is the unit name, which lib.fanout_lock.REASON matches and the pruner
     # judges by the unit's state. Without it a merged, clean, unlocked tree is removable the
     # moment the PR lands — even while the unit is still running.
     wt = worktree_path(batch, target)
+    adopt = origin is OriginBranch.OPEN_PR
     steps = [
         exists_check_command(batch, target),
         _step(f"git -C {target.checkout} fetch origin", "fetch"),
-        remote_branch_command(batch, target, merged),
+        ""
+        if adopt
+        else remote_branch_command(batch, target, origin is OriginBranch.MERGED),
         exclude_fanout_command(target),
-        _step(
-            f"git -C {target.checkout} worktree add -b {branch_name(batch)} "
-            f"{wt} {target.base}",
-            "worktree add",
-        ),
+        worktree_add_command(batch, target, adopt),
         _step(
             f"git -C {target.checkout} worktree lock "
             f"--reason {unit_name(batch, target)} {wt}",
@@ -393,7 +424,7 @@ def review_command(
     """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`.
 
     `PYTHONPATH` supplies the import root a no-venv run lacks: the `scripts/` of the copy
-    `review_script` names. `resume` adds `RESUME_FLAG`, for the unit `resume_command` starts.
+    `review_script` names. `resume` adds `RESUME_FLAG`, for the unit `resume.resume_command` starts.
     """
     wt = worktree_path(batch, target)
     own_tree = target.is_server and not resume
@@ -404,25 +435,6 @@ def review_command(
         f"{review_script(batch, target, resume)} review --batch {batch}"
         f" --repo {target.repo} --rung {rung.name}"
         + (f" {RESUME_FLAG}" if resume else "")
-    )
-
-
-def resume_command(batch: str, unit: str, rung: Rung = DEFAULT) -> str:
-    """The one call that restarts this repo's finished `batch` for a merge conflict.
-
-    It clears a failed unit of the same name, replaces the batch's snapshot with master's
-    `RESUME_SNAPSHOT_PATHS`, writes its own stdin to `RESUME_REQUEST`, and starts the unit
-    `launch` would with `RESUME_FLAG`. It makes no worktree and removes none.
-    """
-    wt = worktree_path(batch)
-    return " && ".join(
-        [
-            f"{{ systemctl --user reset-failed {unit} 2>/dev/null; "
-            f"rm -rf {snapshot_root(wt)}; }}",
-            snapshot_command(batch, SERVER_TARGET, paths=RESUME_SNAPSHOT_PATHS),
-            _step(f"cat > {wt}/{RESUME_REQUEST}", "request write"),
-            systemd_run_command(batch, review=True, rung=rung, resume=True),
-        ]
     )
 
 
@@ -457,11 +469,13 @@ def systemd_run_command(
     return _step(shim_guarded(run, home), "systemd-run")
 
 
-def prepare_command(batch: str, target: Target, merged: bool = False) -> str:
+def prepare_command(
+    batch: str, target: Target, origin: OriginBranch = OriginBranch.ABSENT
+) -> str:
     """Another repo's worktree add+lock, its snapshot and the brief write, without the agent."""
     return " && ".join(
         [
-            create_worktree_command(batch, target, merged),
+            create_worktree_command(batch, target, origin),
             snapshot_command(batch, target),
             write_brief_command(batch, target),
         ]
@@ -469,7 +483,10 @@ def prepare_command(batch: str, target: Target, merged: bool = False) -> str:
 
 
 def launch_command(
-    batch: str, review: bool = False, rung: Rung = DEFAULT, merged: bool = False
+    batch: str,
+    review: bool = False,
+    rung: Rung = DEFAULT,
+    origin: OriginBranch = OriginBranch.ABSENT,
 ) -> str:
     """The one call a batch launch runs: worktree add+lock, venv sync, brief write, systemd-run.
 
@@ -481,7 +498,7 @@ def launch_command(
     """
     return " && ".join(
         [
-            create_worktree_command(batch, merged=merged),
+            create_worktree_command(batch, origin=origin),
             venv_sync_command(batch),
             write_brief_command(batch),
             systemd_run_command(batch, review=review, rung=rung),
@@ -602,13 +619,17 @@ def _release(tools: Tools, batch: str, issues: list[int], target: Target) -> str
     return ""
 
 
-def _branch_merged(tools: Tools, batch: str, target: Target) -> bool:
-    """Whether the batch's branch has a merged PR and no open one, for `remote_branch_command`.
+def _origin_branch(
+    tools: Tools, batch: str, target: Target, continues: OpenPr | None
+) -> OriginBranch:
+    """What origin holds for the batch's branch; `OPEN_PR` only for the PR `continues` names.
 
     Raises:
         LaunchError: GitHub could not be asked, or the branch has an open PR, which is an
             earlier launch's work still waiting to land.
     """
+    if continues is not None:
+        return OriginBranch.OPEN_PR
     branch = branch_name(batch)
     prs = tools.branch_prs(branch, target.repo)
     if prs is None:
@@ -618,7 +639,7 @@ def _branch_merged(tools: Tools, batch: str, target: Target) -> bool:
             f"branch {branch} has open PR {prs.open[0]} from an earlier launch — land or "
             f"close it before relaunching batch {batch}"
         )
-    return bool(prs.merged)
+    return OriginBranch.MERGED if prs.merged else OriginBranch.ABSENT
 
 
 def _launch_elsewhere(
@@ -628,7 +649,7 @@ def _launch_elsewhere(
     brief_text: str,
     issues: list[int],
     target: Target,
-    merged: bool,
+    origin: OriginBranch,
     review: bool = False,
     rung: Rung = DEFAULT,
 ) -> None:
@@ -643,7 +664,7 @@ def _launch_elsewhere(
     """
     try:
         proc = _run(
-            tools, host, prepare_command(batch, target, merged), brief_text, "launch"
+            tools, host, prepare_command(batch, target, origin), brief_text, "launch"
         )
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch, target) or "")
@@ -704,21 +725,6 @@ def _raise_failure(
     raise LaunchError(message)
 
 
-def resume_batch(tools: Tools, b: Batch, request: str, rung: Rung) -> None:
-    """Start the unit that resumes finished batch `b`, feeding `request` to `RESUME_REQUEST`.
-
-    The caller holds the launch lock and has passed the gates `launch`'s caller passes.
-
-    Raises:
-        LaunchError: the call failed or timed out. The worktree and its branch are left as
-            they were, whichever step failed.
-    """
-    proc = _run(tools, b.host, resume_command(b.batch, b.unit, rung), request, "resume")
-    if proc.returncode != 0:
-        step = _attribute_failure(proc.stderr) or "resume command"
-        raise LaunchError(f"{step} failed ({proc.returncode}): {proc.stderr.strip()}")
-
-
 def launch(
     tools: Tools,
     host: str,
@@ -728,6 +734,7 @@ def launch(
     target: Target = SERVER_TARGET,
     review: bool = False,
     rung: Rung = DEFAULT,
+    continues: OpenPr | None = None,
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
 
@@ -754,14 +761,17 @@ def launch(
         LaunchError: the launch call failed or timed out. An `exists` failure means this
             batch's worktree or branch is already on the host — usually a relaunch of a
             batch that failed — and the message says to `clean` it first; nothing is
-            removed. The batch's branch having an open PR, or a copy on origin with no
-            merged PR, refuses the same way; one with a merged PR is deleted from origin. A `worktree add`/`worktree lock` failure (or a timeout, which is a
+            removed. The batch's branch having an open PR that `continues` does not name,
+            or a copy on origin with no merged PR, refuses the same way; one with a merged
+            PR is deleted from origin. A `worktree add`/`worktree lock` failure (or a timeout, which is a
             hung git step in practice — see the `DECIDED:` note above the cleanup check)
             removes the half-made tree and its branch before raising, folding a cleanup
             failure into the same message; so does a refused `systemd-run`. A `fetch` or
             `brief write` failure, or one this can't attribute, leaves the tree in place.
         review: start `fanout_lib.review.review`'s pipeline instead of one `claude -p`.
         rung: the model and effort the implementer runs at (`fanout_lib.sizing`).
+        continues: the open PR `pr_to_continue` found. The tree then checks out its head,
+            the batch's branch on `origin`, instead of a new branch from the target's base.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -772,17 +782,17 @@ def launch(
     # that would remove a worktree a live unit still needs.
     # `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts
     # `"--scope" not in cmd` as the guard.
-    merged = _branch_merged(tools, batch, target)
+    origin = _origin_branch(tools, batch, target, continues)
     if not target.is_server:
         _launch_elsewhere(
-            tools, host, batch, brief_text, issues, target, merged, review, rung
+            tools, host, batch, brief_text, issues, target, origin, review, rung
         )
     else:
         try:
             proc = _run(
                 tools,
                 host,
-                launch_command(batch, review, rung, merged),
+                launch_command(batch, review, rung, origin),
                 brief_text,
                 "launch",
             )

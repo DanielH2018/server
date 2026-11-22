@@ -11,6 +11,7 @@ from collections.abc import Collection, Sequence
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 
 
+from dev.fanout_lib.branch_pr import OpenPr
 from dev.fanout_lib.target import (
     SERVER,
     SERVER_TARGET,
@@ -391,6 +392,35 @@ def _precomputed(cited: list[str]) -> str:
     return precomputed(cited)
 
 
+CONTINUING_HEADING = "## The open PR this batch finishes"
+
+
+def _continuing(pr: OpenPr, branch: str, target: Target) -> str:
+    """The section that turns a batch onto an earlier launch's open PR instead of a new one."""
+    number = pr.url.rstrip("/").rsplit("/", 1)[-1]
+    failing = (
+        "\n".join(f"- {line}" for line in pr.failing)
+        or "- none failed on its head when this batch launched"
+    )
+    undraft = (
+        f"\nThe PR is not a draft, so every push starts CI. Run `gh pr ready {number} --undo` "
+        "before your first push; the pipeline marks it ready after the review.\n"
+        if drafts_pr(target) and not pr.draft
+        else ""
+    )
+    return f"""{CONTINUING_HEADING}
+An earlier launch of this batch opened {pr.url} and did not finish it. Your branch is that
+PR's head, and it tracks `origin/{branch}`. Finish that PR: read its diff, its comments and its
+checks (`gh pr view {number} --comments`, `gh pr checks {number}`), bring the branch up to
+`{target.base}` with `git merge {target.base}`, and fix what fails. Push with a plain
+`git push` and never force-push. Do not open another PR: wherever this brief says
+`gh pr create`, push to this branch instead, and end with this PR's URL.
+{undraft}
+Checks that failed on its head at launch:
+{failing}
+"""
+
+
 def render_brief(
     issues: Sequence[Issue],
     host: str,
@@ -400,6 +430,7 @@ def render_brief(
     target: Target = SERVER_TARGET,
     review: bool = False,
     tracked: Collection[str] = (),
+    continues: OpenPr | None = None,
 ) -> str:
     """Render the stdin brief a headless fan-out agent reads on launch.
 
@@ -419,6 +450,8 @@ def render_brief(
         review: the batch runs `fanout_lib.review.review`'s pipeline. The agent stops at the PR
             on every host, and the pipeline hands it the landing after the review.
         tracked: the target repo's tracked files, which the cited paths resolve against.
+        continues: the open PR on the batch's branch, which the agent finishes instead of
+            opening a new one (`launch.pr_to_continue`).
 
     Returns:
         The full brief text.
@@ -450,11 +483,16 @@ def render_brief(
             f"`uv run --project {snapshot} python {snapshot}/scripts/dev/findings.py open "
             f"--repo {target.repo}`"
         )
+    if continues:
+        start = f"checked out from `origin/{branch}`, the head of {continues.url}"
+        resumed = "\n" + _continuing(continues, branch, target)
+    else:
+        start, resumed = f"checked out\nfresh from {target.base}", ""
     return f"""# Fan-out batch {batch} on {host}
 
-You are a headless agent in the worktree `{branch}` of {target.checkout}, checked out
-fresh from {target.base}. Work the issues below to a PR.
-
+You are a headless agent in the worktree `{branch}` of {target.checkout}, {start}.
+Work the issues below to a PR.
+{resumed}
 ## Claim
 Issues {numbers} are already claimed under `{holder}`. Do not claim them again. The
 dispatcher has posted the `Worked by` comment naming your branch on each of them.

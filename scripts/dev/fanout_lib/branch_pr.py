@@ -103,6 +103,75 @@ def parse_branch_prs(stdout: str) -> BranchPrs | None:
         return None
 
 
+def open_pr_argv(branch: str, repo: str) -> list[str]:
+    """The `gh` command that reads the open PR opened from `branch` in `repo`, with its checks."""
+    return [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        repo,
+        "--head",
+        branch,
+        "--state",
+        "open",
+        "--json",
+        "url,isDraft,statusCheckRollup",
+        "--limit",
+        "1",
+    ]
+
+
+# A cancelled run is no verdict on its head (`docs/landing.md`), so it is not listed as failing.
+_FAILED_CONCLUSIONS = frozenset(
+    {"FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+)
+_FAILED_STATES = frozenset({"FAILURE", "ERROR"})
+
+
+@dataclass(frozen=True)
+class OpenPr:
+    """A branch's open PR, which a launch of the same batch continues instead of starting over.
+
+    Attributes:
+        url: the PR's URL.
+        draft: whether the PR is a draft.
+        failing: one `<check name> <link>` line per check that failed on its head.
+    """
+
+    url: str
+    draft: bool
+    failing: tuple[str, ...] = ()
+
+
+def parse_open_pr(stdout: str) -> OpenPr | None | str:
+    """The open PR in `open_pr_argv`'s output, None when there is none, a reason when unreadable."""
+    try:
+        rows = json.loads(stdout)
+        if not rows:
+            return None
+        row = rows[0]
+        failing = []
+        for check in row.get("statusCheckRollup") or []:
+            if "context" in check:
+                name, link, failed = (
+                    check["context"],
+                    check.get("targetUrl") or "",
+                    str(check.get("state")).upper() in _FAILED_STATES,
+                )
+            else:
+                name, link, failed = (
+                    check["name"],
+                    check.get("detailsUrl") or "",
+                    str(check.get("conclusion")).upper() in _FAILED_CONCLUSIONS,
+                )
+            if failed:
+                failing.append(f"{name} {link}".strip())
+        return OpenPr(str(row["url"]), row.get("isDraft") is True, tuple(failing))
+    except KeyError, TypeError, ValueError, AttributeError, IndexError:
+        return f"`gh pr list` printed what could not be read: {stdout.strip()[:200]!r}"
+
+
 def parse_merged_before(stdout: str, launched_at: str) -> list[str]:
     """The urls of the branch's PRs that merged before `launched_at`; [] if either is unreadable."""
     try:
