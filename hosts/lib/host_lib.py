@@ -3,13 +3,13 @@
 
 Used by the host components (checkout_sync.py, the builder, deploy_ui.py, renovate_notify.py,
 the renovate agent, the triage poller and runner, the fake-remux scripts), by the repo's own
-tools (await_ci.py, land_lib, promote_lib, longhorn_reap_lib, longhorn_lib) and by the
+tools (land_lib, promote_lib, longhorn_reap_lib, longhorn_lib) and by the
 janitorr and configarr health checks. A host component's package ships a copy beside its
 script (a ``lib:`` entry in its ``component.yml``), and the script does a
 ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...`` resolves that copy. Single source of truth for helpers that had drifted between
 scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, the
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
-parser, the GitHub token lookup and REST read, the journal-aware ``log``
+parser, the journal-aware ``log``
 with its ``logfmt`` fields and crash hook, the node-exporter textfile write, and the start of a
 session's oneshot unit with the guarded read of what it left. Stdlib only.
 
@@ -62,9 +62,6 @@ DISCORD_TRUNCATED = "\n…(truncated)"
 # burst; a 429 from a burst only re-queues the message anyway.
 DISCORD_SPOOL_MAX = 50
 DISCORD_SPOOL_FLUSH_MAX = 4
-
-GITHUB_API = "https://api.github.com"
-GITHUB_TIMEOUT_S = 15
 
 # sd-daemon(3) priorities for `log`'s `level`. Without one, journald files a line at the unit's
 # `SyslogLevel=` (notice on checkout-sync and the builder), so `journalctl -p err` finds nothing for a failure.
@@ -505,88 +502,6 @@ def discord_post(
     if spool_dir and not _discord_rejected(status):
         _spool_message(spool_dir, message, log)
     return False
-
-
-def github_token(source: Mapping[str, str], run: Callable) -> str | None:
-    """A GitHub token for REST reads, or None to query anonymously.
-
-    ``GH_TOKEN`` then ``GITHUB_TOKEN`` in ``source`` win, then ``gh auth token``. ``source`` is
-    wherever the caller keeps its settings: await_ci passes ``os.environ``, renovate_notify
-    its ``config.env``, checkout-sync and the builder their systemd credential. The gh CLI on
-    daniel-box is logged in as the repo owner, and the callers that let it answer run as that
-    user. The lookup is best-effort: a missing gh, an expired login, or a slow
-    keyring all return None, and the caller queries anonymously.
-
-    Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
-    SOURCE IP, and every GitHub call from this host shares it: the tick's gate, ``await_ci.py``
-    during a landing, renovate_notify, the ruleset-drift cron. ``await_ci.py`` polls every 20s
-    for up to land.sh's CI budget, which would be hundreds of polls of 2 or more requests each.
-    When this returns None it makes at most 15 polls, at least 90s apart, and skips its
-    descendant walk, which bounds a wait at 30 requests (``await_ci.ANONYMOUS_MAX_POLLS``).
-    Without that back-off, two ``land.sh`` runs in an hour exhaust the limit, after which the
-    tick's gate reads ``HTTP Error 403: rate limit exceeded`` and defers as ``CI not finished``.
-    That is correct fail-closed behaviour, and also a deploy outage nobody asked for.
-    Authenticated, the limit is 5000/hour per token.
-    """
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        value = (source.get(name) or "").strip()
-        if value:
-            return value
-    try:
-        proc = run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
-    except Exception:
-        return None
-    if proc.returncode != 0:
-        return None
-    return (proc.stdout or "").strip() or None
-
-
-def github_auth_headers(token: str | None) -> dict[str, str]:
-    """The ``Authorization`` header for ``token``, or nothing for an anonymous request."""
-    if not token:
-        return {}
-    return {"Authorization": f"Bearer {token}"}
-
-
-def github_get(
-    path: str,
-    token: str | None,
-    *,
-    user_agent: str,
-    timeout: float = GITHUB_TIMEOUT_S,
-    opener: Callable | None = None,
-):
-    """GET ``https://api.github.com/<path>`` and return the parsed JSON body.
-
-    The one request shape every host GitHub reader shares, so the readers cannot drift on the
-    headers, the auth or the timeout. What a failure MEANS stays with the caller:
-    checkout-sync's and the builder's CI gates read an error as ``pending``, a landing lets it
-    raise.
-
-    Args:
-        path: the part after the API root, query string included, e.g. ``repos/o/n/pulls``.
-        token: from ``github_token``, looked up once by the caller; None reads anonymously.
-        user_agent: names the caller in GitHub's logs. GitHub refuses a request without one.
-        timeout: seconds for the whole request.
-        opener: the ``urlopen`` that carries the request, ``urllib.request.urlopen`` when None,
-            resolved per call so a stub of the stdlib name reaches it too.
-
-    Raises:
-        urllib.error.URLError: the API could not be reached, or answered non-2xx
-            (``HTTPError`` is a subclass).
-        TimeoutError, OSError: the socket failed.
-        ValueError: the body was not JSON.
-    """
-    req = urllib.request.Request(
-        "%s/%s" % (GITHUB_API, path.lstrip("/")),
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": user_agent,
-            **github_auth_headers(token),
-        },
-    )
-    with (opener or urllib.request.urlopen)(req, timeout=timeout) as resp:
-        return json.load(resp)
 
 
 def kubectl_runner(binary: str, namespace: str, timeout: int):
