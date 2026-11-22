@@ -9,6 +9,7 @@ Description=Hold the log2ram package until a planned upgrade
 ConditionPathExists=/var/lib/dpkg/info/log2ram.list
 
 [Service]
+SyslogLevel=notice
 Type=oneshot
 ExecStart=/usr/bin/apt-mark -o DPkg::Lock::Timeout=60 hold log2ram
 
