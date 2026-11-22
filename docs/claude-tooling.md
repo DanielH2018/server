@@ -66,9 +66,10 @@ has its own test under `scripts/diagnostics/tests/`.
   working set, and flags a p95 above 80% of the limit or more than 25% from the request.
   The third compares each container's CPU request and limit with its 7-day p95 rate, beside
   its worst 15-minute window of CFS throttling and of CPU and memory PSI `some`. It flags a
-  p95 above 80% of the limit, a window that met both of `ContainerCPUThrottled`'s gates
-  (over 25% of periods throttled and over 0.05 cores lost), and PSI over 10%, so it answers
-  that alert after the fact. The fourth lists each PVC's fill and its days to full at the
+  p95 above 80% of the limit and PSI over 10%. It also flags a throttled container whose pod
+  met `ContainerCPUThrottled`'s condition: over 25% of periods throttled and over 0.05 cores
+  lost, summed over the pod's containers in one window. The table therefore answers that
+  alert after the fact. The fourth lists each PVC's fill and its days to full at the
   7-day growth rate. Without `--all`, the last three list only the flagged rows. It is a report, not a verdict: exit 0,
   or 75 when a query or the IngressRoute read fails.
 - **`vip-placement`** reads the Services, EndpointSlices, L2Advertisements and Nodes, and exits

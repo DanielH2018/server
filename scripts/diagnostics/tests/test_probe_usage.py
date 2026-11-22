@@ -1,5 +1,7 @@
 """Tests for `probe.py usage`: route grouping, the memory and CPU flags and the PVC projection."""
 
+import re
+
 import pytest
 
 
@@ -109,16 +111,20 @@ def test_a_container_matching_its_request_is_counted_but_listed_only_under_all()
     assert len(_memory(100 * mib, 512 * mib, [("xk2vq", 110 * mib)], True)) == 3
 
 
-def _cpu(containers):
-    """`format_cpu` over `{container: (request, limit, p95, throttle, cpu_psi, mem_psi)}`."""
+def _cpu(containers, pod_throttled=True):
+    """`format_cpu` over `{container: (request, limit, p95, throttle, cpu_psi, mem_psi)}`.
+
+    Every container is in one pod, which met the alert's condition when `pod_throttled`.
+    """
+    labels = {"namespace": "homelab", "pod": "app-6b4f9c8d7-xk2vq"}
     columns = [[] for _ in range(6)]
     for container, cells in containers.items():
-        labels = {"namespace": "homelab", "pod": "app-6b4f9c8d7-xk2vq"}
         for column, value in zip(columns, cells, strict=True):
             if value is not None:
                 column.append(_series(value, container=container, **labels))
     request, limit, p95, throttle, cpu_psi, memory_psi = columns
-    return usage.format_cpu(p95, request, limit, throttle, cpu_psi, memory_psi)
+    pods = [_series(0.4, **labels)] if pod_throttled else []
+    return usage.format_cpu(p95, request, limit, throttle, pods, cpu_psi, memory_psi)
 
 
 def test_a_container_throttled_and_stalled_is_listed_before_one_only_throttled():
@@ -145,12 +151,32 @@ def test_a_container_throttled_and_stalled_is_listed_before_one_only_throttled()
     )
 
 
+def test_a_pod_over_the_gates_marks_its_throttled_containers_but_not_an_unthrottled_one():
+    lines = _cpu(
+        {
+            "a-sidecar": (0.05, 0.5, 0.03, 0.4, 0.0, 0.0),
+            "b-app": (0.05, 0.5, 0.03, 0.4, 0.0, 0.0),
+            "c-idle": (0.05, 0.5, 0.0, 0.0, 0.0, 0.0),
+        }
+    )
+    assert lines[0].startswith("CPU: 3 containers, 2 flagged")
+    assert [line.split()[0] for line in lines[2:]] == [
+        "homelab/app/a-sidecar",
+        "homelab/app/b-app",
+    ]
+
+
+def test_a_throttled_container_in_a_pod_under_the_gates_is_not_flagged():
+    lines = _cpu({"app": (0.05, 0.5, 0.03, 0.4, 0.0, 0.0)}, pod_throttled=False)
+    assert lines[0].startswith("CPU: 1 containers, 0 flagged")
+
+
 def test_memory_pressure_alone_marks_a_container_stalled():
     lines = _cpu({"app": (0.1, 1.0, 0.1, None, 0.0, 0.3)})
     assert lines[2].endswith("30.0%  stalled")
 
 
-def test_a_container_with_no_throttled_window_is_counted_but_not_listed():
+def test_a_container_with_no_cpu_limit_is_counted_but_not_listed():
     lines = _cpu({"app": (0.1, None, 0.05, None, 0.01, 0.0)})
     assert lines[0].startswith("CPU: 1 containers, 0 flagged")
     assert len(lines) == 2
@@ -168,9 +194,20 @@ def test_the_throttle_query_carries_both_gates_of_the_throttle_alert():
         for r in group["rules"]
         if r.get("alert") == "ContainerCPUThrottled"
     ]
-    gates = f"> {usage.THROTTLED}", f"> {usage.THROTTLED_CORES}"
-    assert all(gate in rule and gate in usage.THROTTLE_QUERY for gate in gates)
-    assert f"[{usage.CPU_WINDOW}]" in rule
+    query = usage.THROTTLED_POD_QUERY
+
+    def gates(expr):
+        return sorted({float(n) for n in re.findall(r"> ([0-9.]+)", expr)})
+
+    def rate_windows(expr):
+        return set(re.findall(r"\[(\w+)\]", expr))
+
+    def sums(expr):
+        return set(re.findall(r"sum by \(([^)]*)\)", expr))
+
+    assert gates(rule) == gates(query) == [usage.THROTTLED_CORES, usage.THROTTLED]
+    assert rate_windows(rule) == rate_windows(query) == {usage.CPU_WINDOW}
+    assert sums(rule) == sums(query) == {"namespace, pod"}
 
 
 def test_a_pvc_filling_inside_the_horizon_is_listed_with_its_days_to_full():
