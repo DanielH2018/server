@@ -179,6 +179,33 @@ def exists_check_command(batch: str, target: Target = SERVER_TARGET) -> str:
     )
 
 
+def remote_branch_command(
+    batch: str, target: Target = SERVER_TARGET, merged: bool = False
+) -> str:
+    """Free the batch's branch name on origin, or refuse when origin still holds it.
+
+    A branch left on origin by an earlier launch has a tip unrelated to the fresh local
+    branch, so the agent's push cannot fast-forward it, and the agent once pushed to the
+    orchestrator's branch instead. The "Default branch" ruleset blocks GitHub's
+    delete-on-merge for `worktree-fanout-*`, so such leftovers are common.
+
+    Args:
+        batch: the batch id.
+        target: the repo the batch works.
+        merged: the branch's PR has merged and none is open, so its origin copy is deleted.
+            Otherwise an origin copy is work nothing has landed, and the step fails.
+    """
+    branch = branch_name(batch)
+    git = f"git -C {target.checkout}"
+    absent = 'test -z "$heads"'
+    if merged:
+        absent = f"{{ {absent} || {git} push --quiet origin --delete {branch}; }}"
+    return _step(
+        f"heads=$({git} ls-remote --heads origin refs/heads/{branch}) && {absent}",
+        _REMOTE_STEP,
+    )
+
+
 def exclude_fanout_command(target: Target) -> str:
     """Make git ignore `.fanout/` in `target`'s worktrees, or "" where the repo already does.
 
@@ -198,7 +225,9 @@ def exclude_fanout_command(target: Target) -> str:
     )
 
 
-def create_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
+def create_worktree_command(
+    batch: str, target: Target = SERVER_TARGET, merged: bool = False
+) -> str:
     # The lock keeps the worktree pruner off this tree while the batch's unit runs: its
     # `--reason` is the unit name, which lib.fanout_lock.REASON matches and the pruner
     # judges by the unit's state. Without it a merged, clean, unlocked tree is removable the
@@ -207,6 +236,7 @@ def create_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
     steps = [
         exists_check_command(batch, target),
         _step(f"git -C {target.checkout} fetch origin", "fetch"),
+        remote_branch_command(batch, target, merged),
         exclude_fanout_command(target),
         _step(
             f"git -C {target.checkout} worktree add -b {branch_name(batch)} "
@@ -427,18 +457,20 @@ def systemd_run_command(
     return _step(shim_guarded(run, home), "systemd-run")
 
 
-def prepare_command(batch: str, target: Target) -> str:
+def prepare_command(batch: str, target: Target, merged: bool = False) -> str:
     """Another repo's worktree add+lock, its snapshot and the brief write, without the agent."""
     return " && ".join(
         [
-            create_worktree_command(batch, target),
+            create_worktree_command(batch, target, merged),
             snapshot_command(batch, target),
             write_brief_command(batch, target),
         ]
     )
 
 
-def launch_command(batch: str, review: bool = False, rung: Rung = DEFAULT) -> str:
+def launch_command(
+    batch: str, review: bool = False, rung: Rung = DEFAULT, merged: bool = False
+) -> str:
     """The one call a batch launch runs: worktree add+lock, venv sync, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -449,7 +481,7 @@ def launch_command(batch: str, review: bool = False, rung: Rung = DEFAULT) -> st
     """
     return " && ".join(
         [
-            create_worktree_command(batch),
+            create_worktree_command(batch, merged=merged),
             venv_sync_command(batch),
             write_brief_command(batch),
             systemd_run_command(batch, review=review, rung=rung),
@@ -473,6 +505,7 @@ _CLEANUP_STEPS = frozenset(
 )
 
 _EXISTS_STEP = "exists"
+_REMOTE_STEP = "remote branch"
 
 
 def _attribute_failure(stderr: str) -> str | None:
@@ -569,6 +602,25 @@ def _release(tools: Tools, batch: str, issues: list[int], target: Target) -> str
     return ""
 
 
+def _branch_merged(tools: Tools, batch: str, target: Target) -> bool:
+    """Whether the batch's branch has a merged PR and no open one, for `remote_branch_command`.
+
+    Raises:
+        LaunchError: GitHub could not be asked, or the branch has an open PR, which is an
+            earlier launch's work still waiting to land.
+    """
+    branch = branch_name(batch)
+    prs = tools.branch_prs(branch, target.repo)
+    if prs is None:
+        raise LaunchError(f"could not read branch {branch}'s PRs from GitHub")
+    if prs.open:
+        raise LaunchError(
+            f"branch {branch} has open PR {prs.open[0]} from an earlier launch — land or "
+            f"close it before relaunching batch {batch}"
+        )
+    return bool(prs.merged)
+
+
 def _launch_elsewhere(
     tools: Tools,
     host: str,
@@ -576,6 +628,7 @@ def _launch_elsewhere(
     brief_text: str,
     issues: list[int],
     target: Target,
+    merged: bool,
     review: bool = False,
     rung: Rung = DEFAULT,
 ) -> None:
@@ -589,7 +642,9 @@ def _launch_elsewhere(
         LaunchError: as `launch` documents, plus a refused claim, which removes the tree.
     """
     try:
-        proc = _run(tools, host, prepare_command(batch, target), brief_text, "launch")
+        proc = _run(
+            tools, host, prepare_command(batch, target, merged), brief_text, "launch"
+        )
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch, target) or "")
         raise LaunchError(message) from None
@@ -634,6 +689,12 @@ def _raise_failure(
             f"{branch_name(batch)} on {host} — run `clean <run-id>` first, or remove "
             "the tree by hand if you are abandoning its work; relaunching over it "
             "would delete that branch"
+        )
+    if step == _REMOTE_STEP:
+        raise LaunchError(
+            f"origin still holds branch {branch_name(batch)} with no merged PR, or could "
+            "not be asked, and the batch could not push to it — run `git push origin "
+            f"--delete {branch_name(batch)}` if you are abandoning its work"
         )
     message = (
         f"{step or 'launch command'} failed ({proc.returncode}): {proc.stderr.strip()}"
@@ -693,7 +754,8 @@ def launch(
         LaunchError: the launch call failed or timed out. An `exists` failure means this
             batch's worktree or branch is already on the host — usually a relaunch of a
             batch that failed — and the message says to `clean` it first; nothing is
-            removed. A `worktree add`/`worktree lock` failure (or a timeout, which is a
+            removed. The batch's branch having an open PR, or a copy on origin with no
+            merged PR, refuses the same way; one with a merged PR is deleted from origin. A `worktree add`/`worktree lock` failure (or a timeout, which is a
             hung git step in practice — see the `DECIDED:` note above the cleanup check)
             removes the half-made tree and its branch before raising, folding a cleanup
             failure into the same message; so does a refused `systemd-run`. A `fetch` or
@@ -710,14 +772,17 @@ def launch(
     # that would remove a worktree a live unit still needs.
     # `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts
     # `"--scope" not in cmd` as the guard.
+    merged = _branch_merged(tools, batch, target)
     if not target.is_server:
-        _launch_elsewhere(tools, host, batch, brief_text, issues, target, review, rung)
+        _launch_elsewhere(
+            tools, host, batch, brief_text, issues, target, merged, review, rung
+        )
     else:
         try:
             proc = _run(
                 tools,
                 host,
-                launch_command(batch, review, rung),
+                launch_command(batch, review, rung, merged),
                 brief_text,
                 "launch",
             )
