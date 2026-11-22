@@ -188,9 +188,7 @@ class Plan:
         return f"remote-ips: {'; '.join(parts)}"
 
 
-def plan(
-    seen, items, now, home=frozenset(), ttl=TTL, refresh_below=REFRESH_BELOW, cap=CAP
-):
+def plan(seen, items, now, home=frozenset(), refresh_below=REFRESH_BELOW, cap=CAP):
     """Decide the writes for this run from the sightings and the LAPI's current items.
 
     `items` is `cscli allowlists inspect -o json`'s `items` list. An item whose expiry cannot be
