@@ -40,6 +40,10 @@
 # publishes a newer homelab-daniel-pi, so the Pi applies a change without waiting for the daily
 # fire. The daily timer below stays the fallback. No file here needs a credential.
 #
+# The reconcile timing drop-in copies reconcile's per-action timing lines, and those of its wait
+# unit, to /var/log/pi-health/reconcile.log. Alloy ships that file to Loki, because the Pi's
+# journal archives are root-only and last about five days. No file here needs a credential.
+#
 # The host baseline (host-hardening) is the sudo cache, auditd's rules, the module blacklist, the
 # core-dump drop-in, the apport drop-in, the login banner and the base packages. No file here needs
 # a credential.
@@ -57,6 +61,8 @@ depends:
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+  - {src: units/homelab-reconcile-timing.conf, dst: /usr/lib/systemd/system/homelab-reconcile.service.d/50-homelab-timing.conf}
+  - {src: units/homelab-reconcile-timing.conf, dst: /usr/lib/systemd/system/homelab-reconcile-wait.service.d/50-homelab-timing.conf}
 enable:
   homelab-updater.timer: timers.target
 # The Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
