@@ -22,14 +22,14 @@
 # `sudo /usr/lib/homelab/docker-engine restart docker` (or `containerd`), which restarts the one
 # daemon under the updater interlock and recreates the project after a dockerd restart.
 defaults:
-  # The Ubuntu release in the apt version suffix, `-*~ubuntu.24.04~noble`. The renderer has no
+  # The Ubuntu release in the apt version suffix, `-*~ubuntu.26.04~resolute`. The renderer has no
   # facts, so these restate the Pi's release, as the Renovate annotations do.
-  docker_engine_ubuntu_version: "24.04"
-  docker_engine_ubuntu_codename: noble
+  docker_engine_ubuntu_version: "26.04"
+  docker_engine_ubuntu_codename: resolute
   # The engine versions homelab-docker-engine.service installs. Four upstream versions, not one:
   # docker-ce and docker-ce-cli share the Moby version, and the other three packages each carry
   # their own. Renovate tracks each on the `deb` datasource against download.docker.com's own
-  # noble/arm64 index in ONE manual group, never the upstream GitHub releases: Docker packages a
+  # resolute/arm64 index in ONE manual group, never the upstream GitHub releases: Docker packages a
   # release days to weeks after upstream tags it, so a bump could name a version apt has no
   # package for.
   #
@@ -40,13 +40,13 @@ defaults:
   #   `~ubuntu`: the same index carries bare `<version>-<rev>` rows for containerd.io, and a
   #   version extractVersion cannot match is dropped from the version space.
   # - `versioning=semver` overrides the deb datasource's default `deb` versioning.
-  # renovate: datasource=deb depName=docker-ce versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  # renovate: datasource=deb depName=docker-ce versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=resolute&components=stable&binaryArch=arm64
   docker_engine_version: "29.8.1"
-  # renovate: datasource=deb depName=containerd.io versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  # renovate: datasource=deb depName=containerd.io versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=resolute&components=stable&binaryArch=arm64
   docker_engine_containerd_version: "2.3.5"
-  # renovate: datasource=deb depName=docker-compose-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  # renovate: datasource=deb depName=docker-compose-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=resolute&components=stable&binaryArch=arm64
   docker_engine_compose_plugin_version: "5.5.1"
-  # renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
+  # renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=resolute&components=stable&binaryArch=arm64
   docker_engine_buildx_plugin_version: "0.37.1"
   # GOMEMLIMIT for each Go daemon, paired with GOGC=off. docs/docker-engine-pins-and-runtime.md
   # has the measurements; hosts/tests/test_docker_daemons_gomemlimit_headroom.py holds

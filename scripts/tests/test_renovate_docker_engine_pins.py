@@ -2,10 +2,10 @@
 """Guard that the Pi's four Docker engine pins track the apt index they install from.
 
 `hosts/components/pi-docker/templates/docker-engine.pins.j2` renders each pin into a glob
-(`containerd.io 2.3.5-*~ubuntu.24.04~noble`), so the version space that matters is Docker's
+(`containerd.io 2.3.5-*~ubuntu.26.04~resolute`), so the version space that matters is Docker's
 own apt index, not the upstream GitHub tags. The managers read the apt index, not
 github-releases, because Docker packages a release days-to-weeks after upstream tags it: a
-bare upstream tag can name a version the noble/arm64 index does not carry, and
+bare upstream tag can name a version the resolute/arm64 index does not carry, and
 homelab-docker-engine.service would then refuse the upgrade. No CI job resolves the rendered spec.
 
 The guards here are offline by construction — the operator rejected a CI job that fetches
@@ -96,7 +96,7 @@ def test_each_annotation_names_the_apt_package_its_var_renders() -> None:
 
 
 def test_each_annotation_reads_dockers_own_apt_index() -> None:
-    """Every one of the four resolves against Docker's noble/arm64 index, with all three
+    """Every one of the four resolves against Docker's resolute/arm64 index, with all three
     query parameters the deb datasource requires. Omit one and the datasource is inert."""
     pins = _pi_docker_pins()
     assert len(pins) == len(PI_DOCKER_DEB_PACKAGES)
@@ -108,7 +108,7 @@ def test_each_annotation_reads_dockers_own_apt_index() -> None:
             "the repo apt actually installs from."
         )
         params = parse_qs(url.query)
-        assert params.get("suite") == ["noble"], params
+        assert params.get("suite") == ["resolute"], params
         assert params.get("components") == ["stable"], params
         assert params.get("binaryArch") == ["arm64"], params
 
