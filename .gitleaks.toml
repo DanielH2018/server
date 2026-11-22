@@ -72,7 +72,8 @@ paths = ['''^scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json$''']
 # reads `key` plus a high-entropy token as a credential: monitor-bridge's
 # `- key: b2_probe_application_key` tripped it at entropy 3.77 and failed promote's render. The template's
 # `# gitleaks:allow` on that line does not help, because the renderer drops YAML comments and the
-# bundle line arrives bare. The line regex admits
+# bundle line arrives bare. CI's `host_packages_build` job runs the same bundle scan on every PR.
+# The line regex admits
 # only a snake_case name with at least one underscore, the shape of every SOPS key name. A hex,
 # base62 or JWT credential has no underscore and still trips, and so does every other rule on the
 # same line. It needs both the bundle path and the line (`condition = "AND"`), and `regexTarget =
