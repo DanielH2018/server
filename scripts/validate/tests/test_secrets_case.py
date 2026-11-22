@@ -141,3 +141,16 @@ def test_seal_pi_rebuilds_the_real_pi_package_and_both_variants_with_the_sealed_
 def test_seal_pi_refuses_a_job_that_built_no_homelab_tools(tmp_path):
     with pytest.raises(case.CaseFailed, match="no homelab-tools"):
         case.seal_pi(_Cases(tmp_path, tools=()), _Container())
+
+
+def test_seal_host_seals_the_named_hosts_credentials(tmp_path):
+    seal_dir = case.seal_host(
+        _Cases(tmp_path),
+        _Container(),
+        "daniel-server",
+        seal=lambda c, values: f"sealed:{sorted(values)}\n",
+    )
+
+    sealed = (seal_dir / "daniel-server.sops.yaml").read_text()
+    assert "'nut_monitor_password'" in sealed
+    assert "'alloy_pi_http_password'" not in sealed

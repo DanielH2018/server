@@ -39,7 +39,9 @@ of the Pi package Depends on the pinned version (`validate_lib/engine_case.py`).
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). Another installs the
 Ubuntu packages that daniel-server's and daniel-box's units override, puts each shipped override
-on them, and starts it (`validate_lib/node_units_case.py`). The last cases run
+on them, and starts it (`validate_lib/node_units_case.py`). Another installs daniel-server's
+and daniel-box's real packages, each sealed as the Pi's is, on a container named after the node,
+and asserts no unit failed (`validate_lib/node_package_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
 branch with a break-glass kit, the kit's two red fixtures, a local build whose Depends only
 the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and a host made from
@@ -120,6 +122,7 @@ from validate.validate_lib import bootstrap_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
+    HOST,
     HOST_PKG,
     KEYRING,
     PAYLOAD,
@@ -258,8 +261,10 @@ class Cases:
             return
         self.passed.append(name)
 
-    def boot(self, label: str) -> Container | None:
-        container = Container(self.image, f"homelab-host-test-{label}", self.work)
+    def boot(self, label: str, hostname: str = HOST) -> Container | None:
+        container = Container(
+            self.image, f"homelab-host-test-{label}", self.work, hostname=hostname
+        )
         try:
             container.boot(self.python)
         except (CaseFailed, subprocess.SubprocessError) as exc:

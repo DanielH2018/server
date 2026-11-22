@@ -271,7 +271,7 @@ def _body(cases, c: Container) -> str:
     expect_held(held, _engine(c), c.read(PROM), pin)
 
     # The ciphertext seal_pi wrote, so the red build differs from pi-dropin only by its Depends.
-    sealed = cases.work / "build" / f"pi-sealed-{c.name}" / "sops"
+    sealed = secrets_case.sealed_sops(cases, c, HOST)
     rendered = depends_variant(build_root / "red", deb_version(offered_deb), sealed)
     red = build(rendered, f"{cases.versions['updater-head']}.8", build_root / "red-deb")
     red_deb = cases.work / "debs" / f"engine-red-{red.name}"
