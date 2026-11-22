@@ -26,7 +26,8 @@ from dev.fanout_lib.review.held_hooks import (
     with_batch_env,
     write_hooks,
 )
-from dev.fanout_lib.review.processes import Runner, otel_attributes, run_process
+from dev.fanout_lib.review.processes import Runner, run_process
+from dev.fanout_lib.telemetry import otel_attributes
 from dev.fanout_lib.review.review_prompts import (
     FINDINGS_SCHEMA,
     anti_patterns,

@@ -125,7 +125,8 @@ def test_a_dotfiles_unit_registers_the_fanout_stop_hook_through_settings():
 
 def test_a_server_unit_takes_the_hook_from_its_project_settings_not_the_argv():
     """A second registration would fire the hook twice per stop and halve its block cap."""
-    assert _settings_arg(systemd_run_command("763", SERVER_TARGET)) is None
+    settings = _settings_arg(systemd_run_command("763", SERVER_TARGET))
+    assert settings is not None and "hooks" not in settings
     project = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text())
     commands = [h["command"] for s in project["hooks"]["Stop"] for h in s["hooks"]]
     assert any(c.endswith("run-hook.sh fanout-stop") for c in commands)
