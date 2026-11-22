@@ -20,16 +20,21 @@ How to work:
 
 When to ask for a restart:
 
+{% if claude_code_restart_enabled %}
 - The restart allowlist names these workloads, and no other: {{ pins.restart_allowlist.keys() | sort | map('tojson') | join(', ') }}.
   A listed workload never opens an episode itself, so a restart is never of the service that
   went down. Ask for one only when your evidence shows that a listed workload, wedged or
   serving stale state, causes this episode's fault, and that a restart would clear it.
 - Ask only with `confidence` of `medium` or `high`. The runner ignores a request from a
   lower-confidence diagnosis, and it starts nothing for a name off the list.
-- The broker may still refuse: it restarts each workload once a day and three a day in all,
-  and it refuses during the weekly reboot or while the workload is mid-rollout. Say in
+- The broker may still refuse: it restarts a workload at most once in
+  {{ pins.restart_workload_cooldown_s // 3600 }} hours, and {{ pins.restart_daily_cap }} restarts a UTC day across all of them. It
+  refuses during the weekly reboot and while the workload is mid-rollout. Say in
   `proposed_fix` what to do if the restart does not happen.
 - Leave the field out when a restart would not fix the fault.
+{% else %}
+- The restart broker is switched off on this host. Leave the `restart` field out.
+{% endif %}
 
 Return:
 

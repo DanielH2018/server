@@ -79,6 +79,9 @@ RESTART_UNIT = "homelab-claude-restart@{}.service"
 # An allowlist key fits the instance shape's 63 characters, so a longer name is never listed.
 RESTART_NAME_MAX = 64
 VERDICT_MAX = 4096
+# How long the runner waits past each unit's own TimeoutStartSec, which stops the unit first.
+SESSION_WAIT_MARGIN_S = 300
+RESTART_WAIT_MARGIN_S = 60
 
 
 def build_prompt(instructions: str, episode: dict) -> str:
@@ -217,8 +220,10 @@ def request_restart(
         )
     path = cfg["RESTART_VERDICT"]
     before = _file_identity(path)
-    # The broker unit's own TimeoutStartSec stops it; this wait only outlasts it.
-    end = start(RESTART_UNIT.format(asked), int(cfg["RESTART_TIMEOUT_S"]) + 60)
+    end = start(
+        RESTART_UNIT.format(asked),
+        int(cfg["RESTART_TIMEOUT_S"]) + RESTART_WAIT_MARGIN_S,
+    )
     restart = read_verdict(path, asked, before, end)
     log(f"restart {asked}: {restart.verdict} {restart.cause}".rstrip(), tag=TAG)
     return restart
@@ -436,8 +441,9 @@ def main(
             build_prompt(instructions, episode),
         )
         out = fresh_dir(exchange, OUT_DIR)
-        # The unit's own TimeoutStartSec stops the session; this wait only outlasts it.
-        end = start(SESSION_UNIT, int(cfg.get("RUN_TIMEOUT_S", "1800")) + 300)
+        end = start(
+            SESSION_UNIT, int(cfg.get("RUN_TIMEOUT_S", "1800")) + SESSION_WAIT_MARGIN_S
+        )
         result, timed_out = session_result(out, end)
         transcript_bytes = keep_transcript(
             out, os.path.join(runs_dir, f"{episode_id}.transcript.jsonl"), TAG

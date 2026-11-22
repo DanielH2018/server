@@ -628,7 +628,9 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   (`hosts/tests/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_restart_enabled`, true
   only in daniel-box's host_vars. False drops the unit, the script and the config from the next
-  package version, and keeps `/var/lib/claude-restart`. To stop the broker without a landing,
+  package version, and keeps `/var/lib/claude-restart`. It also empties the restart names
+  the triage config and prompt carry, so no run asks for a restart
+  (`hosts/tests/test_claude_triage.py::test_a_switched_off_broker_leaves_a_run_no_name_to_ask_for`). To stop the broker without a landing,
   run `sudo touch /etc/claude-restart/hold`; removing the file releases it
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_hold_file_refuses_a_listed_workload`).
 - **Abort valves:** one restart per workload per 24 hours

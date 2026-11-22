@@ -43,7 +43,7 @@ PINNED = {
 
 
 def runner_constants() -> dict:
-    """EPISODE_ID's pattern and STATES, read from the runner's source.
+    """EPISODE_ID's pattern, STATES and the two wait margins, read from the runner's source.
 
     Read rather than imported: a role's `files/` is on no test's path but its own `tests/`.
     """
@@ -51,11 +51,16 @@ def runner_constants() -> dict:
     for node in ast.parse(RUNNER.read_text()).body:
         if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
             name = node.targets[0].id
-            if name == "STATES":
+            if name in ("STATES", "SESSION_WAIT_MARGIN_S", "RESTART_WAIT_MARGIN_S"):
                 found[name] = ast.literal_eval(node.value)
             elif name == "EPISODE_ID" and isinstance(node.value, ast.Call):
                 found[name] = ast.literal_eval(node.value.args[0])
-    assert set(found) == {"STATES", "EPISODE_ID"}, "the runner moved its constants"
+    assert set(found) == {
+        "STATES",
+        "EPISODE_ID",
+        "SESSION_WAIT_MARGIN_S",
+        "RESTART_WAIT_MARGIN_S",
+    }, "the runner moved its constants"
     return found
 
 
@@ -124,14 +129,18 @@ def test_an_inventory_value_under_the_role_names_moves_nothing(template) -> None
     ) == render_component_text("claude-code", template)
 
 
+def config_env(overrides: dict | None = None) -> dict[str, str]:
+    return dict(
+        line.split("=", 1)
+        for line in render_component_text("claude-code", CONFIG, overrides).splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+
+
 def test_the_config_carries_the_pins() -> None:
     """The red half of the test above: the config does read the pins file."""
     pinned = pins()
-    config = dict(
-        line.split("=", 1)
-        for line in render_component_text("claude-code", CONFIG).splitlines()
-        if "=" in line and not line.startswith("#")
-    )
+    config = config_env()
     assert config["BUDGET_USD"] == str(pinned["budget_usd"])
     assert config["DAILY_CAP"] == str(pinned["daily_cap"])
     assert config["POLL_MODE"] == pinned["poll_mode"]
@@ -141,11 +150,7 @@ def test_the_config_carries_the_pins() -> None:
 
 def test_the_run_outlasts_the_session_and_the_restart_it_waits_for() -> None:
     # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
-    config = dict(
-        line.split("=", 1)
-        for line in render_component_text("claude-code", CONFIG).splitlines()
-        if "=" in line and not line.startswith("#")
-    )
+    config = config_env({"claude_code_restart_enabled": True})
     broker = json.loads(
         render_component_text("claude-code", "claude-restart-config.json.j2")
     )
@@ -154,10 +159,20 @@ def test_the_run_outlasts_the_session_and_the_restart_it_waits_for() -> None:
     assert json.loads(config["RESTART_NAMES"]) == sorted(broker["allowlist"])
     assert config["RESTART_VERDICT"] == f"{broker['state_dir']}/verdict"
     assert directive(broker_unit, "TimeoutStartSec") == [config["RESTART_TIMEOUT_S"]]
-    # claude_triage_run.py waits 300 s past the session unit's clock and 60 s past the broker's.
-    waits = int(directive(session, "TimeoutStartSec")[0]) + 300
-    waits += int(config["RESTART_TIMEOUT_S"]) + 60
+    margins = runner_constants()
+    waits = int(directive(session, "TimeoutStartSec")[0])
+    waits += margins["SESSION_WAIT_MARGIN_S"]
+    waits += int(config["RESTART_TIMEOUT_S"]) + margins["RESTART_WAIT_MARGIN_S"]
     assert int(directive(unit(), "TimeoutStartSec")[0]) > waits
+
+
+def test_a_switched_off_broker_leaves_a_run_no_name_to_ask_for() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`homelab-claude-restart@`, a restart of one allowlisted Deployment)
+    off = {"claude_code_restart_enabled": False}
+    assert json.loads(config_env(off)["RESTART_NAMES"]) == []
+    prompt = render_component_text("claude-code", "claude-triage-prompt.txt.j2", off)
+    assert "Leave the `restart` field out." in prompt
+    assert '"docs"' not in prompt
 
 
 # The pinned users (claude-triage-pins.j2): the controller and the session.
