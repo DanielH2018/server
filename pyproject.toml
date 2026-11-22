@@ -223,9 +223,12 @@ target-version = "py314"
 extend-exclude = [
   "*.md",
 ]
-# The hosts run reconcile under Ubuntu 24.04's python3, which is 3.12. Formatting it for the
-# repo's newer target writes 3.14-only syntax, `except A, B:` among it.
-# hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
+# The files below run under a host's /usr/bin/python3, not uv's interpreter, and keep to the
+# 3.12 grammar. Formatting them for the repo's newer target writes 3.14-only syntax,
+# `except A, B:` among it.
+# TODO: https://github.com/DanielH2018/server/issues/9987 - every host's python3 is 3.14 on
+# Ubuntu 26.04, so this floor no longer matches an interpreter; retire it.
+# hosts/lib/tests/test_reconcile_component.py parses reconcile with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
 # hosts/lib/tests/test_repo_signer.py holds it to the same grammar.
 # The signer imports host_lib.py, so that is py312 too, and

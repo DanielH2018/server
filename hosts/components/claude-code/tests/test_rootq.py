@@ -472,8 +472,8 @@ def test_as_root_the_test_seam_is_ignored() -> None:
 
 
 def test_the_root_script_parses_with_the_3_12_grammar() -> None:
-    # The hosts run it under Ubuntu 24.04's python3, so a 3.14-only construct would fail every
-    # run there and none here.
+    # Root runs it under /usr/bin/python3, and pyproject.toml holds it to the py312 floor of the
+    # host-run files.
     ast.parse(Path(rootq.__file__).read_text(), feature_version=(3, 12))
 
 

@@ -26,8 +26,8 @@ from lib.worktrees import (
 )
 from worktree_holders import answer, escape, main, render, scan, serve
 
-# Ubuntu 24.04's /usr/bin/python3, which the shebang names. Root must not run an interpreter
-# a non-root user can write, so the uv-managed host Python is not an option.
+# pyproject.toml's py312 floor for the host-run files. The shebang names /usr/bin/python3: root
+# must not run an interpreter a non-root user can write, so the uv-managed Python is no option.
 DISTRO_PYTHON = (3, 12)
 ME = pwd.getpwuid(os.getuid()).pw_name
 

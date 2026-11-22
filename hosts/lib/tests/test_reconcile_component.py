@@ -1,8 +1,8 @@
 """The rendered `reconcile` component, and `homelab-reconcile` held to the 3.12 grammar.
 
-The hosts run reconcile under Ubuntu 24.04's python3, which is 3.12, while this suite runs a
-newer interpreter. The parse below covers syntax only; the container suite, which runs
-reconcile under 3.12, covers the standard library.
+The hosts run reconcile under their /usr/bin/python3, and pyproject.toml holds it to the 3.12
+grammar, while this suite runs a newer interpreter. The parse below covers syntax only; the
+container suite, which runs reconcile under each release's python3, covers the standard library.
 
 Run: uv run pytest hosts/lib/tests/test_reconcile_component.py
 """

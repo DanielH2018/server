@@ -2,12 +2,11 @@
 # step 4). CI builds it once per matrix leg with build-image.sh, beside this file, and boots it
 # with systemd as PID 1. scripts/validate/host_package_cases.py runs the cases against it.
 
-ARG RELEASE=24.04
+ARG RELEASE=26.04
 
-# Each release pinned by digest, so a rebuild starts from the same root filesystem. Bump both
-# by hand, with SNAPSHOT below: renovate.json's ignorePaths holds `**/tests/**`, so no
-# Renovate manager reads this file.
-FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS ubuntu-24.04
+# Each release pinned by digest, so a rebuild starts from the same root filesystem. Bump it by
+# hand, with SNAPSHOT below: renovate.json's ignorePaths holds `**/tests/**`, so no Renovate
+# manager reads this file. A RELEASE with no stage here fails the build.
 FROM ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7 AS ubuntu-26.04
 
 FROM ubuntu-${RELEASE}

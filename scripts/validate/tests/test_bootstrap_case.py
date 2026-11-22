@@ -141,7 +141,7 @@ def test_ci_runs_the_fewest_bootstrap_shards_whose_items_all_start_at_once(tmp_p
     def widest(n: int) -> int:
         return max(len(case.shard(planned, k, n)) for k in range(1, n + 1))
 
-    assert len(shards) >= 2
+    assert shards, "host_packages_bootstrap runs no release"
     expected = [f"{k}/{count}" for k in range(1, count + 1)]
     assert {release: sorted(s) for release, s in shards.items()} == {
         release: expected for release in shards

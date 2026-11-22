@@ -32,7 +32,7 @@ literal value, is withheld whole. The rest is redacted by default: every value i
 a placeholder unless it matches one of the token classes below, and a value under a key whose
 name could name a credential is always replaced. Output stops at OUT_MAX bytes.
 
-It runs under /usr/bin/python3, Ubuntu 24.04's 3.12, not uv's pinned interpreter: that one sits
+It runs under /usr/bin/python3, not uv's pinned interpreter: that one sits
 under a user's home, and root never executes a file a user can write. `-I` keeps PYTHONPATH,
 the user site and the working directory out of the interpreter.
 

@@ -461,7 +461,7 @@ While the Pi is down, `pi-peer-backup`'s nightly run reports down, and a promoti
 that role fails its `pi-peer-backup-verify` gate. A builder run that changes only the Pi's and
 daniel-box's packages stages the Pi as the canary, so its gate stays open until step 10.
 
-1. To name the host, flash stock Ubuntu 24.04 for Raspberry Pi and edit `user-data` on the card's
+1. To name the host, flash stock Ubuntu 26.04 for Raspberry Pi and edit `user-data` on the card's
     boot partition before first boot. The script refuses the image's default hostname, `ubuntu`.
     The script's step 5 also turns off SSH passwords, so add the operator's key here.
 

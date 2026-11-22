@@ -6,6 +6,11 @@
 # `homelab-secrets.service` writes it. A host that lists this component lists `secrets-unit` too.
 # A failed delivery re-runs every five minutes until it succeeds, and the page ends
 # `Failed at <UTC time>`, the time of the first attempt.
+#
+# The alert needs a curl newer than 8.5. The unit passes the time and the webhook as
+# `--variable 'name@file'`, and the claude-code component's alert units pass them the same way.
+# curl 8.18.0 on Ubuntu 26.04 reads both files. On Ubuntu 24.04, curl 8.5.0 opens them and then
+# exits 26 on a read error, so the alert sends nothing there.
 credentials:
   - discord_alert_webhook
 files:

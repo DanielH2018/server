@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release: ["24.04", "26.04"]
+        release: ["26.04"]
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -87,9 +87,9 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          line=$(hosts/lib/tests/container/build-image.sh 24.04 --publish | tail -n 1)
+          line=$(hosts/lib/tests/container/build-image.sh 26.04 --publish | tail -n 1)
           {
-            echo "### image.pins, ubuntu:24.04 arm64"
+            echo "### image.pins, ubuntu:26.04 arm64"
             echo '```'
             echo "inputs $(sha256sum hosts/lib/tests/container/Dockerfile | cut -c1-64)"
             echo "$line"

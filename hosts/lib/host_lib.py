@@ -13,9 +13,9 @@ parser, the journal-aware ``log``
 with its ``logfmt`` fields and crash hook, the node-exporter textfile write, and the start of a
 session's oneshot unit with the guarded read of what it left. Stdlib only.
 
-The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3,
-Ubuntu 24.04's 3.12, so this file keeps to the 3.12 grammar: pyproject.toml formats
-it for py312, and tests/test_host_lib.py parses it with that grammar.
+The repository signer (homelab_repo_sign.py) imports it under the host's /usr/bin/python3.
+Like the other host-run files it keeps to the 3.12 grammar: pyproject.toml formats it for
+py312, and tests/test_host_lib.py parses it with that grammar.
 """
 
 from __future__ import annotations

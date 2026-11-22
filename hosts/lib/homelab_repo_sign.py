@@ -44,8 +44,8 @@ the same reason as the run before it; 1 on a new refusal or a new failure, which
 the set's chosen SHA), `key`, `index`, `sign`, `staged` (it is not a plain directory) and
 `io`, a filesystem or tool error.
 
-It runs under the host's `/usr/bin/python3`, Ubuntu 24.04's 3.12, with the standard library
-only, so pyproject.toml formats it for 3.12. It imports `host_lib.py`, which the builder component
+It runs under the host's `/usr/bin/python3` with the standard library only, and pyproject.toml
+formats it for 3.12, like the other host-run files. It imports `host_lib.py`, which the builder component
 installs beside it and which pyproject.toml holds to the same grammar.
 
 Run: /usr/bin/python3 homelab_repo_sign.py

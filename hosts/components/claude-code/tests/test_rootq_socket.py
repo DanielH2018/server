@@ -266,8 +266,8 @@ def test_the_helpers_verbs_are_exactly_rootqs() -> None:
 
 
 def test_the_root_helper_and_the_client_parse_with_the_3_12_grammar() -> None:
-    # The hosts run both under Ubuntu 24.04's python3, so a 3.14-only construct would fail
-    # every request there and none here.
+    # Root runs both under /usr/bin/python3, and pyproject.toml holds them to the py312 floor of
+    # the host-run files.
     for name in ("homelab_rootq_socket.py", "rootq_socket.py"):
         ast.parse((FILES / name).read_text(), feature_version=(3, 12))
 

@@ -107,7 +107,7 @@ files:
   - {src: templates/90-homelab-pi-tuning.conf, dst: /etc/sysctl.d/90-homelab-pi-tuning.conf, activate: sysctl}
 lines:
   # The GPU split and the watchdog dtparam. Bookworm moved the file to /boot/firmware; the Pi runs
-  # Ubuntu 24.04, which has no /boot/config.txt.
+  # Ubuntu 26.04, which has no /boot/config.txt.
   - {path: /boot/firmware/config.txt, line: "gpu_mem=16", regexp: '^gpu_mem=', activate: reboot}
   - {path: /boot/firmware/config.txt, line: "dtparam=watchdog=on", regexp: '^dtparam=watchdog=', activate: reboot}
   # zram. PERCENT is the device's uncompressed capacity, not its RAM cost (about 4.6:1).
