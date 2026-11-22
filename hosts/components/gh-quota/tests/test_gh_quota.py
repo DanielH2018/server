@@ -185,6 +185,7 @@ def test_two_logins_of_one_uid_are_counted_in_separate_ledgers(recording):
     )
 
     operator.record(["pr", "list"])
+    gh.graphql_reset = RESET + 900
     agent.record(["pr", "list"])
     agent.record(["issue", "list"])
 
@@ -305,9 +306,47 @@ def test_a_caller_whose_gh_has_no_token_gets_a_ledger_named_by_uid(tmp_path: Pat
     assert path.name.startswith(f"uid-{os.getuid()}@")
 
 
+def _with_builder_token(ledger: Ledger) -> Ledger:
+    return dataclasses.replace(
+        ledger, env={"GH_TOKEN": "builder-token", "CLAUDE_CODE_SESSION_ID": "builder"}
+    )
+
+
+def test_tokens_whose_windows_share_a_reset_report_one_window(recording):
+    operator, clock, gh = recording
+    builder = _with_builder_token(operator)
+    operator.record(["pr", "list"])
+    operator.record(["pr", "view", "1"])
+    clock.t += 31
+    gh.graphql_reset, gh.graphql_used = RESET + 30, 140
+    builder.record(["pr", "list"])
+
+    (window,) = operator.windows()
+
+    assert window.identities == tuple(
+        sorted((identity_of("gho_operator"), identity_of("builder-token")))
+    )
+    assert (window.used, window.recorded, window.beyond) == (140, 3, 137)
+    assert window.sessions == {
+        SESSION: {"pr list": 1, "pr view": 1},
+        "builder": {"pr list": 1},
+    }
+
+
+def test_the_json_row_of_a_shared_window_sums_each_tokens_writes(recording, capsys):
+    operator, _clock, _gh = recording
+    operator.record(["pr", "ready", "1"])
+    _with_builder_token(operator).record(["issue", "comment", "9", "--body", "x"])
+
+    assert main(["status", "--json"], operator) == 0
+
+    (row,) = json.loads(capsys.readouterr().out)
+    assert (row["writes_minute"], row["writes_hour"]) == (2, 2)
+
+
 def test_status_lists_only_the_sessions_over_the_share_until_asked_for_all():
     window = Window(
-        identity="uid-1000",
+        identities=("uid-1000",),
         bucket="graphql",
         used=3120,
         quota=5000,

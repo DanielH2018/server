@@ -13,7 +13,7 @@ decision. The ledger records and refuses nothing.
 |---|---|---|
 | 1 | A ledger that `ghread` and `lib/gh.py` record each call in, and `gh-quota status` | Deployed on 2026-11-14: [server#8717](https://github.com/DanielH2018/server/pull/8717) for the module and `lib/gh.py`, and [dotfiles#1336](https://github.com/DanielH2018/dotfiles/pull/1336) for `ghread`, `cc-wait` and the claude-guard rule. Its week of measurement ends on 2026-11-21. |
 | 2 | The session ceiling, the reserve and the write pace, enforced inside those two wrappers | Planned |
-| 3 | The REST readers that do not run `gh` record and obey the same ledger | Recording built: `github_rest.github_get` records each authenticated read. `admit` and `If-None-Match` are planned. |
+| 3 | The REST readers that do not run `gh` record and obey the same ledger | Recording built: `github_rest.github_get` records each authenticated read, and `forge.py`'s `GitHub` client each REST request. `admit` and `If-None-Match` are planned. |
 | 4 | Identical reads from many sessions cost one GitHub call | Planned |
 | Identity | Agent sessions stop spending the operator's quota | Owned by [slice 6 of the agent-user plan](claude-agent-user.md#status) |
 
@@ -117,7 +117,7 @@ Three paths reach GitHub from a host, and each already has one owner.
 |---|---|---|
 | A read from a session's shell | `ghread`, the one GitHub shim, shipped by the dotfiles repo | every session, with no permission prompt |
 | A `gh` call from a repo Python tool | `scripts/lib/gh.py` | `findings.py`, fan-out, `land_lib`, the probes. The `git-and-gh-go-through-lib` census row in `tests/repo/test_census_rows_python.py` refuses a bare `["gh", …]` elsewhere. |
-| A REST read with no `gh` | `hosts/lib/github_rest.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify` |
+| A REST read with no `gh` | `hosts/lib/github_rest.py:github_get` | `await_ci.py`, checkout-sync, the builder, `renovate-notify`. `forge.py`'s `GitHub` client sends through its own transport and records through `github_rest.count_github_call`. |
 
 **The design adds no shim.** The operator ruled on 2026-11-14 that GitHub gets one shim, and
 `ghread` is it. The budget is a library that those three owners call.
@@ -291,11 +291,15 @@ measurement predates slice 3's recording, so the host REST readers are part of t
 **`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
 checkout-sync therefore shows under its own service name, and the builder's token gets a
-ledger file of its own. `gh-quota status` prints one line per identity, and each line's
-spend beyond the ledger subtracts only that identity's recorded calls. The builder token's
-reads therefore show on that token's line, while the operator's line still counts them as
-beyond the ledger, as it counts the other host's calls. Only a join over every identity's
-file on both hosts, on GitHub's reset epoch, attributes them. An anonymous read spends the source IP's limit, so it is not
+ledger file of its own. `gh-quota status` joins the identities whose windows in a bucket
+share GitHub's limit and a reset within `RESET_DRIFT_S`, because every token one user owns
+spends that user's one quota. It prints one count line per joined window, named by its
+identities joined with `+`, and that line's spend beyond the ledger subtracts the recorded
+calls of every identity in it. The builder token's reads therefore count as recorded on the
+operator's line. The other host's calls still count as beyond the ledger, so a figure for
+both hosts still needs the join on GitHub's reset epoch described above. Two different users
+whose windows happen to reset within `RESET_DRIFT_S` are joined too, because no sample names
+a token's owner. An anonymous read spends the source IP's limit, so it is not
 recorded. `github_rest` loads the module from `/usr/lib/homelab/gh_quota.py` by path,
 because a component's copy sits beside its own script, where a bare import cannot find the
 module. A host without the gh-quota component therefore records nothing.
@@ -390,15 +394,15 @@ tok-2edb9dd14a9a graphql: 3120/5000 used, resets 15:20 UTC; 2 sessions made 1012
 tok-2edb9dd14a9a writes: 12/80 in the last minute, 140/500 in the last hour
 ```
 
-Each identity and bucket with an open quota window gets one count line. Under it come only
+Each open quota window gets one count line per bucket, naming every identity that shares it. Under it come only
 the sessions at or above `ATTENTION_SHARE` of the bucket's limit. Each identity that wrote in
 the last hour then gets one writes line, described below.
 
 | Command | What it does |
 |---|---|
-| `gh-quota status` | A count line per identity and bucket, then only the sessions over the share. |
+| `gh-quota status` | A count line per shared window and bucket, then only the sessions over the share. |
 | `gh-quota status --all` | Every session, with its calls by class. |
-| `gh-quota status --json` | The same windows as one line of compact JSON. Each row also carries its identity's `writes_minute` and `writes_hour`. |
+| `gh-quota status --json` | The same windows as one line of compact JSON. Each row also carries `writes_minute` and `writes_hour`, summed over its identities. |
 | `gh-quota mode` | Prints the mode. The mode changes through `gh_quota_mode` and the next package version. |
 | `gh-quota release <session>`, from slice 2 | Lifts that session's ceiling until the window resets. Operator only. |
 
