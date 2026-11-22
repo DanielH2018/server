@@ -712,6 +712,44 @@ The weekly autoclean (`APT::Periodic::AutocleanInterval "7"`) never removed a ho
 deletes only a deb whose version no index lists, and the homelab index lists every version the
 pool holds.
 
+## The 30-minute start timeout of reconcile on the Pi (#7490)
+
+`homelab-reconcile.service` on daniel-pi reached its `TimeoutStartSec=30min` at 00:22 UTC on
+2026-11-05 and at 16:23 UTC on 2026-11-06. The second timeout made the updater write its hold,
+and `HostReconcileFailed` fired from 16:45 to 20:44 and from 21:04 to 22:47 that day. The journal
+could not name the slow action, so reconcile gained a `starts` and a `took <N>s` line around every
+command it calls (`docs/host-packages.md`, *Clearing a host's hold*).
+
+The timing named the wait for the `dpkg` lock. The `DPkg::Post-Invoke` hooks of apt held the
+lock for 179 s to 206 s after `dpkg` finished, and reconcile waited inside its own limit: the wait
+was 70% to 76% of each run (#7648). Since 2026-11-08 `homelab-reconcile-wait.service` waits first, under
+its own 5-minute limit, so the 30-minute limit starts once the lock is free. The line arm's
+`dpkg -S` calls then became one call that names every path (#8610, the table above).
+
+The margin held under the worst hook seen. At 03:52 on 2026-11-14 `needrestart` outlasted the
+wait unit's limit, and reconcile still finished inside its own: `HostReconcileFailed` did not
+fire. The two runs left in the Pi's journal on 2026-11-22, at 12:21 and 13:09 UTC, took 16 s and
+15 s. Their slowest commands were the batched `dpkg -S` at 2.1 s and 4.6 s, and `ufw` at 0.6 s to
+1.3 s a call.
+
+The issue's check, two weeks of package updates with no timeout, ran from Prometheus, not the
+journal:
+
+| Reading, 2026-11-07 13:00 to 2026-11-22 13:00 UTC | Value |
+|---|---|
+| Versions `homelab_host_applied_info{host="daniel-pi"}` reported | 85 |
+| `HostReconcileFailed` episodes on daniel-pi | 1, 22:27 to 22:37 on 2026-11-12 |
+| Cause of that episode | The users arm refused `node_exporter` at uid 999 when 8f1029aad declared 904. daniel-box held at 22:02 on the same refusal for its own users. |
+| End of that episode | `homelab_host_update_success_timestamp_seconds` reads 22:37:06, after the renumber and `--clear-hold` |
+
+A timeout shows in Prometheus only as the hold an updater run writes. A reconcile that timed out
+outside an updater run, such as after a hand `apt upgrade`, leaves no series, so this reading
+bounds the updater path alone.
+
+The journal could not answer the check. journald keeps 32 MiB in 1 MiB files, about five days on
+the Pi. An agent session reads only the active file, because the archives are root-only, and the
+Pi's Alloy ships no journal line to Loki. #9926 tracks that gap.
+
 ## See also
 
 - `hosts/components/pi-heartbeats/CLAUDE.md` — the container-recovery contract.
