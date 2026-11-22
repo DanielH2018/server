@@ -4,7 +4,7 @@
 Neither node's resolver has a record for the Pi, so `ssh daniel-pi` and `probe.py pi
 containers` fail there with "Could not resolve hostname" (#8227). Either half of the host the
 package owns can carry the name: a line in /etc/hosts or a drop-in under /etc/ssh/ssh_config.d/.
-A per-user ssh config or known_hosts, such as the operator's on daniel-box (#9626) or the
+A per-user ssh config or known_hosts, such as the operator's on daniel-box or the
 agent's under /usr/lib/homelab/claude-agent/, does not count: a rebuilt host has neither.
 
 Run: uv run pytest hosts/tests/test_server_names_daniel_pi.py

@@ -2,8 +2,8 @@
 #
 # Neither node's resolver has a record for the Pi, so without the /etc/hosts line `ssh daniel-pi`
 # and `probe.py pi` end "Could not resolve hostname". The regexp anchors on the NAME, so a new Pi
-# address rewrites the line rather than adding a second one. cloud-init leaves /etc/hosts alone
-# on both nodes, because neither sets `manage_etc_hosts`.
+# address rewrites the line rather than adding a second one. Neither node's /etc/hosts carries the
+# header cloud-init writes when `manage_etc_hosts` lets it regenerate the file at boot.
 #
 # /etc/ssh/ssh_known_hosts pins the Pi's key from `ssh_host_ed25519_key` in
 # inventory/host_vars/daniel-pi.yml under the name and the address. Without it `ssh daniel-pi`
