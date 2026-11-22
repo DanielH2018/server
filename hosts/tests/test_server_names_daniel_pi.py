@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""daniel-server's package gives every user on the host a name for daniel-pi (#8227).
+"""Each k3s node's package gives every user on the host a name and a host key for daniel-pi.
 
-daniel-server's resolver has no record for the Pi, so `ssh daniel-pi` and `probe.py pi
-containers` fail there with "Could not resolve hostname". Either half of the host the package
-owns can carry the name: a line in /etc/hosts or a drop-in under /etc/ssh/ssh_config.d/. A
-per-user ssh config, such as the agent's under /usr/lib/homelab/claude-agent/, does not count:
-the sessions that hit this run as `ubuntu`.
+Neither node's resolver has a record for the Pi, so `ssh daniel-pi` and `probe.py pi
+containers` fail there with "Could not resolve hostname" (#8227). Either half of the host the
+package owns can carry the name: a line in /etc/hosts or a drop-in under /etc/ssh/ssh_config.d/.
+A per-user ssh config or known_hosts, such as the operator's on daniel-box or the
+agent's under /usr/lib/homelab/claude-agent/, does not count: a rebuilt host has neither.
 
 Run: uv run pytest hosts/tests/test_server_names_daniel_pi.py
 """
 
+import pytest
 from _host_packages import package
 from lib import yaml_fast
 from lib.repo_paths import HOST_VARS
 
 SSH_DROPINS = "/etc/ssh/ssh_config.d/"
+K3S_NODES = ("daniel-box", "daniel-server")
 
 
 def _etc_hosts_names(pkg) -> dict[str, str]:
@@ -47,11 +49,12 @@ def _ssh_dropin_names(pkg) -> dict[str, str]:
     return names
 
 
-def test_daniel_server_pins_the_pi_host_key_under_every_name_it_gives_the_pi() -> None:
+@pytest.mark.parametrize("host", K3S_NODES)
+def test_node_pins_the_pi_host_key_under_every_name_it_gives_the_pi(host: str) -> None:
     """ssh looks a host key up under the name it connects to, so a pin under the address alone
     leaves `ssh daniel-pi` at "Host key verification failed"."""
     pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
-    pkg = package("daniel-server")
+    pkg = package(host)
     body, _mode = pkg.files["/etc/ssh/ssh_known_hosts"]
     pinned: dict[str, str] = {}
     for row in body.decode().splitlines():
@@ -64,11 +67,12 @@ def test_daniel_server_pins_the_pi_host_key_under_every_name_it_gives_the_pi() -
     )
 
 
-def test_daniel_server_names_daniel_pi_at_the_pi_address() -> None:
+@pytest.mark.parametrize("host", K3S_NODES)
+def test_node_names_daniel_pi_at_the_pi_address(host: str) -> None:
     pi_ip = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())["server_ip"]
-    pkg = package("daniel-server")
+    pkg = package(host)
     names = {**_ssh_dropin_names(pkg), **_etc_hosts_names(pkg)}
     assert names.get("daniel-pi") == pi_ip, (
-        "daniel-server's package maps daniel-pi to nothing in /etc/hosts or "
+        f"{host}'s package maps daniel-pi to nothing in /etc/hosts or "
         f"{SSH_DROPINS}; mapped names: {names}"
     )
