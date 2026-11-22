@@ -1,0 +1,7 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
+# here are overwritten. Reclaim takes the Claude fleet's pages before system.slice's working set.
+# `k3s_system_slice_memory_low` in hosts/components/k3s-server/defaults/main.yml says why.
+#
+# The postinst's daemon-reload writes the value into the running slice's cgroup.
+[Slice]
+MemoryLow={{ k3s_system_slice_memory_low }}

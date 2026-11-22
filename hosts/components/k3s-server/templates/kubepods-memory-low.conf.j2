@@ -1,0 +1,10 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
+# here are overwritten. Reclaim takes the Claude fleet's pages before the pods' working set.
+# `k3s_kubepods_memory_low` in hosts/components/k3s-server/defaults/main.yml says why.
+#
+# kubepods.slice is kubelet's transient unit, and at each start kubelet runs set-property with
+# MemoryLow=0, written to /run/systemd/transient/kubepods.slice.d/50-MemoryLow.conf. This file's
+# name sorts after it, so it wins at every daemon-reload, and homelab-kubepods-memory-low.path
+# runs that reload each time kubelet rewrites the file.
+[Slice]
+MemoryLow={{ k3s_kubepods_memory_low }}

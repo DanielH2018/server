@@ -205,8 +205,8 @@ SUBCOMMANDS = [
     ),
     (
         "usage",
-        "requests per service over the retention window, memory request and limit against "
-        "the 7d p95, and PVC fill with days to full",
+        "requests per service over the retention window, memory and CPU request and limit "
+        "against the 7d p95 with CPU throttling and pressure, and PVC fill with days to full",
         "usage",
         run_usage,
     ),

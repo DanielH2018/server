@@ -17,7 +17,7 @@ import shutil
 import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
+from lib.repo_paths import HOST_VARS, K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from lib.longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
@@ -242,6 +242,67 @@ def test_the_system_slice_drop_in_outweighs_kubepods_with_no_restart(package):
     assert setting(content, "CPUWeight") == str(weight)
     assert int(weight) > 625
     assert SYSTEM_SLICE_WEIGHT not in package.activations
+
+
+UNIT_DIR = "/usr/lib/systemd/system/"
+KUBEPODS_DROPINS = UNIT_DIR + "kubepods.slice.d/"
+KUBELET_MEMORY_LOW = "/run/systemd/transient/kubepods.slice.d/50-MemoryLow.conf"
+REAPPLY = UNIT_DIR + "homelab-kubepods-memory-low"
+K3S_UNIT = {
+    "homelab-daniel-box": "k3s.service",
+    "homelab-daniel-server": "k3s-agent.service",
+}
+
+
+def mebibytes(size: str) -> int:
+    return int(size[:-1]) * {"M": 1, "G": 1024}[size[-1]]
+
+
+def test_each_node_renders_its_own_memory_low_and_k3s_fits_inside_system_slice(
+    node_package,
+):
+    """A child's effective memory.low never exceeds its parent's, so k3s fits system.slice."""
+    host = node_package.name.removeprefix("homelab-")
+    values = {
+        **yaml_fast.safe_load(K3S_DEFAULTS.read_text()),
+        **yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()),
+    }
+    dropin = "60-homelab-memory-low.conf"
+    rendered = {
+        "k3s_kubepods_memory_low": KUBEPODS_DROPINS + dropin,
+        "k3s_system_slice_memory_low": f"{UNIT_DIR}system.slice.d/{dropin}",
+        "k3s_memory_low": f"{UNIT_DIR}{K3S_UNIT[node_package.name]}.d/{dropin}",
+    }
+    for key, path in rendered.items():
+        content = text(node_package, path)
+        assert setting(content, "MemoryLow") == values[key]
+        assert setting(content, "MemoryMin") is None
+        assert path not in node_package.activations
+    assert mebibytes(values["k3s_memory_low"]) <= mebibytes(
+        values["k3s_system_slice_memory_low"]
+    )
+
+
+def test_kubelets_reset_of_kubepods_memory_low_is_overridden_and_reapplied(
+    node_package,
+):
+    """kubelet writes MemoryLow=0 to the transient drop-in at each start; a later name wins."""
+    # fact: hosts/components/k3s-server/CLAUDE.md#Autonomous-role contract (`homelab-kubepods-memory-low.path`, the reload after kubelet's reset)
+    kubelet_name = KUBELET_MEMORY_LOW.rsplit("/", 1)[1]
+    names = [
+        path.removeprefix(KUBEPODS_DROPINS)
+        for path in node_package.files
+        if path.startswith(KUBEPODS_DROPINS)
+    ]
+    assert names
+    assert all(name > kubelet_name for name in names), names
+    assert setting(text(node_package, REAPPLY + ".path"), "PathChanged") == (
+        KUBELET_MEMORY_LOW
+    )
+    service = text(node_package, REAPPLY + ".service")
+    assert setting(service, "ExecStart") == "/usr/bin/systemctl daemon-reload"
+    wants = UNIT_DIR + "paths.target.wants/homelab-kubepods-memory-low.path"
+    assert node_package.links[wants] == "../homelab-kubepods-memory-low.path"
 
 
 def test_the_logging_drop_in_sends_both_streams_to_the_log_file(package):

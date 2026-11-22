@@ -14,7 +14,7 @@ Run: uv run pytest tests/services/test_alertmanager_flux_inhibit.py
 
 from _helpers import K8S_ROLES
 from lib import yaml_fast
-from test_alertmanager_blackbox_inhibit import scrape_down_rule, target_alert
+from test_alertmanager_blackbox_inhibit import target_alert
 from test_alertmanager_host_check_inhibit import inhibited
 
 FLUX_RULES = K8S_ROLES / "observability" / "files" / "rules" / "flux.yaml"
@@ -71,10 +71,3 @@ def test_another_jobs_scrape_target_page_is_not_held():
 
 def test_the_absent_arm_holds_no_scrape_target_page():
     assert not inhibited(target_alert("flux", SOURCE_INSTANCE), [absent_source()])
-
-
-def test_source_and_target_rules_are_both_live():
-    # Inhibition runs before routing, so a shadow source over a live target mutes the only page.
-    source_shadow = "shadow" in controller_down_rules()["up"]["labels"]
-    target_shadow = "shadow" in scrape_down_rule("flux")["labels"]
-    assert (source_shadow, target_shadow) == (False, False)

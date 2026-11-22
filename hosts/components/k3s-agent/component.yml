@@ -91,6 +91,11 @@ files:
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
   - {src: "component:templates/cpu-weight.conf.j2", dst: /usr/lib/systemd/system/k3s-agent.service.d/60-homelab-cpu-weight.conf}
   - {src: "component:templates/system-slice-cpu-weight.conf.j2", dst: /usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf}
+  - {src: "component:templates/memory-low.conf.j2", dst: /usr/lib/systemd/system/k3s-agent.service.d/60-homelab-memory-low.conf}
+  - {src: "component:templates/system-slice-memory-low.conf.j2", dst: /usr/lib/systemd/system/system.slice.d/60-homelab-memory-low.conf}
+  - {src: "component:templates/kubepods-memory-low.conf.j2", dst: /usr/lib/systemd/system/kubepods.slice.d/60-homelab-memory-low.conf}
+  - {src: "component:units/homelab-kubepods-memory-low.path", dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.path}
+  - {src: "component:units/homelab-kubepods-memory-low.service", dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.service}
   # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
@@ -143,6 +148,7 @@ outputs:
 enable:
   homelab-k3s-kubeconfig.service: multi-user.target
   homelab-kubelet-shutdown-lock.timer: timers.target
+  homelab-kubepods-memory-low.path: paths.target
   homelab-wired-gateway.timer: {target: timers.target, when: "k3s_node_static_link | length > 0"}
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:

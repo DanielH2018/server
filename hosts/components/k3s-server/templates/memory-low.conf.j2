@@ -1,0 +1,8 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-server) -- edits
+# here are overwritten. k3s's own claim on system.slice's MemoryLow, so the docs-refresh run's
+# pytest cannot take its share. `k3s_memory_low` in hosts/components/k3s-server/defaults/main.yml
+# says why.
+#
+# The postinst's daemon-reload writes the value into the running unit's cgroup.
+[Service]
+MemoryLow={{ k3s_memory_low }}

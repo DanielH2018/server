@@ -1,6 +1,6 @@
 """`probe.py usage` -- how the services are used, read from Prometheus and the IngressRoutes.
 
-Three tables:
+Four tables:
 
 1. Requests per service over the whole retention window, summed across the service's
    IngressRoutes. Traefik labels each route `<namespace>-<route>-<hash>@kubernetescrd`, and a
@@ -10,7 +10,13 @@ Three tables:
 2. Each container's memory request, limit and 7-day p95 working set. The p95 of a
    container at a `CENSUS_PRIORITY_CLASSES` class is also recorded by `docs/reference/critical_memory.py`, and CI fails one
    whose request is under `UNDER_REQUEST` of it.
-3. Each PVC's fill and its projected days to full.
+3. Each container's CPU request, limit and 7-day p95 rate, beside its worst `CPU_WINDOW`
+   window of CFS throttling and of CPU and memory pressure (PSI "some": the share of wall
+   time at least one of its tasks waited). `throttled` marks a throttled container in a pod
+   that met the `ContainerCPUThrottled` rule's condition: both of its gates, `THROTTLED` and
+   `THROTTLED_CORES`, over the pod's summed containers in one window. The table therefore
+   explains that alert after the fact.
+4. Each PVC's fill and its projected days to full.
 
 A report, not a verdict: it exits 0 once every query answered, and 75 when one did not.
 """
@@ -50,6 +56,8 @@ REQUEST_QUERY = (
     '* on (namespace, pod) group_left () (kube_pod_status_phase{phase="Running"} == 1)'
 )
 LIMIT_QUERY = REQUEST_QUERY.replace("requests", "limits")
+CPU_REQUEST_QUERY = REQUEST_QUERY.replace('"memory"', '"cpu"')
+CPU_LIMIT_QUERY = LIMIT_QUERY.replace('"memory"', '"cpu"')
 NEAR_LIMIT = 0.80
 REQUEST_SLACK = 0.25
 UNDER_REQUEST = 0.5
@@ -62,6 +70,44 @@ CRITICAL_P95_QUERY = (
     f'kube_pod_info{{priority_class=~"{"|".join(sorted(CENSUS_PRIORITY_CLASSES))}"}}'
     f"[{MEMORY_WINDOW}]))"
 )
+
+_CONTAINER = '{container!="",container!="POD"}'
+CPU_P95_QUERY = (
+    "max by (namespace, pod, container) (quantile_over_time(0.95, "
+    f"rate(container_cpu_usage_seconds_total{_CONTAINER}[5m])[{MEMORY_WINDOW}:5m]))"
+)
+CPU_WINDOW = "15m"
+THROTTLED = 0.25
+THROTTLED_CORES = 0.05
+STALLED = 0.10
+
+
+def _worst_window(rate_expr, by="namespace, pod, container"):
+    return f"max by ({by}) (max_over_time(({rate_expr})[{MEMORY_WINDOW}:5m]))"
+
+
+def _pod_rate(family):
+    return (
+        f"sum by (namespace, pod) (rate(container_cpu_cfs_{family}{_CONTAINER}"
+        f"[{CPU_WINDOW}]))"
+    )
+
+
+# A container with no CPU limit has 0/0 periods, a NaN that `>= 0` drops.
+THROTTLE_QUERY = _worst_window(
+    f"rate(container_cpu_cfs_throttled_periods_total{_CONTAINER}[{CPU_WINDOW}]) / "
+    f"rate(container_cpu_cfs_periods_total{_CONTAINER}[{CPU_WINDOW}]) >= 0"
+)
+# ContainerCPUThrottled's condition: both gates over the pod's summed containers.
+THROTTLED_POD_QUERY = _worst_window(
+    f"{_pod_rate('throttled_periods_total')} / {_pod_rate('periods_total')} > {THROTTLED} "
+    f"and {_pod_rate('throttled_seconds_total')} > {THROTTLED_CORES}",
+    by="namespace, pod",
+)
+CPU_PSI_QUERY = _worst_window(
+    f"rate(container_pressure_cpu_waiting_seconds_total{_CONTAINER}[{CPU_WINDOW}])"
+)
+MEMORY_PSI_QUERY = CPU_PSI_QUERY.replace("_cpu_", "_memory_")
 
 _PVC = "max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_{}_bytes)"
 USED_QUERY = _PVC.format("used")
@@ -240,6 +286,95 @@ def format_memory(p95_series, request_series, limit_series, show_all=False):
     return lines
 
 
+def _cores(value):
+    return "-" if value is None else f"{value:.2f}"
+
+
+def _share(value):
+    return "-" if value is None else f"{value:.1%}"
+
+
+def cpu_flags(limit, p95, throttle, pod_throttled, cpu_psi, memory_psi):
+    """The flags a container's CPU row carries: `near limit`, `throttled`, `stalled`. Pure.
+
+    `throttled` needs both the pod's alert condition (`pod_throttled`) and some throttling of
+    this container, so an unthrottled sibling in the same pod is not marked.
+    """
+    flags = []
+    if limit and p95 is not None and p95 > NEAR_LIMIT * limit:
+        flags.append("near limit")
+    if pod_throttled and throttle:
+        flags.append("throttled")
+    if any(psi is not None and psi > STALLED for psi in (cpu_psi, memory_psi)):
+        flags.append("stalled")
+    return flags
+
+
+def format_cpu(
+    p95_series,
+    request_series,
+    limit_series,
+    throttle_series,
+    throttled_pod_series,
+    cpu_psi_series,
+    memory_psi_series,
+    show_all=False,
+):
+    """The CPU table: a count line, then the flagged containers, throttled and stalled first.
+
+    Rows are keyed like the memory table's. The throttle and PSI columns are each the worst
+    `CPU_WINDOW` window in `MEMORY_WINDOW`, so `throttled` and `stalled` on one row need not
+    come from the same window. `throttled_pod_series` holds the pods whose summed containers
+    met both alert gates in a window; a throttle cell of `-` is a container with no CPU limit.
+    Pure.
+    """
+    throttled_pods = {
+        (m.get("namespace", "?"), workload(m.get("pod", "?")))
+        for m in (s.get("metric", {}) for s in throttled_pod_series)
+    }
+    columns = [
+        by_container(s)
+        for s in (
+            request_series,
+            limit_series,
+            p95_series,
+            throttle_series,
+            cpu_psi_series,
+            memory_psi_series,
+        )
+    ]
+    rows = []
+    for key in set(columns[0]) | set(columns[1]):
+        req, lim, p95, throttle, cpu_psi, memory_psi = (c.get(key) for c in columns)
+        pod_throttled = key[:2] in throttled_pods
+        flags = cpu_flags(lim, p95, throttle, pod_throttled, cpu_psi, memory_psi)
+        rows.append((flags, key, (req, lim, p95, throttle, cpu_psi, memory_psi)))
+    rows.sort(key=lambda r: (not {"throttled", "stalled"} <= set(r[0]), not r[0], r[1]))
+    width = max(
+        [len("namespace/workload/container"), *(len("/".join(r[1])) for r in rows)]
+    )
+    width += 2
+    flagged = sum(1 for r in rows if r[0])
+    hint = "" if show_all else "; --all to list every container"
+    lines = [
+        f"CPU: {len(rows)} containers, {flagged} flagged against their {MEMORY_WINDOW} p95 "
+        f"rate in cores and their worst {CPU_WINDOW} window (near limit = p95 above "
+        f"{NEAR_LIMIT:.0%} of the limit, throttled = a throttled container in a pod over {THROTTLED:.0%} of CFS "
+        f"periods throttled and over {THROTTLED_CORES} cores lost, stalled = CPU or memory PSI some over {STALLED:.0%}){hint}",
+        f"  {'namespace/workload/container':<{width}}{'request':>9}{'limit':>9}{'p95':>9}"
+        f"{'throttle':>10}{'cpu psi':>9}{'mem psi':>9}  flags",
+    ]
+    for flags, key, (req, lim, p95, throttle, cpu_psi, memory_psi) in rows:
+        if flags or show_all:
+            row = (
+                f"  {'/'.join(key):<{width}}{_cores(req):>9}{_cores(lim):>9}"
+                f"{_cores(p95):>9}{_share(throttle):>10}{_share(cpu_psi):>9}"
+                f"{_share(memory_psi):>9}  "
+            )
+            lines.append((row + ", ".join(flags)).rstrip())
+    return lines
+
+
 def _by_pvc(series):
     out = {}
     for s in series:
@@ -307,7 +442,7 @@ def ingressroutes(cluster=DEFAULT_CLUSTER):
 
 
 def report(query=prom_query, routes=(), show_all=False):
-    """The three tables as lines.
+    """The four tables as lines.
 
     Args:
         query: returns an instant query's result list; raises `core.Unreadable` on a failed
@@ -326,6 +461,17 @@ def report(query=prom_query, routes=(), show_all=False):
     lines.append("")
     lines += format_memory(
         query(P95_QUERY), query(REQUEST_QUERY), query(LIMIT_QUERY), show_all
+    )
+    lines.append("")
+    lines += format_cpu(
+        query(CPU_P95_QUERY),
+        query(CPU_REQUEST_QUERY),
+        query(CPU_LIMIT_QUERY),
+        query(THROTTLE_QUERY),
+        query(THROTTLED_POD_QUERY),
+        query(CPU_PSI_QUERY),
+        query(MEMORY_PSI_QUERY),
+        show_all,
     )
     lines.append("")
     lines += format_pvcs(

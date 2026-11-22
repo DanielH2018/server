@@ -117,6 +117,8 @@ claude_code_fleet_slice: user.slice
 # and MemAvailable fell to 2.7 GiB. The floor holds on an ordinary busy day only because much of
 # the fleet's memory is page cache: on 2026-11-20 the fleet peaked at 15.9 GiB and MemAvailable
 # stayed at or above 9.8 GiB. docs/claude-code-rc-caps.md has the full record.
+# The cap stays, and the homelab plane is protected directly instead:
+# k3s_kubepods_memory_low in hosts/components/k3s-server makes reclaim take the fleet's pages first.
 #
 # memory.high counts PAGE CACHE as well as anon, so an ordinary multi-agent pytest fan-out
 # will touch this bound and reclaim cache. That is the cheap half of reclaim and it is
