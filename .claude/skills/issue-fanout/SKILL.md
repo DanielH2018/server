@@ -289,8 +289,12 @@ again. A wait that spends its 35 minutes with no verdict also ends `needs input:
 head's checks are still running, which extends it to 60 minutes. Only this repo's daniel-server batches wait; a daniel-box batch
 reads its run from its landing, and another repo's batch has no wait. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
-Each phase's Claude Code telemetry also carries `fanout_batch` and `fanout_phase` labels in
-Prometheus (`fanout_lib/review/processes.py:otel_attributes`), so spend per batch and phase is one query across both hosts.
+Each phase's Claude Code telemetry also carries `session_kind`, `fanout_batch` and
+`fanout_phase` labels in Prometheus (`scripts/dev/fanout_lib/telemetry.py:otel_attributes`),
+so spend per batch and phase is one query across both hosts. A plain batch carries
+`session_kind="fanout-batch"` and `fanout_batch`
+(`scripts/dev/fanout_lib/telemetry.py:batch_attributes`), and a review phase carries
+`session_kind="fanout-review"`.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
 taken out (`scripts/dev/fanout_lib/review/base_check.py`). The reviewer is told which still pass, and
 the PR comment counts them.
