@@ -283,7 +283,7 @@ def _cores(value):
 
 
 def _share(value):
-    return "-" if value is None else f"{value:.0%}"
+    return "-" if value is None else f"{value:.1%}"
 
 
 def cpu_flags(limit, p95, throttle, cpu_psi, memory_psi):

@@ -129,7 +129,14 @@ def test_a_container_throttled_and_stalled_is_listed_before_one_only_throttled()
         }
     )
     assert lines[0].startswith("CPU: 2 containers, 2 flagged")
-    assert lines[2].split()[1:] == ["0.10", "2.00", "0.99", "99%", "12%", "8%"] + [
+    assert lines[2].split()[1:] == [
+        "0.10",
+        "2.00",
+        "0.99",
+        "99.0%",
+        "12.0%",
+        "8.0%",
+    ] + [
         "throttled,",
         "stalled",
     ]
@@ -140,7 +147,7 @@ def test_a_container_throttled_and_stalled_is_listed_before_one_only_throttled()
 
 def test_memory_pressure_alone_marks_a_container_stalled():
     lines = _cpu({"app": (0.1, 1.0, 0.1, None, 0.0, 0.3)})
-    assert lines[2].endswith("30%  stalled")
+    assert lines[2].endswith("30.0%  stalled")
 
 
 def test_a_container_with_no_throttled_window_is_counted_but_not_listed():
