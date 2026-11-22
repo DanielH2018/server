@@ -1183,11 +1183,13 @@ Every `k3s` subcommand needs root.
     ```
 
 1. On daniel-pi, lift the `log2ram` hold for the run, in the root shell. A held package stays
-   on the old release's version. The release upgrade ends in a reboot, which is the planned
-   window the hold waits for: the boot remounts `/var/log` as a tmpfs, and
-   `homelab-log2ram-hold.service` holds the package again.
+   on the old release's version. Stop the timer that re-applies the hold daily, because the
+   upgrade can run past its 05:05 UTC slot. The release upgrade ends in a reboot, which is the
+   planned window the hold waits for: the boot remounts `/var/log` as a tmpfs, starts the
+   timer, and `homelab-log2ram-hold.service` holds the package again.
 
     ```bash
+    systemctl stop homelab-log2ram-hold.timer
     apt-mark unhold log2ram
     ```
 

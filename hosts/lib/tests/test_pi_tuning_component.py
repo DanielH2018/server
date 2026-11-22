@@ -122,6 +122,24 @@ def test_log2ram_is_held_at_every_boot_and_reconcile_once_it_is_installed(packag
     assert re.search(r"^ExecStart=/usr/bin/apt-mark .*\bhold log2ram$", text, re.M)
 
 
+def test_the_log2ram_hold_is_reapplied_daily_before_the_unattended_upgrade(package):
+    """The updater runs reconcile only when a package changes, so a timer re-applies the hold."""
+    timer = _text(package, "/usr/lib/systemd/system/homelab-log2ram-hold.timer")
+    assert "homelab-log2ram-hold.timer" in package.enable_links()
+
+    def minute(text: str) -> int:
+        found = re.findall(r"^OnCalendar=\*-\*-\* (\d\d):(\d\d)", text, re.M)
+        assert len(found) == 1, text
+        return int(found[0][0]) * 60 + int(found[0][1])
+
+    hold = minute(timer)
+    update = minute(_text(package, APT_DROPINS["apt-daily.timer"]))
+    upgrade = minute(_text(package, APT_DROPINS["apt-daily-upgrade.timer"]))
+    # apt-daily's RandomizedDelaySec=10min plus its four-minute run.
+    assert update + 14 < hold < upgrade
+    assert re.search(r"^RandomizedDelaySec=0$", timer, re.M)
+
+
 # The line arm: each edit adopts what Ansible wrote.
 
 # (path, the line Ansible's task wrote or the stock line it replaces, the action)

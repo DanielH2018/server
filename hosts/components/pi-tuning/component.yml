@@ -54,6 +54,7 @@ enable:
   # unplanned upgrade leaves every log write on the SD card until the weekly reboot.
   # docs/pi-host-tuning-record.md has the planned-upgrade steps.
   homelab-log2ram-hold.service: multi-user.target
+  homelab-log2ram-hold.timer: timers.target
 files:
   # DECIDED: the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false.
   # Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
@@ -78,6 +79,7 @@ files:
   - {src: templates/homelab-profile.sh, dst: /etc/profile.d/homelab.sh}
   - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
   - {src: units/homelab-log2ram-hold.service, dst: /usr/lib/systemd/system/homelab-log2ram-hold.service}
+  - {src: units/homelab-log2ram-hold.timer, dst: /usr/lib/systemd/system/homelab-log2ram-hold.timer}
   - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
   - {src: units/earlyoom-dropin.conf, dst: /usr/lib/systemd/system/earlyoom.service.d/50-homelab.conf}
   # Without it a restart of the watchdog daemon leaves the daemon stopped; the file has the reason.

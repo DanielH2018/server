@@ -1,9 +1,11 @@
-# Shipped by the pi-tuning component with its enable link. Holds the log2ram package at boot and
-# on every reconcile run, so it upgrades only in a planned window that ends in a reboot: the
-# package's prerm unmounts /var/log and its postinst never remounts it. No RemainAfterExit, so
-# reconcile finds the unit inactive and starts it again, and a hand `apt-mark unhold` lasts only
-# until the next run. The condition skips a Pi without log2ram, because a hold on a package that
-# is not installed would refuse bootstrap's install of it.
+# Shipped by the pi-tuning component with its enable link. Holds the log2ram package so it upgrades
+# only in a planned window that ends in a reboot: the package's prerm unmounts /var/log and its
+# postinst never remounts it. It runs at boot, on each reconcile run (no RemainAfterExit, so
+# reconcile finds it inactive), and daily from homelab-log2ram-hold.timer ahead of
+# apt-daily-upgrade, so a hand `apt-mark unhold` never reaches an unattended upgrade.
+# The condition skips a Pi without log2ram, because a hold on a package that is not installed would
+# refuse bootstrap's install of it. ExecCondition skips the run while the hold is in place, so the
+# steady state takes no dpkg lock.
 [Unit]
 Description=Hold the log2ram package until a planned upgrade
 ConditionPathExists=/var/lib/dpkg/info/log2ram.list
@@ -11,6 +13,7 @@ ConditionPathExists=/var/lib/dpkg/info/log2ram.list
 [Service]
 SyslogLevel=notice
 Type=oneshot
+ExecCondition=/bin/sh -c '! /usr/bin/apt-mark showhold log2ram | grep -qx log2ram'
 ExecStart=/usr/bin/apt-mark -o DPkg::Lock::Timeout=60 hold log2ram
 
 [Install]

@@ -386,11 +386,13 @@ package.
 
 **The `log2ram` package stays held, so it upgrades only in a planned window that ends in a
 reboot** (#9940). `homelab-log2ram-hold.service`, from the `pi-tuning` component, runs
-`apt-mark hold log2ram` at every boot and on every reconcile run. A hand `apt-mark unhold`
-therefore lasts only until the next reconcile or boot. To check the hold, run
-`ssh daniel-pi apt-mark showhold`, which lists `log2ram` beside the Docker packages. To upgrade
-log2ram, run these three commands back to back on the Pi, so no reconcile re-holds the package
-between them:
+`apt-mark hold log2ram` at every boot, on every reconcile run, and daily at 05:05 UTC from
+`homelab-log2ram-hold.timer`. The daily run comes before `apt-daily-upgrade` at 05:20, the one
+unattended path that installs an upgrade, because the updater runs reconcile only when a package
+changes. A hand `apt-mark unhold` therefore never reaches an unattended upgrade. To check the
+hold, run `ssh daniel-pi apt-mark showhold`, which lists `log2ram` beside the Docker packages.
+To upgrade log2ram, run these three commands back to back on the Pi, so neither a reconcile run
+nor the timer re-holds the package between them:
 
 ```bash
 sudo apt-mark unhold log2ram
