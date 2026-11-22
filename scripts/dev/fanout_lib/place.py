@@ -342,12 +342,13 @@ def _launch_locked(
                 continue
         issues = [fetched[n] for n in numbers]
         rung = sizing.size([label for i in issues for label in i.labels], chosen)
-        brief = render_brief(
-            issues, host, batch, holder, health, target, args.review, tracked
-        )
         try:
+            pr = launch_mod.pr_to_continue(tools, batch, target)
+            brief = render_brief(
+                issues, host, batch, holder, health, target, args.review, tracked, pr
+            )
             launched = launch_mod.launch(
-                tools, host, batch, brief, numbers, target, args.review, rung=rung
+                tools, host, batch, brief, numbers, target, args.review, rung, pr
             )
             cited = batch_paths(issues, tracked)
             launched = dataclasses.replace(

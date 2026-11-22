@@ -449,7 +449,17 @@ whatever the agent committed. It then records the removal in the manifest and re
 batch's claims, so the relaunch is free to place. A landing or detached deploy the agent
 started runs in its own scope and is not stopped; check
 `systemctl --user list-units 'land*' 'deploy-*'` on that host first. The PR, if the agent
-opened one, stays open on GitHub; close it with `gh pr close`.
+opened one, stays open on GitHub. Close it with `gh pr close` to discard it, or leave it open
+for a relaunch to finish.
+
+**A relaunch finishes an open PR on the batch's branch.** `launch` asks GitHub for an open PR
+on `worktree-fanout-<batch>` before it adds the tree
+(`scripts/dev/fanout_lib/launch.py:pr_to_continue`). When one is there, the tree checks out that
+PR's head and tracks it, and the brief names the PR and the checks that failed on it. The
+implementer then merges master, fixes the checks and pushes to the same PR. The batch keeps its
+review phase and its landing. Relaunch the abandoned batch's exact issues, so the batch id, and
+with it the branch name, is the same. A GitHub read that fails refuses the batch and releases
+its claims, because a fresh branch would orphan the PR.
 
 **daniel-server is refused as a host until its signing key is registered.** The repo ruleset
 requires a verified commit signature, and `launch` drops a host whose `user.signingkey` is not

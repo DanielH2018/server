@@ -228,11 +228,14 @@ def resumable(
             default. A test passes its own.
     """
     name = f"{b.batch} on {b.host}"
+    relaunch = (
+        f"`fanout.py place launch --batch {','.join(str(n) for n in b.issues)}`, which "
+        f"finishes the open PR on {b.branch} when one is left"
+    )
     if b.removed_at:
-        issues = ",".join(str(n) for n in b.issues)
         return (
             f"{name} was cleaned ({b.removed_at}), so no worktree or session is left to "
-            f"resume; relaunch its issues with `fanout.py place launch --batch {issues}`"
+            f"resume; relaunch its issues with {relaunch}"
         )
     if b.repo != SERVER:
         return (
@@ -258,7 +261,8 @@ def resumable(
     if "standing" not in sections.get("tree", ""):
         return (
             f"{name}: its worktree {b.worktree} is gone, and the session to resume went "
-            f"with it; record that with `fanout.py place clean {run_id}`"
+            f"with it; record that with `fanout.py place clean {run_id}`, then relaunch "
+            f"its issues with {relaunch}"
         )
     merged = tools.merged_pr(b.branch, b.repo)
     if merged:
