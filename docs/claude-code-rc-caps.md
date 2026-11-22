@@ -182,6 +182,7 @@ To verify a deploy, read the configured value and the kernel's value. Read
 `kubepods.slice` again after the next k3s start, which is when kubelet resets it:
 
 ```bash
+systemctl is-active homelab-kubepods-memory-low.path
 systemctl show -p MemoryLow -p DropInPaths kubepods.slice system.slice
 systemctl show -p MemoryLow k3s.service   # k3s-agent.service on daniel-server
 cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.low
