@@ -149,7 +149,9 @@ def test_a_conffile_the_edits_give_from_an_older_versions_copy_is_clean(tmp_path
 
 UNAVAILABLE = {
     "no copy kept, and the archive unreachable": {},
-    "a copy kept only under another package": {f"other/1.0{DEFS}": DEFS_SHIPPED},
+    "a kept copy that is not the package's": {
+        TOOL_COPY: DEFS_SHIPPED.replace("# limits", "#")
+    },
 }
 
 

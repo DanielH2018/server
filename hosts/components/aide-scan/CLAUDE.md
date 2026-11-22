@@ -11,13 +11,18 @@ It reads the filesystem, reports, and advances its own baseline.
   download` from the configured archive, for the package copy of a conffile the lines arm makes
   line edits to when no copy of the installed version is kept in `/var/lib/homelab-aide-originals`.
   The classifier reads only the kept copies, so a failed fetch with no older version's copy kept
-  leaves that file "original unavailable" and pages it, never skips it. No run deletes a kept
-  copy.
+  leaves that file "original unavailable" and pages it, never skips it. A run deletes only a
+  kept copy of the installed version whose md5 is not dpkg's digest, then fetches it again.
+- **Recovery when no run kept the old copy:** an upgrade before the component's first run on a
+  host leaves an edited conffile built on a copy no run can fetch, and it pages as `differs`.
+  To clear it, move the file aside, run `sudo apt-get install --reinstall -o
+  Dpkg::Options::=--force-confmiss <package>`, and let the next reconcile reapply the lines
+  arm's edits.
 - **Mode (explicit and reversible):** the timer's enable link arms it. Dropping the component from a
   host package stops the timer on the install that drops it. A DOWN on an unexplained change
   stays DOWN until an operator reviews it and runs `/usr/lib/homelab/aide-check --accept`.
 - **Authoritative sources:** AIDE's own exit code and report, dpkg's file lists and digests, and
-  the kept package copies, each checked against dpkg's digest when it is kept. An edit replayed
+  the kept package copies, each checked against dpkg's digest on every run while its version is installed. An edit replayed
   on a copy of any kept version explains the file, because under `--force-confold` dpkg keeps an
   edited conffile built on the old version's copy across an upgrade
   (`hosts/components/aide-scan/files/aide_originals.py:DECIDED: a kept copy of any version`).

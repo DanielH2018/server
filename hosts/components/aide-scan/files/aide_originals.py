@@ -7,10 +7,16 @@
 `seed` keeps, at STATE/<package>/<version>/<path>, the copy of each conffile named on stdin that
 the installed version of its package ships. It runs `apt-get download`, which checks the .deb
 against the signed archive index, reads the one member out of the .deb, and keeps it only when
-its md5 is the digest STATUS, dpkg's status file, records for the path. A version already kept is
-never fetched again, so the archive is reached only after the installed version changes. No copy
-is ever deleted. When it fetched or failed to keep a copy, it prints one count line, then each
+its md5 is the digest STATUS, dpkg's status file, records for the path. It checks a copy of the
+installed version that is already kept against the same digest on every run, and deletes one
+that fails before fetching it again. A version kept with the right digest is never fetched again,
+so the archive is reached only after the installed version changes, and an older version's copy
+is never deleted. When it fetched or failed to keep a copy, it prints one count line, then each
 path it could not keep with the reason.
+
+No run can keep the copy of a version that was replaced before aide-originals first ran on the
+host, so a conffile built on it pages as `differs` until an operator restores the installed
+version's package copy and the lines arm reapplies its edits.
 
 `judge` reads only STATE and STATUS. It prints `explained` when replaying the declared line edits
 on any kept copy of PATH, of any version of the package that lists it, gives FILE, the path as it
@@ -107,7 +113,7 @@ def command(argv: list[str], cwd: str) -> bytes:
 
 
 def seed(state: Path, status: Path, paths: list[str]) -> tuple[int, list[str]]:
-    """Keep the package copy of each conffile in `paths` that is not kept yet.
+    """Keep the package copy of each conffile in `paths` whose installed version has none kept.
 
     Returns how many copies it fetched and kept, and "path (reason)" for each it could not. A
     path no installed package lists as a conffile is skipped.
@@ -118,7 +124,14 @@ def seed(state: Path, status: Path, paths: list[str]) -> tuple[int, list[str]]:
         if path not in listed:
             continue
         copy = kept_copy(state, path, listed[path])
-        if copy.exists():
+        try:
+            if hashlib.md5(copy.read_bytes()).hexdigest() == listed[path].digest:
+                continue
+            copy.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            failed.append(f"{path} (the kept copy is unreadable: {exc})")
             continue
         try:
             content = fetch(path, listed[path])
@@ -156,7 +169,7 @@ def judge(state: Path, status: Path, path: str, file: Path, edits: list[dict]) -
     conffile = conffiles(status).get(path)
     if conffile is None:
         return "original unavailable"
-    # DECIDED: a kept copy of any version explains the file; seed checked each against dpkg's digest when it kept it.
+    # DECIDED: a kept copy of any version explains the file; seed checks each against dpkg's digest on every run while its version is installed.
     copies = sorted((state / conffile.package).glob(f"*/{path.lstrip('/')}"))
     if not copies:
         return "original unavailable"
