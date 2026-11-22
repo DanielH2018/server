@@ -118,8 +118,10 @@ schema the same day.
   (`issueFieldValues`, `setIssueFieldValue`) or REST (`/repos/{o}/{r}/issues/{n}/issue-field-values`,
   [REST reference][d-rest-values]). REST creates field definitions only for organizations
   ([REST reference][d-rest-fields]), so on this account a definition is made in
-  Settings > Planning > Issue fields. Issue search filters a value as
-  `field.domain:cicd` ([search syntax][d-search]). `gh issue list --json` returns no field
+  Settings > Planning > Issue fields. The web UI's issue search filters a value as
+  `field.domain:cicd` ([search syntax][d-search]). The search API does not: on
+  2026-11-22 the REST and GraphQL searches returned 0 for `field.domain:cicd` and for
+  `field.severity:low`, while `has:field.domain` counted 70. `gh issue list --json` returns no field
   values, and `gh issue edit` sets none; the docs name no `gh` flag for either.
 - **Issue types** are generally available on personal accounts on the same date
   ([managing issue types][d-types]), up to 25 per owner. Both repositories have Task, Bug,
@@ -283,8 +285,9 @@ repeat. It paces mutations with the `MUTATION_PAUSE_S` board.py uses, under GitH
 secondary write limit. On 2026-11-22 it found 205 server issues and 22 dotfiles issues.
 Nothing reads the field yet; the labels stay authoritative.
 
-- **Exercise:** search `is:issue field.domain:cicd is:open` returns the same 27 server issues
-  as `label:domain/cicd is:open`.
+- **Exercise:** `findings.py list --json`, reading the field, lists the same `cicd` issues
+  as `label:domain/cicd is:open`. Done 2026-11-22: 208 server and 22 dotfiles issues
+  filled, and the run after slice 2 filled the one issue filed in between.
 - **Complexity:** adds one temporary script and its test; slice 3 deletes both.
 - **Option:** backfill all ~4,000 closed issues too, so search history keeps the domain. At
   about 500 writes an hour that is an eight-hour paced run, for values nothing reads.
