@@ -94,6 +94,9 @@ from dev.fanout_lib.stops import load_stops, stop_lines
 from lib.cli_help import ArgumentParser, answer_help
 from lib.gh import gh_json
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
+
 REVIEW_DIR = Path.home() / ".local" / "state" / "fanout-review"
 OUT_DIR = Path.home() / ".local" / "state" / "pipeline-timeline"
 WAITS_FILE = (
@@ -223,22 +226,21 @@ def load_reviews(directory: Path) -> dict[int, dict]:
     return out
 
 
-def ci_by_branch(runs: list[dict]) -> dict[str, dict]:
+def ci_by_branch(runs: list[WorkflowRun]) -> dict[str, dict]:
     """Per head branch: the first verdict's conclusion, the verdict count, the newest run.
 
-    `runs` is `gh run list --json databaseId,headBranch,conclusion,createdAt` for the CI
-    workflow. The newest run is the one the final head's queue time is read from.
+    `runs` are the CI workflow's runs. The newest run is the one the final head's queue time
+    is read from.
     """
     out: dict[str, dict] = {}
-    for run in sorted(runs, key=lambda r: r.get("createdAt") or ""):
+    for run in sorted(runs, key=lambda r: r.created_at):
         row = out.setdefault(
-            str(run.get("headBranch")),
-            {"first_ci": None, "ci_runs": 0, "last_run": None},
+            run.head_branch, {"first_ci": None, "ci_runs": 0, "last_run": None}
         )
-        row["last_run"] = run.get("databaseId")
-        if run.get("conclusion") in _CI_VERDICTS:
+        row["last_run"] = run.id
+        if run.conclusion in _CI_VERDICTS:
             row["ci_runs"] += 1
-            row["first_ci"] = row["first_ci"] or run["conclusion"]
+            row["first_ci"] = row["first_ci"] or run.conclusion
     return out
 
 
@@ -566,11 +568,11 @@ def main(argv: list[str] | None = None) -> int:
         "--search", f"merged:>={args.since}",
         "--json", "number,title,createdAt,mergedAt,headRefName,body",
     ))  # fmt: skip
-    ci = ci_by_branch(_objects(gh_json(
+    ci = ci_by_branch([WorkflowRun.parse(run) for run in _objects(gh_json(
         "run", "list", "--workflow", CI_WORKFLOW, "--event", "pull_request",
         "--limit", "5000", "--created", f">={(since - ISSUE_LOOKBACK).date().isoformat()}",
         "--json", "databaseId,headBranch,conclusion,createdAt",
-    )))  # fmt: skip
+    ))])  # fmt: skip
     jobs: dict = {}
     if not args.no_ci_jobs:
         wanted = {

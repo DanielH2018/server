@@ -195,6 +195,8 @@ def unpromoted_age(
     """
     body = as_object(src.get_json(CI_RUNS % RUNS_PER_PAGE, _api_headers(cfg)), "runs")
     green: dict[str, tuple[float, float]] = {}
+    # DECIDED: these workflow runs stay raw objects, not `ci_verdict.WorkflowRun`. The pod ships
+    # only this role's files/, and the read needs the push and green times that type lacks.
     for run in as_object_list(body.get("workflow_runs"), "runs.workflow_runs"):
         sha = str(run["head_sha"])
         pushed, greened = _time(run["created_at"]), _time(run["updated_at"])

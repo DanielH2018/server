@@ -332,6 +332,17 @@ def _text(value: object) -> str:
     return value if isinstance(value, str) else ""
 
 
+_EARLIEST = datetime.min.replace(tzinfo=UTC)
+
+
+def _moment(value: object) -> datetime:
+    """An ISO 8601 time, or the earliest time when missing or malformed."""
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return _EARLIEST
+
+
 @dataclass(frozen=True)
 class CommitStatus:
     """One commit status, parsed from GitHub's REST statuses listing or its combined status.
@@ -363,17 +374,13 @@ class CommitStatus:
             raise ValueError(f"a commit status is not an object: {raw!r}")
         creator = raw.get("creator")
         login = creator.get("login") if isinstance(creator, dict) else None
-        try:
-            updated_at = datetime.fromisoformat(str(raw.get("updated_at")))
-        except ValueError:
-            updated_at = datetime.min.replace(tzinfo=UTC)
         return cls(
             context=_text(raw.get("context")),
             state=_text(raw.get("state")),
             creator=login if isinstance(login, str) else None,
             description=_text(raw.get("description")),
             target_url=_text(raw.get("target_url")),
-            updated_at=updated_at,
+            updated_at=_moment(raw.get("updated_at")),
         )
 
 
@@ -392,6 +399,13 @@ class WorkflowRun:
         conclusion: lowercase, or None while the run has none.
         head_sha: the commit the run tested; "" when absent.
         url: the run's page; "" when absent.
+        attempt: the attempt this listing describes, 1 for a run never re-run or when absent.
+        head_branch: the branch the run was started for; "" when absent.
+        name: the workflow's name; "" when absent.
+        created_at: when the run was created; the earliest time when missing or malformed.
+        started_at: when this attempt started; the earliest time when missing or malformed.
+        repository: the repository's `owner/name`; "" when absent, as `gh` never names it.
+        head_tree: the tree id of `head_sha`; "" when absent, as `gh` never names it.
     """
 
     id: int | None
@@ -399,6 +413,13 @@ class WorkflowRun:
     conclusion: str | None
     head_sha: str
     url: str
+    attempt: int = 1
+    head_branch: str = ""
+    name: str = ""
+    created_at: datetime = _EARLIEST
+    started_at: datetime = _EARLIEST
+    repository: str = ""
+    head_tree: str = ""
 
     @classmethod
     def parse(cls, raw: object) -> WorkflowRun:
@@ -409,13 +430,27 @@ class WorkflowRun:
         """
         if not isinstance(raw, dict):
             raise ValueError(f"a workflow run is not an object: {raw!r}")
-        run_id = raw.get("id")
+        run_id = raw.get("id", raw.get("databaseId"))
+        attempt = raw.get("run_attempt", raw.get("attempt"))
+        repository = raw.get("repository")
+        head_commit = raw.get("head_commit")
         return cls(
             id=run_id if type(run_id) is int else None,
             status=_text(raw.get("status")).lower(),
             conclusion=_text(raw.get("conclusion")).lower() or None,
             head_sha=_text(raw.get("head_sha") or raw.get("headSha")),
             url=_text(raw.get("html_url") or raw.get("url")),
+            attempt=attempt if type(attempt) is int and attempt > 0 else 1,
+            head_branch=_text(raw.get("head_branch") or raw.get("headBranch")),
+            name=_text(raw.get("name")),
+            created_at=_moment(raw.get("created_at") or raw.get("createdAt")),
+            started_at=_moment(raw.get("run_started_at") or raw.get("startedAt")),
+            repository=_text(
+                repository.get("full_name") if isinstance(repository, dict) else None
+            ),
+            head_tree=_text(
+                head_commit.get("tree_id") if isinstance(head_commit, dict) else None
+            ),
         )
 
     @property

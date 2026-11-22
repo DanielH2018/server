@@ -94,7 +94,7 @@ def _tested_base(runs, jobs, log):
         endpoint = args[1]
         if "/workflows/ci.yml/runs" in endpoint:
             assert f"head_sha={OLD}" in endpoint
-            return runs
+            return {"workflow_runs": runs}
         assert endpoint.endswith("/actions/runs/7/jobs")
         return jobs
 
@@ -106,6 +106,16 @@ def _tested_base(runs, jobs, log):
     return land_tested_base.tested_base(OLD, gh_json=gh_json, gh=gh)
 
 
+def _runs(*conclusions_by_id):
+    """REST workflow-run rows, newest first, from `(id, conclusion)` pairs."""
+    return [
+        {"id": run_id, "status": "completed", "conclusion": conclusion}
+        for run_id, conclusion in conclusions_by_id
+    ]
+
+
+GREEN_7 = _runs((7, "success"))
+
 CHECKOUT_LOG = (
     "2026-10-17T22:19:21Z HEAD is now at db8b8d59f Merge {head} into {base}\n"
     "2026-10-17T22:19:22Z Download action repository 'actions/setup-python'\n"
@@ -114,23 +124,31 @@ CHECKOUT_LOG = (
 
 def test_tested_base_is_the_base_in_the_checkout_logs_merge_line():
     log = CHECKOUT_LOG.format(head=OLD, base=TESTED)
-    assert _tested_base([7, 6], [101], log) == TESTED
+    assert _tested_base(_runs((7, "success"), (6, "success")), [101], log) == TESTED
+
+
+def test_tested_base_reads_the_newest_green_run_past_a_red_one():
+    log = CHECKOUT_LOG.format(head=OLD, base=TESTED)
+    assert _tested_base(_runs((8, "failure"), (7, "success")), [101], log) == TESTED
 
 
 @pytest.mark.parametrize(
     ("runs", "jobs", "log"),
     [
-        pytest.param([], [], "", id="no-green-run"),
-        pytest.param([7], [], "", id="no-green-job"),
-        pytest.param([7], [101], "no merge line here\n", id="log-without-merge-line"),
+        pytest.param([], [], "", id="no-run"),
+        pytest.param(_runs((8, "failure")), [], "", id="no-green-run"),
+        pytest.param(GREEN_7, [], "", id="no-green-job"),
         pytest.param(
-            [7],
+            GREEN_7, [101], "no merge line here\n", id="log-without-merge-line"
+        ),
+        pytest.param(
+            GREEN_7,
             [101],
             CHECKOUT_LOG.format(head=NEW, base=TESTED),
             id="log-of-another-head",
         ),
         pytest.param(
-            [7], [101], subprocess.CalledProcessError(1, ["gh"]), id="log-expired"
+            GREEN_7, [101], subprocess.CalledProcessError(1, ["gh"]), id="log-expired"
         ),
     ],
 )
