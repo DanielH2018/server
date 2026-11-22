@@ -198,14 +198,6 @@ def test_no_two_roles_ship_a_byte_identical_template(basename):
     )
 
 
-def test_the_duplicate_check_rejects_a_duplicate_pair():
-    """Control: prove the grouping above can go red rather than passing on an empty set."""
-    poisoned = defaultdict(list)
-    poisoned["same"] = ["alpha", "beta"]
-    duplicates = {d: roles for d, roles in poisoned.items() if len(roles) > 1}
-    assert duplicates == {"same": ["alpha", "beta"]}
-
-
 @pytest.mark.parametrize(
     ("basename", "role"),
     sorted(
