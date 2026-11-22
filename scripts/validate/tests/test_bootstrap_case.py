@@ -118,6 +118,13 @@ def test_the_shards_split_the_builds_evenly_and_cover_the_plan_once(tmp_path, co
     assert all(s == [p for p in planned if p in s] for s in shards)
 
 
+def test_an_online_build_is_submitted_before_a_kit_red_planned_ahead_of_it(tmp_path):
+    red = case.Planned("red", "red", "daniel-box", tmp_path, None, "no k3s")
+    online = case.Planned("online", "online", "daniel-box", None, "marker", None)
+
+    assert case.submission_order([red, online]) == [1, 0]
+
+
 # GitHub's standard Linux runner for a public repository, which `run` gives one item per CPU.
 RUNNER_CPUS = 4
 
