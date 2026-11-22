@@ -1,0 +1,113 @@
+{% from 'container-resources.yml.j2' import job_container_resources with context %}
+{% from 'security-context.yml.j2' import job_hardened_security_context with context %}
+{#
+  Writes the SOPS Sonarr, Radarr and Lidarr API keys into Prowlarr's application entries;
+  `files/seed_prowlarr_app_keys.py` has the design. This file only schedules it.
+
+  DECIDED: the seed runs on a schedule as well as once per revision. A `prowlarr-config`
+  revert restores whatever key the snapshot held and changes no render, so only a scheduled run
+  writes the SOPS key back. A second run writes nothing, so the schedule costs one list call and
+  three app tests an hour. `flux_cronjob_gates` copies the jobTemplate into `prowlarr-verify`,
+  which waits on sonarr, radarr and lidarr (`flux_verify_after`), so a revision still seeds the
+  keys before it passes.
+
+  DECIDED: the keys come from the four `<app>-exportarr` Secrets, which each app's own render
+  applies with `api_key` filled from `<app>_api_key`. A Secret of its own here would be a second
+  copy of each key to keep in step.
+
+  DECIDED: the jobTemplate embeds the `cluster-vars.source` digest of the three app keys. Their
+  Secrets render in the apps' own directories, so a rotation moves nothing in `cluster/prowlarr/`
+  and the gate's role digest misses it; the digest renames the gate Job, and the seed runs again.
+  The digest is of the keys' ciphertext, so no value enters the hash.
+
+  The pod carries `app: prowlarr-verify`, a peer prowlarr's `netpol_from` already admits, and it
+  dials only prowlarr. Prowlarr dials the apps itself.
+#}
+{% set script = 'seed_prowlarr_app_keys.py' %}
+{% set apps = ['sonarr', 'radarr', 'lidarr'] %}
+{% set keys = namespace(rows=[]) %}
+{% set source = lookup('file', cluster_vars_source()).splitlines() %}
+{% for app in apps %}
+{% for line in source if line.split()[:1] == [app + '_api_key'] %}
+{% set keys.rows = keys.rows + [line] %}
+{% endfor %}
+{% endfor %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prowlarr-app-keys
+  namespace: {{ k8s_namespace }}
+data:
+  {{ script }}: |
+{{ lookup('file', role_file('files/' + script)) | indent(4, true) }}
+  flux_job_connect.py: |
+{{ lookup('file', repo_file('scripts/renderer/job_files/flux_job_connect.py')) | indent(4, true) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prowlarr-app-keys
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ prowlarr_k8s_app_keys_schedule }}"
+  timeZone: Etc/UTC
+  # The gate Job runs outside this policy. Two runs at once each PUT the same key.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      # Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization
+      # takes. One list call and, per app, a test and a write of 30s each, plus 60s of connect
+      # retries.
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: {{ prowlarr_k8s_app_keys_job_ttl_seconds }}
+      # One retry. A rerun tests each entry again and writes only a key Prowlarr still rejects.
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: prowlarr-verify
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          # The seed reads Prowlarr's API, not the Kubernetes API.
+          automountServiceAccountToken: false
+          priorityClassName: homelab-best-effort
+          containers:
+            - name: seed
+              image: {{ prowlarr_k8s_app_keys_image }}
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/seed/{{ script }}"]
+              env:
+                - name: PROWLARR_URL
+                  value: http://{{ container_item.name }}.{{ k8s_namespace }}.svc.cluster.local:{{ container_item.port }}
+                - name: PROWLARR_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ container_item.name }}-exportarr
+                      key: api_key
+{% for app in apps %}
+                - name: {{ app | upper }}_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ app }}-exportarr
+                      key: api_key
+{% endfor %}
+                - name: APP_KEYS_DIGEST8
+                  value: "{{ (keys.rows | join('\n') | hash('sha256'))[:8] }}"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+{{ job_hardened_security_context(read_only=true, non_root=true, run_as_user=65534, run_as_group=65534) }}
+              volumeMounts:
+                - name: seed
+                  mountPath: /seed
+                  readOnly: true
+{{ job_container_resources(cpu_limit='100m', mem_limit='64Mi', cpu_request='10m', mem_request='32Mi') }}
+          volumes:
+            - name: seed
+              configMap:
+                name: prowlarr-app-keys
