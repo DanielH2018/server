@@ -186,17 +186,16 @@ def read_verdict(
 
 
 def request_restart(
-    found: dict | None,
+    asked: object,
     state: str,
     cfg: dict[str, str],
     start: Callable[[str, int], UnitEnd],
 ) -> Restart | None:
-    """Start the broker for the allowlisted name the result asked for; None when it asked none.
+    """Start the broker for `asked`, the result's `restart` field; None when it asked none.
 
     The name is session output, so it reaches systemd only once it equals an allowlist key, and
     only a diagnosis of medium or high confidence may ask.
     """
-    asked = found.get("restart") if isinstance(found, dict) else None
     if not asked:
         return None
     name = str(asked)[:RESTART_NAME_MAX]
@@ -311,13 +310,13 @@ def _e(value: object) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
 
-def _restart_section(restart: dict | None) -> str:
-    if not restart:
+def _restart_section(restart: Restart | None) -> str:
+    if restart is None:
         return ""
-    cause = f" ({_e(restart.get('cause'))})" if restart.get("cause") else ""
+    cause = f" ({_e(restart.cause)})" if restart.cause else ""
     return (
-        f"<h2>Restart</h2><p><code>{_e(restart.get('name'))}</code>: "
-        f"{_e(restart.get('verdict'))}{cause}. {_e(restart.get('detail'))}</p>"
+        f"<h2>Restart</h2><p><code>{_e(restart.name)}</code>: "
+        f"{_e(restart.verdict)}{cause}. {_e(restart.detail)}</p>"
     )
 
 
@@ -362,7 +361,7 @@ table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid var(--s1);p
 <h2>Evidence</h2><table><tr><th>Source</th><th>Finding</th></tr>{rows}</table>
 <h2>Proposed fix</h2><p>{_e(found.get("proposed_fix", ""))}</p>
 <h2>Follow-up</h2><p>{_e(found.get("follow_up", ""))}</p>
-{_restart_section(record.get("restart"))}
+{_restart_section(Restart(**record["restart"]) if record.get("restart") else None)}
 <h2>The episode (untrusted input)</h2><pre>{_e(json.dumps(episode, indent=2, sort_keys=True))}</pre>
 <p class="muted">Episode {_e(record["episode_id"])} · session {_e(record.get("session_id") or "none")} ·
  permission denials {_e(record.get("denials"))} · started {_e(record.get("started"))} ·
@@ -448,7 +447,9 @@ def main(
         state = classify(result, timed_out)
         error = stop_reason(result, timed_out)
     found = result.get("structured_output")
-    restart = request_restart(found, state, cfg, start)
+    restart = request_restart(
+        found.get("restart") if isinstance(found, dict) else None, state, cfg, start
+    )
     finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     record = {
         "episode_id": episode_id,
