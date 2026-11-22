@@ -36,12 +36,11 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
   strips the newlines from a placeholder's value. The role lists that
   file in `render_sops_manifests`, so a placeholder render leaves it out. The CronJob projects
   it and `pi-peer-backup-ssh` into one volume at `/ssh`, so the script still reads `/ssh/id`.
-  The Pi's host key is pinned from the committed `files/daniel-pi-ssh-host-ed25519.pub`, so
-  `pi-peer-backup-ssh` renders from git alone; the job runs
-  `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is re-keyed, read the key
-  over the operator's trusted connection with
-  `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub`, commit it, and merge; `promote`
-  applies the new `pi-peer-backup-ssh` Secret.
+  The Pi's host key is pinned from `ssh_host_ed25519_key` in
+  `inventory/host_vars/daniel-pi.yml`, the same value the `pi-ssh-name` host component pins
+  on daniel-box and daniel-server, so `pi-peer-backup-ssh` renders from git alone. The job
+  runs `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is re-keyed, follow
+  step 9 of `docs/break-glass.md`; `promote` applies the new `pi-peer-backup-ssh` Secret.
 - **The key is pinned to one operation.** sshd authorizes it with
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper
   (`hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
