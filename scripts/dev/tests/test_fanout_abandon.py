@@ -309,7 +309,8 @@ LOCK_RECORD = json.dumps(
         (
             {"reads": [_host_read(tree="")]},
             "its worktree /w/fanout-7 is gone",
-            f"fanout.py place clean {RUN_ID}",
+            f"`fanout.py place clean {RUN_ID}`, then relaunch its issues with "
+            "`fanout.py place launch --batch 7`, which finishes the open PR",
         ),
         (
             {"merged_prs": {RESUMED.branch: PR}},

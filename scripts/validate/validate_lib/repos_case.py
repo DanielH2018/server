@@ -36,7 +36,7 @@ NAME = "install the apt-source components over the files the roles wrote"
 ROLE_SOURCES = {
     "/etc/apt/sources.list.d/docker.sources": (
         "Architectures: arm64\nComponents: stable\nX-Repolib-Name: docker\n"
-        "Signed-By: /etc/apt/keyrings/docker.asc\nSuites: noble\nTypes: deb\n"
+        "Signed-By: /etc/apt/keyrings/docker.asc\nSuites: resolute\nTypes: deb\n"
         "URIs: https://download.docker.com/linux/ubuntu\n"
     ),
     "/etc/apt/sources.list.d/github-cli.sources": (

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from dev.fanout_lib.clean import clean_one
+from dev.fanout_lib.clean import clean_one, delete_branch
 from lib.git_testing import git, init_repo, scrub_process_git_env
 from lib.worktree_testing import ignore_foreign_slice_holds
 from lib.repo_paths import REPO as REPO_ROOT
@@ -90,6 +90,47 @@ def test_a_present_merged_worktree_is_removed_and_its_branch_dropped(
     assert (state, why) == ("removed", "")
     assert not wt.exists()
     assert "done-branch" not in _branches(repo)
+
+
+def _with_origin(tmp_path, repo: Path) -> None:
+    origin = init_repo(tmp_path / "origin.git", bare=True)
+    git(repo, "remote", "add", "origin", str(origin))
+
+
+def test_a_present_merged_worktree_drops_its_origin_branch_too(tmp_path, monkeypatch):
+    """The ruleset blocks GitHub's delete-on-merge, so `clean_one` removes origin's copy."""
+    _scrub_git_env(monkeypatch)
+    ignore_foreign_slice_holds(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    _with_origin(tmp_path, repo)
+    wt = tmp_path / "wt"
+    git(repo, "worktree", "add", "-q", "-b", "done-branch", str(wt))
+    git(repo, "push", "-q", "origin", "done-branch")
+    tree = next(
+        t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
+    )
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert (state, why) == ("removed", "")
+    assert git(repo, "ls-remote", "--heads", "origin", "done-branch").stdout == ""
+
+
+def test_an_origin_copy_that_has_not_landed_keeps_both_branches(tmp_path, monkeypatch):
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    _with_origin(tmp_path, repo)
+    git(repo, "branch", "done-branch")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "unlanded", "--no-gpg-sign")
+    git(repo, "push", "-q", "origin", "master:refs/heads/done-branch")
+
+    ok, why = delete_branch(str(repo), "done-branch", landed=lambda *a: False)
+
+    assert not ok and "has not landed" in why
+    assert "done-branch" in git(repo, "ls-remote", "--heads", "origin").stdout
+    assert "done-branch" in _branches(repo)
 
 
 def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkeypatch):

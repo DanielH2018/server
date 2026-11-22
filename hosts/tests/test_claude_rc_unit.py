@@ -40,6 +40,7 @@ import pytest
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
+from dev.fanout_lib.telemetry import SessionKind
 from renderer.renderer_lib.environment import RenderError
 
 COMPONENT = "claude-code"
@@ -100,6 +101,18 @@ def test_path_includes_usr_local_bin(unit: str) -> None:
     # Reading paths[0] would pass on a unit whose second PATH= drops /usr/local/bin.
     assert "/usr/local/bin" in paths[-1], (
         f"PATH must include /usr/local/bin (kubectl, uv); got {paths[-1]}"
+    )
+
+
+def test_spawned_sessions_carry_the_remote_control_session_kind(unit: str) -> None:
+    """Without the label, Remote Control spend sits in the unlabelled bucket."""
+    attributes = [
+        v.split("=", 1)[1]
+        for v in directive(unit, "Environment")
+        if v.startswith("OTEL_RESOURCE_ATTRIBUTES=")
+    ]
+    assert attributes[-1:] == [f"session.kind={SessionKind.REMOTE_CONTROL}"], (
+        f"the unit must label its sessions session.kind=remote-control; got {attributes}"
     )
 
 

@@ -1,15 +1,15 @@
 """Guards that UFW's own sysctl file must not undo the host's martian logging.
 
-Two files set `log_martians`: /etc/sysctl.conf, and UFW's `/etc/ufw/sysctl.conf` (`IPT_SYSCTL`
-in /etc/default/ufw), which UFW re-applies on every `ufw enable`/`reload` and at boot. Ubuntu
+Two files set `log_martians`: host-tuning's sysctl.d file, and UFW's `/etc/ufw/sysctl.conf`
+(`IPT_SYSCTL` in /etc/default/ufw), which UFW re-applies on every `ufw enable`/`reload` and at
+boot. Ubuntu
 ships the second with `net/ipv4/conf/{all,default}/log_martians=0` uncommented, so unless the
 host-tuning component rewrites that file too, the next `ufw reload` puts the key back to 0.
 
-The source is the rendered host package (`host-tuning/component.yml`'s `lines:` section), which
-the reconcile line arm applies. That arm runs before the activations (`sysctl --system`) and before
-the ufw arm (`hosts/lib/homelab-reconcile`, `ARMS` and `EARLY`), so ordering within the list
-does not matter; what matters is that both files carry the same value and the sysctl.conf
-edits are activated.
+The source is the rendered host package: `host-tuning/component.yml`'s `lines:` section, which
+the reconcile line arm applies before the ufw arm (`hosts/lib/homelab-reconcile`, `ARMS` and
+`EARLY`), and its sysctl.d file. What matters is that both files carry the same value and the
+sysctl.d file is activated.
 
 The census names the edits it must find, so a rename fails with the member that went missing
 rather than passing over an empty list.
@@ -21,7 +21,7 @@ import pytest
 from _host_packages import HOSTS, package
 
 UFW_SYSCTL = "/etc/ufw/sysctl.conf"
-SYSCTL_CONF = "/etc/sysctl.conf"
+SYSCTL_D = "/etc/sysctl.d/90-homelab-host-tuning.conf"
 INTERFACES = ("all", "default")
 
 
@@ -52,7 +52,7 @@ def test_the_component_rewrites_ufws_copy_of_the_log_martians_keys(host: str):
 def test_an_edit_that_leaves_ufws_copy_alone_is_flagged():
     """The rejecting half: the same predicate over the shapes it must NOT accept."""
     assert not _rewrites_ufw_log_martians(
-        {"path": SYSCTL_CONF, "regexp": "log_martians", "line": "x=1"}
+        {"path": SYSCTL_D, "regexp": "log_martians", "line": "x=1"}
     )
     assert not _rewrites_ufw_log_martians(
         {
@@ -71,19 +71,14 @@ def test_an_edit_that_leaves_ufws_copy_alone_is_flagged():
 
 
 @pytest.mark.parametrize("host", HOSTS)
-def test_sysctl_conf_and_ufws_copy_agree_and_the_live_value_is_activated(host: str):
+def test_the_sysctl_d_file_and_ufws_copy_agree_and_the_live_value_is_activated(
+    host: str,
+):
     """UFW's reload re-asserts the same 1 the live value was set to."""
-    live = {
-        e["line"].split("=")[0]: e
-        for e in _edits(host, SYSCTL_CONF)
-        if "log_martians" in e["line"]
-    }
-    assert sorted(live) == [
-        f"net.ipv4.conf.{iface}.log_martians" for iface in INTERFACES
-    ], sorted(live)
-    for iface in INTERFACES:
-        edit = live[f"net.ipv4.conf.{iface}.log_martians"]
-        assert edit["line"].endswith("=1"), edit
-    assert package(host).activations[SYSCTL_CONF] == "sysctl", (
-        "/etc/sysctl.conf is not activated, so the file changes and the live value does not"
+    shipped = package(host).files[SYSCTL_D][0].decode().splitlines()
+    assert sorted(line for line in shipped if "log_martians" in line) == [
+        f"net.ipv4.conf.{iface}.log_martians=1" for iface in INTERFACES
+    ]
+    assert package(host).activations[SYSCTL_D] == "sysctl", (
+        f"{SYSCTL_D} is not activated, so the file changes and the live value does not"
     )

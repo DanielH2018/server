@@ -84,6 +84,7 @@ def fake_tools(
     merged_prs=None,
     branch_prs=None,
     open_prs=(),
+    continued_prs=None,
     findings_exit=0,
     refused_claims=(),
     head="worktree-orch",
@@ -107,6 +108,8 @@ def fake_tools(
             None is a read that failed.
         open_prs: the head branches of the repo's open PRs, or a mapping of each to the
             files its PR changes, as `open_pr_files` answers; None is a read that failed.
+        continued_prs: branch -> the `OpenPr` `open_pr` answers for it, or a str for a read
+            that failed. A branch absent from it has no open PR.
         findings_exit: the exit status every `findings.py` call returns. Each call is recorded
             in the FakeRun's `calls` under the pseudo-host `findings`.
         refused_claims: issue numbers whose `claim` exits 3 instead, refused.
@@ -158,6 +161,9 @@ def fake_tools(
         edited = open_prs if isinstance(open_prs, dict) else dict.fromkeys(open_prs, ())
         return {branch: frozenset(files) for branch, files in edited.items()}
 
+    def open_pr(branch: str, repo: str):
+        return (continued_prs or {}).get(branch)
+
     def head_branch() -> str:
         if isinstance(head, BaseException):
             raise head
@@ -174,6 +180,7 @@ def fake_tools(
         branch_prs=branch_pr_urls,
         earlier_prs=lambda *_: [],
         open_pr_files=open_pr_files,
+        open_pr=open_pr,
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,

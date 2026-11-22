@@ -6,11 +6,8 @@ The command's checks and refusals are in `test_fanout_abandon.py`, and its lock 
 Run: uv run pytest scripts/dev/tests/test_fanout_resume.py
 """
 
-from dev.fanout_lib.launch import (
-    RESUME_SNAPSHOT_PATHS,
-    SYSTEM_PROMPT_FILE,
-    resume_command,
-)
+from dev.fanout_lib.launch import SYSTEM_PROMPT_FILE
+from dev.fanout_lib.resume import RESUME_SNAPSHOT_PATHS, resume_command
 from dev.fanout_lib.review.held_hooks import HELD_TREES, HOOKS_DIR, RULES_DIR
 from _fanout_fakes import as_operator
 

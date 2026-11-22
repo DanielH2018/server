@@ -118,6 +118,12 @@ Environment=HOME={{ claude_code_user_home }}
 Environment=PATH={{ fnm_node }}{{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 
+# A spawned session reports session_kind="remote-control", a value from
+# scripts/dev/fanout_lib/telemetry.py:SessionKind.
+# DECIDED: rendered for the agent user too, where it has no effect: a settings `env` replaces
+# the whole OTEL_RESOURCE_ATTRIBUTES value, and the agent's settings set process.owner=claude.
+Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=remote-control
+
 {% if claude_code_rc_disable_bg_shell_pressure_reap %}
 # DECIDED: the background-shell pressure reaper is turned OFF here. Claude Code registers
 # `process.on("memoryPressure", ...)` and, when Node emits that event, kills every running

@@ -53,6 +53,12 @@
       "epoch": "cc-2.1.325",
       "mode": "hermetic",
       "ts": 1794793876
+    },
+    {
+      "costUsd": 11.1866,
+      "epoch": "cc-2.1.329",
+      "mode": "hermetic",
+      "ts": 1795314530
     }
   ],
   "add-secret/001-cluster-key-stops-before-the-pr": [
@@ -85,6 +91,28 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0.6666666666666666,
+      "passes": 2,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
+    }
+  ],
+  "coordinate/001-hold-pauses-refills-and-recaps": [
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0.3333333333333333,
+      "passes": 1,
+      "status": "FAIL",
+      "thresholdMet": false,
+      "ts": 1795314530
     }
   ],
   "deploy/001-gates-need-a-commit-and-pi-health-runs-from-box": [
@@ -117,6 +145,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "ha-edit-automation/001-new-file-and-no-jinja-in-configuration": [
@@ -149,6 +187,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "ha-review/001-single-writer-bypass": [
@@ -251,6 +299,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "ha-review/002-al-startup-handled": [
@@ -353,6 +411,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "ha-review/003-stop-readonly": [
@@ -455,6 +523,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "home-assistant-engineer/001-math-in-a-tested-macro-and-a-live-load-gate": [
@@ -487,6 +565,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-backup-observability-reviewer/001-stateful-unmonitored": [
@@ -589,6 +677,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-backup-observability-reviewer/002-kuma-push-no-retries": [
@@ -693,6 +791,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-cicd-reviewer/001-config-not-registered": [
@@ -795,6 +903,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-cicd-reviewer/002-frozenset-latest-accepted": [
@@ -897,6 +1015,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-cicd-reviewer/003-output-format": [
@@ -999,6 +1127,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 5,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 5,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-container-reviewer/001-named-volume-unbacked": [
@@ -1101,6 +1239,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-container-reviewer/002-named-volume-accepted": [
@@ -1203,6 +1351,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-network-diagnostician/001-router-missing-ratelimit": [
@@ -1305,6 +1463,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-network-diagnostician/002-crowdsec-mullvad-whitelist": [
@@ -1407,6 +1575,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/001-dedup": [
@@ -1509,6 +1687,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/002-drop-settled": [
@@ -1611,6 +1799,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/003-stop-readonly": [
@@ -1713,6 +1911,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/004-anti-merge": [
@@ -1815,6 +2023,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/005-verdict-manifest": [
@@ -1917,6 +2135,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 0.6666666666666666,
+      "passes": 2,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/006-fixed-unmerged-branch": [
@@ -2019,6 +2247,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/007-ha-out-of-scope": [
@@ -2121,6 +2359,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/008-recurrence-not-discovery": [
@@ -2223,6 +2471,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/009-collection-manifest": [
@@ -2325,6 +2583,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/011-skeptic-sizing": [
@@ -2427,6 +2695,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/012-seam-surfaces": [
@@ -2529,6 +2807,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/013-standing-list-foldback": [
@@ -2631,6 +2919,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "homelab-review/014-barred-fix-is-not-a-settled-finding": [
@@ -2733,6 +3031,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "issue-fanout/001-triage-grouping": [
@@ -2765,6 +3073,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "land-after-merge/001-merged-pr-lands-unasked": [
@@ -2847,6 +3165,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "land-after-merge/002-hold-sha-stops": [
@@ -2929,6 +3257,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "new-container/001-pi-service-conventions": [
@@ -2961,6 +3299,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "new-k8s-service/001-scaffold-not-copy": [
@@ -2993,6 +3341,28 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
+    }
+  ],
+  "prune-tests/001-a-red-half-is-kept-and-a-candidate-is-proven": [
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "renovate-prs/001-stuck-item-and-paired-digest": [
@@ -3025,6 +3395,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "security-review/001-hardcoded-secret": [
@@ -3127,6 +3507,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "security-review/002-readonly-tmpfs-accepted": [
@@ -3229,6 +3619,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "skeptic/001-refuted-with-evidence": [
@@ -3331,6 +3731,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "skeptic/002-falsify-the-defense": [
@@ -3433,6 +3843,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "skeptic/003-no-evidence-is-not-refutation": [
@@ -3535,6 +3955,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ],
   "worktree-cleanup/001-merged-refusal-asks-the-pruner": [
@@ -3567,6 +3997,16 @@
       "status": "PASS",
       "thresholdMet": true,
       "ts": 1794793876
+    },
+    {
+      "epoch": "cc-2.1.329",
+      "healthy": 3,
+      "mode": "hermetic",
+      "passRate": 1,
+      "passes": 3,
+      "status": "PASS",
+      "thresholdMet": true,
+      "ts": 1795314530
     }
   ]
 }

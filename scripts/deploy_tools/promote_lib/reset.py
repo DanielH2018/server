@@ -42,8 +42,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 
+from lib import host_modules  # noqa: F401
 from lib.exit_codes import FAILED, OK
 
+from ci_verdict import WorkflowRun
 from deploy_tools import forge
 from deploy_tools.artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from deploy_tools.promote_lib.prune import READ_ERRORS
@@ -67,7 +69,7 @@ class ResetReads:
     hold: Callable[[], str | None]
     digest: Callable[[str], str | None]
     prod_commit: Callable[[], str | None]
-    in_progress: Callable[[], list[dict]]
+    in_progress: Callable[[], list[WorkflowRun]]
 
 
 @dataclass(frozen=True)
@@ -139,10 +141,8 @@ def _in_flight(
     except READ_ERRORS as err:
         commit = f"unreadable ({err})"
     try:
-        runs = [r for r in reads.in_progress() if str(r.get("id")) != run_id]
-        listed = ", ".join(
-            f"run {r.get('id')} at {str(r.get('head_sha', ''))[:8]}" for r in runs
-        )
+        runs = [r for r in reads.in_progress() if str(r.id) != run_id]
+        listed = ", ".join(f"run {r.id} at {r.head_sha[:8]}" for r in runs)
     except READ_ERRORS as err:
         listed = f"unreadable ({err})"
     return (

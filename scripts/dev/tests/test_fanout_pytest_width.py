@@ -58,4 +58,5 @@ def test_the_placement_time_unit_carries_no_worker_count():
     """`systemd_run_command` runs on the placing host, whose core count is the wrong one."""
     dotfiles = Target("DanielH2018/dotfiles", "/srv/dotfiles", "origin/main")
     argv = shlex.split(systemd_run_command("763", dotfiles))
-    assert "env" not in json.loads(argv[argv.index("--settings") + 1])
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert PYTEST_WORKERS_ENV not in settings["env"]

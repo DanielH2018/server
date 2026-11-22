@@ -131,6 +131,17 @@ def test_the_package_points_the_include_at_the_project_directory(package):
     assert include["project_directory"] == PROJECT_DIR
 
 
+# --- kernel modules ---------------------------------------------------------------------------
+
+
+def test_the_package_loads_the_legacy_iptables_tables_at_boot(package):
+    """wg-easy's PostUp runs legacy `iptables` against nat and filter, which 26.04 boots without."""
+    data, mode = package.files["/etc/modules-load.d/wg-easy.conf"]
+    assert data.decode() == "ip_tables\niptable_nat\niptable_filter\n"
+    assert mode == 0o644
+    assert package.activations["/etc/modules-load.d/wg-easy.conf"] == "modules-load"
+
+
 # --- no secret --------------------------------------------------------------------------------
 
 

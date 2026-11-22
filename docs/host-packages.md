@@ -1056,6 +1056,35 @@ Every `k3s` subcommand needs root.
    release.
 1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
    during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
+1. On daniel-pi, mask every other timer that runs apt or restarts the host, and stop
+   `watchdog.service`, from the `ubuntu` shell. The watchdog restarts the Pi at load 24, and
+   the upgrade reached load 14. The package upgrade starts the watchdog again, so the upgrade
+   step checks it once more. The *Verify* steps unmask the timers.
+
+    ```bash
+    sudo systemctl mask --now homelab-docker-engine.timer homelab-apt-autoremove.timer \
+      homelab-dpkg-purge.timer apt-daily.timer apt-daily-upgrade.timer homelab-reboot.timer
+    sudo systemctl stop watchdog.service
+    ```
+
+1. Install the updates the current release has pending, from the `ubuntu` shell.
+   `do-release-upgrade` refuses to start while any are pending, with `Please install all
+   available updates for your release before upgrading.` It also refuses while the host awaits
+   a restart, with `You have not rebooted after updating a package which requires a reboot`.
+
+    ```bash
+    sudo apt update
+    apt list --upgradable
+    ls /var/run/reboot-required
+    ```
+
+    - When the list holds only Ubuntu packages, run `sudo apt full-upgrade`.
+    - When it holds a `homelab-*` package, master published one while updates were stopped.
+      Install it through the updater, never with apt, because only the updater runs
+      reconcile: run `sudo systemctl start homelab-updater.service`, then list again.
+    - When `ls` prints `/var/run/reboot-required`, run `sudo reboot`, then list again from a new
+      `ubuntu` shell. daniel-box needed this on 2026-11-21 after a kernel update.
+
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
    The label stops a promoted k3s bump from starting a Job on the node. Go on only when the gate
    exits 0. daniel-box's restart runs at `k3s_restart_window` in
@@ -1126,7 +1155,18 @@ Every `k3s` subcommand needs root.
     install -d -m 0700 /root/pre-release-upgrade
     dpkg -S '/etc/apt/sources.list.d/*' | awk '{print $NF}' \
       | xargs cp -a -t /root/pre-release-upgrade/
-    ls /root/pre-release-upgrade
+    ls -l /root/pre-release-upgrade
+    ```
+
+    The listing holds only the files a package owns, so a source file that no package owns is
+    missing from it by design.
+
+1. On daniel-pi, remove `docker.sources` for the run, in the root shell. The five Docker
+   packages are held with `apt-mark hold`, and `do-release-upgrade` refuses while their source
+   is present. The staged copy restores the file after the upgrade.
+
+    ```bash
+    rm /etc/apt/sources.list.d/docker.sources
     ```
 
 1. Stop `do-release-upgrade` from removing the homelab packages. Once their source is
@@ -1141,17 +1181,31 @@ Every `k3s` subcommand needs root.
 
 1. Upgrade the host. Do not reboot yet. `do-release-upgrade` runs inside a GNU screen window,
    so a dropped SSH session reattaches with `screen -r`. Keep a console on standby anyway. If it
-   shows *Foreign Packages Installed*, answer `y`, because its default aborts the upgrade.
+   shows *Foreign Packages Installed*, answer `y`, because its default aborts the upgrade. At
+   its closing `Restart required` prompt, answer `N`: the next two steps run before the reboot.
 
     ```bash
     do-release-upgrade
     ```
 
-1. Put the sources back and remove the drop-in, so the updater sees its repository again and
-   the verify step's `dpkg --verify` passes.
+    On daniel-pi the upgrade takes about four hours (20:34 to 00:30 UTC on 2026-11-21 to
+    2026-11-22), and the `ubuntu` SSH session can drop or stall under load. From a new session,
+    `sudo screen -d -r` takes the window back. The `console-setup` character-set dialog
+    appears there: Enter keeps the installed setting. When the package upgrade has restarted
+    `watchdog.service`, stop it again:
+
+    ```bash
+    systemctl stop watchdog.service
+    ```
+
+1. Put the sources back and remove the drop-in. Until this step runs, `homelab.sources` reads
+   `Enabled: no`, so the updater sees no repository and the verify step's `dpkg --verify`
+   fails. The copy gives `/etc/apt/sources.list.d` the staging directory's mode 0700, so the
+   `chmod` restores 755, without which apt reports `Permission denied` for non-root reads.
 
     ```bash
     cp -a /root/pre-release-upgrade/. /etc/apt/sources.list.d/
+    chmod 755 /etc/apt/sources.list.d
     rm /etc/update-manager/release-upgrades.d/90-homelab.cfg
     ```
 
@@ -1182,10 +1236,20 @@ Every `k3s` subcommand needs root.
     it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
     file. A setting either implementation's `visudo` refuses fails
     `hosts/lib/tests/test_pi_host_hardening.py::test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy`.
-    Reboot only once the second session's sudo works:
+    Reboot only once the second session's sudo works and the step that puts the sources back
+    has run:
 
     ```bash
     reboot
+    ```
+
+    A host that rebooted before the sources went back takes that step from the `ubuntu` shell,
+    before the verify step:
+
+    ```bash
+    sudo cp -a /root/pre-release-upgrade/. /etc/apt/sources.list.d/
+    sudo chmod 755 /etc/apt/sources.list.d
+    sudo rm /etc/update-manager/release-upgrades.d/90-homelab.cfg
     ```
 
 1. Verify the host against the release, from a new `ubuntu` shell. The reboot ended the root
@@ -1212,6 +1276,15 @@ Every `k3s` subcommand needs root.
     ps -eo label=,pid=,comm= | grep '//&'
     sudo grep 'apparmor="DENIED" operation="signal"' /var/log/audit/audit.log | grep 'comm="runc"'
     sudo grep -c 'apparmor="DENIED"' /var/log/audit/audit.log
+    ```
+
+    Also check that no pod is stuck in `Init`, from daniel-box. The stacked label held Traefik
+    and Authelia there for 12 minutes on 2026-11-21 (issue 9833). The kernel log shows no
+    denial, because auditd takes them, so read `/var/log/audit/audit.log` as above and never
+    `journalctl -k`.
+
+    ```bash
+    kubectl get pods -A | grep Init
     ```
 
 1. Resume updates as *Stopping updates on one host* describes, then run the updater once. Only the
@@ -1241,6 +1314,19 @@ Every `k3s` subcommand needs root.
 
 1. Read Prometheus. `homelab_host_reconcile_ok{host="<host>"}` reads 1, and
    `homelab_host_applied_info{host="<host>"}` carries the version `dpkg-query` printed.
+1. On daniel-pi, unmask the timers that the stop step masked, and check the watchdog.
+   After a restart, wg-easy can crash-loop until the legacy iptables modules load, which
+   [issue 9859](https://github.com/DanielH2018/server/issues/9859) tracks. Leave
+   `homelab-reboot.timer` masked until that issue closes.
+
+    ```bash
+    sudo systemctl unmask homelab-docker-engine.timer homelab-apt-autoremove.timer \
+      homelab-dpkg-purge.timer apt-daily.timer apt-daily-upgrade.timer
+    sudo systemctl start homelab-docker-engine.timer homelab-apt-autoremove.timer \
+      homelab-dpkg-purge.timer apt-daily.timer apt-daily-upgrade.timer
+    systemctl is-active watchdog.service
+    ```
+
 1. On a cluster node, remove the label from daniel-box. system-upgrade-controller resumes on the
    node.
 

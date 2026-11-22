@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _hook_common import parse_payload
 from dev.fanout_lib import status
-from dev.fanout_lib.brief import render_brief
+from dev.fanout_lib.brief import ISSUES_HEADING, render_brief
 from dev.findings_lib.issue_model import Issue, IssueState
 
 _HOOK = os.path.join(
@@ -183,6 +183,30 @@ def test_a_review_batch_owes_no_verdict_in_any_phase(tmp_path):
         assert _stop(root, FINISHED) is None
     landing = render_brief(issues, "daniel-box", "1", "worktree-orch", [])
     assert _stop(_fanout_tree(tmp_path / "landing", landing), FINISHED) is not None
+
+
+def test_land_sh_quoted_in_the_issue_text_owes_no_verdict(tmp_path):
+    quoting = Issue(
+        1, "one", IssueState.OPEN, body="./scripts/deploy_tools/land.sh --pr 9457"
+    )
+    for brief in (
+        render_brief([quoting], "daniel-box", "1", "worktree-orch", [], review=True),
+        render_brief([quoting], "daniel-server", "1", "worktree-orch", []),
+    ):
+        root = _fanout_tree(tmp_path / str(len(brief)), brief)
+        assert _stop(root, FINISHED) is None
+    landing = render_brief([quoting], "daniel-box", "1", "worktree-orch", [])
+    assert _stop(_fanout_tree(tmp_path / "landing", landing), FINISHED) is not None
+
+
+def test_the_hook_splits_the_brief_at_the_heading_the_renderer_writes():
+    assert _mod.ISSUES_HEADING == ISSUES_HEADING
+
+
+def test_a_landing_brief_owes_no_verdict_once_a_pipeline_phase_runs(tmp_path):
+    root = _fanout_tree(tmp_path, LANDING_BRIEF)
+    (root / ".fanout" / "phase").write_text("implement\n")
+    assert _stop(root, FINISHED) is None
 
 
 def test_the_worktrees_copy_stands_down_while_the_pipeline_runs_its_own_and_no_other_does(
