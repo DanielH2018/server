@@ -557,6 +557,24 @@ def cancellation_suspects(check_runs: list[CheckRun]) -> set[int | None]:
     return suspects
 
 
+def gates_failed_by_cancellation(
+    check_runs: list[CheckRun], read_suites: Callable[[], list[CheckSuite]]
+) -> set[int | None]:
+    """The check-suite ids of the gates that failed only because their own run was cancelled.
+
+    Such a gate is a `cancellation_suspects` gate whose suite `read_suites()` reports
+    `cancelled`, and it says nothing about the commit. `read_suites` is called only when a
+    suspect exists, so an ordinary head costs no check-suites read.
+
+    Raises:
+        OSError, ValueError: `read_suites` failed.
+    """
+    suspects = cancellation_suspects(check_runs)
+    if not suspects:
+        return set()
+    return {s.id for s in read_suites() if s.cancelled} & suspects
+
+
 def ci_verdict(
     check_runs: list[CheckRun],
     required: frozenset[str] | set[str],
@@ -576,10 +594,8 @@ def ci_verdict(
     The gate job's own name is the exception to "missing or still running is pending": while it
     has not concluded, `jobs_verdict` decides from the jobs it aggregates. A skipped gate
     has not concluded either: only a draft PR's run skips it. Nor has a gate that failed
-    only because its own run was cancelled: a `cancellation_suspects` gate whose suite
-    `read_suites()` reports `cancelled`. It is called only when a suspect exists, so an ordinary
-    verdict costs no check-suites read, and a read that fails is `pending`. A caller that passes
-    no reader keeps such a gate red.
+    only because its own run was cancelled (`gates_failed_by_cancellation`). A suites read
+    that fails is `pending`. A caller that passes no reader keeps such a gate red.
 
     Raises:
         ValueError: `required` is empty. Every commit would grade green against it.
@@ -589,14 +605,11 @@ def ci_verdict(
             "no required CI contexts: an empty set would grade every commit green"
         )
     cancelled = set()
-    suspects = cancellation_suspects(check_runs) if read_suites else set()
-    if suspects and read_suites:
+    if read_suites:
         try:
-            suites = read_suites()
+            cancelled = gates_failed_by_cancellation(check_runs, read_suites)
         except (OSError, ValueError):
             return CIVerdict.PENDING
-        cancelled = {s.id for s in suites if s.cancelled}
-        cancelled &= suspects
     states: dict[str, set[CIVerdict]] = {}
     for run in check_runs:
         if run.name not in required:
