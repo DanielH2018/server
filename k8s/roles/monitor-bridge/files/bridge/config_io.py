@@ -142,7 +142,7 @@ def io_config(
         # documentation lists 403/transaction_cap_exceeded among the errors of both. A Class A
         # cap has no probe: Class A calls are free and B2 sets no cap on them.
         B2_PROBE_URL=_env(
-            "B2_PROBE_URL", "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
+            "B2_PROBE_URL", "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"
         ),
         # Read through _env_file for the same reason as HA_TOKEN: envFrom has no per-key filter,
         # so a secret in monitor-bridge-env is a secret in every process's environment

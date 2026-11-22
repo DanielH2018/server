@@ -54,18 +54,23 @@ def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
     )
 
 
-def b2_storage_api(auth: dict) -> tuple[str | None, str | None, str | None]:
-    """(api_url, authorization_token, bucket_id) from an authorize response.
+def b2_allowed(auth: dict) -> dict:
+    """The v4 authorize response's `apiInfo.storageApi.allowed`: buckets, capabilities, prefix."""
+    storage = (auth.get("apiInfo") or {}).get("storageApi") or {}
+    return storage.get("allowed") or {}
 
-    v3 groups the storage endpoint under `apiInfo.storageApi` where v1/v2 had `apiUrl` at the top
-    level, so both shapes are read — the same version-tolerance b2_authorize applies to its own
-    fields. `bucketId` is present when the application key is bucket-scoped, which this one is;
-    without it there is no bucket to sum and the caller reports that rather than guessing.
+
+def b2_storage_api(auth: dict) -> tuple[str | None, str | None, str | None]:
+    """(api_url, authorization_token, bucket_id) from a v4 authorize response.
+
+    `bucket_id` is the one bucket in `allowed.buckets` when the key is scoped to exactly one,
+    which this one is; otherwise there is no bucket to sum and the caller reports that rather
+    than guessing.
     """
     storage = (auth.get("apiInfo") or {}).get("storageApi") or {}
-    api_url = storage.get("apiUrl") or auth.get("apiUrl")
-    bucket_id = storage.get("bucketId") or (auth.get("allowed") or {}).get("bucketId")
-    return api_url, auth.get("authorizationToken"), bucket_id
+    buckets = b2_allowed(auth).get("buckets") or []
+    bucket_id = buckets[0].get("id") if len(buckets) == 1 else None
+    return storage.get("apiUrl"), auth.get("authorizationToken"), bucket_id
 
 
 def b2_storage_usage(
@@ -136,7 +141,7 @@ def b2_list_versions(
             payload["startFileId"] = start_id
         page = as_object(
             src.post_json(
-                "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
+                "%s/b2api/v4/b2_list_file_versions" % api_url.rstrip("/"),
                 payload,
                 headers={"Authorization": token},
             ),
@@ -171,18 +176,15 @@ def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
       RuntimeError: Either call never reached B2.
     """
     data = b2_authorize_data(cfg, src)
-    # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
-    # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)
-    # but not for v3, whose documented change was to group endpoint info under `apiInfo`. Both
-    # fields have been present since v1, so this survives a version bump either way — and a wrong
-    # guess here would page every cycle rather than fail safe.
+    # A 200 from something that isn't B2 must not read as healthy. Either field will do: both
+    # have been top-level since v1, and a wrong guess here would page every cycle.
     if not (data.get("accountId") or data.get("authorizationToken")):
         return False, "B2 auth returned neither accountId nor authorizationToken"
     api_info = optional_object(data.get("apiInfo"), "apiInfo") or {}
     storage = optional_object(api_info.get("storageApi"), "storageApi") or {}
-    allowed = optional_object(data.get("allowed"), "allowed") or {}
-    download_url = storage.get("downloadUrl") or data.get("downloadUrl")
-    bucket_name = storage.get("bucketName") or allowed.get("bucketName")
+    download_url = storage.get("downloadUrl")
+    buckets = b2_allowed(data).get("buckets") or []
+    bucket_name = buckets[0].get("name") if len(buckets) == 1 else None
     if not download_url or not bucket_name:
         return False, (
             "B2 auth carried no downloadUrl/bucketName, so the Class B probe cannot run"
@@ -291,9 +293,7 @@ def check_b2_object_lock(
             raise RuntimeError(
                 "B2 auth response carried no storage apiUrl, token or bucketId"
             )
-        api_info = optional_object(auth.get("apiInfo"), "apiInfo") or {}
-        storage = optional_object(api_info.get("storageApi"), "storageApi") or {}
-        granted = storage.get("capabilities")
+        granted = b2_allowed(auth).get("capabilities")
         capabilities = (
             [c for c in granted if isinstance(c, str)]
             if isinstance(granted, list)
@@ -301,7 +301,7 @@ def check_b2_object_lock(
         )
         listed = as_object(
             src.post_json(
-                "%s/b2api/v3/b2_list_buckets" % api_url.rstrip("/"),
+                "%s/b2api/v4/b2_list_buckets" % api_url.rstrip("/"),
                 {"accountId": auth.get("accountId"), "bucketId": bucket_id},
                 headers={"Authorization": token},
             ),

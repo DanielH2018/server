@@ -225,19 +225,23 @@ def problems(
         return f"the batch ended '{rec.get('outcome')}', not 'pr'"
     if not rec.get("reviewed") or rec.get("review_error"):
         return f"the review did not complete ({rec.get('review_error') or 'no review phase'})"
-    if not str(rec.get("ci_gate") or "").startswith("passed"):
-        return f"the CI gate did not pass ({rec.get('ci_gate') or 'it did not run'})"
     if rec.get("remaining"):
         return f"{rec['remaining']} findings remain after the fix round"
     reviewed = str(rec.get("head") or "")
     if not reviewed:
         return "the record names no reviewed head (written before the field existed)"
-    if pr.get("isDraft"):
-        return "the PR is a draft"
     head = str(pr.get("headRefOid") or "")
     if head != reviewed:
         return f"the head moved since the review ({reviewed[:8]} -> {head[:8]})"
-    return own_surface.pr_problems(pr, str(rec.get("batch")), pyproject_ok)
+    # Before the CI gate: a PR this rule holds stays a draft with no CI gate (`person_lands`).
+    held = own_surface.pr_problems(pr, str(rec.get("batch")), pyproject_ok)
+    if held:
+        return held
+    if not str(rec.get("ci_gate") or "").startswith("passed"):
+        return f"the CI gate did not pass ({rec.get('ci_gate') or 'it did not run'})"
+    if pr.get("isDraft"):
+        return "the PR is a draft"
+    return ""
 
 
 # A landing that a rule refused before its merge, which merged nothing and ends exit 75
