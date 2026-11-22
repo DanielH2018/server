@@ -293,9 +293,12 @@ def _ready_run_on(ln: Landing, head: str) -> str:
     A run that is not completed, or that completed with a verdict, ran while the PR was
     ready. Its `prek` gate `needs` every other job, so the gate gets no check run until they
     finish, and for those minutes `await_ci` reads only the draft run's skipped gate.
-    Converting to draft then cancels the ready run. A run that completed `skipped` or with no
-    verdict, such as `cancelled`, is past cancelling, so it allows the toggle. A failed read
-    forbids it, because the toggle is the one action here that can cancel a run.
+    Converting to draft then cancels the ready run. A run that completed `skipped` allows the
+    toggle. So does one that completed with no verdict, such as `cancelled`, beside a skipped
+    run: a draft run cancels a ready run made in the same second (`await_ci.draft_skipped`).
+    A head with no skipped run is no draft case, so its cancelled run forbids the toggle and
+    `_start_run` takes no turn for it. A failed read forbids it, because the toggle is the
+    one action here that can cancel a run.
     """
     url = f"repos/{{owner}}/{{repo}}/actions/workflows/ci.yml/runs?head_sha={head}&event=pull_request"
 
@@ -309,9 +312,9 @@ def _ready_run_on(ln: Landing, head: str) -> str:
         runs = [WorkflowRun.parse(r) for r in ln.read(call, "gh api ci.yml runs")]
     except (gh_read.GhReadFailed, ValueError) as exc:
         return f"its CI runs could not be read ({exc})"
+    skipped = [r for r in runs if (r.status, r.conclusion) == ("completed", "skipped")]
     for run in runs:
-        skipped = run.status == "completed" and run.conclusion == "skipped"
-        if not (skipped or run.no_verdict):
+        if run not in skipped and not (skipped and run.no_verdict):
             return f"run {run.id} is {run.conclusion or run.status}"
     return ""
 
@@ -369,8 +372,8 @@ def _start_run(
 ) -> tuple[str, bool, int]:
     """Give a PR that has had no CI run its one run, on the master of the landing turn.
 
-    A head with no CI run that ran jobs, or whose only such runs were cancelled
-    (`_ready_run_on`), takes the landing turn first (`turn.py`), so that the
+    A head with no CI run that ran jobs, or whose only such runs were cancelled beside a
+    draft run (`_ready_run_on`), takes the landing turn first (`turn.py`), so that the
     run it is about to get tests the master its merge lands on. A draft stands in the line
     for the turn while it waits (`line.py`). With the turn, the PR's branch is updated from
     master when master is ahead of it, and only then is a draft marked ready, because a
@@ -380,8 +383,8 @@ def _start_run(
     turn. A flip before the update started a run on the stale head, which the update's push
     cancels after it has held runners for minutes.
 
-    A head with a CI run that ran jobs and was not cancelled keeps it and takes no turn
-    here: `await_merge` takes
+    Any other head with a CI run that ran jobs keeps it and takes no turn here:
+    `await_merge` takes
     the turn once that head is green, so no landing holds the turn while a run that started
     before it finishes. The branch is also left as it is for a head that moved after the
     landing policy pinned it, a head admitted on an approval, a PR GitHub reads as

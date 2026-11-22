@@ -285,11 +285,18 @@ def test_an_update_github_refuses_leaves_the_pr_the_run_it_has(landing, capsys):
     assert "going on with the run the PR has" in capsys.readouterr().out
 
 
-def test_a_head_with_a_run_takes_the_turn_only_once_it_is_green(landing):
+@pytest.mark.parametrize(
+    "head_runs",
+    [A_RUN, [{"id": 2, "status": "completed", "conclusion": "cancelled"}]],
+    ids=["in-progress", "cancelled-with-no-draft-run"],
+)
+def test_a_head_with_a_run_takes_the_turn_only_once_it_is_green(landing, head_runs):
+    """A cancelled run with no draft run beside it gets no new run from the turn, so a
+    landing that took the turn for it would hold it until `merge_timeout`."""
     ln, calls = turn_landing(
         landing,
         polls=(OPEN, OPEN, MERGED),
-        head_runs=A_RUN,
+        head_runs=head_runs,
         await_ci=[(75, "pending"), (0, "CI green")],
     )
     land_in_turn(ln)

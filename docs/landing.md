@@ -408,8 +408,10 @@ At least one gate must have skipped: a head whose runs were all cancelled is not
   skip again, which is why the landing toggles instead.
 - The landing does not toggle while the head has a `ci.yml` run that can still give a
   verdict: one queued, in progress, or finished with a verdict. A run that finished `skipped`
-  or with no verdict, such as `cancelled`, is past cancelling and allows the toggle. The
-  landing prints why it waits and restarts the grace.
+  allows the toggle. A run that finished with no verdict, such as `cancelled`, allows it only
+  beside a skipped run. A head with no skipped run is no draft case: a cancelled run there
+  stops the toggle, and the landing takes no turn for it before it is green. The landing
+  prints why it waits and restarts the grace.
   The ready run's `prek` gate gets its check run only once every job it needs has finished,
   so for those minutes `await_ci` reads only the draft run's skipped gate. A toggle then
   cancels the ready run: on PR 6443 it cancelled a run 32 seconds old, and on PR 6531 one 20

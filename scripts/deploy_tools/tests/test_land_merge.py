@@ -447,11 +447,20 @@ def test_a_toggle_a_secondary_limit_refuses_says_to_wait_not_to_toggle_by_hand(
         [_DRAFT_RUN, {"id": 2, "status": "queued", "conclusion": None}],
         [_DRAFT_RUN, {"id": 2, "status": "in_progress", "conclusion": None}],
         [_DRAFT_RUN, {"id": 2, "status": "completed", "conclusion": "failure"}],
+        [{"id": 2, "status": "completed", "conclusion": "cancelled"}],
         subprocess.CalledProcessError(1, "gh", stderr="HTTP 404: Not Found"),
         {"workflow_runs": []},
         ["not a run"],
     ],
-    ids=["queued", "in-progress", "failed", "gh-fails", "not-a-list", "not-a-run"],
+    ids=[
+        "queued",
+        "in-progress",
+        "failed",
+        "cancelled-alone",
+        "gh-fails",
+        "not-a-list",
+        "not-a-run",
+    ],
 )
 def test_a_ready_run_or_an_unreadable_run_list_stops_the_conversion(landing, head_runs):
     """The ready run's gate has no check run until its jobs finish, so await_ci reads
