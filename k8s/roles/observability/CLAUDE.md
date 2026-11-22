@@ -10,6 +10,11 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
+**Prometheus keeps only the `claude_code_*` names from the collector.** The fenced triage and
+Renovate sessions export here, and they read untrusted text. A metric they forged under any
+other name could fire a routed triage alert
+(`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
+
 Flux applies the role (its entry is in `cluster/services.yml`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.

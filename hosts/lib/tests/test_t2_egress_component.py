@@ -18,6 +18,7 @@ from lib.estate import Inventory
 from lib.proc_testing import run, write_exec
 from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
+from _setup_render import CLAUDE_CODE, role_context
 
 RULESET = "/usr/lib/homelab/t2-egress/t2-egress.nft"
 EGRESS_UNIT = "/usr/lib/systemd/system/homelab-t2-egress.service"
@@ -229,10 +230,11 @@ def test_each_session_uid_is_refused_everything_after_its_trace_and_the_proxy(bo
         (HOST_VARS / "daniel-box.yml").read_text()
     )["t2_egress_proxy"].split(":")
     rules = [s for s in statements(rendered(box, RULESET)) if s.startswith("add rule")]
-    accept = first(rules, " accept")
-    assert (
-        f"ip daddr {proxy_host} tcp dport {proxy_port} counter accept" in rules[accept]
+    accept = first(
+        rules, f"ip daddr {proxy_host} tcp dport {proxy_port} counter accept"
     )
+    accepts = [i for i, rule in enumerate(rules) if rule.endswith(" accept")]
+    assert accepts == [accept, accept + 1], "only squid and the OTLP collector get past"
     assert (
         first(rules, "update @seen4") < accept
         and first(rules, "update @seen6") < accept
@@ -240,10 +242,26 @@ def test_each_session_uid_is_refused_everything_after_its_trace_and_the_proxy(bo
     for uid in declared_uids():
         tcp = first(rules, f'comment "t2-fence {uid} tcp"')
         other = first(rules, f'comment "t2-fence {uid} other"')
-        assert accept < tcp < other
+        assert accepts[-1] < tcp < other
         assert "reject with tcp reset" in rules[tcp]
         assert "reject with icmpx admin-prohibited" in rules[other]
     assert not [r for r in rules if re.search(r"\blog\b", r)], "a rule logs (I6)"
+
+
+def test_each_session_uid_reaches_the_otlp_collector_by_its_pre_dnat_address(box):
+    """The collector's port is a hostPort, so the hook sees the pod's address, not loopback."""
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    context = role_context(CLAUDE_CODE)
+    host, port = context["claude_code_otlp_host_ip"], context["claude_code_otlp_port"]
+    rules = statements(rendered(box, RULESET))
+    [otlp] = [rule for rule in rules if f"proto-dst {port}" in rule]
+    uids = ", ".join(str(uid) for uid in sorted(declared_uids()))
+    assert otlp.startswith(f"add rule inet t2_egress output meta skuid {{ {uids} }} ")
+    assert (
+        f"meta l4proto tcp ct original ip daddr {host} ct original proto-dst {port} "
+        in otlp
+    )
+    assert otlp.endswith(" accept")
 
 
 def test_squid_admits_exactly_the_ruled_hosts_and_refuses_the_rest(box):
