@@ -20,7 +20,7 @@ import pytest
 import prowlarr_verify
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import SECRETS
+from lib.repo_paths import REPO, SECRETS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -129,12 +129,15 @@ def stubs(tmp_path_factory):
 def _render_copy(tree, stubs, edit_policy=False) -> cluster.RenderedTag:
     """Render a copy of the role, with flaresolverr's policy edited when `edit_policy`.
 
-    The seed Job's lookups read arr-notification and `cluster-vars.source`, so the copy holds
-    those too, laid out as the repo lays them out.
+    The seeds' lookups read arr-notification, `cluster-vars.source` and `flux_job_connect.py`,
+    so the copy holds those too, laid out as the repo lays them out.
     """
     roles = tree / "k8s" / "roles"
     for role in (TAG, "arr-notification"):
         shutil.copytree(K8S_ROLES / role, roles / role)
+    helper = tree / cluster.FLUX_JOB_CONNECT.relative_to(REPO)
+    helper.parent.mkdir(parents=True)
+    shutil.copy(cluster.FLUX_JOB_CONNECT, helper)
     (tree / "secrets").mkdir()
     shutil.copy(
         SECRETS / "cluster-vars.source", tree / "secrets" / "cluster-vars.source"
@@ -145,17 +148,15 @@ def _render_copy(tree, stubs, edit_policy=False) -> cluster.RenderedTag:
     return cluster.render_tag(TAG, stubs, roles=roles)
 
 
-# The seed Jobs beside the verify Job, which their own tests cover: arr-notification's in
-# `k8s/roles/arr-notification/tests/`, the app-keys seed in `test_seed_prowlarr_app_keys.py`.
+# The seed Job beside the verify Job, which arr-notification's own tests cover.
 SEED = "notification.yaml"
-SEEDS = (SEED, "app-keys.yaml")
 
 
 def _docs(texts: dict[str, str]) -> list[dict]:
     return [
         doc
         for name, text in sorted(texts.items())
-        if name not in ("kustomization.yaml", *SEEDS)
+        if name not in ("kustomization.yaml", SEED)
         for doc in yaml_fast.safe_load_all(text)
         if doc
     ]
@@ -343,7 +344,6 @@ def test_the_verify_job_reads_no_other_roles_file():
         if path.name != f"{SEED}.j2"
     )
     assert [p.name for p in staged] == [
-        "app-keys.yaml.j2",
         "job.yaml.j2",
         "rbac.yaml.j2",
     ]
