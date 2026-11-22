@@ -21,7 +21,8 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
   * the common path, which leaves `pkgcache.bin` unchanged;
   * remove the host package, and the next run reinstalls it;
   * cold-install the head version on a fresh container;
-  * install the real Pi package by hand on a fresh container, then change its drop-in on
+  * install the real Pi package by hand on a fresh container, and `systemd-sysctl --cat-config`
+    reads its sysctl.d files and sets vm.swappiness from them; then change its drop-in on
     homelab-updater.timer, and the timer, which has an enable link (H3.9b), stays active;
   * install the real Pi package by hand on a fresh container, then upgrade to one rendered with
     optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
@@ -112,6 +113,7 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    expect_boot_sysctl,
     expect_declared_uids,
     expect_tools_run,
     list_problems,
@@ -513,6 +515,7 @@ class Cases:
             self.expect_reconciled(c, "updater-head", "pi-head")
             # The users arm creates node_exporter in the homelab band, below the dynamic range.
             expect_declared_uids(c)
+            expect_boot_sysctl(c)
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")
             if self.tools:

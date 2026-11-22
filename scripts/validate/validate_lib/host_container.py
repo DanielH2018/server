@@ -6,6 +6,7 @@ test image with systemd as PID 1 and hostname daniel-pi unless told otherwise, a
 `host_fixtures.publish` writes with `python3 -m http.server` on 127.0.0.1:8791.
 """
 
+import re
 import shlex
 import subprocess
 import time
@@ -305,3 +306,60 @@ def expect_tools_run(c: Container) -> None:
                 found.returncode != 0,
                 f"{tool} is on PATH; it installs at {TOOLS_BIN} only",
             )
+
+
+SYSCTL_CAT_CONFIG = "/usr/lib/systemd/systemd-sysctl --no-pager --cat-config"
+# The sysctl.d files the Pi package ships, and a key whose boot value comes from one of them.
+PI_SYSCTL_FILES = (
+    "/etc/sysctl.d/90-homelab-host-tuning.conf",
+    "/etc/sysctl.d/90-homelab-pi-tuning.conf",
+)
+PI_SYSCTL_KEYS = {"vm.swappiness": "130"}
+SYSCTL_HEADER = re.compile(r"# (/\S+\.conf)")
+
+
+def boot_sysctl(cat_config: str) -> dict[str, tuple[str, str]]:
+    """Each key's (value, file) that systemd-sysctl applies last, from its `--cat-config`."""
+    applied: dict[str, tuple[str, str]] = {}
+    path = ""
+    for line in cat_config.splitlines():
+        header = SYSCTL_HEADER.fullmatch(line)
+        if header:
+            path = header[1]
+            continue
+        key, sep, value = line.partition("=")
+        if sep and not line.lstrip().startswith(("#", ";")):
+            applied[key.strip().lstrip("-")] = (value.strip(), path)
+    return applied
+
+
+def boot_sysctl_problems(cat_config: str) -> list[str]:
+    """Each Pi sysctl file systemd-sysctl's boot path skips, and each Pi key it sets elsewhere."""
+    files = set(SYSCTL_HEADER.findall(cat_config))
+    problems = [
+        f"systemd-sysctl does not read {path}"
+        for path in PI_SYSCTL_FILES
+        if path not in files
+    ]
+    applied = boot_sysctl(cat_config)
+    for key, want in PI_SYSCTL_KEYS.items():
+        value, path = applied.get(key, ("unset", "no file"))
+        if value != want or path not in PI_SYSCTL_FILES:
+            problems.append(
+                f"systemd-sysctl sets {key}={value} from {path}, not {want} from"
+                f" {' or '.join(PI_SYSCTL_FILES)}"
+            )
+    return problems
+
+
+def expect_boot_sysctl(c: Container) -> None:
+    """systemd-sysctl's boot path in `c` reads the Pi's sysctl.d files and applies their keys.
+
+    `--cat-config` prints the files without applying them, so the case sets no kernel value on
+    the runner, whose kernel the privileged container shares.
+
+    Raises:
+        CaseFailed: A Pi sysctl file goes unread, or a Pi key's last setting is elsewhere.
+    """
+    problems = boot_sysctl_problems(c.ok(SYSCTL_CAT_CONFIG))
+    expect(not problems, "; ".join(problems))
