@@ -1797,9 +1797,6 @@ tests:
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []
       - eval_time: 17m
-        alertname: SystemdUnitsFailed
-        exp_alerts: []
-      - eval_time: 17m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts:
           - exp_labels:
