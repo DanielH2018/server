@@ -673,7 +673,9 @@ groups:
       # The `for: 2m` lets the pair fire first. Most pairs sit in another group, which Prometheus
       # evaluates at its own offset inside the 1m evaluation interval, so a pair can start up to
       # a minute after this rule crosses. Without the hold, this rule's page would flush after
-      # group_wait, before the inhibit's source exists.
+      # group_wait, before the inhibit's source exists. A pair with a `for:` longer than this
+      # hold is still pending then, and Prometheus sends no pending alert, so this rule skips a
+      # check whose pair is pending and fires 2m after the pair does, by when the pair holds it.
       # A producer switched off on purpose writes homelab_check_disarmed{check="<name>"} 1 (the
       # renovate_agent role does), and this rule skips that check, because its pair goes quiet
       # on the same marker and so leaves no inhibit source.
@@ -686,6 +688,7 @@ groups:
               homelab_check_deadline_seconds{job="${job}",origin="${host}"}
           )
           unless on (check, origin) (homelab_check_disarmed{job="${job}",origin="${host}"} == 1)
+          unless on (check, origin) ALERTS{alertname=~".+NotReporting",alertstate="pending",origin="${host}"}
           unless on (origin) (up{job="${job}"} == 0)
         for: 2m
         labels:
@@ -838,6 +841,14 @@ groups:
             homelab-claude-memory-sync.timer` and `journalctl -u homelab-claude-memory-sync`. An
             empty MEMORY.md also skips the run.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudememorysyncnotreporting
+      # DECIDED: one page per fault. A poll that fails pages through its own OnFailure hook, and
+      # its SystemdUnitsFailed, carrying paged_by="homelab-alert", inhibits this rule on the same
+      # origin (alertmanager-secret.yaml.j2). The `for: 5m` lets that source fire first: the poll
+      # fails about 2m after its last clean run, SystemdUnitsFailed fires 10m after the 5-minute
+      # check first sees the failure, and this rule fires 5m after the 660s deadline. The source
+      # therefore leads unless the check sees the failure more than about 4m after it happens.
+      # A stopped or disabled timer never fails the unit, so this rule alone pages it, 5m later
+      # than with no hold.
       - alert: ClaudeTriagePollNotReporting
         hosts: [daniel-box]
         expr: |
@@ -847,6 +858,7 @@ groups:
               absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="${host}"}[660s])
           )
           unless on (origin) (up{job="${job}"} == 0)
+        for: 5m
         labels:
           severity: warning
           service: ${host}
