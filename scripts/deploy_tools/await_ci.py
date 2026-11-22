@@ -30,6 +30,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
+from functools import partial
 
 from lib import gh_rate_limit
 from lib.cli_help import ArgumentParser
@@ -41,11 +43,13 @@ from lib import host_modules  # noqa: F401
 
 from builder_ci_grade import read_check_pages
 from ci_verdict import (
+    CI_GATE_NAME,
     CheckRun,
     CheckSuite,
     CIVerdict,
     RunState,
     ci_verdict,
+    gates_failed_by_cancellation,
     parse_check_runs,
     parse_check_suites,
 )
@@ -89,10 +93,13 @@ ANONYMOUS_MAX_POLLS = 15
 ANONYMOUS_INTERVAL_S = 90
 
 
-# The cause a pending line names for a head whose every gate run was skipped. Only a
-# draft PR's run skips the `prek` gate (ci.yml's `draft != true`), and a re-run replays that
-# run's draft event, so it skips again. `land_lib/merge.py` reads the phrase to act on it.
-DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
+# The cause a pending line names for a head whose gate runs all skipped, or failed only because
+# their run was cancelled. Only a draft PR's run skips the `prek` gate (ci.yml's
+# `draft != true`), and a re-run replays that run's draft event, so it skips again.
+# `land_lib/merge.py` reads the phrase to act on it.
+DRAFT_SKIPPED = (
+    "every CI run on it skipped the gate because the PR was a draft, or was cancelled"
+)
 
 
 class DisarmedGateError(RuntimeError):
@@ -281,19 +288,35 @@ def _has_only_no_verdict_conclusions(runs: list[CheckRun], required) -> bool:
     return bool(seen) and all(r.no_verdict for r in seen)
 
 
-def draft_skipped(runs: list[CheckRun], required) -> bool:
-    """True when the head has gate runs and every one of them was skipped.
+def draft_skipped(
+    runs: list[CheckRun], required, read_suites: Callable[[], list[CheckSuite]]
+) -> bool:
+    """True when a gate run skipped and every other one failed only because it was cancelled.
 
     A draft run is the only shape that skips the gate, so no CI ran on such a head and none
-    arrives until the PR is marked ready or pushed. It reads the gate's own name rather than
-    the jobs `jobs_verdict` aggregates: a skipped matrix job reports its unexpanded name, such
-    as `pytest (shard ${{ matrix.shard }})`. A ready run's gate beside the skipped one
-    makes this False, but the gate gets its check run only once every job it needs finishes,
-    so a ready run still in progress reads as True; `land_lib/merge.py` reads the workflow
-    runs before it acts on this.
+    arrives until the PR is marked ready or pushed. A ready run that the draft run cancelled
+    through ci.yml's concurrency group still runs its `always()` gate, which fails on the
+    cancelled jobs. That gate carries no verdict either (`gates_failed_by_cancellation`). A
+    `read_suites` call that fails reads as False.
+
+    It reads the gate's own name rather than the jobs `jobs_verdict` aggregates: a skipped
+    matrix job reports its unexpanded name, such as `pytest (shard ${{ matrix.shard }})`. A
+    ready run's gate beside the skipped one makes this False, but the gate gets its check run
+    only once every job it needs finishes, so a ready run still in progress reads as True;
+    `land_lib/merge.py` reads the workflow runs before it acts on this.
     """
     seen = [r for r in runs if r.name in required]
-    return bool(seen) and all(r.state is RunState.SKIPPED for r in seen)
+    if not any(r.state is RunState.SKIPPED for r in seen):
+        return False
+    try:
+        cancelled = gates_failed_by_cancellation(runs, read_suites)
+    except OSError, ValueError:
+        return False
+    return all(
+        r.state is RunState.SKIPPED
+        or (r.name == CI_GATE_NAME and r.suite_id in cancelled)
+        for r in seen
+    )
 
 
 def _cancelled_before_any_run_registered(
@@ -684,7 +707,9 @@ def wait(
                         "for it, and no later master commit is green yet; a re-run converges "
                         "once one is"
                     )
-                if draft_skipped(runs, required_contexts()):
+                if draft_skipped(
+                    runs, required_contexts(), partial(suites_this_poll, target)
+                ):
                     return 75, (
                         f"{target[:8]}: no verdict after {timeout_s}s — {DRAFT_SKIPPED}, and a "
                         "re-run skips again; mark the PR ready, or, if it is ready already, "

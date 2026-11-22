@@ -1,7 +1,8 @@
 ---
 server_ip: 10.0.0.139
 # The Pi's one address literal. group_vars' k8s_pi_client_ip reads it through hosts.
-# The Pi's sshd host key, a public key, which the pi-ssh-name component pins on both k3s nodes. A reflash changes
+# The Pi's sshd host key, a public key, which the pi-ssh-name component pins on both k3s nodes
+# and pi-peer-backup pins in its CronJob's known_hosts. A reflash changes
 # it, and trusting the changed key is the operator's decision: on the Pi,
 # `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` prints the fingerprint to compare,
 # SHA256:JARYzuFmM51svNv21q3ZEasx7UaI6F1883tdwAQ2YkQ for this value.
