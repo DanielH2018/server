@@ -256,7 +256,8 @@ def drafts_pr(target: Target) -> bool:
     review runs, so CI on the first push was wasted: from 2026-10-16 to 2026-10-18, 27 PR runs
     were cancelled by such a push, and 50 more finished on a head such a push replaced.
     After the review, `review_ci.land_draft` lands the draft, on daniel-server only when
-    `review_ci.server_lands` passes it. `review_ci.ready_gate` marks any other PR ready. Another repo's CI does not
+    `review_ci.server_lands` passes it. A PR that check holds for a person stays a draft until
+    that person's `land.sh`, and `review_ci.ready_gate` marks any other PR ready. Another repo's CI does not
     skip drafts, so a draft there would only stop `autoland` from landing it.
     """
     return target.is_server

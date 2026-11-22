@@ -363,16 +363,18 @@ def test_a_daniel_server_pr_the_server_lander_would_land_lands_as_a_draft(tmp_pa
     assert _record(tmp_path)["land_hold"] == ""
 
 
-def test_a_daniel_server_pr_on_the_landers_surface_waits_for_its_ci_and_is_not_landed(
-    tmp_path,
-):
+def test_a_daniel_server_pr_on_the_landers_surface_stays_a_draft_with_no_ci(tmp_path):
+    """The person who lands it gives it its one run: `land.sh` marks it ready at its turn."""
     pipeline, run, _ = _server_batch(tmp_path, _clean_review(), heads=("bbb",))
+    run.draft = True
     run.pr_fields = OWN_SURFACE
     assert pipeline.run_all()["result"] == f"Opened {PR}"
-    assert len(run.ci_calls) == 1 and run.lands == []
+    assert run.readied == [] and run.ci_calls == [] and run.lands == []
     hold = "it changes the lander's own surface: scripts/deploy_tools/land.sh"
-    assert _record(tmp_path)["land_hold"] == hold
+    record = _record(tmp_path)
+    assert record["land_hold"] == hold and record["person_lands"] is True
     assert f"Not landed by the pipeline: {hold}." in run.comments[0]
+    assert "It stays a draft" in run.comments[0]
 
 
 def test_a_ci_fix_that_reaches_the_landers_surface_is_left_for_a_person(tmp_path):
