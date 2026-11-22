@@ -15,8 +15,10 @@ def _auth(capabilities=("listFiles", "writeFileRetentions")):
         "apiInfo": {
             "storageApi": {
                 "apiUrl": "https://api.example",
-                "bucketId": "bid",
-                "capabilities": list(capabilities),
+                "allowed": {
+                    "buckets": [{"id": "bid", "name": "weekly"}],
+                    "capabilities": list(capabilities),
+                },
             }
         },
         "authorizationToken": "tok",

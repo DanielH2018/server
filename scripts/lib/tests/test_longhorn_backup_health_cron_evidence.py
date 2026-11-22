@@ -425,8 +425,10 @@ def _retention_line(refuse: bool = False, can_extend: bool = True) -> str:
             "apiInfo": {
                 "storageApi": {
                     "apiUrl": "https://api.example",
-                    "bucketId": "bid",
-                    "capabilities": ["writeFileRetentions"] if can_extend else [],
+                    "allowed": {
+                        "buckets": [{"id": "bid", "name": "weekly"}],
+                        "capabilities": ["writeFileRetentions"] if can_extend else [],
+                    },
                 }
             },
             "authorizationToken": "tok",

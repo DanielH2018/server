@@ -20,8 +20,10 @@ AUTH = {
     "apiInfo": {
         "storageApi": {
             "apiUrl": "https://api.example/",
-            "bucketId": "bid",
-            "capabilities": ["listFiles", "deleteFiles"],
+            "allowed": {
+                "buckets": [{"id": "bid", "name": "bucket"}],
+                "capabilities": ["listFiles", "deleteFiles"],
+            },
         }
     },
     "authorizationToken": "tok",
@@ -56,7 +58,13 @@ def test_authorize_sends_the_key_as_basic_auth_and_reads_the_storage_api():
 
 
 def test_an_account_wide_key_has_no_bucket_until_one_is_looked_up():
-    auth = {"apiUrl": "https://api", "authorizationToken": "t", "accountId": "acct"}
+    auth = {
+        "apiInfo": {
+            "storageApi": {"apiUrl": "https://api", "allowed": {"buckets": None}}
+        },
+        "authorizationToken": "t",
+        "accountId": "acct",
+    }
     transport = FakeTransport(auth, {"buckets": [{"bucketId": "found"}]})
     session = B2Session("k", "s", transport=transport)
     assert session.bucket_id is None
@@ -78,7 +86,7 @@ def test_a_version_listing_pages_on_name_and_id():
 
     assert [f["fileName"] for f in files] == ["a", "b"]
     url, headers, payload = transport.calls[2]
-    assert url.endswith("/b2api/v3/b2_list_file_versions")
+    assert url.endswith("/b2api/v4/b2_list_file_versions")
     assert headers == {"Authorization": "tok"}
     assert payload is not None
     assert payload["startFileName"] == "b" and payload["startFileId"] == "id-b"
@@ -113,7 +121,7 @@ def test_a_b2_error_status_raises_with_b2s_code(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", refuse)
     with pytest.raises(B2Error) as caught:
-        http_json("https://api/b2api/v3/b2_list_file_names", {}, {"a": 1}, 5)
+        http_json("https://api/b2api/v4/b2_list_file_names", {}, {"a": 1}, 5)
     assert caught.value.code == "transaction_cap_exceeded"
     assert "HTTP 403" in str(caught.value)
 
