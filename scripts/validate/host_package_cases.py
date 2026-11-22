@@ -80,8 +80,8 @@ The case groups, the three `Cases` methods and each case module's `run`, run con
 written as one block when it ends (`validate_lib/case_groups.py`).
 
 Usage:
-    uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
-        --python 3.12 --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \\
+    uv run python scripts/validate/host_package_cases.py --image homelab-host-test:26.04 \\
+        --python 3.14 --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \\
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
     uv run python scripts/validate/host_package_cases.py ... --bootstrap
 

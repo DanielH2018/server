@@ -98,8 +98,8 @@ def _only_one_job_bootstraps(wf: Workflow) -> list[str]:
 def _bootstrap_release_problems(wf: Workflow) -> list[str]:
     legs = _releases(ci_job(wf, LEGS_JOB))
     found = []
-    if len(legs) < 2:
-        found.append(f"{LEGS_JOB} lost a matrix leg: {legs}")
+    if not legs:
+        found.append(f"{LEGS_JOB} runs no release")
     covered = {
         job_id: _releases(ci_job(wf, job_id)) for job_id in _bootstrap_job_ids(wf)
     }
@@ -189,17 +189,14 @@ def _build_consumer_problems(wf: Workflow) -> list[str]:
     return found
 
 
-def _only_the_first_release(wf: Workflow) -> None:
+def _no_release_at_all(wf: Workflow) -> None:
     for name in (LEGS_JOB, BOOTSTRAP_JOB):
-        matrix = wf["jobs"][name]["strategy"]["matrix"]
-        matrix["include"] = [
-            leg for leg in matrix["include"] if leg["release"] == "24.04"
-        ]
+        wf["jobs"][name]["strategy"]["matrix"]["include"] = []
 
 
-def _cases_without_a_release(wf: Workflow) -> None:
-    matrix = wf["jobs"][BOOTSTRAP_JOB]["strategy"]["matrix"]
-    matrix["include"] = [leg for leg in matrix["include"] if leg["release"] == "24.04"]
+def _cases_on_another_release(wf: Workflow) -> None:
+    for leg in wf["jobs"][BOOTSTRAP_JOB]["strategy"]["matrix"]["include"]:
+        leg["release"] = "28.04"
 
 
 def _bootstrap_in_the_legs(wf: Workflow) -> None:
@@ -259,15 +256,16 @@ CI_ROWS = (
         **ci_row(
             name="ci-bootstrap-job-covers-every-release-the-legs-run",
             reason=(
-                "Running the bootstrap cases in one release only would drop coverage, which is "
-                "the operator's call, so the job keeps the legs' matrix. The legs keep two "
-                "releases or more, so the comparison cannot pass on a lone leg."
+                "Running the bootstrap cases on fewer releases than the legs would drop "
+                "coverage, which is the operator's call, so the job keeps the legs' matrix. "
+                "The legs run at least one release, so the comparison cannot pass on two "
+                "empty matrices."
             ),
             offence=judge(_bootstrap_release_problems),
             red=mutants(
                 CI,
-                the_legs_lose_a_matrix_leg=_only_the_first_release,
-                a_bootstrap_job_missing_a_release=_cases_without_a_release,
+                the_legs_run_no_release=_no_release_at_all,
+                a_bootstrap_job_on_another_release=_cases_on_another_release,
             ),
         )
     ),

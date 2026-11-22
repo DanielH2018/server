@@ -53,9 +53,9 @@ def test_a_malformed_status_reads_as_no_conditions(item):
 
 
 def test_the_module_runs_under_a_hosts_python_312():
-    """`homelab-k3s-restart` imports it under Ubuntu 24.04's /usr/bin/python3, a 3.12."""
+    """`homelab-k3s-restart` imports it under /usr/bin/python3; it keeps the py312 floor."""
     uv = shutil.which("uv")
-    assert uv, "no uv to fetch the hosts' 3.12"
+    assert uv, "no uv to fetch a 3.12"
     ran = subprocess.run(
         [
             uv,

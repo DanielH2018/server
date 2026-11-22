@@ -25,9 +25,8 @@ shipped timer's every trigger to TIMER_FIRES; each timer still loads, gets its e
 started by reconcile, so a timer file a release cannot parse still fails here.
 
 The failure pages (`homelab-alert@`, `homelab-claude-rc-alert`) start only when another unit
-fails, so a green run never delivers one. CI run 45027731473 showed curl 8.5 on 24.04 exiting 26
-on their `--variable` file reads while curl 8.18 on 26.04 read them; issue #9924 records that
-break.
+fails, so a green run never delivers one. Their curl floor is recorded in
+`hosts/components/failure-alert/component.yml`.
 """
 
 import base64

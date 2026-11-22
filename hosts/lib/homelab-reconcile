@@ -3,7 +3,7 @@
 
 The design is H3's *The reconcile unit* (docs/archive/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
-host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
+host's /usr/bin/python3. It uses the standard library only, and
 hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar. The activation step,
 the four arms and the metrics file live in the reconcile_lib package beside it, which the same
 component ships; the reconcile-size census counts both against one line ceiling.

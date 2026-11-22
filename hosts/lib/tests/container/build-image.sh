@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Makes the host_packages test image `homelab-host-test:<release>` for one Ubuntu release.
 #
-#   build-image.sh 24.04             pull the image image.pins names, or build it
-#   build-image.sh 24.04 --publish   push this Dockerfile's image to GHCR unless already there
+#   build-image.sh 26.04             pull the image image.pins names, or build it
+#   build-image.sh 26.04 --publish   push this Dockerfile's image to GHCR unless already there
 #
 # A plain run pulls the pinned digest when image.pins was written for this Dockerfile, so a PR
 # that changes no image input fetches nothing from snapshot.ubuntu.com. When that pull fails it

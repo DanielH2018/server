@@ -68,9 +68,7 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "flux round trip (placeholder render against stub render)",
         "sops-manifest-type-proof (an all-digit stringData value stays a string)",
         "build the host packages (render, nfpm, lint)",
-        "host_packages (24.04, 3.12)",
         "host_packages (26.04, 3.14)",
-        "host_packages_bootstrap (24.04, 3.12)",
         "host_packages_bootstrap (26.04, 3.14)",
         "host_tools_arm64",
     }
@@ -86,9 +84,7 @@ CI_BUILD_JOB = "build the host packages (render, nfpm, lint)"
 # same, and the gate job's own conclusion then decides once it exists.
 CI_BUILD_READER_JOBS = frozenset(
     {
-        "host_packages (24.04, 3.12)",
         "host_packages (26.04, 3.14)",
-        "host_packages_bootstrap (24.04, 3.12)",
         "host_packages_bootstrap (26.04, 3.14)",
         "host_tools_arm64",
     }

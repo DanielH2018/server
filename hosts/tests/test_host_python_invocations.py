@@ -1,12 +1,13 @@
 """Host Python runs through uv, on a pinned interpreter, and only that way.
 
-Hosts run Ubuntu 24.04's Python 3.12 as the system interpreter while the repo is on 3.14, so a
-script run by `/usr/bin/python3` parses 3.13+ syntax in CI and SyntaxErrors on the host --
-silently, in the case of session-health.py, whose wrapper routes stderr to /dev/null and
-exits 0 by design. Host scripts therefore run a pinned 3.14 through uv. A new unit, cron
-entry or hook wrapper reaching for `/usr/bin/python3`, or for a bare `python3` that cron's PATH
-resolves to the same file, puts one script under 3.12 with nothing left to notice, so this file
-guards that route rather than the syntax level.
+A host's system interpreter is its Ubuntu release's python3, which moves only with a release
+upgrade, while the repo's pinned interpreter moves with the repo. When the two differ, a script
+run by `/usr/bin/python3` parses newer syntax in CI and SyntaxErrors on the host -- silently,
+in the case of session-health.py, whose wrapper routes stderr to /dev/null and exits 0 by
+design. Host scripts therefore run the pinned interpreter through uv. A new unit, cron entry or
+hook wrapper reaching for `/usr/bin/python3`, or for a bare `python3` that cron's PATH resolves
+to the same file, puts one script on the release's interpreter with nothing left to notice, so
+this file guards that route rather than the syntax level.
 
 Container contexts are deliberately out of scope: a Dockerfile or compose healthcheck names the
 interpreter inside its own digest-pinned image, which has nothing to do with the host.
@@ -122,9 +123,9 @@ def test_no_host_invocation_uses_the_system_interpreter():
         if name not in _SYSTEM_INTERPRETER_EXEMPT
     )
     assert not offenders, (
-        "these invoke the host's system Python (Ubuntu 24.04's 3.12) instead of running through "
-        "uv on the pinned interpreter. That silently puts a script back below the repo's syntax "
-        "floor:\n  " + "\n  ".join(offenders)
+        "these invoke the host's system Python (its Ubuntu release's python3) instead of running "
+        "through uv on the pinned interpreter. That silently puts a script on an interpreter the "
+        "repo does not pin:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -368,8 +369,8 @@ def test_no_host_invocation_runs_a_bare_python3():
         for n in _bare_python3_lines(path.read_text())
     )
     assert not offenders, (
-        "these run `python3` by name, which resolves to the host's system Python (Ubuntu "
-        "24.04's 3.12) under cron's PATH. Ship the code as a `.py` in the role's `files/` and "
+        "these run `python3` by name, which resolves to the host's system Python (its Ubuntu "
+        "release's python3) under cron's PATH. Ship the code as a `.py` in the role's `files/` and "
         "run it by path through `/usr/bin/uv run --no-project --no-python-downloads "
         "--python {{ host_python_version }} /opt/<dir>/<name>.py`. An inline `python -c` "
         "fails the stdlib-only census (scripts/lib/role_installs.py):\n  "

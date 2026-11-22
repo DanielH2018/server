@@ -34,7 +34,7 @@ def _inputs() -> str:
 
 
 def _tag() -> str:
-    return f"{IMAGE}:24.04-arm64-{_inputs()[:12]}"
+    return f"{IMAGE}:26.04-arm64-{_inputs()[:12]}"
 
 
 def _build(
@@ -45,7 +45,7 @@ def _build(
     inspect: str = "missing",
     label: str | None = None,
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
-    """Run build-image.sh 24.04 with `pins` as image.pins, returning the result and each docker argv.
+    """Run build-image.sh 26.04 with `pins` as image.pins, returning the result and each docker argv.
 
     A `docker pull` succeeds only for a ref in `pullable`, and a pulled image carries `label` as
     its Dockerfile hash, this Dockerfile's by default.
@@ -74,18 +74,18 @@ case "$1 $2" in
 esac
 """
     result = run(
-        [str(context / "build-image.sh"), "24.04", *args],
+        [str(context / "build-image.sh"), "26.04", *args],
         stub_bin=fake_bin(tmp_path / "bin", docker=docker, dpkg=_DPKG_STUB),
     )
     return result, calls.read_text().splitlines()
 
 
 def _matching_pins() -> str:
-    return f"inputs {_inputs()}\n24.04-arm64 {DIGEST}\n"
+    return f"inputs {_inputs()}\n26.04-arm64 {DIGEST}\n"
 
 
 def _stale_pins() -> str:
-    return f"inputs {'0' * 64}\n24.04-arm64 {DIGEST}\n"
+    return f"inputs {'0' * 64}\n26.04-arm64 {DIGEST}\n"
 
 
 def _docker_verbs(calls: list[str]) -> list[str]:
@@ -105,7 +105,7 @@ def test_a_pin_for_this_dockerfile_pulls_by_digest_and_never_builds(
     assert result.returncode == 0, result.stderr
     assert [c for c in calls if not c.startswith("inspect ")] == [
         f"pull {pinned}",
-        f"tag {pinned} homelab-host-test:24.04",
+        f"tag {pinned} homelab-host-test:26.04",
     ]
 
 
@@ -127,7 +127,7 @@ def test_a_tag_built_from_another_dockerfile_is_refused_and_built(
         tmp_path, pins=_stale_pins(), pullable=(_tag(),), label="0" * 64
     )
     assert result.returncode == 0, result.stderr
-    assert f"tag {_tag()} homelab-host-test:24.04" not in calls
+    assert f"tag {_tag()} homelab-host-test:26.04" not in calls
     assert _docker_verbs(calls)[-1] == "buildx build"
     assert "is not used" in result.stdout
 
@@ -137,7 +137,7 @@ def test_a_dockerfile_with_no_published_image_is_built(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert _docker_verbs(calls) == ["pull", "buildx build"]
     assert calls[0] == f"pull {_tag()}"
-    assert "-t homelab-host-test:24.04" in calls[-1]
+    assert "-t homelab-host-test:26.04" in calls[-1]
 
 
 def test_a_failed_pinned_pull_builds_and_never_pulls_the_tag(
@@ -156,14 +156,14 @@ def test_a_publish_pushes_a_missing_tag_and_prints_its_pin(tmp_path: Path) -> No
     assert result.returncode == 0, result.stderr
     assert any(call.startswith("buildx build --load") for call in calls)
     assert f"push {_tag()}" in calls
-    assert result.stdout.splitlines()[-1] == f"24.04-arm64 {DIGEST}"
+    assert result.stdout.splitlines()[-1] == f"26.04-arm64 {DIGEST}"
 
 
 def test_a_publish_never_rebuilds_a_tag_that_exists(tmp_path: Path) -> None:
     result, calls = _build(tmp_path, "--publish", pins="inputs -\n", inspect="exists")
     assert result.returncode == 0, result.stderr
     assert not any(call.startswith(("buildx build", "push")) for call in calls)
-    assert result.stdout.splitlines()[-1] == f"24.04-arm64 {DIGEST}"
+    assert result.stdout.splitlines()[-1] == f"26.04-arm64 {DIGEST}"
 
 
 def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
@@ -178,7 +178,7 @@ def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
 _ARCH = {"ubuntu-26.04": "amd64", "ubuntu-24.04-arm": "arm64"}
 # The sites whose image the publisher has pushed. A site joins in the PR that copies its first
 # digest into image.pins; until then the matrix PR pins it `-`.
-PUBLISHED = frozenset({"24.04-amd64", "26.04-amd64", "24.04-arm64"})
+PUBLISHED = frozenset({"26.04-amd64"})
 
 
 def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
@@ -219,20 +219,17 @@ def test_a_complete_pin_file_is_clean() -> None:
 
 def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
     sites = _build_sites(CI_WORKFLOW)
-    text = f"inputs {_inputs()}\n24.04-amd64 {DIGEST}\n26.04-amd64 latest\n"
+    text = f"inputs {_inputs()}\n26.04-amd64 latest\n"
     assert _pin_problems(text, sites) == [
         "26.04-amd64 is not a digest: latest",
-        "24.04-arm64 has no pin",
+        "26.04-arm64 has no pin",
     ]
     assert _pin_problems("inputs latest\n", sites) == [
         "inputs is no Dockerfile sha256: latest"
     ]
     assert _pin_problems("inputs -\n", sites) == ["inputs is no Dockerfile sha256: -"]
-    unpinned = (
-        f"inputs {_inputs()}\n24.04-amd64 {DIGEST}\n26.04-amd64 -\n24.04-arm64 -\n"
-    )
+    unpinned = f"inputs {_inputs()}\n26.04-amd64 -\n26.04-arm64 -\n"
     assert _pin_problems(unpinned, sites) == [
-        "24.04-arm64 is published, so it needs its digest",
         "26.04-amd64 is published, so it needs its digest",
     ]
 
@@ -240,7 +237,7 @@ def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
 def test_a_site_not_yet_published_may_be_pinned_dash() -> None:
     sites = _build_sites(CI_WORKFLOW) | {("ubuntu-26.04", "28.04")}
     lines = [f"{key} {DIGEST}" for key in sorted(PUBLISHED)]
-    text = "\n".join([f"inputs {_inputs()}", *lines, "28.04-amd64 -"])
+    text = "\n".join([f"inputs {_inputs()}", *lines, "26.04-arm64 -", "28.04-amd64 -"])
     assert _pin_problems(text, sites) == []
 
 
@@ -279,11 +276,7 @@ def _build_sites(workflow: Path) -> set[tuple[str, str]]:
 
 def test_the_publisher_covers_every_build_site_on_its_own_runner() -> None:
     sites = _build_sites(CI_WORKFLOW)
-    named = {
-        ("ubuntu-26.04", "24.04"),
-        ("ubuntu-26.04", "26.04"),
-        ("ubuntu-24.04-arm", "24.04"),
-    }
+    named = {("ubuntu-26.04", "26.04"), ("ubuntu-24.04-arm", "26.04")}
     assert named <= sites, f"the census lost {sorted(named - sites)}"
     assert _build_sites(PUBLISHER) == sites
 

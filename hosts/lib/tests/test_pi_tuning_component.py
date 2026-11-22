@@ -176,7 +176,7 @@ def test_each_edit_replaces_the_line_ansible_left_and_names_its_activation(
 
 
 UPDATE_NOTIFIER = "/etc/apt/apt.conf.d/99update-notifier"
-# Ubuntu 24.04's stock conffile, md5 8c8636b1123964162e9a1127f237ba7b, as daniel-pi holds it.
+# Ubuntu 26.04's stock conffile, md5 8c8636b1123964162e9a1127f237ba7b, per dpkg on daniel-pi.
 STOCK_UPDATE_NOTIFIER = (
     'DPkg::Post-Invoke {"if [ -d /var/lib/update-notifier ]; then touch'
     " /var/lib/update-notifier/dpkg-run-stamp; fi;"

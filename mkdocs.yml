@@ -300,7 +300,6 @@ nav:
           - Host bring-up: host-bring-up.md
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
-          - Ubuntu 26.04 upgrade plan: ubuntu-26.04-upgrade-plan.md
           - Airflow warehouse plan: airflow-warehouse-plan.md
           - Longhorn disaster recovery: longhorn-disaster-recovery.md
           - k3s etcd restore: k3s-etcd-restore.md

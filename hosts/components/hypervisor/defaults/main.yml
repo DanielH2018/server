@@ -35,14 +35,14 @@ hypervisor_staging_net_dhcp_end: 192.168.140.99
 # a container image pin, and scripts/tests/test_renovate_managers.py reads every such key as one
 # Renovate must be able to bump. This is a file on disk, so an `_image` name would fail that
 # guard.
-hypervisor_base_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+hypervisor_base_image_url: https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img
 # DECIDED: pin the checksum even though `current` rotates (2026-08-27). Upstream moves this
 # roughly monthly, so a host that has not downloaded the image yet WILL eventually fail here
 # — which is the intended failure. A drill guest silently built from a different image than the
 # one reviewed defeats the point of having a reviewed substrate. Re-pin from
-# https://cloud-images.ubuntu.com/noble/current/SHA256SUMS when it fails.
-hypervisor_base_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
-hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
+# https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS when it fails.
+hypervisor_base_image_sha256: 7b90593f5532b49b7e3fe3d2743f0d1f0d822e5b07cebcd8e00c0df8069ecab9
+hypervisor_base_image_path: /var/lib/libvirt/images/resolute-server-cloudimg-amd64.img
 
 # A THROWAWAY guest that exists only while a FULL etcd restore drill runs in it.
 # `scripts/backup/etcd_restore_drill.sh` restores the newest off-box snapshot into a

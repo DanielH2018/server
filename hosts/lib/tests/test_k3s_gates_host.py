@@ -39,7 +39,7 @@ def _round(mode, routes, root, version=VERSION, guard=False, notes=None):
 
 
 def test_the_script_parses_with_the_python_312_grammar():
-    """The hosts run it under Ubuntu 24.04's python3; ruff's default target would write 3.14."""
+    """It keeps pyproject.toml's py312 floor; ruff's default target would write 3.14."""
     ast.parse(SCRIPT.read_text(), feature_version=(3, 12))
 
 

@@ -3,7 +3,7 @@
 All three hosts can move from Ubuntu 24.04 to 26.04.1 LTS. They move one at a time:
 daniel-server, then daniel-box, with daniel-pi on its own at any time after daniel-server,
 following *Upgrading a host's Ubuntu
-release* in [`docs/host-packages.md`](host-packages.md). Two PRs remain: one moves the Pi's
+release* in [`docs/host-packages.md`](../host-packages.md). Two PRs remain: one moves the Pi's
 Docker source, and one retires 24.04. The upgrade itself is operator-only. This page records
 the answers the procedure rests on, then the sequence.
 
@@ -110,7 +110,7 @@ drop-in that skips obsolete removal. The notes below cover what is specific to e
   holds the command and its confirmation. The datastore is embedded etcd (`cluster-init: true`
   in `hosts/components/k3s-server/component.yml`), and k3s already snapshots it at 00:00 and
   12:00 UTC, locally and to R2. The on-demand snapshot moves the recovery point to the minute
-  before the upgrade. [`docs/k3s-etcd-restore.md`](k3s-etcd-restore.md) is the restore
+  before the upgrade. [`docs/k3s-etcd-restore.md`](../k3s-etcd-restore.md) is the restore
   runbook. It says no drill exercises the agent rejoin or the Longhorn reattach after a real
   restore.
 
