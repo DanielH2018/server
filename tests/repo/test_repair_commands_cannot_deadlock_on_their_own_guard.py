@@ -110,6 +110,9 @@ def test_the_census_walks_the_scripts_it_must_read():
     """Non-vacuity. A broken walk finds nothing, and the ruling check below passes over it."""
     walked = {str(path.relative_to(REPO)) for path in _first_party_scripts()}
     assert KNOWN_SCRIPTS <= walked, f"not walked: {sorted(KNOWN_SCRIPTS - walked)}"
+    assert set(RULINGS) <= _suite_invokers(), (
+        f"missing: {sorted(set(RULINGS) - _suite_invokers())}"
+    )
 
 
 def test_every_script_that_runs_the_suite_carries_a_ruling():

@@ -120,3 +120,7 @@ def test_no_two_render_targets_render_one_object(tmp_path):
     assert ("v1", "Namespace", "", "observability") in found
     assert any(k[1] == "Middleware" for k in found)
     assert collisions(found) == {}
+    # A listed pair that no longer collides is a stale entry.
+    stale = [k for k in SHARED_OBJECTS if len(found.get(k, ())) < 2]
+    assert stale == []
+    assert all(reason.strip() for reason in SHARED_OBJECTS.values())
