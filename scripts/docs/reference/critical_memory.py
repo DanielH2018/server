@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Generates docs/assets/generated/critical-memory-p95.json, the critical tier's memory p95.
+"""Generates docs/assets/generated/critical-memory-p95.json, the tiered pods' memory p95.
 
-CI cannot query Prometheus, so the census that fails a critical-tier container whose memory
+CI cannot query Prometheus, so the census that fails a tiered container whose memory
 request is under half its 7-day p95 working set reads its p95 figures from this table
 (`tests/k8s/_memory_property_rows.py`). The docs-refresh cron runs this generator twice a day
 from daniel-box, where Prometheus answers, and commits the table when a figure moves.
 
-A row is one container of a pod that ran at `CRITICAL_PRIORITY_CLASS` in the window, keyed
-`namespace/workload/container`. Its value is the highest p95 of any pod of the workload, in
-MiB rounded up to a multiple of `STEP_MIB`. The rounding keeps the table from changing on
+A row is one container of a pod that ran at a `CENSUS_PRIORITY_CLASSES` class in the window,
+keyed `namespace/workload/container`. Its value is the highest p95 of any pod of the workload,
+in MiB rounded up to a multiple of `STEP_MIB`. The rounding keeps the table from changing on
 every run, which would make every cron run open a docs-refresh PR.
 
 A query that answers without the members the census names writes nothing, so the previous
