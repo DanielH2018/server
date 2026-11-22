@@ -4,9 +4,10 @@
 
 - **Scope / exclusions:** each check reads and reports. None changes the cluster, and one timer
   changes a backup store. `homelab-b2-retention` (`scripts/backup/b2_extend_retention.py`)
-  extends the governance retention of every current Longhorn object in the B2 weekly bucket. It
-  never shortens a retention and never deletes, and it declines while the bucket's lock or the
-  key is not set up for it (ADR-0041).
+  sets the governance retention of every current Longhorn object in the B2 weekly bucket, which
+  has no default retention, so the sweep is the only thing that locks an object. It never
+  shortens a retention and never deletes. It declines while the bucket's file lock is off, and
+  is blocked while the key lacks `writeFileRetentions` (ADR-0041).
   `etcd-token-drift.sh` compares the cluster token with the operator's stamp and writes neither.
   The two reapers delete stranded objects, operator-invoked and dry-run by default. Scheduling
   either is out of contract, and they run from the checkout, so this component ships nothing of
@@ -18,7 +19,7 @@
   installed etcd drop-in, the root filesystem, the cluster token file, and for the retention sweep
   the B2 bucket's Object Lock setting and its listing.
 - **Abort valves:** the boot grace in the two */10 checks, and the reader's own per-call deadlines.
-  The retention sweep's valve is the key: a key without `writeFileRetentions` makes it decline.
+  The retention sweep's valve is the key: a key without `writeFileRetentions` blocks it.
 - **Required evidence, every run:** a check textfile that a Prometheus rule reads, and a
   Healthchecks.io ping. The three B2 units are the exception: each only touches a fire stamp. Checks 9 and 10 read the B2 units' journal lines AS WRITTEN;
   docs/k3s-node-plane-crons-and-incidents.md names the regex and the file to edit together.

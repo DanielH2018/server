@@ -1,7 +1,5 @@
 """The B2 Object Lock sweep, driven through the real B2Session over a fake transport."""
 
-import pytest
-
 from backup import b2_extend_retention as sweep
 from lib.b2 import B2Error, B2Session
 
@@ -26,7 +24,10 @@ def _auth(capabilities=("listFiles", "writeFileRetentions")):
     }
 
 
-def _bucket(enabled=True, mode="governance", duration=7, unit="days"):
+NO_DEFAULT = {"mode": None, "period": None}
+
+
+def _bucket(enabled=True, retention=NO_DEFAULT):
     return {
         "buckets": [
             {
@@ -35,10 +36,7 @@ def _bucket(enabled=True, mode="governance", duration=7, unit="days"):
                     "isClientAuthorizedToRead": True,
                     "value": {
                         "isFileLockEnabled": enabled,
-                        "defaultRetention": {
-                            "mode": mode,
-                            "period": {"duration": duration, "unit": unit},
-                        },
+                        "defaultRetention": retention,
                     },
                 },
             }
@@ -79,7 +77,7 @@ def _run(transport, capsys):
     return code, out.out.strip(), out.err.strip()
 
 
-def test_every_object_but_a_lock_file_is_extended_by_the_buckets_period(
+def test_a_file_lock_bucket_with_no_default_has_every_object_but_a_lock_file_locked(
     capsys,
 ):
     transport = FakeTransport(_auth(), _bucket(), _listing(BLOCK, CFG, LOCK_FILE))
@@ -96,6 +94,16 @@ def test_every_object_but_a_lock_file_is_extended_by_the_buckets_period(
     ]
     assert out.startswith("b2-retention: extended 2 of 2 objects to 2027-01-22T")
     assert out.endswith("0 gone, 3 Class C")
+
+
+def test_the_period_is_the_sweeps_own_whatever_the_bucket_default():
+    one_day = {"mode": "governance", "period": {"duration": 1, "unit": "days"}}
+    transport = FakeTransport(_auth(), _bucket(retention=one_day), _listing(BLOCK))
+    sweep.run(B2Session("k", "s", transport=transport), NOW)
+    until_ms = (NOW + sweep.RETENTION_DAYS * 86400) * 1000
+    assert [
+        u["fileRetention"]["retainUntilTimestamp"] for u in transport.updates()
+    ] == [until_ms]
 
 
 def test_the_listing_is_scoped_to_the_backupstore_volumes():
@@ -115,36 +123,13 @@ def test_a_key_without_write_file_retentions_is_blocked_on_a_locked_bucket(capsy
     assert "b2_list_file_names" not in [api for api, _ in transport.calls]
 
 
-def test_an_unlocked_bucket_declines_before_the_key_is_judged(capsys):
+def test_a_bucket_with_file_lock_off_declines_before_the_key_is_judged(capsys):
     transport = FakeTransport(
         _auth(capabilities=("listFiles",)), _bucket(enabled=False)
     )
     code, out, _ = _run(transport, capsys)
     assert code == 0
     assert out == "b2-retention: declined: Object Lock is off on the bucket"
-
-
-@pytest.mark.parametrize(
-    ("bucket", "reason"),
-    [
-        (_bucket(enabled=False), "Object Lock is off on the bucket"),
-        (
-            _bucket(mode="compliance"),
-            "the bucket's default retention is not governance mode",
-        ),
-        (
-            _bucket(duration=None),
-            "the bucket's default retention has no readable period",
-        ),
-    ],
-)
-def test_a_bucket_not_set_up_for_the_lock_declines_without_listing(
-    bucket, reason, capsys
-):
-    transport = FakeTransport(_auth(), bucket)
-    code, out, _ = _run(transport, capsys)
-    assert code == 0
-    assert out == f"b2-retention: declined: {reason}"
     assert "b2_list_file_names" not in [api for api, _ in transport.calls]
 
 
