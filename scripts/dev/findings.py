@@ -135,9 +135,10 @@ offered, marked with who holds it — `claim` reaps that claim on the way past, 
 clears every one of them at once. `--limit N` bounds the list; there is no default bound,
 because one truncated the free set silently and the reader took ten rows for all of them.
 
-SEVERITY AND DATES ARE ISSUE FIELDS. `open --severity` sets the issue's Severity issue field
-and `open --not-before` its Not Before field, once the issue exists, because `gh issue
-create` cannot set one; re-running the same `open` repairs a failed write. Every loader in
+SEVERITY, DOMAIN AND DATES ARE ISSUE FIELDS. `open --severity` sets the issue's Severity
+issue field, `open --domain` its Domain field and `open --not-before` its Not Before field,
+once the issue exists, because `gh issue create` cannot set one; re-running the same `open`
+repairs a failed write. Every loader in
 `findings_lib/gh_calls.py` reads them with `attach_fields`, and a failed read fails the
 command rather than reading as "nothing is deferred". `open --kind` sets the issue type in
 the same write: Gap, Improvement or Feature. A `severity/`, `not-before:` or `kind/` label
@@ -214,6 +215,8 @@ from dev.findings_lib.gh_calls import (
     set_fields,
 )
 from dev.findings_lib.issue_model import (
+    DOMAIN_FIELD,
+    ESCALATED_AT,
     NO_REOPEN,
     NOT_BEFORE_FIELD,
     PR_REPO,
@@ -226,6 +229,7 @@ from dev.findings_lib.issue_model import (
     now_iso,
     fingerprint,
     issue_rows,
+    reobservations,
     sort_key,
     today_utc,
 )
@@ -279,7 +283,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if args.not_before:
         fields[NOT_BEFORE_FIELD] = args.not_before.isoformat()
     if args.domain:
-        labels.append(f"domain/{args.domain}")
+        fields[DOMAIN_FIELD] = args.domain
     if args.no_vetted_remediation:
         labels.append("no-vetted-remediation")
     if args.manual:
@@ -353,8 +357,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         if outcome != "reopened":
             plans += _release_for_manual(existing)
     run(plans, args.dry_run, tools)
-    severity_only = {SEVERITY_FIELD: fields[SEVERITY_FIELD]}
-    fill_missing(existing, severity_only, issue_type, tools, args.dry_run)
+    repairable = {k: v for k, v in fields.items() if k != NOT_BEFORE_FIELD}
+    fill_missing(existing, repairable, issue_type, tools, args.dry_run)
     print(f"#{existing.number} {outcome}  {existing.url}")
     return 0
 
@@ -375,9 +379,8 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
         why = terminal[0] if terminal else "fixed"
         print(f"#{args.number} is closed ({why}); use open to re-file", file=sys.stderr)
         return 3
-    plans = plan_touch(issue, args.source)
-    run(plans, args.dry_run, tools)
-    escalated = any(p[:2] == ["issue", "edit"] for p in plans)
+    run(plan_touch(issue, args.source), args.dry_run, tools)
+    escalated = reobservations(issue) + 1 == ESCALATED_AT
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
     return 0
 

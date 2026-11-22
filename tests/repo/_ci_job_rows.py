@@ -31,6 +31,7 @@ RATCHET = "tests/repo/test_module_length_ratchet.py"
 TEST_STEP = "Run the test suite"
 RESTORE = "actions/cache/restore"
 SAVE = "actions/cache/save"
+CACHE = "actions/cache"
 SWEEP = ".github/workflows/pytest-sweep.yml"
 REF_ONLY_GROUP = "${{ github.workflow }}-${{ github.ref }}"
 STALE_PYC_GLOB = "**/__pycache__/*.cpython-315.pyc"
@@ -146,10 +147,6 @@ def rewrite_step(job: dict, action: str) -> dict | None:
     return None
 
 
-def _restore_step(wf: Workflow) -> dict | None:
-    return rewrite_step(ci_job(wf, PYTEST_JOB), RESTORE)
-
-
 def _after_tests(wf: Workflow, step: dict) -> bool | None:
     names = [s.get("name") for s in steps(ci_job(wf, PYTEST_JOB))]
     if TEST_STEP not in names:
@@ -158,7 +155,7 @@ def _after_tests(wf: Workflow, step: dict) -> bool | None:
 
 
 def _restore_before_tests_problems(wf: Workflow) -> list[str]:
-    step = _restore_step(wf)
+    step = ci_rewrite_restore(wf)
     if step is None:
         return [f"no {RESTORE} step matches the `*{PYC_TAIL}` files pytest writes"]
     if _after_tests(wf, step) is not False:
@@ -166,9 +163,16 @@ def _restore_before_tests_problems(wf: Workflow) -> list[str]:
     return []
 
 
-def _restore_reads_the_sweep_problems(wf: Workflow) -> list[str]:
-    restore = _restore_step(wf)
-    save = rewrite_step(jobs(load(SWEEP)).get("sweep", {}), SAVE)
+def ci_rewrite_restore(wf: Workflow) -> dict | None:
+    return rewrite_step(ci_job(wf, PYTEST_JOB), RESTORE)
+
+
+def sweep_rewrite_save(wf: Workflow) -> dict | None:
+    return rewrite_step(jobs(wf).get("sweep", {}), SAVE)
+
+
+def rewrite_cache_link_problems(restore: dict | None, save: dict | None) -> list[str]:
+    """What keeps ci.yml's rewrite-cache restore from reading the sweep's saved entry."""
     if restore is None or save is None:
         return [
             f"no rewrite-cache restore in {CI}, or no rewrite-cache save in {SWEEP}"
@@ -187,11 +191,36 @@ def _restore_reads_the_sweep_problems(wf: Workflow) -> list[str]:
     return found
 
 
+def _rewrite_cache_problems(wf: Workflow) -> list[str]:
+    job = ci_job(wf, PYTEST_JOB)
+    saves = [
+        f"a {PYTEST_JOB} leg saves the rewrite cache through {action}"
+        for action in (SAVE, CACHE)
+        if rewrite_step(job, action) is not None
+    ]
+    link = rewrite_cache_link_problems(
+        ci_rewrite_restore(wf), sweep_rewrite_save(load(SWEEP))
+    )
+    return saves + link
+
+
+def _add_leg_save(action: str) -> Callable[[Workflow], None]:
+    """A mutation that appends a copy of the restore step that uses `action` instead."""
+
+    def mutate(wf: Workflow) -> None:
+        restore = ci_rewrite_restore(wf)
+        assert restore is not None
+        save = {**restore, "uses": restore["uses"].replace(RESTORE, action)}
+        steps(wf["jobs"][PYTEST_JOB]).append(save)
+
+    return mutate
+
+
 def _edit_restore(**fields: object) -> Callable[[Workflow], None]:
     """A mutation that sets keys of `with` on the pytest job's rewrite-cache restore step."""
 
     def mutate(wf: Workflow) -> None:
-        step = _restore_step(wf)
+        step = ci_rewrite_restore(wf)
         assert step is not None
         step["with"].update(fields)
 
@@ -199,14 +228,14 @@ def _edit_restore(**fields: object) -> Callable[[Workflow], None]:
 
 
 def _drop_restore_keys(wf: Workflow) -> None:
-    step = _restore_step(wf)
+    step = ci_rewrite_restore(wf)
     assert step is not None
     step["with"].pop("restore-keys")
 
 
 def _restore_after_tests(wf: Workflow) -> None:
     job = wf["jobs"][PYTEST_JOB]
-    moved = _restore_step(wf)
+    moved = ci_rewrite_restore(wf)
     rest = [s for s in steps(job) if s is not moved]
     at = [s.get("name") for s in rest].index(TEST_STEP) + 1
     job["steps"] = [*rest[:at], moved, *rest[at:]]
@@ -371,12 +400,14 @@ CI_JOB_ROWS = (
             reason=(
                 "No leg saves the rewrite cache: the nightly sweep in pytest-sweep.yml saves "
                 "one entry over every module on master, which every leg of every event can "
-                "read, whatever its shard packed. The restore reads the path the sweep saves, "
+                "read, whatever its shard packed. A leg's save, through `actions/cache/save` or "
+                "the combined `actions/cache`, would hold its shard alone and become the newest "
+                "match for every leg's `restore-keys`. The restore reads the path the sweep saves, "
                 "byte for byte, since the cache version hashes the path, and its `restore-keys` "
                 "is a prefix of the sweep's key, so it takes the newest sweep entry. A shard or "
                 "a lock hash in the prefix would match no sweep entry."
             ),
-            offence=judge(_restore_reads_the_sweep_problems),
+            offence=judge(_rewrite_cache_problems),
             red=mutants(
                 CI,
                 restore_keys_that_name_the_shard=_edit_restore(
@@ -391,6 +422,8 @@ CI_JOB_ROWS = (
                 ),
                 a_restore_with_no_restore_keys=_drop_restore_keys,
                 a_restore_of_another_path=_edit_restore(path="**/__pycache__/*.pyc"),
+                a_leg_that_saves_the_cache=_add_leg_save(SAVE),
+                a_leg_that_also_caches_through_actions_cache=_add_leg_save(CACHE),
             ),
         )
     ),

@@ -295,3 +295,60 @@ def test_a_closed_stderr_does_not_make_a_clean_run_exit_non_zero(node):
 
     assert result.returncode == 0
     assert node.applied()["result"].get("ok") is True
+
+
+TIMING_LOG = "/var/log/pi-health/reconcile.log"
+
+
+def _with_timing_log(env: dict[str, str]) -> dict[str, str]:
+    return {**env, "HOMELAB_RECONCILE_TIMING_LOG": TIMING_LOG}
+
+
+def test_a_killed_runs_timing_file_ends_on_the_action_it_was_in(node, tmp_path):
+    settled_with_units(node, SLOW_UNIT)
+    change(node, SLOW_UNIT)
+    timing_file = node.root / TIMING_LOG.lstrip("/")
+    timing_file.parent.mkdir(parents=True)
+    entered = tmp_path / "entered"
+    slowed(
+        node,
+        "systemctl",
+        f"restart {SLOW_UNIT}",
+        f"touch {shlex.quote(str(entered))}; sleep 3; exit 1",
+    )
+    argv, env = node.command()
+    process = subprocess.Popen(
+        argv, env=_with_timing_log(env), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    deadline = time.monotonic() + 30
+    while not entered.exists():
+        assert process.poll() is None, process.communicate()
+        assert time.monotonic() < deadline, "reconcile never reached the restart"
+        time.sleep(0.01)
+
+    process.send_signal(signal.SIGTERM)
+    process.communicate(timeout=60)
+
+    lines = timing_file.read_text().splitlines()
+    assert any(seconds_on(line) for line in lines), lines
+    assert f"systemctl restart {SLOW_UNIT} starts" in lines[-1]
+    # A timestamp leads, because Alloy stamps a file line when it reads it, not when it was written.
+    assert re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", lines[-1])
+
+
+def test_a_timing_file_that_cannot_be_opened_leaves_the_run_and_the_journal_lines(
+    node,
+):
+    settled_with_units(node, SLOW_UNIT)
+    change(node, SLOW_UNIT)
+    (node.root / TIMING_LOG.lstrip("/")).mkdir(parents=True)
+    node.applied_path.write_text(json.dumps({**node.applied(), "result": {}}))
+    argv, env = node.command()
+
+    result = subprocess.run(
+        argv, env=_with_timing_log(env), capture_output=True, text=True, timeout=60
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert node.applied()["result"].get("ok") is True
+    assert timed_lines(result.stderr, SLOW_UNIT)

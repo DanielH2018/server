@@ -36,6 +36,9 @@
 #   carries them for a rebuild. Step 4 also removes rsyslog's text logs, and step 7 removes the
 #   report aideinit leaves at /var/log/aide/aide.log. Audit rotations need no step, because
 #   auditd's cap below is in place before a rebuilt Pi has any to spare.
+# - An apt preferences pin for log2ram. A pin that blocks the upgrade either names the installed
+#   version, so it moves the package on the next apt run once the two drift, or blocks every
+#   version, which refuses bootstrap's install. The hold unit below holds it instead.
 # - A check that log2ram.conf's JOURNALD_AWARE lines agree: a test in
 #   hosts/lib/tests/test_pi_tuning_component.py keeps the packaged log2ram copy honest instead.
 depends:
@@ -45,6 +48,13 @@ depends:
   - locales
 units:
   log2ram.service: {policy: manual}
+enable:
+  # DECIDED: log2ram stays held, and lifts only for a planned upgrade that ends in a reboot. The
+  # package's prerm unmounts /var/log on upgrade and its postinst waits for a reboot, so an
+  # unplanned upgrade leaves every log write on the SD card until the weekly reboot.
+  # docs/pi-host-tuning-record.md has the planned-upgrade steps.
+  homelab-log2ram-hold.service: multi-user.target
+  homelab-log2ram-hold.timer: timers.target
 files:
   # DECIDED: the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false.
   # Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file
@@ -68,6 +78,8 @@ files:
   # own ~/.bashrc and no ~/.gitconfig.
   - {src: templates/homelab-profile.sh, dst: /etc/profile.d/homelab.sh}
   - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
+  - {src: units/homelab-log2ram-hold.service, dst: /usr/lib/systemd/system/homelab-log2ram-hold.service}
+  - {src: units/homelab-log2ram-hold.timer, dst: /usr/lib/systemd/system/homelab-log2ram-hold.timer}
   - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
   - {src: units/earlyoom-dropin.conf, dst: /usr/lib/systemd/system/earlyoom.service.d/50-homelab.conf}
   # Without it a restart of the watchdog daemon leaves the daemon stopped; the file has the reason.

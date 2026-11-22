@@ -68,13 +68,13 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 25 jobs. A concurrent master sweep therefore delays
+  # jobs at once, and a full sweep runs 23 jobs. A concurrent master sweep therefore delays
   # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: a full sweep runs 25 jobs against a pool of 20.
+  # of the pool, not the group key: a full sweep runs 23 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -627,7 +627,7 @@ jobs:
       #
       # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
       # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
+      # hosted jobs at once and a full sweep asks for 23, so every leg's fixed cost also
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
@@ -704,8 +704,8 @@ jobs:
       # by the source's hash, not its mtime, so an entry from an earlier commit stays valid for
       # every module the commit left unchanged, and a changed module is rewritten again.
       # DECIDED: no leg saves. The nightly sweep in pytest-sweep.yml saves one entry over every
-      # module on master, about 40 MB a day, and every leg of every event restores the newest
-      # one, whatever its shard packed. A pull-request run reads master's entries. The key names
+      # module on master, a 9 MB archive a day, and every leg of every event restores the newest
+      # one, whatever its shard packed. A leg restores it in 1 to 2 seconds. A pull-request run reads master's entries. The key names
       # the commit only so that it misses, and `restore-keys` then takes the newest sweep entry.
       # The path and the key prefix must match the sweep's save step byte for byte.
       - name: Restore pytest's rewritten test modules
@@ -1604,9 +1604,10 @@ jobs:
 
   # The bootstrap cases (`validate_lib/bootstrap_case.py`), one leg per release, beside the
   # `host_packages` legs rather than inside them, where they were the longest group. Each
-  # release runs three shards, one CPU-bound offline build in each, and `run` submits the three
-  # builds first so the host items fill in behind them. Keep the shard count equal to the number
-  # of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  # release runs two shards. Six of the eight items build the three packages, each in about
+  # 60 s, and `shard` deals three builds and one short red to each shard, so a 4-CPU runner
+  # starts all four at once. Keep the count the smallest that fits every shard's items on a
+  # runner's CPUs; `test_bootstrap_case.py` holds it.
   #
   # Each item prints each phase of the script's local build under its `[DONE]` line. An offline
   # build spends most of its time in `apt-get update`: the image's `Acquire::Retries "10"` backs
@@ -1616,10 +1617,10 @@ jobs:
   # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
   # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. These legs
   # wait for runners because they become ready while the planned pytest legs still hold
-  # slots. Two shards per release would put two offline builds on one leg, which lengthens
-  # the sweep's last leg by more than the queue it saves.
+  # slots. One shard per release would run six builds on four CPUs in two waves, which ends
+  # the bootstrap legs too close to the `host_packages` legs.
   #
-  # The `name:` leaves the shard out, so a release's three shards share the check-run name
+  # The `name:` leaves the shard out, so a release's shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
   #
@@ -1639,12 +1640,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {release: "24.04", python: "3.12", shard: "1/3"}
-          - {release: "24.04", python: "3.12", shard: "2/3"}
-          - {release: "24.04", python: "3.12", shard: "3/3"}
-          - {release: "26.04", python: "3.14", shard: "1/3"}
-          - {release: "26.04", python: "3.14", shard: "2/3"}
-          - {release: "26.04", python: "3.14", shard: "3/3"}
+          - {release: "24.04", python: "3.12", shard: "1/2"}
+          - {release: "24.04", python: "3.12", shard: "2/2"}
+          - {release: "26.04", python: "3.14", shard: "1/2"}
+          - {release: "26.04", python: "3.14", shard: "2/2"}
     env:
       UV_NO_GROUP: lint
     steps:
