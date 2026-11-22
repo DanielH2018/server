@@ -79,6 +79,34 @@ groups:
       description: >-
         {{ $labels.origin }} has less than 10% of its memory available. Per-container OOM kills are ContainerOOMKilled's.
         Read `free -h` and the top memory cgroups on the host.
+  - alert: HostMemoryAvailableLow
+    expr: |
+      node_memory_MemAvailable_bytes{origin="daniel-box"} < 8 * 1024 * 1024 * 1024
+    for: 10m
+    labels:
+      severity: warning
+      service: daniel-box
+    annotations:
+      summary: '{{ $labels.origin }}: {{ $value | humanize1024 }}B of memory is available.'
+      description: >-
+        {{ $labels.origin }} has had under 8 GiB of memory available for 10 minutes. The fleet's anon
+        memory is past what MemoryLow can protect against. Read `free -h` and the top memory cgroups on
+        the host.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostmemoryavailablelow
+  - alert: HostMemoryAvailableLow
+    expr: |
+      node_memory_MemAvailable_bytes{origin="daniel-server"} < 8 * 1024 * 1024 * 1024
+    for: 10m
+    labels:
+      severity: warning
+      service: daniel-server
+    annotations:
+      summary: '{{ $labels.origin }}: {{ $value | humanize1024 }}B of memory is available.'
+      description: >-
+        {{ $labels.origin }} has had under 8 GiB of memory available for 10 minutes. The fleet's anon
+        memory is past what MemoryLow can protect against. Read `free -h` and the top memory cgroups on
+        the host.
+      runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#hostmemoryavailablelow
   - alert: ClaudeCgroupMemoryEvent
     expr: |
       sum by (origin, job, instance, cgroup, event) (

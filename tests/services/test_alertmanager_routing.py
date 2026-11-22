@@ -100,7 +100,7 @@ ROUTED = [
     ),
     (
         "hosts.yaml",
-        37,
+        39,
         {
             "HostDiskFull",
             "UPSOnBattery",
