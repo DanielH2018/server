@@ -1161,7 +1161,7 @@ Every `k3s` subcommand needs root.
 1. Copy aside the apt sources the host's packages own. `do-release-upgrade` writes
    `Enabled: no` into every source whose URI is not an Ubuntu mirror. That covers
    `homelab.sources`, which `homelab-updater` reads as its only source list. It also covers daniel-pi's `docker.sources`
-   and `azlux.sources`, and `github-cli.sources` on the cluster nodes. Unowned files in the
+   and `github-cli.sources` on the cluster nodes. Unowned files in the
    directory are left out, and `do-release-upgrade` disables those for good.
 
     ```bash

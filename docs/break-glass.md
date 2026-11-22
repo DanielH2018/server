@@ -146,10 +146,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
       reads every fetch from one directory and checks each file against the pin the download
       path checks. A file that is missing or differs from its pin stops the script and names
       the file. The kit holds no `age` package, so step 3 installs it from Ubuntu's archive,
-      which step 5 also needs for the packages' Depends. The kit holds no `log2ram` package. On the Pi, step 5 installs it from
-      `packages.azlux.fr`. If that host does not answer, the script prints a warning and goes on
-      with `/var/log` on the SD card. To install the package, rerun the script once the host
-      answers. The directory holds, for the node's architecture:
+      which step 5 also needs for the packages' Depends, `log2ram` on the Pi among them. The
+      directory holds, for the node's architecture:
         - `install.sh` at `K3S_VERSION`, whose sha256 is `K3S_INSTALL_SHA256` in the script;
         - the `k3s` binary (`k3s-arm64` on arm64) and the release's `sha256sum-<arch>.txt`;
         - the `nfpm` and `uv` archives that the script's pins name:
@@ -565,8 +563,6 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     sudo sh /boot/firmware/bootstrap-host.sh daniel-pi
     ```
 
-    Script step 5 prints a warning and continues when `packages.azlux.fr` does not answer. Rerun
-    the script once that host answers, or `/var/log` stays on the SD card.
 8. To start the Compose project and move `/var/log` to RAM, reboot the Pi. Script step 6 only
     installs the Docker engine, and `log2ram` mounts only at boot. After the reboot, check each:
 

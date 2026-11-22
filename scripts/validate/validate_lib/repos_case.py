@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """The container case for dpkg taking over the apt sources and keys the roles wrote (H7.24a).
 
-The `apt-docker`, `apt-azlux` and `apt-github-cli` components ship the files that
-`docker_install`, `optimize_pi` and `github_cli` wrote on the hosts, at the same paths. dpkg
+The `apt-docker` and `apt-github-cli` components ship the files that `docker_install` and
+`github_cli` wrote on the hosts, at the same paths. dpkg
 overwrites a file no package owns unless the package marks it a conffile, and then it prompts.
 This case proves the install needs no answer:
 
-  * it removes the image's diversions of the three sources, which keep every other case off the
+  * it removes the image's diversions of the two sources, which keep every other case off the
     network, so the files land at their real paths;
-  * it seeds all six paths with the roles' own text (`ROLE_SOURCES`) and a stale key, as a host
+  * it seeds all four paths with the roles' own text (`ROLE_SOURCES`) and a stale key, as a host
     that ran the roles holds them;
-  * it installs the `apt-sources` fixture, a host package that lists all three components, with
+  * it installs the `apt-sources` fixture, a host package that lists both components, with
     apt and no terminal and no `--force-conf*` option, so a conffile prompt would fail the
     install;
-  * it asserts the package owns all six paths, that each holds the rendered bytes, that
+  * it asserts the package owns all four paths, that each holds the rendered bytes, that
     `dpkg --verify` is silent about them, and that none is a recorded conffile.
 
-It does not cover the three upstream hosts, an arm64 host, or daniel-server's hand-installed
+It does not cover the two upstream hosts, an arm64 host, or daniel-server's hand-installed
 `github-cli.list`, which reconcile retires and no case here installs.
 """
 
@@ -44,16 +44,10 @@ ROLE_SOURCES = {
         "Signed-By: /etc/apt/keyrings/githubcli-archive-keyring.gpg\nSuites: stable\n"
         "Types: deb\nURIs: https://cli.github.com/packages\n"
     ),
-    "/etc/apt/sources.list.d/azlux.sources": (
-        "Components: main\nX-Repolib-Name: azlux\n"
-        "Signed-By: /usr/share/keyrings/azlux-archive-keyring.gpg\nSuites: bookworm\n"
-        "Types: deb\nURIs: http://packages.azlux.fr/debian/\n"
-    ),
 }
 KEYS = (
     "/etc/apt/keyrings/docker.asc",
     "/etc/apt/keyrings/githubcli-archive-keyring.gpg",
-    "/usr/share/keyrings/azlux-archive-keyring.gpg",
 )
 STALE_KEY = "a key a role fetched before the package existed\n"
 
@@ -108,7 +102,7 @@ def _body(cases, c: Container) -> None:
     }
     expect(
         set(expected) == {*ROLE_SOURCES, *KEYS},
-        f"the fixture ships {sorted(expected)}, not the six apt paths",
+        f"the fixture ships {sorted(expected)}, not the four apt paths",
     )
     version = f"{cases.versions['updater-head']}.7"
     deb = build(rendered, version, build_root / "apt-sources-deb")

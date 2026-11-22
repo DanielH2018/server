@@ -131,32 +131,20 @@ UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
 PHASE = re.compile(r"^bootstrap-host: .+ took \d+s$", re.MULTILINE)
 
 
-def split_log2ram(host: str, calls: str) -> tuple[str, list[str]]:
-    """Take step 5's Azlux update and log2ram install out of the shim's log.
+def simulation_problems(host: str, stdout: str) -> list[str]:
+    """Each package step 5 must install that apt's simulation in `stdout` does not.
 
-    The Pi makes those two calls after its packages, so a check of the package install reads
-    the rest. The simulation installs nothing, so no Azlux source exists for the install to read.
-
-    Args:
-        host: The host the script ran for.
-        calls: The shim's log, one apt-get argument list per line.
-
-    Returns:
-        The log without those calls, and a problem when the count is not two on the Pi and none
-        on any other host.
+    The three homelab packages on every host, and on the Pi the log2ram its package depends on,
+    which apt resolves from Ubuntu's archive.
     """
-    lines = calls.splitlines()
-    rest = [
-        line
-        for line in lines
-        if "azlux.sources" not in line and not line.endswith(" log2ram")
+    want = ["homelab-tools", "homelab-updater", f"homelab-{host}"]
+    if host == "daniel-pi":
+        want.append("log2ram")
+    return [
+        f"apt's simulation installs no {package}"
+        for package in want
+        if not re.search(rf"^Inst {re.escape(package)} ", stdout, re.MULTILINE)
     ]
-    found = len(lines) - len(rest)
-    want = 2 if host == "daniel-pi" else 0
-    problems = (
-        [] if found == want else [f"{host} ran {found} log2ram calls, not {want}"]
-    )
-    return "\n".join(rest), problems
 
 
 def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
@@ -168,23 +156,15 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         stdout: The script's standard output, which holds apt's simulation.
     """
     want = ["homelab-tools", "homelab-updater", f"homelab-{host}"]
-    package_calls, log2ram_problems = split_log2ram(host, calls)
     installs = [
-        line.split()
-        for line in package_calls.splitlines()
-        if line.startswith("install")
+        line.split() for line in calls.splitlines() if line.startswith("install")
     ]
     if len(installs) != 1:
         return [f"apt-get ran {len(installs)} installs, not one: {installs}"]
     debs = [arg for arg in installs[0] if arg.endswith(".deb")]
     named = [deb.rsplit("/", 1)[-1].split("_", 1)[0] for deb in debs]
     problems = [] if named == want else [f"the install named {named}, not {want}"]
-    problems += [
-        f"apt's simulation installs no {package}"
-        for package in want
-        if not re.search(rf"^Inst {re.escape(package)} ", stdout, re.MULTILINE)
-    ]
-    return problems + log2ram_problems
+    return problems + simulation_problems(host, stdout)
 
 
 def _download(
