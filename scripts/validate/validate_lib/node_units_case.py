@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The container case for the cluster nodes' units that lean on an Ubuntu release's packages.
 
-No other case installs daniel-server's or daniel-box's package for real: `bootstrap_case`
-simulates the install, so none of their units ever starts. This case puts one shipped file at a
-time onto the Ubuntu package it overrides, on each `host_packages` leg's release, and starts it:
+`node_package_case` installs daniel-server's and daniel-box's whole packages and reads only
+whether a unit failed. This case checks two shipped files closer: it puts each onto the Ubuntu
+package it overrides, on each `host_packages` leg's release, starts it, and reads what it did:
 
   * nut-client, with the `nut-secondary` drop-in on nut-monitor.service and an upsmon.conf at
     the drop-in's NUT_CONFPATH. The unit must come up active with upsmon's root parent as its
@@ -13,7 +13,7 @@ time onto the Ubuntu package it overrides, on each `host_packages` leg's release
     the real netplan. It must install a valid file and keep the old one for a file netplan
     cannot parse and for one only its generator refuses (a short passphrase).
 
-It covers only the files it names, not the rest of either node's package. Each check runs even
+It covers only the files it names. Each check runs even
 when the one before it failed, so one leg reports every check that fails.
 """
 

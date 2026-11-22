@@ -1,6 +1,6 @@
 """The container cases' runner: it runs the case groups concurrently and still fails the leg.
 
-Each test drives `host_package_cases.main()` with the twelve case groups, `bootstrap_case` among them, replaced by stubs that
+Each test drives `host_package_cases.main()` with the thirteen case groups, `bootstrap_case` among them, replaced by stubs that
 sleep instead of booting a container, so no Docker is needed. The runner must look the groups
 up when `main()` runs, the three `Cases` methods on the instance and each `validate_lib` case
 module's `run` on that module, and must run them in this process (threads, not
@@ -25,6 +25,7 @@ from validate.validate_lib import (
     conffile_case,
     disarm_case,
     engine_case,
+    node_package_case,
     node_units_case,
     repos_case,
     secrets_case,
@@ -37,6 +38,7 @@ MODULES = {
     "conffile_case": conffile_case,
     "engine_case": engine_case,
     "repos_case": repos_case,
+    "node_package_case": node_package_case,
     "node_units_case": node_units_case,
     "bootstrap_case": bootstrap_case,
     "bootstrap_repo_case": bootstrap_repo_case,
@@ -141,7 +143,7 @@ def test_a_case_with_no_verdict_passes_the_leg_and_is_counted_last(
     last = capfd.readouterr().err.splitlines()[-1]
     assert (status, last) == (
         0,
-        "[NO VERDICT] 1 no verdict, 10 passed; --all to list the passes: ['bootstrap_age_case']",
+        "[NO VERDICT] 1 no verdict, 11 passed; --all to list the passes: ['bootstrap_age_case']",
     )
 
 
@@ -163,8 +165,8 @@ def test_a_failed_case_is_annotated_and_summarised_and_no_pass_is_listed(
         "status": 1,
         "errors": ["::error title=host package case failed::cold_install"],
         "passes": [],
-        "last": "[FAIL] 1 failed, 10 passed; --all to list the passes: ['cold_install']",
-        "summary": ["1 failed, 10 passed", "", "- failed: cold_install"],
+        "last": "[FAIL] 1 failed, 11 passed; --all to list the passes: ['cold_install']",
+        "summary": ["1 failed, 11 passed", "", "- failed: cold_install"],
     }
 
 
@@ -175,7 +177,7 @@ def test_a_clean_run_ends_with_one_count_line(tmp_path, monkeypatch, capfd):
     err = capfd.readouterr().err.splitlines()
     assert (status, err[-1], [line for line in err if "::error" in line]) == (
         0,
-        "[PASS] 11 passed; --all to list the passes",
+        "[PASS] 12 passed; --all to list the passes",
         [],
     )
 
@@ -188,7 +190,7 @@ def test_the_all_flag_lists_each_passing_case(tmp_path, monkeypatch, capfd):
     passes = {
         line.removeprefix("[PASS] ") for line in err[:-1] if line.startswith("[PASS] ")
     }
-    assert (status, passes, err[-1]) == (0, GROUPS, "[PASS] 11 passed")
+    assert (status, passes, err[-1]) == (0, GROUPS, "[PASS] 12 passed")
 
 
 def test_failures_past_the_annotation_cap_are_counted_in_the_last_annotation(capfd):

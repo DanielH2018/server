@@ -106,19 +106,31 @@ def stub_docker(c: Container) -> None:
     )
 
 
-def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
-    """Rebuild the real Pi package and its two variants with a ciphertext `c` can decrypt.
+def sealed_sops(cases, c: Container, host: str) -> Path:
+    """The SOPS directory `seal_host` writes for `host` in container `c`."""
+    return cases.work / "build" / f"{host}-sealed-{c.name}" / "sops"
 
-    The real package ships `secrets-unit` and the operator's ciphertext, which only the Pi's key
-    decrypts. Reconcile exits 1 when `homelab-secrets` cannot run, so a case that installs the
-    real package needs the same treatment the `sealed` fixture gets: a throwaway age key in `c`,
-    and a ciphertext encrypted to it for the real package's credentials, with fake values.
-    Only the ciphertext and the manifest hash derived from it differ from the real build.
-    `cases.debs` then names the sealed builds, at the versions of the real ones.
 
-    `seal` and `make_deb` default to `encrypt` and `build`; a test passes stand-ins.
+def seal_host(cases, c: Container, host: str, seal=None) -> Path:
+    """Give `c` a throwaway age key, and return a SOPS directory to render `host` with.
+
+    A host package ships `secrets-unit` and the operator's ciphertext, which only that host's
+    key decrypts, and reconcile exits 1 when `homelab-secrets` cannot run. So `c` gets the
+    homelab-tools build, for its `sops`, and a fresh age key. The directory holds a ciphertext
+    encrypted to that key, naming every credential and output key the real package lists, each
+    with a fake value.
+
+    Args:
+        cases: The `Cases` whose homelab-tools build is installed, and under whose `work` the
+            directory is made.
+        c: The container the key is made in.
+        host: The host whose package is rendered.
+        seal: Encrypts a key-to-value map in `c`; `encrypt` unless a test passes a stand-in.
+
+    Raises:
+        CaseFailed: The job built no homelab-tools, or the package lists no credential.
     """
-    seal, make_deb = seal or encrypt, make_deb or build
+    seal = seal or encrypt
     if not cases.tools:
         raise CaseFailed(
             "host_packages built no homelab-tools, so the container has no sops"
@@ -128,19 +140,35 @@ def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
         f" /srv/debs/{cases.debs[cases.tools[0]].name}"
     )
     c.ok(f"install -d -m 0755 /etc/homelab && age-keygen -o {AGE_KEY}")
+    package = host_mode.render_host(host)
+    expect(bool(package.credentials), f"{host}'s package lists no credential to seal")
+    # An output's keys, such as the Pi's Compose env file (H5.7), are decrypted by the unit too.
+    # Without them homelab-secrets fails, and reconcile keeps every legacy entry and exits 1.
+    keys = sorted(
+        {*package.credentials, *(k for out in package.outputs for k in out["keys"])}
+    )
+    seal_dir = sealed_sops(cases, c, host)
+    seal_dir.mkdir(parents=True)
+    (seal_dir / f"{host}.sops.yaml").write_text(
+        seal(c, {key: f"fixture-only-{key}" for key in keys})
+    )
+    return seal_dir
+
+
+def seal_pi(cases, c: Container, seal=None, make_deb=None) -> None:
+    """Rebuild the real Pi package and its two variants with a ciphertext `c` can decrypt.
+
+    `seal_host` makes the ciphertext, so only it and the manifest hash derived from it differ
+    from the real build. `cases.debs` then names the sealed builds, at the versions of the real
+    ones. `c` also gets the stubs and the host state the Pi package's units need.
+
+    `seal` and `make_deb` default to `encrypt` and `build`; a test passes stand-ins.
+    """
+    make_deb = make_deb or build
+    seal_dir = seal_host(cases, c, HOST, seal)
     stub_docker(c)
     seed_pi_host(c)
-    package = host_mode.render_host(HOST)
-    credentials = package.credentials
-    expect(bool(credentials), "the real Pi package lists no credential to seal")
-    # The Compose env file (H5.7) is an output whose keys the unit also decrypts. Without them in
-    # the ciphertext homelab-secrets fails, and reconcile keeps every legacy entry and exits 1.
-    keys = sorted({*credentials, *(k for out in package.outputs for k in out["keys"])})
-    sealed = seal(c, {key: f"fixture-only-{key}" for key in keys})
-    root = cases.work / "build" / f"pi-sealed-{c.name}"
-    seal_dir = root / "sops"
-    seal_dir.mkdir(parents=True)
-    (seal_dir / f"{HOST}.sops.yaml").write_text(sealed)
+    root = seal_dir.parent
     head = root / "head"
     host_mode.write_packages([host_mode.render_host(HOST, sops_dir=seal_dir)], head)
     builds = {
