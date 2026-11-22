@@ -482,7 +482,7 @@ containers_list:
         from:
           - freshrss  # the subscription URL lives in FreshRSS's own database, so no template
                       # names `feed-cache` as a target and a grep cannot see this caller.
-                      # Confirm after a deploy that the rachelbythebay feed still refreshes.
+                      # Confirm after a deploy that the Rest of World feed still refreshes.
   - name: navidrome
     # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
     weekly_backup_claims: {navidrome-data: 3}  # Wed
