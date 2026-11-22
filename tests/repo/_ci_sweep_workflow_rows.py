@@ -15,7 +15,12 @@ BUILD_JOB = "host_packages_build"
 GATE = "steps.render.outputs.changed"
 FIRST_SCAN = "Scan the named package roots for secrets"
 SECOND_SCAN = "Check the named package roots' placeholders against their SOPS keys"
-SCANS = {FIRST_SCAN: "scan-roots", SECOND_SCAN: "placeholders"}
+SCANS = {
+    FIRST_SCAN: "scan-roots",
+    SECOND_SCAN: "placeholders",
+    "Render the cluster bundle as promote does": "homelab_render.py cluster --out out",
+    "Scan the cluster bundle for secrets": "dir out --config .gitleaks.toml",
+}
 FULL_SWEEP = "Run hooks (full sweep)"
 REJECT = "Reject a PR whose merge changes no files"
 NO_DISPATCH_ARM = (
@@ -336,7 +341,8 @@ SWEEP_ROWS = (
                 "The gitleaks scan and the placeholder check read the head render's package "
                 "roots, and a PR that changes only `.gitleaks.toml` or the gitleaks pin renders "
                 "nothing differently, so a scan behind that gate skips on exactly the PRs that "
-                "change what it enforces (H4.1c). Each scan sits after the render step, carries "
+                "change what it enforces (H4.1c). The cluster bundle's render and gitleaks scan "
+                "hold to the same rule. Each scan sits after the render step, carries "
                 "no `if:`, and comes before the first step that tests the render's `changed` "
                 "output."
             ),
