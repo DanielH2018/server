@@ -176,7 +176,14 @@ re-read of the issue's Verify-by query is the check on it.
   anon can leave RAM only through its 2G swap share, so all-anon fleet memory past
   `MemTotal - homelab - 8 GiB` still breaks the floor.
 - It does not steer the OOM killer. kubelet gives burstable and best-effort pods a high
-  `oom_score_adj`, so a global OOM still tends to pick a pod.
+  `oom_score_adj`, so a global OOM still tends to pick a pod
+  ([#9989](https://github.com/DanielH2018/server/issues/9989)).
+
+So no `MemoryLow` value meets the ruling's condition that the protected slices keep the
+floor with the fleet at its cap. With all-anon fleet memory at the cap, daniel-box gives
+27.7 - 13 - 20 = -5.3 GiB and daniel-server gives 30.5 - 9.5 - 24 = -3 GiB, and a larger
+protection only widens the gap. The floor stays a typical-day floor until the operator
+re-rules on it ([#9993](https://github.com/DanielH2018/server/issues/9993)).
 
 To verify a deploy, read the configured value and the kernel's value. Read
 `kubepods.slice` again after the next k3s start, which is when kubelet resets it:
