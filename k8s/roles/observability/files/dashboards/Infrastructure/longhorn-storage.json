@@ -1129,6 +1129,259 @@
       ],
       "title": "R2 operations, month to date",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 82
+      },
+      "id": 24,
+      "panels": [],
+      "title": "Volume performance",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "The highest longhorn_volume_write_latency of any volume. When every volume slows at once, suspect the link between the nodes or a node itself; when one volume is slow, suspect its replica or its workload.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 83
+      },
+      "id": 25,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "max(longhorn_volume_write_latency)",
+          "legendFormat": "max",
+          "refId": "A"
+        }
+      ],
+      "title": "Max write latency, any volume",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_write_latency per volume, the 10 slowest at each step. Longhorn's manager reports these as gauges at the 1m scrape, so a sub-minute spike does not show. Legend is the PVC name.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 83
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_write_latency)",
+          "legendFormat": "{{pvc}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Write latency, top 10 volumes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_read_latency per volume, the 10 slowest at each step. Longhorn's manager reports these as gauges at the 1m scrape, so a sub-minute spike does not show. Legend is the PVC name.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0
+          },
+          "unit": "ns"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 91
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_read_latency)",
+          "legendFormat": "{{pvc}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Read latency, top 10 volumes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_read_iops and longhorn_volume_write_iops per volume, the 10 busiest of each at each step. Longhorn's manager reports these as gauges at the 1m scrape, so a sub-minute spike does not show. Legend is the PVC name.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0
+          },
+          "unit": "iops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 91
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_read_iops)",
+          "legendFormat": "{{pvc}} read",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_write_iops)",
+          "legendFormat": "{{pvc}} write",
+          "refId": "B"
+        }
+      ],
+      "title": "IOPS, top 10 volumes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "EGdsQqhVk"
+      },
+      "description": "longhorn_volume_read_throughput and longhorn_volume_write_throughput per volume, the 10 busiest of each at each step. Longhorn's manager reports these as gauges at the 1m scrape, so a sub-minute spike does not show. Legend is the PVC name.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 99
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_read_throughput)",
+          "legendFormat": "{{pvc}} read",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "EGdsQqhVk"
+          },
+          "expr": "topk(10, longhorn_volume_write_throughput)",
+          "legendFormat": "{{pvc}} write",
+          "refId": "B"
+        }
+      ],
+      "title": "Throughput, top 10 volumes",
+      "type": "timeseries"
     }
   ],
   "refresh": "1m",
