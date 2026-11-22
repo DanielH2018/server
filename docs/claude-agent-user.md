@@ -350,7 +350,10 @@ daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=
   only the operator import line of the older copied subset, which the component does not ship.
   The
   agent's telemetry carries the resource attribute `process.owner=claude`, so its metrics carry
-  the label `process_owner="claude"` and the operator's carry none.
+  the label `process_owner="claude"` and the operator's carry none. That settings `env` replaces
+  the whole `OTEL_RESOURCE_ATTRIBUTES` value, so the agent's Remote Control unit passes
+  `claude rc --settings` a root-owned file that carries `process.owner` beside
+  `session.kind=remote-control` (`hosts/components/claude-code/templates/claude-rc-settings.json.j2`).
 - **The memory store is re-copied after every stint as the operator.** `claude-agent-home`
   copies the operator's store into the agent's while the agent's `MEMORY.md` does not exist. It
   also copies it on the first run as the agent after a run as the operator, if the two stores
