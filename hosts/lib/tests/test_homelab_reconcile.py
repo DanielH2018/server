@@ -324,25 +324,58 @@ def test_a_path_dpkg_reports_as_owned_is_never_removed_and_an_unowned_one_is(nod
     assert not (node.root / "usr/local/bin/stray").exists()
 
 
+CONFFILE = "/etc/logrotate.d/cloud-init"
+
+
 def legacy_conffile(node, *, obsolete: bool):
-    path = node.root / "etc/logrotate.d/cloud-init"
+    path = node.root / CONFFILE.lstrip("/")
     path.parent.mkdir(parents=True)
     path.write_text("")
-    node.manifest["legacy"].append({"path": "/etc/logrotate.d/cloud-init"})
-    node.state["owned"] = ["/etc/logrotate.d/cloud-init"]
-    node.state["conffiles"] = {"some-package": ["/etc/logrotate.d/cloud-init"]}
-    node.state["obsolete"] = ["/etc/logrotate.d/cloud-init"] if obsolete else []
-    result = node.run()
-    assert result.returncode == 0, result.stderr
+    node.manifest["legacy"].append({"path": CONFFILE})
+    node.state["owned"] = [CONFFILE]
+    node.state["conffiles"] = {"some-package": [CONFFILE]}
+    node.state["obsolete"] = [CONFFILE] if obsolete else []
     return path
 
 
 def test_a_legacy_path_its_owner_lists_as_an_obsolete_conffile_is_removed(node):
-    assert not legacy_conffile(node, obsolete=True).exists()
+    path = legacy_conffile(node, obsolete=True)
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not path.exists()
 
 
-def test_a_legacy_path_its_owner_still_ships_as_a_conffile_is_kept(node):
-    assert legacy_conffile(node, obsolete=False).exists()
+def test_a_live_conffile_waits_unretired_and_goes_once_an_upgrade_makes_it_obsolete(
+    node,
+):
+    path = legacy_conffile(node, obsolete=False)
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert path.exists()
+    assert node.applied()["retired"] == []
+    node.state["obsolete"] = [
+        CONFFILE
+    ]  # the release upgrade moved it to another package
+
+    assert node.run().returncode == 0
+    assert not path.exists()
+
+
+def test_a_dpkg_query_that_cannot_list_conffiles_keeps_the_entry_and_fails_the_run(
+    node,
+):
+    path = legacy_conffile(node, obsolete=True)
+    node.state["fail"].append("dpkg-query -W")
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert path.exists()
+    assert node.applied()["retired"] == []
 
 
 def test_an_empty_legacy_directory_listed_after_its_files_is_removed(node):

@@ -234,7 +234,7 @@ def test_red_an_arm_that_edits_any_owned_file_would_fight_dpkg(tmp_path):
         tmp_path,
         owned_non_conffile_is_refused,
         ARM,
-        "if path not in conffiles(owner):",
+        "if path not in listed:",
         "if False:",
     )
 
