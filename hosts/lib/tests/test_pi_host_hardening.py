@@ -222,4 +222,6 @@ def test_the_apport_dropin_condition_never_holds(package):
         timeout=60,
     )
     assert conditions
-    assert result.returncode != 0, result.stdout + result.stderr
+    # A line systemd cannot parse also exits 1, so each condition must be reported as failed.
+    for condition in conditions:
+        assert f"{condition} failed." in result.stderr, result.stderr
