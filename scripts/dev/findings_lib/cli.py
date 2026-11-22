@@ -229,7 +229,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
 
     t = sub.add_parser(
         "touch",
-        help="record a re-observation; the third adds escalated",
+        help="record a re-observation; the third sighting marks it escalated",
         example=_example("touch 1234 --source review-2026-11-09"),
     )
     _add_dry_run(t, suppress=True)
