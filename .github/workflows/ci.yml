@@ -68,13 +68,13 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 25 jobs. A concurrent master sweep therefore delays
+  # jobs at once, and a full sweep runs 23 jobs. A concurrent master sweep therefore delays
   # queued PR runs by minutes when the pool is full.
   #
   # The grouping stays anyway. A run that waits for a slot still delivers its SHA's verdict,
   # while an evicted run delivers none, so slot contention costs latency and eviction costs
   # correctness. The levers on the cost side are the share each master run takes and the size
-  # of the pool, not the group key: a full sweep runs 25 jobs against a pool of 20.
+  # of the pool, not the group key: a full sweep runs 23 jobs against a pool of 20.
   #
   # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
   # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
@@ -627,7 +627,7 @@ jobs:
       #
       # The count is chosen on two numbers, not on one run's unloaded wall: the slot-seconds a
       # landing's CI uses, and the p90 queue wait under normal load. The account runs at most 20
-      # hosted jobs at once and a full sweep asks for 25, so every leg's fixed cost also
+      # hosted jobs at once and a full sweep asks for 23, so every leg's fixed cost also
       # lengthens the queue every other run waits in. `scripts/dev/ci_slot_cost.py --recent 20`
       # prints both, per job family. Re-decide the count from its output, never from a projection.
       #
