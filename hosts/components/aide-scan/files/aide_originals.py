@@ -6,15 +6,17 @@
 
 `seed` keeps, at STATE/<package>/<version>/<path>, the copy of each conffile named on stdin that
 the installed version of its package ships. It runs `apt-get download`, which checks the .deb
-against the signed archive index, and reads the one member out of the .deb. A version already
-kept is never fetched again, so the archive is reached only after the installed version changes.
-When it fetched or failed to keep a copy, it prints one count line, then each path it could
-not keep with the reason.
+against the signed archive index, reads the one member out of the .deb, and keeps it only when
+its md5 is the digest STATUS, dpkg's status file, records for the path. A version already kept is
+never fetched again, so the archive is reached only after the installed version changes. No copy
+is ever deleted. When it fetched or failed to keep a copy, it prints one count line, then each
+path it could not keep with the reason.
 
-`judge` reads only STATE and STATUS, dpkg's status file. It prints `explained` when replaying the
-declared line edits on the kept copy gives FILE, the path as it is on disk, and the copy's md5 is
-the digest dpkg records for PATH. It prints `original unavailable` when no copy of the installed
-version is kept or the kept copy's md5 is not that digest, and `differs` otherwise.
+`judge` reads only STATE and STATUS. It prints `explained` when replaying the declared line edits
+on any kept copy of PATH, of any version of the package that lists it, gives FILE, the path as it
+is on disk. It prints `original unavailable` when no copy of PATH is kept for that package, and
+`differs` otherwise. An older version's copy counts because under --force-confold dpkg keeps an
+edited conffile, built on the old version's copy, across an upgrade that changes it upstream.
 
 aide-check runs both; the module imports reconcile_lib, which the reconcile component ships
 beside it in /usr/lib/homelab.
@@ -120,6 +122,8 @@ def seed(state: Path, status: Path, paths: list[str]) -> tuple[int, list[str]]:
             continue
         try:
             content = fetch(path, listed[path])
+            if hashlib.md5(content).hexdigest() != listed[path].digest:
+                raise OSError("its md5 is not the digest dpkg records")
             copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=copy.parent, prefix=f".{copy.name}.")
             with os.fdopen(fd, "wb") as handle:
@@ -152,18 +156,22 @@ def judge(state: Path, status: Path, path: str, file: Path, edits: list[dict]) -
     conffile = conffiles(status).get(path)
     if conffile is None:
         return "original unavailable"
-    try:
-        original = kept_copy(state, path, conffile).read_bytes()
-    except OSError:
-        return "original unavailable"
-    if hashlib.md5(original).hexdigest() != conffile.digest:
+    # DECIDED: a kept copy of any version explains the file; seed checked each against dpkg's digest when it kept it.
+    copies = sorted((state / conffile.package).glob(f"*/{path.lstrip('/')}"))
+    if not copies:
         return "original unavailable"
     try:
-        now = file.read_bytes()
+        now = file.read_bytes().decode(errors="surrogateescape")
     except OSError:
         return "differs"
-    decoded = (b.decode(errors="surrogateescape") for b in (original, now))
-    return "explained" if replays(*decoded, edits) else "differs"
+    for copy in copies:
+        try:
+            original = copy.read_bytes().decode(errors="surrogateescape")
+        except OSError:
+            continue
+        if replays(original, now, edits):
+            return "explained"
+    return "differs"
 
 
 def main(argv: list[str]) -> int:

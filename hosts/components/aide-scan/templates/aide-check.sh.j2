@@ -44,8 +44,9 @@
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged. A
 #   conffile the host package's lines arm adds a block to is the package's copy while removing
 #   that block, once, between its markers and as declared, leaves the digest dpkg records. One it
-#   only makes line edits to is the package's copy while replaying those edits on the kept copy
-#   of the installed version's file gives it, the lines they append in any order (aide-originals).
+#   only makes line edits to is the package's copy while replaying those edits on a kept copy of
+#   the file, from any version of its package, gives it, the lines they append in any order
+#   (aide-originals). An older version counts because --force-confold keeps an edited conffile.
 #   Each run first keeps the copies it lacks, fetched from the configured archive. That is the
 #   run's only network call, and a copy it cannot keep names the file "original unavailable".
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,

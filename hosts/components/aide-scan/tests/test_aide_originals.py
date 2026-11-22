@@ -18,7 +18,7 @@ Package: tool
 Status: install ok installed
 Version: 1:2.0-1
 Conffiles:
- /etc/tool.defs 0123456789abcdef0123456789abcdef
+ /etc/tool.defs 92874ad1d97bf6eb24017b438bdf3a57
  /etc/tool.old 0123456789abcdef0123456789abcdef obsolete
 Description: a tool
 
@@ -56,6 +56,16 @@ def test_the_installed_versions_copy_is_kept_under_its_package_and_version(host)
     assert seed(state, status, ["/etc/tool.defs"]) == (1, [])
     assert (state / "tool" / "1:2.0-1" / "etc/tool.defs").read_bytes() == SHIPPED
     assert (status.parent / "fetched").read_text() == "download tool=1:2.0-1\n"
+
+
+def test_a_fetched_copy_whose_md5_is_not_dpkgs_digest_is_not_kept(host):
+    status, state = host
+    status.write_text(STATUS.replace("92874ad1d97bf6eb24017b438bdf3a57", "0" * 32))
+    assert seed(state, status, ["/etc/tool.defs"]) == (
+        0,
+        ["/etc/tool.defs (its md5 is not the digest dpkg records)"],
+    )
+    assert not (state / "tool" / "1:2.0-1" / "etc/tool.defs").exists()
 
 
 def test_a_version_already_kept_is_not_fetched_again(host):

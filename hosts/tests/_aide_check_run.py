@@ -10,7 +10,7 @@ import shlex
 import sys
 import time
 
-from _aide_fake_host import ACCOUNT_FILES, DEFS, PACKAGE, TOOL_COPIES, _fake_host
+from _aide_fake_host import ACCOUNT_FILES, DEFS, PACKAGE, TOOL_COPY, _fake_host
 from _helpers import REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
@@ -181,7 +181,8 @@ def _run_check(
     a file's copy, or removing it for None. `pending_snapshot` leaves an earlier run's copies
     beside its aide.db.new, ACCOUNT_FILES with those files replaced. `during_scan` has the aide
     stub append the given text to each named path while it runs. `originals` keeps the given
-    content as aide-originals' copy of each named tool conffile, in place of DEFS as shipped. The real aide-originals runs,
+    content at each path under aide-originals' state directory, such as TOOL_COPY, in place of
+    DEFS as the installed tool version ships it at TOOL_COPY. The real aide-originals runs,
     with an `apt-get` stub that fails, so a copy no test keeps is never fetched.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
     [status, message] pair read from the `status=` line the script logs, or None when it logged
@@ -245,10 +246,10 @@ def _run_check(
 
     lock_file = tmp_path / "aide-check.lock"
     copies = tmp_path / "originals"
-    for path, content in (
-        {DEFS: PACKAGE[DEFS][0]} if originals is None else originals
+    for kept, content in (
+        {TOOL_COPY: PACKAGE[DEFS][0]} if originals is None else originals
     ).items():
-        copy = copies.joinpath(*TOOL_COPIES, path.lstrip("/"))
+        copy = copies / kept
         copy.parent.mkdir(parents=True, exist_ok=True)
         copy.write_text(content)
     originals_bin = write_exec(

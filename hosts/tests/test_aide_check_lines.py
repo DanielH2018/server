@@ -5,9 +5,9 @@ add one to /etc/zsh/zshenv, so the file differs from the digest dpkg records. Th
 explained only when removing exactly the declared block, between its markers, leaves the file
 dpkg installed. The case table below is the rule.
 
-A conffile the arm only makes line edits to is explained when replaying those edits on the kept
-package copy gives the file, the appended lines in any order, and the copy is the one dpkg
-records. With no such copy the file is named "original unavailable".
+A conffile the arm only makes line edits to is explained when replaying those edits on a kept
+package copy of any version gives the file, the appended lines in any order. With no copy kept
+for the package that lists it, the file is named "original unavailable".
 
 Run: uv run pytest hosts/tests/test_aide_check_lines.py
 """
@@ -22,6 +22,7 @@ from _aide_fake_host import (
     HOST_MANIFEST,
     LINE_EDITS,
     PACKAGE,
+    TOOL_COPY,
 )
 from _aide_check_run import (
     CHANGED_CONTENT,
@@ -128,11 +129,39 @@ def test_a_conffile_with_an_undeclared_line_difference_is_flagged(tmp_path, now)
     assert f"aide-check: unexplained: {DEFS} ({REASON})" in logged, logged
 
 
+# tool 0.9's copy of DEFS, and the file the arm's edits made of it, which dpkg kept under
+# --force-confold when 1.0 changed the copy.
+OLDER_SHIPPED = DEFS_SHIPPED.replace("# limits", "# login limits")
+OLDER_EDITED = DEFS_EDITED.replace("# limits", "# login limits")
+OLDER_COPY = TOOL_COPY.replace("/1.0/", "/0.9/")
+
+
+def test_a_conffile_the_edits_give_from_an_older_versions_copy_is_clean(tmp_path):
+    _, pushed, _, _ = _run_check(
+        tmp_path,
+        _report(f"{CHANGED_CONTENT}: {DEFS}"),
+        rc=4,
+        rewrite={DEFS: OLDER_EDITED},
+        originals={TOOL_COPY: DEFS_SHIPPED, OLDER_COPY: OLDER_SHIPPED},
+    )
+    assert pushed[0] == "up", pushed
+
+
+def test_a_copy_another_package_ships_does_not_explain_the_conffile(tmp_path):
+    _, pushed, logged, _ = _run_check(
+        tmp_path,
+        _report(f"{CHANGED_CONTENT}: {DEFS}"),
+        rc=4,
+        rewrite={DEFS: OLDER_EDITED},
+        originals={TOOL_COPY: DEFS_SHIPPED, f"other/0.9{DEFS}": OLDER_SHIPPED},
+    )
+    assert pushed[0] == "down", pushed
+    assert f"aide-check: unexplained: {DEFS} ({REASON})" in logged, logged
+
+
 UNAVAILABLE = {
     "no copy kept, and the archive unreachable": {},
-    "a kept copy that is not the package's": {
-        DEFS: DEFS_SHIPPED.replace("# limits", "#")
-    },
+    "a copy kept only under another package": {f"other/1.0{DEFS}": DEFS_SHIPPED},
 }
 
 
