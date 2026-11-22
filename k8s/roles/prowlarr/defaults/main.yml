@@ -51,6 +51,24 @@ flux_verify_after:
   - radarr
   - sonarr
 
+# ── the app-keys seed (templates/app-keys-cronjob.yaml.j2) ──────────────────────────────────
+# The same python:3.15-alpine digest flux_job_image pins; Renovate moves both in one PR.
+prowlarr_k8s_app_keys_image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
+# Hourly. Prowlarr raises ApplicationLongTermStatusCheck, which ProwlarrAppSyncFailing reads,
+# only after 6 hours of failed syncs, so a key a revert left stale is rewritten before it pages.
+prowlarr_k8s_app_keys_schedule: "23 * * * *"
+# How long a finished prowlarr-app-keys Job, and so its pod, stays visible: one period plus the
+# 300s deadline and a margin, so the newest run is always there to read. A run at :23 ends
+# before the weekly reboot's shutdown minute (tests/k8s/test_reboot_window_cronjobs_age_out.py).
+prowlarr_k8s_app_keys_job_ttl_seconds: 4200
+# The renderer copies the seed's jobTemplate into `prowlarr-verify` as
+# `prowlarr-app-keys-deploy-gate-<spec digest8>`, a real run once per revision. A second run
+# writes nothing, so the gate is a post-apply mutation.
+flux_cronjob_gates:
+  prowlarr-app-keys:
+    kind: mutation
+    rerun_safe: k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py::test_a_second_run_writes_nothing
+
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES
 # in a headless browser. It is reachable by prowlarr and nothing else — a deliberate

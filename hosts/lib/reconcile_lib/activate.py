@@ -34,9 +34,9 @@ VALIDATE_FAILED = RUN_DIR / "validate-failed"
 REBOOT_PENDING = RUN_DIR / "reboot-pending"
 
 _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
-ACTION = re.compile(
-    rf"none|sysctl|tmpfiles|modules-load|locale-gen|reboot|(?:try-restart|reload|manual):{_UNIT}"
-)
+KINDS = ("none", "sysctl", "tmpfiles", "modules-load", "locale-gen", "reboot")
+UNIT_KINDS = ("try-restart", "reload", "manual")  # each followed by :<unit>
+ACTION = re.compile(rf"{'|'.join(KINDS)}|(?:{'|'.join(UNIT_KINDS)}):{_UNIT}")
 # The commands that check a service's configuration before reconcile reloads or restarts it.
 COMMANDS = {
     "ssh.service": ("sshd", "-t"),

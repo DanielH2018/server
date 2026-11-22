@@ -19,6 +19,10 @@
 # The installed versions are reconciled when `result` names exactly the versions dpkg-query
 # reports for both packages and says the run succeeded.
 #
+# When HOMELAB_UPDATER_LOG names a file, each line this prints is also appended there with a
+# timestamp and the host name. daniel-pi's package sets it to /var/log/pi-health/updater.log,
+# which its Alloy ships to Loki, because no agent can read that host's journal archives.
+#
 # HOMELAB_ROOT prefixes every state path. Only the tests in hosts/lib/tests/ set it.
 
 set -u
@@ -48,7 +52,11 @@ HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc:
 INSTALL="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600"
 RETRY="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=0"
 
-say() { echo "homelab-updater: $*" >&2; }
+say() {
+    echo "homelab-updater: $*" >&2
+    [ -n "${HOMELAB_UPDATER_LOG:-}" ] || return 0
+    { echo "$(date -Iseconds) $HOST homelab-updater: $*" >>"$ROOT$HOMELAB_UPDATER_LOG"; } 2>/dev/null || :
+}
 
 # Set <PKG>_STATUS (dpkg's three-letter abbreviation, "" when dpkg knows no such package) and
 # <PKG>_VERSION for the updater and the host package. Set EXTRAS to the names of every other

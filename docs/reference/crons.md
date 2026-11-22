@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-21 15:45 UTC
-generated_sha: 7a64823b9
+generated_at: 2026-11-22 18:17 UTC
+generated_sha: cb4f5351c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 7a64823b9
 
 # Scheduled jobs
 
-63 job(s) scheduled by the host packages' timers.
+65 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -61,6 +61,7 @@ generated_sha: 7a64823b9
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
 | homelab-kubelet-shutdown-lock.timer | `OnCalendar=*:0/5` | daniel-box, daniel-server | `root` | read the script | `hosts/components/k3s-server/units/homelab-kubelet-shutdown-lock.timer` |
+| homelab-log2ram-hold.timer | `OnCalendar=*-*-* 05:05:00` | daniel-pi | `root` | read the script | `hosts/components/pi-tuning/units/homelab-log2ram-hold.timer` |
 | homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
 | homelab-mkv-attachment-repair.timer | `OnCalendar=*:0/15:00` | daniel-box | `ubuntu` | read the script | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.timer.j2` |
@@ -81,6 +82,7 @@ generated_sha: 7a64823b9
 | homelab-updater.timer | `OnBootSec=5min, OnUnitActiveSec=5min` | daniel-box, daniel-server | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |
 | homelab-updater.timer | `OnCalendar=*-*-* 03:05:00` | daniel-pi | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |
 | homelab-ups-watchdog.timer | `OnCalendar=*:0/10` | daniel-box, daniel-server | `root` | read the script | `hosts/components/nut-secondary/units/homelab-ups-watchdog.timer.j2` |
+| homelab-wired-gateway.timer | `OnCalendar=*:0/1` | daniel-box, daniel-server | `root` | read the script | `hosts/components/k3s-server/units/homelab-wired-gateway.timer` |
 | homelab-worktree-sweep.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/worktree-sweep/units/homelab-worktree-sweep.timer` |
 
 ## Schedule format

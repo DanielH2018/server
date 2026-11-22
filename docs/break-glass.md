@@ -581,12 +581,11 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
     The Pi runs no AIDE (#8084), so a rebuilt Pi has no `aide.db` and no mask on
     `dailyaidecheck.timer`.
-9. To re-pin the host key, write the output of
+9. To re-pin the host key, write the key fields of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
-    `k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub`, and its key fields to
-    `ssh_host_ed25519_key` in `inventory/host_vars/daniel-pi.yml` with the fingerprint in the
-    comment above it. Merge both through one PR. `promote` applies the new
-    `pi-peer-backup-ssh` Secret, and the next host package update on daniel-box and
+    `ssh_host_ed25519_key` in `inventory/host_vars/daniel-pi.yml`, with the fingerprint in the
+    comment above it. That value is the repo's one copy of the key. Merge it through a PR.
+    `promote` applies the new `pi-peer-backup-ssh` Secret, and the next host package update on daniel-box and
     daniel-server ships the new `/etc/ssh/ssh_known_hosts`. Each other account that has the
     old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
 10. To make the Pi report the applied version, start the updater on the Pi. Only the updater
