@@ -22,6 +22,7 @@ Three guards moved here with the service from `tests/services/`
 Run: uv run pytest hosts/lib/tests/test_pi_compose_alloy.py
 """
 
+import fnmatch
 import hashlib
 import re
 
@@ -130,6 +131,25 @@ def test_container_streams_are_job_pi_on_machine_daniel_pi(config):
     assert re.search(
         r'target_label = "machine"\s*\n\s*replacement  = "daniel-pi"', config
     )
+
+
+@pytest.mark.parametrize(
+    "unit", ["homelab-reconcile.service", "homelab-reconcile-wait.service"]
+)
+def test_reconciles_timing_file_is_one_the_pi_health_source_ships(
+    package, config, unit
+):
+    dropin = package.files[f"/usr/lib/systemd/system/{unit}.d/50-homelab-timing.conf"][
+        0
+    ].decode()
+    timing = re.search(
+        r"^Environment=HOMELAB_RECONCILE_TIMING_LOG=(\S+)$", dropin, re.M
+    )
+    shipped = re.search(
+        r'local\.file_match "pi_health".*?"__path__" = "([^"]+)"', config, re.S
+    )
+    assert timing and shipped
+    assert fnmatch.fnmatch(timing[1], shipped[1])
 
 
 def test_the_journal_is_not_shipped(config):

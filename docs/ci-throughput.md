@@ -69,9 +69,13 @@ run's job from GitHub's jobs listing. A flux-deletion-drill run found nothing to
 - **flux-deletion-drill and image-smoke skip a draft at job level.** Both triggered on every
   push to a draft, about three runs a merge. A run on a draft takes no runner.
 - **Bootstrap drill and render-diff have no run with nothing to do.** Each has a `paths:`
-  filter and no step that scopes the job out, so every run that starts does its work. They
-  still run on a draft's pushes, which
-  [#9949](https://github.com/DanielH2018/server/issues/9949) tracks.
+  filter and no step that scopes the job out, so every run that starts does its work.
+- **Bootstrap drill and render-diff skip a draft at job level too**
+  ([#9949](https://github.com/DanielH2018/server/issues/9949)). Neither is a required
+  context, so the skip decides no merge. GitHub evaluates `paths:` against the whole PR diff
+  on `ready_for_review`, so marking the PR ready starts a run whenever the diff touches a
+  filtered path. A person reads render-diff's printed diff before merge, not while the PR
+  is a draft.
 
 ## A pull request runs the test modules its diff can affect
 

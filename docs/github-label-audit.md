@@ -276,16 +276,16 @@ call it, so the UI is the dependable path.
 
 ### Slice 1: backfill Domain from the labels
 
-A `findings.py fill-domain` subcommand sets `Domain` on every issue that carries a
-`domain/` label and has no Domain value: every open issue, and the closed issues
-the backlog page renders. It reuses `gh_calls.fill_missing`, so a re-run skips filled
-issues and is safe to repeat. It paces mutations with the `MUTATION_PAUSE_S` board.py uses,
-under GitHub's secondary write limit. About 70 open issues and the backlog page's closed
-rows need one mutation each. Nothing reads the field yet; the labels stay authoritative.
+The script `scripts/dev/fill_domain.py` sets `Domain` on every issue that carries a
+`domain/` label and has no Domain value: every open issue, and the closed issues the
+backlog page renders (`load_backlog_issues`). A re-run skips filled issues, so it is safe to
+repeat. It paces mutations with the `MUTATION_PAUSE_S` board.py uses, under GitHub's
+secondary write limit. On 2026-11-22 it found 205 server issues and 22 dotfiles issues.
+Nothing reads the field yet; the labels stay authoritative.
 
 - **Exercise:** search `is:issue field.domain:cicd is:open` returns the same 27 server issues
   as `label:domain/cicd is:open`.
-- **Complexity:** adds one temporary subcommand and its test; slice 3 deletes both.
+- **Complexity:** adds one temporary script and its test; slice 3 deletes both.
 - **Option:** backfill all ~4,000 closed issues too, so search history keeps the domain. At
   about 500 writes an hour that is an eight-hour paced run, for values nothing reads.
 
@@ -296,7 +296,7 @@ and stops adding the label. The row's `domain` reads `issue.fields["Domain"]`, s
 `next`, `show` and the backlog page move with it. The `for _d in DOMAINS` loop leaves
 `LABELS`, so `sync-labels` and `open` stop creating the labels, and the fragment generator
 stops parsing the loop. `docs/issue-claiming-and-fanout.md` and the generated label table
-change in the same PR. After the merge, run `fill-domain` once more for issues filed in
+change in the same PR. After the merge, run `fill_domain.py` once more for issues filed in
 between.
 
 - **Why one PR:** writing the field before the readers move leaves new issues blank in every
@@ -319,7 +319,7 @@ between.
 
 Once no live session runs a pre-slice-2 checkout, the same date #9120 waits for:
 
-1. Run `fill-domain` a last time, then delete the subcommand.
+1. Run `fill_domain.py` a last time on each repository, then delete it and its test.
 2. Delete the 14 `domain/*` labels, the 6 `severity/*`, the 6 `kind/*`, the 41
    `not-before:*` and the 2 `escalated` labels across both repositories, and the readers'
    fallbacks.

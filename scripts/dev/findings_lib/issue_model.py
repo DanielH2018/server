@@ -61,6 +61,8 @@ LABELS: dict[str, tuple[str, str]] = {
 # operator created both under Settings > Planning > Issue fields; the names and the Severity
 # options are matched exactly. `gh_calls.attach_fields` puts their values in `Issue.fields`.
 SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
+# The account-level issue field holding an issue's reviewer domain; its options are `DOMAINS`.
+DOMAIN_FIELD = "Domain"
 SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
 # The repository's issue type for each kind; the operator created Gap and Improvement beside
 # GitHub's own Feature. gh's `--json issueType` and REST's `type` both carry it.

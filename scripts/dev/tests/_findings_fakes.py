@@ -22,7 +22,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
-from dev.findings_lib.issue_model import LABELS, Issue, parse_issue
+from dev.findings_lib.issue_model import DOMAINS, LABELS, Issue, parse_issue
 from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree, held_by_readable_process
@@ -271,6 +271,11 @@ ISSUE_FIELD_DEFS = [
         "options": [{"id": f"o_{s}", "name": s} for s in ("High", "Medium", "Low")],
     },
     {"id": "IF_nb", "name": "Not Before"},
+    {
+        "id": "IF_dom",
+        "name": "Domain",
+        "options": [{"id": f"o_{d}", "name": d} for d in DOMAINS],
+    },
 ]
 ISSUE_TYPE_DEFS = [
     {"id": f"IT_{name}", "name": name}
