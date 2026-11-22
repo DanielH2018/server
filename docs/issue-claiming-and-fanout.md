@@ -62,17 +62,23 @@ Severity is the Severity issue field, `High`, `Medium` or `Low`, which `open --s
 A kind is the issue's type: `open --kind gap` sets Gap, `improvement` sets Improvement and
 `feature` sets GitHub's own Feature. The operator created Gap and Improvement under
 Settings > Planning > Issue types.
+A domain is the Domain issue field, one option per reviewer domain in
+`scripts/dev/findings_lib/issue_model.py:DOMAINS`, which `open --domain` sets. The
+operator created it on 2026-11-22, and `scripts/dev/fill_domain.py` copied the old labels
+into it.
 
-All three replaced labels: one `not-before:<YYYY-MM-DD>` label per date, three `severity/*`
-and three `kind/*`, where `kind/addition` was the name for `feature`. `gh issue list --json`
-returns the type as `issueType`.
+All four replaced labels: one `not-before:<YYYY-MM-DD>` label per date, three `severity/*`,
+three `kind/*`, where `kind/addition` was the name for `feature`, and seven `domain/*`.
+`gh issue list --json` returns the type as `issueType`.
 `gh issue list --json` cannot return an issue field, so every loader in
 `findings_lib/gh_calls.py` adds them with `attach_fields`, one aliased GraphQL read per 100
 issues (0.79s and one point for 113 issues, measured 2026-11-19). A failed read fails the
 command, because an issue missing its date reads as not deferred, and `next` would offer it.
 Until [#9120](https://github.com/DanielH2018/server/issues/9120) closes, the readers still
 take a `not-before:`, `severity/` or `kind/` label as a fallback, the later date winning,
-because a session on a pre-field checkout writes only labels.
+because a session on a pre-field checkout writes only labels. Domain has no fallback: it
+gates no selection, so an issue a pre-field checkout files shows no domain until the next
+`fill_domain.py` run (`docs/github-label-audit.md`, slice 2).
 
 Issue search filters a field directly, as `field."not before":>2026-12-01`, which a dated
 label never allowed. The "Deferred, by date" table on the generated backlog page still lists
