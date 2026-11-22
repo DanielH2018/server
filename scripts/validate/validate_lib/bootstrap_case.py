@@ -32,9 +32,9 @@ systemd loads that unit:
     renders, builds and simulates the install of that host's package on a container of its name.
 
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
-most one per CPU. It submits the offline builds first, because they are the longest
-items and the host items fill in behind them. Under `--bootstrap-shard K/N` it runs only
-`bootstrap_plan.shard`'s K-th share, so CI can give each offline build a runner of its own.
+most one per CPU. It submits the package builds first, because they are the longest
+items and the kit reds fill in behind them. Under `--bootstrap-shard K/N` it runs only
+`bootstrap_plan.shard`'s K-th share, so CI can spread the builds over several runners.
 Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
 place, taking at most a file lock there. The verdicts print in plan order, each followed by
