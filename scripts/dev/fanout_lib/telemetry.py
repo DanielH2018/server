@@ -5,7 +5,7 @@ turned to underscores. `session_kind` splits spend, tokens and tool failures by 
 a session, and `fanout_batch` and `fanout_phase` split a fan-out batch's further.
 
 Claude Code applies a settings `env` over the process environment and replaces the whole
-`OTEL_RESOURCE_ATTRIBUTES` string, so every launcher passes the value both in the
+`OTEL_RESOURCE_ATTRIBUTES` string, so each fan-out launcher passes the value both in the
 environment and in `--settings` (`review.held_hooks.labelled`).
 """
 
@@ -16,10 +16,22 @@ from pathlib import Path
 
 
 class SessionKind(StrEnum):
-    """The `session.kind` values. A session no launcher here starts carries no such label."""
+    """The `session.kind` values. A session no launcher labels carries no such label.
+
+    `probe.py claude-spend` splits the unlabelled desktop sessions by a Loki join.
+
+    `REMOTE_CONTROL` and `BG_RESUME` are set by the claude-code host component's
+    `claude-rc.service.j2` and `claude-bg-resume.service.j2`. `TRIAGE` and `RENOVATE` are set
+    by the unattended sessions' settings overlays, `claude-triage-settings-overlay.json` and
+    the renovate-agent component's `claude-settings-overlay.json`.
+    """
 
     FANOUT_BATCH = "fanout-batch"
     FANOUT_REVIEW = "fanout-review"
+    REMOTE_CONTROL = "remote-control"
+    BG_RESUME = "bg-resume"
+    TRIAGE = "triage"
+    RENOVATE = "renovate"
 
 
 def batch_attributes(batch: str) -> str:

@@ -20,10 +20,10 @@ the diff through a PR that a detached landing merges.
 - **Authoritative sources:** the primary checkout's HEAD, which the tree is checked out at and
   cleaned of every untracked and ignored file, and origin's branch list for the
   unlanded-branch guard. The cluster Prometheus is the source of
-  `docs/assets/generated/critical-memory-p95.json`, each critical-tier container's 7-day p95
+  `docs/assets/generated/critical-memory-p95.json`, the 7-day p95 of each container at a tier's PriorityClass
   (`scripts/docs/reference/critical_memory.py:hold_drifted`). When a fresh p95 grows past
   twice a container's live memory request, that container keeps its previous figure, so the
-  suite's `critical-tier-memory-request-covers-half-its-p95` row stays green. The generator
+  suite's `tier-memory-request-covers-half-its-p95` row stays green. The generator
   fails, the run publishes the rest and reads DOWN, and the alert names the container until a
   PR raises its request.
 - **Required evidence:** `status=<up|down> <msg>` in the log, and `docs-refresh.prom` in the

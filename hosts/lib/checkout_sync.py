@@ -55,13 +55,8 @@ from ci_verdict import (
     parse_check_runs,
     parse_check_suites,
 )
-from host_lib import (
-    ERR,
-    github_get,
-    github_token,
-    write_check_textfile,
-    write_textfile,
-)
+from github_rest import github_get, github_token
+from host_lib import ERR, write_check_textfile, write_textfile
 from host_lib import log as host_log
 
 TAG = "homelab-checkout-sync"

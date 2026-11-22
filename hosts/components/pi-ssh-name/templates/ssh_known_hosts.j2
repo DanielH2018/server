@@ -1,4 +1,4 @@
 {# ssh looks a host key up under the name it connects to, and /etc/hosts gives the Pi the name
    `daniel-pi` here. The address is listed for a caller that connects by address. #}
-# Shipped by homelab-daniel-server. ssh reads this file for every user on the host.
+# Shipped by the pi-ssh-name host component. ssh reads this file for every user on the host.
 daniel-pi,{{ hosts['daniel-pi'].server_ip }} {{ hosts['daniel-pi'].ssh_host_ed25519_key }}

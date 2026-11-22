@@ -518,10 +518,13 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     ```
 
     Then trust the Pi's new SSH host key on daniel-box, because the copy sends client private
-    keys over this connection. `ssh` refuses the new key until `ssh-keygen -R` removes the old
-    entry, so run that once for `daniel-pi` and once for the inventory's `server_ip`. Then run
-    `ssh daniel-pi true`, and answer `yes` only when the `ED25519` fingerprint it shows equals
-    the one from step 3. If they differ, stop: something other than the rebuilt Pi answered.
+    keys over this connection. The `pi-ssh-name` component pins the old key in
+    `/etc/ssh/ssh_known_hosts`, and `ssh` refuses a changed key without asking, so this step
+    trusts the new key in your own `known_hosts` only. Run `ssh-keygen -R` once for `daniel-pi`
+    and once for the inventory's `server_ip`. Then run
+    `ssh -o GlobalKnownHostsFile=/dev/null daniel-pi true`, and answer `yes` only when the
+    `ED25519` fingerprint it shows equals the one from step 3. If they differ, stop: something
+    other than the rebuilt Pi answered.
 
     Then copy `wg0.conf` and `wg0.json` from daniel-box, outside the 23:00 window of the
     `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk.
@@ -580,8 +583,11 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `dailyaidecheck.timer`.
 9. To re-pin the host key, write the output of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
-    `k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
-    PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
+    `k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub`, and its key fields to
+    `ssh_host_ed25519_key` in `inventory/host_vars/daniel-pi.yml` with the fingerprint in the
+    comment above it. Merge both through one PR. `promote` applies the new
+    `pi-peer-backup-ssh` Secret, and the next host package update on daniel-box and
+    daniel-server ships the new `/etc/ssh/ssh_known_hosts`. Each other account that has the
     old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
 10. To make the Pi report the applied version, start the updater on the Pi. Only the updater
     writes `homelab_host_applied_info`, and its poll starts it only for a newer publish.
@@ -724,14 +730,17 @@ key. No part of it has been drilled.
 What survives depends on the locks
 [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) sets.
 The operator applies them by hand, in
-[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2 and 3
+[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2, 2b and 4
 ([#9699](https://github.com/DanielH2018/server/issues/9699)), so check that they exist
 before you count on them:
 
-- **B2.** In the Backblaze console, the bucket's settings show *Object Lock: Enabled* and a
-  governance default retention of 7 days. Every version uploaded in the last 7 days is
-  locked. A delete that names no version only writes a hide marker over it, and a delete of
-  the version itself is refused.
+- **B2.** In the Backblaze console, the bucket's settings show *Object Lock: Enabled* and no
+  default retention. The daily sweep sets a 7-day governance retention on every current
+  Longhorn object, so a version is locked from the first 07:30 UTC sweep after its upload. A
+  version uploaded since the last sweep is not locked. To see a version's lock, run
+  `b2 file info b2id://<fileId>` and read `fileRetention`. A delete that names no version
+  only writes a hide marker over a locked version, and a delete of the version itself is
+  refused.
 - **B2, even without a lock.** The bucket's lifecycle rule, `daysFromHidingToDeleting: 7`,
   keeps every hidden version for 7 days after its hide. A delete through Longhorn or the S3
   API writes hide markers, so the data stays recoverable for those 7 days. A delete that

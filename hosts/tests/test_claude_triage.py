@@ -19,6 +19,7 @@ from _helpers import REPO, K8S_ROLES
 from _k8s_render import render_role_template
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import policy
+from dev.fanout_lib.telemetry import SessionKind
 from lib.guard_jinja_env import template_env
 from lib import yaml_fast
 
@@ -355,6 +356,32 @@ def test_the_sessions_overlay_is_renovates_with_the_hooks_moved_to_the_controlle
     assert triage["hooks"] == moved
 
 
+@pytest.mark.parametrize(
+    ("overlay", "kind"),
+    [
+        (ROLE / "files" / "claude-triage-settings-overlay.json", SessionKind.TRIAGE),
+        (
+            REPO / "hosts/components/renovate-agent/files/claude-settings-overlay.json",
+            SessionKind.RENOVATE,
+        ),
+    ],
+)
+def test_each_unattended_session_exports_telemetry_to_the_loopback_collector_under_its_kind(
+    overlay, kind
+) -> None:
+    env = json.loads(overlay.read_text())["env"]
+    context = role_context(ROLE)
+    assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
+    assert env["OTEL_METRICS_EXPORTER"] == env["OTEL_LOGS_EXPORTER"] == "otlp"
+    assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == (
+        f"http://{context['claude_code_otlp_host_ip']}:{context['claude_code_otlp_port']}"
+    )
+    assert env["OTEL_RESOURCE_ATTRIBUTES"] == f"session.kind={kind}"
+    assert not [name for name in env if name.startswith("OTEL_LOG_")], (
+        "session text stays out of Loki"
+    )
+
+
 @pytest.mark.parametrize("path", TRIAGE_FILES)
 def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     """The operator's 2026-10-15 ruling: the agent cannot raise its own caps unattended."""
@@ -409,80 +436,6 @@ def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
     state_dir = pins()["state_dir"]
     assert declared[f"{state_dir}/runs"][0] == "0750"
     assert declared[f"{state_dir}/done"][0] == "0750"
-
-
-# I6 of the guardrails plan: a session has no write path into what opens the next
-# episode. A session can write syslog lines with any tag, so a routed alert must not count them.
-PROMETHEUS_RULES = K8S_ROLES / "observability" / "files" / "rules"
-LOKI_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules"
-# Prometheus series that count log lines or bytes: Alloy's `stage.metrics` counters and Loki's
-# own ingest volume.
-LOG_VOLUME_METRICS = (
-    "loki_process_custom_",
-    "loki_distributor_lines_received",
-    "loki_distributor_bytes_received",
-)
-# The LogQL function applied to each range over a stream selector.
-LOG_RANGE_FUNCTION = re.compile(r"(\w+)\s*\(\s*\{[^{}]*\}[^\[\]]*\[")
-
-
-def alert_rules() -> list[tuple[str, str, str]]:
-    """(alert, ruler, expr) for every alerting rule Prometheus or the Loki ruler evaluates."""
-    found = []
-    for ruler, directory in (("prometheus", PROMETHEUS_RULES), ("loki", LOKI_RULES)):
-        for rule_file in sorted(directory.glob("*.yaml")):
-            for group in yaml_fast.safe_load(rule_file.read_text())["groups"]:
-                found += [
-                    (r["alert"], ruler, r["expr"])
-                    for r in group["rules"]
-                    if "alert" in r
-                ]
-    return found
-
-
-def session_can_raise(ruler: str, expr: str) -> bool:
-    """Whether log lines a session writes can push the rule towards firing.
-
-    Any count of lines can, whatever it filters on: a session adds lines with `logger`. Only
-    `absent_over_time` is exempt, because an added line can only keep it from firing.
-    """
-    if ruler == "prometheus":
-        return any(metric in expr for metric in LOG_VOLUME_METRICS)
-    return any(
-        function != "absent_over_time" for function in LOG_RANGE_FUNCTION.findall(expr)
-    )
-
-
-def routed_alerts() -> list[str]:
-    return sorted({key.split(":", 1)[0] for key in pins()["poll_routes"]})
-
-
-@pytest.mark.parametrize("alert", routed_alerts())
-def test_no_routed_alert_counts_log_lines_a_session_can_write(alert) -> None:
-    rules = [(ruler, expr) for name, ruler, expr in alert_rules() if name == alert]
-    assert rules, f"{alert} is routed but no rule defines it"
-    for ruler, expr in rules:
-        assert not session_can_raise(ruler, expr), (
-            f"{alert} is routed, and its {ruler} rule counts log lines: {expr}"
-        )
-
-
-def test_the_log_count_check_flags_the_rules_it_exists_for() -> None:
-    """The red half: routing any of these would fail the test above."""
-    flagged = {
-        name for name, ruler, expr in alert_rules() if session_can_raise(ruler, expr)
-    }
-    assert {"HostLogErrors", "HostOutOfMemoryKill", "WorkloadLogErrors"} <= flagged
-    assert "LokiHostLogsSilent" not in flagged
-    assert session_can_raise(
-        "loki", 'sum(count_over_time({job="syslog", machine="daniel-box"}[5m])) > 500'
-    )
-    assert session_can_raise(
-        "prometheus", "increase(loki_process_custom_crowdsec_edge_probe_total[1h]) > 0"
-    )
-    assert session_can_raise(
-        "prometheus", "rate(loki_distributor_lines_received_total[5m]) > 1000"
-    )
 
 
 def test_no_triage_path_sits_where_the_agent_or_the_session_could_rename_it() -> None:

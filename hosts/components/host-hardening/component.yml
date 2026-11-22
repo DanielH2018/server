@@ -15,6 +15,12 @@
 #   the initramfs, so a change to it goes live only after `update-initramfs -u` and a reboot, which
 #   the rebuild procedure in docs/host-packages.md runs by hand.
 #
+# apport.service's start writes fs.suid_dumpable=2 and points kernel.core_pattern at apport, after
+# systemd-sysctl has applied host-tuning's 0. The apport drop-in gives the unit a condition that
+# never holds, so apport never starts. Purging apport is not an option: ubuntu-server depends on it.
+# The drop-in also makes reconcile restart the unit once. The stop half runs `apport --stop`, which
+# writes suid_dumpable 0 and core_pattern `core`, and the start half is skipped.
+#
 # The `ssh-users` group and the sys user's membership are step 4 of hosts/bootstrap-host.sh, which
 # runs before the `sshd` component's AllowGroups line lands. A `.ssh` owner drifted to root returns
 # at the next boot, through the tmpfiles.d line.
@@ -41,6 +47,7 @@ files:
   - {src: templates/hardening.rules, dst: /etc/audit/rules.d/hardening.rules, mode: "0640", activate: "try-restart:auditd.service"}
   - {src: templates/wireguard.conf, dst: /etc/modules-load.d/wireguard.conf, activate: modules-load}
   - {src: templates/coredump-disable.conf, dst: /etc/systemd/coredump.conf.d/disable.conf}
+  - {src: templates/apport-dropin.conf, dst: /usr/lib/systemd/system/apport.service.d/50-homelab.conf}
   - {src: tmpfiles.d/homelab-hardening.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-hardening.conf}
   - {src: templates/53homelab-keep-conffiles, dst: /etc/apt/apt.conf.d/53homelab-keep-conffiles}
   - {src: templates/i915.conf, dst: /etc/modprobe.d/i915.conf, when: has_igpu}

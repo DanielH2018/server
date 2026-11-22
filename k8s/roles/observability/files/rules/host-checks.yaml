@@ -961,6 +961,7 @@ groups:
           homelab_check_deadline_seconds{job="node",origin="daniel-box"}
       )
       unless on (check, origin) (homelab_check_disarmed{job="node",origin="daniel-box"} == 1)
+      unless on (check, origin) ALERTS{alertname=~".+NotReporting",alertstate="pending",origin="daniel-box"}
       unless on (origin) (up{job="node"} == 0)
     for: 2m
     labels:
@@ -980,6 +981,7 @@ groups:
           homelab_check_deadline_seconds{job="node-pi",origin="daniel-pi"}
       )
       unless on (check, origin) (homelab_check_disarmed{job="node-pi",origin="daniel-pi"} == 1)
+      unless on (check, origin) ALERTS{alertname=~".+NotReporting",alertstate="pending",origin="daniel-pi"}
       unless on (origin) (up{job="node-pi"} == 0)
     for: 2m
     labels:
@@ -999,6 +1001,7 @@ groups:
           homelab_check_deadline_seconds{job="node",origin="daniel-server"}
       )
       unless on (check, origin) (homelab_check_disarmed{job="node",origin="daniel-server"} == 1)
+      unless on (check, origin) ALERTS{alertname=~".+NotReporting",alertstate="pending",origin="daniel-server"}
       unless on (origin) (up{job="node"} == 0)
     for: 2m
     labels:
@@ -1229,6 +1232,7 @@ groups:
           absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-triage-poll",origin="daniel-box"}[660s])
       )
       unless on (origin) (up{job="node"} == 0)
+    for: 5m
     labels:
       severity: warning
       service: daniel-box

@@ -9,7 +9,7 @@ import functools
 import re
 
 from diagnostics.probe_lib.usage import (
-    CRITICAL_PRIORITY_CLASS,
+    CENSUS_PRIORITY_CLASSES,
     UNDER_REQUEST,
     under_requested,
 )
@@ -30,11 +30,11 @@ def _mib(quantity: str) -> float:
     return int(match[1]) * _MIB[match[2]]
 
 
-def _critical_containers(role: str, tpl: str, doc: dict):
+def _census_containers(role: str, tpl: str, doc: dict):
     if doc.get("kind") not in POD_KINDS:
         return
     spec = pod_spec(doc)
-    if spec.get("priorityClassName") != CRITICAL_PRIORITY_CLASS:
+    if spec.get("priorityClassName") not in CENSUS_PRIORITY_CLASSES:
         return
     p95s = _p95_table()
     for container in (spec.get("initContainers") or []) + (
@@ -59,17 +59,18 @@ def _under_requested_offence(role: str, usage: dict) -> str | None:
 
 MEMORY_PROPERTIES = (
     Property(
-        name="critical-tier-memory-request-covers-half-its-p95",
+        name="tier-memory-request-covers-half-its-p95",
         reason=(
-            "A critical-tier pod whose memory request sits far under what it uses lets the "
+            "A tiered pod whose memory request sits far under what it uses lets the "
             "scheduler pack its node as if the memory were free, and a Burstable pod over its "
             "request ranks higher for the kernel OOM killer. `probe.py usage` flags a request "
             "more than 25% off its p95, but only when someone runs it. This row fails a "
-            "container of a pod at the critical PriorityClass whose request is under half its "
+            "container of a pod at a tier's PriorityClass (homelab-critical or "
+            "homelab-automation) whose request is under half its "
             "recorded 7-day p95. A container with no recorded p95 (a new workload, or one not "
-            "yet at the critical class) passes until the docs-refresh cron records one."
+            "yet at a tier's class) passes until the docs-refresh cron records one."
         ),
-        select=_critical_containers,
+        select=_census_containers,
         offence=_under_requested_offence,
         red=("pihole", {"request_mib": 128, "p95_mib": 304}),
         green=("pihole", {"request_mib": 152, "p95_mib": 304}),

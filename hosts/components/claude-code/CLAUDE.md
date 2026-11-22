@@ -221,7 +221,8 @@ What it does not restore:
   new sessions. `claude rc --session-id` cannot be combined with `--spawn`.
 - **Interactive sessions that ran `/remote-control`.** They end with their process. Resume one
   with `claude --resume <id>`, then `/remote-control`.
-- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG` and the pytest cap.
+- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG`, the pytest cap and
+  the `session.kind=bg-resume` telemetry label.
   A respawned session has no `SSH_AUTH_SOCK`, D-Bus session or `XDG_RUNTIME_DIR`, because no
   one is logged in at boot. `gh` reads its token from `~/.config/gh/hosts.yml`, so it works.
 - **Monitoring.** A failed run pages nothing; `systemctl status homelab-claude-bg-resume` shows it.
@@ -528,6 +529,12 @@ Applying it: a new version of daniel-box's host package, which its updater insta
   (`hosts/lib/tests/test_t2_egress_component.py::test_the_triage_kubeconfig_names_the_api_by_the_hosts_lan_address`).
   The session unit refuses to start unless the fence holds its uid's rules
   (`hosts/lib/tests/test_t2_egress_component.py::test_each_session_unit_checks_its_own_uid_is_fenced_before_it_starts`).
+  The fence's one other opening is the loopback OTLP collector
+  (`hosts/lib/tests/test_t2_egress_component.py::test_each_session_uid_reaches_the_otlp_collector_by_its_pre_dnat_address`).
+  The overlay's `env` sends the session's telemetry there with `session.kind=triage` and no
+  prompt or tool content. Prometheus keeps only the `claude_code_*` names from the collector,
+  so a session cannot forge a series a routed alert reads
+  (`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_triage_enabled`, false
   by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.

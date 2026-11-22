@@ -125,6 +125,16 @@ def test_an_if_rule_on_a_tool_event_renders_after_the_timeout():
     ]
 
 
+@pytest.mark.parametrize("event", ["PostToolUseFailure", "PermissionDenied"])
+def test_an_if_rule_is_accepted_on_every_event_the_harness_evaluates_it_on(event):
+    text = register(
+        f"#   event: {event}\n#   matcher: Bash\n#   timeout: 10\n#   order: 10\n"
+        "#   if: Bash(git push*)"
+    )
+    [r] = g.parse_hook_file("bridge.py", text).registrations
+    assert r.entry()["if"] == "Bash(git push*)"
+
+
 def test_library_block_is_accepted_with_a_reason():
     parsed = g.parse_hook_file("lib.py", LIBRARY)
     assert parsed.registrations == []
@@ -174,7 +184,8 @@ def test_library_block_is_accepted_with_a_reason():
             register(
                 "#   event: Stop\n#   timeout: 5\n#   order: 1\n#   if: Bash(git *)"
             ),
-            "if: is evaluated only on PreToolUse, PostToolUse, PermissionRequest; on Stop",
+            "if: is evaluated only on PreToolUse, PostToolUse, PostToolUseFailure, "
+            "PermissionRequest, PermissionDenied; on Stop",
         ),
         (
             "library without reason",

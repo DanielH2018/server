@@ -1,0 +1,22 @@
+# Lets `who` read the name-service files under Ubuntu 26.04's `who` AppArmor profile, on each k3s
+# node.
+#
+# /etc/apparmor.d/who confines /usr/bin/who, which is uutils on 26.04. The profile includes
+# `abstractions/base` and `abstractions/wutmp` but no name-service abstraction, so every `who` run
+# logs a denial for /etc/nsswitch.conf and /etc/passwd in /var/log/audit/audit.log. Reading those
+# files is what `who` does to print a user name, so the override completes the profile.
+#
+# The profile ends with `include if exists <local/who>`. /etc/apparmor.d/local/who is unowned, so
+# it ships as a file and dpkg takes it over. `reload:apparmor.service` loads every profile under
+# /etc/apparmor.d again, and the next `who` runs under the widened profile.
+#
+# REVERSE: dropping this component makes dpkg remove the file. The `who` profile keeps the rules
+# until apparmor.service next reloads, at the latest on the next boot.
+#
+# daniel-pi stays out until its release upgrade to 26.04 has finished.
+#
+# hosts/tests/test_who_apparmor_override.py holds the hosts and the expanded profile.
+depends:
+  - apparmor
+files:
+  - {src: templates/who, dst: /etc/apparmor.d/local/who, activate: "reload:apparmor.service"}

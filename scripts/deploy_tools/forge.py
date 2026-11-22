@@ -39,7 +39,7 @@ from lib import gh_rate_limit
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
 from lib import host_modules  # noqa: F401
 from ci_verdict import CheckRun, CommitStatus, WorkflowRun, parse_check_runs
-from host_lib import github_token
+from github_rest import github_token
 from deploy_tools.forge_transport import (
     TIMEOUT_S,
     ForgeError,
@@ -487,7 +487,7 @@ def connect(
 ) -> Forge:
     """The live clients, with `GITHUB_TOKEN` from `env` for the registry and REST calls.
 
-    Without `GITHUB_TOKEN`, as on a host, the REST calls take `host_lib.github_token`'s
+    Without `GITHUB_TOKEN`, as on a host, the REST calls take `github_rest.github_token`'s
     answer (`GH_TOKEN`, then `gh auth token`), and the registry pulls anonymously: a `gh`
     login token usually lacks the `read:packages` scope GHCR's token endpoint checks.
 

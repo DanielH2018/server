@@ -482,4 +482,10 @@ def _build_parser():
         "against the 7d p95, and PVC fill with days to full",
     )
     _flag(usage, "--all", "list every container and PVC, not only the flagged ones")
+    claude_spend = sub.add_parser(
+        "claude-spend",
+        help="Claude Code spend per session kind over --since, unlabelled desktop sessions "
+        "split into coordinator and interactive",
+    )
+    claude_spend.add_argument("--since", default="7d", help="window, e.g. 6h/2d/1w")
     return p

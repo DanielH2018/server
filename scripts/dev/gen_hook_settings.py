@@ -125,9 +125,13 @@ REGISTER_KEYS = frozenset(
 )
 # The events this grammar accepts `if` on, as `bin/gen-hooks-lib.js` does. On an event the
 # harness does not evaluate `if` on, the handler never runs, so it is an error here.
-# TODO: https://github.com/DanielH2018/server/issues/9759 - the harness also evaluates `if`
-# on PostToolUseFailure and PermissionDenied; the shared fixture pins this list and its error.
-IF_EVENTS = ("PreToolUse", "PostToolUse", "PermissionRequest")
+IF_EVENTS = (
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PermissionRequest",
+    "PermissionDenied",
+)
 LIBRARY_KEYS = frozenset({"reason"})
 
 # The order events are written in: the order the hand-written object had, so the first

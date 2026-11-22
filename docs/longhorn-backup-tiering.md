@@ -273,162 +273,201 @@ the drain's `b2_list_file_versions` above, one level up.
 ## Bucket immutability (ADR-0041)
 
 [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) locks the B2 weekly bucket
-with Object Lock and the R2 etcd snapshots with a bucket lock rule. It leaves the R2 daily
-tier unlocked. monitor-bridge's `b2_object_lock` row reads the B2 setting once a day and fires
-`B2ObjectLockOff`, a warning, until step 2 is done. The R2 rule has no standing reader
-until [#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 3 verifies it
-by hand.
+with per-object Object Lock retentions and the R2 etcd snapshots with a bucket lock rule. It
+leaves the R2 daily tier unlocked. The B2 bucket has file lock enabled and **no default
+retention**: the daily sweep sets each object's retention. monitor-bridge's `b2_object_lock`
+row reads the B2 setting once a day and fires `B2ObjectLockOff`, a warning, until steps 2 and
+2a are both done. The R2 rule has no standing reader until
+[#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 4 verifies it by hand.
 
 Every step is **operator-only**. A session holds no credential that can change a bucket, a
-key or a cluster object.
+key, a Cloudflare token or a cluster object. Run each command as `ubuntu` on daniel-box, with
+the `b2` command-line tool authorized by the account's master key. Never use the Longhorn
+key, which the cluster holds.
 
-### Step 1: run a Longhorn backup and prune against a locked scratch bucket
+### Step 1 result: a default retention breaks every backup
 
-Longhorn deletes with an S3 `DeleteObject` that names no version. On B2 that call should
-write a hide marker and leave a locked version in place, but Backblaze does not document it.
-Every backup removes its own `locks/*.lck` object seconds after writing it, so if B2 refuses
-that delete, a lock on the real bucket fails every weekly backup. Prove it with Longhorn
-itself before you lock the real bucket.
+The operator ran a real Longhorn backup and backup deletion against the scratch bucket
+`lock-spike-45841c6d` on 2026-11-21
+([#9699](https://github.com/DanielH2018/server/issues/9699#issuecomment-7065073692)).
 
-Create the scratch bucket, give it a one-day lock, and mint a key scoped to it. The commands
-use the B2 command-line tool v4 and the account's master key:
+- **With a governance default retention, the first backup failed** at its `locks/*.lck`
+  upload: `Content-MD5 OR x-amz-checksum- HTTP header is required for Put Object requests
+  with Object Lock parameters`. B2 treats every upload into a bucket with a default retention
+  as carrying lock parameters, and Longhorn's S3 client sends neither header.
+- **With file lock on and no default retention, every test held.** Backups completed. A
+  governance retention set on each object by hand survived both a backup deletion and a
+  backup-volume deletion: each locked version stayed, a hide marker went over it, and
+  `longhorn-manager` logged no `failed to delete objects`.
 
-```bash
-b2 bucket create --file-lock-enabled lock-spike-<random> allPrivate
-b2 bucket update --default-retention-mode governance \
-  --default-retention-period "1 days" lock-spike-<random>
-b2 key create --bucket lock-spike-<random> lock-spike \
-  listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions
-```
+So the design is file lock with no default, and the sweep sets each retention. The cost is
+that a new block is unlocked from its upload until the next 07:30 UTC sweep, up to one day.
 
-Give Longhorn a backup target on it, with the key the last command printed:
+### Step 2: enable file lock on the B2 weekly bucket
 
-```bash
-sudo k3s kubectl -n longhorn-system create secret generic lock-spike-b2 \
-  --from-literal=AWS_ACCESS_KEY_ID=<keyID> \
-  --from-literal=AWS_SECRET_ACCESS_KEY=<applicationKey> \
-  --from-literal=AWS_ENDPOINTS=https://s3.us-east-005.backblazeb2.com
-sudo k3s kubectl apply -f - <<'EOF'
-apiVersion: longhorn.io/v1beta2
-kind: BackupTarget
-metadata:
-  name: lock-spike
-  namespace: longhorn-system
-spec:
-  backupTargetURL: s3://lock-spike-<random>@us-east-005/longhorn
-  credentialSecret: lock-spike-b2
-  pollInterval: 0s
-EOF
-```
-
-In the Longhorn UI, create a 1 GiB volume named `lock-spike` and attach it to any node. Point
-it at the scratch target, then take a backup of it from the UI:
+**This cannot be undone.** B2 never turns file lock off on a bucket once it is on. The
+command sets no default retention, and none must ever be added: a default makes every weekly
+backup fail.
 
 ```bash
-sudo k3s kubectl -n longhorn-system patch volumes.longhorn.io lock-spike --type merge \
-  -p '{"spec":{"backupTargetName":"lock-spike"}}'
+b2 bucket update --file-lock-enabled daniel-server-kopia
 ```
-
-The backup must reach `Completed`, which proves the `.lck` removal works under the lock. Then
-delete the backup from the UI, which runs Longhorn's prune over every block it wrote. The
-backup must disappear, and `longhorn-manager` must log no `failed to delete objects`:
 
 ```bash
-sudo k3s kubectl -n longhorn-system logs -l app=longhorn-manager --since=15m \
-  | grep -c 'failed to delete objects'
-b2 ls --versions --recursive b2://lock-spike-<random>/longhorn/
+b2 bucket get daniel-server-kopia
 ```
 
-The count must be 0. The listing must show a hide marker beside each block, `.cfg` and `.lck`
-version, because the locked versions stay until their lock expires. If the backup fails or
-the delete logs a refusal, stop: ADR-0041 needs revisiting before step 2. If both pass, mark
-ADR-0041 Accepted.
+The second command's `fileLockConfiguration` must read `"isFileLockEnabled": true` and a
+`defaultRetention` whose `mode` is `null`. `B2ObjectLockOff` clears at the next daily read
+only once the Longhorn key can read the setting, which is step 2a. If the row reads
+`key bypasses governance`, the Longhorn key holds `bypassGovernance`: mint a key without it,
+then rotate `longhorn_b2_key_id` and `longhorn_b2_application_key`. If it reads
+`default retention set`, remove the default at once with
+`b2 bucket update --default-retention-mode none daniel-server-kopia`.
 
-To remove the scratch objects, delete the `lock-spike` volume in the UI, then run
-`sudo k3s kubectl -n longhorn-system delete backuptarget lock-spike` and
-`sudo k3s kubectl -n longhorn-system delete secret lock-spike-b2`. Delete the key with
-`b2 key delete <keyID>`, and the bucket once its one-day lock expires.
+### Step 2a: let the Longhorn key read the bucket's lock setting
 
-### Step 2: lock the B2 weekly bucket
+The `b2_object_lock` row and the daily sweep both read the lock setting with the Longhorn key
+(`longhorn_b2_key_id`, which monitor-bridge mounts as `B2_PROBE_KEY_ID`). That key lacks
+`readBucketRetentions`, so the row reads `lock unreadable` and the sweep prints
+`declined: the key cannot read the bucket's Object Lock setting` whatever the bucket's state.
+B2 cannot add a capability to a key, so mint a new one and rotate both SOPS keys to it.
 
-Run this with the account's master key. Never use the Longhorn key, which the cluster holds.
+Steps 2a and 2b share one key and one rotation, so the new key also holds
+`writeFileRetentions`. The 2026-11-22 rotation copied the live key's capabilities, which
+`b2 key list --long` prints, and added the two the lock needs. That keeps every reader of the
+key working through the rotation:
 
 ```bash
-b2 bucket update --file-lock-enabled --default-retention-mode governance \
-  --default-retention-period "7 days" daniel-server-kopia
+b2 key create --bucket daniel-server-kopia longhorn-weekly listBuckets,writeBuckets,readBuckets,listFiles,readFiles,shareFiles,writeFiles,deleteFiles,readBucketEncryption,writeBucketEncryption,readBucketLogging,writeBucketLogging,readBucketReplications,writeBucketReplications,readBucketNotifications,writeBucketNotifications,readBucketLifecycleRules,writeBucketLifecycleRules,readBucketRetentions,writeFileRetentions
 ```
 
-Object Lock cannot be turned off again once a bucket has it. `B2ObjectLockOff` clears at the
-next daily read. If it reads `key bypasses governance`, the Longhorn key holds
-`bypassGovernance`: mint a key without it, then rotate `longhorn_b2_key_id` and
-`longhorn_b2_application_key`.
+Longhorn needs far fewer: the step 1 scratch key backed up and deleted with
+`listBuckets,listFiles,readFiles,writeFiles,deleteFiles,readBucketRetentions`.
+[#9934](https://github.com/DanielH2018/server/issues/9934) trims the key once the old one is
+deleted.
+
+Then set `longhorn_b2_key_id` and `longhorn_b2_application_key` to the printed pair with
+`sops`, and run `cluster_vars.py write` so Flux carries them to the cluster
+([Secret rotation](secret-rotation.md)). Delete the old key with `b2 key delete` only after a
+weekly backup has completed with the new one.
 
 ### Step 2b: give the daily sweep a key that can extend retention
 
-The sweep below is blocked until the key it reads holds `writeFileRetentions`. The choice of key
-stays open in [#9787](https://github.com/DanielH2018/server/issues/9787). Read
-*`writeFileRetentions` lets a leaked key lock objects for good* in ADR-0041's *Consequences*
-before choosing. The two options:
-
-- **The Longhorn key.** The sweep reads it unchanged. B2 cannot add a capability to a key, so
-  mint a new key with the master key, then rotate `longhorn_b2_key_id` and
-  `longhorn_b2_application_key` to it. That key sits in a cluster Secret.
-- **A separate sweep key** with `listBuckets`, `listFiles`, `readBucketRetentions` and
-  `writeFileRetentions`, held in SOPS for the host and never rendered into a cluster Secret.
-  The sweep then needs a code change to read the new SOPS keys.
-
-Either new key must not hold `bypassGovernance`. To mint the Longhorn key, start from the live
-key's capabilities, because Longhorn breaks after the rotation if the new key lacks one it
-uses:
-
-```bash
-b2 key list --long
-b2 key create --bucket daniel-server-kopia longhorn-weekly \
-  <the live key's capabilities, comma-separated>,writeFileRetentions
-```
+**Until this step is done, no B2 object is locked.** With no default retention, the sweep is
+the only thing that sets a lock, and it is blocked until the key it reads holds
+`writeFileRetentions`. A green `b2_object_lock` row means the bucket is set up, not that any
+object is locked. The sweep reads the Longhorn key: the operator chose it over a separate
+sweep key on 2026-11-22 ([#9787](https://github.com/DanielH2018/server/issues/9787)), and
+ADR-0041's *`writeFileRetentions` lets a leaked key lock objects for good* records the cost.
+So step 2b is step 2a with `writeFileRetentions` added to the new key's list: one key and one
+rotation. The new key must not hold `bypassGovernance`.
 
 With the key in place, the `homelab-b2-retention` timer on daniel-box stops being blocked at its
-next 07:30 UTC run. To
-confirm, read its line with `journalctl -t b2-retention --since today`. It must read
-`b2-retention: extended N of N objects to <date>`, with the date one retention period ahead.
+next 07:30 UTC run. To confirm, read its line:
+
+```bash
+journalctl -t b2-retention --since today
+```
+
+It must read `b2-retention: extended N of N objects to <date>`, with the date 7 days ahead.
 
 ### What the daily sweep does
 
-B2 counts a version's retention from its upload, and a Longhorn backup uploads only the blocks
-that changed. Without help, the default retention would lock only the last 7 days of uploads,
-and the base blocks of every retained weekly backup would stay open to deletion.
-`scripts/backup/b2_extend_retention.py` closes that gap. Once a day it lists the current
+B2 counts a version's retention from its upload, and the bucket sets none at upload.
+`scripts/backup/b2_extend_retention.py` sets every lock. Once a day it lists the current
 objects under `longhorn/backupstore/volumes/` and sets each one's governance retention to now
-plus the bucket's default period. It skips each backup's `locks/` files.
+plus `RETENTION_DAYS` (7). It skips each backup's `locks/` files. That locks a new block by
+the next run, and keeps the base blocks that every retained weekly backup references locked,
+however old their upload.
 
 - **It costs about four Class C calls a day:** the authorize, the bucket read and one listing
   page per 1,000 objects. Each retention update is Class A, which B2 does not meter.
 - **It adds no storage.** It uploads nothing. A block that Longhorn prunes leaves the listing,
-  so its lock lapses within one period, and the lifecycle rule removes it as before.
-- **It declines and changes nothing** while the lock is off or the default retention is not
-  governance mode. The `b2_object_lock` row reports both.
+  so its lock lapses within 7 days, and the lifecycle rule removes it as before.
+- **It declines and changes nothing** while the lock is off or unreadable. The
+  `b2_object_lock` row reports both. A bucket default retention does not stop the sweep, but
+  the row reports it, because it breaks every backup.
 - **It is blocked** once the bucket is locked but the key lacks `writeFileRetentions`. It
   prints `b2-retention: blocked: the key lacks writeFileRetentions` and exits 1, and check 10
   reports the sweep as not completing until either key from step 2b is in place.
 - **Checks 9 and 10 watch it.** `longhorn-backup-health` reads the `b2-retention` journal
-  tag, and reports `down` on a `FAILED` line or on a day with no completed run.
+  tag, and reports `down` on a `FAILED` line or on a day with no completed run. The
+  `b2_object_lock` row does not read the sweep, because the pod cannot read daniel-box's
+  journal and the checks already own that signal.
 
 Longhorn's `full-backup-interval` was the other candidate, and ADR-0041 records why it was
 rejected: a full backup re-uploads every block as a new version, and the replaced versions
 stay billed for a week, so the bucket would carry about two copies of the referenced set
 against the 10 GB free tier.
 
-### Step 3: lock the R2 etcd snapshot prefix
+### Step 3: let the Cloudflare analytics token read R2 lock rules
+
+[#9702](https://github.com/DanielH2018/server/issues/9702)'s standing reader reads the R2
+rule with the token SOPS holds as `cloudflare_analytics_token`. Cloudflare scopes the
+permission only to a whole account. In the Cloudflare dashboard, open *My Profile → API
+Tokens*, edit the token that `cloudflare_analytics_token` holds, add the permission
+*Account → Workers R2 Storage → Read*, and save. Editing a token's permissions keeps its
+value, so no secret rotates.
+
+### Step 4: lock the R2 etcd snapshot prefix
+
+The bucket name is the SOPS key `r2_bucket`, so each command reads it from the primary
+checkout. Authorize wrangler first. Its browser callback listens on daniel-box's port 8976,
+so if your browser runs on another computer, open `ssh -L 8976:localhost:8976 daniel-box`
+from that computer before you run it.
 
 ```bash
-npx wrangler r2 bucket lock add <r2_bucket> etcd-snapshots-7d etcd-snapshots/ --retention-days 7
-npx wrangler r2 bucket lock list <r2_bucket>
+npx wrangler login
+```
+
+```bash
+cd /home/ubuntu/server && npx wrangler r2 bucket lock add "$(sops -d --extract '["r2_bucket"]' secrets/secrets.yml)" etcd-snapshots-7d etcd-snapshots/ --retention-days 7
+```
+
+```bash
+cd /home/ubuntu/server && npx wrangler r2 bucket lock list "$(sops -d --extract '["r2_bucket"]' secrets/secrets.yml)"
 ```
 
 The list must show the one rule over `etcd-snapshots/`, for 7 days, and nothing over
 `longhorn/` or over an empty prefix. A rule there would lock Longhorn's daily blocks, and R2
 refuses a locked delete with a 409, so the daily prune would retry. The rule must stay
 shorter than the 14 days k3s keeps its S3 snapshots, or R2 refuses k3s's prune too.
+
+### Step 5: remove the step 1 scratch objects
+
+The scratch locks expire at about 15:40 UTC on 2026-11-22. The first three commands can run
+at any time:
+
+```bash
+sudo k3s kubectl -n longhorn-system delete volumes.longhorn.io lock-spike
+```
+
+```bash
+sudo k3s kubectl -n longhorn-system delete backuptarget lock-spike
+```
+
+```bash
+sudo k3s kubectl -n longhorn-system delete secret lock-spike-b2
+```
+
+After the locks expire, empty the bucket, then delete its key and the bucket. B2 refuses to
+delete a bucket that holds any version, and refuses to delete a locked version:
+
+```bash
+b2 rm -r --versions b2://lock-spike-45841c6d
+```
+
+```bash
+b2 key delete "$(b2 key list | awk '$2 == "lock-spike" {print $1}')"
+```
+
+```bash
+b2 bucket delete lock-spike-45841c6d
+```
+
+If the key deletion prints a usage error, `b2 key list` has no `lock-spike` row, so the key is
+already gone.
 
 ## Deliberate deviations from kopiaignore (all in the cheap direction)
 

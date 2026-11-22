@@ -40,6 +40,7 @@ import pytest
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
+from dev.fanout_lib.telemetry import SessionKind
 from renderer.renderer_lib.environment import RenderError
 
 COMPONENT = "claude-code"
@@ -100,6 +101,18 @@ def test_path_includes_usr_local_bin(unit: str) -> None:
     # Reading paths[0] would pass on a unit whose second PATH= drops /usr/local/bin.
     assert "/usr/local/bin" in paths[-1], (
         f"PATH must include /usr/local/bin (kubectl, uv); got {paths[-1]}"
+    )
+
+
+def test_spawned_sessions_carry_the_remote_control_session_kind(unit: str) -> None:
+    """Without the label, Remote Control spend sits in the unlabelled bucket."""
+    attributes = [
+        v.split("=", 1)[1]
+        for v in directive(unit, "Environment")
+        if v.startswith("OTEL_RESOURCE_ATTRIBUTES=")
+    ]
+    assert attributes[-1:] == [f"session.kind={SessionKind.REMOTE_CONTROL}"], (
+        f"the unit must label its sessions session.kind=remote-control; got {attributes}"
     )
 
 
@@ -391,6 +404,35 @@ def test_agent_unit_without_a_uid_fails_the_package_render(tmp_path) -> None:
     """
     with pytest.raises(RenderError, match="'claude_code_user_uid' is undefined"):
         render_daniel_server_with(tmp_path, claude_code_user="claude")
+
+
+def test_agent_sessions_carry_both_the_owner_and_the_remote_control_kind(
+    tmp_path,
+) -> None:
+    """The agent's settings.json env replaces the unit's OTEL_RESOURCE_ATTRIBUTES wholesale.
+
+    Only a --settings file outranks it, so the agent's unit must pass one that carries
+    process.owner beside session.kind, and the package must ship that file.
+    """
+    package = render_daniel_server_with(
+        tmp_path, claude_code_user="claude", claude_code_user_uid=AGENT_UID
+    )
+    unit_text = package.files["/usr/lib/systemd/system/homelab-claude-rc.service"][
+        0
+    ].decode()
+    flags = directive(unit_text, "ExecStart")[0].split()
+    path = flags[flags.index("--settings") + 1]
+    settings = json.loads(package.files[path][0])
+    assert settings["env"]["OTEL_RESOURCE_ATTRIBUTES"] == (
+        f"process.owner=claude,session.kind={SessionKind.REMOTE_CONTROL}"
+    )
+
+
+def test_operator_unit_passes_no_settings_file(unit: str, tmp_path) -> None:
+    """--settings drops Remote Control's auto-compact and auto mode, so the operator keeps none."""
+    assert "--settings" not in directive(unit, "ExecStart")[0]
+    package = render_daniel_server_with(tmp_path)
+    assert "/usr/lib/homelab/claude-rc/settings.json" not in package.files
 
 
 @pytest.mark.parametrize("uid", [1000, 1500])

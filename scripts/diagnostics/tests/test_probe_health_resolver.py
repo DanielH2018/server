@@ -242,15 +242,11 @@ def test_pod_selector_is_flagged_when_it_reads_only_the_shared_selector():
         {"app": "pihole", "instance": "pihole"},
         {"app": "pihole", "instance": "pihole-2"},
     ]
-    old_rule = {
-        ",".join(f"{k}={v}" for k, v in sorted(shared.items())) for _ in templates
-    }
-    new_rule = {
+    selectors = {
         health_kubectl.pod_selector(_workload("pihole", shared, template))
         for template in templates
     }
-    assert len(old_rule) == 1
-    assert len(new_rule) == 2
+    assert len(selectors) == 2
 
 
 def test_pod_selector_is_never_wider_than_the_workloads_own_selector():

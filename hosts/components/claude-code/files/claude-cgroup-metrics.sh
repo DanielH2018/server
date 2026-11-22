@@ -132,6 +132,24 @@ trap 'rm -f "$TMP"' EXIT
     [ -r "$f" ] && printf 'claude_cgroup_pids_current{cgroup="%s"} %s\n' "$label" "$(cat "$f")"
   done
 
+  # The fleet against the homelab plane, the measurement the fleet cap is derived from.
+  # MemAvailable is close to MemTotal minus the anon and kernel memory of these three slices,
+  # because their page cache is reclaimable and counts as available. cAdvisor reports
+  # kubepods.slice but never system.slice, where k3s itself runs. A separate family keeps the
+  # homelab slices out of the ClaudeCgroup* alerts, which select claude_cgroup_* by name alone.
+  printf '# HELP claude_host_plane_memory_bytes Memory of each top-level plane: anon, file and kernel from memory.stat, swap from memory.swap.current.\n'
+  printf '# TYPE claude_host_plane_memory_bytes gauge\n'
+  for plane in user kubepods system; do
+    d="$CGROOT/$plane.slice"
+    [ -r "$d/memory.stat" ] || continue
+    awk -v p="$plane" '
+      $1 == "anon" || $1 == "file" || $1 == "kernel" {
+        printf "claude_host_plane_memory_bytes{plane=\"%s\",kind=\"%s\"} %s\n", p, $1, $2
+      }' < "$d/memory.stat"
+    [ -r "$d/memory.swap.current" ] &&
+      printf 'claude_host_plane_memory_bytes{plane="%s",kind="swap"} %s\n' "$plane" "$(cat "$d/memory.swap.current")"
+  done
+
   # One series set per live fan-out batch unit (fanout-<batch>.service), wherever a user
   # manager put it, so each batch's use can be set against placement.py's RESERVATION_BYTES.
   # memory.current and systemd's "memory peak" both count page cache, so anon and file are split

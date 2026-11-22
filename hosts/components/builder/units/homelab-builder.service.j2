@@ -35,6 +35,10 @@ CapabilityBoundingSet=
 StateDirectory=homelab-builder
 StateDirectoryMode=0711
 ReadWritePaths=/var/lib/homelab-builder
+# github_rest.github_get counts each CI read in the builder's own ledger file there. The
+# directory is sticky, so the builder cannot rewrite another user's ledger. The gh-quota
+# component creates it, and `-` lets the builder start on a host without that component.
+ReadWritePaths=-/var/lib/gh-quota
 # The token arrives as a credential. config.env holds no secret.
 LoadCredential=github_token:/run/credstore/homelab_builder_github_token
 Environment=HOME=/var/lib/homelab-builder

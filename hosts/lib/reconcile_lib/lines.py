@@ -98,10 +98,25 @@ def refusal(path: str, owners: set[str] | None) -> str | None:
     if owners is None:
         return f"dpkg -S cannot say which package owns {path}"
     for owner in sorted(owners):
-        listed = run("dpkg-query", "-W", "-f", "${Conffiles}\\n", owner).stdout
-        if path not in (row.split()[0] for row in listed.splitlines() if row.strip()):
+        listed = conffiles(owner)
+        if listed is None:
+            return f"dpkg-query cannot list the conffiles of {owner}"
+        if path not in listed:
             return f"{path} is owned by {owner}, which does not list it as a conffile"
     return None
+
+
+def conffiles(owner: str) -> dict[str, bool] | None:
+    """Each conffile `owner` lists, mapped to whether dpkg marks it `obsolete`; None when dpkg-query fails.
+
+    A release upgrade that moves a conffile to another package leaves the old copy on disk,
+    listed under its first owner as obsolete. dpkg never writes an obsolete conffile again.
+    """
+    listed = run("dpkg-query", "-W", "-f", "${Conffiles}\\n", owner)
+    if listed.returncode != 0:
+        return None
+    rows = [row.split() for row in listed.stdout.splitlines() if row.strip()]
+    return {row[0]: "obsolete" in row[2:] for row in rows}
 
 
 def with_line(text: str, edit: dict) -> str:

@@ -84,10 +84,49 @@ what this unit is: a per-user install that runs as `claude_code_user`, with that
 OAuth token.
 
 **`memory.high` counts page cache**, so the fleet touches this bound during an ordinary multi-agent
-pytest fan-out and reclaims cache. The host-RAM floor is what the number is derived from, not what
-it throttles on, and the derivation itself lives in `defaults/main.yml` beside
-`claude_code_fleet_memory_high`: the operator-set floor of about 8 GiB of `MemAvailable`, worked
-backward from a measured `MemAvailable` and fleet size. Re-derive it there, not from this page.
+pytest fan-out and reclaims cache. The derivation lives in `defaults/main.yml` beside
+`claude_code_fleet_memory_high`, and daniel-server's lives in its host_vars. Re-derive it there,
+not from this page.
+
+### The fleet cap and the 8 GiB `MemAvailable` floor
+
+Neither cap holds the operator's 8 GiB `MemAvailable` floor when the fleet's memory is anon.
+Both hosts fell below it once:
+
+- daniel-box reached 2.7 GiB on 2026-11-18 with the fleet at 17.3 GiB.
+- daniel-server reached 1.4 GiB on 2026-11-14 with the fleet at 23.1 GiB.
+
+[#9199](https://github.com/DanielH2018/server/issues/9199) re-derived both caps from a
+measurement per plane.
+
+- **`MemAvailable` is close to `MemTotal` minus each plane's anon and kernel memory.**
+  The planes are `user.slice` (the fleet), `kubepods.slice` and `system.slice`. On
+  2026-11-22 that sum came within 0.6 GiB of `MemTotal - MemAvailable` on both hosts.
+  Page cache counts as available.
+- **`memory.high` bounds anon, file and kernel together.** So the worst-case floor is
+  `MemTotal - homelab (anon + kernel) - cap`. The old derivation added the fleet's whole
+  `memory.current`, page cache included, as if it were already unavailable. That error
+  hid a negative worst case.
+- **The worst-case floor is below zero on both hosts.** daniel-box gives
+  27.7 - 12.6 - 20 = -4.9 GiB, and daniel-server gives 30.5 - 8.3 - 24 = -1.8 GiB. The
+  homelab terms use the 14-day peak of `kubepods.slice`'s anon.
+- **A cap that holds 8 GiB of all-anon fleet memory is about 7 GiB on daniel-box and 14 GiB
+  on daniel-server.** Those caps are far below what an ordinary busy day needs. On
+  2026-11-20, six coordinator projects ran. daniel-box's fleet peaked at 15.9 GiB and
+  `MemAvailable` stayed at or above 9.8 GiB. daniel-server's fleet peaked at 11.7 GiB and
+  `MemAvailable` stayed at or above 20.7 GiB. The floor holds only while much of the
+  fleet's memory is page cache.
+- **The swap in the daniel-box episode was not the pods'.** Host swap reached 7.6 GiB. The
+  fleet held its 2 GiB, and cAdvisor reports at most 2 MiB of swap in `kubepods.slice`.
+  The other 5.6 GiB was in `system.slice` or outside every slice, which nothing measured
+  then.
+
+`claude-cgroup-metrics.sh` writes `claude_host_plane_memory_bytes{plane, kind}` for each
+plane, with `kind` one of `anon`, `file`, `kernel` and `swap`. cAdvisor reports
+`kubepods.slice` but never `system.slice`, where k3s runs, so this family is the only source
+for the `system` plane. It is a separate family from `claude_cgroup_*` because the
+`ClaudeCgroup*` rules select that prefix with no `cgroup` filter, and a homelab plane in
+it would page as the fleet.
 
 ## The fleet's CPU weight
 

@@ -49,7 +49,7 @@ from ci_verdict import (
     parse_check_runs,
     parse_check_suites,
 )
-from host_lib import github_get, github_token
+from github_rest import github_get, github_token
 
 CI_REPO = "DanielH2018/server"
 
