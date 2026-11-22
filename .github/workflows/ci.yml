@@ -709,8 +709,8 @@ jobs:
       # the commit only so that it misses, and `restore-keys` then takes the newest sweep entry.
       # The path and the key prefix must match the sweep's save step byte for byte.
       #
-      # DECIDED: the restore is not gated on the selection's size. A runner rewrites a
-      # module in 20 to 30 ms, so the restore saves that much for each selected module the entry
+      # DECIDED: the restore is not gated on the selection's size.
+      # A runner rewrites a module in 20 to 30 ms, so the restore saves that much for each selected module the entry
       # holds. The restore step took 0 to 3 seconds, median 1, over 190 pull-request legs on
       # 2026-11-22. The smallest selection a change makes is still tens of modules, because every
       # module with no current row in the affected table is selected: a 2-path change selected 65.
