@@ -19,7 +19,7 @@ state.json keys:
     reconcile_run: {"argv", "env", "record"}, optional. The start then runs the real reconcile
         with that argv and environment and copies the record it wrote at `record`.
     verify: what `dpkg --verify` prints.
-    hour, today, now: what `date +%H`, `+%F` and `+%s` print.
+    hour, today, now: what `date +%H`, `+%F` and `+%s` print; `-Iseconds` joins today and hour.
 
 `dpkg --compare-versions` runs the real dpkg, so the version order is Debian's.
 """
@@ -52,7 +52,14 @@ def hostname(state: dict, args: list[str]) -> int:
 
 
 def date(state: dict, args: list[str]) -> int:
-    print({"+%H": state["hour"], "+%F": state["today"], "+%s": state["now"]}[args[0]])
+    print(
+        {
+            "+%H": state["hour"],
+            "+%F": state["today"],
+            "+%s": state["now"],
+            "-Iseconds": f"{state['today']}T{state['hour']}:00:00+00:00",
+        }[args[0]]
+    )
     return 0
 
 

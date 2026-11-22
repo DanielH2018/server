@@ -6,7 +6,8 @@
 # glob-based tailer handles correctly. /var/log is log2ram's tmpfs, and four 5-minute heartbeats
 # x 288 runs a day x ~90 B is ~104 KB a day, so the cap is precautionary, not load-bearing.
 # Root-owned reconcile.log gets two ~100 B lines per command a reconcile run calls, and the Pi runs
-# reconcile once per published package, so it stays well under the cap too.
+# reconcile once per published package, so it stays well under the cap too. Root-owned
+# updater.log gets a line only when the updater reports a failure or a hold.
 /var/log/pi-health/*.log {
   daily
   rotate 1

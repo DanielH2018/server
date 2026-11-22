@@ -134,17 +134,24 @@ def test_container_streams_are_job_pi_on_machine_daniel_pi(config):
 
 
 @pytest.mark.parametrize(
-    "unit", ["homelab-reconcile.service", "homelab-reconcile-wait.service"]
+    ("dropin", "variable"),
+    [
+        (
+            "homelab-reconcile.service.d/50-homelab-timing.conf",
+            "HOMELAB_RECONCILE_TIMING_LOG",
+        ),
+        (
+            "homelab-reconcile-wait.service.d/50-homelab-timing.conf",
+            "HOMELAB_RECONCILE_TIMING_LOG",
+        ),
+        ("homelab-updater.service.d/50-homelab-log.conf", "HOMELAB_UPDATER_LOG"),
+    ],
 )
-def test_reconciles_timing_file_is_one_the_pi_health_source_ships(
-    package, config, unit
+def test_each_host_plane_log_file_is_one_the_pi_health_source_ships(
+    package, config, dropin, variable
 ):
-    dropin = package.files[f"/usr/lib/systemd/system/{unit}.d/50-homelab-timing.conf"][
-        0
-    ].decode()
-    timing = re.search(
-        r"^Environment=HOMELAB_RECONCILE_TIMING_LOG=(\S+)$", dropin, re.M
-    )
+    text = package.files[f"/usr/lib/systemd/system/{dropin}"][0].decode()
+    timing = re.search(rf"^Environment={variable}=(\S+)$", text, re.M)
     shipped = re.search(
         r'local\.file_match "pi_health".*?"__path__" = "([^"]+)"', config, re.S
     )
