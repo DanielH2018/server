@@ -219,6 +219,10 @@ MemoryHigh={{ claude_code_rc_memory_high }}
 # cgroup safe; claude_code_rc_pytest_workers is still the bound on the fan-out that fills it.
 MemorySwapMax={{ claude_code_rc_memory_swap_max }}
 
+# A global OOM picks a fleet process before a pod. defaults/main.yml beside
+# claude_code_fleet_oom_score_adjust says why the value is the maximum.
+OOMScoreAdjust={{ claude_code_fleet_oom_score_adjust }}
+
 # Stopping the host is meant to stop the sessions it spawned; they are its children, so the
 # default control-group kill is the wanted behaviour. The timeout gives them a chance to
 # flush transcripts first.

@@ -54,3 +54,22 @@ def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv()
     assert "${RUN_HOOK_PROJECT_DIR:-" in shim and "${RUN_HOOK_UV:-" in shim, (
         "the hook shim no longer reads the overrides this profile sets"
     )
+
+
+def test_a_login_shell_raises_the_oom_score_of_what_it_starts(tmp_path) -> None:
+    """An ssh login inherits sshd's 0, which a global OOM ranks below every pod's."""
+    from lib.proc_testing import run
+
+    profile = tmp_path / "profile"
+    profile.write_text(
+        render_component_text(
+            "claude-code",
+            "agent-user-profile.j2",
+            {"claude_code_fleet_oom_score_adjust": 1000},
+        )
+    )
+    child = run(
+        ["bash", "-c", '. "$1" && cat /proc/self/oom_score_adj', "-", str(profile)],
+        check=True,
+    )
+    assert child.stdout.strip() == "1000"

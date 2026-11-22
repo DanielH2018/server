@@ -175,9 +175,9 @@ re-read of the issue's Verify-by query is the check on it.
 - It decides which cgroup gives up pages first. It creates no `MemAvailable`. The fleet's
   anon can leave RAM only through its 2G swap share, so all-anon fleet memory past
   `MemTotal - homelab - 8 GiB` still breaks the floor.
-- It does not steer the OOM killer. kubelet gives burstable and best-effort pods a high
-  `oom_score_adj`, so a global OOM still tends to pick a pod
-  ([#9989](https://github.com/DanielH2018/server/issues/9989)).
+- It does not steer the OOM killer. kubelet gives a burstable pod an `oom_score_adj` of
+  2-999 and a best-effort pod 1000. `claude_code_fleet_oom_score_adjust` steers it instead,
+  as *The OOM killer's victim* below says.
 
 So no `MemoryLow` value meets the ruling's condition that the protected slices keep the
 floor with the fleet at its cap. With all-anon fleet memory at the cap, daniel-box gives
@@ -190,7 +190,7 @@ with both fleet caps unchanged and no systemd-oomd kill. The `HostMemoryAvailabl
 its check: it warns when `node_memory_MemAvailable_bytes` stays under 8 GiB for 10 minutes on
 daniel-box or daniel-server. If it fires during an episode in which a pod was evicted or
 OOM-killed, the next step is systemd-oomd on `user.slice`
-([#9989](https://github.com/DanielH2018/server/issues/9989)).
+([#10000](https://github.com/DanielH2018/server/issues/10000)).
 
 To verify a deploy, read the configured value and the kernel's value. Read
 `kubepods.slice` again after the next k3s start, which is when kubelet resets it:
@@ -201,6 +201,33 @@ systemctl show -p MemoryLow -p DropInPaths kubepods.slice system.slice
 systemctl show -p MemoryLow k3s.service   # k3s-agent.service on daniel-server
 cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.low
 ```
+
+### The OOM killer's victim
+
+Every fleet process runs at `oom_score_adj` 1000, the kernel's maximum, so a global OOM picks
+a fleet process before a pod. `claude_code_fleet_oom_score_adjust` in the component's
+`defaults/main.yml` holds the value. `OOMScoreAdjust=` is an exec option that a slice drop-in
+cannot carry, so the value reaches the fleet by three paths:
+
+- `homelab-claude-rc.service` and `homelab-claude-bg-resume.service` set `OOMScoreAdjust=`, and
+  the sessions they start inherit it.
+- A drop-in on `user@<uid>.service` sets the user manager's value for the agent's uid 900 and
+  the operator's uid 1000. Its units, among them every fan-out batch `systemd-run --user`
+  starts, inherit it. uid 1000 gets it on daniel-box too: its login caps leave
+  `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
+- The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
+  login inherits sshd's 0. Raising the value needs no privilege.
+
+The operator's own ssh login is not covered, because its profile belongs to the dotfiles repo.
+
+The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
+RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod
+process with a far larger RSS than any fleet process can still be the victim.
+
+Each value takes effect at the next start of what carries it. Reconcile restarts neither unit
+nor any user manager, so read the live value after the next reboot. To check, run
+`systemctl show -p MainPID homelab-claude-rc.service user@900.service`, then read
+`/proc/<pid>/oom_score_adj` for each process ID it prints.
 
 ## The fleet's CPU weight
 
