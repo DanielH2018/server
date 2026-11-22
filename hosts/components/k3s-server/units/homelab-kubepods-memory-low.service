@@ -6,4 +6,5 @@ Description=Reload systemd so kubepods.slice takes the homelab MemoryLow drop-in
 
 [Service]
 Type=oneshot
+SyslogLevel=notice
 ExecStart=/usr/bin/systemctl daemon-reload
