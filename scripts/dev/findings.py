@@ -214,6 +214,7 @@ from dev.findings_lib.gh_calls import (
     set_fields,
 )
 from dev.findings_lib.issue_model import (
+    ESCALATED_AT,
     NO_REOPEN,
     NOT_BEFORE_FIELD,
     PR_REPO,
@@ -226,6 +227,7 @@ from dev.findings_lib.issue_model import (
     now_iso,
     fingerprint,
     issue_rows,
+    reobservations,
     sort_key,
     today_utc,
 )
@@ -375,9 +377,8 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
         why = terminal[0] if terminal else "fixed"
         print(f"#{args.number} is closed ({why}); use open to re-file", file=sys.stderr)
         return 3
-    plans = plan_touch(issue, args.source)
-    run(plans, args.dry_run, tools)
-    escalated = any(p[:2] == ["issue", "edit"] for p in plans)
+    run(plan_touch(issue, args.source), args.dry_run, tools)
+    escalated = reobservations(issue) + 1 == ESCALATED_AT
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
     return 0
 

@@ -4,7 +4,6 @@
 | `claude` | `#cba6f7` | Filed by Claude via scripts/dev/findings.py |
 | `refuted` | `#6c7086` | Closed because a skeptic disproved the finding; do not reopen |
 | `accepted` | `#9399b2` | Closed because the operator accepted the trade-off; true, but do not reopen |
-| `escalated` | `#f5c2e7` | Re-observed three or more times; needs a durable owner |
 | `no-vetted-remediation` | `#585b70` | Every proposed fix failed the fix-skeptic |
 | `manual` | `#6c7086` | Reserved for the operator; no Claude session claims or fans this out |
 | `review-leftover` | `#fab387` | Left after a fan-out fix round; next ranks it last |

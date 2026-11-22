@@ -704,8 +704,8 @@ jobs:
       # by the source's hash, not its mtime, so an entry from an earlier commit stays valid for
       # every module the commit left unchanged, and a changed module is rewritten again.
       # DECIDED: no leg saves. The nightly sweep in pytest-sweep.yml saves one entry over every
-      # module on master, about 40 MB a day, and every leg of every event restores the newest
-      # one, whatever its shard packed. A pull-request run reads master's entries. The key names
+      # module on master, a 9 MB archive a day, and every leg of every event restores the newest
+      # one, whatever its shard packed. A leg restores it in 1 to 2 seconds. A pull-request run reads master's entries. The key names
       # the commit only so that it misses, and `restore-keys` then takes the newest sweep entry.
       # The path and the key prefix must match the sweep's save step byte for byte.
       - name: Restore pytest's rewritten test modules

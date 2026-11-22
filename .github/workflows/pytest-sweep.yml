@@ -73,8 +73,11 @@ jobs:
 
       # The one writer of ci.yml's rewrite cache: this run collects every module, so its entry
       # holds whatever a leg's shard runs. It restores nothing first, so an entry never carries
-      # a deleted module's file or one named for an older pytest. A red sweep still rewrote
-      # every module it collected, and pytest checks each file against its source's hash.
+      # a deleted module's file or one named for an older pytest. A red sweep saves too: a failed
+      # test or a collection error leaves every module rewritten. A run that crashes partway saves
+      # only the modules it reached, and until the next sweep each leg rewrites the rest itself.
+      # A timed-out run is cancelled and saves nothing. pytest checks each file against its
+      # source's hash, so a partial entry costs time, never a wrong result.
       - name: Save pytest's rewritten test modules
         if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
         uses: actions/cache/save@v6.1.0

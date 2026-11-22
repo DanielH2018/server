@@ -6,13 +6,23 @@ with one property broken.
 
 from collections.abc import Callable
 
-from _ci_job_rows import RESTORE, SAVE, rewrite_step
+from _ci_job_rows import (
+    RESTORE,
+    SAVE,
+    SWEEP,
+    ci_rewrite_restore,
+    rewrite_cache_link_problems,
+    rewrite_step,
+    sweep_rewrite_save,
+)
 from _row_table import Census, Subject, tracked
 from _workflow_rows import (
+    CI,
     Workflow,
     condition,
     jobs,
     judge,
+    load,
     mutants,
     report_job_problems,
     runs,
@@ -21,7 +31,6 @@ from _workflow_rows import (
 )
 from ci_verdict import CI_GATE_NAME
 
-SWEEP = ".github/workflows/pytest-sweep.yml"
 PYTEST_TOOLS = ".github/actions/pytest-tools/action.yml"
 RUN_STEP = "Run the whole test suite"
 CACHE_STEP = "Cache the age and apt-utils binaries"
@@ -73,7 +82,7 @@ def _sweep_grading_problems(wf: Workflow) -> list[str]:
 
 def _sweep_save_problems(wf: Workflow) -> list[str]:
     job = jobs(wf).get("sweep", {})
-    save = rewrite_step(job, SAVE)
+    save = sweep_rewrite_save(wf)
     if save is None:
         return [f"the sweep job has no {SAVE} step for pytest's rewritten modules"]
     found = []
@@ -85,8 +94,14 @@ def _sweep_save_problems(wf: Workflow) -> list[str]:
         found.append(f"the save gate {gate!r} saves a branch's entry")
     if "!cancelled()" not in gate:
         found.append(f"the save gate {gate!r} saves nothing after a red sweep")
-    if "github.run_id" not in str(save["with"].get("key")):
+    key = str(save["with"].get("key"))
+    if "github.run_id" not in key:
         found.append("the save key repeats across runs, so a later save writes nothing")
+    if "github.run_attempt" not in key:
+        found.append(
+            "the save key repeats across a run's attempts, so a re-run saves nothing"
+        )
+    found += rewrite_cache_link_problems(ci_rewrite_restore(load(CI)), save)
     if rewrite_step(job, RESTORE) is not None:
         found.append(
             "the sweep restores an earlier entry and carries its stale files on"
@@ -194,6 +209,15 @@ def _restore_before_the_suite(job: dict) -> None:
 
 def _edit_save(**fields: object) -> Callable[[Workflow], object]:
     return sweep_job(lambda job: _save_step(job).update(fields))
+
+
+def _edit_key(find: str, replace: str) -> Callable[[Workflow], object]:
+    def mutate(job: dict) -> None:
+        fields = _save_step(job)["with"]
+        assert find in fields["key"], f"the save key no longer holds {find!r}"
+        fields["key"] = fields["key"].replace(find, replace)
+
+    return sweep_job(mutate)
 
 
 def _row(path: str, **row) -> dict:
@@ -350,9 +374,9 @@ PYTEST_SWEEP_ROWS = (
                 "The sweep is the one writer of ci.yml's rewrite cache: it collects every "
                 "module, so its entry holds whatever a leg's shard runs, and an entry saved on "
                 "master is readable by every branch. It saves after the suite has written the "
-                "files, on a red sweep too, under a key unique to the run. It restores nothing, "
-                "so an entry never carries a deleted module's file or one named for an older "
-                "pytest."
+                "files, on a red sweep too, under a key unique to the run and its attempt, whose "
+                "prefix ci.yml's `restore-keys` matches. It restores nothing, so an entry never "
+                "carries a deleted module's file or one named for an older pytest."
             ),
             offence=judge(_sweep_save_problems),
             red=mutants(
@@ -368,6 +392,12 @@ PYTEST_SWEEP_ROWS = (
                 a_restore_before_the_suite=sweep_job(_restore_before_the_suite),
                 a_sweep_with_no_save=sweep_job(
                     lambda job: job["steps"].remove(_save_step(job))
+                ),
+                a_key_without_the_run_attempt=_edit_key(
+                    "-${{ github.run_attempt }}", ""
+                ),
+                a_key_prefix_ci_does_not_restore=_edit_key(
+                    "pytest-rewrite-", "pytest-rewritten-"
                 ),
             ),
         )
