@@ -1689,7 +1689,7 @@ tests:
   # The claude_code timers. Every check file stopped being refreshed at 0 while both
   # exporters stay up. Each NotReporting rule stays quiet at its deadline and fires in the next
   # minute: the three syncs at 2100s, the lander at 3300s. claude-triage-poll crosses 660s at
-  # 12m and fires at 17m, after its 5m `for`. The two
+  # 12m and fires at 19m, after its 7m `for`. The two
   # syncs that run on both hosts fire once per host. The absent_over_time arm is the
   # zero-series case's.
   - interval: 1m
@@ -1738,10 +1738,10 @@ tests:
                 homelab-claude-pipeline-timeline.timer` and `journalctl -u
                 homelab-claude-pipeline-timeline`.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudepipelinetimelinenotreporting
-      - eval_time: 16m
+      - eval_time: 18m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []
-      - eval_time: 17m
+      - eval_time: 19m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts:
           - exp_labels:
@@ -1877,8 +1877,8 @@ tests:
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#claudefanoutlandernotreporting
 
   # The triage poll's timer stopped after its clean run at 0, so the unit never fails. Its
-  # pair is pending from 12m to 17m, and HostCheckOverdue skips the check while it is, so the
-  # catch-all does not page at 14m. The pair fires at 17m and pages alone, as the
+  # pair is pending from 12m to 19m, and HostCheckOverdue skips the check while it is, so the
+  # catch-all does not page at 14m. The pair fires at 19m and pages alone, as the
   # Alertmanager inhibit it sits under needs a SystemdUnitsFailed source.
   - interval: 1m
     input_series:
@@ -1892,10 +1892,10 @@ tests:
       - eval_time: 14m
         alertname: HostCheckOverdue
         exp_alerts: []
-      - eval_time: 16m
+      - eval_time: 18m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []
-      - eval_time: 17m
+      - eval_time: 19m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts:
           - exp_labels:
@@ -1918,7 +1918,7 @@ tests:
   # The triage poll fails on every tick from 2m, after its clean run at 0, and its hook pages.
   # The systemd-units check first sees the failure at 3m and writes paged_by, so
   # SystemdUnitsFailed fires at 13m, while ClaudeTriagePollNotReporting is still inside its
-  # 5m `for` at 16m. The inhibit's source is firing before the pair fires at 17m.
+  # 7m `for` at 18m. The inhibit's source is firing before the pair fires at 19m.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1951,7 +1951,47 @@ tests:
                 A summary that names no unit means the check named none, so run `systemctl --failed`
                 on daniel-box.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
+      - eval_time: 18m
+        alertname: ClaudeTriagePollNotReporting
+        exp_alerts: []
+
+  # The same failure, but the 5-minute systemd-units check sees it last, at 7m. SystemdUnitsFailed
+  # fires at 17m, and ClaudeTriagePollNotReporting is still inside its 7m `for` at 18m, so
+  # the source still leads the pair, which fires at 19m. A 5m `for` fired the pair at 17m,
+  # in the same minute as the source.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x25'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-triage-poll", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x25'
+      - series: 'homelab_systemd_unit_failed{check="systemd-units", instance="daniel-box", job="node", origin="daniel-box", paged_by="homelab-alert", unit="homelab-claude-triage-poll.service"}'
+        values: '_x7 1x17'
+    alert_rule_test:
       - eval_time: 16m
+        alertname: SystemdUnitsFailed
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: SystemdUnitsFailed
+        exp_alerts:
+          - exp_labels:
+              check: systemd-units
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              paged_by: homelab-alert
+              severity: warning
+              service: daniel-box
+              unit: homelab-claude-triage-poll.service
+            exp_annotations:
+              summary: 'daniel-box: homelab-claude-triage-poll.service has failed.'
+              description: >-
+                Read `systemctl status <unit>` and `journalctl -u <unit> -b` on daniel-box, fix the
+                cause, then run `systemctl reset-failed <unit>`; the next check resolves this alert.
+                A summary that names no unit means the check named none, so run `systemctl --failed`
+                on daniel-box.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#systemdunitsfailed
+      - eval_time: 18m
         alertname: ClaudeTriagePollNotReporting
         exp_alerts: []
 

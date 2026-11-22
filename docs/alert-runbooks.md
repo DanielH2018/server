@@ -602,7 +602,7 @@ dotfiles apply has not completed a clean run.
 
 ### `ClaudeTriagePollNotReporting`
 
-No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus for 5 minutes, so the
+No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus for 7 minutes, so the
 monitor triage poll has not completed a clean run.
 
 - The timer most likely stopped firing. A run that fails pages through its `OnFailure` unit,
