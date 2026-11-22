@@ -37,6 +37,8 @@ DOTFILES_TOOLS = ("/home/ubuntu/.local/bin/uv", "/home/ubuntu/.local/bin/claude"
 EXIT_0 = "#!/bin/sh\nexit 0\n"
 # Long enough for a forked service that dies, or a restart loop's RestartSec, to show.
 SETTLE_SECONDS = 30
+# Under `Container.sh`'s 900-second default, which kills the exec and drops its output.
+STEP_SECONDS = 840
 UNIT_PROPERTIES = "Id,ActiveState,SubState,NRestarts"
 # Each unit whose start needs something only the real host has, and that thing. A drop-in swaps
 # its ExecStart= for `sleep`, so its other lines still load and its enable link still starts it.
@@ -83,16 +85,17 @@ def _put(c: Container, path: str, text: str, mode: str) -> None:
 def seed_node_host(c: Container) -> None:
     """Seed in container `c` the host state a cluster node has and the container lacks.
 
-    The nodes ship the Pi's sshd, ufw, auditd, postfix, hosts and modules-load subjects, so
-    `seed_pi_host` comes first. A node adds the Ubuntu server packages in SERVER_PACKAGES, the
-    dotfiles tools in DOTFILES_TOOLS as stubs that exit 0, and a drop-in on each STUBBED_UNITS
-    unit.
+    The nodes ship the Pi's sshd, ufw, auditd, postfix, hosts and modules-load subjects, so they
+    get `seed_pi_host`, which unmounts /etc/resolv.conf: no name resolves after it, so every
+    fetch from the archive comes first. A node adds the Ubuntu server packages in
+    SERVER_PACKAGES, the dotfiles tools in DOTFILES_TOOLS as stubs that exit 0, and a drop-in on
+    each STUBBED_UNITS unit.
     """
-    seed_pi_host(c)
     c.ok(
         "DEBIAN_FRONTEND=noninteractive apt-get install -y"
         f" {' '.join(SERVER_PACKAGES)} < /dev/null"
     )
+    seed_pi_host(c)
     for path in DOTFILES_TOOLS:
         _put(c, path, EXIT_0, "0755")
     c.ok("chown -R ubuntu:ubuntu /home/ubuntu/.local")
@@ -103,7 +106,6 @@ def seed_node_host(c: Container) -> None:
 
 def _install(cases, c: Container, host: str) -> None:
     seal_dir = seal_host(cases, c, host)
-    seed_node_host(c)
     head = seal_dir.parent / "head"
     host_mode.write_packages([host_mode.render_host(host, sops_dir=seal_dir)], head)
     deb = build(head / "hosts" / host, cases.versions["pi-head"], head.parent / "deb")
@@ -112,9 +114,15 @@ def _install(cases, c: Container, host: str) -> None:
         f"/srv/debs/{cases.debs[label].name}"
         for label in ("updater-head", f"{host}-head", *cases.tools)
     )
-    c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs} < /dev/null")
+    # The Depends are fetched while names still resolve; the seed takes resolv.conf away.
+    c.ok(f"apt-get install -y --download-only {debs} < /dev/null")
+    seed_node_host(c)
+    # A shell timeout under the exec's own, so a hung step still returns what it printed.
+    c.ok(
+        f"DEBIAN_FRONTEND=noninteractive timeout {STEP_SECONDS} apt-get install -y {debs} < /dev/null"
+    )
     # Joins the reconcile the postinst queued, and returns once it ends.
-    c.sh("systemctl start homelab-reconcile.service")
+    c.sh(f"timeout {STEP_SECONDS} systemctl start homelab-reconcile.service")
     c.ok(f"sleep {SETTLE_SECONDS}")
     problems = unit_problems(c.ok(f"systemctl show -p {UNIT_PROPERTIES} '*'"))
     for unit in problems:
