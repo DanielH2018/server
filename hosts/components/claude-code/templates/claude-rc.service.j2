@@ -119,9 +119,9 @@ Environment=PATH={{ fnm_node }}{{ claude_code_user_home }}/.local/bin:/usr/local
 Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 
 # A spawned session reports session_kind="remote-control", a value from
-# scripts/dev/fanout_lib/telemetry.py:SessionKind.
-# DECIDED: rendered for the agent user too, where it has no effect: a settings `env` replaces
-# the whole OTEL_RESOURCE_ATTRIBUTES value, and the agent's settings set process.owner=claude.
+# scripts/dev/fanout_lib/telemetry.py:SessionKind. A settings `env` replaces the whole
+# OTEL_RESOURCE_ATTRIBUTES value, so the agent's settings.json, which sets process.owner,
+# displaces this line; the agent's ExecStart passes both labels through --settings instead.
 Environment=OTEL_RESOURCE_ATTRIBUTES=session.kind=remote-control
 
 {% if claude_code_rc_disable_bg_shell_pressure_reap %}
@@ -162,9 +162,22 @@ Environment=PYTEST_XDIST_AUTO_NUM_WORKERS={{ claude_code_rc_pytest_workers }}
 # process.stdin.isTTY). Under systemd there is no stdin to answer, so the host would sit
 # there having never connected — a hang, not an error. ENFORCED by
 # hosts/tests/test_claude_rc_unit.py.
+{% if claude_code_user != sys_user %}
+# DECIDED: --settings for a non-operator user only, naming a root-owned file the package ships
+# (templates/claude-rc-settings.json.j2), where no session can write it. Its env outranks the
+# agent's settings.json and carries process.owner beside session.kind. The flag also stops
+# Remote Control forcing auto-compact and auto mode over the user's own settings: the agent's
+# settings then decide auto-compact, and --permission-mode already pins the mode.
+# `claude rc` reads the file once, at start. Its content follows claude_code_user, which also
+# renders User= here, so a changed file always comes with a changed unit, and the manual
+# restart that unit needs rereads it.
+{% endif %}
 ExecStart={{ claude_code_user_home }}/.local/bin/claude rc \
   --spawn={{ claude_code_rc_spawn_mode }} \
   --permission-mode {{ claude_code_rc_permission_mode }} \
+{% if claude_code_user != sys_user %}
+  --settings /usr/lib/homelab/claude-rc/settings.json \
+{% endif %}
   --capacity {{ claude_code_rc_capacity }}
 
 Restart=always
