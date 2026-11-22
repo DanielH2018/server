@@ -952,11 +952,9 @@ tests:
                 daniel-box: the gateway does not answer over the wired link eno1, which still
                 has carrier.
               description: >-
-                daniel-box has pinged the gateway over eno1 with no reply for 3 minutes, while
-                the link keeps carrier. The wired default route still wins, so the node has no
-                internet and may not reach the other node. Read `journalctl -k -g eno1` and
-                `journalctl -t wired-gateway` on daniel-box; a run of `NETDEV WATCHDOG` and
-                `Reset adapter` lines means the NIC's transmit queue hung.
+                The gateway has not answered a ping over eno1 for 3 minutes while the link
+                keeps carrier, and the wired route still wins, so daniel-box is offline. Read
+                `journalctl -k -g eno1` on daniel-box.
               runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewayunreachable
 
   # The cable to daniel-box's eno1 is pulled, so the gateway check fails beside carrier 0, and

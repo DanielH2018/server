@@ -951,11 +951,9 @@ groups:
             ${host}: the gateway does not answer over the wired link ${k3s_node_static_link},
             which still has carrier.
           description: >-
-            ${host} has pinged the gateway over ${k3s_node_static_link} with no reply for 3
-            minutes, while the link keeps carrier. The wired default route still wins, so the
-            node has no internet and may not reach the other node. Read `journalctl -k -g
-            ${k3s_node_static_link}` and `journalctl -t wired-gateway` on ${host}; a run of
-            `NETDEV WATCHDOG` and `Reset adapter` lines means the NIC's transmit queue hung.
+            The gateway has not answered a ping over ${k3s_node_static_link} for 3 minutes
+            while the link keeps carrier, and the wired route still wins, so ${host} is
+            offline. Read `journalctl -k -g ${k3s_node_static_link}` on ${host}.
           runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#wiredgatewayunreachable
       - alert: WiredGatewayCheckNotReporting
         hosts: {host_var: k3s_node_static_link}
