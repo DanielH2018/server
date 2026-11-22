@@ -32,8 +32,8 @@ its open and closed pull request counts, and the newest issue and pull request c
 read per issue. The *Last seen* column below is therefore the creation date of the newest
 item that carries the label, a lower bound on its last use. A second query read the issue
 fields, issue types and Projects fields both repositories see. Readers come from a grep of
-`scripts/`, `.github/`, `.claude/`, `renovate.json`, `hosts/components/board-sync/` and
-`docs/` on this branch, tests excluded.
+the whole tracked tree of both repositories, tests excluded, and from the filters of the
+seven saved views on the *Server Issue Tracking* project, read the same day.
 
 ## Inventory: DanielH2018/server
 
@@ -206,7 +206,10 @@ retires every label fallback.
 
 `plans.py:231` adds `escalated` on the third sighting, and `issue_model.py:840` and `:939`
 read it back. Every row already carries `reobservations` (`issue_model.py:855`), so
-`escalated` is `reobservations >= 2`, computed where the row is built.
+`escalated` is `reobservations >= 2`, computed where the row is built. The threshold is
+exact: `plan_touch` counts the filing as the first sighting and adds the label while
+posting the second `Re-observed` comment (`plans.py:219`). On 2026-11-22 no open issue had
+more than one such comment, so the derivation reorders nothing in `next` today.
 
 - **Readers that change:** `issue_model.py:53`, `:840`, `:939`; `plans.py:219`, `:231`;
   `scripts/dev/findings.py:380`, `:683`; `scripts/dev/findings_lib/cli.py:232`;
@@ -219,7 +222,9 @@ read it back. Every row already carries `reobservations` (`issue_model.py:855`),
 - `red-green`: the fan-out red phase that wrote and read it was retired in 35eb56560. No
   code names it; 415 closed issues carry it.
 - `claimed`: replaced by the `Claim:` comment and the board's Status (896f23374). It sits
-  on 30 closed dotfiles issues and none on server.
+  on 30 closed dotfiles issues and none on server. Two project views, *Open* and
+  *Non-Manual*, still filter `-label:claimed`; that term matches every issue, so it is
+  stale rather than broken, and the operator removes it when the label goes.
 - The nine GitHub defaults on server carry nothing. On dotfiles, `enhancement` (21),
   `bug` (1) and `question` (1) sit on closed issues from September 2026, which no tool reads.
   Mapping `enhancement` to the Feature type first would cost 21 writes for history nobody
@@ -237,8 +242,10 @@ the issues, or a pull request label, which no field can hold.
   `gh issue list` call.
 - `manual` withholds an issue from sessions and has its reverse, `manual --clear`
   (`plans.py:157`, `:315`; `claim.py:196`; `scripts/dev/fanout_lib/operator_waits.py:233`;
-  `issue_model.py:848`). A one-option single-select field would add a definition and a
-  two-call write for a boolean.
+  `issue_model.py:848`), and the project views *Manual*, *Non-Manual* and *No Milestone*
+  filter on it. A one-option single-select field would add a definition and a two-call
+  write for a boolean. No project view filters on `domain/*`, `escalated` or the other
+  labels this page moves.
 - `no-vetted-remediation` has its reverse in `remedy` (`plans.py:198`; `findings.py:342`;
   `.claude/skills/homelab-review/SKILL.md:332`, `:393`).
 - `review-leftover` sets a batch's model floor (`scripts/dev/fanout_lib/sizing.py:56`;
@@ -298,7 +305,10 @@ between.
 - **No label fallback:** unlike severity and not-before dates, domain gates nothing. A
   session on a pre-merge checkout files an issue with only the label; its domain reads `-`
   until the slice 3 re-run fills it. #9120 kept a fallback because a missing date lets
-  `next` offer a deferred issue; a missing domain only blanks a column.
+  `next` offer a deferred issue; a missing domain blanks a column, and drops the issue from
+  the `findings.py list --domain` that `homelab-review` runs to show a reviewer its
+  domain's findings (`SKILL.md:121`). Fingerprint matching on `open` still catches an exact
+  re-filing, so that gap costs at most a near-duplicate until the re-run.
 - **Exercise:** `findings.py open --dry-run --domain network …` prints the field in the
   mutation and no `domain/` label; `findings.py list --domain cicd` lists the same issues
   as before.
@@ -334,7 +344,8 @@ adds `escalated` to the names `LABELS` must not hold.
 ### Slice 5: delete the unread labels
 
 Delete `red-green`, `claimed` and the nine defaults on server, and `claimed` and
-the nine defaults on dotfiles. No code changes; `LABELS` names none of them.
+the nine defaults on dotfiles. No code changes; `LABELS` names none of them. The operator
+drops `-label:claimed` from the *Open* and *Non-Manual* project views in the same step.
 
 - **Exercise:** each repository's label page lists only the labels this page keeps.
 - **Complexity:** removes 21 labels.
