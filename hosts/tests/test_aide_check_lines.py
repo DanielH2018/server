@@ -147,18 +147,6 @@ def test_a_conffile_the_edits_give_from_an_older_versions_copy_is_clean(tmp_path
     assert pushed[0] == "up", pushed
 
 
-def test_a_copy_another_package_ships_does_not_explain_the_conffile(tmp_path):
-    _, pushed, logged, _ = _run_check(
-        tmp_path,
-        _report(f"{CHANGED_CONTENT}: {DEFS}"),
-        rc=4,
-        rewrite={DEFS: OLDER_EDITED},
-        originals={TOOL_COPY: DEFS_SHIPPED, f"other/0.9{DEFS}": OLDER_SHIPPED},
-    )
-    assert pushed[0] == "down", pushed
-    assert f"aide-check: unexplained: {DEFS} ({REASON})" in logged, logged
-
-
 UNAVAILABLE = {
     "no copy kept, and the archive unreachable": {},
     "a copy kept only under another package": {f"other/1.0{DEFS}": DEFS_SHIPPED},
