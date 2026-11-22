@@ -121,8 +121,9 @@ schema the same day.
   Settings > Planning > Issue fields. The web UI's issue search filters a value as
   `field.domain:cicd` ([search syntax][d-search]). The search API does not: on
   2026-11-22 the REST and GraphQL searches returned 0 for `field.domain:cicd` and for
-  `field.severity:low`, while `has:field.domain` counted 70. `gh issue list --json` returns no field
-  values, and `gh issue edit` sets none; the docs name no `gh` flag for either.
+  `field.severity:low`, while `has:field.domain` counted 70. `gh issue list --json`
+  returns no field values, and `gh issue edit` sets none; the docs name no `gh` flag for
+  either.
 - **Issue types** are generally available on personal accounts on the same date
   ([managing issue types][d-types]), up to 25 per owner. Both repositories have Task, Bug,
   Feature, Gap and Improvement. `gh issue list --json issueType` returns the type, and
