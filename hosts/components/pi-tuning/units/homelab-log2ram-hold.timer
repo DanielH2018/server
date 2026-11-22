@@ -1,0 +1,16 @@
+# Shipped by the pi-tuning component with its enable link. Re-applies the log2ram hold daily at
+# 05:05 UTC, after apt-daily's 04:20 run and before apt-daily-upgrade's 05:20, the one unattended
+# path that installs an upgrade. The updater runs reconcile only when a package changes, so without
+# this a hand unhold would last until the weekly reboot. Persistent=false: a Pi that was off at
+# 05:05 holds the package at boot instead.
+[Unit]
+Description=Re-apply the log2ram hold before the daily unattended upgrade
+
+[Timer]
+OnCalendar=*-*-* 05:05:00
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=false
+
+[Install]
+WantedBy=timers.target
