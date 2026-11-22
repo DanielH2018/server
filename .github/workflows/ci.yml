@@ -1604,9 +1604,10 @@ jobs:
 
   # The bootstrap cases (`validate_lib/bootstrap_case.py`), one leg per release, beside the
   # `host_packages` legs rather than inside them, where they were the longest group. Each
-  # release runs three shards, one CPU-bound offline build in each, and `run` submits the three
-  # builds first so the host items fill in behind them. Keep the shard count equal to the number
-  # of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  # release runs two shards. Six of the eight items build the three packages, each in about
+  # 60 s, and `shard` deals three builds and one short red to each shard, so a 4-CPU runner
+  # starts all four at once. Keep the count the smallest that fits every shard's items on a
+  # runner's CPUs; `test_bootstrap_case.py` holds it.
   #
   # Each item prints each phase of the script's local build under its `[DONE]` line. An offline
   # build spends most of its time in `apt-get update`: the image's `Acquire::Retries "10"` backs
@@ -1616,10 +1617,10 @@ jobs:
   # The count meets the criterion the pytest matrix is chosen on: slot-seconds per landing and
   # the p90 queue wait, as `scripts/dev/ci_slot_cost.py --recent 20` prints them. These legs
   # wait for runners because they become ready while the planned pytest legs still hold
-  # slots. Two shards per release would put two offline builds on one leg, which lengthens
-  # the sweep's last leg by more than the queue it saves.
+  # slots. One shard per release would run six builds on four CPUs in two waves, which ends
+  # the bootstrap legs too close to the `host_packages` legs.
   #
-  # The `name:` leaves the shard out, so a release's three shards share the check-run name
+  # The `name:` leaves the shard out, so a release's shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
   #
@@ -1639,12 +1640,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {release: "24.04", python: "3.12", shard: "1/3"}
-          - {release: "24.04", python: "3.12", shard: "2/3"}
-          - {release: "24.04", python: "3.12", shard: "3/3"}
-          - {release: "26.04", python: "3.14", shard: "1/3"}
-          - {release: "26.04", python: "3.14", shard: "2/3"}
-          - {release: "26.04", python: "3.14", shard: "3/3"}
+          - {release: "24.04", python: "3.12", shard: "1/2"}
+          - {release: "24.04", python: "3.12", shard: "2/2"}
+          - {release: "26.04", python: "3.14", shard: "1/2"}
+          - {release: "26.04", python: "3.14", shard: "2/2"}
     env:
       UV_NO_GROUP: lint
     steps:

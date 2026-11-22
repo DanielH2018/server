@@ -56,8 +56,8 @@ The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstr
 them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
 legs that run every other group: on one runner their offline builds and the other groups slowed
 each other, and they ran 338-477 s against 214-271 s for the next-longest group.
-`--bootstrap-shard K/N` runs one share of them, and that job runs three shares per release so no
-two offline builds share a runner.
+`--bootstrap-shard K/N` runs one share of them, and that job runs two shares per release so
+each runner starts all of its share's items at once.
 
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
 so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the

@@ -272,20 +272,22 @@ def test_each_item_s_phase_timings_print_under_its_duration_and_nothing_else_doe
     assert "Reading package lists" not in err
 
 
-def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):
-    monkeypatch.setattr(os, "cpu_count", lambda: 3)
-    _, _, overlap = _run(monkeypatch, tmp_path, quorum=3)
+def test_the_builds_start_before_the_kit_reds(monkeypatch, tmp_path):
+    monkeypatch.setattr(os, "cpu_count", lambda: 6)
+    _, planned, overlap = _run(monkeypatch, tmp_path, quorum=6)
 
-    assert set(overlap.started[:3]) == {"offline", "red-depends", "fixture-host"}
+    builds = {label for label, p in planned.items() if p.builds}
+    assert len(builds) == 6
+    assert set(overlap.started[:6]) == builds
 
 
 def test_a_shard_runs_only_its_share_of_the_items(monkeypatch, tmp_path, capsys):
-    _, planned, _ = _run(monkeypatch, tmp_path, shard=(2, 3))
+    _, planned, _ = _run(monkeypatch, tmp_path, shard=(2, 2))
 
-    share = case.shard(list(planned.values()), 2, 3)
+    share = case.shard(list(planned.values()), 2, 2)
     ran = re.findall(r"^\[DONE\] (\S+) in ", capsys.readouterr().err, re.MULTILINE)
     assert sorted(ran) == sorted(p.label for p in share)
-    assert [p.label for p in share if p.builds_offline] == ["red-depends"]
+    assert sum(p.builds for p in share) == 3
     assert len(share) < len(planned)
 
 
