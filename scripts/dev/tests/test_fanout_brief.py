@@ -11,7 +11,9 @@ import json
 import re
 
 from _review_fakes import _pipeline
+from dev.fanout_lib.branch_pr import OpenPr
 from dev.fanout_lib.brief import (
+    CONTINUING_HEADING,
     DESIGN_HEADING,
     DESIGN_RULES,
     relevant_health,
@@ -326,3 +328,32 @@ def test_every_brief_asks_for_proof_that_new_tests_fail_and_names_the_pr_body_se
         assert f"git merge-base HEAD {base})" in brief
         assert "each new\ntest that still passes is reported" in brief
         assert brief.index("## Prove each new test") < brief.index("## Landing")
+
+
+CONTINUED = OpenPr(
+    "https://github.com/DanielH2018/server/pull/9736",
+    draft=False,
+    failing=("pytest https://github.com/DanielH2018/server/actions/runs/1",),
+)
+
+
+def test_a_brief_that_continues_an_open_pr_names_it_and_its_failing_checks():
+    brief = render_brief(
+        ISSUES,
+        "daniel-box",
+        "9349",
+        "worktree-orch",
+        [],
+        review=True,
+        continues=CONTINUED,
+    )
+    assert "checked out from `origin/worktree-fanout-9349`" in brief
+    assert "fresh from" not in brief
+    assert CONTINUED.url in brief and CONTINUED.failing[0] in brief
+    assert "Do not open another PR" in brief and "git merge origin/master" in brief
+    assert "gh pr ready 9736 --undo" in brief
+
+
+def test_a_brief_for_a_new_branch_carries_no_continuation():
+    brief = render_brief(ISSUES, "daniel-box", "9349", "worktree-orch", [], review=True)
+    assert CONTINUING_HEADING not in brief and "fresh from origin/master" in brief

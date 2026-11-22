@@ -38,7 +38,7 @@ from lib import gh_rate_limit
 
 # The parsed check-run every CI grader reads. `ci_verdict` imports nothing first-party.
 from lib import host_modules  # noqa: F401
-from ci_verdict import CheckRun, CommitStatus, parse_check_runs
+from ci_verdict import CheckRun, CommitStatus, WorkflowRun, parse_check_runs
 from host_lib import github_token
 from deploy_tools.forge_transport import (
     TIMEOUT_S,
@@ -205,11 +205,12 @@ class GitHub:
                     raise ForgeError(f"check-runs for {sha}: {exc}") from exc
         raise ForgeError(f"check-runs for {sha}: more than {CHECK_RUN_PAGES_MAX} pages")
 
-    def runs(self, workflow: str, status: str) -> list[dict]:
+    def runs(self, workflow: str, status: str) -> list[WorkflowRun]:
         """The newest 100 runs of `workflow`, a file name such as `promote.yml`, with `status`.
 
         Raises:
-            ForgeError: any status but 200, a body without a `workflow_runs` list, or no answer.
+            ForgeError: any status but 200, a body without a `workflow_runs` list, a run
+                that is not an object, or no answer.
         """
         url = (
             f"https://api.github.com/repos/{self.repository}/actions/workflows/{workflow}"
@@ -222,7 +223,10 @@ class GitHub:
         runs = runs.get("workflow_runs") if isinstance(runs, dict) else None
         if not isinstance(runs, list):
             raise ForgeError(f"{workflow} runs: the body has no workflow_runs list")
-        return runs
+        try:
+            return [WorkflowRun.parse(run) for run in runs]
+        except ValueError as exc:
+            raise ForgeError(f"{workflow} runs: {exc}") from exc
 
     def run_jobs(self, run_id: object) -> list[dict]:
         """The jobs of one workflow run, the newest attempt's, 100 to a page.

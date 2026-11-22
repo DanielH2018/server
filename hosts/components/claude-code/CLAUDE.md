@@ -221,7 +221,8 @@ What it does not restore:
   new sessions. `claude rc --session-id` cannot be combined with `--spawn`.
 - **Interactive sessions that ran `/remote-control`.** They end with their process. Resume one
   with `claude --resume <id>`, then `/remote-control`.
-- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG` and the pytest cap.
+- **The login environment.** The unit sets `HOME`, `PATH`, `KUBECONFIG`, the pytest cap and
+  the `session.kind=bg-resume` telemetry label.
   A respawned session has no `SSH_AUTH_SOCK`, D-Bus session or `XDG_RUNTIME_DIR`, because no
   one is logged in at boot. `gh` reads its token from `~/.config/gh/hosts.yml`, so it works.
 - **Monitoring.** A failed run pages nothing; `systemctl status homelab-claude-bg-resume` shows it.

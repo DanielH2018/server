@@ -3,6 +3,8 @@
 import json
 import subprocess
 
+from lib import host_modules  # noqa: F401
+from ci_verdict import WorkflowRun
 from dev.pipeline_timeline import (
     ci_by_branch,
     concurrency,
@@ -144,12 +146,14 @@ def test_concurrency_counts_overlapping_batches_and_skips_non_fanout_rows():
 
 
 def _run(n, branch, conclusion, hour):
-    return {
-        "databaseId": n,
-        "headBranch": branch,
-        "conclusion": conclusion,
-        "createdAt": f"2026-10-18T{hour:02d}:00:00Z",
-    }
+    return WorkflowRun.parse(
+        {
+            "databaseId": n,
+            "headBranch": branch,
+            "conclusion": conclusion,
+            "createdAt": f"2026-10-18T{hour:02d}:00:00Z",
+        }
+    )
 
 
 def test_first_ci_is_the_first_run_that_reached_a_verdict():
