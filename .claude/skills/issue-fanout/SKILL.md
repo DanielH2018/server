@@ -251,9 +251,11 @@ the batch's `.fanout/server`. The snapshot also supplies that batch's system pro
 `fanout-stop` hook.
 The agent stops at its PR on every host, and the pipeline decides what happens next. In
 this repo the agent opens that PR as a draft, and `ci.yml` runs no job on a draft. On
-daniel-server the pipeline marks the PR ready after the review and its fix round, so CI runs
-once, on the reviewed head (#5563). On daniel-box a PR the pipeline lands stays a draft until its landing, and a held batch's
-PR is marked ready as on daniel-server.
+either host a PR the pipeline lands stays a draft until its landing. A daniel-server PR the
+server lander's rule holds for a person also stays a draft with no CI, and that person's
+`land.sh` marks it ready at its turn (#9896). Any other PR the pipeline does not land is
+marked ready after the review and its fix round, so CI runs once, on the reviewed head
+(#5563).
 A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A `design` finding names code the change added that the repo
 would not miss, and its fix only takes code out
@@ -265,8 +267,9 @@ the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwi
 pipeline lands the draft with `land.sh` itself
 (`scripts/dev/fanout_lib/review/review_ci.py:land_draft`), from a fresh detached checkout of `origin/master` rather than the batch worktree, whose landing code a master change since launch would make stale.
 On daniel-server it does so only when the PR passes the server lander's PR rule
-(`scripts/dev/fanout_lib/review/review_ci.py:server_lands`); a PR that rule holds is marked
-ready, and the pipeline waits for its CI with `cc-wait gh-ci --pr` (#4737).
+(`scripts/dev/fanout_lib/review/review_ci.py:server_lands`); a PR that rule holds stays a
+draft for a person to land. A PR held only because it could not be read or its head moved is
+marked ready, and the pipeline waits for its CI with `cc-wait gh-ci --pr` (#4737).
 The landing marks the draft ready, or a landing batch tests it with other drafts, so the PR's
 first CI run is the one it merges on (`docs/ci-throughput.md`, D9). A landing that ends
 `pr-ci-red` resumes the agent once, and the pipeline lands the PR again. It also resumes the agent for an `unhealthy`,

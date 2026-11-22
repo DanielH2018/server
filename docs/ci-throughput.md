@@ -267,9 +267,9 @@ The operator ruled on its two preconditions on 2026-11-15:
 A daniel-server review pipeline lands its own draft (`review_ci.server_lands`). It does so
 only for a PR the server lander would land unattended: `own_surface.pr_problems` holds a
 PR that changes the landing code, the fan-out tooling, `secrets/`, `.github/`, `.claude/`
-or the `claude-code` component, and one whose body names an operator step. A held PR is
-marked ready and waits for its run, as before, and the server lander leaves it for a
-person. A CI fix that reaches a held path ends the batch `needs input`. A plain daniel-server
+or the `claude-code` component, and one whose body names an operator step. A held PR
+stays a draft with no run, and the server lander leaves it for a person, whose `land.sh`
+marks it ready at its turn ([#9896](https://github.com/DanielH2018/server/issues/9896)). A CI fix that reaches a held path ends the batch `needs input`. A plain daniel-server
 batch still stops at its PR.
 
 The slices:
@@ -807,7 +807,9 @@ and the landing's `stale_base.rejoin_line` converts it back to a draft. The 39 h
 spent 79 full runs, 2.0 a PR, counting 9 red or cancelled runs. 24 of them still merged as
 batch members, whose own run is a proof run, so their early run bought nothing. Had each
 held PR stayed a draft until its landing, about 55 fewer runs would have run, which is
-about 1.12 per merge. The operator rules on the fix with these numbers.
+about 1.12 per merge. The operator ruled option 1 on 2026-11-22: a held PR stays a draft
+until a person starts its landing, so the landing's turn gives it its one run
+(`review_ci.server_lands` sets `person_lands`).
 
 Two of the plan's candidates were small. PRs opened ready cost 8 runs. Holders whose landing
 code was older than master's cost 7.
