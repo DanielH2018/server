@@ -1,9 +1,13 @@
 #!/usr/sbin/nft -f
 {% set uids = [901, 907] -%}
 {% set proxy_host, proxy_port = t2_egress_proxy.split(':') -%}
+{# claude-code's claude_code_otlp_host_ip and claude_code_otlp_port, which this component cannot
+   read; hosts/lib/tests/test_t2_egress_component.py holds them equal. #}
+{% set otlp_host, otlp_port = '127.0.0.1', 4317 -%}
 # Shipped by daniel-box's package (the t2-egress component). The T2 session users' egress fence:
-# each may reach squid on {{ t2_egress_proxy }} and nothing else. Every other connection gets a TCP
-# reset or ICMP admin-prohibited, so a client fails at once instead of waiting out a timeout.
+# each may reach squid on {{ t2_egress_proxy }} and the Claude Code telemetry collector on
+# {{ otlp_host }}:{{ otlp_port }}, and nothing else. Every other connection gets a TCP reset or ICMP
+# admin-prohibited, so a client fails at once instead of waiting out a timeout.
 #
 # It touches only `table inet t2_egress`, so loading it changes no ufw, kube-proxy, flannel or
 # portmap rule (I4). nft applies the file as one transaction, and its statements are idempotent,
@@ -12,7 +16,12 @@
 # a change to a set's key must `delete set` it first.
 #
 # The output hook at filter priority sees addresses after kube-proxy's DNAT, so a rule naming a
-# Service VIP would never match: the fence names squid's own address alone.
+# Service VIP would never match: the fence names squid's own address. The collector's port is a
+# hostPort, which portmap DNATs to the pod before this hook, so its rule matches the connection's
+# original destination instead.
+#
+# The collector forwards whatever a session sends to Prometheus, which keeps only the
+# claude_code_* names from it, so a session cannot forge a series a routed triage alert reads.
 #
 # The trace rules come first, so a refused attempt still lands in the sets. No statement logs: a
 # kernel log line reaches syslog and loki-homelab, the path I6 closes. The counters and the sets
@@ -31,6 +40,7 @@ add set inet t2_egress seen6 { type uid . ipv6_addr . inet_proto . inet_service;
 add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ct state new meta l4proto { tcp, udp } meta nfproto ipv4 update @seen4 { meta skuid . ip daddr . meta l4proto . th dport } counter
 add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ct state new meta l4proto { tcp, udp } meta nfproto ipv6 update @seen6 { meta skuid . ip6 daddr . meta l4proto . th dport } counter
 add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } ip daddr {{ proxy_host }} tcp dport {{ proxy_port }} counter accept
+add rule inet t2_egress output meta skuid { {{ uids | join(', ') }} } meta l4proto tcp ct original ip daddr {{ otlp_host }} ct original proto-dst {{ otlp_port }} counter accept
 {% for uid in uids %}
 add rule inet t2_egress output meta skuid {{ uid }} meta l4proto tcp counter reject with tcp reset comment "t2-fence {{ uid }} tcp"
 add rule inet t2_egress output meta skuid {{ uid }} counter reject with icmpx admin-prohibited comment "t2-fence {{ uid }} other"

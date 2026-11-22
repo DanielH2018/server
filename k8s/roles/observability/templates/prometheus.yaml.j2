@@ -83,6 +83,13 @@ data:
             action: keep
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: node
+        # The fenced triage and Renovate sessions, which read untrusted text, export here too. Any
+        # other name would let one forge a series a routed triage alert reads, such as
+        # kube_deployment_status_replicas_available.
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: claude_code_.*
+            action: keep
       # The collector's OWN metrics, on a different port. These carry the send_failed_*
       # counters that are the only evidence a batch was dropped en route to Loki. Without
       # this scrape a silent export failure is indistinguishable from "Claude Code was idle".
