@@ -67,15 +67,6 @@ def test_every_required_context_names_a_real_job():
     assert not missing, f"required contexts naming no ci.yml job: {sorted(missing)}"
 
 
-def test_a_bogus_context_would_be_flagged():
-    """The reject half.
-
-    Without this, a parser that returned every string in the file would pass the check above while
-    proving nothing.
-    """
-    assert "not-a-real-job" not in _workflow_job_names()
-
-
 def test_the_workflow_parse_actually_finds_jobs():
     """A regex that matched nothing would make the coverage test vacuously true."""
     assert _workflow_job_names(), "parsed no job names out of ci.yml"

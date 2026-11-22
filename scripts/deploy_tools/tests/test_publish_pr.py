@@ -203,10 +203,7 @@ def test_open_pr_returns_the_first_of_several():
             )
         }
     )
-    assert (
-        publish_pr.open_pr("x/", rec.tools()) == "7"
-        or publish_pr.open_pr("x/", rec.tools()) == "3"
-    )
+    assert publish_pr.open_pr("x/", rec.tools()) == "3"
 
 
 # --- A `gh` timeout is a state, not a traceback ------------------------------------------------
