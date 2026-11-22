@@ -239,6 +239,34 @@ def test_red_an_arm_that_edits_any_owned_file_would_fight_dpkg(tmp_path):
     )
 
 
+def missing_owned_conffile_is_refused(node: Node) -> None:
+    write(node, "/etc/.keep", "")
+    own(node, "/etc/login.defs", conffile=True)
+    declare(node, {**SWAPPY, "path": "/etc/login.defs"})
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "/etc/login.defs is missing and owned by some-package" in result.stderr
+    assert "--force-confmiss some-package" in result.stderr
+    assert not (node.root / "etc/login.defs").exists()
+
+
+def test_a_missing_package_owned_conffile_is_refused_and_not_created(node):
+    # fact: hosts/components/aide-scan/CLAUDE.md#Autonomous-role contract (the scan runs weekly with no human in the loop)
+    missing_owned_conffile_is_refused(node)
+
+
+def test_red_an_arm_that_creates_a_missing_owned_conffile_writes_a_stub(tmp_path):
+    red(
+        tmp_path,
+        missing_owned_conffile_is_refused,
+        ARM,
+        "if owners and not under_root(Path(path)).exists():",
+        "if False:",
+    )
+
+
 # The two owning-package upgrade cases (H7, *In-place edits*).
 
 

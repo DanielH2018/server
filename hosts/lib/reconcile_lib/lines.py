@@ -17,7 +17,9 @@ the arm left with the wrong ones.
 
 Before it writes, the arm asks one `dpkg -S` call for the owners of every path it edits. It accepts
 an unowned file, and an owned file only when every owner lists the path among its conffiles. It refuses any other owned file, so it
-can never fight dpkg, and a refusal is a fault: the package shipped something wrong. The arm never
+can never fight dpkg, and a refusal is a fault: the package shipped something wrong. It also
+refuses an owned path that is missing: a line edit presumes the package's copy beneath it, and a
+file written from nothing holds only the managed lines. The arm never
 removes a line, so it keeps no record and reports no drift.
 
 `activate:` on an edit is not read here. The renderer writes it into the manifest's `activations`
@@ -97,6 +99,12 @@ def refusal(path: str, owners: set[str] | None) -> str | None:
     """Why the arm must not edit `path`, or None when no package owns it or only a conffile."""
     if owners is None:
         return f"dpkg -S cannot say which package owns {path}"
+    if owners and not under_root(Path(path)).exists():
+        packages = " ".join(sorted(owners))
+        return (
+            f"{path} is missing and owned by {packages}; restore it with apt-get install "
+            f"--reinstall -o Dpkg::Options::=--force-confmiss {packages}"
+        )
     for owner in sorted(owners):
         listed = conffiles(owner)
         if listed is None:
