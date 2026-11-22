@@ -57,6 +57,10 @@ AGENT_CLONES = (
 # The image masks systemd-udevd, so that no case reaches the runner's devices through
 # --privileged. A node runs udevd, which reconcile's udev arm reloads when a shipped rule changes.
 UDEVADM_STUB = "/usr/local/sbin/udevadm"
+# virsh's defines failed identically on 24.04 and 26.04 in CI run 45031671927, so the container,
+# not the release, refuses libvirt. The stub leaves reconcile's libvirt arm, daniel-server's
+# staging network and its egress nwfilter, untested here.
+VIRSH_STUB = "/usr/local/sbin/virsh"
 # Every container shares the runner's virtual consoles through --privileged, so logind starts a
 # getty on each console another case's container touches, and they trip each other's start
 # limits. The image masks getty@tty1 for that reason; a node container masks the rest.
@@ -147,7 +151,8 @@ def seed_node_host(c: Container, dropins: dict[str, str]) -> None:
     The nodes ship the Pi's sshd, ufw, auditd, postfix, hosts and modules-load subjects, so they
     get `seed_pi_host`, which unmounts /etc/resolv.conf: no name resolves after it, so every
     fetch from the archive comes first. A node adds the Ubuntu server packages in
-    SERVER_PACKAGES, the dotfiles tools in DOTFILES_TOOLS and `udevadm` as stubs that exit 0,
+    SERVER_PACKAGES, the dotfiles tools in DOTFILES_TOOLS, `udevadm` and `virsh` as stubs that
+    exit 0,
     the agent's clones in AGENT_CLONES, and `dropins`, from `case_dropins`.
     """
     c.ok(
@@ -155,7 +160,7 @@ def seed_node_host(c: Container, dropins: dict[str, str]) -> None:
         f" {' '.join(SERVER_PACKAGES)} < /dev/null"
     )
     seed_pi_host(c)
-    for path in (*DOTFILES_TOOLS, UDEVADM_STUB):
+    for path in (*DOTFILES_TOOLS, UDEVADM_STUB, VIRSH_STUB):
         _put(c, path, EXIT_0, "0755")
     c.ok("chown -R ubuntu:ubuntu /home/ubuntu/.local")
     c.ok(f"install -d {' '.join(AGENT_CLONES)}")
