@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-22 06:17 UTC
-generated_sha: 0d03adcb5
+generated_at: 2026-11-22 18:17 UTC
+generated_sha: cb4f5351c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -94,9 +94,9 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `lidarr_api_key` | 2026-07-07 | 2027-07-07 | 227 |
 | `livesync_db_password` | 2025-11-16 | 2026-11-02 | -20 |
 | `livesync_sync_token` | 2025-09-04 | 2026-08-10 | -104 |
-| `longhorn_b2_application_key` | 2026-05-29 | 2027-05-13 | 172 |
+| `longhorn_b2_application_key` | 2026-11-22 | 2027-11-06 | 349 |
 | `longhorn_b2_endpoint` | 2026-05-29 | 2027-05-04 | 163 |
-| `longhorn_b2_key_id` | 2026-05-29 | 2027-05-04 | 163 |
+| `longhorn_b2_key_id` | 2026-11-22 | 2027-10-28 | 340 |
 | `monitor_bridge_ha_token` | 2025-11-06 | 2026-10-19 | -34 |
 | `mqtt_password` | 2026-06-08 | 2027-05-20 | 179 |
 | `mqtt_password_hash` | 2026-04-23 | 2027-03-29 | 127 |

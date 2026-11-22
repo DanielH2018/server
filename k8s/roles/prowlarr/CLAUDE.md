@@ -7,9 +7,10 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=prowlarr` gates the rollout
-- **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`),
-  `ghcr.io/flaresolverr/flaresolverr` (`prowlarr_k8s_flaresolverr_image`),
-  `ghcr.io/onedr0p/exportarr` (`prowlarr_k8s_exportarr_image`)
+- **Images:** `lscr.io/linuxserver/prowlarr` (`prowlarr_k8s_image`), `python`
+  (`prowlarr_k8s_app_keys_image`), `ghcr.io/flaresolverr/flaresolverr`
+  (`prowlarr_k8s_flaresolverr_image`), `ghcr.io/onedr0p/exportarr`
+  (`prowlarr_k8s_exportarr_image`)
 - **Route:** `prowlarr.local.<domain>` (LAN only), Authelia one_factor
 - **Claim:** `prowlarr-config` (weekly -> B2 (default target))
 <!-- /generated_from -->
@@ -33,32 +34,34 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
   operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump.
 - **Its checks.** The Kustomization's `wait` holds both Deployments' rollout. The
-  `prowlarr-verify` Kustomization runs the flaresolverr isolation probe and two seed Jobs
-  that write the Discord notification and the app API keys.
+  `prowlarr-verify` Kustomization runs the flaresolverr isolation probe, the seed Job that
+  writes the Discord notification, and the app-keys seed's gate Job.
 
 ## Notable
 - **Prowlarr keeps its own copy of each app's API key.** Settings → Apps stores the Sonarr,
   Radarr and Lidarr keys in Prowlarr's database. A stale copy fails every indexer push with a
   401 while RSS through Prowlarr keeps working.
-- **`templates/verify/app-keys.yaml.j2` writes the SOPS keys into those entries.** The seed
-  Job runs `files/seed_prowlarr_app_keys.py` in `prowlarr-verify`, reading each key from the
-  app's `<app>-exportarr` Secret. Prowlarr's API masks `apiKey` as `********`, so the script
-  cannot compare keys. It sends each entry unchanged to `POST /api/v1/applications/test`, which
-  tests the app with the stored key, and PUTs the SOPS key only when that test fails on
+- **`templates/app-keys-cronjob.yaml.j2` writes the SOPS keys into those entries.** The
+  `prowlarr-app-keys` CronJob runs `files/seed_prowlarr_app_keys.py` hourly, reading each key
+  from the app's `<app>-exportarr` Secret. Prowlarr's API masks `apiKey` as `********`, so the
+  script cannot compare keys. It sends each entry unchanged to `POST /api/v1/applications/test`,
+  which tests the app with the stored key, and PUTs the SOPS key only when that test fails on
   `ApiKey`. A PUT pushes every indexer to the app, so a second run writes nothing
   (`k8s/roles/prowlarr/tests/test_seed_prowlarr_app_keys.py::test_a_second_run_writes_nothing`).
-  Any other test failure, or an app with no entry or two, fails the Job without a write. The
-  Job's spec embeds the `cluster-vars.source` digest of the three keys and a digest of the
-  rendered Deployment. Flux therefore runs it again after a key rotation and after each
-  revision that rolls prowlarr. `flux_verify_after` holds `prowlarr-verify` until sonarr,
-  radarr and lidarr are Ready.
-- **A `prowlarr-config` revert can leave a stale key until the next prowlarr revision.** The
-  revert changes no render, so the seed does not run after it. A rerun after a revert is
-  [#9789](https://github.com/DanielH2018/server/issues/9789).
-  `ProwlarrAppSyncFailing` in `k8s/roles/observability/files/rules/arr-apps.yaml` pages once
-  Prowlarr's `ApplicationLongTermStatusCheck` has reported an app for 6 hours, read from the
-  exportarr sidecar's `prowlarr_system_health_issues` series. To repair it, paste the app's
-  key from its Settings → General into Prowlarr's entry for it, then click Sync App Indexers.
+  Any other test failure, or an app with no entry or two, fails the run without a write.
+- **The seed also runs once per revision, as a gate Job.** `flux_cronjob_gates` copies the
+  jobTemplate into `prowlarr-verify` as `prowlarr-app-keys-deploy-gate-<spec digest8>`. The
+  copy's role digest renames it on every prowlarr revision, and the jobTemplate embeds the
+  `cluster-vars.source` digest of the three keys, so a key rotation renames it too.
+  `flux_verify_after` holds `prowlarr-verify` until sonarr, radarr and lidarr are Ready.
+- **The next hourly run repairs a `prowlarr-config` revert.** The revert changes no render, so
+  the gate does not run after it. The scheduled run writes back any stale key the snapshot
+  restored. Prowlarr raises `ApplicationLongTermStatusCheck` only after 6 hours of failed
+  syncs, so the run lands before `ProwlarrAppSyncFailing` in
+  `k8s/roles/observability/files/rules/arr-apps.yaml` reads it from the exportarr sidecar's
+  `prowlarr_system_health_issues` series. When the alert pages anyway, read the last
+  `prowlarr-app-keys` run's log: a failure other than the key needs a hand fix in
+  Settings → Apps.
 - **A revert desyncs indexer IDs.** Unlike sonarr/radarr/bazarr/jellyfin, which self-heal a
   volume revert (rescan, re-download, existence check), Prowlarr pushes indexer config to the
   other *arr apps and they store Prowlarr-assigned IDs back. A rollback needs a manual re-sync.
@@ -106,6 +109,22 @@ challenges for the indexers by rendering attacker-supplied pages in a headless b
 - **Log churn, not log size, drives PVC growth.** `prowlarr_k8s_log_level`/`_log_rotate`
   override upstream's noisier defaults; see `k8s/roles/sonarr/defaults/main.yml` for the full
   rationale, shared across the *arr roles.
+
+## Autonomous-role contract
+
+The `prowlarr-app-keys` CronJob writes Prowlarr's database with no human in the loop.
+
+- **Scope.** It PUTs the `apiKey` field of the one Sonarr, Radarr and Lidarr application
+  entry, and only when Prowlarr's own test of that entry fails on `ApiKey`. It never creates or
+  deletes an entry.
+- **Mode and arming.** Always armed. To stop it, remove the CronJob and its gate entry in
+  `defaults/main.yml`; the per-revision gate goes with it.
+- **Abort valves.** Any test failure other than the key, and an app with no entry or two, fail
+  the run before any write. `activeDeadlineSeconds` bounds a hung run.
+- **Required evidence.** Each run logs one count line, `prowlarr applications: N keys written`,
+  in Loki; `ProwlarrAppSyncFailing` pages when the keys stay wrong.
+- **Next-run review.** A run that writes a key outside a revert or a rotation means something
+  else rewrites Prowlarr's entries; find it before widening the scope.
 
 ## Editing
 - Manifest: `k8s/roles/prowlarr/templates/deployment.yaml.j2`,

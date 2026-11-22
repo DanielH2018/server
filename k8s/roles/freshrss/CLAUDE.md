@@ -44,7 +44,6 @@ FreshRSS with a small nginx feed-cache Deployment beside it
 - The nginx feed cache (`files/nginx-feed-cache.conf`) proxies a **fixed set of upstreams**, one
   `location` each. It is not a general outbound-feed proxy, so adding a feed means editing the
   nginx conf.
-  - `/` caches `rachelbythebay.com` for 24h, because that site blocks readers that poll often.
   - `/restofworld/` rewrites the unescaped `&dpr=` and `&crop=` in Rest of World's media URLs
     to `&amp;`. Without it FreshRSS rejects the feed as invalid XML. The rewrite stops working
     if the publisher changes those query parameters.

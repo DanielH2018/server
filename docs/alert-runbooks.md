@@ -421,6 +421,10 @@ fallback never engages.
   `journalctl -k -g enp88s0` on daniel-server. A run of `NETDEV WATCHDOG: ... transmit queue
   ... timed out` and `Reset adapter` lines from `igc` means the NIC's transmit queue hung. That
   was the cause on daniel-box on 2026-11-22, 2026-10-18 and 2026-10-28.
+- daniel-box's package turns Ethernet flow control off on `eno1`
+  (`hosts/daniel-box/network/50-homelab-eno1.link`), because the switch sends the port PAUSE
+  frames. The file goes live at a boot. `ethtool -a eno1` reads `RX: off` and `TX: off` once it
+  has. If it reads `on` after a boot, the `Link File:` line of `networkctl status eno1` names the file that was applied.
 - `journalctl -t wired-gateway` shows each failed run's ping output and the gateway's
   neighbour entry. `INCOMPLETE` means ARP got no answer over the link.
 - If both nodes fire at once, the gateway itself is down, not either node's link.
@@ -598,7 +602,7 @@ dotfiles apply has not completed a clean run.
 
 ### `ClaudeTriagePollNotReporting`
 
-No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus for 5 minutes, so the
+No `claude-triage-poll` verdict newer than 660 seconds reached Prometheus for 7 minutes, so the
 monitor triage poll has not completed a clean run.
 
 - The timer most likely stopped firing. A run that fails pages through its `OnFailure` unit,

@@ -19,7 +19,7 @@ from _readonly_kubeconfig import UNIT as KUBECONFIG_UNIT
 from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 
 from lib import yaml_fast
-from lib.estate import REPO_INVENTORY, role_defaults
+from lib.estate import REPO_INVENTORY, Estate, role_defaults
 from lib.proc_testing import run, write_exec
 from lib.render_context import render_context
 from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
@@ -30,6 +30,7 @@ SYSTEM = "/usr/lib/systemd/system/"
 COMPONENTS = REPO / "hosts" / "components"
 TOOLS = REPO / "hosts" / "packages" / "homelab-tools" / "package.yml"
 ADMIN_KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
+FLOW_CONTROL = ("AutoNegotiationFlowControl", "RxFlowControl", "TxFlowControl")
 # Each cron file `setup/k3s` installed, with the timer that replaces it and its OnCalendar.
 TIMERS = {
     "longhorn-backup-health": ("homelab-longhorn-backup-health", "*:00/10"),
@@ -214,6 +215,21 @@ def test_the_resolver_names_only_the_forwarder(package):
 def test_a_netplan_file_goes_live_at_the_next_boot(package, path):
     assert package.activations[path] == "manual:systemd-networkd.service"
     assert package.files[path][1] == 0o600
+
+
+def test_eno1_turns_flow_control_off_and_keeps_its_onboard_name_from_the_next_boot(
+    package,
+):
+    path = "/usr/lib/systemd/network/50-homelab-eno1.link"
+    keys = text(package, path).splitlines()
+    link = dict(
+        line.split("=", 1) for line in keys if "=" in line and not line.startswith("#")
+    )
+    assert package.activations[path] == "reboot"
+    assert link["Path"] == "pci-0000:02:00.0"
+    assert {key: link[key] for key in FLOW_CONTROL} == dict.fromkeys(FLOW_CONTROL, "no")
+    assert "onboard" in link["NamePolicy"].split()
+    assert Estate().own_vars(HOST)["k3s_node_static_link"] == "eno1"
 
 
 def test_the_inotify_key_ships_in_sysctl_d_and_the_zshenv_block_uses_the_line_arm(
