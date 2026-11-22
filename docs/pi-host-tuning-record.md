@@ -381,8 +381,26 @@ on the card until the next boot. The Ubuntu 26.04 upgrade did this on 2026-11-21
 when it replaced Azlux's `log2ram 1.7.2` with Ubuntu's `1.7.2+ds-1build1`. `PiSdHealthFailed`
 then paged three times between 22:37 and 00:40 with `errors_count=0` on every line, until the
 00:35 reboot remounted the tmpfs. The 2026-11-12 page had the same leg but a different cause:
-log2ram's size guard refused at boot. #9940 tracks the upgrade path, and #9941 tracks the two
-apt sources that both offer the package.
+log2ram's size guard refused at boot. #9941 tracks the two apt sources that both offer the
+package.
+
+**The `log2ram` package stays held, so it upgrades only in a planned window that ends in a
+reboot** (#9940). `homelab-log2ram-hold.service`, from the `pi-tuning` component, runs
+`apt-mark hold log2ram` at every boot and on every reconcile run. A hand `apt-mark unhold`
+therefore lasts only until the next reconcile or boot. To check the hold, run
+`ssh daniel-pi apt-mark showhold`, which lists `log2ram` beside the Docker packages. To upgrade
+log2ram, run these three commands back to back on the Pi, so no reconcile re-holds the package
+between them:
+
+```bash
+sudo apt-mark unhold log2ram
+sudo apt-get install --only-upgrade log2ram
+sudo reboot
+```
+
+The boot remounts `/var/log` as a tmpfs and re-holds the package. A new upstream version also
+needs a new vendored copy of the script and a re-diff, as the `DECIDED:` marker in
+`hosts/components/pi-tuning/component.yml` says.
 
 Three things about the integrity verdict:
 

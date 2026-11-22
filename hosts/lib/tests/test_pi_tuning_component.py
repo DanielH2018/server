@@ -110,6 +110,18 @@ def test_log2ram_runs_the_packaged_copy_and_no_live_restart_follows_a_change(pac
     assert package.policies["log2ram.service"] == "manual"
 
 
+def test_log2ram_is_held_at_every_boot_and_reconcile_once_it_is_installed(package):
+    unit = "homelab-log2ram-hold.service"
+    text = _text(package, f"/usr/lib/systemd/system/{unit}")
+    assert "/usr/lib/systemd/system/multi-user.target.wants/" + unit in package.links
+    # Reconcile starts an enabled unit only while it is inactive and not manual.
+    assert unit not in package.policies
+    assert not re.search(r"^RemainAfterExit=", text, re.M)
+    assert "Type=oneshot\n" in text
+    assert "ConditionPathExists=/var/lib/dpkg/info/log2ram.list\n" in text
+    assert re.search(r"^ExecStart=/usr/bin/apt-mark .*\bhold log2ram$", text, re.M)
+
+
 # The line arm: each edit adopts what Ansible wrote.
 
 # (path, the line Ansible's task wrote or the stock line it replaces, the action)

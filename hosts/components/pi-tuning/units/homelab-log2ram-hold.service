@@ -1,0 +1,16 @@
+# Shipped by the pi-tuning component with its enable link. Holds the log2ram package at boot and
+# on every reconcile run, so it upgrades only in a planned window that ends in a reboot: the
+# package's prerm unmounts /var/log and its postinst never remounts it. No RemainAfterExit, so
+# reconcile finds the unit inactive and starts it again, and a hand `apt-mark unhold` lasts only
+# until the next run. The condition skips a Pi without log2ram, because a hold on a package that
+# is not installed would refuse bootstrap's install of it.
+[Unit]
+Description=Hold the log2ram package until a planned upgrade
+ConditionPathExists=/var/lib/dpkg/info/log2ram.list
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/apt-mark -o DPkg::Lock::Timeout=60 hold log2ram
+
+[Install]
+WantedBy=multi-user.target
