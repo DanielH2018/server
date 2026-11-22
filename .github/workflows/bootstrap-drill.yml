@@ -17,11 +17,15 @@ name: Bootstrap drill
 #
 # A pull request whose changed paths match the filter below starts it. `gh workflow run`
 # finds only workflows on the default branch, so `gh workflow run bootstrap-drill.yml --ref
-# <branch>` runs it on any branch only once the file is there.
+# <branch>` runs it on any branch only once the file is there. On a draft the jobs skip at job
+# level and take no runner; GitHub evaluates `paths:` against the whole PR diff on
+# `ready_for_review`, which starts the run that counts (docs/ci-throughput.md, *When a job may
+# skip at job level*).
 
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/bootstrap-drill.yml
       - .github/actions/pinned-tool/action.yml
@@ -40,6 +44,7 @@ concurrency:
 jobs:
   drill:
     name: drill (${{ matrix.leg }})
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 25
     strategy:
