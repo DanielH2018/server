@@ -12,6 +12,8 @@ from validate.validate_lib.node_package_case import (
     NODES,
     STUBBED_ONESHOTS,
     STUBBED_UNITS,
+    TIMER_DROPIN,
+    case_dropins,
     unit_problems,
 )
 
@@ -62,6 +64,15 @@ def test_each_stub_matches_its_units_type():
     oneshots = {u for u, text in shipped.items() if "\nType=oneshot" in text}
     assert set(STUBBED_ONESHOTS) - oneshots == set()
     assert set(STUBBED_UNITS) & oneshots == set()
+
+
+def test_every_timer_a_node_ships_is_held_off():
+    """A timer left out would fire a networked service at whatever minute the case runs."""
+    for package in map(host_mode.render_host, NODES):
+        dropins = case_dropins(package)
+        timers = {unit for unit in package.units() if unit.endswith(".timer")}
+        assert "homelab-claude-guardrail-ack.timer" in timers
+        assert {t for t in timers if dropins.get(t) != TIMER_DROPIN} == set()
 
 
 def test_the_host_packages_job_runs_the_case():
