@@ -72,6 +72,9 @@ WARNING = 4
 
 # A logfmt value with any of these, or an empty one forced to quote, is written in quotes.
 _LOGFMT_NEEDS_QUOTES = re.compile(r'[\s"=\\]')
+# One pair as `logfmt` writes it: a bare value runs to the next space, a quoted one to its
+# unescaped closing quote.
+_LOGFMT_PAIR = re.compile(r'(?:^|\s)([\w.-]+)=("(?:[^"\\]|\\.)*"|[^\s"]*)')
 
 
 def _fd_is_journal(fd: int) -> bool:
@@ -112,6 +115,17 @@ def logfmt(fields: Mapping[str, object], always_quote: Collection[str] = ()) -> 
             text = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
         pairs.append(f"{key}={text}")
     return " ".join(pairs)
+
+
+def parse_logfmt(line: str) -> dict[str, str]:
+    """The `key=value` pairs of a line `logfmt` wrote, quoted values unescaped.
+
+    Text that is not a pair, such as a `RESTART-RESULT:` prefix, is skipped.
+    """
+    return {
+        key: re.sub(r"\\(.)", r"\1", value[1:-1]) if value.startswith('"') else value
+        for key, value in _LOGFMT_PAIR.findall(line)
+    }
 
 
 def deploy_event(

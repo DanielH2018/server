@@ -141,3 +141,9 @@ def test_a_failed_textfile_write_removes_its_temp_file(tmp_path):
     with pytest.raises(IsADirectoryError):
         host_lib.write_textfile(str(tmp_path / "check.prom"), "a 1\n")
     assert os.listdir(tmp_path) == ["check.prom"]
+
+
+def test_parse_logfmt_reads_back_what_logfmt_wrote():
+    fields = {"name": "docs", "cause": "", "detail": 'a "quoted" \\ path=x'}
+    line = "RESTART-RESULT: " + host_lib.logfmt(fields)
+    assert host_lib.parse_logfmt(line) == fields

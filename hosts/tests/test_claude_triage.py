@@ -139,6 +139,27 @@ def test_the_config_carries_the_pins() -> None:
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
+def test_the_run_outlasts_the_session_and_the_restart_it_waits_for() -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    config = dict(
+        line.split("=", 1)
+        for line in render_component_text("claude-code", CONFIG).splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    broker = json.loads(
+        render_component_text("claude-code", "claude-restart-config.json.j2")
+    )
+    broker_unit = render_component_text("claude-code", "claude-restart@.service.j2")
+    session = render_component_text("claude-code", SESSION_UNIT)
+    assert json.loads(config["RESTART_NAMES"]) == sorted(broker["allowlist"])
+    assert config["RESTART_VERDICT"] == f"{broker['state_dir']}/verdict"
+    assert directive(broker_unit, "TimeoutStartSec") == [config["RESTART_TIMEOUT_S"]]
+    # claude_triage_run.py waits 300 s past the session unit's clock and 60 s past the broker's.
+    waits = int(directive(session, "TimeoutStartSec")[0]) + 300
+    waits += int(config["RESTART_TIMEOUT_S"]) + 60
+    assert int(directive(unit(), "TimeoutStartSec")[0]) > waits
+
+
 # The pinned users (claude-triage-pins.j2): the controller and the session.
 CTL_USER = "claude-triage-ctl"
 SESSION_USER = "claude-triage"

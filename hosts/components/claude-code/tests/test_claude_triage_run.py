@@ -128,19 +128,29 @@ def _setup(tmp_path, claude_body: str) -> tuple[str, str, str]:
                 f"CLAUDE_BIN={_fake_claude(tmp_path, claude_body)}",
                 f"SETTINGS_FILE={published}/current/triage.json",
                 "RUN_TIMEOUT_S=30",
+                'RESTART_NAMES=["docs"]',
+                "RESTART_TIMEOUT_S=900",
+                f"RESTART_VERDICT={tmp_path}/verdict",
             ]
         )
     )
     return str(config), str(state), str(reports)
 
 
-def _start(config: str):
-    """systemd's part: run the session unit's script, then report how the unit ended."""
+def _start(config: str, broker=None, started: list | None = None):
+    """systemd's part: run the session unit's script, or `broker` for a restart unit.
+
+    Each unit started is appended to `started`.
+    """
 
     def start(unit: str, timeout: int) -> UnitEnd:
-        assert unit == run.SESSION_UNIT
-        session.main(["claude_triage_session.py"], config)
-        return UnitEnd("success", 0)
+        if started is not None:
+            started.append(unit)
+        if unit == run.SESSION_UNIT:
+            session.main(["claude_triage_session.py"], config)
+            return UnitEnd("success", 0)
+        assert broker is not None, unit
+        return broker(unit)
 
     return start
 
@@ -377,3 +387,119 @@ def test_a_kept_transcript_does_not_count_toward_the_daily_cap(tmp_path) -> None
     )
 
     assert run.runs_today(str(runs), CAP_DAY) == 1
+
+
+def _diagnosis(confidence: str, restart: str) -> str:
+    return json.dumps(
+        {
+            "subtype": "success",
+            "structured_output": {
+                "summary": "docs serves a stale page",
+                "root_cause": "x",
+                "confidence": confidence,
+                "evidence": [],
+                "proposed_fix": "none",
+                "restart": restart,
+            },
+        }
+    )
+
+
+def _broker_writes(tmp_path, line: str):
+    """The broker as it ends: its verdict line replaces the verdict file."""
+
+    def broker(unit: str) -> UnitEnd:
+        host_lib.atomic_write(str(tmp_path / "verdict"), line + "\n")
+        return UnitEnd("success", 0)
+
+    return broker
+
+
+def _run_restart(tmp_path, body: str, broker=None):
+    config, _, reports = _setup(tmp_path, body)
+    started, pages = [], []
+    run.main(
+        ["claude_triage_run.py", "drill"],
+        config,
+        lambda e, s: pages.append(s),
+        start=_start(config, broker, started),
+    )
+    record = json.loads((tmp_path / "state" / "runs" / "drill.json").read_text())
+    with open(os.path.join(reports, "triage-drill.html")) as f:
+        report = f.read()
+    return record, report, started, pages
+
+
+def test_a_diagnosis_naming_a_listed_workload_starts_the_broker_and_records_its_verdict(
+    tmp_path,
+) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    line = 'RESTART-RESULT: name=docs verdict=restarted cause= detail="deployment/docs rolled"'
+
+    record, report, started, pages = _run_restart(
+        tmp_path, _diagnosis("high", "docs"), _broker_writes(tmp_path, line)
+    )
+
+    assert started == [run.SESSION_UNIT, "homelab-claude-restart@docs.service"]
+    assert record["restart"] == {
+        "name": "docs",
+        "verdict": "restarted",
+        "cause": "",
+        "detail": "deployment/docs rolled",
+    }
+    assert "<code>docs</code>: restarted. deployment/docs rolled" in report
+    assert pages == ["diagnosed"]
+
+
+def test_a_name_off_the_allowlist_starts_nothing_and_is_escaped_in_the_report(
+    tmp_path,
+) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    record, report, started, _ = _run_restart(tmp_path, _diagnosis("high", HOSTILE))
+
+    assert started == [run.SESSION_UNIT]
+    assert (record["restart"]["verdict"], record["restart"]["cause"]) == (
+        "refused",
+        "not-listed",
+    )
+    assert "<script>" not in report
+    assert "&lt;script&gt;" in report
+
+
+def test_a_low_confidence_diagnosis_cannot_ask_for_a_restart(tmp_path) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    record, _, started, _ = _run_restart(tmp_path, _diagnosis("low", "docs"))
+
+    assert started == [run.SESSION_UNIT]
+    assert record["state"] == "inconclusive"
+    assert record["restart"]["cause"] == "not-diagnosed"
+
+
+def test_a_verdict_an_earlier_request_left_is_not_read_as_this_ones(tmp_path) -> None:
+    # fact: hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
+    # The broker's lock wait timed out, so the script never ran and the file is the drill's.
+    (tmp_path / "verdict").write_text(
+        "RESTART-RESULT: name=docs verdict=restarted cause= detail=drill\n"
+    )
+
+    record, _, _, _ = _run_restart(
+        tmp_path, _diagnosis("medium", "docs"), lambda unit: UnitEnd("exit-code", 1)
+    )
+
+    assert (record["restart"]["verdict"], record["restart"]["cause"]) == (
+        "unknown",
+        "no-verdict",
+    )
+    assert "exit-code" in record["restart"]["detail"]
+
+
+def test_a_diagnosis_that_names_no_restart_starts_only_the_session(tmp_path) -> None:
+    body = json.dumps(
+        {"subtype": "success", "structured_output": {"confidence": "high"}}
+    )
+
+    record, report, started, _ = _run_restart(tmp_path, body)
+
+    assert started == [run.SESSION_UNIT]
+    assert record["restart"] is None
+    assert "<h2>Restart</h2>" not in report

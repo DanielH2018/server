@@ -9,7 +9,7 @@ catch-up run on a later day still covers that week. It reads each source the con
 - `renovate`: a `runs.jsonl` file of one record per tick, which `agent_logic.run_record` writes.
 
 The post leads with one count line per source: runs, sessions spent, total cost and total
-denials. It then lists each triage run, each Renovate tick that merged, closed or left PRs open
+denials. It then lists each triage run, with the restart it asked for and the verdict, each Renovate tick that merged, closed or left PRs open
 or did not finish, and every run with a permission denial. A week with no runs still posts its
 count lines. Text a session or an alert wrote is defused of Discord mentions and clamped.
 
@@ -130,6 +130,12 @@ def read_triage(path: str, start: float, end: float, tally: Tally) -> None:
         )
         summary = diagnosis.get("summary") or record.get("error") or ""
         line = f"- {defuse(subject, 80)} {defuse(state, 20)}{_denials(denials)}"
+        restart = record.get("restart")
+        if isinstance(restart, dict):
+            outcome = " ".join(
+                defuse(restart.get(key) or "", 20) for key in ("verdict", "cause")
+            ).rstrip()
+            line += f"; restart {defuse(restart.get('name') or '', 64)} {outcome}"
         if summary:
             line += f": {defuse(summary, SUMMARY_MAX)}"
         if record.get("report"):

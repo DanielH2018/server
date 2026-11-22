@@ -447,7 +447,10 @@ at 09:00 UTC, and 10 minutes after each activation of the timer.
   (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_the_config_reads_the_record_paths_the_controllers_pin`).
   A new kind of record needs a reader in `READERS` and a row in
   `hosts/components/claude-code/templates/claude-weekly-summary.json.j2`.
-- **What it posts:** one count line per source, then each triage run, each Renovate tick that
+- **What it posts:** one count line per source, then each triage run with the restart it
+  asked for and the verdict
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_run_that_asked_for_a_restart_shows_the_brokers_verdict`),
+  each Renovate tick that
   merged, closed or left PRs open or did not finish, and every run with a denial
   (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_drill_weeks_records_render_the_summary`).
   A quiet week still posts its count lines
@@ -512,10 +515,26 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
-- **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
+- **Scope:** one episode per run. The session diagnoses: Edit, Write, a landing and a push
   are denied (`hosts/components/claude-code/files/claude_triage_session.py:DENIED_TOOLS`,
-  `hosts/components/claude-code/tests/test_claude_triage_session.py::test_the_session_is_diagnose_only_and_capped`). The later slices widen this to a fix landed through `homelab-claude-land@` and a
-  restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
+  `hosts/components/claude-code/tests/test_claude_triage_session.py::test_the_session_is_diagnose_only_and_capped`).
+  Its one action is a request: the result's optional `restart` field names an allowlist key.
+  The runner, as the controller, starts `homelab-claude-restart@<name>.service` for it, waits
+  for the broker, and writes the broker's verdict line into the record and the report
+  (`hosts/components/claude-code/files/claude_triage_run.py:request_restart`,
+  `hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_diagnosis_naming_a_listed_workload_starts_the_broker_and_records_its_verdict`).
+  A name off the allowlist starts nothing
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_name_off_the_allowlist_starts_nothing_and_is_escaped_in_the_report`),
+  and neither does a request from a diagnosis of low confidence
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_low_confidence_diagnosis_cannot_ask_for_a_restart`).
+  The broker replaces its verdict file on every start, so the runner reads the file only when
+  its inode or mtime changed during the request
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_verdict_an_earlier_request_left_is_not_read_as_this_ones`).
+  The broker's wait runs inside the run's wall clock, which adds the broker's pinned timeout
+  (`hosts/tests/test_claude_triage.py::test_the_run_outlasts_the_session_and_the_restart_it_waits_for`).
+  A run that asked for a restart keeps its state, so the page's closed list of states is
+  unchanged; the broker posts each restart to Discord itself. A fix landed through
+  `homelab-claude-land@` is a later slice, under the operator's 2026-10-15 rulings.
 - **Identity:** the controller, `claude-triage-ctl`, runs the poller and the runner and alone may
   start the units (`hosts/tests/test_claude_triage.py::test_the_poller_runs_as_the_controller`).
   The session user, `claude-triage`, holds no GitHub token and no start right,
@@ -601,7 +620,8 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   `hosts/components/claude-code/templates/50-claude-restart.rules.j2` admits no other user and
   no other verb, by the operator's 2026-11-20 ruling
   (`hosts/tests/test_claude_restart_broker.py::test_only_the_triage_controller_may_start_the_broker_and_only_start_it`).
-  Neither `claude` nor the triage session user can. The rule admits an instance only in the
+  Neither `claude` nor the triage session user can: a triage run asks through its result, and
+  the runner starts the unit. The rule admits an instance only in the
   script's name shape
   (`hosts/tests/test_claude_restart_broker.py::test_the_rule_admits_only_the_broker_in_the_scripts_name_shape`).
   The unit passes the script its instance and nothing else

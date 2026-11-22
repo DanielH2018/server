@@ -8,9 +8,13 @@ Usage: claude_triage_run.py <episode-id>
 carried. The script writes the framed prompt into the exchange directory and starts
 `homelab-claude-triage-session.service`, which runs one headless, diagnose-only Claude session
 over it (`claude_triage_session.py`) and leaves the result there. The script reads that result
-as untrusted, and writes three things whatever the session achieved:
+as untrusted. When a diagnosis of medium or high confidence names a restart, and the name is a
+key of the allowlist the config carries, it starts `homelab-claude-restart@<name>.service`,
+waits for it, and reads the broker's verdict line. It then writes three things whatever the
+session achieved:
 
-- the record, `<STATE_DIR>/runs/<episode-id>.json`, which outlives the report, and beside it
+- the record, `<STATE_DIR>/runs/<episode-id>.json`, which outlives the report and carries the
+  restart's verdict, and beside it
   the session's transcript, `<episode-id>.transcript.jsonl`;
 - the report, `<REPORT_DIR>/triage-<episode-id>.html`, an artifact the operator opens later;
 - the page, by starting `claude-triage-report-alert@<episode-id>:<state>.service`, which holds the
@@ -34,6 +38,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from dataclasses import asdict, dataclass
 
 # The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
 # ships host_lib.py beside it.
@@ -47,6 +52,7 @@ from host_lib import (
     keep_transcript,
     log,
     parse_env_file,
+    parse_logfmt,
     read_untrusted,
     TRANSCRIPT_MAX,
     start_unit,
@@ -67,6 +73,12 @@ SESSION_OUTPUT_MAX = 1 << 20
 
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage"
+# The restart broker. 50-claude-restart.rules.j2 lets the controller start it, and the instance
+# is an allowlist key.
+RESTART_UNIT = "homelab-claude-restart@{}.service"
+# An allowlist key fits the instance shape's 63 characters, so a longer name is never listed.
+RESTART_NAME_MAX = 64
+VERDICT_MAX = 4096
 
 
 def build_prompt(instructions: str, episode: dict) -> str:
@@ -96,8 +108,121 @@ def run(argv: list[str], timeout: int = 120) -> tuple[int, str]:
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
-def start_session(unit: str, timeout: int) -> UnitEnd:
+def start_and_wait(unit: str, timeout: int) -> UnitEnd:
     return start_unit(unit, run, timeout)
+
+
+@dataclass(frozen=True)
+class Restart:
+    """A restart the session's result asked for, and how the request ended.
+
+    Attributes:
+        name: the name the result gave, cut to RESTART_NAME_MAX characters.
+        verdict: the broker's `restarted`, `refused` or `failed`. `refused` with cause
+            `not-diagnosed` or `not-listed` means the runner started nothing, and `unknown`
+            means the broker left no verdict for this request.
+        cause: the refusal's or the failure's short name; empty for a restart.
+        detail: one sentence for the operator, from the broker or the runner, never the session.
+    """
+
+    name: str
+    verdict: str
+    cause: str = ""
+    detail: str = ""
+
+
+def restart_names(cfg: dict[str, str]) -> frozenset[str]:
+    """The allowlist keys the config carries; a missing or unreadable list allows none."""
+    try:
+        names = json.loads(cfg.get("RESTART_NAMES", "[]"))
+    except json.JSONDecodeError:
+        return frozenset()
+    if not isinstance(names, list):
+        return frozenset()
+    # 50-claude-restart.rules.j2 admits an instance only in the episode id's shape.
+    return frozenset(n for n in names if isinstance(n, str) and EPISODE_ID.match(n))
+
+
+def _file_identity(path: str) -> tuple[int, int] | None:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns
+
+
+def read_verdict(
+    path: str, name: str, before: tuple[int, int] | None, end: UnitEnd
+) -> Restart:
+    """The broker's `RESTART-RESULT:` line for `name`, if this request wrote it.
+
+    The verdict file is shared with every other start of the broker, and the broker replaces it
+    whole, so a file whose inode and mtime are still `before` holds an older request's verdict:
+    a start that never reached the script, such as a timed-out lock wait, leaves it in place.
+    """
+    unknown = Restart(
+        name,
+        "unknown",
+        "no-verdict",
+        f"the broker left no verdict for this request (unit result {end.result or 'unknown'}, "
+        f"status {end.status})",
+    )
+    if _file_identity(path) in (None, before):
+        return unknown
+    try:
+        with open(path, encoding="utf-8") as f:
+            line = f.readline(VERDICT_MAX)
+    except OSError:
+        return unknown
+    fields = parse_logfmt(line)
+    if not line.startswith("RESTART-RESULT: ") or fields.get("name") != name:
+        return unknown
+    return Restart(
+        name,
+        fields.get("verdict", ""),
+        fields.get("cause", ""),
+        fields.get("detail", ""),
+    )
+
+
+def request_restart(
+    found: dict | None,
+    state: str,
+    cfg: dict[str, str],
+    start: Callable[[str, int], UnitEnd],
+) -> Restart | None:
+    """Start the broker for the allowlisted name the result asked for; None when it asked none.
+
+    The name is session output, so it reaches systemd only once it equals an allowlist key, and
+    only a diagnosis of medium or high confidence may ask.
+    """
+    asked = found.get("restart") if isinstance(found, dict) else None
+    if not asked:
+        return None
+    name = str(asked)[:RESTART_NAME_MAX]
+    if state != "diagnosed":
+        return Restart(
+            name,
+            "refused",
+            "not-diagnosed",
+            "the runner started nothing: only a diagnosis of medium or high confidence may "
+            "ask for a restart",
+        )
+    if not isinstance(asked, str) or asked not in restart_names(cfg):
+        log("the result asked to restart a name off the allowlist", WARNING, tag=TAG)
+        return Restart(
+            name,
+            "refused",
+            "not-listed",
+            "the runner started nothing: the name is not on the restart allowlist",
+        )
+    path = cfg["RESTART_VERDICT"]
+    before = _file_identity(path)
+    # The broker unit's own TimeoutStartSec stops it; this wait only outlasts it.
+    end = start(RESTART_UNIT.format(asked), int(cfg["RESTART_TIMEOUT_S"]) + 60)
+    restart = read_verdict(path, asked, before, end)
+    log(f"restart {asked}: {restart.verdict} {restart.cause}".rstrip(), tag=TAG)
+    return restart
 
 
 def session_result(out: str, end: UnitEnd) -> tuple[dict, bool]:
@@ -186,6 +311,16 @@ def _e(value: object) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
 
+def _restart_section(restart: dict | None) -> str:
+    if not restart:
+        return ""
+    cause = f" ({_e(restart.get('cause'))})" if restart.get("cause") else ""
+    return (
+        f"<h2>Restart</h2><p><code>{_e(restart.get('name'))}</code>: "
+        f"{_e(restart.get('verdict'))}{cause}. {_e(restart.get('detail'))}</p>"
+    )
+
+
 def render_report(record: dict, updated: str) -> str:
     """The report page. Every value is escaped: the session's output can echo episode text."""
     found = record.get("diagnosis") or {}
@@ -227,6 +362,7 @@ table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid var(--s1);p
 <h2>Evidence</h2><table><tr><th>Source</th><th>Finding</th></tr>{rows}</table>
 <h2>Proposed fix</h2><p>{_e(found.get("proposed_fix", ""))}</p>
 <h2>Follow-up</h2><p>{_e(found.get("follow_up", ""))}</p>
+{_restart_section(record.get("restart"))}
 <h2>The episode (untrusted input)</h2><pre>{_e(json.dumps(episode, indent=2, sort_keys=True))}</pre>
 <p class="muted">Episode {_e(record["episode_id"])} · session {_e(record.get("session_id") or "none")} ·
  permission denials {_e(record.get("denials"))} · started {_e(record.get("started"))} ·
@@ -250,7 +386,7 @@ def main(
     config_path: str = CONFIG,
     page: Callable[[str, str], None] = start_report_unit,
     now: Callable[[], float] = time.time,
-    start: Callable[[str, int], UnitEnd] = start_session,
+    start: Callable[[str, int], UnitEnd] = start_and_wait,
 ) -> int:
     """Run one episode; `page`, `start` and `now` are the seams for systemd and the clock."""
     parser = argparse.ArgumentParser(
@@ -311,13 +447,15 @@ def main(
         shutil.rmtree(out, ignore_errors=True)
         state = classify(result, timed_out)
         error = stop_reason(result, timed_out)
-    finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     found = result.get("structured_output")
+    restart = request_restart(found, state, cfg, start)
+    finished = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
     record = {
         "episode_id": episode_id,
         "episode": episode,
         "state": state,
         "diagnosis": found if isinstance(found, dict) else None,
+        "restart": asdict(restart) if restart else None,
         "error": error,
         "session_id": result.get("session_id"),
         "subtype": "timeout" if timed_out else result.get("subtype"),
