@@ -99,14 +99,13 @@ class Planned(NamedTuple):
     gates: bool = True
 
     @property
-    def builds_offline(self) -> bool:
-        """True when the run builds the packages from the kit, which takes minutes of CPU.
+    def builds(self) -> bool:
+        """True when the run builds the three packages, online or from the kit.
 
-        A kit red refuses before the build, so it finishes in seconds.
+        A build is CPU-bound and takes about a minute, most of it in nfpm. A kit red refuses
+        before the build, so it finishes in seconds.
         """
-        return self.kit is not None and (
-            self.refusal is None or self.apt_says is not None
-        )
+        return self.refusal is None or self.apt_says is not None
 
 
 def plan(work: Path, green: Path) -> list[Planned]:
@@ -203,12 +202,12 @@ def plan(work: Path, green: Path) -> list[Planned]:
 
 
 def submission_order(planned: list[Planned]) -> list[int]:
-    """The plan positions of `planned`, the offline builds first and otherwise in plan order.
+    """The plan positions of `planned`, the builds first and otherwise in plan order.
 
-    The builds are the longest items, so starting them in the first wave keeps the short host
-    items from delaying them.
+    The builds are the longest items, so starting them in the first wave keeps the short reds
+    from delaying them.
     """
-    return sorted(range(len(planned)), key=lambda i: not planned[i].builds_offline)
+    return sorted(range(len(planned)), key=lambda i: not planned[i].builds)
 
 
 def selected(planned: list[Planned], k3s_download: bool) -> list[Planned]:
@@ -219,10 +218,10 @@ def selected(planned: list[Planned], k3s_download: bool) -> list[Planned]:
 def shard(planned: list[Planned], number: int, count: int) -> list[Planned]:
     """The items shard `number` of `count` runs, in plan order.
 
-    The offline builds are dealt first, one to each shard while they last, then the other items
-    round-robin. With as many shards as builds, no two builds share a runner's CPUs.
+    The builds are dealt first, round-robin, then the other items, so no shard holds more
+    than one build above another.
     """
-    dealt = [p for p in planned if p.builds_offline]
-    dealt += [p for p in planned if not p.builds_offline]
+    dealt = [p for p in planned if p.builds]
+    dealt += [p for p in planned if not p.builds]
     mine = {id(item) for k, item in enumerate(dealt) if k % count == number - 1}
     return [item for item in planned if id(item) in mine]
