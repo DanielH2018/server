@@ -536,7 +536,7 @@ def test_the_component_directories_hold_only_files_the_specs_ship():
         p.resolve()
         for name in ("pi-tuning", "pi-node-exporter", "pi-peer-backup-target")
         for p in (COMPONENTS / name).rglob("*")
-        if p.is_file() and p.name != "component.yml"
+        if p.is_file() and p.name not in ("component.yml", "CLAUDE.md")
     }
     assert {p.name for p in on_disk - shipped} == {
         "log2ram-1.7.2",
