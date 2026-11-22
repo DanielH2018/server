@@ -209,6 +209,8 @@ fail a rule file that differs from its table. The generator refuses to render wh
 inventory host has no host-table entry, so every host pages for its reconcile and its updates. `docs/host-packages.md` is the
 runbook for both pages. `WiredLinkDown` takes one copy per node whose host_vars set
 `k3s_node_static_link`, reading that link's carrier and operstate (#5124).
+`WiredGatewayUnreachable` takes the same nodes and reads the `wired-gateway` check, which pings
+the gateway bound to that link, so a link that keeps carrier with no working path still pages.
 
 **`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
 One rule per host compares each check's timestamp with the
