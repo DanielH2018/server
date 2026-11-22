@@ -39,11 +39,20 @@ claude_agent_ssh_login_enabled: true
 #   A cap that holds 8 GiB with all-anon fleet memory: 30.5 - 8.3 - 8 = 14.2 GiB.
 # The 2026-11-14 episode fits the model: the fleet held 23.1 GiB and MemAvailable fell to
 # 1.4 GiB. On 2026-11-20 the fleet peaked at 11.7 GiB and MemAvailable stayed at or above 20.7 GiB.
+# The homelab plane's MemoryLow below, not a lower cap, is what keeps reclaim off the pods.
 # With the RC unit disabled, user-1000.slice is the only plane here, so the 23G login cap is
 # the effective per-plane bound and the fleet cap only matters once a second plane appears.
 claude_code_fleet_memory_high: 24G
-# 2G is under a third of this host's 7 GiB swap (`free -g`) — the same
-# shape as daniel-box's "a quarter of its 8 GiB" reasoning in defaults/main.yml:117-119.
+# The homelab plane's MemoryLow, derived as hosts/components/k3s-server/defaults/main.yml states
+# at k3s_kubepods_memory_low. Measured on daniel-server on 2026-11-22:
+#   kubepods.slice: cAdvisor's 14-day rss peak 7.3 GiB + kernel 0.4 = 7.7 -> 8G.
+#   k3s-agent.service: cAdvisor's 14-day rss peak 0.76 GiB -> 1G.
+#   system.slice: k3s-agent's 1G + the other units' steady anon + kernel 0.25 GiB -> 1536M.
+k3s_kubepods_memory_low: 8G
+k3s_memory_low: 1G
+k3s_system_slice_memory_low: 1536M
+# 2G is under a third of this host's 7 GiB swap (`free -g`) — the same shape as daniel-box's
+# "a quarter of its 8 GiB" reasoning beside claude_code_fleet_swap_max in defaults/main.yml.
 claude_code_fleet_swap_max: 2G
 claude_code_rc_memory_high: 23G
 claude_code_rc_memory_swap_max: 2G

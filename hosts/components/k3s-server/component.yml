@@ -192,6 +192,12 @@ files:
   # No activation: the postinst's daemon-reload applies the weight to the running unit.
   - {src: templates/cpu-weight.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/60-homelab-cpu-weight.conf}
   - {src: templates/system-slice-cpu-weight.conf.j2, dst: /usr/lib/systemd/system/system.slice.d/60-homelab-cpu-weight.conf}
+  # No activation either: the postinst's daemon-reload applies each MemoryLow to the running unit.
+  - {src: templates/memory-low.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/60-homelab-memory-low.conf}
+  - {src: templates/system-slice-memory-low.conf.j2, dst: /usr/lib/systemd/system/system.slice.d/60-homelab-memory-low.conf}
+  - {src: templates/kubepods-memory-low.conf.j2, dst: /usr/lib/systemd/system/kubepods.slice.d/60-homelab-memory-low.conf}
+  - {src: units/homelab-kubepods-memory-low.path, dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.path}
+  - {src: units/homelab-kubepods-memory-low.service, dst: /usr/lib/systemd/system/homelab-kubepods-memory-low.service}
   # kubelet reads its config only at start, so the first shutdown it governs is the one after the
   # restart homelab-k3s-restart makes in its next window.
   - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s.service"}
@@ -259,6 +265,7 @@ outputs:
 enable:
   homelab-k3s-kubeconfig.service: multi-user.target
   homelab-kubelet-shutdown-lock.timer: timers.target
+  homelab-kubepods-memory-low.path: paths.target
   homelab-wired-gateway.timer: {target: timers.target, when: "k3s_node_static_link | length > 0"}
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:

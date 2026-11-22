@@ -1,0 +1,11 @@
+# Shipped by the host package's k3s-server component with its enable link. kubelet resets
+# kubepods.slice's MemoryLow to 0 at each start by rewriting this file, and the reload it
+# triggers puts templates/kubepods-memory-low.conf.j2's value back.
+[Unit]
+Description=Re-apply kubepods.slice's MemoryLow after kubelet resets it
+
+[Path]
+PathChanged=/run/systemd/transient/kubepods.slice.d/50-MemoryLow.conf
+
+[Install]
+WantedBy=paths.target

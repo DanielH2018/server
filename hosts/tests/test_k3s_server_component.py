@@ -244,6 +244,48 @@ def test_the_system_slice_drop_in_outweighs_kubepods_with_no_restart(package):
     assert SYSTEM_SLICE_WEIGHT not in package.activations
 
 
+KUBEPODS_MEMORY_LOW = (
+    "/usr/lib/systemd/system/kubepods.slice.d/60-homelab-memory-low.conf"
+)
+SYSTEM_SLICE_MEMORY_LOW = (
+    "/usr/lib/systemd/system/system.slice.d/60-homelab-memory-low.conf"
+)
+KUBELET_MEMORY_LOW = "/run/systemd/transient/kubepods.slice.d/50-MemoryLow.conf"
+REAPPLY = "/usr/lib/systemd/system/homelab-kubepods-memory-low"
+EXPECTED_MEMORY_LOW = {
+    "daniel-box": ("k3s.service", "10G", "3G", "2560M"),
+    "daniel-server": ("k3s-agent.service", "8G", "1536M", "1G"),
+}
+
+
+def test_each_node_protects_its_homelab_plane_with_its_own_memory_low(node_package):
+    unit, kubepods, system, k3s = EXPECTED_MEMORY_LOW[
+        node_package.name.removeprefix("homelab-")
+    ]
+    k3s_dropin = f"/usr/lib/systemd/system/{unit}.d/60-homelab-memory-low.conf"
+    assert setting(text(node_package, KUBEPODS_MEMORY_LOW), "MemoryLow") == kubepods
+    assert setting(text(node_package, SYSTEM_SLICE_MEMORY_LOW), "MemoryLow") == system
+    assert setting(text(node_package, k3s_dropin), "MemoryLow") == k3s
+    for path in (KUBEPODS_MEMORY_LOW, SYSTEM_SLICE_MEMORY_LOW, k3s_dropin):
+        assert setting(text(node_package, path), "MemoryMin") is None
+        assert path not in node_package.activations
+
+
+def test_kubelets_reset_of_kubepods_memory_low_is_overridden_and_reapplied(
+    node_package,
+):
+    """kubelet writes MemoryLow=0 to the transient drop-in at each start; a later name wins."""
+    assert KUBEPODS_MEMORY_LOW.rsplit("/", 1)[1] > KUBELET_MEMORY_LOW.rsplit("/", 1)[1]
+    path_unit = text(node_package, REAPPLY + ".path")
+    assert setting(path_unit, "PathChanged") == KUBELET_MEMORY_LOW
+    service = text(node_package, REAPPLY + ".service")
+    assert setting(service, "ExecStart") == "/usr/bin/systemctl daemon-reload"
+    wants = (
+        "/usr/lib/systemd/system/paths.target.wants/homelab-kubepods-memory-low.path"
+    )
+    assert node_package.links[wants] == "../homelab-kubepods-memory-low.path"
+
+
 def test_the_logging_drop_in_sends_both_streams_to_the_log_file(package):
     content = text(package, DROPIN)
     log_file = component_defaults()["k3s_log_file"]
