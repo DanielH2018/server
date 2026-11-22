@@ -185,6 +185,14 @@ fleet below `system.slice`, where k3s runs, while the CPU is contended. A weight
 `docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
 start**, so the deploy that changes it drops the RC host's sessions.
 
+`claude_code_fleet_oom_score_adjust` (1000) makes a global OOM kill a fleet process before a
+pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
+`templates/fleet-user-manager-oom.conf.j2` drop-in sets it on each fleet uid's
+`user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
+That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
+`50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
+ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.
+
 ## Background sessions come back at boot
 
 `claude-bg-resume.service` runs `files/bg_session_resume.py` once at boot as

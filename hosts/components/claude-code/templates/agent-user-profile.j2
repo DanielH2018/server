@@ -12,6 +12,9 @@ export RUN_HOOK_UV={{ claude_code_agent_user_home }}/.local/bin/uv
 # `worktree-<prefix>+fanout-<batch>` from this, the one shape the agent branch fence lets this
 # user push. A script that names branches itself never reads the agent's CLAUDE.md.
 export CLAUDE_WORKTREE_PREFIX={{ claude_code_agent_worktree_prefix }}
+# An ssh login inherits sshd's oom_score_adj of 0, below every pod's. Raising it needs no
+# privilege, and the processes this shell starts inherit it (claude_code_fleet_oom_score_adjust).
+echo {{ claude_code_fleet_oom_score_adjust }} > /proc/self/oom_score_adj 2>/dev/null
 {% if claude_code_lander_enabled and claude_code_agent_is_primary %}
 {% import 'templates/claude-land-pins.j2' as pins with context %}
 # land.sh hands each landing this user starts to {{ pins.unit }}@<n>.service, which lands it as

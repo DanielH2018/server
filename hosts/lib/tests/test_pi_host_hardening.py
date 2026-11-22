@@ -49,7 +49,7 @@ WRITTEN = {
 # The one directive in SUDOERS; the file's comment header is the component's own. It sets no
 # timestamp type, because sudo-rs, 26.04's default sudo, refuses that setting.
 SUDOERS_DIRECTIVE = "Defaults timestamp_timeout=60"
-# Where each visudo lives: classic sudo's on 24.04, classic beside sudo-rs on 26.04, sudo-rs's.
+# Where each visudo lives: the alternatives symlink, classic sudo's beside sudo-rs, sudo-rs's.
 VISUDO_PATHS = ("/usr/sbin/visudo", "/usr/sbin/visudo.ws", "/usr/lib/cargo/bin/visudo")
 BLACKLIST_WRITTEN = (
     "install dccp /bin/true\n"
@@ -121,8 +121,8 @@ def _visudo(implementation: str) -> str | None:
     return None
 
 
-# Classic sudo prints `visudo version` on 24.04 and `visudo.ws version` beside sudo-rs on 26.04.
-@pytest.mark.parametrize("implementation", ["visudo", "visudo.ws", "visudo-rs"])
+# Classic sudo prints `visudo.ws version` beside sudo-rs.
+@pytest.mark.parametrize("implementation", ["visudo.ws", "visudo-rs"])
 def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(
     package, tmp_path, implementation
 ):

@@ -7,8 +7,7 @@ package it overrides, on each `host_packages` leg's release, starts it, and read
 
   * nut-client, with the `nut-secondary` drop-in on nut-monitor.service and an upsmon.conf at
     the drop-in's NUT_CONFPATH. The unit must come up active with upsmon's root parent as its
-    main process, not the MODE wrapper 24.04 ships at /usr/sbin/upsmon nor the child upsmon runs
-    as user nut. Killing that child must make systemd restart the unit once.
+    main process, not the child upsmon runs as user nut. Killing that child must make systemd restart the unit once.
   * netplan.io, under the `homelab-netplan-wifi` installer, run as root on a scratch root with
     the real netplan. It must install a valid file and keep the old one for a file netplan
     cannot parse and for one only its generator refuses (a short passphrase).

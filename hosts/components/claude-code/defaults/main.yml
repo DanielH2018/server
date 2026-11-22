@@ -137,6 +137,15 @@ claude_code_fleet_swap_max: 2G
 # below both siblings. No CPUQuota: a cap would idle cores the homelab plane is not using.
 claude_code_fleet_cpu_weight: 20
 
+# DECIDED: 1000, the kernel's maximum, on every fleet process: claude-rc.service, the
+# background resume, each fleet uid's user manager and the agent's login shell. kubelet gives
+# a burstable pod 2-999 and a best-effort pod 1000, so any lower value lets the global OOM
+# killer prefer a pod although the fleet caused the pressure. The bias is small: the kernel's
+# badness adds adj * totalpages / 1000 to a process's RSS, so one point is about 30 MiB here,
+# and a pod with a far larger RSS can still be the victim. A systemd-oomd kill on user.slice
+# was ruled out on 2026-11-22 (docs/claude-code-rc-caps.md).
+claude_code_fleet_oom_score_adjust: 1000
+
 # One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
 # to user-<uid>.slice's drop-in. Each must be <= the fleet bound: a sub-bound above its
 # parent's is a number that can never be reached. ENFORCED by
