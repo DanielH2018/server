@@ -5,6 +5,6 @@
 # is published. To move the pins after a Dockerfile change merges, copy the lines the
 # host-test-image workflow's run summary prints, inputs line included. A site added to the matrix
 # is pinned `-` until the publisher has run for it.
-inputs c80db5adceafb1d68f5e3a43b3833641b174d9db8e7e8057486ccd244116b40a
-26.04-amd64 sha256:74ca426e924a350dcf520ecb2704693ecec320f009e3ea1fc7ed2473a6ef3395
-26.04-arm64 -
+inputs a6151e56de0a5150a484ebc64cb0998eaec222b0ef07381e65e1d99769d46205
+26.04-amd64 sha256:400133017ad434777f7b183edec09c6aa8d739ed865d5785c02079d67b0c3e90
+26.04-arm64 sha256:da9e1fba3f07a33d8b5be50d8cd1cb5cbb8e748a6f46d7413becd80d29a4e063
