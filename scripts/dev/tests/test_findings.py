@@ -83,11 +83,8 @@ def test_reobservations_counts_only_reobserved_comments(issue):
 
 
 def test_issue_rows_reads_labels_into_fields(issue):
-    one = issue(
-        9,
-        labels=("claude", "severity/high", "kind/gap", "domain/network"),
-        fp="f",
-    )
+    one = issue(9, labels=("claude", "severity/high", "kind/gap"), fp="f")
+    one["fields"] = {"Domain": "network"}
     (row,) = issue_rows([typed(one)])
     assert (
         row["severity"] == "high"

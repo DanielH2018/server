@@ -105,35 +105,49 @@ def _gating(tmp_path):
     return case.selected(case.plan(tmp_path, green), k3s_download=False)
 
 
-def test_each_shard_holds_one_offline_build_and_the_shards_cover_the_plan_once(
-    tmp_path,
-):
+@pytest.mark.parametrize("count", [2, 3])
+def test_the_shards_split_the_builds_evenly_and_cover_the_plan_once(tmp_path, count):
     planned = _gating(tmp_path)
-    builds = [p.label for p in planned if p.builds_offline]
-    shards = [case.shard(planned, k, len(builds)) for k in range(1, len(builds) + 1)]
+    shards = [case.shard(planned, k, count) for k in range(1, count + 1)]
 
-    assert set(builds) == {"offline", "red-depends", "fixture-host"}
-    assert [[p.label for p in s if p.builds_offline] for s in shards] == [
-        [label] for label in builds
-    ]
+    assert {p.label for p in planned if not p.builds} == {"red-k3s", "red-nfpm"}
+    builds = [sum(p.builds for p in s) for s in shards]
+    assert max(builds) - min(builds) <= 1, builds
     dealt = [p.label for s in shards for p in s]
     assert sorted(dealt) == sorted(p.label for p in planned)
     assert all(s == [p for p in planned if p in s] for s in shards)
 
 
-def test_ci_runs_one_bootstrap_shard_per_offline_build_on_each_release(tmp_path):
-    builds = sum(p.builds_offline for p in _gating(tmp_path))
+def test_an_online_build_is_submitted_before_a_kit_red_planned_ahead_of_it(tmp_path):
+    red = case.Planned("red", "red", "daniel-box", tmp_path, None, "no k3s")
+    online = case.Planned("online", "online", "daniel-box", None, "marker", None)
+
+    assert case.submission_order([red, online]) == [1, 0]
+
+
+# GitHub's standard Linux runner for a public repository, which `run` gives one item per CPU.
+RUNNER_CPUS = 4
+
+
+def test_ci_runs_the_fewest_bootstrap_shards_whose_items_all_start_at_once(tmp_path):
+    planned = _gating(tmp_path)
     workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
     legs = workflow["jobs"]["host_packages_bootstrap"]["strategy"]["matrix"]["include"]
     shards: dict[str, list[str]] = {}
     for leg in legs:
         shards.setdefault(leg["release"], []).append(leg["shard"])
+    count = len(next(iter(shards.values())))
+
+    def widest(n: int) -> int:
+        return max(len(case.shard(planned, k, n)) for k in range(1, n + 1))
 
     assert len(shards) >= 2
-    expected = [f"{k}/{builds}" for k in range(1, builds + 1)]
+    expected = [f"{k}/{count}" for k in range(1, count + 1)]
     assert {release: sorted(s) for release, s in shards.items()} == {
         release: expected for release in shards
     }
+    assert widest(count) <= RUNNER_CPUS
+    assert count == 1 or widest(count - 1) > RUNNER_CPUS
 
 
 def test_a_shard_from_one_to_its_count_is_parsed():
