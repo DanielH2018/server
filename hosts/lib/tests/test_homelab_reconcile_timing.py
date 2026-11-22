@@ -336,9 +336,12 @@ def test_a_killed_runs_timing_file_ends_on_the_action_it_was_in(node, tmp_path):
     assert re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", lines[-1])
 
 
-def test_an_unwritable_timing_file_leaves_the_run_and_the_journal_lines(node):
+def test_a_timing_file_that_cannot_be_opened_leaves_the_run_and_the_journal_lines(
+    node,
+):
     settled_with_units(node, SLOW_UNIT)
     change(node, SLOW_UNIT)
+    (node.root / TIMING_LOG.lstrip("/")).mkdir(parents=True)
     node.applied_path.write_text(json.dumps({**node.applied(), "result": {}}))
     argv, env = node.command()
 
