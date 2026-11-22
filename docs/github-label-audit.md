@@ -333,8 +333,8 @@ adds `escalated` to the names `LABELS` must not hold.
 
 ### Slice 5: delete the unread labels
 
-Delete `red-green`, `claimed` and the nine defaults on server, and `claimed` and the nine defaults on
-dotfiles. No code changes; `LABELS` names none of them.
+Delete `red-green`, `claimed` and the nine defaults on server, and `claimed` and
+the nine defaults on dotfiles. No code changes; `LABELS` names none of them.
 
 - **Exercise:** each repository's label page lists only the labels this page keeps.
 - **Complexity:** removes 21 labels.
