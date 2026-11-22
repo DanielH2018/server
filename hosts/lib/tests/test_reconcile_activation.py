@@ -17,7 +17,11 @@ from _reconcile_host import Node
 SYSCTL_FILE = "/etc/sysctl.d/50-homelab.conf"
 SSHD_FILE = "/etc/ssh/sshd_config.d/50-homelab.conf"
 TMPFILES_FILE = "/usr/lib/tmpfiles.d/homelab-media-volume.conf"
-PATHS = {"sysctl": SYSCTL_FILE, "tmpfiles": TMPFILES_FILE}
+PATHS = {
+    "sysctl": SYSCTL_FILE,
+    "tmpfiles": TMPFILES_FILE,
+    "locale-gen": "/etc/locale.gen",
+}
 FLAG = "run/homelab/validate-failed"
 
 
@@ -42,6 +46,7 @@ def settled(node: Node) -> None:
             [["systemd-tmpfiles", "--create", TMPFILES_FILE]],
             id="tmpfiles",
         ),
+        pytest.param("locale-gen", [["locale-gen"]], id="locale-gen"),
         pytest.param(
             "try-restart:fail2ban.service",
             [

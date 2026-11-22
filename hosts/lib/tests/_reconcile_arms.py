@@ -55,6 +55,7 @@ def verbs(node: Node) -> list[list[str]]:
         in (
             "sysctl",
             "systemd-tmpfiles",
+            "locale-gen",
             "sshd",
             "fail2ban-client",
             "squid",
