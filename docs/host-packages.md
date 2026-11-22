@@ -1435,7 +1435,15 @@ container started under the stacked label keeps it until its pod restarts.
 
 Ubuntu tracks the kernel side as [Launchpad bug 2172640], which had no fix on 2026-11-21.
 
+**The `who` profile.** 26.04's `/etc/apparmor.d/who` confines the host's own `who` and
+includes no name-service abstraction. Each `who` run therefore logged a denial for
+`/etc/passwd` and `/etc/nsswitch.conf`, about once a minute on both nodes (issue [9835]).
+The `apparmor-who` component ships `/etc/apparmor.d/local/who` with
+`include <abstractions/nameservice>` and reloads `apparmor.service` when the file changes.
+Those lines would otherwise inflate the denial count the upgrade procedure reads.
+
 [9833]: https://github.com/DanielH2018/server/issues/9833
+[9835]: https://github.com/DanielH2018/server/issues/9835
 [containerd 14487]: https://github.com/containerd/containerd/pull/14487
 [Launchpad bug 2172640]: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172640
 
