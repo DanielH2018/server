@@ -59,6 +59,7 @@ def test_a_batch_whose_branch_has_an_open_pr_continues_it(tmp_path):
         f"worktree add -b worktree-fanout-1 --track {tree} origin/worktree-fanout-1"
         in command
     )
+    assert "fanout-step: remote branch" not in command
     assert ABANDONED_PR in brief and "pytest https://ci/1" in brief
 
 

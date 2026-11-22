@@ -705,7 +705,7 @@ so the two share one prompt and one review.
   manifest read to the manifest save, and through the placement gates a launch passes: the
   signing check, the memory headroom and the live-batch cap. The unit runs master's copy
   of the pipeline from a fresh snapshot in the worktree's `.fanout/server`
-  (`scripts/dev/fanout_lib/launch.py:resume_command`), because the worktree's own copy is
+  (`scripts/dev/fanout_lib/resume.py:resume_command`), because the worktree's own copy is
   as old as the batch's branch and holds what the implementer left.
 - **Who lands it.** The pipeline lands the PR when it would have at first: a daniel-box
   batch, or a daniel-server PR that passes `server_lands`. It does not land a PR that check

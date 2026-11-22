@@ -69,6 +69,18 @@ _ACTIVE = re.compile(r"(?m)^ActiveState=(\S+)")
 _SECTION = re.compile(r"(?m)^--- (tree|landing|conflicts)\n")
 _LIVE = frozenset({"active", "activating", "deactivating"})
 
+# What a `place resume` unit's snapshot holds beyond `launch.SNAPSHOT_PATHS`: the files a pipeline
+# of this repo reads from its own source root at start (`batch_run.BatchRun.__init__`), and
+# the trees its held hooks read (`held_hooks.HELD_TREES`).
+RESUME_SNAPSHOT_PATHS = (
+    *launch_mod.SNAPSHOT_PATHS,
+    ".claude/settings.json",
+    ".claude/rules",
+    ".claude/agents",
+    "inventory",
+    "CLAUDE.md",
+)
+
 
 @dataclass(frozen=True)
 class LandingLog:
@@ -117,7 +129,7 @@ class Resumable:
 
     @property
     def request(self) -> str:
-        """The text `launch.resume_batch` writes for the unit: the PR and the verdict line."""
+        """The text `resume_batch` writes for the unit: the PR and the verdict line."""
         return json.dumps({"pr": self.pr, "line": self.line})
 
 
@@ -325,6 +337,48 @@ def resumable(
     return Resumable(b, url, line)
 
 
+def resume_command(batch: str, unit: str, rung: sizing.Rung = sizing.DEFAULT) -> str:
+    """The one call that restarts this repo's finished `batch` for a merge conflict.
+
+    It clears a failed unit of the same name, replaces the batch's snapshot with master's
+    `RESUME_SNAPSHOT_PATHS`, writes its own stdin to `launch.RESUME_REQUEST`, and starts the unit
+    `launch.launch` would with `launch.RESUME_FLAG`. It makes no worktree and removes none.
+    """
+    wt = launch_mod.worktree_path(batch)
+    return " && ".join(
+        [
+            f"{{ systemctl --user reset-failed {unit} 2>/dev/null; "
+            f"rm -rf {launch_mod.snapshot_root(wt)}; }}",
+            launch_mod.snapshot_command(
+                batch, SERVER_TARGET, paths=RESUME_SNAPSHOT_PATHS
+            ),
+            launch_mod._step(
+                f"cat > {wt}/{launch_mod.RESUME_REQUEST}", "request write"
+            ),
+            launch_mod.systemd_run_command(batch, review=True, rung=rung, resume=True),
+        ]
+    )
+
+
+def resume_batch(tools: Tools, b: Batch, request: str, rung: sizing.Rung) -> None:
+    """Start the unit that resumes finished batch `b`, feeding `request` to `launch.RESUME_REQUEST`.
+
+    The caller holds the launch lock and has passed the gates `launch`'s caller passes.
+
+    Raises:
+        launch.LaunchError: the call failed or timed out. The worktree and its branch are left as
+            they were, whichever step failed.
+    """
+    proc = launch_mod._run(
+        tools, b.host, resume_command(b.batch, b.unit, rung), request, "resume"
+    )
+    if proc.returncode != 0:
+        step = launch_mod._attribute_failure(proc.stderr) or "resume command"
+        raise launch_mod.LaunchError(
+            f"{step} failed ({proc.returncode}): {proc.stderr.strip()}"
+        )
+
+
 def add_resume_arguments(parser: argparse.ArgumentParser) -> None:
     """Add what `place resume` takes after its run id."""
     parser.description = (
@@ -394,7 +448,7 @@ def _resume_locked(args, tools: Tools, readings: Callable, placement: Callable) 
     if placement([b.batch], good, b.host, root, tools.multiplexed()) is None:
         return FANOUT_PLACE_NOTHING_PLACED
     try:
-        launch_mod.resume_batch(tools, b, found.request, sizing.by_name(b.rung))
+        resume_batch(tools, b, found.request, sizing.by_name(b.rung))
     except launch_mod.LaunchError as exc:
         error(" ".join(f"{b.batch} on {b.host}: {exc}".split()))
         return FANOUT_PLACE_FAILED

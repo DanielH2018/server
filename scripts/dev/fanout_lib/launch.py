@@ -115,20 +115,9 @@ SNAPSHOT_PATHS = (
 # Both sit under the launching user's HOME, which is /var/lib/claude for the agent user.
 # systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too.
 RESUME_FLAG = "--resume-conflict"
-# Where `resume_command` writes the PR and the landing's `VERDICT:` line for the unit it
+# Where `resume.resume_command` writes the PR and the landing's `VERDICT:` line for the unit it
 # starts, relative to the worktree. Not `conflict.json`, which is the `conflict` phase's report.
 RESUME_REQUEST = ".fanout/resume.json"
-# What a `place resume` unit's snapshot holds beyond `SNAPSHOT_PATHS`: the files a pipeline
-# of this repo reads from its own source root at start (`batch_run.BatchRun.__init__`), and
-# the trees its held hooks read (`held_hooks.HELD_TREES`).
-RESUME_SNAPSHOT_PATHS = (
-    *SNAPSHOT_PATHS,
-    ".claude/settings.json",
-    ".claude/rules",
-    ".claude/agents",
-    "inventory",
-    "CLAUDE.md",
-)
 
 
 def unit_path(home: str) -> str:
@@ -435,7 +424,7 @@ def review_command(
     """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`.
 
     `PYTHONPATH` supplies the import root a no-venv run lacks: the `scripts/` of the copy
-    `review_script` names. `resume` adds `RESUME_FLAG`, for the unit `resume_command` starts.
+    `review_script` names. `resume` adds `RESUME_FLAG`, for the unit `resume.resume_command` starts.
     """
     wt = worktree_path(batch, target)
     own_tree = target.is_server and not resume
@@ -446,25 +435,6 @@ def review_command(
         f"{review_script(batch, target, resume)} review --batch {batch}"
         f" --repo {target.repo} --rung {rung.name}"
         + (f" {RESUME_FLAG}" if resume else "")
-    )
-
-
-def resume_command(batch: str, unit: str, rung: Rung = DEFAULT) -> str:
-    """The one call that restarts this repo's finished `batch` for a merge conflict.
-
-    It clears a failed unit of the same name, replaces the batch's snapshot with master's
-    `RESUME_SNAPSHOT_PATHS`, writes its own stdin to `RESUME_REQUEST`, and starts the unit
-    `launch` would with `RESUME_FLAG`. It makes no worktree and removes none.
-    """
-    wt = worktree_path(batch)
-    return " && ".join(
-        [
-            f"{{ systemctl --user reset-failed {unit} 2>/dev/null; "
-            f"rm -rf {snapshot_root(wt)}; }}",
-            snapshot_command(batch, SERVER_TARGET, paths=RESUME_SNAPSHOT_PATHS),
-            _step(f"cat > {wt}/{RESUME_REQUEST}", "request write"),
-            systemd_run_command(batch, review=True, rung=rung, resume=True),
-        ]
     )
 
 
@@ -753,21 +723,6 @@ def _raise_failure(
     if step in _CLEANUP_STEPS:
         message += _cleanup_worktree(tools, host, batch, target) or ""
     raise LaunchError(message)
-
-
-def resume_batch(tools: Tools, b: Batch, request: str, rung: Rung) -> None:
-    """Start the unit that resumes finished batch `b`, feeding `request` to `RESUME_REQUEST`.
-
-    The caller holds the launch lock and has passed the gates `launch`'s caller passes.
-
-    Raises:
-        LaunchError: the call failed or timed out. The worktree and its branch are left as
-            they were, whichever step failed.
-    """
-    proc = _run(tools, b.host, resume_command(b.batch, b.unit, rung), request, "resume")
-    if proc.returncode != 0:
-        step = _attribute_failure(proc.stderr) or "resume command"
-        raise LaunchError(f"{step} failed ({proc.returncode}): {proc.stderr.strip()}")
 
 
 def launch(
