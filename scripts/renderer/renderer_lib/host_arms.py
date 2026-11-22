@@ -60,18 +60,14 @@ from pathlib import Path
 from typing import Protocol
 from xml.etree import ElementTree
 
+from lib import host_modules  # noqa: F401
+from reconcile_lib.activate import ACTION, KINDS, UNIT_KINDS
+from reconcile_lib.ufw import ID as UFW_ID
+from reconcile_lib.ufw import SPEC as UFW_SPEC
 from renderer.renderer_lib.cluster import RenderRefused
 
-_UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
-# The actions `hosts/lib/reconcile_lib/activate.py:ACTION` reads.
-ACTION = re.compile(
-    rf"none|sysctl|tmpfiles|modules-load|locale-gen|reboot|(?:try-restart|reload|manual):{_UNIT}"
-)
 # A file here gets the `tmpfiles` action unasked, so a new line applies on install.
 TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
-# The shapes `hosts/lib/reconcile_lib/ufw.py` reads.
-UFW_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
-UFW_SPEC = re.compile(r"(?:allow|deny|limit|reject) [A-Za-z0-9 ./:_-]+")
 UFW_RULE_KEYS = frozenset({"id", "spec", "keep", "position", "before"})
 UFW_LEGACY_KEYS = frozenset({"spec", "comment", "replaced_by"})
 # The keys a package or component spec may carry for an arm, and the shapes the other arms read.
@@ -119,8 +115,8 @@ def add_activation(package: Package, directory: Path, dst: str, action: object) 
         return
     if not isinstance(action, str) or not ACTION.fullmatch(action):
         raise RenderRefused(
-            f"{directory}: {dst} activate {action!r} is not none, sysctl, tmpfiles, "
-            "modules-load, locale-gen, reboot, or try-restart, reload or manual followed by :<unit>"
+            f"{directory}: {dst} activate {action!r} is not {', '.join(KINDS)}, "
+            f"or {', '.join(UNIT_KINDS)} followed by :<unit>"
         )
     package.activations[dst] = action
 

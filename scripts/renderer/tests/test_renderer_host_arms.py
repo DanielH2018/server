@@ -8,14 +8,12 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_host_arms.py
 
 import importlib.machinery
 import json
-import re
 import types
 
 import pytest
 
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
-from renderer.renderer_lib import host_arms
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_manifest import MANIFEST
 
@@ -100,21 +98,6 @@ def test_an_action_reconcile_would_refuse_fails_the_render(hosts, action):
     with pytest.raises(RenderRefused, match="activate"):
         _render(hosts, _entry(action))
     assert not _reconcile().activate.valid_activations({SSHD: action})
-
-
-def test_the_renderer_checks_the_action_grammar_reconcile_reads():
-    assert host_arms.ACTION.pattern == _reconcile().activate.ACTION.pattern
-
-
-def test_the_refusal_of_an_unknown_action_names_every_kind_reconcile_reads(hosts):
-    kinds_part = _reconcile().activate.ACTION.pattern.partition("[")[0]
-    kinds = re.findall(r"[a-z][a-z-]*", kinds_part)
-    assert {"none", "locale-gen", "manual"} <= set(kinds)
-
-    with pytest.raises(RenderRefused) as refused:
-        _render(hosts, _entry("restart:ssh.service"))
-
-    assert [k for k in kinds if k not in str(refused.value)] == []
 
 
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-c.conf"
