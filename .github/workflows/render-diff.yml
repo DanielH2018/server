@@ -4,11 +4,12 @@ name: render-diff
 # difference and the head's tree digest. It fails nothing and no ruleset requires it. A human
 # reads the printed diff before merging a renderer or renderer-dependency change. renovate.json
 # disables automerge for the renderer's dependency closure, so a bump that moves output waits
-# for that read.
+# for that read. On a draft the job skips at job level and takes no runner; the read happens
+# before merge, and `ready_for_review` starts the run that prints the diff.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - scripts/renderer/**
       - scripts/lib/**
@@ -28,6 +29,7 @@ concurrency:
 jobs:
   render-diff:
     name: render-diff
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true  # advisory: a red job here is information, never a block

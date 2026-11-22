@@ -9,8 +9,9 @@
 // The host JOURNAL is readable now and still not shipped. Promtail's arm64 build was a
 // journal stub; this image is not — measured 2026-09-02, loki.source.journal read 6,573
 // lines in ten minutes off /var/log/journal and they landed in Loki. What is shipped is the
-// two health timers' verdict lines, via the pi_health source below: the narrow slice
-// that puts the Pi's verdicts in Loki beside the other hosts', at ~576 lines/day against the journal's ~38k. Turning the journal
+// health timers' verdict lines and reconcile's per-action timing lines, via the pi_health source
+// below: the narrow slice that puts the Pi's verdicts in Loki beside the other hosts', at ~576
+// verdict lines/day against the journal's ~38k. Turning the journal
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
 // the component id) — not a capability gap any more. What decided against it is this
 // process's memory, not Loki volume: the RSS measurement is in compose.yaml.j2's header (#1922).
@@ -137,8 +138,9 @@ loki.process "pi" {
   }
 }
 
-// The two host health timers' verdict lines — the ONLY host logs shipped from this box, and
-// deliberately not the journal (see the header). Every other host's verdict lines reach Loki
+// The host health timers' verdict lines, and reconcile's `starts` / `took` timing lines in
+// reconcile.log (hosts/daniel-pi/units/homelab-reconcile-timing.conf) — the ONLY host logs shipped
+// from this box, and deliberately not the journal (see the header). Every other host's verdict lines reach Loki
 // as `{job="syslog"} |= "status=down"`, and until this source existed no daniel-pi health
 // check left one there: a real "Daniel Pi Recovery" outage on 2026-08-29
 // (autoheal down ~50 min) left no episode anywhere.

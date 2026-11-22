@@ -50,7 +50,6 @@ LABELS: dict[str, tuple[str, str]] = {
         "9399b2",
         "Closed because the operator accepted the trade-off; true, but do not reopen",
     ),
-    "escalated": ("f5c2e7", "Re-observed three or more times; needs a durable owner"),
     "no-vetted-remediation": ("585b70", "Every proposed fix failed the fix-skeptic"),
     "manual": (
         "6c7086",
@@ -62,6 +61,8 @@ LABELS: dict[str, tuple[str, str]] = {
 # operator created both under Settings > Planning > Issue fields; the names and the Severity
 # options are matched exactly. `gh_calls.attach_fields` puts their values in `Issue.fields`.
 SEVERITY_FIELD, NOT_BEFORE_FIELD = "Severity", "Not Before"
+# The account-level issue field holding an issue's reviewer domain; its options are `DOMAINS`.
+DOMAIN_FIELD = "Domain"
 SEVERITY_OPTIONS = {s: s.capitalize() for s in SEVERITIES}
 # The repository's issue type for each kind; the operator created Gap and Improvement beside
 # GitHub's own Feature. gh's `--json issueType` and REST's `type` both carry it.
@@ -607,6 +608,10 @@ def reobservations(issue: Issue) -> int:
     return sum(1 for c in issue.comments if c.body.startswith(_REOBSERVED))
 
 
+# Re-observations that make a finding escalated: the filing plus two is its third sighting.
+ESCALATED_AT = 2
+
+
 # What `plan_close` opens a not-planned close comment with, keyed by outcome name (also the
 # label name); `settled_reason` reads it back for the register in docs/reference/backlog.md.
 NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
@@ -829,6 +834,7 @@ def issue_rows(issues: list[Issue], tracked: Collection[str] = ()) -> list[dict]
     for issue in issues:
         names = issue.labels
         day = issue.not_before
+        seen = reobservations(issue)
         rows.append(
             {
                 "number": issue.number,
@@ -837,7 +843,7 @@ def issue_rows(issues: list[Issue], tracked: Collection[str] = ()) -> list[dict]
                 "severity": issue.severity,
                 "kind": issue.kind,
                 "domain": _prefixed(names, "domain/"),
-                "escalated": "escalated" in names,
+                "escalated": seen >= ESCALATED_AT,
                 "refuted": "refuted" in names,
                 "accepted": "accepted" in names,
                 "reason": settled_reason(issue),
@@ -852,7 +858,7 @@ def issue_rows(issues: list[Issue], tracked: Collection[str] = ()) -> list[dict]
                 "claimed": issue.holder,
                 "first_seen": issue.created_at[:10],
                 "closed_on": issue.closed_at[:10] or None,
-                "reobservations": reobservations(issue),
+                "reobservations": seen,
                 "url": issue.url,
             }
         )
