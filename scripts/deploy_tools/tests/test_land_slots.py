@@ -149,14 +149,14 @@ def _land(ln) -> None:
         (_K8S, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes a k8s"),
         (_SERVICES, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes"),
         (_SERIAL, {"serial": [False]}, f"another {slots._SERIAL_LIVE}"),
-        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}"),
+        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}, after "),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
     ids=[
         "hold",
         "services-yml-under-a-hold",
         "serial-live-past-the-drain",
-        "beside-serial",
+        "beside-serial-past-the-wait",
         "window",
     ],
 )
@@ -172,10 +172,9 @@ def test_a_rule_refuses_the_merge_with_exit_75(landing, paths, fakes, why):
     ("draft", "fakes"),
     [
         (False, {"slot": [False, False, True]}),
-        (False, {"serial": [False, True]}),
         (True, {"slot": [False, False, False, True]}),
     ],
-    ids=["a-slot-frees", "the-serial-lock-frees", "a-draft-beside-a-slot"],
+    ids=["a-slot-frees", "a-draft-beside-a-slot"],
 )
 def test_a_serial_pr_in_the_turn_merges_once_the_landings_past_their_merge_finish(
     landing, draft, fakes
@@ -184,6 +183,40 @@ def test_a_serial_pr_in_the_turn_merges_once_the_landings_past_their_merge_finis
     _land(ln)
     assert "merge" in call_order(calls)
     assert "sleep" in _names(calls)
+
+
+@pytest.mark.parametrize(
+    ("paths", "draft"),
+    [(_DOCS, False), (_DOCS, True), (_SERIAL, False)],
+    ids=["a-ready-head", "a-draft", "a-serial-pr"],
+)
+def test_a_landing_beside_a_live_serial_landing_waits_in_line_without_the_turn(
+    landing, paths, draft
+):
+    ln, calls = _merging(landing, paths, draft, serial=[False, True])
+    _land(ln)
+    turn_and_waits = [
+        n for n in _names(calls) if n in ("try_turn", "release_turn", "sleep")
+    ]
+    assert turn_and_waits[:4] == ["try_turn", "release_turn", "sleep", "try_turn"]
+    assert "merge" in call_order(calls)
+
+
+def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last(
+    landing,
+):
+    # fact: CLAUDE.md#When to wait
+    ln, calls = _merging(landing, _DOCS, serial=[False] * 100 + [True])
+    _land(ln)
+    assert _names(calls).count("sleep") * ln.opts.merge_poll > slots.DRAIN_S
+    assert "merge" in call_order(calls)
+
+
+def test_a_serial_pr_out_of_the_turn_waits_for_the_serial_landing_to_end(landing):
+    ln, calls = _merging(landing, _SERIAL, serial=[False, True])
+    slots.refuse_before_merge(ln, HEAD)
+    assert "sleep" in _names(calls)
+    assert ln.serial_lock
 
 
 @pytest.mark.parametrize(

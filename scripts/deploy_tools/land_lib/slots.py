@@ -29,6 +29,8 @@ runs a whole landing never takes a real slot.
 import contextlib
 import os
 from collections.abc import Callable, Generator, Sequence
+from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import NoReturn
 
@@ -49,14 +51,11 @@ FALLBACK_COUNT = 3
 _LOCK_DIR = turn.LOCK.parent
 SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # DECIDED: 2400 s, the longest a serial PR in the turn waits for the landings past their merge
-# (`_drain`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its
+# (`_wait_out`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
-_SERIAL_LIVE = (
-    f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live "
-    "(`cc-wait landing-clear` waits for it)"
-)
+_SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]
@@ -185,68 +184,129 @@ def _keep_serial(ln: Landing, lock: Locker) -> bool:
     return ln.serial_lock is None
 
 
-def _bar(ln: Landing, kind: str, lock: Locker) -> tuple[str, bool]:
-    """Why `ln`'s PR, of `kind`, may not merge now, and whether `_drain` can clear it.
+class Clears(Enum):
+    """What clears a bar `_bar` names, which decides how a landing waits for it."""
+
+    # Nothing a wait can see: the landing is refused at once.
+    NEVER = "never"
+    # The landings past their merge reach their verdicts. A landing waits for that holding
+    # the turn, so no other landing merges meanwhile.
+    VERDICTS = "verdicts"
+    # The serial landing's process ends. A landing waits for that with the turn given back,
+    # because the serial landing may need the turn again before its merge.
+    SERIAL_ENDS = "serial-ends"
+
+
+_WAITING = {
+    Clears.VERDICTS: (
+        "waiting in the landing turn for the landings past their merge to reach their "
+        "verdicts"
+    ),
+    Clears.SERIAL_ENDS: "waiting in line for the serial landing to end",
+}
+_CLEARED = {
+    Clears.VERDICTS: "the landings past their merge reached their verdicts",
+    Clears.SERIAL_ENDS: "the serial landing ended",
+}
+
+
+def _bar(ln: Landing, kind: str, lock: Locker) -> tuple[str, Clears]:
+    """Why `ln`'s PR, of `kind`, may not merge now, and what clears that.
 
     Returns:
-        The reason, "" when nothing bars the PR, and whether the bar clears once the landings
-        past their merge reach their verdicts. Inside the no-promotion window they cannot,
-        so no bar drains there.
+        The reason, "" when nothing bars the PR, and what clears the bar. Inside the
+        no-promotion window no landing reaches its verdict, so no bar clears there.
     """
     if kind:
         hold = live_limit.fail_open(
             lambda: pin_gate.hold_problem(ln.tools.flux.pins.hold())
         )
         if hold:
-            return f"{hold}, and this PR changes a k8s role", False
-    in_window = bool(kind) and live_limit.fail_open(ln.tools.in_reboot_window)
+            return f"{hold}, and this PR changes a k8s role", Clears.NEVER
+    in_window = bool(kind and live_limit.fail_open(ln.tools.in_reboot_window))
     if kind == live_limit.SERIAL:
         if _keep_serial(ln, lock):
-            return f"another {_SERIAL_LIVE}", not in_window
+            return f"another {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
         if _held_by_another(lock, SLOT_NAMES):
             return (
                 f"this PR changes {live_limit.SERIAL_WHAT}, and another landing is past "
                 "its merge",
-                not in_window,
+                _unless(in_window, Clears.VERDICTS),
             )
     elif _held_by_another(lock, [SERIAL_NAME]):
-        return f"a {_SERIAL_LIVE}", False
+        return f"a {_SERIAL_LIVE}", _unless(in_window, Clears.SERIAL_ENDS)
     if in_window and _held_by_another(lock, SLOT_NAMES):
         return (
             "inside the weekly reboot's no-promotion window, another landing is past its "
             "merge, and this PR changes a k8s role",
-            False,
+            Clears.NEVER,
         )
-    return "", False
+    return "", Clears.NEVER
 
 
-def _drain(ln: Landing, kind: str, lock: Locker, why: str) -> str:
-    """Wait in the turn while the landings past their merge reach their verdicts.
+def _unless(in_window: bool, clears: Clears) -> Clears:
+    return Clears.NEVER if in_window else clears
 
-    The caller holds the turn, so no other landing merges meanwhile and the bar can only
-    clear. The wait ends after `DRAIN_S`, or sooner when the merge budgets run out.
+
+def _wait_out(
+    ln: Landing, kind: str, lock: Locker, why: str, clears: Clears
+) -> tuple[str, Clears]:
+    """Wait while the bar on `ln`'s PR stays one that `clears` clears.
+
+    The wait ends when the merge budgets run out. A wait in the turn ends after `DRAIN_S` at
+    the latest, because no other landing merges while it lasts. A wait for the serial landing
+    gives the turn back, so it holds nothing another landing needs, and only the budgets
+    bound it: the serial lock is held from the serial draft's turn, through its CI run, its
+    merge and its deploy, which is longer than `DRAIN_S` measures.
 
     Returns:
-        Why the PR still may not merge; "" once nothing bars it.
+        The bar the wait ended on: "" once nothing bars the PR, a bar of another kind as
+        soon as one applies, and `Clears.NEVER` with the reason when time ran out.
     """
     o = ln.opts
-    budget = min(DRAIN_S, _budget_left(ln))
+    budget = _budget_left(ln)
+    if clears is Clears.VERDICTS:
+        budget = min(DRAIN_S, budget)
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
-        waiting(
-            f"waiting in the landing turn for the landings past their merge to reach their "
-            f"verdicts: {why}"
-        )
+        waiting(f"{_WAITING[clears]}: {why}")
         ln.tools.sleep(o.merge_poll)
         waited += o.merge_poll
-        why, drains = _bar(ln, kind, lock)
+        why, now = _bar(ln, kind, lock)
         if not why:
-            say(f"the landings past their merge reached their verdicts after {waited}s")
-            return ""
-        if not drains:
-            return why
-    return f"{why}, after {waited}s of waiting in the landing turn"
+            say(f"{_CLEARED[clears]} after {waited}s")
+            return "", Clears.NEVER
+        if now is not clears:
+            return why, now
+    return f"{why}, after {waited}s of {_WAITING[clears]}", Clears.NEVER
+
+
+def _bar_after_waits(ln: Landing, head: str, in_turn_waits: bool) -> tuple[str, Clears]:
+    """The bar on `ln`'s PR at `head` once every wait that can clear it has run.
+
+    A live serial landing is waited out with the turn given back, and asked for again before
+    the bar is read once more (`Landing.without_turn`). With `in_turn_waits`, a landing that
+    holds the turn waits there for the landings past their merge to reach their verdicts.
+
+    Returns:
+        The reason the PR still may not merge, "" when nothing bars it, and what clears it.
+    """
+    kind, lock = _kind(ln, head), _lock_of(ln)
+    why, clears = _bar(ln, kind, lock)
+    while why:
+        if clears is Clears.SERIAL_ENDS:
+            why, clears = ln.without_turn(
+                partial(_wait_out, ln, kind, lock, why, clears),
+                "to wait in line for the serial landing to end",
+            )
+            if not why:
+                why, clears = _bar(ln, kind, lock)
+        elif clears is Clears.VERDICTS and in_turn_waits and ln.give_back_turn:
+            why, clears = _wait_out(ln, kind, lock, why, clears)
+        else:
+            break
+    return why, clears
 
 
 def _kind(ln: Landing, head: str) -> str:
@@ -282,11 +342,12 @@ def _refuse(ln: Landing, why: str) -> NoReturn:
 def refuse_before_run(ln: Landing, head: str) -> None:
     """End the landing of a draft that takes the turn while a rule bars it, before its run.
 
-    A bar that the landings past their merge clear (`_bar`) lets the run start: the turn
-    keeps other merges out during the run, and `refuse_before_merge` waits out the rest.
+    A live serial landing is waited out first, so the draft spends no run beside it. A bar
+    that the landings past their merge clear (`_bar`) lets the run start: the turn keeps
+    other merges out during the run, and `refuse_before_merge` waits out the rest.
     """
-    why, drains = _bar(ln, _kind(ln, head), _lock_of(ln))
-    if why and not drains:
+    why, clears = _bar_after_waits(ln, head, in_turn_waits=False)
+    if why and clears is not Clears.VERDICTS:
         _refuse(ln, why)
     if why:
         say(f"{why}; starting its run, and it waits in the turn for that to clear")
@@ -299,19 +360,19 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
     takes the turn. The rules, for a PR of `live_limit.kind`:
 
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
-    - a serial PR waits while another landing holds a slot or the serial lock, and keeps the
-      serial lock until its process ends, a fresh grading included, so every other PR waits
-      for it. While it holds the landing turn (`ln.give_back_turn`), it waits up to
-      `DRAIN_S` for those landings to reach their verdicts before it refuses, because no
-      other landing merges meanwhile;
+    - every PR waits while another landing holds the serial lock. Outside the no-promotion
+      window it waits in line, with the landing turn given back, for that landing to end,
+      and refuses only once its merge budgets run out;
+    - a serial PR waits while another landing holds a slot, and keeps the serial lock until
+      its process ends, a fresh grading included, so every other PR waits for it. While it
+      holds the landing turn (`ln.give_back_turn`), it waits up to `DRAIN_S` for those
+      landings to reach their verdicts before it refuses, because no other landing merges
+      meanwhile;
     - a k8s or serial PR waits inside the weekly reboot's no-promotion window while another
       landing holds a slot, so one at a time waits out the window.
 
     Every read fails open: a rule whose read fails bars nothing.
     """
-    kind, lock = _kind(ln, head), _lock_of(ln)
-    why, drains = _bar(ln, kind, lock)
-    if why and drains and ln.give_back_turn:
-        why = _drain(ln, kind, lock, why)
+    why, _ = _bar_after_waits(ln, head, in_turn_waits=True)
     if why:
         _refuse(ln, why)

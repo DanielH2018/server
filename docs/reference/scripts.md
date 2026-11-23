@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-22 18:17 UTC
-generated_sha: cb4f5351c
+generated_at: 2026-11-23 06:17 UTC
+generated_sha: 2933fca28
 ---
 
 !!! warning "Generated file — do not edit"
@@ -260,7 +260,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/validate_lib/host_fixtures.py` | validate | The packages and the repository the host_packages container cases serve. | imported by bootstrap_case.py, bootstrap_repo_case.py, conffile_case.py, disarm_case.py, engine_case.py, host_container.py, host_package_cases.py, node_package_case.py, repos_case.py, scratch_clones.py, secrets_case.py | — | — |
 | `scripts/renderer/renderer_lib/host_inputs.py` | renderer | `HOST_INPUTS`: every repo path a host render reads (H3, *Steps*, H3.9a item 1). | imported by classify.py | `test_renderer_host_inputs.py` | — |
 | `scripts/renderer/renderer_lib/host_manifest.py` | renderer | The manifest `homelab-reconcile` reads, and the three spec keys that feed it. | imported by host.py, host_outputs.py, host_package.py | `test_renderer_host_manifest.py` | — |
-| `scripts/lib/host_modules.py` | lib | Puts the host-side module directories on `sys.path`: the one module under `scripts/` that may. | imported by await_ci.py, backups.py, bootstrap_case.py, ci_contexts.py, ci_failures.py, forge.py, gate_runner.py, gh.py, host_packages.py, k3s_upgrade.py, land_tested_base.py, landing_blockers.py, landing_clear.py, ledger.py, logic.py, longhorn_dr.py, longhorn_upgrade.py, merge.py, pipeline_timeline.py, promote.py, publish_pr.py, reads.py, renovate_rebase.py, reset.py, review_ci.py, shard_weight_gate.py, snapshots.py, stuck_checks.py, tested_tree.py, verify_promotion.py, wait.py | `test_host_modules.py` | — |
+| `scripts/lib/host_modules.py` | lib | Puts the host-side module directories on `sys.path`: the one module under `scripts/` that may. | imported by await_ci.py, backups.py, bootstrap_case.py, ci_contexts.py, ci_failures.py, forge.py, gate_runner.py, gh.py, host_arms.py, host_packages.py, k3s_upgrade.py, land_tested_base.py, landing_blockers.py, landing_clear.py, ledger.py, logic.py, longhorn_dr.py, longhorn_upgrade.py, merge.py, pipeline_timeline.py, promote.py, publish_pr.py, reads.py, renovate_rebase.py, reset.py, review_ci.py, shard_weight_gate.py, snapshots.py, stuck_checks.py, tested_tree.py, verify_promotion.py, wait.py | `test_host_modules.py` | — |
 | `scripts/renderer/renderer_lib/host_outputs.py` | renderer | Secret-bearing files in host mode: declared outputs, compose files and credentials. | imported by host.py, host_compose.py | — | — |
 | `scripts/renderer/renderer_lib/host_package.py` | renderer | The `Package` a host or shared package renders to, and the `nfpm.yaml` it writes. | imported by host.py, host_compose.py, host_outputs.py, host_write.py | — | — |
 | `scripts/deploy_tools/land_lib/host_published.py` | deploy_tools | Whether the builder has published a host's package at the merge commit or after it. | imported by host_wait.py | — | — |

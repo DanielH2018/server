@@ -7,4 +7,4 @@ Jellyfin image (`jellyfin_k8s_image`): `lscr.io/linuxserver/jellyfin:10.11.11ubu
 | Intro Skipper | `1.10.11.24` | `10.11.11.0` |
 | Webhook | `21.0.0.0` | `10.11.8.0` |
 | Merge Versions | `10.11.0.1` | `10.11.0.0` |
-| Media Cleaner | `3.7.0.101109` | `10.11.9.0` |
+| Media Cleaner | `3.8.0.101109` | `10.11.9.0` |

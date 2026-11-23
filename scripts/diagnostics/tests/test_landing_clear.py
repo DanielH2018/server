@@ -5,14 +5,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_landing_clear.py
 
 import json
 import subprocess
-from unittest import mock
 
 
 from diagnostics import landing_clear
 from diagnostics.probe_lib import landing_blockers
 import pytest
 from deploy_tools.land_lib import serial_lock, turn
-from lib import proc_testing
 from ci_verdict import WorkflowRun
 
 RUN_URL = "https://github.com/DanielH2018/server/actions/runs/123"
@@ -29,8 +27,8 @@ def _run(status="completed", conclusion="success"):
     )
 
 
-def _read(hold="none", run=None, serial=None):
-    return landing_clear.read(lambda: hold, lambda: run or _run(), lambda: serial)
+def _read(hold="none", run=None):
+    return landing_clear.read(lambda: hold, lambda: run or _run())
 
 
 def _fail():
@@ -62,12 +60,6 @@ def test_a_pending_or_cancelled_master_is_not_a_blocker(run):
     assert _read(run=run)["state"] == "clear"
 
 
-def test_a_live_serial_landing_blocks():
-    state = _read(serial="9418")
-    assert state["state"] == "blocked"
-    assert state["detail"].startswith("PR #9418's serial landing is live")
-
-
 def test_both_blockers_are_named():
     state = _read(hold="abc1234", run=_run(conclusion="failure"))
     assert state["detail"] == (
@@ -82,7 +74,7 @@ def test_both_blockers_are_named():
 )
 def test_a_failed_read_exits_1_and_prints_no_state(hold_read, ci_read, capsys):
     def read_state():
-        return landing_clear.read(hold_read, ci_read, lambda: None)
+        return landing_clear.read(hold_read, ci_read)
 
     assert landing_clear.main([], read_state=read_state) == 1
     out = capsys.readouterr()
@@ -129,9 +121,7 @@ def test_any_other_gh_failure_is_a_failed_read(capsys):
 
 
 def test_a_master_with_no_ci_run_reads_pending():
-    state = landing_clear.read(
-        lambda: "none", _ci_read(0, '{"workflow_runs": []}'), lambda: None
-    )
+    state = landing_clear.read(lambda: "none", _ci_read(0, '{"workflow_runs": []}'))
     assert state == {"state": "clear", "detail": "DEPLOY_HOLD none; master CI pending"}
 
 
@@ -175,42 +165,17 @@ def test_a_held_landing_slot_is_not_a_serial_landing(tmp_path, monkeypatch):
     held()
 
 
-def test_the_probe_and_the_wait_name_the_same_blockers(tmp_path, monkeypatch):
-    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
-
-    def serial():
-        return serial_lock.serial_landing("anywhere")
-
-    def both():
-        snap = landing_blockers.collect(
-            lambda path: {"runs": []}, lambda argv: "[]", serial=serial
-        )
-        wait = landing_clear.read(lambda: "none", _run, serial)
-        return snap["blockers"], wait
-
-    assert both() == ([], {"state": "clear", "detail": mock.ANY})
-    end = _serial_landing_of(tmp_path, "9418")
-    probe_blockers, wait = both()
-    end()
-    assert wait == {"state": "blocked", "detail": " | ".join(probe_blockers)}
-    assert probe_blockers[0].startswith("PR #9418's serial landing is live")
-
-
-def test_an_unanswered_turn_host_is_a_failed_read_not_clear(
-    tmp_path, monkeypatch, capsys
+def test_the_probe_and_the_wait_agree_a_live_serial_landing_blocks_nothing(
+    tmp_path, monkeypatch
 ):
-    monkeypatch.delenv(serial_lock.TURN_DIR_ENV, raising=False)
-    bin_dir = proc_testing.fake_bin(
-        tmp_path, ssh="echo 'ssh: connection refused' >&2\nexit 255\n"
+    monkeypatch.setenv(serial_lock.TURN_DIR_ENV, str(tmp_path))
+    end = _serial_landing_of(tmp_path, "9418")
+    snap = landing_blockers.collect(
+        lambda path: {"runs": []},
+        lambda argv: "[]",
+        serial=lambda: serial_lock.serial_landing("anywhere"),
     )
-    monkeypatch.setenv("PATH", proc_testing.path_with(bin_dir))
-
-    def read_state():
-        return landing_clear.read(
-            lambda: "none",
-            lambda: _run(),
-            lambda: serial_lock.serial_landing("daniel-server"),
-        )
-
-    assert landing_clear.main([], read_state=read_state) == 1
-    assert capsys.readouterr().out == ""
+    wait = landing_clear.read(lambda: "none", _run)
+    end()
+    assert snap["serial"] == {"live": True, "pr": "9418"}
+    assert (snap["blockers"], wait["state"]) == ([], "clear")

@@ -111,11 +111,10 @@ render_gid: 993
 # to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
 # to false stops and disables the timer; that is the rollback.
 #
-# Disarmed: the session's token (renovate_agent_gh_token) can still write to PRs and Actions.
-# Re-arm only once two slices of the
-# guardrails plan have landed: B2r, which moves that write to a controller user and gives the
-# session a read-only token, and B3, which fences the session's egress.
-renovate_agent_enabled: false
+# Armed only while both guardrails hold: the session runs with a read-only token and its GitHub
+# writes go through the renovate-agent-ctl runner (B2r), and t2-egress's nftables fence refuses
+# every connection uid 901 opens except the egress proxy and the loopback OTLP collector (B3).
+renovate_agent_enabled: true
 # B3-0: the T2 session users' egress table, recording only (hosts/components/t2-egress).
 t2_egress_enabled: true
 # B3-1: the T2 egress proxy's listen address. The t2-egress component's squid binds it, and the
