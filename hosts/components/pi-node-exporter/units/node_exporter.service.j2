@@ -13,7 +13,8 @@ Group=node_exporter
 # The collector set without the --path.* remaps a container needs to see the host's /proc, /sys
 # and /, and with the textfile collector on for homelab-updater's homelab_host.prom. The listen
 # address is the LAN IP; a UFW allow for the LAN admits it. The binary is homelab-tools'
-# node-exporter, the version the cluster's DaemonSet pins.
+# node-exporter, the version the cluster's DaemonSet pins. netclass skips Docker's bridges and
+# veths, which churn, and keeps the LAN NIC's node_network_carrier_changes_total.
 # +: the directory is created outside the unit's ProtectSystem=strict sandbox.
 # systemd-tmpfiles-setup.service applies the same file at boot.
 ExecStartPre=+/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-node-exporter.conf
@@ -21,7 +22,7 @@ ExecStart=/usr/lib/homelab/bin/node-exporter \
   --web.listen-address={{ server_ip }}:9100 \
   --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/) \
   --no-collector.arp \
-  --no-collector.netclass \
+  --collector.netclass.ignored-devices=^(lo|docker0|br-[0-9a-f]+|veth[0-9a-f]+)$ \
   --collector.textfile.directory=/var/lib/node-exporter-textfile \
   --no-collector.wifi
 Restart=on-failure

@@ -336,7 +336,10 @@ binary at `/usr/lib/homelab/bin/node-exporter`, checksum-pinned per architecture
 Until H7.25 the `node-exporter-host` tag installed the tarball under `/opt`, with
 `/usr/local/bin/node_exporter` a symlink to the pinned version. The unit runs as
 the `node_exporter` system user on the LAN IP's port 9100 with the collector flags the
-container ran, plus a UFW allow from `lan_subnet`. H3.6 turned the textfile collector on over
+container ran, plus a UFW allow from `lan_subnet`. The unit turns the `netclass` collector back
+on, with `--collector.netclass.ignored-devices` skipping `lo`, `docker0`, the Docker bridges and
+the veth interfaces. A carrier flap on the USB Ethernet adapter then shows as
+`node_network_carrier_changes_total` (#10006). H3.6 turned the textfile collector on over
 `/var/lib/node-exporter-textfile`, where `homelab-updater` writes `homelab_host.prom`. A
 `tmpfiles.d` line creates that directory with M3's owner contract: owner root, group `sys_user`,
 mode 2775. The unit's `ExecStartPre=+` and `systemd-tmpfiles-setup.service` apply it. Nothing
@@ -347,7 +350,7 @@ It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role
 The trade was one containerd shim, about 5 MB, off a host that keeps 10-25 MB free — and this
 was the one container whose host form changes no decision.
 `hosts/tests/test_pi_node_exporter_host_unit.py` holds the unit to the archived
-compose's collector set with the textfile collector on, the directory to M3's contract, and the
+compose's collector set with the `netclass` and textfile collectors on, the directory to M3's contract, and the
 version to the cluster DaemonSet's.
 
 **HISTORY — the node_exporter cutover.** It retired the container by hand (`docker rm -f node-exporter` and its `containers/node-exporter/` directory) before the first apply, because the container published the same IP and port the unit binds.
