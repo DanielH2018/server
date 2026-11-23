@@ -300,7 +300,10 @@ again before the work that waited goes on, so no branch update, ready flip, batc
 runs without the turn. An ask that times out goes on without the turn, as any landing's
 does. Master may have moved during the wait, so before the merge a head
 that master moved past gives the turn back and rejoins the line as a draft. A batch
-member's reads still wait with the holder's turn held.
+member's rate-limit wait gives the holder's turn back too, and ends the batch: while it forms,
+the holder lands its PR alone, and while it merges, that member and the ones after it land
+alone. A holder that cannot take the turn back after its own wait ends its batch the same way
+(`scripts/deploy_tools/land_lib/batch.py:_wait_without_turn`).
 
 **A rate-limit wait ends at the quota's reset**, not at the wait computed when the call
 failed. It re-reads the quota every `RECHECK_S`

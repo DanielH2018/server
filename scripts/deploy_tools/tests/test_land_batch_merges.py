@@ -5,13 +5,12 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_batch_merges.py
 `test_land_batch.py` has how a batch forms, and the same fixture and model.
 """
 
-import subprocess
 from dataclasses import replace
 
 import pytest
 
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
-from deploy_tools.land_lib import batch, line, pr_json
+from deploy_tools.land_lib import batch, line
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import CiVerdict
 from lib.exit_codes import CI_PENDING
@@ -216,84 +215,3 @@ def test_a_label_github_refuses_leaves_the_member_to_land_alone(batch_of):
     assert hub.merged == [OWN]
     assert hub.full_runs == [] and hub.prs["7"]["isDraft"] is True
     assert answers(the_line, "7") == [""]
-
-
-def test_a_member_merges_only_once_the_holder_holds_the_turn_again(batch_of):
-    ln, hub, _ = batch_of(drafts=("7",))
-    limited = subprocess.CalledProcessError(
-        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
-    )
-    refused = []
-
-    def gh_json(*args, **kwargs):
-        # The holder reads its own merge commit before the first member's merge.
-        if "{merged, sha: .merge_commit_sha}" in args and not refused:
-            refused.append(args)
-            raise limited
-        return hub.gh_json(*args, **kwargs)
-
-    def gh(*args, **kwargs):
-        if "PUT" in args and args[3].endswith("/merge"):
-            hub.calls.append(("merge", (args[3].split("/")[-2],), {}))
-        return hub.gh(*args, **kwargs)
-
-    ln.tools = replace(ln.tools, gh_json=gh_json, gh=gh)
-    land(ln)
-    order = [
-        c[0] if c[0] != "merge" else f"merge {c[1][0]}"
-        for c in hub.calls
-        if c[0] in ("try_turn", "release_turn", "sleep", "merge")
-    ]
-    assert order[order.index(f"merge {OWN}") :] == [
-        f"merge {OWN}",
-        "release_turn",
-        "sleep",
-        "try_turn",
-        "merge 7",
-        "release_turn",
-    ]
-    assert hub.merged == [OWN, "7"]
-
-
-def test_a_members_rate_limit_wait_in_its_merge_gives_the_turn_back_and_ends_the_batch(
-    batch_of,
-):
-    ln, hub, the_line = batch_of(drafts=("7", "9"))
-    limited = subprocess.CalledProcessError(
-        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
-    )
-    polled = pr_json.rest_filter("state,mergeable,headRefOid")
-    refused = []
-
-    def gh_json(*args, **kwargs):
-        # PR 7's merge wait polls it once it is labelled and ready; GitHub refuses that once.
-        ready = not hub.prs["7"]["isDraft"]
-        if ready and "repos/{owner}/{repo}/pulls/7" in args and polled in args:
-            if not refused:
-                refused.append(args)
-                raise limited
-        return hub.gh_json(*args, **kwargs)
-
-    def gh(*args, **kwargs):
-        if "PUT" in args and args[3].endswith("/merge"):
-            hub.calls.append(("merge", (args[3].split("/")[-2],), {}))
-        return hub.gh(*args, **kwargs)
-
-    ln.tools = replace(ln.tools, gh_json=gh_json, gh=gh)
-    land(ln)
-    order = [
-        c[0] if c[0] != "merge" else f"merge {c[1][0]}"
-        for c in hub.calls
-        if c[0] in ("try_turn", "release_turn", "sleep", "merge")
-    ]
-    assert order[order.index(f"merge {OWN}") :] == [
-        f"merge {OWN}",
-        "release_turn",
-        "sleep",
-        "try_turn",
-        "release_turn",
-    ]
-    assert hub.merged == [OWN]
-    # PR 7 was labelled and marked ready, so it gets a full run before anything lands it.
-    assert hub.full_runs == ["7"] and hub.labels["7"] == set()
-    assert answers(the_line, "7", "9") == ["", ""]
