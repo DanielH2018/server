@@ -119,19 +119,27 @@ groups:
       # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
       # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
       # ContainerOOMKilled covers.
+      #
+      # The second arm is daniel-pi's. Its `pi_health` stream carries no `program` label, so the
+      # arm matches the kernel's line inside the journal.log file that the Pi's journal-warnings
+      # timer writes. It is a separate selector because the `machine!="daniel-pi"` exclusion is
+      # what keeps the Pi out of LokiHostLogsSilent's count.
       - alert: HostOutOfMemoryKill
         expr: >-
-          sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h])) > 0
+          (
+            sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h]))
+            or
+            sum by (machine) (count_over_time({job="syslog", machine="daniel-pi", filename="/var/log/pi-health/journal.log"} |= "kernel: Out of memory: Killed process" [1h]))
+          ) > 0
         labels:
           severity: warning
           service: host-syslog
         annotations:
           summary: '{{ $labels.machine }}: the kernel OOM-killed a process in the last hour.'
           description: >-
-            The kernel on {{ $labels.machine }} logged {{ $value }} "Out of memory: Killed
-            process" lines in the last hour, so the node ran out of memory rather than a
-            container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
-            for the killed process and the memory report above it.
+            The kernel on {{ $labels.machine }} logged {{ $value }} OOM kills in the last hour, so
+            the node ran out of memory. Read {job="syslog", program="kernel"} in loki-homelab, or
+            on daniel-pi {machine="daniel-pi", filename="/var/log/pi-health/journal.log"}.
       # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first
       # line. It catches a remount that clears before Prometheus scrapes again after its own node
       # boots: Longhorn devices on daniel-server can stay read-only for minutes while Prometheus
