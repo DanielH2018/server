@@ -265,15 +265,15 @@ worktrees with the issues each has claimed. While something blocks, the text vie
 worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document with every worktree, for `jq` or an agent to read.
 
-A blocker is one of three states: a `DEPLOY_HOLD` that reads anything but `none`, a red
-master CI run, or a live serial landing. The command computes that list itself, so every
-surface that shows it agrees. Each fact comes from a reader that already exists:
+A blocker is one of two states: a `DEPLOY_HOLD` that reads anything but `none`, or a red
+master CI run. The command computes that list itself, so every surface that shows it agrees.
+Each fact comes from a reader that already exists:
 
-- The serial landing comes from `land_lib.serial_lock.serial_landing`, the read `cc-wait
-  landing-clear` makes. It answers from `/proc/locks` on daniel-box and through one ssh call
-  on daniel-server. The blocker line names the PR that holds the serial lock, and the run of
-  that PR is marked `(serial)` in the list of runs in flight. `docs/landing.md` says when the
-  line names no PR.
+- The serial landing comes from `land_lib.serial_lock.serial_landing`. It answers from
+  `/proc/locks` on daniel-box and through one ssh call on daniel-server. A live serial landing
+  is no blocker, because `land.sh` waits in line behind it. The text view names the PR that
+  holds the serial lock, and the run of that PR is marked `(serial)` in the list of runs in
+  flight. `docs/landing.md` says when the line names no PR.
 - `DEPLOY_HOLD` comes from one `gh variable get`. The blocker line says the hold is set and
   leaves its value to the text view, because the value is free text.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-22 18:17 UTC
-generated_sha: cb4f5351c
+generated_at: 2026-11-23 06:17 UTC
+generated_sha: 2933fca28
 ---
 
 !!! warning "Generated file — do not edit"
@@ -33,7 +33,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.139` |
-| Host package | `homelab-daniel-pi` (24 components) |
+| Host package | `homelab-daniel-pi` (23 components) |
 | Services declared | 4 |
 | Has Docker | yes |
 

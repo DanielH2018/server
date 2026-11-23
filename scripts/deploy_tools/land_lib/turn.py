@@ -22,8 +22,10 @@ turn back for the wait's length and asks for it again before it goes on
 A landing that waits with a draft stands in the line beside the lock (`line.py`), so the
 landing that holds the turn can test that draft's head with its own. A landing whose place
 reads `merged` stops waiting: the holder merged its PR. One whose place reads `alone` leaves
-the line and waits on for the turn: a batch that tested its PR was not green, and it forms no
-batch of its own (`batch.py`).
+the line and waits on for the turn: a batch that tested its PR was not green and the holder's
+own run was not red, and it forms no batch of its own (`batch.py`). One whose place reads
+`split` waits on in the line until the holder's own run settles it, and lands alone if it
+takes the turn first.
 
 The turn is not a safety gate. A landing that cannot take it within `merge_timeout`, or
 cannot reach `TURN_HOST`, goes on without it and merges as a landing without the turn does.
@@ -343,7 +345,8 @@ def _wait(ln: Landing, draft: str) -> tuple[Callable[[], None] | None, int]:
                         f"the landing that holds the turn merged PR #{o.pr} with its own"
                     )
                     return None, waited
-                if answer == line.ALONE:
+                # `split`: the batch's holder stepped out of the turn before its own run decided.
+                if answer in (line.ALONE, line.SPLIT):
                     _lands_alone(ln)
                 say(f"took the landing turn after {waited}s")
                 return release, waited
@@ -411,9 +414,9 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         release, asked = None, False
         offer()
 
-    def step_out[T](wait: Callable[[], T]) -> T:
+    def step_out[T](wait: Callable[[], T], reason: str) -> T:
         give_back()
-        say("gave the landing turn back to wait out GitHub's rate limit")
+        say(f"gave the landing turn back {reason}")
         got = wait()
         take("")
         ln.turn_interrupted = True

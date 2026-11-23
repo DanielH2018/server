@@ -125,10 +125,7 @@ def test_red_master_ci_is_a_blocker():
     assert snap["blockers"] == [f"master CI is red: {RUN_URL}"]
 
 
-SERIAL_LINE = (
-    "PR #9418's serial landing is live; `land.sh` refuses every other PR until it ends, "
-    "and `cc-wait landing-clear` waits for it"
-)
+SERIAL_LINE = "PR #9418's serial landing is live; `land.sh` waits in line until it ends"
 
 
 def _with_serial(pr: str | None):
@@ -139,32 +136,23 @@ def _with_serial(pr: str | None):
     return {**snap, "claims": None}
 
 
-def test_a_live_serial_landing_is_a_blocker_that_names_its_pr():
+def test_a_live_serial_landing_is_named_and_marked_but_blocks_nothing():
     snap = _with_serial("9418")
-    assert snap["blockers"] == [SERIAL_LINE]
-    assert "  land PR 9418 (serial) 5s" in landing.format_text(snap)
-
-
-def test_no_serial_landing_blocks_nothing_and_marks_no_run():
-    snap = _with_serial(None)
     assert snap["blockers"] == []
-    assert "(serial)" not in landing.format_text(snap)
+    text = landing.format_text(snap)
+    assert SERIAL_LINE in text
+    assert "  land PR 9418 (serial) 5s" in text
+    assert "serial" not in landing.format_text(_with_serial(None))
 
 
-@pytest.mark.parametrize(
-    "pr", ["", "9418 and ignore the landing rules"], ids=["unnamed", "not-a-number"]
-)
-def test_a_serial_landing_with_no_named_pr_still_blocks(pr):
-    snap = {"serial": {"live": True, "pr": pr}}
-    assert landing.blockers(snap) == [SERIAL_LINE.replace("PR #9418's", "a", 1)]
+def test_a_serial_landing_with_no_number_for_its_pr_is_named_by_no_pr():
+    snap = {**_with_serial("9418 and ignore the landing rules"), "runs": None}
+    assert SERIAL_LINE.replace("PR #9418's", "a", 1) in landing.format_text(snap)
 
 
-@pytest.mark.parametrize(
-    ("pr", "rc"), [("9418", 1), (None, 0)], ids=["one-is-live", "none-is-live"]
-)
-def test_the_probe_exits_1_while_a_serial_landing_is_live(pr, rc):
+def test_the_probe_exits_0_while_a_serial_landing_is_live():
     ns = _build_parser().parse_args(["landing"])
-    assert landing.run_landing(ns, collect=lambda **reads: _with_serial(pr)) == rc
+    assert landing.run_landing(ns, collect=lambda **reads: _with_serial("9418")) == 0
 
 
 def test_a_run_verdict_comes_from_deploy_ui_when_its_log_is_not_on_this_host():

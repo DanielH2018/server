@@ -20,8 +20,8 @@ from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/crowdsec-edge-probe"
-# Every unit that declares LogsDirectory=pi-health in the Pi package: the five heartbeats of
-# pi-heartbeats and this component's probe. The census must find all six.
+# Every unit that declares LogsDirectory=pi-health in the Pi package: the five heartbeats and
+# the journal copier of pi-heartbeats, and this component's probe. The census must find all seven.
 LOGS_DIRECTORY_UNITS = frozenset(
     f"homelab-{name}.service"
     for name in (
@@ -30,6 +30,7 @@ LOGS_DIRECTORY_UNITS = frozenset(
         "pi-recovery",
         "pi-watchdog-health",
         "pi-audit-health",
+        "pi-journal-warnings",
         "crowdsec-probe",
     )
 )

@@ -494,3 +494,12 @@ def test_a_cluster_silence_rule_that_counts_a_pi_stream_is_flagged():
     assert _pi_boundary_problems({"r": expr}, rules) == [
         "r: also matches pi_health, across the Pi boundary"
     ]
+
+
+def test_host_oom_rule_has_an_arm_for_the_pi_journal_file():
+    expr = _loki_rule_exprs()["homelab-logs.yaml HostOutOfMemoryKill"]
+    pi_journal = {
+        **_PI_STREAMS["pi_health"],
+        "filename": "/var/log/pi-health/journal.log",
+    }
+    assert any(_selector_matches(s, pi_journal) for s in _stream_selectors(expr))

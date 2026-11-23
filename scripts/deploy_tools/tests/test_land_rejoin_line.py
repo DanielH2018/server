@@ -84,6 +84,23 @@ def test_a_ready_head_master_moved_past_while_it_waited_gives_the_turn_back(
     assert "gave the landing turn back" in capsys.readouterr().out
 
 
+def test_a_ready_head_master_moved_past_while_a_serial_landing_ended_rejoins_the_line(
+    landing,
+):
+    updated = {**OPEN, "headRefOid": UPDATED}
+    ln, calls = turn_landing(
+        landing,
+        polls=(OPEN, updated, updated, {**MERGED, "headRefOid": UPDATED}),
+        start=(READY, REJOINED),
+        head_runs=_ran_then_skipped,
+        compare=[[], ["docs/other.md"], []],
+        serial=[False, True],
+    )
+    land_in_turn(ln)
+    assert _undo_calls(calls) == 1
+    assert merged_sha(calls) == UPDATED
+
+
 def test_a_ready_head_master_left_alone_while_it_waited_keeps_the_turn(landing):
     ln, calls = turn_landing(
         landing,
@@ -210,6 +227,8 @@ def test_a_rejoined_pr_a_rule_refuses_in_the_turn_is_marked_ready_again(landing)
     assert call_order(calls) == [
         "pr ready",
         "update",
+        "try_turn",
+        "release_turn",
         "try_turn",
         "pr ready",
         "release_turn",
