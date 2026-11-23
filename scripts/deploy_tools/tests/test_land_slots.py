@@ -149,7 +149,7 @@ def _land(ln) -> None:
         (_K8S, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes a k8s"),
         (_SERVICES, {"deploy_hold": "abc123"}, "holds 'abc123', and this PR changes"),
         (_SERIAL, {"serial": [False]}, f"another {slots._SERIAL_LIVE}"),
-        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}, after 2400s"),
+        (_DOCS, {"serial": [False]}, f"a {slots._SERIAL_LIVE}, after "),
         (_K8S, {"in_window": True, "slot": [False]}, "no-promotion window"),
     ],
     ids=[
@@ -199,6 +199,16 @@ def test_a_landing_beside_a_live_serial_landing_waits_in_line_without_the_turn(
         n for n in _names(calls) if n in ("try_turn", "release_turn", "sleep")
     ]
     assert turn_and_waits[:4] == ["try_turn", "release_turn", "sleep", "try_turn"]
+    assert "merge" in call_order(calls)
+
+
+def test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last(
+    landing,
+):
+    # fact: CLAUDE.md#When to wait
+    ln, calls = _merging(landing, _DOCS, serial=[False] * 100 + [True])
+    _land(ln)
+    assert _names(calls).count("sleep") * ln.opts.merge_poll > slots.DRAIN_S
     assert "merge" in call_order(calls)
 
 

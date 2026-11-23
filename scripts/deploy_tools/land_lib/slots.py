@@ -50,11 +50,10 @@ COUNT = 6
 FALLBACK_COUNT = 3
 _LOCK_DIR = turn.LOCK.parent
 SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
-# DECIDED: 2400 s, the longest a serial PR in the turn waits for the landings past their merge,
-# and the longest any landing waits in line for a live serial landing to end (`_wait_out`). On
-# 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its merge to its
-# verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck on a soak for
-# longer would otherwise hold the turn for two merge budgets.
+# DECIDED: 2400 s, the longest a serial PR in the turn waits for the landings past their merge
+# (`_wait_out`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its
+# merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
+# on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
 _SERIAL_LIVE = (
     f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live "
@@ -257,14 +256,20 @@ def _wait_out(
 ) -> tuple[str, Clears]:
     """Wait while the bar on `ln`'s PR stays one that `clears` clears.
 
-    The wait ends after `DRAIN_S`, or sooner when the merge budgets run out.
+    The wait ends when the merge budgets run out. A wait in the turn ends after `DRAIN_S` at
+    the latest, because no other landing merges while it lasts. A wait for the serial landing
+    gives the turn back, so it holds nothing another landing needs, and only the budgets
+    bound it: the serial lock is held from the serial draft's turn, through its CI run, its
+    merge and its deploy, which is longer than `DRAIN_S` measures.
 
     Returns:
         The bar the wait ended on: "" once nothing bars the PR, a bar of another kind as
         soon as one applies, and `Clears.NEVER` with the reason when time ran out.
     """
     o = ln.opts
-    budget = min(DRAIN_S, _budget_left(ln))
+    budget = _budget_left(ln)
+    if clears is Clears.VERDICTS:
+        budget = min(DRAIN_S, budget)
     waiting = OnChange(say)
     waited = 0
     while waited + o.merge_poll <= budget:
@@ -359,8 +364,8 @@ def refuse_before_merge(ln: Landing, head: str) -> None:
 
     - a k8s or serial PR waits while `DEPLOY_HOLD` holds;
     - every PR waits while another landing holds the serial lock. Outside the no-promotion
-      window it waits in line, with the landing turn given back, up to `DRAIN_S` for that
-      landing to end before it refuses;
+      window it waits in line, with the landing turn given back, for that landing to end,
+      and refuses only once its merge budgets run out;
     - a serial PR waits while another landing holds a slot, and keeps the serial lock until
       its process ends, a fresh grading included, so every other PR waits for it. While it
       holds the landing turn (`ln.give_back_turn`), it waits up to `DRAIN_S` for those

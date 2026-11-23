@@ -228,8 +228,10 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   again before its merge, and its log prints `waiting in line for the serial landing to
   end`. It asks for the turn again once the lock is free, and reads the rules once more in
   the turn. A ready head that master moved past meanwhile rejoins the line as a draft, as
-  after a rate-limit wait. The wait runs up to `slots.DRAIN_S`, or less when the merge
-  budgets run out, then refuses. A draft waits before its run, so it spends no run beside
+  after a rate-limit wait. The wait runs until the landing's two merge budgets run out,
+  which `LAND_DEADLINE` counts, then refuses. It is not capped at `slots.DRAIN_S`, which
+  measures merge to verdict: the serial lock is held from the serial draft's turn, through
+  its CI run, its merge and its deploy. A draft waits before its run, so it spends no run beside
   the serial landing. Inside the no-promotion window the serial landing cannot reach its
   verdict, so a k8s PR there is still refused at once. On 2026-11-20, 20 of the day's 28
   `refused` verdicts came from landing under a live serial landing
