@@ -227,15 +227,15 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 # failure. tests/services/test_mediacleaner_install.py re-derives that encoding from the
 # targetAbi rather than trusting the three values to have been copied consistently.
 jellyfin_k8s_mediacleaner_version: "3.8.0.101109"
-# The newest ABI variant the 10.11.11 image satisfies. v3.7.0 also ships a 12.0 variant, which
+# The newest ABI variant the 10.11.11 image satisfies. v3.8.0 also ships a 12.0 variant, which
 # this image would reject without logging a failure.
 jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"
 jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.8.0/MediaCleaner-10.11.9.zip"
 # sha256, the digest GitHub reports for the asset itself. The plugin's published manifest
-# (shemanaev/jellyfin-plugin-repo, master manifest.json) carries an MD5, 6580d2fa3aa033dc2cfe317a2dfa4be3,
-# for the same bytes. The zip's own meta.json declares version 3.7.0.101109 and targetAbi
+# (shemanaev/jellyfin-plugin-repo, master manifest.json) carries an MD5, a2e3ca1725dd08b8dcae50fe39896bf6,
+# for the same bytes. The zip's own meta.json declares version 3.8.0.101109 and targetAbi
 # 10.11.9.0, matching the two pins above.
-jellyfin_k8s_mediacleaner_sha256: "8d66770e1d7253bc391c60bae9091677f41a1ea797efb3bfa9b1fcb9958cc8ed"
+jellyfin_k8s_mediacleaner_sha256: "9806eb77aef0e668ac020386c099add56d428d1deb17ddc11fa8b4fe33f86595"
 # The zip carries its own meta.json beside MediaCleaner.dll and MediaCleaner.Core.dll, so this
 # install is WEBHOOK's shape, not Intro Skipper's: nothing here writes a manifest, and no guid
 # is needed as an input. For the record, the manifest declares

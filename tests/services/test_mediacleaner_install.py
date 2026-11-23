@@ -274,29 +274,29 @@ def test_the_guard_rejects_an_installer_that_stopped_acting_on_a_pin(
 
 
 @pytest.mark.parametrize(
-    ("what", "before", "after", "guard"),
+    ("what", "key", "mutate", "guard"),
     [
         (
             "a version suffix naming another ABI",
-            "3.7.0.101109",
-            "3.7.0.101100",
+            "jellyfin_k8s_mediacleaner_version",
+            lambda v: v.rsplit(".", 1)[0] + ".999999",
             _assert_pin_agrees,
         ),
         (
             "a targetAbi naming another asset",
-            "10.11.9.0",
-            "10.11.0.0",
+            "jellyfin_k8s_mediacleaner_target_abi",
+            lambda v: "9.99.99.0",
             _assert_pin_agrees,
         ),
         (
             "a release tag the version does not name",
-            "/download/v3.7.0/",
-            "/download/v3.2.0/",
+            "jellyfin_k8s_mediacleaner_url",
+            lambda v: re.sub(r"/download/v[^/]+/", "/download/v0.0.0/", v),
             _assert_release_tag,
         ),
     ],
 )
-def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after, guard):
+def test_the_pin_guards_reject_a_mismatched_defaults_file(what, key, mutate, guard):
     """The red half for the three-way ABI agreement, which is this pin's whole hazard.
 
     Each mutation is a value a careless bump really produces, and each leaves a defaults file
@@ -306,11 +306,12 @@ def test_the_pin_guards_reject_a_mismatched_defaults_file(what, before, after, g
     rather than re-deriving the encoding. A mutation test with its own copy of the formula passes while the
     formula under test is broken, because what it proves is that the copy rejects the input.
     """
-    text = DEFAULTS.read_text()
-    assert text.count(before) >= 1, (
-        f"the mutation for {what} matched nothing — fix the fixture"
+    mutated = yaml_fast.safe_load(DEFAULTS.read_text())
+    original = mutated[key]
+    mutated[key] = mutate(original)
+    assert mutated[key] != original, (
+        f"the mutation for {what} left {key} unchanged — fix the fixture"
     )
-    mutated = yaml_fast.safe_load(text.replace(before, after))
 
     with pytest.raises(AssertionError):
         guard(mutated)
