@@ -16,6 +16,9 @@
 #   system units and writes the `systemd-units` textfile the SystemdUnitsFailed and
 #   SystemdUnitsNotReporting rules read, so a unit with no OnFailure= hook and no verdict
 #   of its own still pages when it fails.
+# - homelab-ucf-dist runs files/ucf-dist-check.sh every hour. It counts the *.ucf-dist copies under
+#   /etc older than a day, which ucf leaves when an upgrade meets a locally edited config file,
+#   and writes the `ucf-dist` textfile the UcfDistPending and UcfDistNotReporting rules read.
 #
 # The Docker prune is the pi-docker component's, because only a Docker host runs it.
 #
@@ -33,6 +36,9 @@ files:
   - {src: files/systemd-units-check.sh, dst: /usr/lib/homelab/systemd-units-check, mode: "0755"}
   - {src: units/homelab-systemd-units.service, dst: /usr/lib/systemd/system/homelab-systemd-units.service}
   - {src: units/homelab-systemd-units.timer, dst: /usr/lib/systemd/system/homelab-systemd-units.timer}
+  - {src: files/ucf-dist-check.sh, dst: /usr/lib/homelab/ucf-dist-check, mode: "0755"}
+  - {src: units/homelab-ucf-dist.service, dst: /usr/lib/systemd/system/homelab-ucf-dist.service}
+  - {src: units/homelab-ucf-dist.timer, dst: /usr/lib/systemd/system/homelab-ucf-dist.timer}
   - {src: templates/homelab-reboot.j2, dst: /usr/lib/homelab/homelab-reboot, mode: "0755"}
   - {src: units/homelab-reboot.service, dst: /usr/lib/systemd/system/homelab-reboot.service}
   - {src: units/homelab-reboot.timer.j2, dst: /usr/lib/systemd/system/homelab-reboot.timer}
@@ -43,6 +49,7 @@ enable:
   homelab-dpkg-purge.timer: timers.target
   homelab-reboot.timer: timers.target
   homelab-systemd-units.timer: timers.target
+  homelab-ucf-dist.timer: timers.target
   homelab-firmware-update.timer: {target: timers.target, when: has_fwupd}
 legacy:
   - {cron: "Weekly firmware update", user: root, when: has_fwupd}

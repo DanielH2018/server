@@ -2465,6 +2465,69 @@ tests:
                 nothing is counting its failed units. Read `systemctl status
                 homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box,
                 then /var/lib/node-exporter-textfile/systemd-units.prom.
+  # UcfDistPending: the script holds the day's grace, so daniel-box's red verdict pages at once
+  # and daniel-server's green one stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x5'
+      - series: 'homelab_check_success{check="ucf-dist", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ucf-dist", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x5'
+      - series: 'homelab_check_success{check="ucf-dist", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ucf-dist", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0+60x5'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: UcfDistPending
+        exp_alerts:
+          - exp_labels:
+              check: ucf-dist
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: 'daniel-box: a new package config copy (*.ucf-dist) has waited more than a day.'
+              description: >-
+                An upgrade kept a locally edited config file and left the package's new version
+                beside it. Run `journalctl -t ucf-dist` on daniel-box for the paths, then merge
+                or replace each file and delete its dist copy; the runbook has the steps.
+              runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ucfdistpending
+  # UcfDistNotReporting's stale arm: a timestamp frozen at 0 crosses the 10800s deadline after
+  # the 180th minute.
+  - interval: 10m
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x20'
+      - series: 'homelab_check_success{check="ucf-dist", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x20'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="ucf-dist", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: UcfDistNotReporting
+        exp_alerts: []
+      - eval_time: 190m
+        alertname: UcfDistNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: ucf-dist
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: 'daniel-box: the pending-config check has stopped reporting.'
+              description: >-
+                No ucf-dist verdict newer than 10800s reached Prometheus from daniel-box, so
+                nothing is counting its pending *.ucf-dist copies. Read `systemctl status
+                homelab-ucf-dist.timer` and `journalctl -t ucf-dist` on daniel-box, then
+                /var/lib/node-exporter-textfile/ucf-dist.prom.
   # SystemdUnitsNotReporting's absent arm: daniel-box's file reports for 5 minutes and is gone,
   # so the arm fires once 900s pass with no sample. daniel-server never wrote one, as before its
   # package installs the timer, and its history guard keeps it quiet.

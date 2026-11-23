@@ -1,0 +1,11 @@
+# Shipped by the host package's host-maintenance component with its enable link. Every hour;
+# ucf-dist-check.sh's DEADLINE_S is three runs.
+[Unit]
+Description=Count the pending *.ucf-dist copies every hour
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

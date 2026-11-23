@@ -609,6 +609,49 @@ groups:
             nothing is counting its failed units. Read `systemctl status
             homelab-systemd-units.timer` and `journalctl -t systemd-units` on ${host}, then
             /var/lib/node-exporter-textfile/systemd-units.prom.
+      # The pending-config check: ucf-dist-check.sh in the host-maintenance component counts the
+      # *.ucf-dist copies under /etc every hour, and writes success 0 once one is older than a
+      # day. The day's grace lives in the script, so the rule needs no `for`. The NotReporting
+      # absent arm carries the same 28-day history guard as the weekly jobs above. Both 10800s
+      # literals equal the script's DEADLINE_S, and hosts/tests/test_ucf_dist_check.py pins
+      # them to it.
+      - alert: UcfDistPending
+        hosts: {component: host-maintenance}
+        expr: |
+          homelab_check_success{check="ucf-dist",origin="${host}"} == 0
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: '${host}: a new package config copy (*.ucf-dist) has waited more than a day.'
+          description: >-
+            An upgrade kept a locally edited config file and left the package's new version
+            beside it. Run `journalctl -t ucf-dist` on ${host} for the paths, then merge or
+            replace each file and delete its dist copy; the runbook has the steps.
+          runbook_url: https://docs.local.daniel-hunter.com/alert-runbooks/#ucfdistpending
+      - alert: UcfDistNotReporting
+        hosts: {component: host-maintenance}
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="ucf-dist",origin="${host}"} > 10800
+            or
+              (
+                  absent_over_time(homelab_check_last_run_timestamp_seconds{check="ucf-dist",origin="${host}"}[10800s])
+                and on ()
+                  present_over_time(homelab_check_last_run_timestamp_seconds{check="ucf-dist",origin="${host}"}[2419200s])
+              )
+          )
+          unless on (origin) (up{job="${job}"} == 0)
+        labels:
+          severity: warning
+          service: ${host}
+        annotations:
+          summary: '${host}: the pending-config check has stopped reporting.'
+          description: >-
+            No ucf-dist verdict newer than 10800s reached Prometheus from ${host}, so nothing
+            is counting its pending *.ucf-dist copies. Read `systemctl status
+            homelab-ucf-dist.timer` and `journalctl -t ucf-dist` on ${host}, then
+            /var/lib/node-exporter-textfile/ucf-dist.prom.
       # kubelet's shutdown delay lock on the nodes that run a graceful node shutdown: both k3s
       # nodes, the hosts of the `node` job (k3s-server's kubelet-graceful-shutdown.conf.j2, which
       # k3s-agent borrows). The lock check writes the verdict every 5 minutes, so a node fixed by

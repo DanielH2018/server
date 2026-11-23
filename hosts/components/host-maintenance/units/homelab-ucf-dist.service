@@ -1,0 +1,12 @@
+# Shipped by the host package's host-maintenance component. Started by homelab-ucf-dist.timer.
+[Unit]
+Description=Count the pending *.ucf-dist copies under /etc and write the ucf-dist textfile verdict
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=ucf-dist
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin HOMELAB_LIB_DIR=/usr/lib/homelab
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/usr/lib/homelab/ucf-dist-check
