@@ -126,7 +126,7 @@ def test_red_master_ci_is_a_blocker():
 
 
 SERIAL_LINE = (
-    "PR #9418's serial landing is live; `land.sh` refuses every other PR until it ends, "
+    "PR #9418's serial landing is live; every other landing waits in line until it ends, "
     "and `cc-wait landing-clear` waits for it"
 )
 

@@ -167,16 +167,17 @@ name is taken. Two landings that go on without the lock therefore still write tw
 
 ### Rules that refuse a merge
 
-**Three rules refuse a merge inside the landing turn.** A landing checks them when a draft
-takes the turn, before its CI run, and again just before the merge. A refused landing exits
-75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
+**Three rules bar a merge inside the landing turn.** A landing checks them when a draft
+takes the turn, before its CI run, and again just before the merge. A bar a wait can clear
+is waited out first, as the bullets below say. A refused landing exits 75 with
+`VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
 `slots._bar` owns the rules, and each read that fails bars nothing.
 
 - A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
   anything but `none`.
 - A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
   takes the serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
-  until its process ends, so every other PR is refused meanwhile. `live_limit.kind` decides
+  until its process ends, so every other PR waits meanwhile. `live_limit.kind` decides
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
   forward-only pins, the `flux` role, the cluster-vars file, or a path in
   `live_limit.SERIAL_PATHS`.
@@ -221,6 +222,17 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   four times each under the rule without the wait, each time after up to 82 minutes in line.
   Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
   the turn, a serial PR is still refused at once.
+- Every PR waits in line while another landing holds the serial lock, instead of refusing.
+  It gives the landing turn back for the wait, because the serial landing may need the turn
+  again before its merge, and its log prints `waiting in line for the serial landing to
+  end`. It asks for the turn again once the lock is free, and reads the rules once more in
+  the turn. A ready head that master moved past meanwhile rejoins the line as a draft, as
+  after a rate-limit wait. The wait runs up to `slots.DRAIN_S`, or less when the merge
+  budgets run out, then refuses. A draft waits before its run, so it spends no run beside
+  the serial landing. Inside the no-promotion window the serial landing cannot reach its
+  verdict, so a k8s PR there is still refused at once. On 2026-11-20, 20 of the day's 28
+  `refused` verdicts came from landing under a live serial landing
+  ([#10010](https://github.com/DanielH2018/server/issues/10010)).
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 

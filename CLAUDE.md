@@ -73,8 +73,9 @@ Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD`, m
 the serial lock (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), and exits 1
 while any of the three blocks.
 
-- A serial landing is live. `land.sh` refuses every other PR until it ends, and the probe
-  names its PR.
+- A serial landing is live. Every other landing waits in line for it, up to
+  `scripts/deploy_tools/land_lib/slots.py:DECIDED: 2400 s`, and is refused after that. The
+  probe names its PR.
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
   (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
