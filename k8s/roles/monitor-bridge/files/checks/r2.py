@@ -241,9 +241,10 @@ def check_r2_etcd_lock(
     means the rule holds, and a delete that succeeds means it does not. Canaries past the
     lock's age are deleted, and a refusal there means a lock outlasts the rule's age.
 
-    Every answer from R2 is cached for R2_LOCK_PROBE_INTERVAL_S, a refusal included, so a
-    missing lock does not upload and delete a canary every cycle. A transport failure raises
-    and the next cycle probes again. Empty credentials disable the check.
+    A verdict, or a 4xx refusal, is cached for R2_LOCK_PROBE_INTERVAL_S, so a missing lock does
+    not upload and delete a canary every cycle. A transport failure, a 5xx or a 429 raises,
+    which exports a down row, and the next cycle probes again. Empty credentials disable the
+    check.
     """
     if not (
         cfg.CF_ACCOUNT_ID
@@ -262,6 +263,8 @@ def check_r2_etcd_lock(
     try:
         result = _r2_etcd_lock_probe(cfg, src, now)
     except urllib.error.HTTPError as e:
+        if e.code >= 500 or e.code == 429:
+            raise
         result = CheckResult(
             False, "R2 refused the lock canary: %s" % e, ["request refused"]
         )

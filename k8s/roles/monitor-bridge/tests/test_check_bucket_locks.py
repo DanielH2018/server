@@ -253,3 +253,16 @@ def test_any_other_r2_refusal_is_flagged(r2_cfg):
     result, _ = _run(r2_cfg, Forbidden([], locked=set()))
     assert not result.ok
     assert result.details == ("request refused",)
+
+
+def test_an_r2_server_error_raises_and_the_next_cycle_probes_again(r2_cfg):
+    class Unavailable(FakeR2):
+        def send(self, method, url, headers, body=None):
+            raise _http_error(url, 503, "<Code>ServiceUnavailable</Code>")
+
+    src = FakeSources(send=Unavailable([], locked=set()).send)
+    with pytest.raises(urllib.error.HTTPError):
+        checks.r2.check_r2_etcd_lock(r2_cfg, src, now=NOON)
+    bucket = FakeR2([], locked={_canary(TODAY)})
+    (ok, msg), _ = _run(r2_cfg, bucket, now=NOON + 300, state=src.state)
+    assert ok, msg

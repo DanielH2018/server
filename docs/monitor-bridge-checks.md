@@ -235,9 +235,9 @@ checks each gate suppresses.
   other answer. Each request is SigV4-signed by `files/bridge/sigv4.py` with the R2 S3 key
   Longhorn and k3s write with (`R2_S3_KEY_ID`, `R2_S3_SECRET_KEY`). A canary must be zero
   bytes: k3s lists every non-empty object under the prefix as a ready snapshot, which would
-  hide a stale one from backup health's check 12. Any answer from R2 is cached for
-  `R2_LOCK_PROBE_INTERVAL_S` (a day), so a missing lock does not churn a canary every cycle;
-  a transport failure raises and the next cycle probes again. It does not see a rule widened
+  hide a stale one from backup health's check 12. A verdict or a 4xx refusal is cached for
+  `R2_LOCK_PROBE_INTERVAL_S` (a day), so a missing lock does not churn a canary every cycle.
+  A transport failure, a 5xx or a 429 raises, and the next cycle probes again. It does not see a rule widened
   over `longhorn/`. Behind `wan_reachable`. Runbook: `longhorn-backup-tiering`, *The R2 lock
   canary*.)
 - **`cloudflare_ips_drift`** (`checks/cloudflare_ips.py`: the two published range pages against

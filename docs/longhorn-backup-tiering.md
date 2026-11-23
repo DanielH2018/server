@@ -445,8 +445,9 @@ three things under `etcd-snapshots/lock-canary-`:
 1. It deletes each canary dated more than 7 days back, which must succeed. A refusal means a
     lock over the prefix outlasts 7 days, and the row reads `lock outlasts its age`.
 
-Any other answer from R2 fails the row as `request refused`. The row holds each verdict for a
-day, so a missing lock does not upload and delete a canary every cycle.
+Any other 4xx answer from R2 fails the row as `request refused`. The row holds each verdict
+for a day, so a missing lock does not upload and delete a canary every cycle. A 5xx or a 429
+fails the row for one cycle only, and the next cycle probes again.
 
 - **Each canary is zero bytes.** k3s lists every non-empty object under `etcd-snapshots/` as
   a ready snapshot (`pkg/etcd/s3/s3.go`, `ListSnapshots`, at v1.37.2+k3s1). A non-empty
