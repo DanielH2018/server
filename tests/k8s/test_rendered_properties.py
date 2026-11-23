@@ -10,7 +10,7 @@ exemption list keeps a file (`test_container_security_context.py` is the example
 Rows that would push this file past the test-module length cap live in
 `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
 `_scrape_property_rows.py`, `_edge_property_rows.py`, `_rbac_property_rows.py`,
-`_telemetry_property_rows.py`,
+`_telemetry_property_rows.py`, `_security_property_rows.py`,
 `_volume_property_rows.py`, `_restart_property_rows.py` and `_memory_property_rows.py`, and run
 here with the rest.
 `_prepull_property_rows.py` holds the rows over a second render, the Flux cluster render of
@@ -39,6 +39,7 @@ from _property_table import Property, check
 from _rbac_property_rows import RBAC_PROPERTIES
 from _restart_property_rows import RESTART_PROPERTIES
 from _scrape_property_rows import SCRAPE_PROPERTIES
+from _security_property_rows import SECURITY_PROPERTIES
 from _telemetry_property_rows import TELEMETRY_PROPERTIES
 from _volume_property_rows import VOLUME_PROPERTIES
 from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
@@ -148,18 +149,6 @@ def _tdarr_env_offence(role: str, container: dict) -> str | None:
     if not wrong:
         return None
     return f"env {wrong} is not pinned to {TDARR_ENV_PINS}"
-
-
-def _job_pod_specs(role: str, tpl: str, doc: dict):
-    if doc.get("kind") in {"Job", "CronJob"}:
-        yield f"{doc['kind']}/{doc['metadata']['name']}", pod_spec(doc)
-
-
-def _restart_policy_offence(role: str, spec: dict) -> str | None:
-    policy = spec.get("restartPolicy")
-    if policy == "Never":
-        return None
-    return f"restartPolicy is {policy!r}, not 'Never'"
 
 
 def _cronjobs(role: str, tpl: str, doc: dict):
@@ -375,30 +364,6 @@ PROPERTIES = (
             ),
             must_find=frozenset({"tdarr"}),
         ),
-        Property(
-            name="job-restart-policy-is-never",
-            reason=(
-                "observability's homelab:pod_service:info leaves a Job-owned pod outside the "
-                "add-on namespaces out of its domain, because under `restartPolicy: Never` the "
-                "kubelet never restarts a Job's container in place, so the crash-loop arm has "
-                "nothing to read there. `OnFailure` restarts it in place, which would put a "
-                "restarting pod outside the workload-service mapping. Keep Never, or add the "
-                "Job hop to files/rules/workload-service.yaml first; "
-                "k8s/roles/observability/CLAUDE.md, 'Alert plane', has the reasoning."
-            ),
-            select=_job_pod_specs,
-            offence=_restart_policy_offence,
-            red=("pi-peer-backup", {"restartPolicy": "OnFailure"}),
-            green=("pi-peer-backup", {"restartPolicy": "Never"}),
-            # A pod template with no restartPolicy is refused by the API for a Job, but the
-            # predicate must not read the gap as Never either.
-            more_red=(("pi-peer-backup", {}),),
-            # 9 Jobs and CronJobs render (measured by an impossible floor; netpol-baseline's probe Job was the tenth). The floor is the count.
-            min_matches=9,
-            must_find=frozenset(
-                {"CronJob/pi-peer-backup", "CronJob/crowdsec-home-ips"}
-            ),
-        ),
     )
     + CONFIG_PROPERTIES
     + WORKLOAD_PROPERTIES
@@ -413,6 +378,7 @@ PROPERTIES = (
     + RESTART_PROPERTIES
     + PREPULL_PROPERTIES
     + TELEMETRY_PROPERTIES
+    + SECURITY_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]
