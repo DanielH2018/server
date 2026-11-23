@@ -135,8 +135,15 @@ def _put(c: Container, path: str, text: str, mode: str) -> None:
 
 
 def case_dropins(package) -> dict[str, str]:
-    """Each unit of `package` the case puts a drop-in on, mapped to the drop-in's text."""
-    timers = [unit for unit in package.units() if unit.endswith(".timer")]
+    """Each unit of `package` the case puts a drop-in on, mapped to the drop-in's text.
+
+    The timers are those the package ships and those it enables, such as the updater's.
+    """
+    timers = {
+        unit
+        for unit in (*package.units(), *package.enable_links())
+        if unit.endswith(".timer")
+    }
     return {
         **dict.fromkeys(timers, TIMER_DROPIN),
         **dict.fromkeys(STUBBED_UNITS, STUB_DROPIN),

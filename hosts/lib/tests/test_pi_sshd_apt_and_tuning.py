@@ -33,6 +33,7 @@ SYSCTL_FILES = (
 SYSCTL_KEYS = {
     "vm.swappiness": "130",
     "vm.page-cluster": "0",
+    "vm.min_free_kbytes": "8192",
     "net.ipv4.ip_forward": "1",
     "net.ipv4.conf.all.rp_filter": "2",
     "net.ipv4.conf.all.accept_redirects": "0",
@@ -166,6 +167,7 @@ def test_the_sysctl_files_hold_exactly_the_keys_ansible_set(package):
         line
         for path in SYSCTL_FILES
         for line in package.files[path][0].decode().splitlines()
+        if not line.startswith("#")
     ]
     assert sorted(shipped) == sorted(f"{k}={v}" for k, v in SYSCTL_KEYS.items())
     assert {package.activations[path] for path in SYSCTL_FILES} == {"sysctl"}

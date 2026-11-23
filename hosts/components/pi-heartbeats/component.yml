@@ -14,6 +14,10 @@
 # - homelab-pi-audit-health, every 5 minutes: auditd.service's state and the time of the last
 #   write to audit.log, written to pi-audit-health.prom, where PiAuditFailed reads it. Its unit
 #   takes the `adm` group to read the log. It reports a suspended auditd and never restarts one.
+#
+# Beside them, one log copier: homelab-pi-journal-warnings, every minute, appends the journal's
+# new warning-and-above lines to /var/log/pi-health/journal.log, which the Pi's Alloy ships to
+# Loki. The journal sits on log2ram's tmpfs, so a hard reboot erases it and Loki keeps the copy.
 defaults:
   # The daily rotated-log integrity sweep (templates/pi-gz-integrity.sh.j2). It `gzip -t`s every
   # rotated log and writes a verdict the 5-minute SD-health heartbeat folds into its own.
@@ -70,9 +74,12 @@ files:
   - {src: units/homelab-pi-watchdog-health.timer, dst: /usr/lib/systemd/system/homelab-pi-watchdog-health.timer}
   - {src: units/homelab-pi-audit-health.service.j2, dst: /usr/lib/systemd/system/homelab-pi-audit-health.service}
   - {src: units/homelab-pi-audit-health.timer, dst: /usr/lib/systemd/system/homelab-pi-audit-health.timer}
+  - {src: units/homelab-pi-journal-warnings.service.j2, dst: /usr/lib/systemd/system/homelab-pi-journal-warnings.service}
+  - {src: units/homelab-pi-journal-warnings.timer, dst: /usr/lib/systemd/system/homelab-pi-journal-warnings.timer}
 enable:
   homelab-pi-sd-health.timer: timers.target
   homelab-pi-gz-integrity.timer: timers.target
   homelab-pi-recovery.timer: {target: timers.target, when: optimize_pi_recovery_restart_enabled}
   homelab-pi-watchdog-health.timer: timers.target
   homelab-pi-audit-health.timer: timers.target
+  homelab-pi-journal-warnings.timer: timers.target

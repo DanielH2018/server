@@ -414,9 +414,9 @@ def held(ln: Landing) -> Generator[Callable[[str], tuple[bool, int]]]:
         release, asked = None, False
         offer()
 
-    def step_out[T](wait: Callable[[], T]) -> T:
+    def step_out[T](wait: Callable[[], T], reason: str) -> T:
         give_back()
-        say("gave the landing turn back to wait out GitHub's rate limit")
+        say(f"gave the landing turn back {reason}")
         got = wait()
         take("")
         ln.turn_interrupted = True

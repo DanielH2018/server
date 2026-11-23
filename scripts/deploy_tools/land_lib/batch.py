@@ -119,13 +119,15 @@ class _TurnGivenBack(Outcome):
     """A member's rate-limit wait gave the holder's landing turn back, which ends the batch."""
 
 
-def _wait_without_turn[T](holder: Landing, member: Landing, wait: Callable[[], T]) -> T:
+def _wait_without_turn[T](
+    holder: Landing, member: Landing, wait: Callable[[], T], reason: str
+) -> T:
     """`wait()` for the PR `member` lands, with the turn `holder` holds given back meanwhile.
 
     Raises:
         _TurnGivenBack: always, once the wait returns.
     """
-    holder.without_turn(wait)
+    holder.without_turn(wait, reason)
     pr = member.opts.pr
     why = f"a rate-limit wait on PR #{pr}'s reads gave the landing turn back"
     raise _TurnGivenBack(1, f"PR #{pr} — {why}", error=why)

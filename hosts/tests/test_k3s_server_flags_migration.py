@@ -54,6 +54,8 @@ MERGE_BASE_ARGS = [
     "--kubelet-arg=image-gc-low-threshold=55",
     # Memory pods use without requesting it.
     "--kubelet-arg=system-reserved=memory=7Gi",
+    # The runtime's default seccomp profile for every container whose pod sets none.
+    "--kubelet-arg=seccomp-default=true",
 ]
 
 
@@ -122,6 +124,10 @@ def reserved_memory_problems(config: dict) -> list[str]:
 
 def test_the_server_kubelet_reserves_memory():
     assert reserved_memory_problems(rendered_config()) == []
+
+
+def test_the_server_kubelet_defaults_every_container_to_the_runtime_seccomp_profile():
+    assert "seccomp-default=true" in rendered_config()["kubelet-arg"]
 
 
 def test_a_kubelet_without_reserved_memory_is_flagged():

@@ -69,12 +69,10 @@ took effect, so exercise the thing you changed.
 
 ### When to wait
 
-Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD`, master CI and
-the serial lock (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), and exits 1
-while any of the three blocks.
+Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI
+(`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), and exits 1 while either
+blocks.
 
-- A serial landing is live. `land.sh` refuses every other PR until it ends, and the probe
-  names its PR.
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
   (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
@@ -82,10 +80,18 @@ while any of the three blocks.
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
-To resume after a red master CI, a set hold or a live serial landing, wait with `cc-wait
-landing-clear` (`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends
-0 once none of them blocks, and its detail names the blocker while it waits, in the probe's
-words. It only waits for the hold to clear.
+A live serial landing is not a reason to stop. The probe names it but does not count it.
+`land.sh` waits in line for it while the landing's merge budgets last
+(`scripts/deploy_tools/tests/test_land_slots.py::test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last`),
+so run `land.sh` and let it wait. A `refused` verdict that names a live serial landing means
+the budgets ran out: re-run `land.sh`, which waits in line again. Inside the weekly reboot's
+no-promotion window a k8s PR is refused at once instead
+(`scripts/deploy_tools/land_lib/slots.py:_bar`), so re-run it after the window.
+
+To resume after a red master CI or a set hold, wait with `cc-wait landing-clear`
+(`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends 0 once neither
+blocks, and its detail names the blocker while it waits, in the probe's words. It only waits
+for the hold to clear.
 
 ## Shell Commands — Shape Them to Auto-Approve
 

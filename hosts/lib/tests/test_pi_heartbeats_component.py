@@ -8,6 +8,7 @@ Autonomous-role contract in the component's `CLAUDE.md`.
 Run: uv run pytest hosts/lib/tests/test_pi_heartbeats_component.py
 """
 
+import fnmatch
 import re
 
 import pytest
@@ -88,8 +89,10 @@ def test_each_service_that_runs_docker_grants_the_docker_group(package):
         if not name.startswith("homelab-pi-") or not name.endswith(".service"):
             continue
         unit = _text(package, f"{UNITS}/{name}")
-        script = _text(package, unit.split("ExecStart=", 1)[1].split("\n", 1)[0])
-        if _runs_docker(script):
+        program = unit.split("ExecStart=", 1)[1].split()[0]
+        if program not in package.files:
+            continue
+        if _runs_docker(_text(package, program)):
             runs_docker.append(name)
             assert "SupplementaryGroups=docker\n" in unit, name
     assert "homelab-pi-recovery.service" in runs_docker
@@ -149,3 +152,47 @@ def test_the_logrotate_file_ships_at_optimize_pis_path(package):
     assert mode == 0o644
     assert b"/var/log/pi-health/*.log {" in text
     assert b"create 0644" in text and b"copytruncate" not in text.split(b"{", 1)[1]
+
+
+def _directives(unit: str) -> dict[str, str]:
+    return dict(
+        line.split("=", 1)
+        for line in unit.splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+
+
+def test_the_journal_warnings_land_in_a_file_alloy_ships(package):
+    unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
+    argv = unit["ExecStart"].split()
+    assert argv[0] == "/usr/bin/journalctl"
+    assert {"-b", "-o", "short-iso"} <= set(argv)
+    assert argv[argv.index("-p") + 1] == "warning"
+    runtime = unit["RuntimeDirectory"]
+    assert f"--cursor-file=/run/{runtime}/cursor" in argv
+    assert unit["RuntimeDirectoryPreserve"] == "yes"
+
+    target = unit["StandardOutput"].removeprefix("append:")
+    alloy = _text(package, "/usr/lib/homelab/compose/alloy/config.alloy")
+    glob = re.search(
+        r'local\.file_match "pi_health".*?"__path__" = "([^"]+)"', alloy, re.S
+    )
+    assert glob and fnmatch.fnmatch(target, glob[1]), target
+
+
+def test_the_journal_warnings_unit_fails_when_the_system_journal_is_unreadable(package):
+    # journalctl -q falls back to the user's own journal and exits 0, so only a pre-check
+    # that opens the system journal turns lost access into a failed unit.
+    unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
+    assert unit["ExecStartPre"].split() == [
+        "/usr/bin/head",
+        "-c0",
+        "/var/log/journal/%m/system.journal",
+    ]
+
+
+def test_the_journal_warnings_timer_runs_every_minute(package):
+    timer = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.timer"))
+    assert timer["OnCalendar"] == "*:*:00"
+    assert timer["AccuracySec"] == "10s"
+    assert "homelab-pi-journal-warnings.timer" in package.enable_links()
