@@ -623,11 +623,13 @@ unexplained_entries() {
 # with "missing configuration" and checks nothing. --update reports exactly as --check
 # does and also writes aide.db.new, which advance_baseline moves into place. A stale aide.db.new
 # from a run nobody accepted goes first, so the database moved is always this run's.
+# 8>&- keeps the lock fd from AIDE's config helpers: AIDE 0.19 fails the run (exit 20) on the
+# leaked-descriptor warning LVM's pvs, vgs and lvs print for it.
 rm -f "$AIDE_DIR/aide.db.new"
 copy_accounts
 line_edit_paths | "$AIDE_ORIGINALS" seed "$ORIGINALS" "$DPKG_DIR/status" 2>&1 | logger -p daemon.notice -t aide-check
 START=$SECONDS
-REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1)
+REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1 8>&-)
 RC=$?
 RUN_TIME="$(((SECONDS - START) / 60))m"
 
