@@ -21,8 +21,10 @@ This family serves gauges of its own beside the check verdicts. It reads no Prom
 so no reachability gate applies to it, and it runs after every check has run.
 
 Per cycle it sends three GETs to api.github.com (the variables, master's green CI runs, one
-compare) and two to ghcr.io (an anonymous pull token, the `prod` manifest). It sends no other
-method, so it changes nothing even with a token that could. A read that fails, and a variable
+compare) and two to ghcr.io (an anonymous pull token, the `prod` manifest). Each api.github.com
+GET carries the ETag of its URL's last answer, and GitHub answers an unchanged read with a 304
+that its primary rate limit does not count, so a cycle with nothing new spends no core calls.
+It sends no other method, so it changes nothing even with a token that could. A read that fails, and a variable
 that does not exist, export no series for the gauges they feed rather than a 0, and
 DeployPipelineExporterAbsent pages a gauge that stays missing.
 
@@ -120,7 +122,8 @@ def _time(stamp: JsonValue) -> float:
 def read_variables(cfg: Config, src: Sources) -> dict[str, dict]:
     """The repository's Actions variables by name, from one GET."""
     body = as_object(
-        src.get_json(API + "/actions/variables", _api_headers(cfg)), "variables"
+        src.get_json_cached(API + "/actions/variables", _api_headers(cfg)),
+        "variables",
     )
     return {
         str(v["name"]): v
@@ -172,7 +175,7 @@ def prod_contains(cfg: Config, src: Sources, commit: str, prod_commit: str) -> b
     file `prod` lacks, 820 kB for 30 commits.
     """
     body = as_object(
-        src.get_json(
+        src.get_json_cached(
             "%s/compare/%s...%s?per_page=1" % (API, commit, prod_commit),
             _api_headers(cfg),
         ),
@@ -193,7 +196,9 @@ def unpromoted_age(
     holds. The age runs from `updated_at`, when the run went green and the commit became
     promotable, rather than from the commit date.
     """
-    body = as_object(src.get_json(CI_RUNS % RUNS_PER_PAGE, _api_headers(cfg)), "runs")
+    body = as_object(
+        src.get_json_cached(CI_RUNS % RUNS_PER_PAGE, _api_headers(cfg)), "runs"
+    )
     green: dict[str, tuple[float, float]] = {}
     # DECIDED: these workflow runs stay raw objects, not `ci_verdict.WorkflowRun`. The pod ships
     # only this role's files/, and the read needs the push and green times that type lacks.

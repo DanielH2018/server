@@ -59,6 +59,12 @@ class Sources:
         """GET `url` and parse the JSON body. An HTTPError is re-raised with its `code` intact."""
         return bridge.net._get_json(url, headers, opener=self.opener)
 
+    def get_json_cached(self, url: str, headers: dict[str, str]) -> JsonValue:
+        """`get_json`, sent with the ETag of `url`'s last answer; a 304 returns that answer."""
+        return bridge.net._get_json_conditional(
+            url, headers, self.state.etags, opener=self.opener
+        )
+
     def get_bytes(self, url: str, headers: dict[str, str] | None = None) -> bytes:
         """GET `url` and return the raw body, with `get_json`'s error contract."""
         return bridge.net._get_bytes(url, headers, opener=self.opener)

@@ -111,7 +111,7 @@ def test_once_publishes_nothing_and_reads_no_github():
     wired = _silence([], DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
     assert cli.main(["--once"], **wired) == 0
     assert wired["exposition"].body() == b""
-    assert wired["sources"].queries("get_json") == []
+    assert [m for m, _ in wired["sources"].calls if m != "prom_vector"] == []
 
 
 def test_every_cycle_reads_the_one_state_main_built():

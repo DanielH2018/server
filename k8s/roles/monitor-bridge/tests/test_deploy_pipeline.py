@@ -6,10 +6,12 @@ missing variable that exports no series rather than a 0. The fixtures in
 `_deploy_pipeline_fakes.py` answer each GET by URL, as GitHub and GHCR answered on 2026-10-15.
 """
 
+import io
 import json
 import urllib.error
 import urllib.request
 from dataclasses import replace
+from email.message import Message
 
 import pytest
 
@@ -27,6 +29,7 @@ from _deploy_pipeline_fakes import (
     github,
 )
 from _fake_sources import FakeSources
+from bridge import net
 from bridge.sources import Sources
 
 
@@ -76,7 +79,7 @@ def test_a_green_run_prod_contains_is_not_unpromoted(piped):
     runs = [green_run(OLDER, 3000, 2900), green_run(PROD, 7200, 7000)]
     src = github(runs=runs, compare="ahead")
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 0
-    assert src.queries("get_json")[-1].endswith(
+    assert src.queries("get_json_cached")[-1].endswith(
         "/compare/%s...%s?per_page=1" % (OLDER, PROD)
     )
 
@@ -89,13 +92,13 @@ def test_a_green_run_prod_lacks_sets_the_age_from_when_it_went_green(piped):
     ]
     src = github(runs=runs, compare="behind")
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 8800
-    assert "/compare/%s...%s" % (OLDER, PROD) in src.queries("get_json")[-1]
+    assert "/compare/%s...%s" % (OLDER, PROD) in src.queries("get_json_cached")[-1]
 
 
 def test_nothing_pushed_after_prod_reads_zero_without_a_compare(piped):
     src = github(runs=[green_run(PROD, 7200, 7000), green_run(OLDER, 9000, 8800)])
     assert gauges(piped, src)["homelab_deploy_unpromoted_age_seconds"] == 0
-    assert not any("/compare/" in q for q in src.queries("get_json"))
+    assert not any("/compare/" in q for q in src.queries("get_json_cached"))
 
 
 def test_a_missing_variable_exports_no_series_rather_than_a_zero(piped):
@@ -132,8 +135,11 @@ def test_an_empty_token_reads_nothing_and_exports_nothing(cfg):
 
 
 class _Response:
-    def __init__(self, body: bytes) -> None:
+    def __init__(self, body: bytes, etag: str | None = None) -> None:
         self._body = body
+        self.headers = Message()
+        if etag is not None:
+            self.headers["ETag"] = etag
 
     def read(self, *args) -> bytes:
         return self._body
@@ -174,6 +180,55 @@ def test_a_cycle_sends_three_gets_to_github_and_nothing_else(piped):
     assert {r.get_method() for r in sent} == {"GET"}
     assert len([r for r in sent if r.host == "api.github.com"]) == 3
     assert len([r for r in sent if r.host == "ghcr.io"]) == 2
+
+
+def test_an_unchanged_github_read_is_answered_from_the_etag_cache(piped):
+    """The second cycle sends each GitHub GET with its ETag and takes the 304 as the last body."""
+    runs = [green_run(NEWER, 600, 500), green_run(PROD, 7200, 7000)]
+    answers = {
+        "/actions/variables": {
+            "variables": [
+                {"name": "DEPLOY_HOLD", "value": "none", "updated_at": stamp(60)},
+                {"name": "PROD_DIGEST", "value": PROD_DIGEST, "updated_at": stamp(60)},
+            ]
+        },
+        "/actions/workflows/ci.yml/runs": {"workflow_runs": runs},
+        "/compare/": {"status": "behind"},
+        "ghcr.io/token": {"token": "anonymous-pull"},
+    }
+    sent: list[urllib.request.Request] = []
+
+    def opener(request, timeout):
+        sent.append(request)
+        if request.full_url.endswith("/manifests/prod"):
+            return _Response(manifest_bytes())
+        [(frag, body)] = [(f, b) for f, b in answers.items() if f in request.full_url]
+        etag = 'W/"%s"' % frag
+        if request.get_header("If-none-match") == etag:
+            raise urllib.error.HTTPError(
+                request.full_url, 304, "Not Modified", Message(), io.BytesIO()
+            )
+        return _Response(json.dumps(body).encode(), etag)
+
+    src = Sources(piped, opener=opener)
+    first = deploy_pipeline.collect(piped, src, NOW)
+    sent.clear()
+    assert deploy_pipeline.collect(piped, src, NOW) == first
+    github = [r for r in sent if r.host == "api.github.com"]
+    assert len(github) == 3
+    assert all(r.get_header("If-none-match") for r in github)
+
+
+def test_the_etag_cache_keeps_only_the_most_recently_read_urls():
+    cache = {}
+
+    def opener(request, timeout):
+        return _Response(b"{}", 'W/"%s"' % request.full_url)
+
+    urls = ["https://api.github.com/%d" % n for n in range(net.ETAG_CACHE_MAX + 1)]
+    for url in urls:
+        net._get_json_conditional(url, {}, cache, opener=opener)
+    assert list(cache) == urls[1:]
 
 
 def test_the_endpoint_serves_the_five_gauges_and_nothing_else(piped):

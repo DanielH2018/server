@@ -11,6 +11,8 @@ patch a module global between tests (#3866).
 from dataclasses import dataclass, field
 from typing import TypedDict
 
+from bridge.types import JsonValue
+
 
 class ProbeCache(TypedDict):
     """A throttled probe's last verdict. `ts` None means never probed.
@@ -84,6 +86,7 @@ class State:
       domain_registration_probe: The RDAP registration-expiry cache
         (`checks.domain_registration`).
       uptime_robot_probe: The Uptime Robot console cache (`checks.uptime_robot`).
+      etags: `Sources.get_json_cached`'s last `(ETag, body)` per URL.
     """
 
     down_streaks: dict[str, int] = field(default_factory=dict)
@@ -111,6 +114,7 @@ class State:
     domain_registration_probe: RegistrationCache = field(
         default_factory=lambda: {"ts": None, "ok": False, "expiry": None}
     )
+    etags: dict[str, tuple[str, JsonValue]] = field(default_factory=dict)
 
 
 def down_streak(
