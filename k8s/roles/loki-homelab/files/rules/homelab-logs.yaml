@@ -119,9 +119,18 @@ groups:
       # case-sensitive on purpose: a container hitting its own limit logs "Memory cgroup out of
       # memory: Killed process" in lower case, which HostLogErrors counts and the shadow
       # ContainerOOMKilled covers.
+      #
+      # The second arm is daniel-pi's. Its `pi_health` stream carries no `program` label, so the
+      # arm matches the kernel's line inside the journal.log file that the Pi's journal-warnings
+      # timer writes. It is a separate selector because the `machine!="daniel-pi"` exclusion is
+      # what keeps the Pi out of LokiHostLogsSilent's count.
       - alert: HostOutOfMemoryKill
         expr: >-
-          sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h])) > 0
+          (
+            sum by (machine) (count_over_time({job="syslog", machine!="daniel-pi", program="kernel"} |= "Out of memory: Killed process" [1h]))
+            or
+            sum by (machine) (count_over_time({job="syslog", machine="daniel-pi", filename="/var/log/pi-health/journal.log"} |= "kernel: Out of memory: Killed process" [1h]))
+          ) > 0
         labels:
           severity: warning
           service: host-syslog

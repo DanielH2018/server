@@ -109,7 +109,8 @@ verbatim-prompts store this role's LAN route
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
-  `HostOutOfMemoryKill` pages on the first host-wide OOM kill.
+  `HostOutOfMemoryKill` pages on the first host-wide OOM kill, on daniel-pi too through its
+  journal.log arm.
   `HostFilesystemRemountedReadOnly` pages on the first ext4 read-only remount, over a 1h range
   that outlasts the weekly reboot's mute. It catches a remount that clears while the node
   hosting Prometheus boots, before any scrape. A remount that persists is
