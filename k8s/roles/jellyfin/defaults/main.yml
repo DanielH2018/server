@@ -125,9 +125,9 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # this pin is deliberately manual (renovate.json names it): Renovate can bump the version but
 # not the image, the asset filename (it leads with the targetAbi) or the MD5.
 # tests/services/test_anisync_pin_matches_server.py refuses the mismatch.
-jellyfin_k8s_anisync_version: "4.4.0.0"
+jellyfin_k8s_anisync_version: "4.7.0.0"
 # URL and checksum both come from the plugin's published manifest.json.
-jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.7/10.11.11.-.ani-sync_4.7.0.0.zip"
 jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
 # ── Intro Skipper (skip-intro / skip-credits media segments) ────────────────────────────────
 # Detects intro and credit sequences by audio fingerprint and publishes them through Jellyfin's
