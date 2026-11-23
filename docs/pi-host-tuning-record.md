@@ -46,6 +46,14 @@ Two zram-aware VM sysctls go with it. `vm.swappiness=130` says zram swap is chea
 evicting hot page cache — daniel-server runs 10 for the opposite reason. `vm.page-cluster=0`
 turns off readahead on a random-access device, worth about 8× lower swap-in latency.
 
+A third sysctl, `vm.min_free_kbytes=8192`, keeps a larger reserve for atomic allocations. The
+USB Ethernet adapter's receive path (`rx_submit -> __alloc_skb`) failed four order-3
+`GFP_ATOMIC` allocations in 24 hours on 2026-11-22/23 (#10037), and each failure drops that
+receive URB's packets. The kernel's auto-sized reserve was 2480 KiB. 8192 KiB is about 1.8% of
+the Pi's 452 MiB of RAM. A reserve of 32 or 64 MiB would push the working set into swap on a box
+that has swap-thrashed before. If the failures persist, the next step is 16384 or a smaller
+receive buffer on the adapter, not a larger reserve.
+
 ## Log2Ram, and why `--sparse` is patched out
 
 `homelab-daniel-pi` depends on Ubuntu's `log2ram` package, so step 5 of `hosts/bootstrap-host.sh`
