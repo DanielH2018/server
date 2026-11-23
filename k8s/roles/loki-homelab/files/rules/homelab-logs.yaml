@@ -139,8 +139,10 @@ groups:
           description: >-
             The kernel on {{ $labels.machine }} logged {{ $value }} "Out of memory: Killed
             process" lines in the last hour, so the node ran out of memory rather than a
-            container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
-            for the killed process and the memory report above it.
+            container hitting its limit. On daniel-box and daniel-server, read
+            {job="syslog", program="kernel"} in loki-homelab for the killed process and the
+            memory report above it. On daniel-pi, which has no `program` label, read
+            {job="syslog", machine="daniel-pi", filename="/var/log/pi-health/journal.log"}.
       # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first
       # line. It catches a remount that clears before Prometheus scrapes again after its own node
       # boots: Longhorn devices on daniel-server can stay read-only for minutes while Prometheus
