@@ -13,11 +13,15 @@ Description=Copy the Pi journal's warning-and-above lines to the log Alloy ships
 
 [Service]
 Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice); stdout goes to the file
+# below, so this covers journalctl's stderr.
+SyslogLevel=notice
 User={{ sys_user }}
 # The journal is readable by `adm`. The unit names the group, so a rebuilt Pi needs no group task.
 SupplementaryGroups=adm
 ExecStart=/usr/bin/journalctl -b -p warning -q --no-pager -o short-iso --cursor-file=/run/pi-journal-warnings/cursor
 StandardOutput=append:/var/log/pi-health/journal.log
+StandardError=journal
 LogsDirectory=pi-health
 RuntimeDirectory=pi-journal-warnings
 # A oneshot's RuntimeDirectory is removed when the unit stops; the cursor has to outlive the run.
