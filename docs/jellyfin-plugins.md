@@ -2,24 +2,36 @@
 
 Working-out moved off `k8s/roles/jellyfin/CLAUDE.md` (#2991), which a session reads on every
 touch of the media server. The role doc keeps the rules; this page keeps what each installed plugin
-is, what blocks the Jellyfin 12 image line, the live census of what the pod loads, and the two
-plugin decisions that outlived their issues.
+is, what a move to the next Jellyfin line needs, the live census of what the pod loads, and
+the two plugin decisions that outlived their issues.
 
-## What blocks the Jellyfin 12 image line
+## Moving to a new Jellyfin line
 
-Ask this before planning an image bump. Four of the five installed plugins have a 12 build ready
-(read 2026-09-10): ani-sync `4.6.0.0` in the `v4.6b` release, Intro Skipper `12.0/v12.0.3.0`,
-Webhook `22.0.0.0` declaring `targetAbi 12.0.0.0` in the official manifest, and Merge Versions
-`12.0.0`.
+Ask this before planning an image bump: does every installed plugin publish a build for the new
+line? The image moves only when all five do, in one PR with all five pins, because Jellyfin's
+loader rejects an ABI-mismatched plugin **without logging a failure**. The pod stays healthy and
+the rollout stays green (the #1648 silence).
 
-**Media Cleaner was the blocker and no longer is.** `v3.2.0` shipped only 10.x assets, `v3.4.0`
-(#2720) added `MediaCleaner-12.0.zip`, and `v3.7.0` — pinned 2026-09-28 (#2905) — publishes that
-asset as `3.7.0.120000` with `targetAbi 12.0.0.0`. A move to 12 must switch this pin to that asset
-in the same PR: leaving it on the 10.11.9 asset stops the automated cleanup rules silently, because
-Jellyfin's loader rejects an ABI-mismatched plugin **without logging a failure**, so the pod stays
-healthy and the rollout stays green (the #1648 silence).
+The move from 10.11.11 to 12.4 (2026-11-23) is the worked example. ani-sync 4.7.0.0 declares
+`targetAbi 12.4.0.0`, which set the image. Intro Skipper `12.0/v12.0.8.0` also declares 12.4.0.0.
+Webhook 22.0.0.0, Merge Versions `12.0.1` and Media Cleaner `3.8.0.120000` declare 12.0.
 
-SSO-Auth was the other blocker and is gone; the section below has that decision.
+Three facts from Jellyfin's 12.0 release notes govern any move across that line:
+
+- **The database migration is one-way.** A 12 server rewrites the library database on first
+  boot, and a 10.11 image cannot open the result. The rollback is the `jellyfin-config` snapshot
+  the `jellyfin-snapshot` Job takes before the 12 revision, restored with
+  `scripts/backup/volume_revert.py` (`docs/volume-snapshot-drills.md`, *The entry point*), and a
+  revert of the image and plugin pins. Watch history recorded after the upgrade is lost.
+- **A full library scan is required after the upgrade.** 12.0 removes alternate versions that
+  were auto-resolved rather than merged by hand, and the scan restores them. The first scan
+  takes much longer than usual.
+- **Legacy authorization is off.** The `X-Emby-Token`, `X-MediaBrowser-Token` and
+  `X-Emby-Authorization` headers, the `api_key` query parameter and the `/emby/*` routes stop
+  working. A client sends `Authorization: MediaBrowser Token="<key>"` or `?ApiKey=`.
+  `scripts/diagnostics/postflight.py:check_jellyfin_key` and janitorr already do.
+
+SSO-Auth publishes no 12 build; the section below has why it is gone.
 
 ## The five installed plugins
 
@@ -27,28 +39,30 @@ SSO-Auth was the other blocker and is gone; the section below has that decision.
   rating set by hand on AniList. Its zip is installed by a `python:3.15-alpine` init container —
   `defaults/main.yml` explains the `unzip`/uid-ownership prerequisites.
 - **Intro Skipper** is a second init container of the same shape, into the same
-  `/config/data/plugins`. Two things differ: its release line is per *Jellyfin* version — the
-  repository tags `10.11/v…` and `12.0/v…` in parallel, so "the latest release" is routinely the
-  wrong one — and its zip carries only `IntroSkipper.dll`, so the init container writes `meta.json`
+  `/config/data/plugins`. Two things differ: its release line is per *Jellyfin* release
+  family — the repository tags `10.11/v…` and `12.0/v…` in parallel, and every Jellyfin 12 build
+  ships on `12.0/` while its `targetAbi` climbs (12.0.8.0 declares 12.4) — and its zip carries
+  only `IntroSkipper.dll`, so the init container writes `meta.json`
   itself rather than letting Jellyfin invent one from the directory name. It draws no UI of its own:
   it publishes timestamps through Jellyfin's Media Segments API and the clients render the skip
   button, so nothing here writes `/usr/share/jellyfin/web`.
 - **Webhook** is Jellyfin's own first-party plugin, sending playback and library events to an HTTP
   endpoint. Nothing consumes them yet, so the repo owns the install and the destination is dashboard
-  state. Its release line has moved to Jellyfin 12 — 22.0.0.0 declares `targetAbi 12.0.0.0` — so the
-  newest Webhook is the wrong one while the image is a 10.11 build. Its zip carries its own
+  state. Each major targets one Jellyfin line — 21.0.0.0 declares `targetAbi 10.11.8.0` and
+  22.0.0.0 declares `12.0.0.0` — so a newer major is the wrong one until the image reaches its
+  ABI. Its zip carries its own
   `meta.json`, so unlike Intro Skipper nothing writes one. Its Renovate manager (added for #1557) is
   the odd one out: Webhook ships from `repo.jellyfin.org` rather than a GitHub release, so the
   manager tracks the `jellyfin/jellyfin-plugin-webhook` tags (a bare major, `v21`) and carries the
-  Jellyfin-line ceiling in `extractVersionTemplate` — raise that anchor only when the image moves to
-  Jellyfin 12.
+  Jellyfin-line ceiling in `extractVersionTemplate` — raise that anchor only when the image
+  reaches the next major's `targetAbi`.
 - **Merge Versions** collapses the several files one movie can have — 1080p beside 2160p, a remux
   beside a web-dl — into a single library entry whose versions the client offers in a picker. It is
   third-party (`danieladov/jellyfin-plugin-mergeversions`) and absent from the official
   `repo.jellyfin.org` manifest, so its `targetAbi`, `guid` and digest come from the plugin's own
   published manifest (`danieladov/JellyfinPluginManifest`) and release asset. Upstream tags the
-  release LINE by Jellyfin version — `10.11.0.1` and `12.0.0` are the two live lines — so the newest
-  release is the wrong one on a 10.11 image. Its zip carries the DLL alone, so this install is Intro
+  release LINE by Jellyfin version — `10.11.0.1` and `12.0.1` are the two live lines, and the 12
+  line's tags have three parts — so the pin follows the line the image runs. Its zip carries the DLL alone, so this install is Intro
   Skipper's shape, not Webhook's. Which libraries it merges is dashboard state on the PVC.
 - **Media Cleaner** is the one whose blast radius justifies the pin: it **deletes media files** on a
   schedule, by rule. It ran as unmanaged dashboard state on the PVC until #1619, when the operator's
@@ -95,7 +109,7 @@ Read 2026-09-28 (#2873), grouped by who owns the version:
   and removed soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674); `sweep-unlisted-plugins`
   keeps both off.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here: `AudioDB`,
-  `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server version.
+  `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — each at the server version.
 - **Unmanaged state on the `jellyfin-config` PVC** — **this group is empty**, and that is #1648's
   outcome rather than an omission. `SSO-Auth 4.0.0.4` was its last member: installed through the
   dashboard, with no pinned version, no checksum and no recorded `targetAbi`, so an image bump could

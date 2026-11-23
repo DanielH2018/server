@@ -24,7 +24,13 @@ Run: uv run pytest tests/services/test_anisync_pin_matches_server.py
 """
 
 from _helpers import image_tag, load_defaults, K8S_ROLES
-from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script, version_tuple
+from _jellyfin_plugins import (
+    PLUGIN_ROOT,
+    padded,
+    plugin_constants,
+    script,
+    version_tuple,
+)
 
 JELLYFIN = K8S_ROLES / "jellyfin"
 
@@ -64,7 +70,8 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
     tag = image_tag(image)
     server = version_tuple(tag, "the jellyfin image tag")
 
-    assert target_abi <= server, (
+    plugin_abi, server_abi = padded(target_abi, server)
+    assert plugin_abi <= server_abi, (
         f"jellyfin-ani-sync asset {asset!r} targets Jellyfin "
         f"{'.'.join(map(str, target_abi))}, but jellyfin_k8s_image is "
         f"{'.'.join(map(str, server))} ({image}).\n"

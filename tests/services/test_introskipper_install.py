@@ -7,9 +7,10 @@ rollout is green and the health gate passes. `test_anisync_pin_matches_server.py
 hazard for the sibling plugin; this file is the same memory for Intro Skipper, plus the two
 things that install does differently.
 
-The first difference is the release line. Upstream maintains one line per JELLYFIN version and
-tags them `10.11/v1.10.11.23` and `12.0/v12.0.2.8` in the same repository, so "the latest
-release" is routinely the wrong one. The second is the checksum: this pin is a sha256 (GitHub's
+The first difference is the release line. Upstream maintains one line per JELLYFIN release
+family and tags them `10.11/v1.10.11.24` and `12.0/v12.0.8.0` in the same repository, so "the
+latest release" is routinely the wrong one. Every Jellyfin 12 build ships on the `12.0/` line, so
+the line names the server's major, not its minor. The second is the checksum: this pin is a sha256 (GitHub's
 own asset digest), where ani-sync pins the MD5 its manifest publishes.
 
 The install step is read out of the RENDERED Deployment (`_jellyfin_plugins`), so each assertion
@@ -60,15 +61,20 @@ def _introskipper_manager() -> dict:
     return manager
 
 
-def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
-    """The manager's release-line anchor must name the Jellyfin minor the image runs."""
-    server = version_tuple(image_tag(image), "the jellyfin image tag")
-    anchor = manager["extractVersionTemplate"]
+def _release_line(url: str) -> str:
+    """The release-line segment of an Intro Skipper download URL (`12.0` in `.../12.0/v...`)."""
+    return url.split("/releases/download/", 1)[1].split("/", 1)[0]
 
-    assert f"{server[0]}\\.{server[1]}" in anchor, (
-        f"jellyfin_k8s_image is a {server[0]}.{server[1]} build ({image}), but the "
+
+def _assert_anchor_tracks_the_line(manager: dict, line: str) -> None:
+    """The manager's release-line anchor must name the line the pinned URL comes from."""
+    anchor = manager["extractVersionTemplate"]
+    escaped = line.replace(".", "\\.")
+
+    assert anchor.startswith(f"^{escaped}/v"), (
+        f"jellyfin_k8s_introskipper_url comes from the {line} release line, but the "
         f"intro-skipper Renovate manager anchors extractVersionTemplate to {anchor!r}.\n"
-        f"Raise the anchor with the image, or the manager tracks a release line upstream has "
+        f"Raise the anchor with the pin, or the manager tracks a release line upstream has "
         f"moved off — it then matches nothing and offers nothing, which reads exactly like a "
         f"plugin with no updates available."
     )
@@ -94,22 +100,22 @@ def test_the_release_url_carries_the_pinned_version():
 def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
     """Upstream ships a 10.11 line and a 12.0 line from one repository, in parallel.
 
-    Renovate ranks `12.0/v12.0.2.8` above `10.11/v1.10.11.23`, and the download URL's path
-    segment is the only place the line is written down. A 12.0 asset against a 10.11 server is
-    the silent-rejection case above.
+    Renovate ranks `12.0/v12.0.8.0` above `10.11/v1.10.11.24`, and the download URL's path
+    segment is the only place the line is written down. An asset from another major's line
+    declares a targetAbi the server's loader rejects, silently.
     """
     defaults = load_defaults(JELLYFIN)
     url = defaults["jellyfin_k8s_introskipper_url"]
     image = defaults["jellyfin_k8s_image"]
 
     server = version_tuple(image_tag(image), "the jellyfin image tag")
-    line = f"{server[0]}.{server[1]}"
+    line = _release_line(url)
 
-    assert f"/releases/download/{line}/" in url, (
-        f"jellyfin_k8s_image is a {line} build, but jellyfin_k8s_introskipper_url does not "
-        f"come from the {line} release line: {url}\nUpstream tags per Jellyfin version "
-        f"(`{line}/v...`); an asset from another line declares a targetAbi Jellyfin's loader "
-        f"rejects without logging a deploy failure."
+    assert version_tuple(line, "the release line")[0] == server[0], (
+        f"jellyfin_k8s_image is a {server[0]}.{server[1]} build, but "
+        f"jellyfin_k8s_introskipper_url comes from the {line} release line: {url}\nUpstream "
+        f"tags per Jellyfin release family (`{line}/v...`); an asset from another major's line "
+        f"declares a targetAbi Jellyfin's loader rejects without logging a deploy failure."
     )
 
 
@@ -243,8 +249,9 @@ def test_renovate_tracks_the_jellyfin_line_that_is_deployed():
     exactly like a plugin with no updates available — green and inert, which is the failure the
     manager's own description says it was written to avoid.
     """
-    _assert_anchor_tracks_the_image(
-        _introskipper_manager(), load_defaults(JELLYFIN)["jellyfin_k8s_image"]
+    _assert_anchor_tracks_the_line(
+        _introskipper_manager(),
+        _release_line(load_defaults(JELLYFIN)["jellyfin_k8s_introskipper_url"]),
     )
 
 
@@ -255,6 +262,7 @@ def test_the_anchor_guard_rejects_a_manager_left_on_the_old_line():
     )
 
     with pytest.raises(AssertionError):
-        _assert_anchor_tracks_the_image(
-            stale, load_defaults(JELLYFIN)["jellyfin_k8s_image"]
+        _assert_anchor_tracks_the_line(
+            stale,
+            _release_line(load_defaults(JELLYFIN)["jellyfin_k8s_introskipper_url"]),
         )

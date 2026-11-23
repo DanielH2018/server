@@ -4,7 +4,7 @@ Jellyfin, transcoding on the AMD GPU the `dri-device-plugin` role advertises. It
 shared `media-data` library and owns its own config volume.
 
 This file holds the rules. `docs/jellyfin-plugins.md` holds the per-plugin record — what each of the
-five installed plugins is, what blocks the Jellyfin 12 image line, the census of what the pod loads,
+five installed plugins is, what a move to a new Jellyfin line needs, the census of what the pod loads,
 the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## At a glance
@@ -52,9 +52,12 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 - SSDP/DLNA discovery is deliberately unsupported: MetalLB's L2 mode does not carry multicast,
   so this pod stays off `hostNetwork`.
 - **The newest plugin release is routinely the wrong one.** Intro Skipper tags `10.11/v…` and
-  `12.0/v…` in parallel, Webhook's newest major declares `targetAbi 12.0.0.0`, Merge Versions tags
-  the release line by Jellyfin version, and Media Cleaner encodes the server ABI in its version's
+  `12.0/v…` in parallel, each Webhook major targets one Jellyfin line, Merge Versions tags the
+  release line by Jellyfin version, and Media Cleaner encodes the server ABI in its version's
   fourth segment — where **picking the wrong asset installs cleanly and never loads**.
+- **The 12 image line migrated the database one way.** An image revert alone cannot take the
+  pod back to 10.11: the rollback also restores `jellyfin-config` from the snapshot taken before
+  the 12 revision. `docs/jellyfin-plugins.md`, *Moving to a new Jellyfin line*, has the steps.
 - **An installer's shape follows its zip.** A zip carrying its own `meta.json` (Webhook, Media
   Cleaner) is unpacked as-is; a DLL-only zip (Intro Skipper, Merge Versions) needs the init container
   to write `meta.json`, or Jellyfin invents one from the directory name.

@@ -107,9 +107,13 @@ def _assert_pin_agrees(defaults: dict) -> None:
         f"two disagreeing means the version and the targetAbi name different builds."
     )
 
-    # And the asset filename is the third place the same ABI is written.
+    # And the asset filename is the third place the same ABI is written. Upstream drops a zero
+    # patch on the 12 line (MediaCleaner-12.0.zip) but kept it on 10.11 (MediaCleaner-10.11.0.zip).
     asset_abi = f"{abi[0]}.{abi[1]}.{abi[2]}"
-    assert f"MediaCleaner-{asset_abi}.zip" in url, (
+    asset_names = {f"MediaCleaner-{asset_abi}.zip"}
+    if abi[2] == 0:
+        asset_names.add(f"MediaCleaner-{abi[0]}.{abi[1]}.zip")
+    assert any(name in url for name in asset_names), (
         f"jellyfin_k8s_mediacleaner_target_abi is {target_abi!r}, so the asset should be "
         f"MediaCleaner-{asset_abi}.zip — but the URL names a different one: {url}\n"
         f"The three per-ABI assets on one release tag are indistinguishable once downloaded, so "

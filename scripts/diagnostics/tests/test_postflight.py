@@ -249,6 +249,22 @@ def test_jellyfin_key_mismatch_fails(monkeypatch):
     assert postflight.check_jellyfin_key()[0] == postflight.FAIL
 
 
+def test_the_jellyfin_key_goes_in_the_authorization_header(monkeypatch):
+    """Jellyfin 12 ignores X-Emby-Token, so a key sent there reads as a stale credential."""
+    sent = []
+
+    def reply(url, config_body=None, **_):
+        sent.append(config_body)
+        return 200, ""
+
+    respond(monkeypatch, reply)
+    assert postflight.check_jellyfin_key()[0] == postflight.OK
+    assert sent and all(
+        body.startswith('header = "Authorization: MediaBrowser Token=\\"')
+        for body in sent
+    ), sent
+
+
 def test_ha_token_rejected_fails(monkeypatch):
     respond(monkeypatch, 401)
     assert postflight.check_ha_token("claude_ha_token")[0] == postflight.FAIL

@@ -180,8 +180,8 @@ _ABI_PLUGINS = frozenset(
     {"anisync", "introskipper", "webhook", "mergeversions", "mediacleaner"}
 )
 _ABI_EDIT = (
-    'jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"',
-    'jellyfin_k8s_mediacleaner_target_abi: "10.12.0.0"',
+    'jellyfin_k8s_mediacleaner_target_abi: "12.0.0.0"',
+    'jellyfin_k8s_mediacleaner_target_abi: "12.5.0.0"',
 )
 
 
@@ -354,9 +354,7 @@ CONFIG_FILE_ROWS = (
         offence=_plugins_newer_than_image,
         red=(
             _Edited(JELLYFIN_DEFAULTS, *_ABI_EDIT),
-            _Edited(
-                JELLYFIN_DEFAULTS, "jellyfin:10.11.11ubu2604", "jellyfin:10.11.7ubu2604"
-            ),
+            _Edited(JELLYFIN_DEFAULTS, "jellyfin:12.4ubu2604", "jellyfin:12.3ubu2604"),
         ),
         green=(Subject(JELLYFIN_DEFAULTS),),
     ),
@@ -365,7 +363,7 @@ CONFIG_FILE_ROWS = (
         reason=(
             "The image cannot move to a new Jellyfin line until every installed plugin has a "
             "release for that ABI, so the binding constraint is the `max` over the declared "
-            "targetAbi values. ani-sync and Intro Skipper hold it at 10.11.11.0. The role's "
+            "targetAbi values. ani-sync and Intro Skipper hold it at 12.4.0.0. The role's "
             "CLAUDE.md states that in its *At a glance* section. When a plugin bump moves the "
             "floor, update that sentence and this row together."
         ),

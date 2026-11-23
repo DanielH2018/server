@@ -230,14 +230,15 @@ def test_every_manager_pattern_still_matches_the_pinned_version():
         )
 
 
-def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
-    """The anchor is what keeps 'the newest Webhook' from being offered against a 10.11 server.
+def test_the_manager_anchor_admits_the_pin_and_drops_the_next_major():
+    """The anchor is what keeps 'the newest Webhook' from being offered against an older server.
 
-    Webhook 22.0.0.0 declares targetAbi 12.0.0.0, which Jellyfin 10.11's loader rejects
-    silently — the directory sits on disk, `GET /Plugins` omits it, the rollout is green. The
-    upstream tags are a bare major (`v21`, `v22`), so unlike the sibling plugins the release
-    line is not written into the tag path: extractVersionTemplate carries the ceiling instead,
-    and it is hand-raised when jellyfin_k8s_image moves to Jellyfin 12.
+    Each Webhook major targets one Jellyfin line (21 declares 10.11.8.0, 22 declares 12.0.0.0),
+    and a loader rejects a plugin built for a newer server silently — the directory sits on
+    disk, `GET /Plugins` omits it, the rollout is green. The upstream tags are a bare major
+    (`v21`, `v22`), so unlike the sibling plugins the release line is not written into the tag
+    path: extractVersionTemplate carries the ceiling instead, and it is hand-raised when
+    jellyfin_k8s_image reaches the next major's targetAbi.
     """
     anchor = re.compile(
         _webhook_manager()["extractVersionTemplate"].replace("(?<", "(?P<")
@@ -249,10 +250,11 @@ def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
         f"{anchor.pattern!r} does not admit the pinned tag v{major} — the manager offers "
         f"nothing, including the release it is pinned to"
     )
-    assert not anchor.match("v22"), (
+    assert not anchor.match(f"v{int(major) + 1}"), (
         f"the Webhook Renovate manager's extractVersionTemplate {anchor.pattern!r} admits "
-        f"v22. Webhook 22.0.0.0 targets Jellyfin 12.0.0.0 and the deployed 10.11 server "
-        f"rejects it without logging anything. Raise this anchor only with jellyfin_k8s_image."
+        f"v{int(major) + 1}, a major built for a Jellyfin line newer than the one pinned, which "
+        f"the server rejects without logging anything. Raise this anchor only with "
+        f"jellyfin_k8s_image."
     )
 
 
