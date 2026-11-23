@@ -238,8 +238,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "LAND_GAVE_UP",
             "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
             "the health gate could not read its store, "
-            "or no host package containing the merge is published. "
-            "From a `--detach` parent: the live-landing limit was full, so no landing started.",
+            "or no host package containing the merge is published.",
         ),
     ),
     "scripts/deploy_tools/await_ci.py": (
