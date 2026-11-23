@@ -180,6 +180,17 @@ def test_the_journal_warnings_land_in_a_file_alloy_ships(package):
     assert glob and fnmatch.fnmatch(target, glob[1]), target
 
 
+def test_the_journal_warnings_unit_fails_when_the_system_journal_is_unreadable(package):
+    # journalctl -q falls back to the user's own journal and exits 0, so only a pre-check
+    # that opens the system journal turns lost access into a failed unit.
+    unit = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.service"))
+    assert unit["ExecStartPre"].split() == [
+        "/usr/bin/head",
+        "-c0",
+        "/var/log/journal/%m/system.journal",
+    ]
+
+
 def test_the_journal_warnings_timer_runs_every_minute(package):
     timer = _directives(_text(package, f"{UNITS}/homelab-pi-journal-warnings.timer"))
     assert timer["OnCalendar"] == "*:*:00"

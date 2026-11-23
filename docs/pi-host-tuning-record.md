@@ -547,6 +547,12 @@ about 1,440 lines a day, mostly the heartbeats' own stdout.
 - **The journal stays on the tmpfs.** A journal on the card would sit outside
   the log2ram size guard that the caps above are sized against, and would write
   the card every sync interval.
+- **Lost read access fails the unit.** Without access to the system journal,
+  `journalctl -q` prints only the service user's own journal and exits 0. An
+  `ExecStartPre=` opens `system.journal` with `head -c0`, so the unit fails
+  instead and `systemd-units-check` reports it. Do not swap in `test -r`: the
+  Pi's `test` comes from `coreutils-from-uutils`, ignores the journal's ACL and
+  reports the readable file as unreadable.
 - **The window it cannot close** is the last minute before a hard reboot, plus
   Alloy's 5s batch wait.
 - **dockerd's lines are not in it.** dockerd writes to stderr at priority 6, so
