@@ -95,7 +95,8 @@ done
 # inspect above cannot say why, because the daemon that would answer is the thing that is
 # gone. The reason sits in `journalctl -u docker`, which SystemMaxUse=32M on the RAM-backed
 # /var/log rotates away in about a day; this line is the only copy that reaches Loki (the
-# Pi ships no journal; see the alloy compose file's header for why). The newest five lines of
+# Pi ships only the journal's warning-and-above lines, and dockerd logs below that; see the
+# alloy compose file's header). The newest five lines of
 # the last ten minutes
 # that are not dockerd's own info/debug chatter — its `level=warning`/`error` lines and
 # systemd's own unit lines ("Main process exited", "Scheduled restart job"), which carry no
@@ -182,11 +183,11 @@ write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 
 # loki-read-route-health), and `probe_lib/alerts.py` reconstructs episodes from those lines. Without
 # this file a successful DOWN would leave no record at all.
 #
-# It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
-# masked here on purpose (journald is the log of record, and a second text logger would
-# write into the RAM-backed /var/log), and the
+# It goes to a FILE rather than to `logger`, because daniel-pi ships only the journal's
+# warning-and-above lines: rsyslog is masked here on purpose (journald is the log of record,
+# and a second text logger would write into the RAM-backed /var/log), and the
 # Pi's Alloy (hosts/components/pi-compose/services/alloy/) ships container logs and /var/log/pi-health/*.log, never
-# the journal. `logger` would reach the local journal and stop. Alloy tails this path under
+# the journal itself. `logger` at notice would reach the local journal and stop. Alloy tails this path under
 # `job="syslog"` instead, matching the label the server's own syslog stream carries so one
 # parser reads both estates.
 #

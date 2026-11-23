@@ -1,0 +1,32 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-journal-warnings.timer.
+#
+# Copies the journal's new warning-and-above lines into /var/log/pi-health/journal.log, which the
+# Pi's Alloy tails into Loki under the pi_health stream. The journal itself lives on log2ram's
+# tmpfs, so a hard reboot erases it; Loki keeps these lines.
+#
+# `-o short-iso` writes `<iso-time> <host> <tag>: <msg>`, the shape the pi_health parser reads.
+# The cursor sits in /run and `-b` scopes every run to this boot: a cursor from the last boot
+# would point into the journal log2ram restored from its daily sync, not the one that was lost.
+# The cursor costs the SD card no writes.
+[Unit]
+Description=Copy the Pi journal's warning-and-above lines to the log Alloy ships to Loki
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice); stdout goes to the file
+# below, so this covers journalctl's stderr.
+SyslogLevel=notice
+User={{ sys_user }}
+# The journal is readable by `adm`. The unit names the group, so a rebuilt Pi needs no group task.
+SupplementaryGroups=adm
+# Without read access to the system journal, journalctl -q prints only this user's journal and
+# exits 0. Fail the unit instead, so systemd-units-check reports it. Not `test -r`: uutils'
+# test ignores the journal's ACL and reports a readable file as unreadable.
+ExecStartPre=/usr/bin/head -c0 /var/log/journal/%m/system.journal
+ExecStart=/usr/bin/journalctl -b -p warning -q --no-pager -o short-iso --cursor-file=/run/pi-journal-warnings/cursor
+StandardOutput=append:/var/log/pi-health/journal.log
+StandardError=journal
+LogsDirectory=pi-health
+RuntimeDirectory=pi-journal-warnings
+# A oneshot's RuntimeDirectory is removed when the unit stops; the cursor has to outlive the run.
+RuntimeDirectoryPreserve=yes
