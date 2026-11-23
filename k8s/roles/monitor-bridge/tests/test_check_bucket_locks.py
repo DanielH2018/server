@@ -2,6 +2,7 @@
 
 import calendar
 import email.message
+import io
 import urllib.error
 import urllib.parse
 from dataclasses import replace
@@ -12,6 +13,7 @@ import pytest
 import checks.b2
 import checks.r2
 from _fake_sources import FakeSources
+from bridge.sources import Sources
 from bridge.types import CheckResult
 from verdicts.storage import (
     R2_CANARY_PREFIX,
@@ -265,4 +267,31 @@ def test_an_r2_server_error_raises_and_the_next_cycle_probes_again(r2_cfg):
         checks.r2.check_r2_etcd_lock(r2_cfg, src, now=NOON)
     bucket = FakeR2([], locked={_canary(TODAY)})
     (ok, msg), _ = _run(r2_cfg, bucket, now=NOON + 300, state=src.state)
+    assert ok, msg
+
+
+R2_LOCKED_BODY = (
+    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>ObjectLockedByBucketPolicy</Code>'
+    b"<Message>Object is protected by a bucket lock rule and cannot be modified or deleted."
+    b"</Message></Error>"
+)
+
+
+def test_r2s_lock_refusal_reads_as_held_through_the_real_transport(r2_cfg):
+    """The 409's code reaches the check through `bridge.net`, which reads it from the body."""
+
+    def opener(req, timeout=None):
+        if req.get_method() == "DELETE":
+            raise urllib.error.HTTPError(
+                req.full_url,
+                409,
+                "Conflict",
+                email.message.Message(),
+                io.BytesIO(R2_LOCKED_BODY),
+            )
+        return io.BytesIO(b"<ListBucketResult></ListBucketResult>")
+
+    ok, msg = checks.r2.check_r2_etcd_lock(
+        r2_cfg, Sources(r2_cfg, opener=opener), now=NOON
+    )
     assert ok, msg

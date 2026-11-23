@@ -725,7 +725,7 @@ key. No part of it has been drilled.
 What survives depends on the locks
 [ADR-0041](adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) sets.
 The operator applies them by hand, in
-[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2, 2b and 4
+[Bucket immutability](longhorn-backup-tiering.md#bucket-immutability-adr-0041) steps 2, 2b and 3
 ([#9699](https://github.com/DanielH2018/server/issues/9699)), so check that they exist
 before you count on them:
 
