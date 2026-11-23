@@ -13,7 +13,7 @@ disagree on what blocks. The other reads `collect` makes (the cluster,
 GHCR, deploy-ui, worktrees, claims) block nothing and are not made.
 
 The third fact is a live landing of a serial PR (`live_limit.SERIAL_WHAT`), which holds the
-serial lock and makes `land.sh` refuse every other landing. Both tools read it through
+serial lock, so every other landing waits in line until it ends. Both tools read it through
 `serial_lock.serial_landing`.
 
 THE STATE.

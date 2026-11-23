@@ -73,8 +73,6 @@ Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD`, m
 the serial lock (`scripts/diagnostics/probe_lib/landing_blockers.py:run_landing`), and exits 1
 while any of the three blocks.
 
-- A serial landing is live. `land.sh` refuses every other PR until it ends, and the probe
-  names its PR.
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The change is docs- or tests-only: `land.sh` ends `nothing-to-deploy`
   (`scripts/deploy_tools/tests/test_land_pipeline.py::test_the_real_classifier_derives_nothing_from_a_docs_only_path`).
@@ -82,7 +80,13 @@ while any of the three blocks.
   operator's decision.
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
-To resume after a red master CI, a set hold or a live serial landing, wait with `cc-wait
+A live serial landing is not a reason to stop, although the probe exits 1 and names its PR.
+`land.sh` waits in line for it while the landing's merge budgets last
+(`scripts/deploy_tools/tests/test_land_slots.py::test_a_landing_waits_for_the_serial_landing_past_drain_s_while_its_budgets_last`),
+so run `land.sh` and let it wait.
+
+To resume after a red master CI, a set hold, or a `refused` verdict that names a live serial
+landing, wait with `cc-wait
 landing-clear` (`.claude/wait-sources/landing-clear`), then re-run `land.sh`. The source ends
 0 once none of them blocks, and its detail names the blocker while it waits, in the probe's
 words. It only waits for the hold to clear.

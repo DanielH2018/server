@@ -37,7 +37,7 @@ Every fact comes from a reader that already exists; this module only joins them:
   On daniel-box it reads `/proc/locks`; on daniel-server it is one ssh call.
 
 `blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none`, a red
-master CI, or a live serial landing, which makes `land.sh` refuse every other PR
+master CI, or a live serial landing, which every other landing waits in line behind
 (`land_lib/slots.py:_bar`). It is computed here rather than in the mod so that the band, the model's
 system-prompt section and this command's text view cannot disagree. A blocker line carries no
 age or other value that moves each minute: the mod puts the list in the system prompt, and a
@@ -184,7 +184,7 @@ def blockers(snap: dict) -> list[str]:
         pr = serial.get("pr") or ""
         who = f"PR #{pr}'s" if _PR_NUMBER.fullmatch(pr) else "a"
         out.append(
-            f"{who} serial landing is live; `land.sh` refuses every other PR until it "
+            f"{who} serial landing is live; every other landing waits in line until it "
             "ends, and `cc-wait landing-clear` waits for it"
         )
     return out
