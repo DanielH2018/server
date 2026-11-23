@@ -4,7 +4,11 @@ import subprocess
 from pathlib import Path
 
 import github_rest
+from _checkout_package import render_daniel_box
 from gh_quota import Ledger
+
+from lib import yaml_fast
+from lib.repo_paths import REPO
 
 
 class _Body:
@@ -138,3 +142,35 @@ def test_github_get_counts_an_authenticated_read_under_the_token_it_sends(
     (window,) = ledger.windows()
     assert window.identity == "tok-" + hashlib.sha256(b"builder-token").hexdigest()[:12]
     assert window.sessions == {"session-under-test": {"api rest": 1}}
+
+
+def test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger(
+    tmp_path,
+):
+    # The unit that runs each component's GitHub reader; the builder's signer and apt-repo
+    # units ship beside it and call nothing.
+    reader_units = {
+        "builder": "homelab-builder.service",
+        "checkout-sync": "homelab-checkout-sync.service",
+        "renovate-notify": "homelab-renovate-notify.service",
+    }
+    shipping = {
+        spec.parent.name
+        for spec in (REPO / "hosts" / "components").glob("*/component.yml")
+        if any(
+            f.get("lib") == "github_rest.py"
+            for f in yaml_fast.safe_load(spec.read_text()).get("files") or []
+        )
+    }
+    assert shipping == reader_units.keys()
+    package = render_daniel_box(tmp_path, "failure-alert", *reader_units)
+    missing = []
+    for unit in reader_units.values():
+        lines = (
+            package.files[f"/usr/lib/systemd/system/{unit}"][0].decode().splitlines()
+        )
+        if "ProtectSystem=strict" in lines and (
+            "ReadWritePaths=-/var/lib/gh-quota" not in lines
+        ):
+            missing.append(unit)
+    assert missing == []

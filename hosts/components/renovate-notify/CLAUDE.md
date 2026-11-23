@@ -75,7 +75,9 @@ whatever Discord did. The `+` prefix runs that one line outside the sandbox, bec
 The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and one override is
 load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before
 Python starts on every tick. `docs/renovate-notify-internals.md` has it, and the gaps the alive
-verdict leaves.
+verdict leaves. `ReadWritePaths=-/var/lib/gh-quota` is the one writable path besides the state
+directory: without it `github_rest.github_get` fails open and the notifier's reads count as
+spend beyond the gh-quota ledger (`docs/github-quota.md`).
 
 ## Working on it
 
@@ -116,7 +118,7 @@ An empty `last_notified` means nothing needs a human — not that the notifier i
 ## Autonomous-role contract (the timer posts a digest to Discord with no human in the loop)
 
 - **Scope / exclusions:** reads the repo's open Renovate PRs and the dependency dashboard, and posts a
-  Discord digest when what needs a human changes. It writes /var/lib/renovate-notify and the textfile below.
+  Discord digest when what needs a human changes. It writes /var/lib/renovate-notify, its gh-quota ledger under /var/lib/gh-quota and the textfile below.
 - **Mode (explicit and reversible):** the timer's enable link in this package arms it. Dropping the
   link from a package version, or reverting this component, stops the timer on the install that
   drops it.
