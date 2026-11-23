@@ -265,17 +265,18 @@ that the tree agrees —
 the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
 the line and half did not.
 
-**The exception is code that runs on an older interpreter**, which the guard exempts:
-`k8s/roles/*/files/`, `hosts/lib/`, and each component file ruff's
-`per-file-target-version` in `pyproject.toml` targets at py312. A program there runs under
-the host's or the pod image's interpreter rather than the repo's uv env. `python3` on every
-host is Ubuntu 26.04's 3.14, so the py312 floor no longer matches a host interpreter, and
-[#9987](https://github.com/DanielH2018/server/issues/9987) retires it. A component program that starts through
-`uv run --python {{ host_python_version }}` runs on 3.15 and is not exempt, nor are
-`hosts/lib/checkout_sync.py` and `hosts/lib/host_package_builder.py`, which start the same
-way. Below 3.14 there is no PEP 649, so annotations evaluate eagerly at
-`def`/`class` time and the import is real insurance against a forward reference. The repo suite
-cannot see that difference, because it runs on 3.15 where both spellings are lazy.
+**The exception is code that runs on a pod image's interpreter**, which the guard exempts:
+`k8s/roles/*/files/`. A pod image can ship a python older than 3.14. Below 3.14 there is no
+PEP 649, so annotations evaluate eagerly at `def`/`class` time and the import is real
+insurance against a forward reference. The repo suite cannot see that difference, because it
+runs on 3.15 where both spellings are lazy.
+
+**Host code keeps no grammar floor below 3.14.** Root runs `hosts/lib/` and the
+`#!/usr/bin/python3` component programs under the host's `/usr/bin/python3`, not uv's
+interpreter, because uv's interpreter sits under a user's home. Every host runs Ubuntu 26.04,
+whose `python3` is 3.14, and each host package depends on `python3 (>= 3.14)`
+(`scripts/renderer/renderer_lib/host.py:HOST_DEPENDS`). So `ruff format` writes these files
+with the repo's own target, `except A, B:` included.
 
 **A check ships with a proof it can go red.** `.claude/rules/python-layout.md` owns this rule
 and its two companions, non-vacuity and a measured transport. They apply to every validator or

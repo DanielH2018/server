@@ -178,7 +178,7 @@ def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
 _ARCH = {"ubuntu-26.04": "amd64", "ubuntu-24.04-arm": "arm64"}
 # The sites whose image the publisher has pushed. A site joins in the PR that copies its first
 # digest into image.pins; until then the matrix PR pins it `-`.
-PUBLISHED = frozenset({"26.04-amd64"})
+PUBLISHED = frozenset({"26.04-amd64", "26.04-arm64"})
 
 
 def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
@@ -231,13 +231,14 @@ def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
     unpinned = f"inputs {_inputs()}\n26.04-amd64 -\n26.04-arm64 -\n"
     assert _pin_problems(unpinned, sites) == [
         "26.04-amd64 is published, so it needs its digest",
+        "26.04-arm64 is published, so it needs its digest",
     ]
 
 
 def test_a_site_not_yet_published_may_be_pinned_dash() -> None:
     sites = _build_sites(CI_WORKFLOW) | {("ubuntu-26.04", "28.04")}
     lines = [f"{key} {DIGEST}" for key in sorted(PUBLISHED)]
-    text = "\n".join([f"inputs {_inputs()}", *lines, "26.04-arm64 -", "28.04-amd64 -"])
+    text = "\n".join([f"inputs {_inputs()}", *lines, "28.04-amd64 -"])
     assert _pin_problems(text, sites) == []
 
 

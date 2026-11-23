@@ -141,3 +141,10 @@ def test_the_transcript_survives_the_wall_clocks_sigint(
     assert session.main(["claude_triage_session.py"], str(config)) == 0
 
     assert copied.read_text() == "stopped\n"
+
+
+def test_the_result_may_name_one_restart_and_need_not():
+    argv = session.build_argv({}, "/s.json")
+    schema = json.loads(argv[argv.index("--json-schema") + 1])
+    assert schema["properties"]["restart"] == {"type": "string"}
+    assert "restart" not in schema["required"]

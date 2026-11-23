@@ -44,15 +44,12 @@ the same reason as the run before it; 1 on a new refusal or a new failure, which
 the set's chosen SHA), `key`, `index`, `sign`, `staged` (it is not a plain directory) and
 `io`, a filesystem or tool error.
 
-It runs under the host's `/usr/bin/python3` with the standard library only, and pyproject.toml
-formats it for 3.12, like the other host-run files. It imports `host_lib.py`, which the builder component
-installs beside it and which pyproject.toml holds to the same grammar.
+It runs under the host's `/usr/bin/python3` with the standard library only. It imports
+`host_lib.py`, which the builder component installs beside it.
 
 Run: /usr/bin/python3 homelab_repo_sign.py
 `--help` prints this text and exits 0.
 """
-
-from __future__ import annotations
 
 import email.utils
 import gzip
@@ -261,7 +258,7 @@ class Signer:
             chosen = read_no_follow("chosen", self.staged_dir()).decode(
                 errors="replace"
             )
-        except (OSError, Refusal):
+        except OSError, Refusal:
             chosen = ""
         try:
             where = f"the set is in {self.refuse()}"
@@ -277,7 +274,7 @@ class Signer:
     def _load_state(self) -> dict:
         try:
             loaded = json.loads((self.signer_dir / "state.json").read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return {}
         return loaded if isinstance(loaded, dict) else {}
 
@@ -393,7 +390,7 @@ class Signer:
                 write_textfile(
                     where / name, read_no_follow(name, self.staged_dir()), 0o600
                 )
-            except (OSError, Refusal):
+            except OSError, Refusal:
                 write_textfile(where / f"{name}.not-a-file", b"", 0o600)
         self.empty_staged()
         return where
@@ -422,7 +419,7 @@ class Signer:
             return True
         try:
             date = email.utils.parsedate_to_datetime(release_fields(text)["Date"])
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return True
         return self.now() - date.timestamp() > RESIGN_AFTER_SECONDS
 

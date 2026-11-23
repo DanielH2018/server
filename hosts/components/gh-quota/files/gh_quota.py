@@ -513,7 +513,7 @@ class Ledger:
                     check=True,
                     env=self._gh_env(),
                 ).stdout.strip()
-            except (OSError, subprocess.SubprocessError):
+            except OSError, subprocess.SubprocessError:
                 token = ""
         if token:
             return "tok-" + hashlib.sha256(token.encode()).hexdigest()[:12]

@@ -185,6 +185,14 @@ fleet below `system.slice`, where k3s runs, while the CPU is contended. A weight
 `docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
 start**, so the deploy that changes it drops the RC host's sessions.
 
+`claude_code_fleet_oom_score_adjust` (1000) makes a global OOM kill a fleet process before a
+pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
+`templates/fleet-user-manager-oom.conf.j2` drop-in sets it on each fleet uid's
+`user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
+That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
+`50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
+ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.
+
 ## Background sessions come back at boot
 
 `claude-bg-resume.service` runs `files/bg_session_resume.py` once at boot as
@@ -447,7 +455,10 @@ at 09:00 UTC, and 10 minutes after each activation of the timer.
   (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_the_config_reads_the_record_paths_the_controllers_pin`).
   A new kind of record needs a reader in `READERS` and a row in
   `hosts/components/claude-code/templates/claude-weekly-summary.json.j2`.
-- **What it posts:** one count line per source, then each triage run, each Renovate tick that
+- **What it posts:** one count line per source, then each triage run with the restart it
+  asked for and the verdict
+  (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_run_that_asked_for_a_restart_shows_the_brokers_verdict`),
+  each Renovate tick that
   merged, closed or left PRs open or did not finish, and every run with a denial
   (`hosts/components/claude-code/tests/test_claude_weekly_summary.py::test_a_drill_weeks_records_render_the_summary`).
   A quiet week still posts its count lines
@@ -512,10 +523,26 @@ Applying it: a new version of daniel-box's host package, which its updater insta
 
 ## Autonomous-role contract (`claude-triage@`, a session started by a monitor episode)
 
-- **Scope:** one episode per run. Slice 1 diagnoses only: Edit, Write, a landing and a push
+- **Scope:** one episode per run. The session diagnoses: Edit, Write, a landing and a push
   are denied (`hosts/components/claude-code/files/claude_triage_session.py:DENIED_TOOLS`,
-  `hosts/components/claude-code/tests/test_claude_triage_session.py::test_the_session_is_diagnose_only_and_capped`). The later slices widen this to a fix landed through `homelab-claude-land@` and a
-  restart through an allowlisted broker, under the operator's 2026-10-15 rulings.
+  `hosts/components/claude-code/tests/test_claude_triage_session.py::test_the_session_is_diagnose_only_and_capped`).
+  Its one action is a request: the result's optional `restart` field names an allowlist key.
+  The runner, as the controller, starts `homelab-claude-restart@<name>.service` for it, waits
+  for the broker, and writes the broker's verdict line into the record and the report
+  (`hosts/components/claude-code/files/claude_triage_run.py:request_restart`,
+  `hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_diagnosis_naming_a_listed_workload_starts_the_broker_and_records_its_verdict`).
+  A name off the allowlist starts nothing
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_name_off_the_allowlist_starts_nothing_and_is_escaped_in_the_report`),
+  and neither does a request from a diagnosis of low confidence
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_low_confidence_diagnosis_cannot_ask_for_a_restart`).
+  The broker replaces its verdict file on every start, so the runner reads the file only when
+  its inode or mtime changed during the request
+  (`hosts/components/claude-code/tests/test_claude_triage_run.py::test_a_verdict_an_earlier_request_left_is_not_read_as_this_ones`).
+  The broker's wait runs inside the run's wall clock, which adds the broker's pinned timeout
+  (`hosts/tests/test_claude_triage.py::test_the_run_outlasts_the_session_and_the_restart_it_waits_for`).
+  A run that asked for a restart keeps its state, so the page's closed list of states is
+  unchanged; the broker posts each restart to Discord itself. A fix landed through
+  `homelab-claude-land@` is a later slice, under the operator's 2026-10-15 rulings.
 - **Identity:** the controller, `claude-triage-ctl`, runs the poller and the runner and alone may
   start the units (`hosts/tests/test_claude_triage.py::test_the_poller_runs_as_the_controller`).
   The session user, `claude-triage`, holds no GitHub token and no start right,
@@ -601,14 +628,17 @@ Triage slice 3 (#9387). `homelab-claude-restart@<name>.service` runs
   `hosts/components/claude-code/templates/50-claude-restart.rules.j2` admits no other user and
   no other verb, by the operator's 2026-11-20 ruling
   (`hosts/tests/test_claude_restart_broker.py::test_only_the_triage_controller_may_start_the_broker_and_only_start_it`).
-  Neither `claude` nor the triage session user can. The rule admits an instance only in the
+  Neither `claude` nor the triage session user can: a triage run asks through its result, and
+  the runner starts the unit. The rule admits an instance only in the
   script's name shape
   (`hosts/tests/test_claude_restart_broker.py::test_the_rule_admits_only_the_broker_in_the_scripts_name_shape`).
   The unit passes the script its instance and nothing else
   (`hosts/tests/test_claude_restart_broker.py::test_the_unit_passes_only_its_instance_to_the_root_script`).
 - **Mode:** `hosts/components/claude-code/defaults/main.yml:claude_code_restart_enabled`, true
   only in daniel-box's host_vars. False drops the unit, the script and the config from the next
-  package version, and keeps `/var/lib/claude-restart`. To stop the broker without a landing,
+  package version, and keeps `/var/lib/claude-restart`. It also empties the restart names
+  the triage config and prompt carry, so no run asks for a restart
+  (`hosts/tests/test_claude_triage.py::test_a_switched_off_broker_leaves_a_run_no_name_to_ask_for`). To stop the broker without a landing,
   run `sudo touch /etc/claude-restart/hold`; removing the file releases it
   (`hosts/components/claude-code/tests/test_claude_restart.py::test_the_hold_file_refuses_a_listed_workload`).
 - **Abort valves:** one restart per workload per 24 hours

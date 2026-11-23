@@ -77,11 +77,8 @@ def boot_order_problems(dropin: str) -> list[str]:
         "After=homelab-secrets.service",
         "Environment=NUT_CONFPATH=/var/lib/homelab-secrets/etc/nut",
         "EnvironmentFile=",
-        # 24.04's daemon is /lib/nut/upsmon and its /usr/sbin/upsmon the MODE wrapper; 26.04 has
-        # no /lib/nut. The order makes each release resolve to its daemon.
-        "ExecSearchPath=/lib/nut:/usr/sbin",
-        "ExecStart=upsmon -F",
-        "ExecReload=upsmon -c reload",
+        "ExecStart=/usr/sbin/upsmon -F",
+        "ExecReload=/usr/sbin/upsmon -c reload",
     )
     return [f"no {line}" for line in wanted if line not in lines] + [
         f"must not carry {line}" for line in lines if line.startswith("Requires=")
@@ -100,9 +97,8 @@ def test_a_drop_in_with_requires_or_no_confpath_is_flagged():
         "no After=homelab-secrets.service",
         "no Environment=NUT_CONFPATH=/var/lib/homelab-secrets/etc/nut",
         "no EnvironmentFile=",
-        "no ExecSearchPath=/lib/nut:/usr/sbin",
-        "no ExecStart=upsmon -F",
-        "no ExecReload=upsmon -c reload",
+        "no ExecStart=/usr/sbin/upsmon -F",
+        "no ExecReload=/usr/sbin/upsmon -c reload",
         "must not carry Requires=homelab-secrets.service",
     ]
 

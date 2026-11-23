@@ -1,0 +1,9 @@
+# Shipped by the claude-code host component — do not edit by hand.
+#
+# A drop-in on user@<uid>.service for each fleet uid. OOMScoreAdjust= is an exec option, so the
+# slice drop-ins cannot carry it. The user manager's units, among them every fan-out batch
+# `systemd-run --user` starts, inherit the manager's value (systemd-system.conf(5),
+# DefaultOOMScoreAdjust=). defaults/main.yml beside claude_code_fleet_oom_score_adjust says
+# why the value is the maximum. It takes effect at the manager's next start.
+[Service]
+OOMScoreAdjust={{ claude_code_fleet_oom_score_adjust }}

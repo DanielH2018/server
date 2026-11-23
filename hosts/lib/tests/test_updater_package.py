@@ -56,7 +56,7 @@ def test_the_package_renders_its_named_members(package):
         0o755,
     )
     assert sorted(package.scripts) == ["postinst", "prerm"]
-    assert package.depends == ["python3 (>= 3.12)"]
+    assert package.depends == ["python3 (>= 3.14)"]
 
 
 def test_the_source_names_daniel_box_and_the_keyring_path(package):
@@ -148,3 +148,18 @@ def test_a_step_6_retry_that_waits_on_the_lock_too_is_flagged(
 )
 def test_a_timeout_span_reads_as_seconds(span, seconds):
     assert timeout_start_s(f"TimeoutStartSec={span}\n") == seconds
+
+
+@pytest.mark.parametrize(
+    ("host", "leftovers"),
+    [
+        ("daniel-pi", {"homelab", "ubuntu"}),
+        ("daniel-box", {"homelab", "ubuntu", "github-cli"}),
+        ("daniel-server", {"homelab", "ubuntu", "github-cli"}),
+    ],
+)
+def test_reconcile_retires_the_release_upgrade_s_apt_source_backups(host, leftovers):
+    legacy = {e["path"] for e in host_mode.render_host(host).legacy if "path" in e}
+    assert {
+        f"/etc/apt/sources.list.d/{name}.sources.distUpgrade" for name in leftovers
+    } <= legacy

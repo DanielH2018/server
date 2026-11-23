@@ -11,7 +11,6 @@ sibling file in the same directory that the new entry still does not admit.
 Run: uv run pytest hosts/components/claude-code/tests/test_rootq.py
 """
 
-import ast
 import fnmatch
 import hashlib
 import os
@@ -469,12 +468,6 @@ def test_as_root_the_test_seam_is_ignored() -> None:
         "/tmp/evil",
         frozenset({0, 1000}),
     )
-
-
-def test_the_root_script_parses_with_the_3_12_grammar() -> None:
-    # Root runs it under /usr/bin/python3, and pyproject.toml holds it to the py312 floor of the
-    # host-run files.
-    ast.parse(Path(rootq.__file__).read_text(), feature_version=(3, 12))
 
 
 def test_stat_refuses_the_retired_webhook_row_alike_whether_or_not_it_exists(

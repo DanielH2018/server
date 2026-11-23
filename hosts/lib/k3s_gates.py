@@ -28,8 +28,6 @@ Usage:
     k3s_gates.py host   --server https://127.0.0.1:6443 --token-file F --ca-file F
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

@@ -6,8 +6,6 @@ which only the render builds, so a render on the unit's pin deadlocks an interpr
 `host_package_builder.Builder.render` calls `render_python` before every render.
 """
 
-from __future__ import annotations
-
 import os
 import re
 from collections.abc import Callable

@@ -243,7 +243,7 @@ a typical-day floor, and this alert is its check (`docs/claude-code-rc-caps.md`)
   because `MemoryLow` cannot move anon pages out of RAM.
 - Record whether a pod was evicted or OOM-killed during the episode. The operator's 2026-12-06
   re-read of the 14-day `MemAvailable` minimum uses that to decide on systemd-oomd for
-  `user.slice` (#9989).
+  `user.slice` ([#10000](https://github.com/DanielH2018/server/issues/10000)).
 
 ### `LonghornBackupHealthNotReporting`
 

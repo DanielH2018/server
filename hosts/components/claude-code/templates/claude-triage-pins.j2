@@ -53,7 +53,6 @@ table raises how many runs a day the poller asks for, so it is pinned too. -#}
   "K8sDeploymentZeroAvailable": "triage",
   "K8sContainerCrashLooping": "triage",
   "ScrapeTargetDown": "triage",
-  "ExtraProbeFailed:wg-easy": "none",
 } -%}
 {#- The Deployments homelab-claude-restart@<name>.service may restart, keyed by the unit instance. Each
 entry names its `namespace` and `deployment`, and its `service`: the deploy tag its alerts carry,
@@ -66,4 +65,7 @@ workload. -#}
 } -%}
 {%- set restart_workload_cooldown_s = 86400 -%}
 {%- set restart_daily_cap = 3 -%}
+{#- The broker unit's wall clock: the lock wait, the rollout wait and the reads around it. A triage
+run waits for the broker inside its own wall clock, so claude-triage@'s timeout adds this. -#}
+{%- set restart_timeout_s = 900 -%}
 {%- set restart_state_dir = "/var/lib/claude-restart" -%}

@@ -7,8 +7,6 @@ the builder ships beside it with nothing else. checkout_sync.py imports `CiSetti
 renovate-notify imports `read_check_pages`, and its component ships it as well.
 """
 
-from __future__ import annotations
-
 import urllib.error
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass

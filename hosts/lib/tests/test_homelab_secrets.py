@@ -10,7 +10,6 @@ _secrets_host.py.
 Run: uv run pytest hosts/lib/tests/test_homelab_secrets.py
 """
 
-import ast
 import json
 import os
 import re
@@ -239,19 +238,9 @@ def test_an_ordinary_nested_destination_passes_the_same_check(host):
     assert host.run() == 0
 
 
-def parses_under_3_12(source):
-    try:
-        ast.parse(source, feature_version=(3, 12))
-    except SyntaxError:
-        return False
-    return True
-
-
-def test_the_script_runs_under_the_hosts_python3_with_the_3_12_grammar():
+def test_the_script_runs_under_the_hosts_python3():
     assert SCRIPT.read_text().startswith("#!/usr/bin/python3\n")
     assert SCRIPT.stat().st_mode & 0o111
-    assert parses_under_3_12(SCRIPT.read_text())
-    assert not parses_under_3_12(SCRIPT.read_text() + 'label = t"{name}"\n')
 
 
 ENV_TEMPLATE = "A='${a}'\nB='${b}'\n"

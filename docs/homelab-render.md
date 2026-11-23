@@ -908,7 +908,7 @@ value of the same name therefore wins, as it does over a role default. No `ansib
 value is in the context, so a template that reads one fails. A fact a template needs becomes
 an inventory variable.
 
-Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.12)`, because reconcile runs
+Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.14)`, because reconcile runs
 under `/usr/bin/python3`. Its `version` is `${HOMELAB_VERSION}`, which `nfpm` expands from the
 builder's environment, so two commits with the same tree render the same spec. Every package
 is `arch: all`. The spec sets `version_schema: none`, so `nfpm` keeps the version as
