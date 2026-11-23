@@ -272,12 +272,12 @@ def test_every_manager_pattern_still_matches_the_pinned_version():
         )
 
 
-def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
-    """The anchor is what keeps 'the newest release' off a 10.11 server.
+def test_the_manager_anchor_admits_the_pin_and_drops_other_lines():
+    """The anchor keeps the manager on the release line the deployed server runs.
 
-    Upstream tags the release LINE by Jellyfin version, so the datasource's newest tag is
-    `12.0.0` — a build declaring targetAbi 12.0, which the deployed 10.11 server's loader
-    rejects without logging anything.
+    Upstream tags the release LINE by Jellyfin version (`10.11.0.1`, `12.0.1`), so an
+    unanchored manager offers whichever line tagged last. A newer line declares a targetAbi
+    the server's loader rejects without logging anything; an older one is a downgrade.
     """
     anchor = re.compile(_manager()["extractVersionTemplate"].replace("(?<", "(?P<"))
     version = load_defaults(JELLYFIN)["jellyfin_k8s_mergeversions_version"]
@@ -287,11 +287,12 @@ def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
         f"does not admit the pinned tag {version} — the manager offers nothing, including the "
         f"release it is pinned to"
     )
-    assert not anchor.match("12.0.0"), (
-        f"the Merge Versions Renovate manager's extractVersionTemplate {anchor.pattern!r} "
-        f"admits 12.0.0, which declares targetAbi 12.0 and which the deployed 10.11 server "
-        f"rejects without logging anything. Raise this anchor only with jellyfin_k8s_image."
-    )
+    for other in ("10.11.0.1", "13.0.0"):
+        assert not anchor.match(other), (
+            f"the Merge Versions Renovate manager's extractVersionTemplate {anchor.pattern!r} "
+            f"admits {other}, a tag from another Jellyfin line than the one pinned. Raise this "
+            f"anchor only with jellyfin_k8s_image."
+        )
 
 
 def test_the_bump_is_never_automerged():

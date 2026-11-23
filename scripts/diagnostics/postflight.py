@@ -241,8 +241,12 @@ def check_jellyfin_key():
     key, err = secret("jellyfin_api_key")
     if not key:
         return FAIL, err
+    # Jellyfin 12 disables the legacy X-Emby-Token header; this form works on 10.11 too.
     status, body = get_via_service(
-        "jellyfin", "/System/Info", 8096, f'header = "X-Emby-Token: {key}"\n'
+        "jellyfin",
+        "/System/Info",
+        8096,
+        f'header = "Authorization: MediaBrowser Token=\\"{key}\\""\n',
     )
     if status == 200:
         return OK, "jellyfin_api_key authenticates"

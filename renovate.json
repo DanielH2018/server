@@ -313,23 +313,23 @@
     },
     {
       "customType": "regex",
-      "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml, in the ani-sync manager's shape, with THREE matchStrings. Upstream keeps a 10.11 line and a 12.0 line in one repository, so extractVersionTemplate is anchored to `^10\\.11/v`, because the 10.11 server rejects a 12.0 plugin silently. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor. The fourth version group is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
+      "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml, in the ani-sync manager's shape, with THREE matchStrings. Upstream keeps a 10.11 line and a 12.0 line in one repository, and every Jellyfin 12 build ships on the 12.0 line, so extractVersionTemplate is anchored to `^12\\.0/v` while jellyfin_k8s_image is a 12 build. A build on that line can still declare a newer targetAbi than the image, which the server rejects silently, so the bump stays manual. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin major. The fourth version group is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
-        "intro-skipper/releases/download/10\\.11/v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
+        "intro-skipper/releases/download/12\\.0/v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
         "intro-skipper-v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\\.zip",
         "jellyfin_k8s_introskipper_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\""
       ],
       "depNameTemplate": "intro-skipper/intro-skipper",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^10\\.11/v(?<version>.+)$",
+      "extractVersionTemplate": "^12\\.0/v(?<version>.+)$",
       "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
     },
     {
       "customType": "regex",
-      "description": "Webhook plugin release pin in k8s/jellyfin/defaults/main.yml (#1557), with TWO matchStrings that capture only the bare major. extractVersionTemplate is the release-line ANCHOR: Webhook 22 declares targetAbi 12.0, which a 10.11 server rejects silently. RAISE IT when jellyfin_k8s_image moves to Jellyfin 12.",
+      "description": "Webhook plugin release pin in k8s/jellyfin/defaults/main.yml (#1557), with TWO matchStrings that capture only the bare major. extractVersionTemplate is the release-line CEILING: each Webhook major targets one Jellyfin line (21 declares 10.11, 22 declares 12.0), and a server rejects a plugin built for a newer one silently. It admits up to 22 while jellyfin_k8s_image is a 12 build. RAISE IT when jellyfin_k8s_image reaches the targetAbi of the next major.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
@@ -339,23 +339,23 @@
       ],
       "depNameTemplate": "jellyfin/jellyfin-plugin-webhook",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>1?\\d|2[01])$",
+      "extractVersionTemplate": "^v(?<version>1?\\d|2[0-2])$",
       "versioningTemplate": "regex:^(?<major>\\d+)(?:\\.(?<minor>\\d+))?(?:\\.(?<patch>\\d+))?$"
     },
     {
       "customType": "regex",
-      "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616), with TWO matchStrings. extractVersionTemplate is the release-line ANCHOR and admits only the 10.11 line, because 12.0.0 declares targetAbi 12.0. RAISE IT when jellyfin_k8s_image moves to a new Jellyfin minor. The fourth version group is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
+      "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616), with TWO matchStrings. extractVersionTemplate is the release-line ANCHOR and admits only the 12.0 line, because upstream tags each Jellyfin line separately and a server rejects a plugin built for a newer one silently. RAISE IT when jellyfin_k8s_image moves to a new Jellyfin line. The 12.0 line's tags have three parts (`12.0.1`) where the 10.11 line's had four, so the patterns take an optional fourth part. That part is named `build`, not `revision`, because Renovate reads `revision` only when `build` is present, and a rename would silently stop the manager offering updates.",
       "managerFilePatterns": [
         "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
-        "jellyfin-plugin-mergeversions/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
-        "jellyfin_k8s_mergeversions_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)\""
+        "jellyfin-plugin-mergeversions/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)/",
+        "jellyfin_k8s_mergeversions_version:\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)\""
       ],
       "depNameTemplate": "danieladov/jellyfin-plugin-mergeversions",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^(?<version>10\\.11\\.\\d+\\.\\d+)$",
-      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+      "extractVersionTemplate": "^(?<version>12\\.0\\.\\d+(?:\\.\\d+)?)$",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?:\\.(?<build>\\d+))?$"
     },
     {
       "customType": "regex",
