@@ -50,10 +50,17 @@ failure.
 
 ## Why the bouncer reports no usage metrics
 
-Under plugin v1.7.1 the default 600s metrics ticker intermittently stops the 60s stream ticker
-for 600s or 1200s, silently, and a ban or an unban made in that window does not reach the edge
-(#2752). The `DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the
-evidence and upstream's issue.
+Nothing in the cluster reads the bouncer's usage metrics. They only fill the bouncer's
+dropped-request counts in `cscli metrics`, so the Middleware sets
+`metricsUpdateIntervalSeconds: 0` and the plugin starts no metrics ticker. The
+`DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` holds the ruling.
+
+Plugin v1.7.1 had a defect with the default 600s ticker: it intermittently stopped the 60s
+stream ticker for 600s or 1200s, and a ban or an unban made in that window did not reach the
+edge (#2752). Upstream fixed it in v1.8.0 (`maxlerebourg/crowdsec-bouncer-traefik-plugin#399`,
+for #377), and the cluster runs v1.8.2. To restore the counts, open a new issue: the change
+restarts Traefik and needs a watch of the LAPI's `GET /v1/decisions/stream` log for gaps of
+600s or 1200s.
 
 The ticker is a package global inside the plugin, so a Middleware edit alone does not stop a
 running one. The Traefik pod has to restart, and the manifests rollout-restart does that.
