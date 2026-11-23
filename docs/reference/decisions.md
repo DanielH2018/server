@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-23 06:17 UTC
-generated_sha: 2933fca28
+generated_at: 2026-11-23 18:17 UTC
+generated_sha: 48d169bdb
 ---
 
 !!! warning "Generated file — do not edit"
@@ -368,7 +368,7 @@ generated_sha: 2933fca28
 | permanent posture (operator 2026-08-14) — with ETP Local load-bearing for client IPs, announcement and placement stay on one node as a unit; this pin only ever moves together with the L2Advertisement nodeSelector. | `k8s/roles/traefik/templates/deployment.yaml.j2` | 2026-08-27 |
 | no automountServiceAccountToken: false here; the kubernetesCRD provider needs the | `k8s/roles/traefik/templates/deployment.yaml.j2` | 2026-09-30 |
 | the shared emptyDir does not need clearing between container starts (#1345). A failing startupProbe restarts the CONTAINER, so /plugins-storage is the same emptyDir on every retry. Traefik clears the sources tree at every process start and re-requests the archive on every install, so a stale or partial archive cannot short-circuit recovery. This role's CLAUDE.md has the evidence. | `k8s/roles/traefik/templates/deployment.yaml.j2` | 2026-09-10 |
-| no usage-metrics ticker. on every tenth stream tick, and on some of those coincidences (v1.7.1, under Yaegi) the stream ticker then skips every pull until a later metrics tick, silently and with no log line, in stalls of exactly 600s or 1200s, each starting on a metrics tick. A ban or an unban made in that window never reaches the edge. Upstream tracks it as maxlerebourg/crowdsec-bouncer-traefik-plugin#377, where 0 showed zero stalls. 0 passes the plugin's validation and New() starts no metrics ticker. The cost is the bouncer's dropped-request count in `cscli metrics`, which nothing here reads. Revisit when a release closes #377. The ticker is a package global, so only a Traefik restart (the manifests rollout-restart does one) stops a ticker already running. | `k8s/roles/traefik/templates/dynamic.yaml.j2` | 2026-09-27 |
+| no usage-metrics ticker. only fill the dropped-request counts in `cscli metrics`. 0 passes the plugin's validation and New() starts no metrics ticker. Restoring the default 600 restarts Traefik, because the ticker is a package global, and needs a two-hour watch of the LAPI's decisions/stream log for 600s or 1200s gaps. | `k8s/roles/traefik/templates/dynamic.yaml.j2` | 2026-11-23 |
 | the Job, behind `traefik_k8s_bouncer_key_precheck`, and its fence peer land in | `k8s/roles/traefik/templates/precheck/bouncer-key.yaml.j2` | 2026-10-25 |
 | (2026-08-24) split upstream's single ClusterRole into a cluster-scoped role holding | `k8s/roles/traefik/templates/rbac.yaml.j2` | 2026-09-30 |
 | Cloudflare only, and not `lan_subnet` ({{ lan_subnet }}). does not hold a proxy for Traefik on k3s: neither node runs Docker, and the Pi runs only docker-proxy, wg-easy, alloy and autoheal. Trusting the /24 let any LAN device forge XFF, and that included every WireGuard peer. wg-easy masquerades its `wg_client_subnet` ({{ wg_client_subnet }}) peers to the Pi's LAN address, which is inside the /24. With the /24 untrusted, Traefik strips a LAN client's XFF and forwards the connection address, so Authelia `networks:` rules and ClientIP() matchers still see the LAN address. Not the pod CIDR either: the Service runs externalTrafficPolicy: Local so requests arrive with the real client address rather than cni0's, and trusting the pod network would let any pod forge XFF. If a LAN reverse proxy is ever added in front of Traefik, list its single address here rather than the /24. | `k8s/roles/traefik/templates/static-config.yaml.j2` | 2026-09-24 |

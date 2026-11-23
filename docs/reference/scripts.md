@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-23 06:17 UTC
-generated_sha: 2933fca28
+generated_at: 2026-11-23 18:17 UTC
+generated_sha: 48d169bdb
 ---
 
 !!! warning "Generated file — do not edit"
@@ -434,7 +434,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/renderer/template_filters/secret_stubs.py` | renderer | The secret stub form of the shadow render (target slice R1). | imported by bundle_gates.py, homelab_render.py, shadow_diff.py | — | — |
 | `scripts/validate/validate_lib/secrets_case.py` | validate | The container case for a package that carries `secrets-unit` (H4.1c). | imported by case_groups.py, disarm_case.py, engine_case.py, host_package_cases.py, node_package_case.py | `test_secrets_case.py` | — |
 | `scripts/backup/longhorn_reap_lib/selection.py` | backup | The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds. | imported by backups.py | — | — |
-| `scripts/deploy_tools/land_lib/serial_lock.py` | deploy_tools | Which landing of a serial PR holds the serial lock, read without taking it. | imported by landing_blockers.py, landing_clear.py, pr_lock.py, resume.py, slots.py, turn.py | — | — |
+| `scripts/deploy_tools/land_lib/serial_lock.py` | deploy_tools | Which landing of a serial PR holds the serial lock, read without taking it. | imported by landing_blockers.py, pr_lock.py, resume.py, slots.py, turn.py | — | — |
 | `scripts/renderer/template_filters/service_tier.py` | renderer | Filters deriving per-tier sets from the `tier` field on containers_list entries. | imported by guard_jinja_env.py, longhorn_groups.py, service_tiers.py | — | — |
 | `scripts/lib/service_tiers.py` | lib | The sets derived from each service entry's ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
 | `scripts/dev/fanout_lib/session_banner.py` | dev | The SessionStart banner a launched brief carries, read from the host it will run on. | imported by place.py | — | — |
@@ -562,7 +562,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | 0 | `LAND_SETTLED` | deployed and settled, or there was nothing to deploy. | — |
 | 1 | `LAND_FAILED` | CI red or unproven, a change needing a hand, a tag no k8s entry declares, a held or failed promotion, a failed health gate, or a PR closed, conflicting or with red CI. | — |
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. | — |
-| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, no promotion covered the merge in time, the health gate could not read its store, or no host package containing the merge is published. | — |
+| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, no promotion covered the merge in time, the health gate could not read its store, or no host package containing the merge is published, or another landing of the PR is live, so no landing started. | — |
 
 ### `scripts/deploy_tools/await_ci.py`
 

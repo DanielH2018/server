@@ -29,6 +29,7 @@
     "homelab/traefik/access-log-rotate": 16,
     "homelab/traefik/crowdsec-agent": 112,
     "homelab/traefik/crowdsec-config-install": 16,
+    "homelab/traefik/crowdsec-data-install": 0,
     "homelab/traefik/traefik": 224,
     "homelab/wg-easy/wg-easy": 128,
     "homelab/zigbee2mqtt/mqtt-broker-wait": 16,
