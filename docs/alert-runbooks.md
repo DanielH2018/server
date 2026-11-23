@@ -329,6 +329,24 @@ alert fires once per failed unit.
   not delivered by that run, the label stays off and this alert pages. After 48 hours the
   alert still escalates to `WarningUnresolved`, which pages.
 
+### `UcfDistPending`
+
+A warning. The host's `ucf-dist` check found a `*.ucf-dist` file under `/etc` that has
+waited more than a day. `ucf` writes one when an upgrade brings a new version of a config file
+that carries a local edit: it keeps the installed file and leaves the package's version
+beside it. A program whose packaged snippets need the new version fails until someone merges
+it, as AIDE 0.19 did with its `PidFile` group.
+
+- Run `journalctl -t ucf-dist` on the host to read the pending paths, or
+  `find /etc -name '*.ucf-dist'`.
+- For each one, run `diff <file> <file>.ucf-dist`. When the installed file carries no local
+  edit, replace it with the dist copy. Otherwise merge the new defaults into the installed
+  file by hand. Then delete the dist copy.
+- A file the repo also manages, such as one the reconcile lines arm edits, keeps those edits
+  only if the merge keeps them; the next reconcile reapplies its managed lines.
+- The next hourly check resolves the alert. To check at once, run
+  `sudo systemctl start homelab-ucf-dist.service`.
+
 ### `TextfileCollectorError`
 
 A shadow warning. node_exporter's textfile collector on the host has failed for 10 minutes, so
