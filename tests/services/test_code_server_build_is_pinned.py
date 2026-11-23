@@ -251,9 +251,9 @@ def test_the_rendered_build_verifies_every_extension() -> None:
         assert e["url"] in rendered, (
             f"{e['name']}: pinned URL not in the rendered Dockerfile"
         )
-        assert f"{e['sha256']}  /opt/vsix/{e['name']}.vsix" in rendered, (
-            f"{e['name']}: no sha256sum check in the rendered Dockerfile"
-        )
+        assert (
+            f"{e['sha256']}  /opt/vsix/{e['name']}@{e['version']}.vsix" in rendered
+        ), f"{e['name']}: no sha256sum check in the rendered Dockerfile"
 
 
 # ── red proofs for the two pure checks ─────────────────────────────────────────────────────

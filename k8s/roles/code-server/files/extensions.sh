@@ -1,11 +1,13 @@
 #!/bin/bash
 # Install proprietary extensions (downloaded at image build time) into the
-# user config volume on each container start. code-server handles idempotency.
+# user config volume on each container start.
 #
 # Usage: extensions.sh (no arguments)
 # Runs as /custom-cont-init.d/10-extensions.sh in the code-server image, on every start of the
-# container. It uninstalls each id in RETIRED_EXTS, then installs every /opt/vsix/*.vsix into
-# /config/extensions. It reads no environment variables and no config file.
+# container. It uninstalls each id in RETIRED_EXTS, then installs each
+# /opt/vsix/<publisher>.<name>@<version>.vsix whose id and version /config/extensions does not
+# already hold. It exits 1 when an install fails. CODE_SERVER and VSIX_DIR override the CLI
+# path and the VSIX directory, for tests.
 
 for arg in "$@"; do
   case "$arg" in
@@ -20,6 +22,8 @@ done
 # image rebuild fetches the current version of each extension, and nothing removes the
 # previous ones, so that directory grows without bound.
 EXTENSIONS_DIR=/config/extensions
+CODE_SERVER="${CODE_SERVER:-/app/code-server/bin/code-server}"
+VSIX_DIR="${VSIX_DIR:-/opt/vsix}"
 
 # Extensions retired from the image. Dropping one from /opt/vsix does NOT remove it: this
 # script only ever installed, so a retired extension stays on the config volume and keeps
@@ -37,10 +41,22 @@ RETIRED_EXTS="
 
 for ext in $RETIRED_EXTS; do
     echo "Removing retired extension: ${ext}"
-    /app/code-server/bin/code-server --extensions-dir "${EXTENSIONS_DIR}" --uninstall-extension "${ext}" || true
+    "${CODE_SERVER}" --extensions-dir "${EXTENSIONS_DIR}" --uninstall-extension "${ext}" || true
 done
 
-for vsix in /opt/vsix/*.vsix; do
+# code-server refuses to reinstall a version it already holds ("Please restart VS Code before
+# reinstalling") and exits non-zero, so an unchanged VSIX is skipped rather than installed.
+# Each file name is the `<id>@<version>` line --show-versions prints; ids are case-insensitive.
+installed="$("${CODE_SERVER}" --extensions-dir "${EXTENSIONS_DIR}" --list-extensions --show-versions)"
+
+failed=0
+for vsix in "${VSIX_DIR}"/*.vsix; do
+    pinned="$(basename "${vsix}" .vsix)"
+    if grep -qFxi -- "${pinned}" <<<"${installed}"; then
+        echo "Already installed: ${pinned}"
+        continue
+    fi
     echo "Installing extension: ${vsix}"
-    /app/code-server/bin/code-server --extensions-dir "${EXTENSIONS_DIR}" --install-extension "${vsix}"
+    "${CODE_SERVER}" --extensions-dir "${EXTENSIONS_DIR}" --install-extension "${vsix}" || failed=1
 done
+exit "${failed}"

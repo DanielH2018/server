@@ -48,6 +48,8 @@ Environment=DISABLE_AUTOUPDATER=1
 # No error reports or telemetry to Claude Code's third-party intakes, which the egress allowlist
 # leaves out.
 Environment=CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+# gh's telemetry goes to cafe.github.com, which the egress allowlist leaves out too.
+Environment=GH_TELEMETRY=false
 # A memory written here would die with the tmpfs home, and none may reach a later run.
 Environment=CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
 EnvironmentFile=/etc/renovate-agent/session.env
