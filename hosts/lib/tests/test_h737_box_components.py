@@ -51,14 +51,15 @@ def test_each_timer_is_enabled_at_the_slot_the_ansible_unit_or_cron_held(
     assert f"{timer}.timer" in package.enable_links()
 
 
-def test_the_renovate_agent_ships_disarmed_at_its_slot(package):
+def test_the_renovate_agent_ships_armed_at_its_slot(package):
     timer = "homelab-renovate-agent.timer"
     assert "OnCalendar=*-*-* 06:00:00 America/Chicago\n" in text(
         package, f"{UNITS}/{timer}"
     )
-    assert timer not in package.enable_links()
+    assert timer in package.enable_links()
     assert (
-        "/var/lib/node-exporter-textfile/renovate-agent-disarmed.prom" in package.files
+        "/var/lib/node-exporter-textfile/renovate-agent-disarmed.prom"
+        not in package.files
     )
 
 
