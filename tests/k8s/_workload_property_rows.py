@@ -191,7 +191,7 @@ def _homepage_with_post_start(command: list[str]) -> dict:
     return {"spec": {"template": {"spec": {"containers": [container]}}}}
 
 
-def _pod_specs(role: str, tpl: str, doc: dict):
+def pod_specs(role: str, tpl: str, doc: dict):
     # The object name is in the key because one template can carry two Deployments (pihole's
     # does), and a key naming only the file would merge them.
     if doc.get("kind") in POD_KINDS:
@@ -236,9 +236,9 @@ def token_path_offence(role: str, mount: dict) -> str | None:
 
 
 # 88 pod templates render, Jobs and CronJobs included. Close enough to notice a contraction.
-_MIN_POD_TEMPLATES = 78
+MIN_POD_TEMPLATES = 78
 # One pod per role the census was written against, so a lost role is named, not counted.
-_POD_TEMPLATES_MUST_FIND = frozenset(
+POD_TEMPLATES_MUST_FIND = frozenset(
     {
         "Deployment/prometheus",
         "Deployment/valheim",
@@ -263,7 +263,7 @@ WORKLOAD_PROPERTIES = (
             "spec, because a grep counts the `automountServiceAccountToken: true` on a "
             "ServiceAccount OBJECT as if it were the pod's."
         ),
-        select=_pod_specs,
+        select=pod_specs,
         offence=_automount_offence,
         red=("nut", {}),
         green=("nut", {"automountServiceAccountToken": False}),
@@ -281,8 +281,8 @@ WORKLOAD_PROPERTIES = (
                 },
             ),
         ),
-        min_matches=_MIN_POD_TEMPLATES,
-        must_find=_POD_TEMPLATES_MUST_FIND,
+        min_matches=MIN_POD_TEMPLATES,
+        must_find=POD_TEMPLATES_MUST_FIND,
     ),
     Property(
         name="pods-disable-service-link-env-vars",
@@ -297,7 +297,7 @@ WORKLOAD_PROPERTIES = (
             "case in this namespace, so every pod template of every kind sets "
             "enableServiceLinks: false, not just `deployment.yaml.j2`."
         ),
-        select=_pod_specs,
+        select=pod_specs,
         offence=_service_links_offence,
         red=("authelia", {}),
         green=("authelia", {"enableServiceLinks": False}),
@@ -305,8 +305,8 @@ WORKLOAD_PROPERTIES = (
             ("authelia", {"enableServiceLinks": True}),
             ("authelia", {"enableServiceLinks": "false"}),
         ),
-        min_matches=_MIN_POD_TEMPLATES,
-        must_find=_POD_TEMPLATES_MUST_FIND,
+        min_matches=MIN_POD_TEMPLATES,
+        must_find=POD_TEMPLATES_MUST_FIND,
     ),
     Property(
         name="service-macro-places-the-namespace",
