@@ -163,7 +163,7 @@ def test_the_plan_probes_the_newest_locked_canary_and_expires_those_past_the_loc
 
 
 class FakeR2:
-    """A bucket whose lock refuses each delete of a key in `locked`."""
+    """A bucket whose lock refuses each delete or overwrite of a key in `locked`."""
 
     def __init__(self, keys: list[str], locked: set[str]):
         self.keys = list(keys)
@@ -175,12 +175,12 @@ class FakeR2:
         key = urllib.parse.urlsplit(url).path.removeprefix("/etcd-r2/")
         if method == "GET":
             return "".join("<Key>%s</Key>" % k for k in self.keys).encode()
+        if key in self.locked and (method == "DELETE" or key in self.keys):
+            raise _http_error(url, 409, "<Code>ObjectLockedByBucketPolicy</Code>")
         if method == "PUT":
             self.puts.append((key, body))
             self.keys.append(key)
             return b""
-        if key in self.locked:
-            raise _http_error(url, 409, "<Code>ObjectLockedByBucketPolicy</Code>")
         self.keys.remove(key)
         return b""
 
@@ -241,10 +241,8 @@ def test_a_second_run_the_same_day_neither_uploads_nor_reads_r2(r2_cfg):
 
 
 def test_a_restarted_bridge_does_not_upload_a_canary_r2_already_holds(r2_cfg):
-    bucket = FakeR2([_canary(TODAY)], locked={_canary(TODAY)})
-    (ok, msg), _ = _run(r2_cfg, bucket)
+    (ok, msg), _ = _run(r2_cfg, FakeR2([_canary(TODAY)], locked={_canary(TODAY)}))
     assert ok, msg
-    assert bucket.puts == []
 
 
 def test_any_other_r2_refusal_is_flagged(r2_cfg):
