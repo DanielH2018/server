@@ -298,7 +298,19 @@ def test_the_operators_zsh_login_raises_the_oom_score_of_what_it_starts(
     profile = tmp_path / "zprofile"
     profile.write_text(edit["block"])
     child = run(
-        ["sh", "-c", '. "$1" && cat /proc/self/oom_score_adj', "-", str(profile)],
+        [
+            "sh",
+            "-c",
+            'cat /proc/self/oom_score_adj && . "$1" && cat /proc/self/oom_score_adj',
+            "-",
+            str(profile),
+        ],
         check=True,
     )
-    assert int(child.stdout) > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
+    before, after = map(int, child.stdout.split())
+    if before > BURSTABLE_POD_MAX_OOM_SCORE_ADJ:
+        pytest.skip(
+            f"pytest already runs at oom_score_adj {before}, which an unprivileged "
+            "process cannot lower, so the write would change nothing to observe"
+        )
+    assert after > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
