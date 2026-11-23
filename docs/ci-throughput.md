@@ -559,6 +559,24 @@ B3 lands in four steps, each one exercised before the next:
    before. A member goes back to the line only behind a holder whose own run is red, so a
    red member is stacked again only while every holder it is stacked behind is red too.
 
+   Red batches ran live, all from landings on daniel-box
+   ([#8983](https://github.com/DanielH2018/server/issues/8983)):
+
+   - **The earliest in the surviving logs, on 2026-11-15.** #8905's landing stacked #8904 and #8906. The batch's run
+     on `2c599e97` was red, and the holder's log reads `the batch is not green: its run is
+     red (2c599e97: CI RED); each of its PRs lands alone`.
+   - **Every member alone, on 2026-11-22 at 23:14 UTC.** #10012's landing stacked #10013,
+     and the batch's run on `cbe30f3b` was red. #10013's log reads `a batch that tested PR
+     #10013 was not green; it lands alone`. #10013 took the turn, got a run of its own, and
+     ended `settled`. #10012's own run was red, so its landing ended `pr-ci-red`. No later
+     landing stacked either PR.
+   - **The split on the holder's own run, on 2026-11-23 at 13:47 UTC**, the first red batch
+     after `_settle` landed. #10046's landing stacked #10048, and the batch's run on
+     `bfa6dc98` was red. #10046's own run passed, so it merged and its log reads `PR
+     #10046's own run was not red, so #10048 each land alone`. #10048's log reads `a batch
+     that tested PR #10048 was not green; it lands alone`. Its own run was red, so its
+     landing ended `pr-ci-red`. The red PR was the member, and no later landing stacked it.
+
 Four facts about the workflows shaped those steps:
 
 - Only the `prek` gate reports on a push to master. The other three required contexts
@@ -830,6 +848,15 @@ and then updated its branch, so the flip started a run on the stale head. The up
 cancelled it, minutes later: #8921's run on `051b6a86` went from 23:05:05 to 23:07:11 before
 the run it merged on started. The landing now updates the branch first, waits up to
 60 s for GitHub to show the new head, and then marks the draft ready.
+
+The reorder ran live on 2026-11-22
+([#8984](https://github.com/DanielH2018/server/issues/8984)). Master had moved 46 paths past
+#9979's base when its landing on daniel-server took the turn. Its log reads `updating its
+branch so CI tests it against master before the merge`, and the next line reads `PR #9979
+was a draft; marked it ready`. GitHub lists only skipped draft runs and one
+`session-milestone` run on the old head `8423d4ce`, and none of them was cancelled. The
+landings of #10012, #10013, #10046 and #10048 logged the same order, and their old heads
+hold no cancelled run either.
 
 #### Runs per merge on 2026-11-19 and 2026-11-20, attributed
 
