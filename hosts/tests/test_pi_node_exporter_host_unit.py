@@ -7,7 +7,7 @@ which monitor-bridge's Pi verdicts read series from (`node_hwmon_*`, `node_files
 the textfile directory, which homelab-updater writes `homelab_host.prom` into and never creates.
 The version's oracle is in the tree: `k8s/roles/node-exporter/defaults/main.yml`. The flags'
 oracle is `CONTAINER_FLAGS` below, a record of what the retired container ran, with the textfile
-collector turned on (H3.6).
+collector turned on (H3.6) and netclass turned on for every device but Docker's.
 
 Run: uv run pytest hosts/tests/test_pi_node_exporter_host_unit.py
 """
@@ -37,8 +37,12 @@ CONTAINER_FLAGS = frozenset(
 )
 # H3.6 turns the textfile collector on, over the directory M3's contract describes.
 TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
-UNIT_FLAGS = (CONTAINER_FLAGS - {"--no-collector.textfile"}) | {
-    f"--collector.textfile.directory={TEXTFILE_DIR}"
+NETCLASS_IGNORED = "^(lo|docker0|br-[0-9a-f]+|veth[0-9a-f]+)$"
+UNIT_FLAGS = (
+    CONTAINER_FLAGS - {"--no-collector.textfile", "--no-collector.netclass"}
+) | {
+    f"--collector.textfile.directory={TEXTFILE_DIR}",
+    f"--collector.netclass.ignored-devices={NETCLASS_IGNORED}",
 }
 CLUSTER_DEFAULTS = K8S_ROLES / "node-exporter" / "defaults" / "main.yml"
 
@@ -81,6 +85,15 @@ def test_a_dropped_collector_flag_is_noticed() -> None:
     assert collector_flags("ExecStart=/x --a --no-collector.wifi", UNIT_ONLY) != (
         collector_flags("- '--a'\n", CONTAINER_ONLY)
     )
+
+
+def test_netclass_keeps_the_lan_nic_and_skips_dockers_devices() -> None:
+    flag = re.search(r"--collector\.netclass\.ignored-devices=(\S+)", _shipped(UNIT))
+    assert flag, "the unit sets no netclass device filter"
+    ignored = re.compile(flag.group(1))
+    kept = {"enx000ec6ac2fc4", "wlan0"}
+    skipped = {"lo", "docker0", "br-052f5ae7d41c", "veth0f4c841"}
+    assert {d for d in kept | skipped if not ignored.search(d)} == kept
 
 
 def test_the_host_binary_pins_the_version_the_cluster_pins() -> None:
