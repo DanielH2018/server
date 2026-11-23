@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-pi with its enable link. Every minute, so a hard reboot loses at most
+# the last minute of warnings plus Alloy's 5s batch wait.
+[Unit]
+Description=Copy the Pi journal's warning-and-above lines every minute
+
+[Timer]
+OnCalendar=*:*:00
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

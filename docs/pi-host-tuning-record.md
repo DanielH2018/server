@@ -526,6 +526,46 @@ Adding this stream meant excluding it from monitor-bridge's Loki file-tail arm
 (`machine!="daniel-pi"` in `LOKI_STREAM`) — a Pi stream under `job="syslog"` would otherwise
 stop a total cluster file-tail outage from ever reaching that arm's zero threshold.
 
+### The journal's warnings reach Loki through the same file source
+
+The journal lives in log2ram's tmpfs, so a hard reboot or a power loss erases
+everything since log2ram's last daily sync. On 2026-11-22 the Pi swap-thrashed
+for four hours and rebooted at 00:36, and no kernel, OOM or systemd line from
+that window survived anywhere (#10005).
+
+`homelab-pi-journal-warnings.timer` runs every minute. Its service runs
+`journalctl -b -p warning --cursor-file=…` and appends the new lines to
+`/var/log/pi-health/journal.log`, inside the `pi_health` glob, so Alloy ships
+them with the verdict lines. `-o short-iso` writes the two-token prefix
+`_SYSLOG_LINE_RE` reads, and the parser ignores a line with no `status=` token.
+The warning floor holds about 100 lines and 8 KB a day. The notice floor is
+about 1,440 lines a day, mostly the heartbeats' own stdout.
+
+- **The cursor sits in `/run`, and every run passes `-b`.** A cursor kept on the
+  SD card would point into the journal log2ram restored from its last sync,
+  which no longer holds the boot that was lost. The first run after a boot
+  ships that boot's warnings so far. The copy writes nothing to the SD card.
+- **No journal reader in Alloy.** `test_the_journal_is_not_shipped` holds that
+  ruling, and its reason is the container's memory, not the line volume.
+- **The journal stays on the tmpfs.** A journal on the card would sit outside
+  the log2ram size guard that the caps above are sized against, and would write
+  the card every sync interval.
+- **Lost read access fails the unit.** Without access to the system journal,
+  `journalctl -q` prints only the service user's own journal and exits 0. An
+  `ExecStartPre=` opens `system.journal` with `head -c0`, so the unit fails
+  instead and `systemd-units-check` reports it. Do not swap in `test -r`: the
+  Pi's `test` comes from `coreutils-from-uutils`, ignores the journal's ACL and
+  reports the readable file as unreadable.
+- **The window it cannot close** is the last minute before a hard reboot, plus
+  Alloy's 5s batch wait.
+- **dockerd's lines are not in it.** dockerd writes to stderr at priority 6, so
+  `pi-recovery-health`'s DOWN record stays the copy of the daemon's failure
+  lines.
+
+To read the lines, query
+`{machine="daniel-pi", filename="/var/log/pi-health/journal.log"}`: Alloy's file
+source labels each stream with the path it tails.
+
 **Two steps activate a new heartbeat**: the Pi installs the `homelab-daniel-pi` version that
 ships it, and `promote` publishes the `observability` rules that read its verdict. Do both close
 together, or the fresh `NotReporting` rule pages until the first heartbeat lands.
