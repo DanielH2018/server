@@ -37,8 +37,6 @@ acl k3s_port port 6443
 acl t2_https dstdomain api.anthropic.com
 acl t2_https dstdomain api.github.com
 acl t2_https dstdomain results-receiver.actions.githubusercontent.com
-# TODO: https://github.com/DanielH2018/server/issues/9181 - name the caller of cafe.github.com.
-acl t2_https dstdomain cafe.github.com
 # The triage session's kubeconfig names the k3s API by daniel-box's LAN address.
 acl t2_k3s dst {{ server_ip }}
 {% for read in reads %}

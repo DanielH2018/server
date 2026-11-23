@@ -177,6 +177,12 @@ def test_no_session_sends_claude_codes_nonessential_traffic(box):
         ), unit
 
 
+def test_no_session_sends_gh_telemetry(box):
+    """gh posts its telemetry to cafe.github.com, which the egress allowlist leaves out."""
+    for unit in SESSION_UNITS:
+        assert "Environment=GH_TELEMETRY=false\n" in rendered(box, unit), unit
+
+
 def test_without_a_proxy_address_no_session_names_one(box_off):
     for unit in SESSION_UNITS:
         text = rendered(box_off, unit)
@@ -206,7 +212,6 @@ ALLOWED_HOSTS = frozenset(
         "api.anthropic.com",
         "api.github.com",
         "results-receiver.actions.githubusercontent.com",
-        "cafe.github.com",
     }
 )
 

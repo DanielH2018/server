@@ -72,6 +72,20 @@ observability's `bridge-exporter.yaml`** for it to page
 `runbook_url` follow the row's columns
 (`k8s/roles/monitor-bridge/tests/test_bridge_row_rules.py::test_every_rows_rule_follows_its_row`).
 
+## Autonomous-role contract (the one row that writes)
+
+The `r2_etcd_lock` row is the bridge's only write. Every other row reads.
+
+- **Scope.** It uploads one zero-byte `etcd-snapshots/lock-canary-<date>` a day to the R2
+  bucket, and deletes only keys under that prefix
+  (`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`). A non-empty canary would
+  read to k3s as a ready snapshot
+  (`k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py::test_a_refused_delete_of_yesterdays_canary_is_clean`).
+- **Abort valve.** Empty `R2_S3_KEY_ID` or `R2_S3_SECRET_KEY` disables the row. Each verdict
+  holds for `R2_LOCK_PROBE_INTERVAL_S`, so a missing lock never churns canaries per cycle.
+- **Required evidence.** The row's verdict, and `R2EtcdLockNotHolding` while it is down.
+- **Next-run review.** `probe.py monitors --checks r2_etcd_lock` prints the last run's note.
+
 ## The two exporters
 
 `files/verdict_export.py` serves the check verdicts, each down row's failing members and the

@@ -10,16 +10,20 @@ Type=oneshot
 # This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
 SyslogLevel=notice
 User={{ sys_user }}
-# Sandbox: a narrow notifier — queries open PRs over HTTPS and writes ONLY its state dir — so it
-# can be confined, unlike the gitops-deploy unit which deploys the whole fleet. Limits blast radius
-# because it parses attacker-influenceable API JSON. The state directory is the only writable path (last_run/last_notified markers);
-# the script + config are read-only (reads are always allowed under ProtectSystem).
+# Sandbox: a narrow notifier — queries open PRs over HTTPS and writes only its state dir and its
+# gh-quota ledger — so it can be confined, unlike the gitops-deploy unit which deploys the whole
+# fleet. Limits blast radius because it parses attacker-influenceable API JSON. The script +
+# config are read-only (reads are always allowed under ProtectSystem).
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
 StateDirectory=renovate-notify
 StateDirectoryMode=0750
+# github_rest.github_get counts each read in the gh-quota ledger there. The directory is sticky,
+# so the notifier cannot rewrite another user's ledger. The gh-quota component creates it, and
+# `-` lets the notifier start on a host without that component.
+ReadWritePaths=-/var/lib/gh-quota
 Environment=PYTHONDONTWRITEBYTECODE=1
 # uv opens its cache for WRITE at startup on every invocation, warm or cold, and the cache
 # defaults to $HOME/.cache/uv — which ProtectHome=read-only above makes unwritable. Without this

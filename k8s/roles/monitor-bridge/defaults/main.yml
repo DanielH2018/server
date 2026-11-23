@@ -48,6 +48,7 @@ monitor_bridge_modules:
   - bridge/net.py
   - bridge/sources.py
   - bridge/streaks.py
+  - bridge/sigv4.py
   - checks/b2.py
   - checks/r2.py
   - checks/host_thermal.py
@@ -144,6 +145,9 @@ render_secrets:
       healthchecks_api_read_only_key: healthchecks_api_read_only_key
       # Uptime Robot's read-only API key: it serves every `get*` method and changes nothing.
       uptimerobot_api_key: uptimerobot_api_key # gitleaks:allow — a SOPS key NAME, not a value
+      # The R2 S3 key Longhorn and k3s write with. The R2 etcd lock row uploads and deletes
+      # its canaries under etcd-snapshots/ with it.
+      r2_s3_secret_key: r2_secret_access_key # gitleaks:allow — a SOPS key NAME, not a value
   # The bridge's API keys, webhooks and SMTP login, consumed by `envFrom`, so every key
   # becomes an env var. A credential that must stay out of the environment goes in
   # monitor-bridge-credentials. Every other setting is a plain `env:` value from
@@ -170,3 +174,4 @@ render_secrets:
       SMTP_PASSWORD: smtp_notify_app_password
       CF_ACCOUNT_ID: r2_account_id
       R2_BUCKET: r2_bucket
+      R2_S3_KEY_ID: r2_access_key_id

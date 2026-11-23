@@ -68,3 +68,11 @@ class Sources:
     ) -> JsonValue:
         """POST `payload` as JSON to `url` and parse the JSON response."""
         return bridge.net._post_json(url, payload, headers, opener=self.opener)
+
+    def send(
+        self, method: str, url: str, headers: dict[str, str], body: bytes | None = None
+    ) -> bytes:
+        """Send `method url` with `body` and return the raw response, with `get_json`'s errors."""
+        return bridge.net._request(
+            url, headers, self.opener, lambda resp: resp.read(), method, body
+        )

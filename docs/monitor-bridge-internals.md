@@ -156,6 +156,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 7. `uptimerobot_api_key`: Uptime Robot's **read-only** API key (Dashboard → Integrations & API
    → API), tier `assisted`. The `uptime_robot_monitors` check only lists the monitors, so it
    must never hold the main key, which can edit and delete them.
+8. `r2_access_key_id` / `r2_secret_access_key`: the R2 S3 key Longhorn and k3s write with, which
+   the `r2_etcd_lock` row uploads and deletes its canaries with. No separate key: the canary
+   proves the lock against the key the lock must bind.
 
 ## The module table
 
@@ -171,8 +174,9 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `host_packages`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `domain_registration`, `uptime_robot`, `wan`. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, IoConfig)`, `load_config(env)`; one builder per domain |
-| `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `prom_scalar`, `prom_vector`, and `loki_count`. Every helper that reads a URL takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
-| `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `get_json`, `get_bytes`, `post_json`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |
+| `bridge/net.py` | the transport: `_get_json`, `_get_bytes`, `_post_json`, `_request` (any method, raw body), `prom_scalar`, `prom_vector`, and `loki_count`. Every helper that reads a URL takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
+| `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `get_json`, `get_bytes`, `post_json`, `send`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |
+| `bridge/sigv4.py` | `sign()`, the AWS SigV4 headers for an S3 request, which the `r2_etcd_lock` row signs its R2 requests with. `tests/test_sigv4.py` holds it to signatures `curl --aws-sigv4` produced |
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), and `down_streak` (the consecutive-down step) |
 | `bridge/common.py` | `_env`, `sanitize` and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |

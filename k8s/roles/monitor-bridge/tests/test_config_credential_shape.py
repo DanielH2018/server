@@ -38,13 +38,15 @@ _NOT_A_CREDENTIAL: frozenset[str] = frozenset()
 
 # The non-vacuity anchor. A census that finds nothing — a broken pattern, a moved module, a
 # `Config` that failed to compose its bases — makes every assertion below vacuously true. These
-# are the 16 credential-bearing fields marked `repr=False`; the census must still contain all of
+# are the 18 credential-bearing fields marked `repr=False`; the census must still contain all of
 # them, and the failure message names whichever went missing.
 _KNOWN_CREDENTIAL_FIELDS = frozenset(
     {
         "B2_PROBE_KEY_ID",
         "B2_PROBE_APPLICATION_KEY",
         "CF_ANALYTICS_TOKEN",
+        "R2_S3_KEY_ID",
+        "R2_S3_SECRET_KEY",
         "DISCORD_WEBHOOK_URL",
         "DISCORD_CROWDSEC_WEBHOOK_URL",
         "DISCORD_GITOPS_WEBHOOK_URL",
