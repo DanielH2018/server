@@ -136,7 +136,7 @@ traefik_k8s_mem_request: 192Mi
 # The static config reads the plugin version from this var, so the annotation below is the
 # only place Renovate learns it.
 # renovate: datasource=github-releases depName=maxlerebourg/crowdsec-bouncer-traefik-plugin
-traefik_k8s_bouncer_plugin_version: v1.7.1
+traefik_k8s_bouncer_plugin_version: v1.8.2
 
 # The Cloudflare real-IP middleware: an in-repo Traefik local plugin (files/cloudflare-realip/),
 # not a downloaded one, so it has no version to pin — git holds its source. The name is the key

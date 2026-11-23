@@ -120,7 +120,7 @@ authelia_k8s_agent_collections: LePresidente/authelia
 authelia_k8s_agent_cpu_limit: "0.5"
 authelia_k8s_agent_mem_limit: 256Mi
 authelia_k8s_agent_cpu_request: 50m
-authelia_k8s_agent_mem_request: 96Mi
+authelia_k8s_agent_mem_request: 64Mi
 # Bounds a runaway auth log on the emptyDir shared with the sidecar.
 authelia_k8s_log_size: 512Mi
 
