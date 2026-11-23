@@ -281,3 +281,36 @@ def test_each_fleet_uids_user_manager_gets_the_oom_drop_in_and_no_restart(
         assert oom_score_adjust(text) > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
     units = json.loads(files["/usr/lib/homelab/manifest.json"][0])["units"]
     assert not {f"user@{uid}.service" for uid in uids} & set(units)
+
+
+@pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
+def test_the_operators_zsh_login_raises_the_oom_score_of_what_it_starts(
+    host: str, tmp_path
+) -> None:
+    """The operator's ssh login is a zsh login shell, which inherits sshd's 0."""
+    from lib.proc_testing import run
+    from renderer.renderer_lib import host as host_mode
+
+    package = host_mode.render_host(host)
+    (edit,) = [e for e in package.lines if e["path"] == "/etc/zsh/zprofile"]
+    # The arm would create a missing /etc/zsh 0700, so zsh has to install the file first.
+    assert "zsh" in package.depends
+    profile = tmp_path / "zprofile"
+    profile.write_text(edit["block"])
+    child = run(
+        [
+            "sh",
+            "-c",
+            'cat /proc/self/oom_score_adj && . "$1" && cat /proc/self/oom_score_adj',
+            "-",
+            str(profile),
+        ],
+        check=True,
+    )
+    before, after = map(int, child.stdout.split())
+    if before > BURSTABLE_POD_MAX_OOM_SCORE_ADJ:
+        pytest.skip(
+            f"pytest already runs at oom_score_adj {before}, which an unprivileged "
+            "process cannot lower, so the write would change nothing to observe"
+        )
+    assert after > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
