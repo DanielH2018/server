@@ -110,6 +110,11 @@ defaults:
   #                      No cgroup caps k3s or the host's processes. The 7Gi sums Longhorn
   #                      instance-manager's 7-day p95 working set (1565 MiB), system.slice anon
   #                      (1.9 GiB: k3s-server, containerd) and user.slice anon (3.7 GiB).
+  #                      seccomp-default gives the runtime's default seccomp profile to every
+  #                      container whose pod sets none. The kubelet applies it when it creates
+  #                      a container, so a pod running at k3s's start keeps what it had until
+  #                      it is recreated. A privileged container is never confined, and a pod
+  #                      that sets `Unconfined` keeps it.
   #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
   #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
   #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
@@ -152,6 +157,7 @@ defaults:
       - image-gc-low-threshold=55
       # DECIDED: user.slice counts. The Claude sessions there compete with pods for memory.
       - system-reserved=memory=7Gi
+      - seccomp-default=true
     secrets-encryption: true
     etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
     kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"

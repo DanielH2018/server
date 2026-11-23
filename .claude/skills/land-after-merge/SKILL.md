@@ -161,9 +161,10 @@ merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `lan
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
-operator clears it, once a red master CI goes green, or once a live serial landing ends, run
-`cc-wait landing-clear` in the background and re-run the same `land.sh` command when it ends
-0. `probe.py landing` names the same blockers and exits 1 while one holds. It ends 1 as
+operator clears it or once a red master CI goes green, run `cc-wait landing-clear` in the
+background and re-run the same `land.sh` command when it ends 0. `probe.py landing` names the
+same blockers and exits 1 while one holds. A live serial landing is neither's blocker:
+`land.sh` waits in line behind it. It ends 1 as
 `gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A

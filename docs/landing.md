@@ -167,16 +167,18 @@ name is taken. Two landings that go on without the lock therefore still write tw
 
 ### Rules that refuse a merge
 
-**Three rules refuse a merge inside the landing turn.** A landing checks them when a draft
-takes the turn, before its CI run, and again just before the merge. A refused landing exits
-75 with `VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
+**Three rules bar a merge inside the landing turn.** A landing checks them when a draft
+takes the turn, before its CI run, and again just before the merge. A bar a wait can clear
+is waited out first, as the bullets below say. A refused landing exits 75 with
+`VERDICT: refused` and merges nothing; re-run the same command once the rule clears.
 `slots._bar` owns the rules, and each read that fails bars nothing.
 
 - A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
   anything but `none`.
-- A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
-  takes the serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
-  until its process ends, so every other PR is refused meanwhile. `live_limit.kind` decides
+- A serial PR is refused while another landing holds a slot, and waits while another landing
+  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise it takes the
+  serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
+  until its process ends, so every other PR waits meanwhile. `live_limit.kind` decides
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
   forward-only pins, the `flux` role, the cluster-vars file, or a path in
   `live_limit.SERIAL_PATHS`.
@@ -188,16 +190,19 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   what a serial PR changes from `live_limit.SERIAL_WHAT`.
 - A landing that takes the serial lock writes its PR number into
   `/run/lock/homelab-land-serial.holder` beside it. `serial_lock.serial_landing` reads the
-  lock and that number without taking the lock, and it is the one read both `probe.py landing`
-  and `cc-wait landing-clear` make. Both report a live serial landing as a blocker in the
-  words of `landing_blockers.blockers`, and the probe exits 1 with `PROBE-VERDICT: fail` while
-  the lock is held. The number is trusted only while that PR's own lock is held, because the
-  file outlives the landing that wrote it. A holder that could not write its number reads as
-  `a serial landing is live`, with no PR. Until 2026-11-20 the probe counted only
-  `DEPLOY_HOLD` and master CI, so it ended `ok` while
-  [#9418](https://github.com/DanielH2018/server/pull/9418) held the lock, and a coordinator
-  read that as leave to re-land two parked PRs
-  ([#9434](https://github.com/DanielH2018/server/issues/9434)).
+  lock and that number without taking the lock. `probe.py landing` names a live serial
+  landing in its text view and marks its run `(serial)`, but it does not count it as a
+  blocker, and `cc-wait landing-clear` does not read the lock. The number is trusted only
+  while that PR's own lock is held, because the file outlives the landing that wrote it. A
+  holder that could not write its number reads as `a serial landing is live`, with no PR.
+  From 2026-11-20 to 2026-11-23 both tools counted a live serial landing as a blocker, after
+  a coordinator re-landed two parked PRs while
+  [#9418](https://github.com/DanielH2018/server/pull/9418) held the lock
+  ([#9434](https://github.com/DanielH2018/server/issues/9434)). Once every landing waited in
+  line behind the serial lock instead of refusing
+  ([#10010](https://github.com/DanielH2018/server/issues/10010)), a re-land under it costs
+  nothing, so the blocker only stopped sessions before a `land.sh` that would have waited
+  itself ([#10031](https://github.com/DanielH2018/server/issues/10031)).
 - The cost was first measured on 2026-11-20, when two PRs that change the file landed in
   a row. [#9386](https://github.com/DanielH2018/server/pull/9386) merged at 00:05 UTC and
   ended `settled` at 00:29. [#9418](https://github.com/DanielH2018/server/pull/9418)
@@ -221,6 +226,19 @@ takes the turn, before its CI run, and again just before the merge. A refused la
   four times each under the rule without the wait, each time after up to 82 minutes in line.
   Inside the no-promotion window, under `DEPLOY_HOLD`, and in a landing that went on without
   the turn, a serial PR is still refused at once.
+- Every PR waits in line while another landing holds the serial lock, instead of refusing.
+  It gives the landing turn back for the wait, because the serial landing may need the turn
+  again before its merge, and its log prints `waiting in line for the serial landing to
+  end`. It asks for the turn again once the lock is free, and reads the rules once more in
+  the turn. A ready head that master moved past meanwhile rejoins the line as a draft, as
+  after a rate-limit wait. The wait runs until the landing's two merge budgets run out,
+  which `LAND_DEADLINE` counts, then refuses. It is not capped at `slots.DRAIN_S`, which
+  measures merge to verdict: the serial lock is held from the serial draft's turn, through
+  its CI run, its merge and its deploy. A draft waits before its run, so it spends no run beside
+  the serial landing. Inside the no-promotion window the serial landing cannot reach its
+  verdict, so a k8s PR there is still refused at once. On 2026-11-20, 20 of the day's 28
+  `refused` verdicts came from landing under a live serial landing
+  ([#10010](https://github.com/DanielH2018/server/issues/10010)).
 - A PR that changes a k8s role is refused inside the no-promotion window around the weekly
   reboot while another landing holds a slot, so one landing at a time waits out the window.
 

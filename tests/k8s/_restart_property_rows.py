@@ -1,4 +1,4 @@
-"""Rendered-manifest property rows about how a container recovers before the kubelet restarts it.
+"""Rendered-manifest property rows about how and when a container restarts.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
@@ -41,6 +41,18 @@ def _z2m_container(watchdog: str | None) -> tuple[str, dict]:
     return "zigbee2mqtt", {"env": env, "livenessProbe": {"periodSeconds": 30}}
 
 
+def _job_pod_specs(role: str, tpl: str, doc: dict):
+    if doc.get("kind") in {"Job", "CronJob"}:
+        yield f"{doc['kind']}/{doc['metadata']['name']}", pod_spec(doc)
+
+
+def _restart_policy_offence(role: str, spec: dict) -> str | None:
+    policy = spec.get("restartPolicy")
+    if policy == "Never":
+        return None
+    return f"restartPolicy is {policy!r}, not 'Never'"
+
+
 RESTART_PROPERTIES = (
     Property(
         name="zigbee2mqtt-restarts-in-process-on-a-coordinator-reset",
@@ -57,5 +69,27 @@ RESTART_PROPERTIES = (
         green=_z2m_container("0.05,0.25,0.5"),
         more_red=(_z2m_container("3s,15s"), _z2m_container("1,5")),
         must_find=frozenset({"zigbee2mqtt"}),
+    ),
+    Property(
+        name="job-restart-policy-is-never",
+        reason=(
+            "observability's homelab:pod_service:info leaves a Job-owned pod outside the "
+            "add-on namespaces out of its domain, because under `restartPolicy: Never` the "
+            "kubelet never restarts a Job's container in place, so the crash-loop arm has "
+            "nothing to read there. `OnFailure` restarts it in place, which would put a "
+            "restarting pod outside the workload-service mapping. Keep Never, or add the "
+            "Job hop to files/rules/workload-service.yaml first; "
+            "k8s/roles/observability/CLAUDE.md, 'Alert plane', has the reasoning."
+        ),
+        select=_job_pod_specs,
+        offence=_restart_policy_offence,
+        red=("pi-peer-backup", {"restartPolicy": "OnFailure"}),
+        green=("pi-peer-backup", {"restartPolicy": "Never"}),
+        # A pod template with no restartPolicy is refused by the API for a Job, but the
+        # predicate must not read the gap as Never either.
+        more_red=(("pi-peer-backup", {}),),
+        # 9 Jobs and CronJobs render (measured by an impossible floor; netpol-baseline's probe Job was the tenth). The floor is the count.
+        min_matches=9,
+        must_find=frozenset({"CronJob/pi-peer-backup", "CronJob/crowdsec-home-ips"}),
     ),
 )

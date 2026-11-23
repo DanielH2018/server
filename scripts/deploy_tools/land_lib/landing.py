@@ -122,7 +122,7 @@ class Landing:
         # Gives the turn up for the length of the wait it is handed, then takes it again
         # (`turn.held`). Set only while this landing holds the turn, and for a batch member to
         # the call that gives the holder's turn up and ends the batch (`batch.py`).
-        self.step_out_of_turn: Callable[[Callable[[], Any]], Any] | None = None
+        self.step_out_of_turn: Callable[[Callable[[], Any], str], Any] | None = None
         # Set once a wait stepped out of the turn, because master may have moved meanwhile;
         # the merge wait clears it when it checks the head against master before its merge.
         self.turn_interrupted = False
@@ -178,14 +178,19 @@ class Landing:
         """
         return gh_read.read(call, self.tools.sleep, label, self.without_turn)
 
-    def without_turn[T](self, wait: Callable[[], T]) -> T:
+    def without_turn[T](
+        self, wait: Callable[[], T], reason: str = "to wait out GitHub's rate limit"
+    ) -> T:
         """`wait()`, with the landing turn given back for its length when this landing holds it.
 
-        A landing that holds the turn gives it back, so no landing behind it waits out the same
-        rate limit, and asks for it again once `wait` returns, so the work that waited goes on
-        in the turn. It then sets `turn_interrupted`.
+        A landing that holds the turn gives it back, so no landing behind it waits through the
+        same wait, and asks for it again once `wait` returns, so the work that waited goes on
+        in the turn. It then sets `turn_interrupted`. The log names `reason`, which completes
+        "gave the landing turn back".
         """
-        return self.step_out_of_turn(wait) if self.step_out_of_turn else wait()
+        if self.step_out_of_turn:
+            return self.step_out_of_turn(wait, reason)
+        return wait()
 
     def view(self, fields: str) -> PrView:
         """This PR's `fields`, in the shape `gh pr view --json <fields>` gives, or die.

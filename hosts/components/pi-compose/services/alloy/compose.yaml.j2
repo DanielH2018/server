@@ -38,7 +38,10 @@
       measure: sdjournal mmaps the journal files, and here those sit on the 128 MB log2ram
       tmpfs, so the mapped window counts in this process's RSS while the physical pages stay
       journald's. The metric and the cgroup cap would disagree, and only a deployed
-      before/after on this host settles it. The daemon-failure evidence the
+      before/after on this host settles it. The journal's warning-and-above lines reach Loki
+      without the reader: `homelab-pi-journal-warnings` (`hosts/components/pi-heartbeats/`)
+      copies them into `/var/log/pi-health/journal.log` every minute, inside the `pi_health`
+      glob. dockerd logs at priority 6, so that copy misses it. The daemon-failure evidence the
       journal would have carried reaches Loki another way: when dockerd stops answering,
       `pi-recovery-health` (`hosts/components/pi-heartbeats/`) appends the newest non-info
       `journalctl -u docker` lines to its own DOWN record, which the `pi_health` source in
