@@ -31,9 +31,26 @@ not merge gets a full run before anything else lands it (`_full_run`).
 `LAND_BATCH=0` turns batches off for one landing. Such a landing forms none, and it can
 still be a member of another landing's batch.
 
-A batch never makes a landing fail. A batch that cannot be formed, a run that is red and a
-member that cannot merge each leave the PRs concerned to land alone, as they would have
-without the batch. The holder's own landing goes on with its own PR either way.
+A batch never makes a landing fail. A batch that cannot be formed and a member that cannot
+merge each leave the PRs concerned to land alone, as they would have without the batch. The
+holder's own landing goes on with its own PR either way.
+
+A batch whose run is not green splits in two: the holder's PR and its members. The holder
+forms no second batch, so its next run tests its PR alone, and that run says which side
+holds the red PR (`_settle`). Until it does, each member's place reads `split`, so no
+other holder stacks it. When the run is red, the red PR was the holder's own, and the
+members go back to the line for the next holder to stack. Otherwise the red PR is among the
+members, or the run's verdict was never read, and each member lands alone. The split costs
+no run the members landing alone would not: the holder's own run happens either way. A
+member goes back to the line only behind a holder whose own run is red, so a red member is
+stacked again only while every holder it is stacked behind is red too.
+
+A member's gh read that GitHub refuses for its rate waits out the limit with the holder's turn
+given back (`Landing.without_turn`), so no landing behind the holder waits through it. Master
+may move during that wait, so the batch ends with it. While the batch forms, the holder forms
+none and lands its PR alone. While it merges, that member and the ones after it land alone.
+The holder's own rate-limit wait keeps the batch, because the holder reads master again after
+it, unless the holder could not take the turn back. The batch then ends the same way.
 
 A holder whose landing code is older than master's forms its batch from master's code: it hands
 the turn to a landing of its PR from a fresh checkout (`turn.HandOver`), which forms the batch.
@@ -46,7 +63,9 @@ member that would not fit lands alone.
 """
 
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 
 
 from deploy_tools import await_ci
@@ -61,7 +80,7 @@ from deploy_tools.land_lib import (
     turn,
 )
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonValue, as_object
 
@@ -90,6 +109,28 @@ class Member:
 
     ln: Landing
     head: str
+
+
+# Why a holder stops its batch once its own rate-limit wait could not take the turn back.
+_TURN_LOST = "this landing could not take the landing turn back after a rate-limit wait"
+
+
+class _TurnGivenBack(Outcome):
+    """A member's rate-limit wait gave the holder's landing turn back, which ends the batch."""
+
+
+def _wait_without_turn[T](
+    holder: Landing, member: Landing, wait: Callable[[], T], reason: str
+) -> T:
+    """`wait()` for the PR `member` lands, with the turn `holder` holds given back meanwhile.
+
+    Raises:
+        _TurnGivenBack: always, once the wait returns.
+    """
+    holder.without_turn(wait, reason)
+    pr = member.opts.pr
+    why = f"a rate-limit wait on PR #{pr}'s reads gave the landing turn back"
+    raise _TurnGivenBack(1, f"PR #{pr} — {why}", error=why)
 
 
 def members_line(numbers: list[str]) -> str:
@@ -138,6 +179,7 @@ def _admit(ln: Landing, pr: str, head: str) -> Member | None:
     """The draft `pr` as a member, or None, with the reason said, when it lands alone."""
     opts = replace(ln.opts, pr=pr, subject="", merge_timeout=MEMBER_TIMEOUT_S)
     member = Landing(opts, ln.tools, ln.classifier)
+    member.step_out_of_turn = partial(_wait_without_turn, ln, member)
     say(f"checking PR #{pr} from the line, as this landing checked its own PR")
     try:
         why = (
@@ -149,6 +191,8 @@ def _admit(ln: Landing, pr: str, head: str) -> Member | None:
             merge.arm_merge(member)
         if not why and member.pinned_head not in ("", head):
             why = "the landing policy checked another head"
+    except _TurnGivenBack:
+        raise
     except Outcome as exc:
         why = exc.error
     if why:
@@ -169,8 +213,15 @@ def _members(ln: Landing, head: str) -> list[Member]:
     places = [row.split() for row in rows]
     # Another landing of this landing's own PR may stand in the line too.
     waiting = [p for p in places if len(p) == 2 and p[0] != ln.opts.pr]
+    if not waiting:
+        say(f"no batch: no other draft stands in the line behind PR #{ln.opts.pr}")
+        return []
     # `_merge_members` merges a member only inside this landing's two merge budgets.
-    if not waiting or ln.opts.merge_timeout < MEMBER_TIMEOUT_S:
+    if ln.opts.merge_timeout < MEMBER_TIMEOUT_S:
+        say(
+            f"no batch: merge_timeout={ln.opts.merge_timeout}s is under the "
+            f"{MEMBER_TIMEOUT_S}s one member's merge may take"
+        )
         return []
     # DECIDED: the landing's code is compared with master here, once, and not again before a
     # member's merge. Until the last member merges, master moves only by this batch's own
@@ -233,28 +284,30 @@ def _drop_branch(ln: Landing, branch: str, may_be_gone: bool = False) -> None:
             )
 
 
-def _stack(
-    ln: Landing, branch: str, head: str, members: list[Member]
-) -> tuple[str, str]:
-    """Build `branch`: master, then `head`, then each member that merges onto it.
-
-    A member that conflicts with the PRs before it is removed from `members` and said.
-
-    Returns:
-        The master commit the branch starts at and the branch's tip. The tip is "" when the
-        holder's own head does not merge.
-    """
+def _master_tip(ln: Landing) -> str:
     ref = ln.read(
         lambda: _api(ln, "GET", f"git/ref/heads/{BRANCH}", jq="{sha: .object.sha}"),
         "gh api git/ref",
     )
-    base = str(as_object(ref, BRANCH).get("sha") or "")
+    return str(as_object(ref, BRANCH).get("sha") or "")
+
+
+def _stack(
+    ln: Landing, branch: str, base: str, head: str, members: list[Member]
+) -> str:
+    """Build `branch`: the master commit `base`, then `head`, then each member that merges.
+
+    A member that conflicts with the PRs before it is removed from `members` and said.
+
+    Returns:
+        The branch's tip, or "" when the holder's own head does not merge.
+    """
     # An earlier landing of this PR may have left its branch behind.
     _drop_branch(ln, branch, may_be_gone=True)
     _api(ln, "POST", "git/refs", f"ref=refs/heads/{branch}", f"sha={base}")
     tip = _merge_into(ln, branch, head, ln.direct_merge_subject)
     if not tip:
-        return base, ""
+        return ""
     for member in list(members):
         merged = _merge_into(ln, branch, member.head, member.ln.direct_merge_subject)
         if merged:
@@ -265,7 +318,7 @@ def _stack(
                 f"leaving PR #{member.ln.opts.pr} out of the batch: it does not merge "
                 "onto the PRs stacked before it"
             )
-    return base, tip
+    return tip
 
 
 def _await_run(ln: Landing, tip: str) -> tuple[int, str]:
@@ -333,14 +386,23 @@ def form(ln: Landing, head: str) -> int:
         The seconds the batch's run took; 0 when no run was started.
     """
     pr = ln.opts.pr
-    members = _members(ln, head)
+    ln.ledger.batch = 1
+    try:
+        members = _members(ln, head)
+    except _TurnGivenBack as exc:
+        say(f"no batch: {exc.error}; PR #{pr} lands alone")
+        return 0
     if not members:
         return 0
     branch = f"queue/{pr}"
     waited = 0
     try:
         try:
-            base, tip = _stack(ln, branch, head, members)
+            base = _master_tip(ln)
+            if ln.give_back_turn is None:
+                say(f"no batch: {_TURN_LOST}; PR #{pr} lands alone")
+                return 0
+            tip = _stack(ln, branch, base, head, members)
             if not tip:
                 say(f"no batch: PR #{pr}'s own head does not merge onto {BRANCH}")
             if not tip or not members:
@@ -364,11 +426,16 @@ def form(ln: Landing, head: str) -> int:
                 jq="{number}",
             )
             say(f"testing {named} in one run, stacked on {base[:8]} as {branch}")
+            ln.ledger.batch = len(numbers)
             waited, why = _await_run(ln, tip)
             if why:
-                say(f"the batch is not green: {why}; each of its PRs lands alone")
+                say(
+                    f"the batch is not green: {why}; PR #{pr}'s own run says whether "
+                    "the red PR is its own or one of the others"
+                )
+                ln.lands_alone, ln.split_members = True, members
                 for member in members:
-                    _answer(ln, member, line.ALONE)
+                    _answer(ln, member, line.SPLIT)
                 return waited
             _label(ln, pr)
         finally:
@@ -387,7 +454,26 @@ def _answer(ln: Landing, member: Member, what: str) -> None:
     try:
         turn.line_of(ln)("answer", pr, member.head, what)
     except OSError as exc:
-        say(f"could not tell PR #{pr}'s landing that it is {what} ({exc})")
+        say(f"could not write {what or 'no answer'} into PR #{pr}'s place ({exc})")
+
+
+def _settle(ln: Landing, own_red: bool) -> None:
+    """Answer the members of this landing's batch that was not green, by its own run.
+
+    Args:
+        own_red: Whether this landing's PR ended with its own run red. The members' places
+            then go back to no answer, and the next holder may stack them.
+    """
+    members, ln.split_members = ln.split_members, []
+    if not members:
+        return
+    named = " ".join(f"#{member.ln.opts.pr}" for member in members)
+    if own_red:
+        say(f"PR #{ln.opts.pr}'s own run is red too, so {named} go back to the line")
+    else:
+        say(f"PR #{ln.opts.pr}'s own run was not red, so {named} each land alone")
+    for member in members:
+        _answer(ln, member, "" if own_red else line.ALONE)
 
 
 def _merge_commit(ln: Landing) -> str:
@@ -412,6 +498,8 @@ def _merge_member(ln: Landing, member: Member, before: Landing) -> str:
     labelled = False
     try:
         member.ln.tested_on = _merge_commit(before)
+        if ln.give_back_turn is None:
+            return _TURN_LOST
         if not member.ln.tested_on:
             return f"PR #{before.opts.pr}'s merge commit could not be read"
         waiting = turn.line_of(ln)("waiting", str(line.FRESH_S)).splitlines()
@@ -481,14 +569,19 @@ def land(ln: Landing, take_turn: merge.TakeTurn) -> None:
                 # DECIDED: a batch never fails the landing that forms it.
                 say(f"the landing batch failed ({exc!r}); PR #{ln.opts.pr} lands alone")
                 ln.tested_on, ln.batch = "", []
+            in_turn = ln.give_back_turn is not None
         return in_turn, waited + ln.batched_s
 
+    own_red = False
     try:
         merge.await_merge(ln, take)
-    except Outcome:
+    except Outcome as exc:
+        own_red = exc.verdict == Verdict.PR_CI_RED
         if ln.tested_head:
             _full_run(ln, ln.opts.pr)
         raise
+    finally:
+        _settle(ln, own_red)
     try:
         _merge_members(ln)
     except Exception as exc:

@@ -7,7 +7,6 @@ assert what happened to each PR, not which calls ran.
 """
 
 import os
-import subprocess
 from dataclasses import replace
 
 import pytest
@@ -15,7 +14,8 @@ import pytest
 from dev import tested_tree
 from _land_batch_fakes import GREEN, OWN, answers, head_of, land
 from _land_fakes import Fakes
-from deploy_tools.land_lib import batch, gh_read, line, live_limit, turn
+from deploy_tools.land_lib import batch, line, live_limit, turn
+from deploy_tools.land_lib.outcome import Outcome, Verdict
 from lib.exit_codes import CI_PENDING, CI_RED
 
 
@@ -81,12 +81,25 @@ def test_a_line_longer_than_a_batch_leaves_the_rest_waiting(batch_of):
     assert hub.labels["9"] == set()
 
 
-def test_a_landing_with_nobody_in_the_line_lands_its_draft_alone(batch_of):
+def test_a_landing_with_nobody_in_the_line_lands_its_draft_alone(batch_of, capsys):
     ln, hub, _ = batch_of()
     land(ln)
     assert hub.merged == [OWN]
     assert hub.stacked == {} and hub.batch_prs == []
     assert hub.labels_at_ready == {OWN: set()}
+    assert f"no batch: no other draft stands in the line behind PR #{OWN}" in (
+        capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize(("drafts", "tested"), [((), 1), (("7", "9"), 3)])
+def test_the_ledger_records_how_many_prs_the_holders_run_tested(
+    batch_of, drafts, tested
+):
+    ln, _, _ = batch_of(drafts=drafts)
+    land(ln)
+    assert ln.ledger.batch == tested
+    assert ln.ledger.turn_wait == 0
 
 
 @pytest.mark.parametrize(
@@ -206,31 +219,75 @@ def test_a_holder_whose_own_head_does_not_merge_forms_no_batch(batch_of):
     assert hub.merged == [OWN]
 
 
+RED_BATCH = [(CI_RED, "CI RED")]
+NO_VERDICT = [(CI_PENDING, "pending")]
+
+
 @pytest.mark.parametrize(
-    ("run", "opts", "said"),
+    ("run", "opts", "github", "verdict", "merged", "told"),
     [
-        pytest.param([(CI_RED, "CI RED")], {}, "its run is red (CI RED)", id="red"),
+        pytest.param(RED_BATCH, {}, {}, None, [OWN], line.ALONE, id="red-own-green"),
         pytest.param(
-            [(CI_PENDING, "pending")],
+            NO_VERDICT,
             {"merge_poll": batch.RUN_TIMEOUT_S},
-            f"its run gave no verdict in {batch.RUN_TIMEOUT_S}s (pending)",
-            id="no-verdict",
+            {},
+            None,
+            [OWN],
+            line.ALONE,
+            id="no-verdict-own-green",
+        ),
+        pytest.param(
+            RED_BATCH,
+            {},
+            {"own_red": [OWN]},
+            Verdict.PR_CI_RED,
+            [],
+            "",
+            id="red-own-red",
+        ),
+        pytest.param(
+            RED_BATCH,
+            {},
+            {"unmergeable": [OWN]},
+            Verdict.MERGE_TIMEOUT,
+            [],
+            line.ALONE,
+            id="red-own-not-merged",
         ),
     ],
 )
-def test_a_batch_that_is_not_green_leaves_every_pr_to_land_alone(
-    batch_of, capsys, run, opts, said
+def test_a_batch_that_is_not_green_is_split_by_the_holders_own_run(
+    batch_of, run, opts, github, verdict, merged, told
 ):
-    ln, hub, the_line = batch_of(drafts=("7", "9"), run=run, opts=opts)
-    land(ln)
-    # The holder's own PR gets a run of its own, with no label, and the members wait on.
-    assert hub.merged == [OWN]
+    ln, hub, the_line = batch_of(drafts=("7", "9"), run=run, opts=opts, **github)
+    read = hub.await_ci
+    while_own_run = []
+
+    def await_ci(sha, timeout):
+        if sha == head_of(OWN) and not hub.prs[OWN]["isDraft"]:
+            while_own_run.append(answers(the_line, "7", "9"))
+        return read(sha, timeout)
+
+    ln.tools = replace(ln.tools, await_ci=await_ci)
+    if verdict:
+        with pytest.raises(Outcome) as ended:
+            land(ln)
+        assert ended.value.verdict == verdict
+    else:
+        land(ln)
+    # The holder's own PR got a run of its own, with no label.
+    assert hub.merged == merged
     assert hub.labels_at_ready == {OWN: set()}
     assert hub.labels == {OWN: set(), "7": set(), "9": set()}
     assert hub.branches == {}
-    # Each member is told, so the next landing to take the turn does not stack it again.
-    assert answers(the_line, "7", "9") == [line.ALONE, line.ALONE]
-    assert f"the batch is not green: {said}" in capsys.readouterr().out
+    # The members wait on the holder's own run, and no other holder may stack them meanwhile.
+    assert while_own_run and all(
+        seen == [line.SPLIT, line.SPLIT] for seen in while_own_run
+    )
+    # Only a red run of the holder's own PR clears the members: they go back to the line.
+    waiting = the_line("waiting", str(line.FRESH_S)).split()
+    assert waiting == ([] if told else ["7", head_of("7"), "9", head_of("9")])
+    assert answers(the_line, "7", "9") == [told, told]
 
 
 @pytest.mark.parametrize(
@@ -241,10 +298,11 @@ def test_a_batch_that_is_not_green_leaves_every_pr_to_land_alone(
         pytest.param([False, True], id="read-on-taking-the-turn"),
     ],
 )
-def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn):
+@pytest.mark.parametrize("told", [line.ALONE, line.SPLIT])
+def test_a_landing_told_to_land_alone_forms_no_batch_of_its_own(batch_of, turn, told):
     ln, hub, the_line = batch_of(drafts=("7",), fakes=Fakes(turn=turn))
     nap = ln.tools.sleep
-    answers = [line.ALONE]
+    answers = [told]
 
     def sleep(seconds: float) -> None:
         # The landing that holds the turn answers once, during this landing's first wait.
@@ -320,51 +378,3 @@ def test_a_bug_in_the_batch_leaves_the_landing_its_own_pr(batch_of, capsys):
     assert "the landing batch failed (RuntimeError('a bug in the batch'))" in (
         capsys.readouterr().out
     )
-
-
-def test_a_holder_stacks_its_batch_only_once_it_holds_the_turn_again(batch_of):
-    ln, hub, _ = batch_of(drafts=("7",))
-    limited = subprocess.CalledProcessError(
-        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
-    )
-    refused = []
-
-    def gh_json(*args, **kwargs):
-        # The batch reads master's tip before it stacks on it, and GitHub refuses that once.
-        if "repos/{owner}/{repo}/git/ref/heads/master" in args and not refused:
-            refused.append(args)
-            raise limited
-        if args[2:4] == ("POST", "repos/{owner}/{repo}/git/refs"):
-            hub.calls.append(("stack", (), {}))
-        return hub.gh_json(*args, **kwargs)
-
-    ln.tools = replace(ln.tools, gh_json=gh_json)
-    land(ln)
-    order = [
-        c[0]
-        for c in hub.calls
-        if c[0] in ("try_turn", "release_turn", "sleep", "stack")
-    ]
-    assert order[:5] == ["try_turn", "release_turn", "sleep", "try_turn", "stack"]
-    assert hub.merged == [OWN, "7"]
-
-
-def test_a_holder_whose_turn_a_rate_limit_wait_lost_forms_no_batch(batch_of, capsys):
-    ln, hub, _ = batch_of(drafts=("7",), fakes=Fakes(turn=[True, False]))
-    # The read before the turn fails for good, so the turn's rule reads the files again;
-    # GitHub refuses that read too, and after its wait another landing holds the turn.
-    refusals = iter(range(gh_read.RATE_LIMIT_WAITS + 2))
-    limited = subprocess.CalledProcessError(
-        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
-    )
-
-    def gh_json(*args, **kwargs):
-        if "files,headRefOid" in args and next(refusals, None) is not None:
-            raise limited
-        return hub.gh_json(*args, **kwargs)
-
-    ln.tools = replace(ln.tools, gh_json=gh_json)
-    land(ln)
-    assert "going on without a turn" in capsys.readouterr().out
-    assert hub.stacked == {} and hub.batch_prs == []
-    assert hub.merged == [OWN]

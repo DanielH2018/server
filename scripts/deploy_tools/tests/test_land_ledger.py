@@ -31,6 +31,8 @@ def _filled() -> Ledger:
         verdict="deploy-failed",
         cause="tag-miss",
         tags_label="sonarr,radarr",
+        turn_wait=420,
+        batch=3,
     )
 
 
@@ -48,6 +50,8 @@ def _filled() -> Ledger:
         ("deploy", "360"),
         ("total", "400"),
         ("tags", "sonarr,radarr"),
+        ("turn_wait", "420"),
+        ("batch", "3"),
     ],
 )
 def test_every_field_of_a_filled_ledger(field, value):
@@ -65,6 +69,8 @@ def test_every_field_of_a_filled_ledger(field, value):
         ("wait_ci", ""),
         ("deploy", ""),
         ("tags", "none"),
+        ("turn_wait", ""),
+        ("batch", ""),
     ],
 )
 def test_an_unreached_stamp_leaves_its_field_empty(field, value):

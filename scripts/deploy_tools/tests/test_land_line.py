@@ -44,6 +44,28 @@ def test_an_answer_reaches_the_landing_that_stands_with_that_head(the_line):
     assert _waiting(the_line) == [f"7 {MOVED}"]
 
 
+def test_a_second_answer_leaves_the_first_in_place(the_line):
+    the_line("join", "7", HEAD)
+    the_line("answer", "7", HEAD, line.MERGED)
+    the_line("answer", "7", HEAD, line.ALONE)
+    assert the_line("stand", "7", HEAD) == line.MERGED
+
+
+@pytest.mark.parametrize(
+    ("then", "waiting"),
+    [(line.ALONE, []), ("", [f"7 {HEAD}"])],
+    ids=["alone", "no-answer"],
+)
+def test_a_split_place_takes_the_holders_final_answer(the_line, then, waiting):
+    the_line("join", "7", HEAD)
+    the_line("answer", "7", HEAD, line.SPLIT)
+    # A split place is not waiting, so no other holder stacks it.
+    assert _waiting(the_line) == []
+    the_line("answer", "7", HEAD, then)
+    assert the_line("stand", "7", HEAD) == then
+    assert _waiting(the_line) == waiting
+
+
 def test_a_landing_that_joins_never_reads_an_answer_left_for_an_earlier_one(the_line):
     the_line("join", "7", HEAD)
     the_line("answer", "7", HEAD, line.MERGED)

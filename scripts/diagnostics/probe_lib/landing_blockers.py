@@ -32,13 +32,14 @@ Every fact comes from a reader that already exists; this module only joins them:
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
   issues are claimed under the orchestrator's branch, not the batch's.
 
-- **The serial landing.** `land_lib.serial_lock.serial_landing`, the read `cc-wait
-  landing-clear` makes: whether a landing holds the serial lock on daniel-box, and which PR's.
-  On daniel-box it reads `/proc/locks`; on daniel-server it is one ssh call.
+- **The serial landing.** `land_lib.serial_lock.serial_landing`: whether a landing holds the
+  serial lock on daniel-box, and which PR's. On daniel-box it reads `/proc/locks`; on
+  daniel-server it is one ssh call. The text view names it and marks its run in flight, but
+  it is no blocker: `land.sh` waits in line behind it (`land_lib/slots.py:_bar`), as it
+  waits on a pending master CI.
 
-`blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none`, a red
-master CI, or a live serial landing, which makes `land.sh` refuse every other PR
-(`land_lib/slots.py:_bar`). It is computed here rather than in the mod so that the band, the model's
+`blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none` or a red
+master CI. It is computed here rather than in the mod so that the band, the model's
 system-prompt section and this command's text view cannot disagree. A blocker line carries no
 age or other value that moves each minute: the mod puts the list in the system prompt, and a
 line that changed every read would rewrite the prompt on every turn. Because that prompt is
@@ -178,14 +179,6 @@ def blockers(snap: dict) -> list[str]:
             f"master CI is red: {_checked(url, _RUN_URL.fullmatch) if url else ''}".rstrip(
                 ": "
             )
-        )
-    serial = snap.get("serial")
-    if serial and serial.get("live"):
-        pr = serial.get("pr") or ""
-        who = f"PR #{pr}'s" if _PR_NUMBER.fullmatch(pr) else "a"
-        out.append(
-            f"{who} serial landing is live; `land.sh` refuses every other PR until it "
-            "ends, and `cc-wait landing-clear` waits for it"
         )
     return out
 
@@ -437,6 +430,12 @@ def format_text(snap: dict) -> str:
         state.append(
             "master CI: "
             + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip())
+        )
+    serial = snap.get("serial")
+    if serial and serial["live"]:
+        who = f"PR #{serial['pr']}'s" if _PR_NUMBER.fullmatch(serial["pr"]) else "a"
+        state.append(
+            f"{who} serial landing is live; `land.sh` waits in line until it ends"
         )
     sections.append(state)
     if snap["runs"]:

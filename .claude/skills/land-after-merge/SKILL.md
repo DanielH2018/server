@@ -60,8 +60,9 @@ the rule.
 holds the turn tests the drafts standing in line with its own in one CI run and merges them
 in order (`land_lib/batch.py`). Your landing then prints `the landing that holds the turn
 merged PR #N with its own` and goes on to the deploy and its verdict as usual. If that
-batch's run was red it prints `a batch that tested PR #N was not green; it lands alone` and
-gets a run of its own. Neither line is a fault. `LAND_BATCH=0` stops one landing forming a
+batch's run was red and the holder's own PR then passed alone, it prints `a batch that
+tested PR #N was not green; it lands alone` and gets a run of its own. When the holder's own
+PR was the red one, your landing waits on in the line. Neither is a fault. `LAND_BATCH=0` stops one landing forming a
 batch.
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
@@ -160,9 +161,10 @@ merge commit; `docs/landing.md`, *The `LAND-RESULT:` line*, has each field. `lan
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. To resume once the
-operator clears it, once a red master CI goes green, or once a live serial landing ends, run
-`cc-wait landing-clear` in the background and re-run the same `land.sh` command when it ends
-0. `probe.py landing` names the same blockers and exits 1 while one holds. It ends 1 as
+operator clears it or once a red master CI goes green, run `cc-wait landing-clear` in the
+background and re-run the same `land.sh` command when it ends 0. `probe.py landing` names the
+same blockers and exits 1 while one holds. A live serial landing is neither's blocker:
+`land.sh` waits in line behind it. It ends 1 as
 `gh-unauthenticated` when `gh` has no login, which needs the operator, not a retry. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A

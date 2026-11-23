@@ -2,7 +2,7 @@
   "generated_from": "scripts/docs/reference/critical_memory.py",
   "p95_mib": {
     "flux-system/kustomize-controller/manager": 160,
-    "flux-system/notification-controller/manager": 112,
+    "flux-system/notification-controller/manager": 96,
     "flux-system/source-controller/manager": 112,
     "homelab/authelia-redis/redis": 32,
     "homelab/authelia/authelia": 144,
@@ -27,7 +27,7 @@
     "homelab/pihole/unbound": 48,
     "homelab/registry/registry": 64,
     "homelab/traefik/access-log-rotate": 16,
-    "homelab/traefik/crowdsec-agent": 128,
+    "homelab/traefik/crowdsec-agent": 112,
     "homelab/traefik/crowdsec-config-install": 16,
     "homelab/traefik/traefik": 224,
     "homelab/wg-easy/wg-easy": 128,
