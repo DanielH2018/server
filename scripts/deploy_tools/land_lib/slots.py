@@ -55,10 +55,7 @@ SLOT_NAMES = tuple(f"homelab-land-slot-{n}.lock" for n in range(COUNT))
 # merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck
 # on a soak for longer would otherwise hold the turn for two merge budgets.
 DRAIN_S = 2400
-_SERIAL_LIVE = (
-    f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live "
-    "(`cc-wait landing-clear` waits for it)"
-)
+_SERIAL_LIVE = f"landing of a PR that changes {live_limit.SERIAL_WHAT} is live"
 
 Release = Callable[[], None]
 Locker = Callable[[Sequence[str], int], Release | None]

@@ -190,16 +190,19 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
   what a serial PR changes from `live_limit.SERIAL_WHAT`.
 - A landing that takes the serial lock writes its PR number into
   `/run/lock/homelab-land-serial.holder` beside it. `serial_lock.serial_landing` reads the
-  lock and that number without taking the lock, and it is the one read both `probe.py landing`
-  and `cc-wait landing-clear` make. Both report a live serial landing as a blocker in the
-  words of `landing_blockers.blockers`, and the probe exits 1 with `PROBE-VERDICT: fail` while
-  the lock is held. The number is trusted only while that PR's own lock is held, because the
-  file outlives the landing that wrote it. A holder that could not write its number reads as
-  `a serial landing is live`, with no PR. Until 2026-11-20 the probe counted only
-  `DEPLOY_HOLD` and master CI, so it ended `ok` while
-  [#9418](https://github.com/DanielH2018/server/pull/9418) held the lock, and a coordinator
-  read that as leave to re-land two parked PRs
-  ([#9434](https://github.com/DanielH2018/server/issues/9434)).
+  lock and that number without taking the lock. `probe.py landing` names a live serial
+  landing in its text view and marks its run `(serial)`, but it does not count it as a
+  blocker, and `cc-wait landing-clear` does not read the lock. The number is trusted only
+  while that PR's own lock is held, because the file outlives the landing that wrote it. A
+  holder that could not write its number reads as `a serial landing is live`, with no PR.
+  From 2026-11-20 to 2026-11-23 both tools counted a live serial landing as a blocker, after
+  a coordinator re-landed two parked PRs while
+  [#9418](https://github.com/DanielH2018/server/pull/9418) held the lock
+  ([#9434](https://github.com/DanielH2018/server/issues/9434)). Once every landing waited in
+  line behind the serial lock instead of refusing
+  ([#10010](https://github.com/DanielH2018/server/issues/10010)), a re-land under it costs
+  nothing, so the blocker only stopped sessions before a `land.sh` that would have waited
+  itself ([#10031](https://github.com/DanielH2018/server/issues/10031)).
 - The cost was first measured on 2026-11-20, when two PRs that change the file landed in
   a row. [#9386](https://github.com/DanielH2018/server/pull/9386) merged at 00:05 UTC and
   ended `settled` at 00:29. [#9418](https://github.com/DanielH2018/server/pull/9418)
