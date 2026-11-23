@@ -9,7 +9,7 @@ session reads it when it edits that code, not on every touch of the role (#2989)
 ## The unit is sandboxed, and two things about that surprise people
 
 Unlike `homelab-renovate-agent.service`, this one is confined — it queries HTTPS and writes only its
-state dir, so `ProtectSystem=strict` + `ProtectHome=read-only` cost nothing. Two consequences
+state dir and its gh-quota ledger, so `ProtectSystem=strict` + `ProtectHome=read-only` cost nothing. Two consequences
 are load-bearing rather than incidental:
 
 - **`UV_CACHE_DIR=/tmp/uv-cache` is required, not tidiness.** uv opens its cache for write at
