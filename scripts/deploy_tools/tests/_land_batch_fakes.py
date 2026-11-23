@@ -11,7 +11,7 @@ from typing import Any
 
 from deploy_tools.land_lib import batch, pr_json, turn
 from deploy_tools.land_lib.tools import CiVerdict
-from lib.exit_codes import CI_GREEN, CI_PENDING
+from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED
 
 OWN = "999"
 MASTER = "0" * 40
@@ -52,6 +52,7 @@ class GitHub:
         crash="",
         unmergeable=(),
         stays_draft=False,
+        own_red=(),
     ):
         self._tools = tools
         # Each PR as `gh pr view` shows it, by number.
@@ -92,6 +93,8 @@ class GitHub:
         self._unmergeable = set(unmergeable)
         # Whether an unmergeable PR also refuses the ready flip, and so stays a draft.
         self._stays_draft = stays_draft
+        # The PRs whose own run, on their head alone, is red.
+        self._own_red = set(own_red)
         self._commits = 0
         # The shared fakes' record of every call the model handed on to them.
         self.calls: list = []
@@ -185,11 +188,12 @@ class GitHub:
         return subprocess.CompletedProcess(args, 0, "", "")
 
     def await_ci(self, sha, timeout):
-        """A PR's own head is green once it is ready; the batch's branch follows `run`."""
+        """A ready PR's own head is green, or red if `own_red` names it; a batch follows `run`."""
         pr = self._pr_of(sha)
         if pr:
-            draft = self.prs[pr]["isDraft"]
-            return CiVerdict(*((CI_PENDING, "draft") if draft else GREEN))
+            if self.prs[pr]["isDraft"]:
+                return CiVerdict(CI_PENDING, "draft")
+            return CiVerdict(*((CI_RED, "CI RED") if pr in self._own_red else GREEN))
         verdict = self._run[0]
         if len(self._run) > 1:
             self._run.pop(0)

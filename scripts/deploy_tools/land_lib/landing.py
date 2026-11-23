@@ -110,6 +110,9 @@ class Landing:
         self.merge_wait_s = 0
         # Set once a batch that tested this landing's PR was not green: it forms no batch.
         self.lands_alone = False
+        # The members of this landing's batch whose run was not green, until its own run
+        # says whether they land alone or go back to the line (`batch._settle`).
+        self.split_members: list[Any] = []
         # Frees the serial lock a landing of a serial PR keeps (`slots.py`). Held here, so the
         # lock and its ssh session last until the landing's process ends.
         self.serial_lock: Callable[[], None] | None = None

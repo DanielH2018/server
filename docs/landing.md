@@ -337,8 +337,11 @@ jobs. Every landing that merges its PR directly takes the turn.
   that off for one landing. Its log names each PR it stacks, each one it leaves out with
   the reason, and each merge. A landing whose PR another landing merged this way prints
   `the landing that holds the turn merged PR #N with its own` and goes on to the deploy.
-  One whose batch was not green prints `a batch that tested PR #N was not green; it lands
-  alone`, leaves the line and gets a run of its own.
+  A batch that is not green is split by its holder's own run. When that run is red too,
+  the holder prints `PR #N's own run is red too, so ... go back to the line`, and the other
+  drafts wait in the line for the next holder to stack. Otherwise each of them prints `a
+  batch that tested PR #N was not green; it lands alone`, leaves the line and gets a run of
+  its own.
 - A holder whose landing code is older than master's, found when it forms its batch, hands
   the turn to a landing of its PR from a fresh checkout of origin/master (`turn.HandOver`).
   Its log prints `land: this landing holds the landing turn, and its landing code is older
@@ -1083,7 +1086,11 @@ deployed it a minute later (issue #1544).
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
 merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `deploy`,
-`total`. `deploy` runs from master CI's answer to the end of the promotion wait.
+`total`. `deploy` runs from master CI's answer to the end of the promotion wait. Two more
+fields measure the landing turn. `turn_wait` is the part of `wait_merge` spent waiting for
+the turn, a batch's run excluded. `batch` counts the PRs that one run tested for a landing
+that took the turn with a draft, its own included, so `1` means nobody stood in the line
+behind it. Each is empty for a landing that never reached it.
 
 **HISTORY — the GitOps tick's fields.** Lines written before H7.49a also carry `tick`, `lock`,
 `holder` and `kick`, which described the GitOps deployer run that `land.sh` no longer starts.
