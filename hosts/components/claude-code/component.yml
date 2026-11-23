@@ -76,6 +76,8 @@ depends:
   - acl
   # claude-agent-browser reads and writes the agent's MCP registration as JSON.
   - jq
+  # Installs /etc/zsh before the lines arm, which would create a missing directory 0700.
+  - zsh
 outputs:
   - src: templates/agent-gh-hosts.yml.j2
     path: /var/lib/claude/.config/gh/hosts.yml
@@ -300,3 +302,10 @@ legacy:
     when: not claude_code_dotfiles_mirror_enabled
   - path: /var/lib/node-exporter-textfile/claude-weekly-summary.prom
     when: not claude_code_weekly_summary_enabled
+lines:
+  # The operator's ssh login is a zsh login shell, which inherits sshd's oom_score_adj of 0,
+  # below every pod's. Raising it needs no privilege, and what the shell starts inherits it.
+  - path: /etc/zsh/zprofile
+    marker: "# {mark} homelab claude-code — fleet oom_score_adj"
+    block: |
+      echo {{ claude_code_fleet_oom_score_adjust }} 2>/dev/null > /proc/self/oom_score_adj

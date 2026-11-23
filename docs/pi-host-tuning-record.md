@@ -336,7 +336,10 @@ binary at `/usr/lib/homelab/bin/node-exporter`, checksum-pinned per architecture
 Until H7.25 the `node-exporter-host` tag installed the tarball under `/opt`, with
 `/usr/local/bin/node_exporter` a symlink to the pinned version. The unit runs as
 the `node_exporter` system user on the LAN IP's port 9100 with the collector flags the
-container ran, plus a UFW allow from `lan_subnet`. H3.6 turned the textfile collector on over
+container ran, plus a UFW allow from `lan_subnet`. The unit turns the `netclass` collector back
+on, with `--collector.netclass.ignored-devices` skipping `lo`, `docker0`, the Docker bridges and
+the veth interfaces. A carrier flap on the USB Ethernet adapter then shows as
+`node_network_carrier_changes_total` (#10006). H3.6 turned the textfile collector on over
 `/var/lib/node-exporter-textfile`, where `homelab-updater` writes `homelab_host.prom`. A
 `tmpfiles.d` line creates that directory with M3's owner contract: owner root, group `sys_user`,
 mode 2775. The unit's `ExecStartPre=+` and `systemd-tmpfiles-setup.service` apply it. Nothing
@@ -347,7 +350,7 @@ It replaced the `node-exporter` container on 2026-09-18 (#2005; the retired role
 The trade was one containerd shim, about 5 MB, off a host that keeps 10-25 MB free — and this
 was the one container whose host form changes no decision.
 `hosts/tests/test_pi_node_exporter_host_unit.py` holds the unit to the archived
-compose's collector set with the textfile collector on, the directory to M3's contract, and the
+compose's collector set with the `netclass` and textfile collectors on, the directory to M3's contract, and the
 version to the cluster DaemonSet's.
 
 **HISTORY — the node_exporter cutover.** It retired the container by hand (`docker rm -f node-exporter` and its `containers/node-exporter/` directory) before the first apply, because the container published the same IP and port the unit binds.
@@ -522,6 +525,46 @@ format is four tokens and parses as nothing.
 Adding this stream meant excluding it from monitor-bridge's Loki file-tail arm
 (`machine!="daniel-pi"` in `LOKI_STREAM`) — a Pi stream under `job="syslog"` would otherwise
 stop a total cluster file-tail outage from ever reaching that arm's zero threshold.
+
+### The journal's warnings reach Loki through the same file source
+
+The journal lives in log2ram's tmpfs, so a hard reboot or a power loss erases
+everything since log2ram's last daily sync. On 2026-11-22 the Pi swap-thrashed
+for four hours and rebooted at 00:36, and no kernel, OOM or systemd line from
+that window survived anywhere (#10005).
+
+`homelab-pi-journal-warnings.timer` runs every minute. Its service runs
+`journalctl -b -p warning --cursor-file=…` and appends the new lines to
+`/var/log/pi-health/journal.log`, inside the `pi_health` glob, so Alloy ships
+them with the verdict lines. `-o short-iso` writes the two-token prefix
+`_SYSLOG_LINE_RE` reads, and the parser ignores a line with no `status=` token.
+The warning floor holds about 100 lines and 8 KB a day. The notice floor is
+about 1,440 lines a day, mostly the heartbeats' own stdout.
+
+- **The cursor sits in `/run`, and every run passes `-b`.** A cursor kept on the
+  SD card would point into the journal log2ram restored from its last sync,
+  which no longer holds the boot that was lost. The first run after a boot
+  ships that boot's warnings so far. The copy writes nothing to the SD card.
+- **No journal reader in Alloy.** `test_the_journal_is_not_shipped` holds that
+  ruling, and its reason is the container's memory, not the line volume.
+- **The journal stays on the tmpfs.** A journal on the card would sit outside
+  the log2ram size guard that the caps above are sized against, and would write
+  the card every sync interval.
+- **Lost read access fails the unit.** Without access to the system journal,
+  `journalctl -q` prints only the service user's own journal and exits 0. An
+  `ExecStartPre=` opens `system.journal` with `head -c0`, so the unit fails
+  instead and `systemd-units-check` reports it. Do not swap in `test -r`: the
+  Pi's `test` comes from `coreutils-from-uutils`, ignores the journal's ACL and
+  reports the readable file as unreadable.
+- **The window it cannot close** is the last minute before a hard reboot, plus
+  Alloy's 5s batch wait.
+- **dockerd's lines are not in it.** dockerd writes to stderr at priority 6, so
+  `pi-recovery-health`'s DOWN record stays the copy of the daemon's failure
+  lines.
+
+To read the lines, query
+`{machine="daniel-pi", filename="/var/log/pi-health/journal.log"}`: Alloy's file
+source labels each stream with the path it tails.
 
 **Two steps activate a new heartbeat**: the Pi installs the `homelab-daniel-pi` version that
 ships it, and `promote` publishes the `observability` rules that read its verdict. Do both close

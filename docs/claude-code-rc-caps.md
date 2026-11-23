@@ -207,7 +207,7 @@ cat /sys/fs/cgroup/kubepods.slice/memory.low /sys/fs/cgroup/system.slice/memory.
 Every fleet process runs at `oom_score_adj` 1000, the kernel's maximum, so a global OOM picks
 a fleet process before a pod. `claude_code_fleet_oom_score_adjust` in the component's
 `defaults/main.yml` holds the value. `OOMScoreAdjust=` is an exec option that a slice drop-in
-cannot carry, so the value reaches the fleet by three paths:
+cannot carry, so the value reaches the fleet by four paths:
 
 - `homelab-claude-rc.service` and `homelab-claude-bg-resume.service` set `OOMScoreAdjust=`, and
   the sessions they start inherit it.
@@ -217,8 +217,10 @@ cannot carry, so the value reaches the fleet by three paths:
   `user-1000.slice`, but fan-out and background jobs still run there as uid 1000.
 - The agent's login profile writes the value to `/proc/self/oom_score_adj`, because an ssh
   login inherits sshd's 0. Raising the value needs no privilege.
-
-The operator's own ssh login is not covered, because its profile belongs to the dotfiles repo.
+- The component's `lines:` block in `/etc/zsh/zprofile` writes the same value for the
+  operator's ssh login. The operator is the only zsh user on either host, and the
+  operator's own profile belongs to the dotfiles repo. `zprofile` runs only in a login
+  shell, so a command passed to `ssh host cmd` keeps sshd's 0.
 
 The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
 RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod

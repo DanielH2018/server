@@ -15,6 +15,9 @@
 // on is one `loki.source.journal` block with a relabel setting `job` (its default job label is
 // the component id) — not a capability gap any more. What decided against it is this
 // process's memory, not Loki volume: the RSS measurement is in compose.yaml.j2's header (#1922).
+// The journal's warning-and-above lines still reach Loki without the reader:
+// homelab-pi-journal-warnings (hosts/components/pi-heartbeats/) copies them into
+// /var/log/pi-health/journal.log every minute, and the pi_health source below ships that file.
 //
 // Every label this file emits is a contract with the cluster's streams: `container`, `job`,
 // `machine`, `stream` — the same names the cluster shipper writes, so one LogQL query spans
@@ -138,9 +141,10 @@ loki.process "pi" {
   }
 }
 
-// The host health timers' verdict lines, and reconcile's `starts` / `took` timing lines in
-// reconcile.log (hosts/daniel-pi/units/homelab-reconcile-timing.conf) — the ONLY host logs shipped
-// from this box, and deliberately not the journal (see the header). Every other host's verdict lines reach Loki
+// The host health timers' verdict lines, reconcile's `starts` / `took` timing lines in
+// reconcile.log (hosts/daniel-pi/units/homelab-reconcile-timing.conf), and the journal's
+// warning-and-above lines in journal.log — the ONLY host logs shipped from this box, and
+// deliberately not through a journal reader (see the header). Every other host's verdict lines reach Loki
 // as `{job="syslog"} |= "status=down"`, and until this source existed no daniel-pi health
 // check left one there: a real "Daniel Pi Recovery" outage on 2026-08-29
 // (autoheal down ~50 min) left no episode anywhere.
