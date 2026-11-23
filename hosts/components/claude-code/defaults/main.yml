@@ -138,7 +138,8 @@ claude_code_fleet_swap_max: 2G
 claude_code_fleet_cpu_weight: 20
 
 # DECIDED: 1000, the kernel's maximum, on every fleet process: claude-rc.service, the
-# background resume, each fleet uid's user manager and the agent's login shell. kubelet gives
+# background resume, each fleet uid's user manager, the agent's login shell and the
+# operator's zsh login shell (/etc/zsh/zprofile). kubelet gives
 # a burstable pod 2-999 and a best-effort pod 1000, so any lower value lets the global OOM
 # killer prefer a pod although the fleet caused the pressure. The bias is small: the kernel's
 # badness adds adj * totalpages / 1000 to a process's RSS, so one point is about 30 MiB here,
