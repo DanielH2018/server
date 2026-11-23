@@ -29,7 +29,6 @@ _ALLOW = {
     "scripts/dev/findings_lib/issue_model.py": "the issue-URL closing syntax is the example",
     "tests/_ratchet.py": "the `#NNNN` issue-reference syntax is the example",
     "tests/repo/test_role_claude_md.py": "its DECIDED paragraph cites the operator ruling",
-    "k8s/roles/traefik/templates/dynamic.yaml.j2": "names the upstream plugin issue it waits on",
 }
 
 

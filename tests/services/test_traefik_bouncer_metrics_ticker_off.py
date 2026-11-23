@@ -1,12 +1,9 @@
 """The CrowdSec bouncer Middleware runs no usage-metrics ticker.
 
-The plugin's 600s metrics tick lands on every tenth 60s stream tick, and on some of those
-coincidences the stream ticker skips every LAPI pull until a later metrics tick — silent
-stalls of exactly 600s or 1200s that can fail a fleet deploy at crowdsec's edge ban gate.
-`metricsUpdateIntervalSeconds: 0` is the only setting under which the plugin
-starts no metrics ticker, and the plugin's own default is 600, so both dropping the key and
-restoring any positive value bring the stall back. The reasoning lives at the DECIDED marker in
-k8s/roles/traefik/templates/dynamic.yaml.j2.
+`metricsUpdateIntervalSeconds: 0` is the only setting under which the plugin starts no metrics
+ticker, and the plugin's own default is 600, so dropping the key or setting a positive value
+turns the ticker on, and restarts Traefik when it ships. The reasoning lives at the DECIDED
+marker in k8s/roles/traefik/templates/dynamic.yaml.j2.
 
 Checked on the RENDERED Middleware, the same way as the sibling
 test_traefik_http_entrypoint_crowdsec.py, whose `_context` shape this file reuses.
@@ -62,12 +59,12 @@ def metrics_ticker_problem(bouncer: dict) -> str | None:
     if "metricsUpdateIntervalSeconds" not in bouncer:
         return (
             "metricsUpdateIntervalSeconds is unset, so the plugin's default of 600 starts the "
-            "metrics ticker that stalls stream pulls (#2752)"
+            "metrics ticker"
         )
     if bouncer["metricsUpdateIntervalSeconds"] != 0:
         return (
             f"metricsUpdateIntervalSeconds is {bouncer['metricsUpdateIntervalSeconds']!r}; any "
-            f"value but 0 starts the metrics ticker that stalls stream pulls (#2752)"
+            f"value but 0 starts the metrics ticker"
         )
     return None
 

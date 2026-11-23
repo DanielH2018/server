@@ -61,12 +61,10 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 - **Do not re-run the outage to see the red path — it is measured** (2026-09-10, #1345).
   Every container restart re-downloads the plugin, so the shared `/plugins-storage` emptyDir
   short-circuits nothing.
-- **The bouncer runs with `metricsUpdateIntervalSeconds: 0`** (#2752): the default ticker
-  silently stops the 60s decision stream for 600s or 1200s at a time, and a ban made in that
-  window never reaches the edge. The `DECIDED: no usage-metrics ticker` comment in
-  `templates/dynamic.yaml.j2` has the evidence, and
-  `tests/services/test_traefik_bouncer_metrics_ticker_off.py` pins the value. Changing
-  it needs a pod restart, not just a Middleware edit.
+- **The bouncer runs with `metricsUpdateIntervalSeconds: 0`**, because nothing reads its usage
+  metrics. The `DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the
+  ruling, and `tests/services/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
+  Changing it needs a pod restart, not just a Middleware edit.
 - **`cloudflare-realip` is an in-repo LOCAL plugin** (`files/cloudflare-realip/`), projected
   from a ConfigMap rather than downloaded, and gated with the bouncer so the startupProbe
   covers it. A name mismatch across `experimental.localPlugins`, the Middleware, the ConfigMap
