@@ -21,7 +21,9 @@ premise held, but the step also showed that the first draft's bucket default ret
 every Longhorn upload. This record was revised on 2026-11-22 to the shape that step proved:
 file lock with no default retention, and a daily sweep that sets each object's retention. The
 bucket settings are operator steps, because no session holds a credential that can change a
-bucket, and [#9699](https://github.com/DanielH2018/server/issues/9699) tracks them.
+bucket, and [#9699](https://github.com/DanielH2018/server/issues/9699) tracks them. On
+2026-11-23 the operator chose a canary as the R2 rule's standing reader
+([#9702](https://github.com/DanielH2018/server/issues/9702)), and the *Decision* records it.
 
 ## Context
 
@@ -120,14 +122,18 @@ the bucket, not the sweep. Checks 9 and 10 of `longhorn-backup-health` read the 
 journal on daniel-box, which the monitor-bridge pod cannot reach, so the row does not repeat
 them.
 
-The R2 rule needs a standing reader too, and this record does not yet have one. Until it
-lands, the operator verifies the rule by hand with `wrangler r2 bucket lock list` after
-setting it. R2's S3 API implements no lock operation, so the cluster's R2 key can neither
-read nor change a rule. Reading one takes a Cloudflare account API token, and Cloudflare
-scopes the permission that reads lock rules only to a whole account, never to one bucket. No
-such token exists in the tree, and only the operator can mint one, so the reader cannot ship
-with this record. [#9702](https://github.com/DanielH2018/server/issues/9702) holds it and the
-operator's choice of where it runs.
+monitor-bridge's `r2_etcd_lock` row
+(`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`) proves the R2 rule by its
+effect once a day. R2's S3 API implements no lock operation, so the cluster's R2 key can
+neither read nor change a rule. Reading one takes a Cloudflare API token, and Cloudflare
+scopes the permission that reads lock rules only to a whole account, never to one bucket. The
+operator ruled on 2026-11-23
+([#9702](https://github.com/DanielH2018/server/issues/9702)) for a canary written with the R2
+key the cluster already holds, over giving a pod or host an account-wide token. Each day the
+row uploads a zero-byte `etcd-snapshots/lock-canary-<date>` and tries to delete an earlier
+canary that is younger than the lock. R2's 409 `ObjectLockedByBucketPolicy` passes the row,
+and a delete that succeeds fails it. The row then deletes the canaries older than 7 days, and
+a refusal there fails it too. It pages a warning, `R2EtcdLockNotHolding`.
 
 ## Consequences
 
@@ -187,10 +193,21 @@ prefix younger than the retention cannot be drained until its lock expires.
 A default retention must never be added to it, because that fails every weekly backup; the
 `b2_object_lock` row pages if one appears.
 
-**Until #9702 lands, nothing pages on an edit to the R2 rule.** A deleted or disabled rule
-removes the etcd snapshots' lock silently. A rule widened over `longhorn/` makes every daily
-Longhorn prune retry against a 409. The `r2_usage` row would notice that only once the
-retries had spent most of the month's operations.
+**The R2 canary sees a missing or lengthened rule, not a widened one.** A deleted or
+disabled rule fails the `r2_etcd_lock` row within a day, and so does a lock over the prefix
+that outlasts 7 days. A rule widened over `longhorn/` passes it, because the canary writes
+only under `etcd-snapshots/`. Such a rule makes every daily Longhorn prune retry against a
+409, and the `r2_usage` row notices only once the retries have spent most of the month's
+operations.
+
+**monitor-bridge holds the R2 write key and writes to the backup bucket.** The canary needs
+the key Longhorn and k3s write with, which can also delete the unlocked `longhorn/` daily
+tier. A leaked monitor-bridge credential therefore reaches every R2 object the lock does not
+cover. The operator accepted this over an account-wide Cloudflare token, which could read and
+change every bucket's rules. Each canary is zero bytes, because k3s lists every non-empty
+object under `etcd-snapshots/` as a ready snapshot, and a non-empty canary would hide a stale
+snapshot from backup health's check 12. No canary name matches `offbox-*`, so k3s's
+retention never counts one.
 
 **The B2 row reads red from deploy until the operator enables file lock**, and fires a warning. A
 warning that holds for 48 hours escalates to a page through `WarningUnresolved`.
@@ -198,5 +215,6 @@ warning that holds for 48 hours escalates to a page through `WarningUnresolved`.
 ## Governs
 
 No single line. The settings live in the two buckets, outside the tree. The `b2_object_lock`
-row reads the B2 one, and `k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py` holds
-its verdict to this record.
+row reads the B2 one, the `r2_etcd_lock` row proves the R2 one, and
+`k8s/roles/monitor-bridge/tests/test_check_bucket_locks.py` holds both verdicts to this
+record.

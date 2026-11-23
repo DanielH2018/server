@@ -105,7 +105,7 @@ def github(
             missing = urllib.error.HTTPError(
                 url, 404, "MANIFEST_UNKNOWN", Message(), io.BytesIO()
             )
-            # The live `bridge.net._get` reads and closes the error before re-raising it.
+            # The live `bridge.net._request` reads and closes the error before re-raising it.
             missing.close()
             raise missing
         return manifest

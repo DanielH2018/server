@@ -212,6 +212,7 @@ def test_each_gate_value_holds_the_rows_its_rules_were_placed_for():
         "wan_reachable": {
             "discord",
             "r2_usage",
+            "r2_etcd_lock",
             "cloudflare_ips_drift",
             "healthchecks_drift",
             "domain_registration",

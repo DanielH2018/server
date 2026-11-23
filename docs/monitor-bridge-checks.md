@@ -225,6 +225,21 @@ checks each gate suppresses.
   which point drop the `bucketName` filter rather than raising the thresholds.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
+- **`r2_etcd_lock`** (`files/checks/r2.py:check_r2_etcd_lock`. Proves ADR-0041's R2 lock rule
+  over `etcd-snapshots/` by its effect, because R2's S3 API cannot read a rule. Once a day it
+  lists `etcd-snapshots/lock-canary-*`, uploads today's zero-byte canary unless one is listed,
+  and tries to delete the newest earlier canary younger than the lock, or today's on a first
+  run. `up` when R2 answers that delete with 409 `ObjectLockedByBucketPolicy`. `down` as
+  `lock missing` when the delete succeeds, as `lock outlasts its age` when R2 refuses to delete
+  a canary dated more than `R2_ETCD_LOCK_DAYS` (7) days back, and as `request refused` on any
+  other answer. Each request is SigV4-signed by `files/bridge/sigv4.py` with the R2 S3 key
+  Longhorn and k3s write with (`R2_S3_KEY_ID`, `R2_S3_SECRET_KEY`). A canary must be zero
+  bytes: k3s lists every non-empty object under the prefix as a ready snapshot, which would
+  hide a stale one from backup health's check 12. A verdict or a 4xx refusal is cached for
+  `R2_LOCK_PROBE_INTERVAL_S` (a day), so a missing lock does not churn a canary every cycle.
+  A transport failure, a 5xx or a 429 raises, and the next cycle probes again. It does not see a rule widened
+  over `longhorn/`. Behind `wan_reachable`. Runbook: `longhorn-backup-tiering`, *The R2 lock
+  canary*.)
 - **`cloudflare_ips_drift`** (`checks/cloudflare_ips.py`: the two published range pages against
   `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and whose IPv4
   half netpol-baseline admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
@@ -371,8 +386,8 @@ checks each gate suppresses.
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
   Notification Delivery tile, `cloudflare-ip-drift`, the since-deleted Swallowed Push Verdicts
   tile and `gitops_alive` (since removed). It gates the `wan_reachable` rows:
-  `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `domain_registration`,
-  `uptime_robot_monitors`, `discord`.
+  `r2_usage`, `r2_etcd_lock`, `cloudflare_ips_drift`, `healthchecks_drift`,
+  `domain_registration`, `uptime_robot_monitors`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The
   endpoints are checked in order and the first answer stops the probe, so a healthy cycle costs

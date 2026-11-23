@@ -42,9 +42,7 @@ _CENSUS_SKIP_FILES = {
 # Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md
 # names secrets it explains without rendering any of them, so counting docs makes the census
 # claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
-# help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles, and
-# `r2_access_key_id` is the clearest — monitor-bridge's CLAUDE.md discusses it while the only
-# renderers are the longhorn-r2-secret.yaml.j2 template and the k3s-host-checks output.
+# help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles.
 #
 # Checked in the direction that matters before making the change: excluding docs creates ZERO
 # new phantom tags, so no real consumer is only discoverable through prose.
