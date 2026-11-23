@@ -144,7 +144,7 @@ def test_a_live_serial_landing_is_named_and_marked_but_blocks_nothing():
     assert "  land PR 9418 (serial) 5s" in text
 
 
-def test_no_serial_landing_is_named_nowhere():
+def test_the_text_view_mentions_no_serial_landing_while_none_is_live():
     text = landing.format_text(_with_serial(None))
     assert "serial" not in text
 
