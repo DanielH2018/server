@@ -127,6 +127,12 @@ def test_a_free_lock_lets_the_scan_run(tmp_path):
     assert ran and pushed[0] == "up" and code == 0, pushed
 
 
+def test_aide_runs_without_the_lock_descriptor(tmp_path):
+    """AIDE 0.19 exits 20 when LVM's helpers warn that they inherited it."""
+    _run_check(tmp_path, CLEAN_REPORT, rc=0)
+    assert (tmp_path / "ran").read_text() == ""
+
+
 # Paths AIDE must skip, and paths beside them it must still check. The second list is
 # what keeps an exclusion from widening: the primary checkout, the repo's hooks and the
 # executables under ~/.local all sit next to an excluded directory.
