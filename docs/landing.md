@@ -175,8 +175,9 @@ is waited out first, as the bullets below say. A refused landing exits 75 with
 
 - A PR that changes a k8s role, and every serial PR, is refused while `DEPLOY_HOLD` reads
   anything but `none`.
-- A serial PR is refused while another landing holds a slot or the serial lock. Otherwise it
-  takes the serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
+- A serial PR is refused while another landing holds a slot, and waits while another landing
+  holds the serial lock, as the bullet on the serial lock's wait says. Otherwise it takes the
+  serial lock, `/run/lock/homelab-land-serial.lock` on daniel-box, and keeps it
   until its process ends, so every other PR waits meanwhile. `live_limit.kind` decides
   which PR is serial. A serial PR changes the `longhorn` or `metallb` role, which hold the
   forward-only pins, the `flux` role, the cluster-vars file, or a path in
