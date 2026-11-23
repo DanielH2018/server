@@ -11,9 +11,9 @@ rule_files:
   - ../../files/rules/bridge-exporter.yaml
 evaluation_interval: 1m
 tests:
-  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its six
+  # THE WAN FAMILY (A6-3). Every gauge is 0 from the first sample, so the gate and its seven
   # dependents all fire at once, with no `for:`. promtool does not run Alertmanager's inhibit
-  # rule, so all seven reach exp_alerts; monitor-bridge's tests/test_bridge_row_rules.py holds the
+  # rule, so all eight reach exp_alerts; monitor-bridge's tests/test_bridge_row_rules.py holds the
   # inhibit against the rule labels. Each dependent carries `requires: wan`, the gate does not.
   - interval: 1m
     input_series:
@@ -22,6 +22,8 @@ tests:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="discord"}
         values: "0x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_usage"}
+        values: "0x5"
+      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="r2_etcd_lock"}
         values: "0x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="cloudflare_ips_drift"}
         values: "0x5"
@@ -83,6 +85,23 @@ tests:
                 Month-to-date R2 storage, Class A operations, Class B operations or incomplete
                 multipart uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so
                 this is the only boundary.
+              runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
+      - eval_time: 1m
+        alertname: R2EtcdLockNotHolding
+        exp_alerts:
+          - exp_labels:
+              job: monitor-bridge
+              instance: monitor-bridge.homelab.svc:9181
+              check: r2_etcd_lock
+              severity: warning
+              service: r2
+              requires: wan
+            exp_annotations:
+              summary: "r2: the lock rule over etcd-snapshots/ departs from ADR-0041."
+              description: >-
+                R2 deleted a canary under etcd-snapshots/ inside the lock's 7 days, kept one past
+                them, or refused the canary. The monitor-bridge log names which:
+                `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN r2_etcd_lock '`.
               runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - eval_time: 1m
         alertname: CloudflareIPRangesDrifted

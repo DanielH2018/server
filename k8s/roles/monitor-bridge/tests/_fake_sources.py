@@ -41,6 +41,7 @@ _METHODS = (
     "get_json",
     "get_bytes",
     "post_json",
+    "send",
 )
 
 
@@ -102,6 +103,9 @@ class FakeSources(Sources):
         if headers is None:
             return self._answer("post_json", url, payload)
         return self._answer("post_json", url, payload, headers=headers)
+
+    def send(self, method, url, headers, body=None):
+        return self._answer("send", method, url, headers=headers, body=body)
 
 
 class FakeExport:

@@ -46,6 +46,10 @@ class IoConfig:
     R2_UPLOADS_MAX: float
     R2_PROBE_INTERVAL_S: float
     B2_LOCK_PROBE_INTERVAL_S: float
+    R2_S3_KEY_ID: str = field(repr=False)
+    R2_S3_SECRET_KEY: str = field(repr=False)
+    R2_LOCK_PROBE_INTERVAL_S: float
+    R2_ETCD_LOCK_DAYS: int
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
     DOMAIN_RDAP_URL: str
@@ -227,6 +231,14 @@ def io_config(
         # How long checks/b2.py:check_b2_object_lock holds a verdict, either outcome. A lock
         # setting changes only by hand, and each read costs two Class C calls.
         B2_LOCK_PROBE_INTERVAL_S=_num("B2_LOCK_PROBE_INTERVAL_S"),
+        # The R2 S3 key Longhorn and k3s write with, which checks/r2.py:check_r2_etcd_lock
+        # uses to upload and delete its lock canaries under etcd-snapshots/.
+        R2_S3_KEY_ID=_env_file("R2_S3_KEY_ID"),
+        R2_S3_SECRET_KEY=_env_file("R2_S3_SECRET_KEY"),
+        # How long check_r2_etcd_lock holds a verdict, either outcome: one canary a day.
+        R2_LOCK_PROBE_INTERVAL_S=_num("R2_LOCK_PROBE_INTERVAL_S"),
+        # The Age of ADR-0041's R2 lock rule over etcd-snapshots/, in days.
+        R2_ETCD_LOCK_DAYS=_int("R2_ETCD_LOCK_DAYS"),
         # The `cloudflare_ips` allowlist traefik trusts and netpol-baseline admits, as the env
         # secret renders it (comma-separated CIDRs). Empty disables the drift check. Daily
         # because Cloudflare moves these ranges on a multi-year cadence; the interval caches

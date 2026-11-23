@@ -120,6 +120,8 @@ spec:
                 path: healthchecks_api_read_only_key
               - key: uptimerobot_api_key # gitleaks:allow — a Secret item NAME, not a value
                 path: uptimerobot_api_key
+              - key: r2_s3_secret_key # gitleaks:allow — a Secret item NAME, not a value
+                path: r2_s3_secret_key
         - name: monitor-bridge-tmp
           emptyDir: {}
         # The etcd restore drill's stamp dir on daniel-box, the node this pod is pinned to.

@@ -64,7 +64,7 @@ CRITICAL_RECEIVERS = ["discord", "email"]
 ROUTED = [
     (
         "bridge-exporter.yaml",
-        24,
+        25,
         {
             "WANUnreachable",
             "DiscordDeliveryFailing",
