@@ -288,6 +288,27 @@ A single `gh-quota status` snapshot can read far lower: 31% on 2026-11-20 was on
 part-way through, and that window ended at 25% once both hosts were subtracted. The
 measurement predates slice 3's recording, so the host REST readers are part of that 59%.
 
+**Since slice 3's recording, both ledgers leave about a quarter.** The same join on 2026-11-23
+kept the 12 closed core windows from 20:00 UTC on 2026-11-22 to 15:00 UTC on 2026-11-23.
+GitHub counted 4,509 calls in them. The two ledgers recorded 3,346, which leaves 1,163, or 26%,
+attributed to neither host. Each window left between 38 and 203 calls. The quietest windows
+left 38, 38 and 46, so a floor of about 40 calls an hour is spent whatever the sessions do.
+The rest rises with session activity, up to about 200 an hour.
+
+The callers that still spend the operator's core quota beyond both ledgers:
+
+| Caller | Calls | Why no ledger records it |
+|---|---|---|
+| monitor-bridge's deploy-pipeline exporter | 24 an hour: two GETs per 300 s cycle, plus a compare while a green commit waits for `prod` | It runs in the cluster, where no host ledger file is reachable |
+| `promote` | a few per master push, through `PROMOTE_TOKEN` | It runs on a GitHub Actions runner, which has no gh-quota module |
+| airflow's `github_daily_rollup` | a few pages of 100 workflow runs, once a day at 02:00 UTC | It runs in the cluster |
+| `github-ruleset-drift` and `github-interaction-limit` | about 10 a day | They call `curl` from bash, not `github_rest` |
+| a session's bare `gh` write, and the operator's terminal and PC | unmeasured | `ghread` refuses writes, and the operator's calls go around every wrapper |
+
+The exporter explains most of the floor. The table's other callers spend too little to explain
+the rest of the busy-hour residual, which is therefore mostly bare `gh` writes and the operator's
+own calls.
+
 **`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
 checkout-sync therefore shows under its own service name, and the builder's token gets a
@@ -305,9 +326,9 @@ with time are still joined, because no sample names a token's owner. An anonymou
 recorded. `github_rest` loads the module from `/usr/lib/homelab/gh_quota.py` by path,
 because a component's copy sits beside its own script, where a bare import cannot find the
 module. A host without the gh-quota component therefore records nothing.
-`homelab-builder.service` lists `/var/lib/gh-quota` in its `ReadWritePaths=`, because its
-sandbox would otherwise refuse the write. `renovate-notify` reads once a day under a sandbox
-that writes only its state directory, so its reads stay beyond the ledger.
+`homelab-builder.service` and `homelab-renovate-notify.service` list `/var/lib/gh-quota` in
+their `ReadWritePaths=`, because their sandboxes would otherwise refuse the write
+(`hosts/lib/tests/test_github_rest.py::test_every_sandboxed_unit_that_reads_through_github_rest_can_write_the_ledger`).
 
 **The mode** is `off` or `record`, and slice 2 adds `enforce`. The component's
 `gh_quota_mode` default renders it into `/etc/gh-quota.conf`, and a host's host_vars can
