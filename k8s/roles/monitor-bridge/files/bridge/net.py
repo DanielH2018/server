@@ -52,6 +52,53 @@ def _get_bytes(
     return _request(url, headers, opener, lambda resp: resp.read())
 
 
+# URLs whose last answer `_get_json_conditional` keeps. The deploy-pipeline family reads three a
+# cycle; the compare's URL changes with each green commit, so older entries fall out.
+ETAG_CACHE_MAX = 8
+
+
+def _get_json_conditional(
+    url: str,
+    headers: dict[str, str],
+    cache: dict[str, tuple[str, JsonValue]],
+    opener: Opener | None = None,
+) -> JsonValue:
+    """GET `url` with the ETag of its cached answer, and return that answer again on a 304.
+
+    GitHub does not count a 304 to a request sent with an `Authorization` header against the
+    primary rate limit, so a read whose data has not changed costs nothing.
+
+    Args:
+      url: The URL to read.
+      headers: The request headers; `If-None-Match` is added when `cache` holds `url`.
+      cache: `(ETag, body)` per URL, updated in place and kept to the `ETAG_CACHE_MAX` URLs
+        read most recently. A response without an ETag is not cached.
+      opener: Sends the request; None is the real `urlopen`.
+
+    Raises:
+      urllib.error.HTTPError: any status but a 304 answering a cached ETag.
+      RuntimeError: as `_get_json`.
+    """
+    held = cache.get(url)
+    hdrs = dict(headers)
+    if held is not None:
+        hdrs["If-None-Match"] = held[0]
+    try:
+        etag, body = _request(
+            url, hdrs, opener, lambda resp: (resp.headers.get("ETag"), json.load(resp))
+        )
+    except urllib.error.HTTPError as e:
+        if held is None or e.code != 304:
+            raise
+        etag, body = held
+    cache.pop(url, None)
+    if etag:
+        cache[url] = (etag, body)
+        while len(cache) > ETAG_CACHE_MAX:
+            del cache[next(iter(cache))]
+    return body
+
+
 def _request(
     url: str,
     headers: dict[str, str] | None,

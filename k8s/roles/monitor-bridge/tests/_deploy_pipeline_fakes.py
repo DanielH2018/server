@@ -85,9 +85,12 @@ def github(
     def get_json(url, headers=None):
         if fail and fail in url:
             raise RuntimeError("GET %s: timed out" % url)
-        if url.startswith("https://ghcr.io/token"):
-            return {"token": "anonymous-pull"}
-        assert headers is not None
+        assert url.startswith("https://ghcr.io/token"), url
+        return {"token": "anonymous-pull"}
+
+    def get_json_cached(url, headers):
+        if fail and fail in url:
+            raise RuntimeError("GET %s: timed out" % url)
         assert headers["Authorization"] == "Bearer read-only-token"
         if url.endswith("/actions/variables"):
             return {"total_count": len(variables), "variables": variables}
@@ -111,5 +114,12 @@ def github(
         return manifest
 
     if prom_vector is None:
-        return FakeSources(get_json=get_json, get_bytes=get_bytes)
-    return FakeSources(get_json=get_json, get_bytes=get_bytes, prom_vector=prom_vector)
+        return FakeSources(
+            get_json=get_json, get_json_cached=get_json_cached, get_bytes=get_bytes
+        )
+    return FakeSources(
+        get_json=get_json,
+        get_json_cached=get_json_cached,
+        get_bytes=get_bytes,
+        prom_vector=prom_vector,
+    )

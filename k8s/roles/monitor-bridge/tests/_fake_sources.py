@@ -39,6 +39,7 @@ _METHODS = (
     "prom_vector",
     "loki_count",
     "get_json",
+    "get_json_cached",
     "get_bytes",
     "post_json",
     "send",
@@ -93,6 +94,9 @@ class FakeSources(Sources):
         if headers is None:
             return self._answer("get_json", url)
         return self._answer("get_json", url, headers=headers)
+
+    def get_json_cached(self, url, headers):
+        return self._answer("get_json_cached", url, headers=headers)
 
     def get_bytes(self, url, headers=None):
         if headers is None:
