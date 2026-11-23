@@ -70,8 +70,12 @@ def test_every_timer_a_node_ships_is_held_off():
     """A timer left out would fire a networked service at whatever minute the case runs."""
     for package in map(host_mode.render_host, NODES):
         dropins = case_dropins(package)
-        timers = {unit for unit in package.units() if unit.endswith(".timer")}
-        assert "homelab-claude-guardrail-ack.timer" in timers
+        timers = {
+            unit
+            for unit in (*package.units(), *package.enable_links())
+            if unit.endswith(".timer")
+        }
+        assert {"homelab-claude-guardrail-ack.timer", "homelab-updater.timer"} <= timers
         assert {t for t in timers if dropins.get(t) != TIMER_DROPIN} == set()
 
 
