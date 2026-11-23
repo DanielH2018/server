@@ -125,10 +125,12 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.325 \
 RUN mkdir -p /opt/vsix
 {% for ext in code_server_k8s_extensions %}
 # {{ ext.name }} {{ ext.version }}
-RUN curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/{{ ext.name }}.vsix" "{{ ext.url }}" \
-    && echo "{{ ext.sha256 }}  /opt/vsix/{{ ext.name }}.vsix" | sha256sum -c -
+RUN curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/{{ ext.name }}@{{ ext.version }}.vsix" "{{ ext.url }}" \
+    && echo "{{ ext.sha256 }}  /opt/vsix/{{ ext.name }}@{{ ext.version }}.vsix" | sha256sum -c -
 {% endfor %}
 
-# 7. Startup script installs all /opt/vsix extensions into the config volume
+# 7. Startup script installs each /opt/vsix extension the config volume does not hold. A file
+#    is named <id>@<version>, the form `--list-extensions --show-versions` prints, so each
+#    entry's version must equal its VSIX manifest's or the script reinstalls it every start.
 COPY extensions.sh /custom-cont-init.d/10-extensions.sh
 RUN chmod +x /custom-cont-init.d/10-extensions.sh
