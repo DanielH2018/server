@@ -277,8 +277,9 @@ with per-object Object Lock retentions and the R2 etcd snapshots with a bucket l
 leaves the R2 daily tier unlocked. The B2 bucket has file lock enabled and **no default
 retention**: the daily sweep sets each object's retention. monitor-bridge's `b2_object_lock`
 row reads the B2 setting once a day and fires `B2ObjectLockOff`, a warning, until steps 2 and
-2a are both done. The R2 rule has no standing reader until
-[#9702](https://github.com/DanielH2018/server/issues/9702) lands, so step 4 verifies it by hand.
+2a are both done. monitor-bridge's `r2_etcd_lock` row proves the R2 rule by its effect once a
+day, and fires `R2EtcdLockNotHolding`, a warning, until step 3 is done. *The R2 lock canary*
+below says how.
 
 Every step is **operator-only**. A session holds no credential that can change a bucket, a
 key, a Cloudflare token or a cluster object. Run each command as `ubuntu` on daniel-box, with
@@ -401,16 +402,7 @@ rejected: a full backup re-uploads every block as a new version, and the replace
 stay billed for a week, so the bucket would carry about two copies of the referenced set
 against the 10 GB free tier.
 
-### Step 3: let the Cloudflare analytics token read R2 lock rules
-
-[#9702](https://github.com/DanielH2018/server/issues/9702)'s standing reader reads the R2
-rule with the token SOPS holds as `cloudflare_analytics_token`. Cloudflare scopes the
-permission only to a whole account. In the Cloudflare dashboard, open *My Profile → API
-Tokens*, edit the token that `cloudflare_analytics_token` holds, add the permission
-*Account → Workers R2 Storage → Read*, and save. Editing a token's permissions keeps its
-value, so no secret rotates.
-
-### Step 4: lock the R2 etcd snapshot prefix
+### Step 3: lock the R2 etcd snapshot prefix
 
 The bucket name is the SOPS key `r2_bucket`, so each command reads it from the primary
 checkout. Authorize wrangler first. Its browser callback listens on daniel-box's port 8976,
@@ -434,7 +426,40 @@ The list must show the one rule over `etcd-snapshots/`, for 7 days, and nothing 
 refuses a locked delete with a 409, so the daily prune would retry. The rule must stay
 shorter than the 14 days k3s keeps its S3 snapshots, or R2 refuses k3s's prune too.
 
-### Step 5: remove the step 1 scratch objects
+`R2EtcdLockNotHolding` clears at the next daily canary run.
+
+### The R2 lock canary
+
+R2's S3 API cannot read a lock rule, and the Cloudflare permission that can is granted only
+for a whole account. The operator chose on 2026-11-23 to prove the rule by its effect with
+the R2 key the cluster already holds, rather than give a pod an account-wide token
+([#9702](https://github.com/DanielH2018/server/issues/9702)). Once a day, monitor-bridge's
+`r2_etcd_lock` row (`k8s/roles/monitor-bridge/files/checks/r2.py:check_r2_etcd_lock`) does
+three things under `etcd-snapshots/lock-canary-`:
+
+1. It uploads today's canary, `lock-canary-<date>`, unless the listing already holds it. R2
+    refuses to overwrite a locked object, so a restarted bridge must not upload twice.
+1. It tries to delete the newest earlier canary younger than the lock, or today's on the
+    first run. R2's 409 `ObjectLockedByBucketPolicy` means the rule holds. A delete that
+    succeeds means no rule covers the prefix, and the row reads `lock missing`.
+1. It deletes each canary dated more than 7 days back, which must succeed. A refusal means a
+    lock over the prefix outlasts 7 days, and the row reads `lock outlasts its age`.
+
+Any other answer from R2 fails the row as `request refused`. The row holds each verdict for a
+day, so a missing lock does not upload and delete a canary every cycle.
+
+- **Each canary is zero bytes.** k3s lists every non-empty object under `etcd-snapshots/` as
+  a ready snapshot (`pkg/etcd/s3/s3.go`, `ListSnapshots`, at v1.37.2+k3s1). A non-empty
+  canary would read as a fresh snapshot to backup health's check 12 and hide a stale one.
+- **No name matches `offbox-*`**, so k3s's retention never counts a canary, and the etcd drill
+  never restores one.
+- **It costs two Class A operations a day**: the listing and the upload. R2 does
+  not bill a delete.
+- **It does not read the rule's prefix list.** A rule widened over `longhorn/` passes the row,
+  and `r2_usage` notices it only once Longhorn's retried prunes have spent the month's
+  operations.
+
+### Step 4: remove the step 1 scratch objects
 
 The scratch locks expire at about 15:40 UTC on 2026-11-22. The first three commands can run
 at any time:

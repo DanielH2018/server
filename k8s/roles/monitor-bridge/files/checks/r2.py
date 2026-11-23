@@ -1,20 +1,28 @@
-"""Cloudflare R2 free-tier headroom for monitor-bridge — one GraphQL query, four arms.
+"""Cloudflare R2 checks for monitor-bridge: free-tier headroom, and the etcd snapshot lock.
 
 Reads config as `cfg.X` and queries R2 through the `src` argument (`bridge.sources.Sources`),
-which a test replaces with a fake. Its cache is `src.state.r2_probe` (`bridge.streaks.State`). Rule and
-enforcement: bridge/config.py's header.
+which a test replaces with a fake. Its caches are `src.state.r2_probe` and
+`src.state.r2_lock_probe` (`bridge.streaks.State`). Rule and enforcement: bridge/config.py's
+header.
 """
 
 import json
+import re
 import time
+import urllib.error
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
+from bridge import sigv4
 from bridge.config import Config
 from bridge.sources import Sources
 from bridge.parsing import FETCH_BODY_MAX
-from bridge.types import JsonValue, as_list, as_object, as_object_list
+from bridge.types import CheckResult, JsonValue, as_list, as_object, as_object_list
 from verdicts.storage import (
+    R2_CANARY_PREFIX,
+    r2_canary_plan,
     r2_classify_operations,
+    r2_lock_verdict,
     r2_month_start,
     r2_usage_verdict,
 )
@@ -168,3 +176,95 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
 
 def check_r2_usage(cfg: Config, src: Sources) -> tuple[bool, str]:
     return r2_usage(cfg, src)
+
+
+def _r2_send(cfg: Config, src: Sources, method: str, path: str, now: float) -> bytes:
+    """A SigV4-signed request to the bucket's S3 API; `path` follows the bucket name."""
+    url = "https://%s.r2.cloudflarestorage.com/%s%s" % (
+        cfg.CF_ACCOUNT_ID,
+        cfg.R2_BUCKET,
+        path,
+    )
+    return src.send(
+        method,
+        url,
+        sigv4.sign(method, url, cfg.R2_S3_KEY_ID, cfg.R2_S3_SECRET_KEY, now=now),
+        # A PUT carries an empty body so urllib sends Content-Length: 0.
+        b"" if method == "PUT" else None,
+    )
+
+
+def _r2_delete_refused(cfg: Config, src: Sources, key: str, now: float) -> bool:
+    """Whether R2's lock refused to delete `key`. Any answer but a delete or that 409 raises."""
+    try:
+        _r2_send(cfg, src, "DELETE", "/" + key, now)
+    except urllib.error.HTTPError as e:
+        if e.code == 409 and "ObjectLockedByBucketPolicy" in str(e.msg):
+            return True
+        raise
+    return False
+
+
+def _r2_etcd_lock_probe(cfg: Config, src: Sources, now: float) -> CheckResult:
+    listing = _r2_send(
+        cfg,
+        src,
+        "GET",
+        "/?list-type=2&prefix=" + urllib.parse.quote(R2_CANARY_PREFIX, safe=""),
+        now,
+    ).decode("utf-8", "replace")
+    plan = r2_canary_plan(
+        re.findall(r"<Key>([^<]*)</Key>", listing),
+        datetime.fromtimestamp(now, timezone.utc).date(),
+        cfg.R2_ETCD_LOCK_DAYS,
+    )
+    if plan.upload:
+        # Zero bytes: k3s lists every non-empty object under etcd-snapshots/ as a ready
+        # snapshot, which would mask a stale one from backup health's check 12.
+        _r2_send(cfg, src, "PUT", "/" + plan.upload, now)
+    probe_refused = _r2_delete_refused(cfg, src, plan.probe, now)
+    expired_refused = [
+        key for key in plan.expired if _r2_delete_refused(cfg, src, key, now)
+    ]
+    return r2_lock_verdict(
+        plan.probe, probe_refused, expired_refused, cfg.R2_ETCD_LOCK_DAYS
+    )
+
+
+def check_r2_etcd_lock(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
+    """Daily proof of ADR-0041's R2 lock rule over etcd-snapshots/, by its effect. (ok, msg).
+
+    R2's S3 API cannot read a lock rule, so the check uploads a zero-byte canary under the
+    prefix once a day and tries to delete an earlier one: R2's 409 `ObjectLockedByBucketPolicy`
+    means the rule holds, and a delete that succeeds means it does not. Canaries past the
+    lock's age are deleted, and a refusal there means a lock outlasts the rule's age.
+
+    Every answer from R2 is cached for R2_LOCK_PROBE_INTERVAL_S, a refusal included, so a
+    missing lock does not upload and delete a canary every cycle. A transport failure raises
+    and the next cycle probes again. Empty credentials disable the check.
+    """
+    if not (
+        cfg.CF_ACCOUNT_ID
+        and cfg.R2_BUCKET
+        and cfg.R2_S3_KEY_ID
+        and cfg.R2_S3_SECRET_KEY
+    ):
+        return True, "R2 etcd lock check disabled (no account id / bucket / S3 key)"
+    now = now if now is not None else time.time()
+    cache = src.state.r2_lock_probe
+    if cache["ts"] is not None and now - cache["ts"] < cfg.R2_LOCK_PROBE_INTERVAL_S:
+        return cache["ok"], "%s (checked %.0fh ago)" % (
+            cache["msg"],
+            (now - cache["ts"]) / 3600,
+        )
+    try:
+        result = _r2_etcd_lock_probe(cfg, src, now)
+    except urllib.error.HTTPError as e:
+        result = CheckResult(
+            False, "R2 refused the lock canary: %s" % e, ["request refused"]
+        )
+    cache["ts"] = now
+    cache["ok"], cache["msg"] = result
+    return result

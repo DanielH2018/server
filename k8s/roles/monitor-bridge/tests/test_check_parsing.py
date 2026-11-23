@@ -139,6 +139,8 @@ _SECRET_ENV = {
     "B2_PROBE_KEY_ID": "sentinel-b2-key-id",
     "B2_PROBE_APPLICATION_KEY": "sentinel-b2-app-key",
     "CF_ANALYTICS_TOKEN": "sentinel-cf-token",
+    "R2_S3_KEY_ID": "sentinel-r2-key-id",
+    "R2_S3_SECRET_KEY": "sentinel-r2-secret-key",
     "HEALTHCHECKS_API_KEY": "sentinel-hc-api-key",
     "UPTIME_ROBOT_API_KEY": "sentinel-uptime-robot-key",
     "SMTP_PASSWORD": "sentinel-smtp-password",

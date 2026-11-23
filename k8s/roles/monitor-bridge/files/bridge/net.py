@@ -41,7 +41,7 @@ _Body = TypeVar("_Body")
 def _get_json(
     url: str, headers: dict[str, str] | None = None, opener: Opener | None = None
 ) -> JsonValue:
-    return _get(url, headers, opener, json.load)
+    return _request(url, headers, opener, json.load)
 
 
 def _get_bytes(
@@ -49,14 +49,16 @@ def _get_bytes(
 ) -> bytes:
     # The raw body, for a caller that hashes it: an OCI manifest's digest is the sha256 of the
     # exact bytes the registry serves, which a JSON round trip does not preserve.
-    return _get(url, headers, opener, lambda resp: resp.read())
+    return _request(url, headers, opener, lambda resp: resp.read())
 
 
-def _get(
+def _request(
     url: str,
     headers: dict[str, str] | None,
     opener: Opener | None,
     read: Callable[[Any], _Body],
+    method: str = "GET",
+    data: bytes | None = None,
 ) -> _Body:
     # The explicit User-Agent is REQUIRED, not decoration. Discord sits behind Cloudflare, which
     # 403s the default python-urllib UA with error 1010 — so `check_discord`'s webhook GETs would
@@ -67,7 +69,7 @@ def _get(
     hdrs = {"User-Agent": "monitor-bridge"}
     if headers is not None:
         hdrs.update(headers)
-    req = urllib.request.Request(url, headers=hdrs)
+    req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
     try:
         with (opener or urllib.request.urlopen)(req, timeout=HTTP_TIMEOUT) as resp:
             return read(resp)

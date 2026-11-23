@@ -13,7 +13,8 @@ rules would have no reason to look and a reader of config.py could not tell them
 tunable.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from typing import NamedTuple
 
 from bridge.types import CheckResult
 
@@ -291,4 +292,78 @@ def b2_lock_verdict(bucket: dict, capabilities: list[str]) -> tuple[bool, str]:
         True,
         "Object Lock on %s with no default retention; the daily sweep locks each object"
         % name,
+    )
+
+
+# A canary must stay outside k3s's `offbox-*` snapshot names, so k3s's retention never counts it.
+R2_CANARY_PREFIX = "etcd-snapshots/lock-canary-"
+
+
+class CanaryPlan(NamedTuple):
+    """The R2 requests one run of the etcd lock canary makes.
+
+    Attributes:
+      upload: Today's canary key, or None when the listing already holds it. R2 refuses to
+        overwrite a locked object, so a second run on one day must not upload again.
+      probe: The canary whose delete the lock must refuse: the newest earlier canary still
+        inside the lock's age, else today's.
+      expired: Canaries past the lock's age by at least a day, each of which must delete.
+    """
+
+    upload: str | None
+    probe: str
+    expired: tuple[str, ...]
+
+
+def r2_canary_plan(keys: list[str], today: date, lock_days: int) -> CanaryPlan:
+    """Which canaries to upload, probe and delete, from the keys listed under the prefix.
+
+    A canary is dated by its name in UTC. One dated `lock_days - 1` days ago is younger than
+    the lock wherever in the day it was uploaded, and one dated `lock_days + 1` days ago is
+    older. A key whose name carries no date is left alone.
+    """
+    dated: dict[date, str] = {}
+    for key in keys:
+        try:
+            dated[date.fromisoformat(key.removeprefix(R2_CANARY_PREFIX))] = key
+        except ValueError:
+            continue
+    todays = R2_CANARY_PREFIX + today.isoformat()
+    locked = [d for d in dated if today - timedelta(days=lock_days - 1) <= d < today]
+    return CanaryPlan(
+        upload=None if today in dated else todays,
+        probe=dated[max(locked)] if locked else todays,
+        expired=tuple(
+            dated[d]
+            for d in sorted(dated)
+            if d <= today - timedelta(days=lock_days + 1)
+        ),
+    )
+
+
+def r2_lock_verdict(
+    probe: str, probe_refused: bool, expired_refused: list[str], lock_days: int
+) -> CheckResult:
+    """(ok, msg) for ADR-0041's R2 lock rule over etcd-snapshots/, from the canary deletes.
+
+    Args:
+      probe: The canary the run tried to delete.
+      probe_refused: R2 answered that delete with 409 `ObjectLockedByBucketPolicy`.
+      expired_refused: The canaries past the lock's age that R2 refused to delete.
+      lock_days: The rule's Age, in days.
+    """
+    problems, details = [], []
+    if not probe_refused:
+        problems.append("R2 deleted %s, so no lock rule holds etcd-snapshots/" % probe)
+        details.append("lock missing")
+    if expired_refused:
+        problems.append(
+            "R2 refused to delete %s, so a lock over etcd-snapshots/ outlasts %d days"
+            % (", ".join(expired_refused), lock_days)
+        )
+        details.append("lock outlasts its age")
+    if problems:
+        return CheckResult(False, "; ".join(problems), details)
+    return CheckResult(
+        True, "R2 refused to delete %s: the etcd-snapshots/ lock holds" % probe
     )

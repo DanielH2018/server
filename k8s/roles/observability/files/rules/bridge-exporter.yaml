@@ -71,6 +71,20 @@ groups:
             uploads passed 80% of the free tier. Cloudflare offers no cap on R2, so this is the only
             boundary.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
+      - alert: R2EtcdLockNotHolding
+        expr: homelab_check_success{job="monitor-bridge", check="r2_etcd_lock"} == 0
+        labels:
+          severity: warning
+          service: r2
+          requires: wan
+        annotations:
+          summary: "r2: the lock rule over etcd-snapshots/ departs from ADR-0041."
+          description: >-
+            The daily canary under etcd-snapshots/ was deleted inside the lock's 7 days, a
+            canary past them could not be deleted, or R2 refused the canary's requests. Read the
+            rules with `wrangler r2 bucket lock list`. The monitor-bridge log names which:
+            `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN r2_etcd_lock '`.
+          runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: CloudflareIPRangesDrifted
         expr: homelab_check_success{job="monitor-bridge", check="cloudflare_ips_drift"} == 0
         labels:

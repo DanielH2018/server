@@ -58,6 +58,8 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True, runbook="alert-runbooks"),
     # WAN-gated rather than startup-graced: the WAN gate covers the reboot transient.
     PushCheck(name="r2_usage", fn=r2.check_r2_usage, gate="wan_reachable", critical=True, runbook="longhorn-backup-tiering"),
+    # Proves ADR-0041's R2 lock over etcd-snapshots/ with a daily canary; holds a verdict a day.
+    PushCheck(name="r2_etcd_lock", fn=r2.check_r2_etcd_lock, gate="wan_reachable", runbook="longhorn-backup-tiering"),
     # cloudflare_ips gates Traefik's forwardedHeaders.trustedIPs. The bridge caches a success for a
     # day and re-probes a failure every cycle.
     PushCheck(name="cloudflare_ips_drift", fn=cloudflare_ips.check_cloudflare_ips_drift, gate="wan_reachable"),
