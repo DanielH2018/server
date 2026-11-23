@@ -4,7 +4,6 @@ The script runs in-process against a fake root, a stub `systemctl` and a stub AP
 (`_k3s_restart_host.py`). Each refusal has a passing twin that differs in one place.
 """
 
-import ast
 import json
 
 import pytest
@@ -263,10 +262,6 @@ def test_a_refusing_run_writes_all_three_series(box):
 
 
 # ── the script's own rules ──────────────────────────────────────────────────────────────────
-
-
-def test_the_script_parses_with_the_python_312_grammar():
-    ast.parse(SCRIPT.read_text(), feature_version=(3, 12))
 
 
 def test_the_script_names_the_marker_prepare_reads():

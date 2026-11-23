@@ -3,7 +3,7 @@
 description: Installs the newest homelab packages and runs reconcile
 # The updater reads reconcile's record with python3.
 depends:
-  - "python3 (>= 3.12)"
+  - "python3 (>= 3.14)"
 maintainer_scripts: [postinst, prerm]
 files:
   - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}

@@ -10,8 +10,6 @@ unreachable or silent leaves the gate open, which fails closed. Stdlib only, plu
 `host_lib` the builder already ships beside it.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.parse

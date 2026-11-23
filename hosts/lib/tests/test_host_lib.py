@@ -4,25 +4,14 @@ host_lib is importable (stdlib only, no module-level config read), so its invari
 directly. This is the behavioural home of the Discord User-Agent + 2xx-only contract.
 """
 
-import ast
 import json
 import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from unittest import mock
 
 import host_lib
-
-
-def test_host_lib_parses_with_the_3_12_grammar():
-    # fact: hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)
-    # The repository signer imports host_lib under daniel-box's /usr/bin/python3, and
-    # pyproject.toml formats both for py312, the floor of the host-run files. A 3.14-only
-    # construct, such as an unparenthesised `except A, B:`, breaks that floor.
-    source = Path(host_lib.__file__).read_text()
-    ast.parse(source, feature_version=(3, 12))
 
 
 def test_host_lib_imports_with_no_sibling_module(tmp_path):

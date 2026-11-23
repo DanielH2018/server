@@ -222,12 +222,9 @@ start waits for a signer still running and never rewrites `staged/` under it.
   unit's `ExecStopPost=-+` line copies it through `publish-textfile`.
 - **The interpreter.** The unit runs the host's `/usr/bin/python3`, because the signer cannot
   read the builder's pinned interpreter under its 0700 state directory. The script is
-  stdlib-only, and `pyproject.toml` formats it for 3.12.
-  `hosts/lib/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
-  holds it to that grammar. The signer takes its `log` and its atomic write from the `host_lib.py`
-  installed beside it, so that file is formatted for 3.12 too, and
-  `hosts/lib/tests/test_host_lib.py::test_host_lib_parses_with_the_3_12_grammar` holds it to that
-  grammar (#6202).
+  stdlib-only. The signer takes its `log` and its atomic write from the `host_lib.py` installed
+  beside it, so that file is stdlib-only too (#6202). Each host package depends on
+  `python3 (>= 3.14)`, the floor both files keep.
 - **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
   `/var/lib/homelab-signer` and `staged/`.
 
