@@ -445,7 +445,6 @@ claude_code_triage_poll_mode: shadow
 # says how a key is read. A fall the table does not route is logged as skipped and opens no run.
 # The seed is the down class, all `warning` but the two `*Critical` probe twins: a severity floor
 # at `critical` opens nothing for a down service.
-# wg-easy's probe stays out until its flap is fixed.
 claude_code_triage_poll_routes:
   ExtraProbeFailed: triage
   ExtraProbeFailedCritical: triage
@@ -454,7 +453,6 @@ claude_code_triage_poll_routes:
   K8sDeploymentZeroAvailable: triage
   K8sContainerCrashLooping: triage
   ScrapeTargetDown: triage
-  "ExtraProbeFailed:wg-easy": none
 claude_code_triage_poll_interval: 2min
 # Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
 # on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.
