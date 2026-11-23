@@ -184,9 +184,8 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
 - **A task's log lives in loki-homelab, not in Airflow.** The task's supervisor writes every
   log line, the exception and its frames included, to the pod's stdout as JSON. The scheduler
   deletes the pod as soon as it exits, and the UI's log view reads only the pod's own file, so
-  the view is empty for a finished task. A task that fails still exits 0, so its pod goes too;
-  `AIRFLOW__KUBERNETES_EXECUTOR__DELETE_WORKER_PODS_ON_FAILURE` keeps only a pod whose
-  container crashed.
+  the view is empty for a finished task. The scheduler deletes a failed task's pod too,
+  including one whose container crashed, so Loki is the only record of any task's log.
 - **Every task pod lingers 15 seconds after its task exits.** Alloy publishes discovered pods
   at most once every 5 seconds and re-globs their log files every 10. Kubelet removes a
   pod's log file when the pod is deleted, so a pod gone before Alloy opens its file leaves

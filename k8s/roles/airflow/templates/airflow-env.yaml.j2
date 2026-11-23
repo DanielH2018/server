@@ -41,10 +41,6 @@
               value: {{ k8s_namespace }}
             - name: AIRFLOW__KUBERNETES_EXECUTOR__POD_TEMPLATE_FILE
               value: /opt/airflow-pod-template/pod-template.yaml
-{# Keeps only a pod whose container exits non-zero, such as an OOM kill. A task that fails
-   still exits 0, so its pod is deleted; its log is in loki-homelab. #}
-            - name: AIRFLOW__KUBERNETES_EXECUTOR__DELETE_WORKER_PODS_ON_FAILURE
-              value: "False"
 {% if platform %}
             - name: AIRFLOW_POSTGRES_PASSWORD
               valueFrom:
