@@ -86,8 +86,8 @@ Exit codes:
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, no promotion covered the
       merge in time, the health gate could not read its store, or the builder has not
-      published a host package that contains the merge. From a `--detach` parent, 75 means
-      only that another landing of the PR is live, so no landing started
+      published a host package that contains the merge, or another landing of the PR is live
+      (`cause=landing-live`), so no landing started
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
