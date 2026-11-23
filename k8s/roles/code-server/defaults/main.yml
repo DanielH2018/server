@@ -130,7 +130,7 @@ code_server_k8s_extensions:
 # finish on its PR (`asset_pins.py --refresh node`). The URL sits beside the digest so
 # `scripts/validate/asset_pins.py` pairs the two and fetches it.
 # renovate: datasource=node-version depName=node
-code_server_k8s_node_version: "24.22.2"
+code_server_k8s_node_version: "24.22.3"
 code_server_k8s_node_url: "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz"
 code_server_k8s_node_sha256: 48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
 
@@ -141,7 +141,7 @@ code_server_k8s_node_sha256: 48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a2
 # version through the annotation below and files it in the `code-server build pins` group; the
 # two digests are the manual finish on that PR, `asset_pins.py --refresh rust-lang/rust`.
 # renovate: datasource=github-releases depName=rust-lang/rust
-code_server_k8s_rust_version: "1.99.1"
+code_server_k8s_rust_version: "1.100.0"
 code_server_k8s_rust_url: "https://static.rust-lang.org/dist/rust-{{ code_server_k8s_rust_version }}-x86_64-unknown-linux-gnu.tar.xz"
 code_server_k8s_rust_sha256: 231fcae47ee950621374725b5fc3b5441d2fbda2955ac45dd7dc816d8876cfe7
 code_server_k8s_rust_src_url: "https://static.rust-lang.org/dist/rust-src-{{ code_server_k8s_rust_version }}.tar.xz"
