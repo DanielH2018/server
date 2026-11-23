@@ -80,9 +80,8 @@ groups:
         annotations:
           summary: "r2: the lock rule over etcd-snapshots/ departs from ADR-0041."
           description: >-
-            The daily canary under etcd-snapshots/ was deleted inside the lock's 7 days, a
-            canary past them could not be deleted, or R2 refused the canary's requests. Read the
-            rules with `wrangler r2 bucket lock list`. The monitor-bridge log names which:
+            R2 deleted a canary under etcd-snapshots/ inside the lock's 7 days, kept one past
+            them, or refused the canary. The monitor-bridge log names which:
             `kubectl -n homelab logs deploy/monitor-bridge | grep 'DOWN r2_etcd_lock '`.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
       - alert: CloudflareIPRangesDrifted
