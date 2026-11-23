@@ -427,3 +427,27 @@ def test_a_holder_whose_turn_a_rate_limit_wait_lost_forms_no_batch(batch_of, cap
     assert "going on without a turn" in capsys.readouterr().out
     assert hub.stacked == {} and hub.batch_prs == []
     assert hub.merged == [OWN]
+
+
+def test_a_members_rate_limit_wait_gives_the_turn_back_and_forms_no_batch(batch_of):
+    ln, hub, the_line = batch_of(drafts=("7",))
+    limited = subprocess.CalledProcessError(
+        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+    )
+    refused = []
+
+    def gh_json(*args, **kwargs):
+        # The holder reads PR 7's files while it checks 7 for the batch; GitHub refuses once.
+        if args[:3] == ("pr", "view", "7") and "files,headRefOid" in args:
+            if not refused:
+                refused.append(args)
+                raise limited
+        return hub.gh_json(*args, **kwargs)
+
+    ln.tools = replace(ln.tools, gh_json=gh_json)
+    land(ln)
+    order = [c[0] for c in hub.calls if c[0] in ("try_turn", "release_turn", "sleep")]
+    assert order[:3] == ["try_turn", "release_turn", "sleep"]
+    assert hub.stacked == {} and hub.batch_prs == []
+    assert hub.merged == [OWN]
+    assert answers(the_line, "7") == [""]

@@ -120,7 +120,8 @@ class Landing:
         # while this landing holds the turn, so never for a batch member, which the holder merges.
         self.give_back_turn: Callable[[], None] | None = None
         # Gives the turn up for the length of the wait it is handed, then takes it again
-        # (`turn.held`). Set only while this landing holds the turn.
+        # (`turn.held`). Set only while this landing holds the turn, and for a batch member to
+        # the call that gives the holder's turn up and ends the batch (`batch.py`).
         self.step_out_of_turn: Callable[[Callable[[], Any]], Any] | None = None
         # Set once a wait stepped out of the turn, because master may have moved meanwhile;
         # the merge wait clears it when it checks the head against master before its merge.
