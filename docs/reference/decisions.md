@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-22 22:29 UTC
-generated_sha: a491bd494
+generated_at: 2026-11-23 06:17 UTC
+generated_sha: 2933fca28
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: a491bd494
 
 # Decisions
 
-645 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+646 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -407,6 +407,7 @@ generated_sha: a491bd494
 | 10, not the CLI's default of 32. at 200-400 MB RSS, so 10 sessions ask for up to ~4 GB against ~15 GB available with k3s already running. | `hosts/components/claude-code/defaults/main.yml` | 2026-09-04 |
 | one crash page per 6 hours, not one per exit. with RestartSec=10, and systemd 255 fires OnFailure= on every exit of that loop, so a host that cannot start would page about every 10 seconds. After a delivered page the alert skips for this many minutes, so a loop that lasts days pages four times a day as a reminder. The cost is that a second, separate crash inside the window is not paged; the page text says so. 0 restores a page per exit. | `hosts/components/claude-code/defaults/main.yml` | 2026-10-12 |
 | 20G on the shared parent, with the per-plane caps below at 14G as sub-bounds. Lowering both planes to 10G would also make the sum 20G, and is the worse shape: a plane would throttle at half the box's fleet budget while the other plane sat idle. A parent ceiling shares elastically — either plane may take up to its own 14G, and the two together are held to 20G by the parent. | `hosts/components/claude-code/defaults/main.yml` | 2026-11-14 |
+| 1000, the kernel's maximum, on every fleet process: claude-rc.service, the background resume, each fleet uid's user manager, the agent's login shell and the operator's zsh login shell (/etc/zsh/zprofile). kubelet gives a burstable pod 2-999 and a best-effort pod 1000, so any lower value lets the global OOM killer prefer a pod although the fleet caused the pressure. The bias is small: the kernel's badness adds adj * totalpages / 1000 to a process's RSS, so one point is about 30 MiB here, and a pod with a far larger RSS can still be the victim. A systemd-oomd kill on user.slice was ruled out on 2026-11-22 (docs/claude-code-rc-caps.md). | `hosts/components/claude-code/defaults/main.yml` | 2026-11-22 |
 | the target path is its own variable, not "the same path" as the source. claude_code_user is the agent, the source is under claude_code_agent_user_home, a path that does not exist on claude_code_memory_sync_target, where sessions read the operator's store. | `hosts/components/claude-code/defaults/main.yml` | 2026-10-09 |
 | a key pair held equal by a test, not one shared key in group_vars/all.yml. key routes as a deploy-plane change only (docs/archive/host/h2-shrink-host-plane.md). Each name below that has a twin in a k8s role is held equal to it by hosts/lib/tests/test_claude_artifacts_node_timers.py, so a change edits both. | `hosts/components/claude-code/defaults/main.yml` | 2026-10-17 |
 | autoMode.allow stays out. push) are the operator's sessions', not an unattended session's. | `hosts/components/claude-code/files/claude_config_render.py` | 2026-11-15 |
@@ -534,7 +535,7 @@ generated_sha: a491bd494
 | an absent `last-good` refuses rather than falling back to `prod` or to "no range". `promote` seeds the tag on its first run, so its absence means the promotion plane is not running yet, and a bump merged then has nothing that would hold it. | `scripts/deploy_tools/land_lib/pin_gate.py` | 2026-10-16 |
 | `suspended`, every published tag suspended, ends the landing as `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still waits on, or a plane is owed a hand, which ends `needs-manual-apply` as in `no_tag_outcome`. The suspend PR itself owes neither and ends at exit 0, so a failure verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits on the same suspended tag again. A change that raced the gate onto a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold. | `scripts/deploy_tools/land_lib/promotion.py` | 2026-11-19 |
 | 6. 6 to 7 live landings spent about 1,700 of the 5,000 core calls an hour and 2,250 of the 5,000 GraphQL calls. Lower it from data. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-15 |
-| 2400 s, the longest a serial PR in the turn waits for the landings past their merge (`_drain`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck on a soak for longer would otherwise hold the turn for two merge budgets. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-19 |
+| 2400 s, the longest a serial PR in the turn waits for the landings past their merge (`_wait_out`). On 2026-11-18 and 2026-11-19 every landing that settled took 7 to 2209 s from its merge to its verdict (the `landing-annotation` records' wait_ci plus deploy). A landing stuck on a soak for longer would otherwise hold the turn for two merge budgets. | `scripts/deploy_tools/land_lib/slots.py` | 2026-11-19 |
 | only a path both master and the PR changed makes an approved head stale Refusing on any master move would make every approved PR be rebased and approved again, since master moves between nearly every approval and its landing. The accepted risk is a red master from a path the PR never touched. | `scripts/deploy_tools/land_lib/stale_base.py` | 2026-11-15 |
 | a stale approved head is refused, not updated and not merged. would make a head the operator's approval does not name, so the policy would refuse it anyway. The rebase moves the merge base to master, so the re-approved head goes stale only if master moves again between the approval and the landing. | `scripts/deploy_tools/land_lib/stale_base.py` | 2026-11-14 |
 | NO tree lock is taken. | `scripts/deploy_tools/land_lib/tools.py` | 2026-10-23 |
