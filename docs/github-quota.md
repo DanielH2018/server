@@ -299,15 +299,15 @@ The callers that still spend the operator's core quota beyond both ledgers:
 
 | Caller | Calls | Why no ledger records it |
 |---|---|---|
-| monitor-bridge's deploy-pipeline exporter | 24 an hour: two GETs per 300 s cycle, plus a compare while a green commit waits for `prod` | It runs in the cluster, where no host ledger file is reachable |
+| monitor-bridge's deploy-pipeline exporter | 24 an hour: two GETs per 300 s cycle, plus a compare when a green run postdates `prod`'s or `prod`'s run is off the page | It runs in the cluster, where no host ledger file is reachable |
 | `promote` | a few per master push, through `PROMOTE_TOKEN` | It runs on a GitHub Actions runner, which has no gh-quota module |
 | airflow's `github_daily_rollup` | a few pages of 100 workflow runs, once a day at 02:00 UTC | It runs in the cluster |
 | `github-ruleset-drift` and `github-interaction-limit` | about 10 a day | They call `curl` from bash, not `github_rest` |
 | a session's bare `gh` write, and the operator's terminal and PC | unmeasured | `ghread` refuses writes, and the operator's calls go around every wrapper |
 
 The exporter explains most of the floor. The table's other callers spend too little to explain
-the rest of the busy-hour residual, which is therefore mostly bare `gh` writes and the operator's
-own calls.
+the rest of the busy-hour residual. By elimination, that rest is a session's bare `gh` writes
+and the operator's own calls. Nothing has counted either of them.
 
 **`github_rest.github_get` records each authenticated read** as `api rest`, under the token the
 read sends and against the caller's session key. A systemd timer such as the builder or
