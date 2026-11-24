@@ -1,12 +1,11 @@
-"""Alertmanager's read door stays narrow, and Karma, the silence UI, stays LAN-only.
+"""Alertmanager's read door stays narrow, and Karma, the silence UI, names Authelia on every route.
 
 The read door is a GET-only, LAN-only read of two API paths. `probe.py health` and `probe.py
 monitors` read silences and inhibitions through it. It carries no Authelia, so its matcher is
 the whole control: a dropped `Method(GET)` would let any LAN host POST a silence that mutes
 every page, and a missing node address makes `probe.py` 404 from one node's shell.
 
-Karma can create silences too, behind the `authelia` chain. A public name would put that on
-the internet under Authelia's `*.<domain>` wildcard, which carries no `admins` subject.
+Karma can create silences too, behind the `authelia` chain on both its LAN and public names.
 
 Run: uv run pytest tests/k8s/test_alertmanager_read_route.py
 """
@@ -63,18 +62,17 @@ def test_the_door_admits_the_lan_and_both_host_source_families():
     assert "ClientIP(`10.42.0.0/16`)" not in match, match
 
 
-def test_karma_is_behind_authelia_and_lan_only_even_with_public_routes_on():
+def test_karma_names_authelia_on_both_its_lan_and_public_routes():
     # fact: k8s/roles/karma/CLAUDE.md#Notable
-    route = _route(
-        "karma",
-        KARMA_TEMPLATE,
-        "karma",
-        ["rate-limit", "authelia"],
-        k8s_public_route=True,
-        container_item=KARMA_ENTRY,
+    ctx = _role_context(
+        "karma", domain="example.com", k8s_public_route=True, container_item=KARMA_ENTRY
     )
-    # `_route` unpacks exactly one document, so a `karma-public` object fails it too.
-    assert route["match"] == "Host(`karma.local.example.com`)", (
-        f"{route['match']!r} is not the LAN name alone; a public name would put the silence "
-        "UI on the internet, and a ClientIP fence refuses blackbox-exporter's pod address"
-    )
+    docs = [d for d in yaml_fast.safe_load_all(_render(KARMA_TEMPLATE, **ctx)) if d]
+    matches = {d["metadata"]["name"]: d["spec"]["routes"][0] for d in docs}
+    assert set(matches) == {"karma", "karma-public"}, matches
+    assert matches["karma"]["match"] == "Host(`karma.local.example.com`)"
+    assert matches["karma-public"]["match"] == "Host(`karma.example.com`)"
+    for name, route in matches.items():
+        assert "authelia" in [m["name"] for m in route["middlewares"]], (
+            f"{name} reaches the silence UI without Authelia"
+        )
