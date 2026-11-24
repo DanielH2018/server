@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-21 15:45 UTC
-generated_sha: 7a64823b9
+generated_at: 2026-11-24 18:17 UTC
+generated_sha: 9c261ef05
 ---
 
 !!! warning "Generated file — do not edit"
@@ -49,7 +49,7 @@ generated_sha: 7a64823b9
 | janitorr | no route (infra role) | unknown (use_authelia not declared on this entry) | not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | jellyfin | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | none (public/no-auth) | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | karakeep | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup); weekly -> B2 (default target) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| karma | <span class="fqdn" data-host="karma.local">karma.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| karma | <span class="fqdn" data-host="karma">karma.&lt;domain&gt;</span> · <span class="fqdn" data-host="karma.local">karma.local.&lt;domain&gt;</span> | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | lidarr | <span class="fqdn" data-host="lidarr">lidarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="lidarr.local">lidarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | littlelink | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | none (public/no-auth) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | livesync | no route (infra role) | none (public/no-auth) | no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
