@@ -111,7 +111,7 @@ AUTHELIA_BYPASS_ROUTES = {
         "registered webhook while the callers keep reporting success."
     ),
     # karakeep's session-less callers are the browser extension and the mobile app, Bearer
-    # API-key clients that cannot pass 2FA. Three prefixes rather than `/api/`: that width
+    # API-key clients that cannot pass 2FA. Four prefixes rather than `/api/`: that width
     # also reaches next-auth's /api/auth/* and the cookie-authenticated children, where the
     # app password is the only gate on the internet. Each entry names the gate the
     # app itself applies to that prefix, which is what makes it safe to leave Authelia off.
@@ -131,6 +131,11 @@ AUTHELIA_BYPASS_ROUTES = {
         "Asset upload and download for the mobile app, behind the app's authMiddleware. No "
         "trailing slash: the upload POSTs to exactly /api/assets, and nothing else under "
         "/api/ starts with `assets`."
+    ),
+    "karakeep-public-api-health": (
+        "The mobile app's connection test and online indicator GET exactly /api/health. It "
+        "has no gate and needs none: the handler returns a constant body and reads no data. "
+        "/api/version stays gated, because it tells the internet which release runs."
     ),
     # navidrome's session-less callers are Subsonic apps, which send credentials on every
     # request and cannot follow an Authelia redirect.

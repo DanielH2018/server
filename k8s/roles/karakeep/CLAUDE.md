@@ -29,9 +29,11 @@ loop to auto-tag bookmarks
   `karakeep` depends on both (#5778). `karakeep` waits up to its 1200s
   `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
   pruner's gate (below).
-- **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public
+- **The Authelia bypass:** `/api/v1/`, `/api/trpc/`, `/api/assets` and `/api/health`, deliberately public
   (Bearer-token auth; the browser extension and mobile app can't pass 2FA, and they speak tRPC,
-  not the REST API). `/api/auth/*` (next-auth's password login) stays behind Authelia on both
+  not the REST API). `/api/health` takes no token: it returns a constant body, and the mobile
+  app reads it for its connection test and its online indicator. `/api/version` stays behind
+  Authelia, so the app's settings page cannot show the server version. `/api/auth/*` (next-auth's password login) stays behind Authelia on both
   names, because a bypass of all of `/api/` would put the app password alone in front of it on
   the internet (#1929). The `.local` monitoring route (homepage's widget, ClientIP-gated to the
   bridge IP and the pod CIDR) bypasses only `/api/v1/users/me/stats`, the one path the widget

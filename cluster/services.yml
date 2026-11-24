@@ -584,20 +584,22 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
     # The browser extension and mobile app authenticate with Bearer API keys and cannot pass
-    # 2FA, so the paths they call are public on purpose. Each prefix is one the app itself
-    # key-gates (packages/api/index.ts in the pinned image): the extension and the app speak
-    # tRPC at /api/trpc/, the app uploads to /api/assets and reads /api/assets/<id>, and
-    # /api/v1/ is the REST API. The list is an allow-list, not `/api/` — that prefix also
+    # 2FA, so the paths they call are public on purpose. The app itself
+    # key-gates each prefix but /api/health (packages/api/index.ts in the pinned image): the
+    # extension and the app speak tRPC at /api/trpc/, the app uploads to /api/assets and reads
+    # /api/assets/<id>, and /api/v1/ is the REST API. /api/health returns a constant body, and
+    # the mobile app's connection test and online indicator read it. The list is an allow-list, not `/api/` — that prefix also
     # reaches next-auth's /api/auth/* (password login, no app-side throttle) and cookie-session
     # auth on every other child, which would leave the app password as the only gate on the
     # internet.
     # The trailing slashes are load-bearing: PathPrefix(`/api`) would also match siblings like
-    # /api-docs. /api/assets has none because the mobile upload POSTs to exactly that path;
-    # nothing else under /api/ starts with `assets`.
+    # /api-docs. /api/assets and /api/health have none because the mobile app calls exactly
+    # those paths; nothing else under /api/ starts with `assets` or `health`.
     bridge_bypass_prefixes:
       - /api/v1/
       - /api/trpc/
       - /api/assets
+      - /api/health
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
     # Browsers arrive through traefik and prometheus scrapes this port; the baseline admits both.
     netpol_from:

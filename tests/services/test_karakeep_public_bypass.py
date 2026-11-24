@@ -5,8 +5,8 @@ prefix on the public hostname, for the browser extension and the mobile app — 
 callers that cannot pass 2FA. A bare `/api/` prefix is one segment wider than anything those
 callers need: it also matches next-auth's `/api/auth/*` (the app's password login, which the app
 does not throttle) and the cookie-authenticated children beside it, leaving the app password as
-the only gate on the internet. The prefixes are an allow-list of the key-gated paths; this guard
-keeps `/api/auth/` out of it however the list is edited.
+the only gate on the internet. The prefixes are an allow-list of the key-gated paths and the
+constant-body `/api/health`; this guard keeps `/api/auth/` out of it however the list is edited.
 
 Three invariants, each a predicate with a passing and a rejecting input, then applied to the
 rendered routes behind a non-vacuity assertion:
@@ -35,13 +35,15 @@ from _k8s_render import rendered_docs
 
 # What next-auth answers on in the pinned image (apps/web/app/api/auth/[...nextauth]).
 NEXT_AUTH_PATH = "/api/auth/csrf"
-# One request path per session-less caller, from the 0.32.0 sources: the extension's tRPC
-# batch URL, the mobile upload POST (no trailing slash, no subpath), and a mobile asset read.
+# One request path per session-less caller, from the 0.34.0 sources: the extension's tRPC
+# batch URL, the mobile upload POST (no trailing slash, no subpath), a mobile asset read, a
+# REST call, and the mobile connection test.
 CLIENT_PATHS = (
     "/api/trpc/bookmarks.getBookmarks?batch=1",
     "/api/assets",
     "/api/assets/0f3c2e1a-asset-id",
     "/api/v1/bookmarks",
+    "/api/health",
 )
 _PREFIX = re.compile(r"PathPrefix\(`([^`]+)`\)")
 
