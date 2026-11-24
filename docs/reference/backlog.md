@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-24 06:17 UTC
-generated_sha: 76aa3d52a
+generated_at: 2026-11-24 18:17 UTC
+generated_sha: 9c261ef05
 ---
 
 !!! warning "Generated file — do not edit"
@@ -39,6 +39,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#10000](https://github.com/DanielH2018/server/issues/10000) | low | improvement | backup-observability | Decide on 2026-12-06 whether user.slice gets a systemd-oomd pressure kill | 2026-11-22 | 0 | - | ✓ |
 | [#10056](https://github.com/DanielH2018/server/issues/10056) | low | improvement | cicd | The deploy-pipeline exporter spends about 24 core calls an hour that no gh-quota ledger can record | 2026-11-23 | 0 | claude/backlog-burndown-033dbc | ✓ |
 | [#10069](https://github.com/DanielH2018/server/issues/10069) | low | gap | backup-observability | Nothing reports the *.dpkg-dist and *.dpkg-old conffile copies dpkg leaves pending | 2026-11-23 | 0 | - | ✓ |
+| [#10078](https://github.com/DanielH2018/server/issues/10078) | low | improvement | - | Merge the duplicated blocks scb-check finds, starting with the Airflow check task | 2026-11-24 | 0 | - | - |
+| [#10079](https://github.com/DanielH2018/server/issues/10079) | low | improvement | - | Merge eight pass-through functions into the functions they call | 2026-11-24 | 0 | - | - |
 
 ## Deferred, by date
 

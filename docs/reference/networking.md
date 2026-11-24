@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-19 22:10 UTC
-generated_sha: fc80e375d
+generated_at: 2026-11-24 18:17 UTC
+generated_sha: 9c261ef05
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,7 @@ generated_sha: fc80e375d
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
-12 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
+11 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
 
 
 ## Routes
@@ -41,7 +41,7 @@ generated_sha: fc80e375d
 | ical-proxy | daniel-box | <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | jellyfin | daniel-box | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | karakeep | daniel-box | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia`, `csp-karakeep` |
-| karma | daniel-box | <span class="fqdn" data-host="karma.local">karma.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
+| karma | daniel-box | <span class="fqdn" data-host="karma">karma.&lt;domain&gt;</span> · <span class="fqdn" data-host="karma.local">karma.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | lidarr | daniel-box | <span class="fqdn" data-host="lidarr">lidarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="lidarr.local">lidarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | littlelink | daniel-box | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | loki-homelab | daniel-box | <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
