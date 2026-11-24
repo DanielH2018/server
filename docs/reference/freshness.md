@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-23 18:17 UTC
-generated_sha: 48d169bdb
+generated_at: 2026-11-24 06:17 UTC
+generated_sha: 76aa3d52a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -51,6 +51,7 @@ generated_sha: 48d169bdb
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-21 | 15 | 5 | `hosts/components/k3s-server/component.yml` (2026-11-23) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-11-21 | 9 | 5 | `inventory/host_vars/daniel-box.yml` (2026-11-23) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-11-22 | 44 | 5 | `docs/reference/scripts.md` (2026-11-23) |
+| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-22 | 20 | 5 | `CLAUDE.md` (2026-11-23) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-11-12 | 4 | 4 | `CLAUDE.md` (2026-11-23) |
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-11-13 | 4 | 4 | `CLAUDE.md` (2026-11-23) |
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-11-13 | 4 | 4 | `scripts/diagnostics/ui_login.py` (2026-11-20) |
@@ -63,7 +64,6 @@ generated_sha: 48d169bdb
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-11-20 | 11 | 4 | `k8s/roles/monitor-bridge/defaults/main.yml` (2026-11-23) |
 | [failure-classes.md](../failure-classes.md) | 2026-11-21 | 21 | 4 | `docs/reference/backlog.md` (2026-11-23) |
 | [homelab-render.md](../homelab-render.md) | 2026-11-22 | 63 | 4 | `scripts/lib/exit_codes.py` (2026-11-23) |
-| [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-22 | 20 | 4 | `CLAUDE.md` (2026-11-23) |
 | [adr/0024-code-scanning-is-off.md](../adr/0024-code-scanning-is-off.md) | 2026-11-13 | 3 | 3 | `.github/workflows/ci.yml` (2026-11-22) |
 | [adr/0031-each-kind-of-fact-has-one-stateless-detector.md](../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) | 2026-11-14 | 4 | 3 | `CLAUDE.md` (2026-11-23) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-11-14 | 3 | 3 | `renovate.json` (2026-11-23) |
@@ -71,10 +71,9 @@ generated_sha: 48d169bdb
 | [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-11-19 | 4 | 3 | `secrets/secrets.yml` (2026-11-22) |
 | [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-11-19 | 6 | 3 | `hosts/lib/checkout_sync.py` (2026-11-22) |
 | [adr/0037-the-renderer-keeps-jinja-after-ansible.md](../adr/0037-the-renderer-keeps-jinja-after-ansible.md) | 2026-11-19 | 3 | 3 | `docs/homelab-render.md` (2026-11-22) |
-| [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-11-20 | 19 | 3 | `k8s/roles/observability/templates/alertmanager-secret.yaml.j2` (2026-11-22) |
+| [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-11-20 | 19 | 3 | `hosts/components/host-maintenance/component.yml` (2026-11-23) |
 | [adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md](../adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md) | 2026-11-21 | 7 | 3 | `pyproject.toml` (2026-11-23) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-11-21 | 10 | 3 | `cluster/services.yml` (2026-11-22) |
-| [alert-runbooks.md](../alert-runbooks.md) | 2026-11-22 | 21 | 3 | `docs/monitor-bridge-internals.md` (2026-11-23) |
 | [github-label-audit.md](../github-label-audit.md) | 2026-11-22 | 24 | 3 | `scripts/deploy_tools/land_lib/batch.py` (2026-11-23) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-11-21) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 2 | `docs/secret-rotation.md` (2026-11-21) |
@@ -108,6 +107,7 @@ generated_sha: 48d169bdb
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-11-21 | 9 | 1 | `scripts/diagnostics/probe.py` (2026-11-22) |
 | [what-the-migration-built.md](../what-the-migration-built.md) | 2026-11-21 | 1 | 1 | `CLAUDE.md` (2026-11-23) |
 | [host-packages.md](../host-packages.md) | 2026-11-22 | 63 | 1 | `inventory/host_vars/daniel-box.yml` (2026-11-23) |
+| [observability-dashboards.md](../observability-dashboards.md) | 2026-11-22 | 15 | 1 | `k8s/roles/observability/files/rules/host-checks.yaml` (2026-11-23) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [jellyfin-attachment-latency.md](../jellyfin-attachment-latency.md) | 2026-10-30 | 0 | 0 | — |
 | [target-architecture/docs-guard/g10-value-rows.md](../target-architecture/docs-guard/g10-value-rows.md) | 2026-11-19 | 3 | 0 | — |
@@ -117,9 +117,9 @@ generated_sha: 48d169bdb
 | [volume-revert-drill-and-sizing.md](../volume-revert-drill-and-sizing.md) | 2026-11-21 | 3 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-11-22 | 1 | 0 | — |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-11-22 | 9 | 0 | — |
-| [observability-dashboards.md](../observability-dashboards.md) | 2026-11-22 | 15 | 0 | — |
 | [security-tools.md](../security-tools.md) | 2026-11-22 | 11 | 0 | — |
 | [adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md](../adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) | 2026-11-23 | 4 | 0 | — |
+| [alert-runbooks.md](../alert-runbooks.md) | 2026-11-23 | 22 | 0 | — |
 | [break-glass.md](../break-glass.md) | 2026-11-23 | 50 | 0 | — |
 | [ci-throughput.md](../ci-throughput.md) | 2026-11-23 | 31 | 0 | — |
 | [claude-agent-user.md](../claude-agent-user.md) | 2026-11-23 | 60 | 0 | — |
