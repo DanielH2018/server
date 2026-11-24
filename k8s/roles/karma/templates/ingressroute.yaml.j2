@@ -1,16 +1,15 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {#
-  `public=false`: Karma can create silences on every page, so it keeps to the LAN name. A public
-  `karma.<domain>` would land on Authelia's `*.<domain>` two_factor wildcard, which carries no
-  `group:admins` subject. The authelia role's hand-written karma.local pair is the other half
-  of the control. No ClientIP fence: blackbox-exporter probes this route from a pod address.
+  The public `karma.<domain>` name renders when `k8s_public_route` is on. Karma can create silences
+  on every page, so the authelia role's hand-written `karma.<domain>` pair admits only
+  `group:admins` at two_factor and denies everyone else. No ClientIP fence: blackbox-exporter
+  probes the LAN route from a pod address.
 #}
 {{ ingressroute(
     container_item.name,
     container_item.hostname,
     container_item.port,
-    container_item.use_authelia,
-    public=false
+    container_item.use_authelia
   )
 }}

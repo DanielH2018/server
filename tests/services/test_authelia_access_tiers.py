@@ -186,7 +186,10 @@ def test_every_sso_entry_resolves_to_its_declared_tier():
         ), entry["name"]
         # The LAN tier is the LAN name's alone: the public name stays two_factor.
         assert (
-            _policy(rules, f"{entry['hostname']}.{domain}", "1.2.3.4") == "two_factor"
+            _policy(
+                rules, f"{entry['hostname']}.{domain}", "1.2.3.4", groups=("admins",)
+            )
+            == "two_factor"
         )
 
 
@@ -241,3 +244,13 @@ def test_a_user_outside_admins_is_denied_a_silence_ui():
     host = _karma_host(rules)
     assert _policy(rules, host, "10.0.0.5") == "deny"
     assert _policy(rules, host, "192.168.1.20", groups=("dev",)) == "deny"
+
+
+def test_the_public_silence_ui_admits_admins_only_from_any_source():
+    """Without the public `deny`, a non-admin falls through to the `*.<domain>` wildcard at
+    two_factor and reaches the silence UI from the internet."""
+    rules = _rendered_rules()
+    host = _karma_host(rules).replace(".local.", ".", 1)
+    assert _policy(rules, host, "1.2.3.4", groups=("admins",)) == "two_factor"
+    assert _policy(rules, host, "1.2.3.4", groups=("dev",)) == "deny"
+    assert _policy(rules, host, "1.2.3.4") == "deny"

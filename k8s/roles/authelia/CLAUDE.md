@@ -28,11 +28,13 @@ one rule per tier from those entries through `template_filters/authelia_access.p
 bypass, Karma's pair and two wildcards. A generated rule names only the LAN name, so
 the public name keeps the `*.<domain>` wildcard's `two_factor` whatever the entry declares (#2057).
 
-**`karma.local.<domain>` is the one `subject:`-scoped rule.** Karma can silence a page, so its
-host takes `two_factor` for `group:admins`, and a `deny` rule for the same domain follows it.
-Authelia skips a rule whose subject does not match, so without the `deny` a user outside
-`admins` would fall through to the `*.local` wildcard at `one_factor`. ENFORCED:
-`tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`.
+**`karma.local.<domain>` and `karma.<domain>` are the `subject:`-scoped rules.** Karma can silence a
+page, so each host takes `two_factor` for `group:admins`, and a `deny` rule for the same domain
+follows it. Authelia skips a rule whose subject does not match, so without the `deny` a user
+outside `admins` would fall through to a wildcard: `*.local` at `one_factor`, or `*.<domain>` at
+`two_factor`. ENFORCED:
+`tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`
+and `tests/services/test_authelia_access_tiers.py::test_the_public_silence_ui_admits_admins_only_from_any_source`.
 
 **A `use_authelia: true` entry without `auth_tier` fails the render** — in
 `validate/render_lib/k8s.py`, in the test render and in a real deploy alike — so a new service cannot ride
