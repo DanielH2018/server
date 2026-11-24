@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-23 18:17 UTC
-generated_sha: 48d169bdb
+generated_at: 2026-11-24 06:17 UTC
+generated_sha: 76aa3d52a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 48d169bdb
 
 # Scheduled jobs
 
-66 job(s) scheduled by the host packages' timers.
+67 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -79,6 +79,7 @@ generated_sha: 48d169bdb
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |
 | homelab-sync-artifacts.timer | `OnCalendar=*-*-* *:00/5:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-sync-artifacts.timer.j2` |
 | homelab-systemd-units.timer | `OnCalendar=*:0/5` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-systemd-units.timer` |
+| homelab-ucf-dist.timer | `OnCalendar=hourly` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-ucf-dist.timer` |
 | homelab-updater-poll.timer | `OnBootSec=15min, OnUnitActiveSec=15min` | daniel-pi | `root` | read the script | `hosts/components/pi-updater-poll/units/homelab-updater-poll.timer` |
 | homelab-updater.timer | `OnBootSec=5min, OnUnitActiveSec=5min` | daniel-box, daniel-server | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |
 | homelab-updater.timer | `OnCalendar=*-*-* 03:05:00` | daniel-pi | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |
