@@ -16,3 +16,11 @@ ALLOWHIDDENFILE=/etc/.resolv.conf.systemd-resolved.bak
 # The task that renders this file sets `no` where the main file carries the line and `unset`
 # where it does not.
 ALLOW_SSH_ROOT_USER={{ integrity_scans_rkhunter_allow_ssh_root_user }}
+{% if inventory_hostname in integrity_scans_squid_hosts %}
+
+# The t2-egress squid (hosts/components/t2-egress) keeps its collapsed-forwarding segments in
+# /dev/shm, and rkhunter reports them as suspicious file types. The glob covers the name's token.
+ALLOWDEVFILE=/dev/shm/squid-*-cf__metadata.shm
+ALLOWDEVFILE=/dev/shm/squid-*-cf__queues.shm
+ALLOWDEVFILE=/dev/shm/squid-*-cf__readers.shm
+{% endif %}
