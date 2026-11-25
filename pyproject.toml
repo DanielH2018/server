@@ -104,7 +104,7 @@ filterwarnings = [
 # and read SOPS.
 markers = [
   "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards and run with `-m image` by .github/workflows/image-leg.yml and the nightly .github/workflows/pytest-sweep.yml",
-  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/test_uptime_robot_keywords.py)",
+  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/test_uptime_robot_keywords.py)",
 ]
 # hosts/lib: host_lib is the module the host components' scripts share, shipped beside them in
 # each host package — on pythonpath so the
@@ -398,6 +398,7 @@ extra-paths = [
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/dev/tests",
+  "scripts/diagnostics/tests",
   "scripts/docs/tests",
 ]
 

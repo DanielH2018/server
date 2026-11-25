@@ -9,7 +9,7 @@ insert there.
 pytest puts a test module's OWN directory on `sys.path` and nothing else, plus the `pythonpath`
 entries in `pyproject.toml`. A test module importing anything else by bare name resolves only
 because some other module — collected earlier in the same session — already inserted that
-directory. `scripts/diagnostics/tests/test_ui_login.py` imported `ui_login` that way for as long
+directory. `scripts/diagnostics/tests/ui_smoke/test_ui_login.py` imported `ui_login` that way for as long
 as `test_probe_vip_placement.py` (which carries the insert) happened to be collected first;
 sharding the suite broke the accident and turned it into `ModuleNotFoundError: No module named
 'ui_login'` on one leg. The diagnostics tests import their package dotted from `scripts/`

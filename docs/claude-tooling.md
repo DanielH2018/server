@@ -39,7 +39,7 @@ shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, b
 line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
 landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
 `subcommands.VERDICT_SUBCOMMANDS` lists the verdict subcommands.
-`scripts/diagnostics/tests/test_probe_registry.py` checks that the subcommands `cli_parser.py`
+`scripts/diagnostics/tests/probe_landing/test_probe_registry.py` checks that the subcommands `cli_parser.py`
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
 
@@ -428,7 +428,7 @@ then `mcp__homelab-ui__browser_close` followed by any `mcp__homelab-ui__browser_
 The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
 state file as it stands.
 
-`scripts/diagnostics/tests/test_ui_state_reload.py` (marker `ui`) guards this procedure, so a
+`scripts/diagnostics/tests/ui_smoke/test_ui_state_reload.py` (marker `ui`) guards this procedure, so a
 `@playwright/mcp` bump that changes what `browser_close` disposes fails a test. It launches its
 own server against a private state file (`UI_MCP_STATE_PATH`, which `ui_mcp.sh` takes in place
 of the tier's shared jar), so it can swap the file under a running server without touching the
@@ -454,7 +454,7 @@ not route around it either — the read-only ServiceAccount is denied `create po
 
 ### The regression suite
 
-`uv run pytest -m ui` (`scripts/diagnostics/tests/test_ui_smoke.py`) drives this same MCP server over
+`uv run pytest -m ui` (`scripts/diagnostics/tests/ui_smoke/test_ui_smoke.py`) drives this same MCP server over
 stdio, so a break in the wrapper's DNS pin, session minting or launch config fails a test rather
 than silently degrading a Claude session. The `ui` marker is deselected by `addopts`, because
 these tests need the host's age key, LAN reachability and a browser — none of which a GitHub

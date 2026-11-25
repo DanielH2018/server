@@ -80,7 +80,7 @@ routed tenant of the retired Docker edge.
 - **Every Prometheus and Loki read goes through `obs_api`**, the client probe.py and
   postflight share (`scripts/diagnostics/probe_lib/obs_api.py`, #2860). The image carries it
   flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;
-  `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
+  `scripts/diagnostics/tests/probe_alerts/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
   and the next promotion builds the image and rolls the pod.
 - The build paths in `defaults/main.yml` come from `role_file()`. The render context resolves
