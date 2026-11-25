@@ -27,12 +27,11 @@ from _k8s_render import host_context, traefik_static_config
 # daniel-box runs the bouncer plugin. A cluster with traefik_k8s_manage_crowdsec false renders
 # no chain at all on either entrypoint — covered by its own test below. That case is an
 # override rather than a host.
-_HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
-def _chains(host: str, overrides: dict | None = None) -> dict[str, list[str]]:
-    config = traefik_static_config(overrides, host=host)
+def _chains(overrides: dict | None = None) -> dict[str, list[str]]:
+    config = traefik_static_config(overrides)
     return {
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and the comparison below
@@ -78,22 +77,22 @@ def crowdsec_chain_gaps(
 
 def test_the_http_entrypoint_enforces_crowdsec() -> None:
     """The accepting half, on the rendered static config for the host that runs the bouncer."""
-    chains = _chains(_HOST)
-    crowdsec_ref = f"{host_context(_HOST)['k8s_namespace']}-crowdsec@kubernetescrd"
+    chains = _chains()
+    crowdsec_ref = f"{host_context()['k8s_namespace']}-crowdsec@kubernetescrd"
     # Non-vacuity: a guard that finds no crowdsec reference anywhere would pass silently.
     assert crowdsec_ref in chains["https"], (
-        f"{_HOST}: the https entrypoint does not chain {crowdsec_ref} — this guard's "
+        f"the https entrypoint does not chain {crowdsec_ref} — this guard's "
         f"reference point is gone and it is checking nothing: {chains}"
     )
     problems = crowdsec_chain_gaps(chains, crowdsec_ref)
-    assert not problems, f"{_HOST}: " + " ".join(problems)
+    assert not problems, " ".join(problems)
 
 
 def test_a_cluster_without_the_bouncer_is_not_flagged() -> None:
     """traefik_k8s_manage_crowdsec false renders no chain on either entrypoint, and that is
     a supported configuration rather than a gap."""
-    chains = _chains(_HOST, _WITHOUT_CROWDSEC)
-    crowdsec_ref = f"{host_context(_HOST)['k8s_namespace']}-crowdsec@kubernetescrd"
+    chains = _chains(_WITHOUT_CROWDSEC)
+    crowdsec_ref = f"{host_context()['k8s_namespace']}-crowdsec@kubernetescrd"
     assert crowdsec_ref not in chains["https"], (
         "the flag no longer removes the chain; this test's premise is stale"
     )

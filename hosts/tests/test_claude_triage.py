@@ -269,7 +269,9 @@ def test_the_artifacts_pod_mounts_the_report_tree_the_host_creates() -> None:
     agent_home = defaults()["claude_code_agent_user_home"]
     deployment = yaml_fast.safe_load(
         render_role_template(
-            "artifacts", "deployment.yaml.j2", {"claude_code_triage_enabled": True}
+            "artifacts",
+            "deployment.yaml.j2",
+            {"hosts": {"daniel-box": {"claude_code_triage_enabled": True}}},
         )
     )
     paths = {

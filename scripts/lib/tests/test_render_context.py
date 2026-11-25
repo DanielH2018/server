@@ -27,7 +27,6 @@ def tree(tmp_path: Path):
     inventory = rc.Inventory(
         all_vars=tmp_path / "all.yml",
         host_vars=tmp_path / "host_vars",
-        plane_hosts={"k8s": "box"},
         services=tmp_path / "services.yml",
     )
     inventory.host_vars.mkdir()
@@ -79,15 +78,11 @@ def test_a_role_default_names_its_own_file_through_role_file(tree):
     assert ctx["dockerfile"] == str(role / "templates" / "Dockerfile.j2")
 
 
-def test_the_k8s_plane_renders_with_its_hosts_vars(tree):
-    template, inv = tree({}, group={"port": 1}, hosts={"box": {"port": 2}}, plane="k8s")
-    assert rc.render_context(template, inventory=inv)["port"] == 2
-
-
-def test_a_setup_template_renders_with_no_hosts_vars(tree):
-    # A setup role runs on several hosts, so no one host's values belong in its render.
+@pytest.mark.parametrize("plane", ["setup", "k8s"])
+def test_a_render_that_names_no_host_takes_no_hosts_vars(tree, plane):
+    # A k8s role reads a host's value through `hosts`, so no host's values merge in unnamed.
     template, inv = tree(
-        {}, group={"port": 1}, hosts={"box": {"port": 2}}, plane="setup"
+        {}, group={"port": 1}, hosts={"daniel-box": {"port": 2}}, plane=plane
     )
     assert rc.render_context(template, inventory=inv)["port"] == 1
 
@@ -319,7 +314,7 @@ def test_an_edit_between_two_renders_reaches_the_second(tree):
         hosts={"box": {"from_host": "h1"}},
         plane="k8s",
     )
-    ctx = rc.render_context(template, inventory=inv)
+    ctx = rc.render_context(template, "box", inventory=inv)
     assert [ctx[name] for name in names] == ["d1", "g1", "h1"]
     files = (
         template.parents[1] / "defaults" / "main.yml",
@@ -336,5 +331,5 @@ def test_an_edit_between_two_renders_reaches_the_second(tree):
     for path, stat in stats.items():
         assert path.stat().st_size == stat.st_size
         os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
-    ctx = rc.render_context(template, inventory=inv)
+    ctx = rc.render_context(template, "box", inventory=inv)
     assert [ctx[name] for name in names] == ["d2", "g2", "h2"]

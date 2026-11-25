@@ -74,8 +74,8 @@ def _role_context(role: str, **overrides) -> dict:
     """The context `role`'s templates render with in a deploy, `overrides` laid on top.
 
     `lib.render_context`'s, the one the validator and `_k8s_render` render with: role defaults
-    under all.yml and daniel-box's host_vars, which is Ansible's own precedence. A context built
-    here by hand put the defaults over all.yml and left host_vars out, so it agreed with the
+    under all.yml, which is Ansible's own precedence. A context built
+    here by hand put the defaults over all.yml, so it agreed with the
     deploy only while no inventory key shared a name with a default.
 
     `overrides` go in before anything resolves, so a default that reads an overridden name

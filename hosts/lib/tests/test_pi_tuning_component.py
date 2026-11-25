@@ -29,6 +29,7 @@ COMPONENTS = REPO / "hosts" / "components"
 LOG2RAM_CONF = "/etc/log2ram.conf"
 JOURNALD_CAP = "/etc/systemd/journald.conf.d/60-homelab-pi.conf"
 AUDITD_CONF = "/etc/audit/auditd.conf"
+WATCHDOG_RESTART = "try-restart:watchdog.service"
 APT_DROPINS = {
     "apt-daily.timer": "/usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf",
     "apt-daily-upgrade.timer": "/usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf",
@@ -164,8 +165,8 @@ ADOPTED = [
     (LOG2RAM_CONF, "ZL2R=false", "reboot"),
     (LOG2RAM_CONF, "LOG_DISK_SIZE=256M", "reboot"),
     (LOG2RAM_CONF, "COMP_ALG=lz4", "reboot"),
-    ("/etc/watchdog.conf", "#watchdog-device\t= /dev/watchdog", "reboot"),
-    ("/etc/watchdog.conf", "max-load-1 = 24", "reboot"),
+    ("/etc/watchdog.conf", "#watchdog-device\t= /dev/watchdog", WATCHDOG_RESTART),
+    ("/etc/watchdog.conf", "max-load-1 = 24", WATCHDOG_RESTART),
     (AUDITD_CONF, "max_log_file = 8", "try-restart:auditd.service"),
     (AUDITD_CONF, "num_logs = 5", "try-restart:auditd.service"),
     (AUDITD_CONF, "space_left = 75", "try-restart:auditd.service"),

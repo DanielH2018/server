@@ -20,26 +20,23 @@ from lib.render_guard import make_env, render_or_error
 from lib.repo_paths import K8S_ROLES, SHARED_TPL
 
 _ROLE = "traefik"
-_HOST = "daniel-box"
 
 
-def _context(host: str) -> dict:
-    entries = render_context(K8S_ROLES, host=host, strict=True)["services"]
+def _context() -> dict:
+    entries = render_context(K8S_ROLES, strict=True)["services"]
     entry = next(c for c in entries if c["name"] == _ROLE)
     return render_context(
-        K8S_ROLES / _ROLE, host=host, overrides={"container_item": entry}, strict=True
+        K8S_ROLES / _ROLE, overrides={"container_item": entry}, strict=True
     )
 
 
-def _bouncer_config(host: str) -> dict:
-    ctx = _context(host)
+def _bouncer_config() -> dict:
+    ctx = _context()
     env = make_env([K8S_ROLES / _ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
     rendered, err = render_or_error(env, "dynamic.yaml.j2", ctx)
-    assert rendered is not None, (
-        f"{_ROLE}/dynamic.yaml.j2 failed to render for {host}: {err}"
-    )
+    assert rendered is not None, f"{_ROLE}/dynamic.yaml.j2 failed to render: {err}"
     bouncers = [
         doc["spec"]["plugin"]["bouncer"]
         for doc in yaml_fast.safe_load_all(rendered)
@@ -48,9 +45,7 @@ def _bouncer_config(host: str) -> dict:
         and "bouncer" in (doc.get("spec", {}).get("plugin") or {})
     ]
     # Non-vacuity: a guard that finds no bouncer Middleware would pass on nothing.
-    assert len(bouncers) == 1, (
-        f"{host}: expected one bouncer Middleware, found {len(bouncers)}"
-    )
+    assert len(bouncers) == 1, f"expected one bouncer Middleware, found {len(bouncers)}"
     return bouncers[0]
 
 
@@ -70,10 +65,10 @@ def metrics_ticker_problem(bouncer: dict) -> str | None:
 
 
 def test_the_rendered_bouncer_starts_no_metrics_ticker() -> None:
-    bouncer = _bouncer_config(_HOST)
+    bouncer = _bouncer_config()
     assert bouncer.get("crowdsecMode") == "stream", "the stall is a stream-mode defect"
     problem = metrics_ticker_problem(bouncer)
-    assert problem is None, f"{_HOST}: {problem}"
+    assert problem is None, problem
 
 
 @pytest.mark.parametrize(

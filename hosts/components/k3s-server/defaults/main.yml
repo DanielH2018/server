@@ -61,9 +61,6 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "7946", proto: tcp }
   - { port: "7946", proto: udp }
 
-# Set in daniel-box host_vars once an agent exists; empty makes the allow tasks no-ops.
-k3s_agent_node_ips: []
-
 # Weight 1-10000, only under contention: a starved etcd costs the controller-manager its lease,
 # exiting k3s.
 # 1000 is ten times a sibling's share (default 100); it does not rank system.slice at the root

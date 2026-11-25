@@ -17,9 +17,9 @@
 # Older lines stay in the files as harmless duplicates: the line arm adopts each line by its
 # regexp, and the arm never removes one.
 #
-# Activation. zram, Log2Ram, the watchdog and the GPU split take effect at boot, so each of those
-# files declares `reboot`; the weekly reboot applies them. The watchdog reads its file on start,
-# so `reboot` also covers a watchdog restart. Nothing here restarts
+# Activation. zram, Log2Ram, the watchdog dtparam and the GPU split take effect at boot, so each of
+# those files declares `reboot`; the weekly reboot applies them. The watchdog daemon reads
+# /etc/watchdog.conf on start, so that file declares a restart of the daemon. Nothing here restarts
 # log2ram.service or zramswap.service live: a Log2Ram restart unmounts /var/log under whatever is
 # writing to it, and a zram restart swapoffs onto the SD swapfile and half-fails (see
 # docs/pi-host-tuning-record.md). log2ram.service carries `policy: manual` for that reason.
@@ -107,9 +107,14 @@ lines:
   - {path: /etc/log2ram.conf, line: "COMP_ALG=lz4", regexp: '^#?COMP_ALG=', activate: reboot}
   # The anchor matches only the UTF-8 line, not `# en_US ISO-8859-1` or `# en_US.ISO-8859-15`.
   - {path: /etc/locale.gen, line: "en_US.UTF-8 UTF-8", regexp: '^#?\s*en_US\.UTF-8 UTF-8\s*$', activate: locale-gen}
-  # The hardware watchdog.
-  - {path: /etc/watchdog.conf, line: "watchdog-device = /dev/watchdog", regexp: '^#?watchdog-device', activate: reboot}
-  - {path: /etc/watchdog.conf, line: "max-load-1 = 24", regexp: '^#?max-load-1\s=', activate: reboot}
+  # The hardware watchdog. All three load limits are declared: the daemon fills an unset one from
+  # max-load-1, 3/4 of it for 5 minutes and half for 15. A 15-minute limit of 12 reboots a host
+  # that is busy for half an hour, as it is during a kernel upgrade. The watchdog drop-in lets the
+  # restart finish.
+  - {path: /etc/watchdog.conf, line: "watchdog-device = /dev/watchdog", regexp: '^#?watchdog-device', activate: "try-restart:watchdog.service"}
+  - {path: /etc/watchdog.conf, line: "max-load-1 = 24", regexp: '^#?max-load-1\s*=', activate: "try-restart:watchdog.service"}
+  - {path: /etc/watchdog.conf, line: "max-load-5 = 24", regexp: '^#?max-load-5\s*=', activate: "try-restart:watchdog.service"}
+  - {path: /etc/watchdog.conf, line: "max-load-15 = 24", regexp: '^#?max-load-15\s*=', activate: "try-restart:watchdog.service"}
   - {path: /etc/sysstat/sysstat, line: "HISTORY=2", regexp: '^#?HISTORY='}
   - {path: /etc/default/acct, line: 'ACCT_LOGGING="3"', regexp: '^#?ACCT_LOGGING='}
   # auditd reports CanReload=no, so the action is a restart.

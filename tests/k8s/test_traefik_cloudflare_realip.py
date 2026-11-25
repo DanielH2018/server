@@ -26,15 +26,14 @@ from lib.repo_paths import K8S_ROLES
 from _k8s_render import host_context, render_role_template, traefik_static_config
 
 _ROLE = "traefik"
-_HOST = "daniel-box"
 
 
 def _render(template: str) -> str:
-    return render_role_template(_ROLE, template, host=_HOST)
+    return render_role_template(_ROLE, template)
 
 
 def _ref(name: str) -> str:
-    return f"{host_context(_HOST)['k8s_namespace']}-{name}@kubernetescrd"
+    return f"{host_context()['k8s_namespace']}-{name}@kubernetescrd"
 
 
 def realip_chain_gaps(
@@ -55,9 +54,7 @@ def realip_chain_gaps(
 
 def test_the_https_chain_rewrites_before_crowdsec() -> None:
     """The accepting half, on daniel-box's rendered static config."""
-    chain = traefik_static_config(host=_HOST)["entryPoints"]["https"]["http"][
-        "middlewares"
-    ]
+    chain = traefik_static_config()["entryPoints"]["https"]["http"]["middlewares"]
     problems = realip_chain_gaps(chain, _ref("cloudflare-realip"), _ref("crowdsec"))
     assert not problems, problems
 
@@ -92,11 +89,11 @@ def test_a_late_or_missing_rewrite_is_flagged(chain: list[str]) -> None:
 def test_only_cloudflare_is_a_trusted_forwarder() -> None:
     """No entrypoint keeps a client-sent XFF from the LAN (see the DECIDED comment on
     static-config.yaml.j2's trustedIPs), and the Middleware trusts exactly Cloudflare."""
-    ctx = host_context(_HOST)
+    ctx = host_context()
     expected = set(ctx["cloudflare_ips"]) | {"127.0.0.1/32"}
     for name in ("http", "https"):
         trusted = set(
-            traefik_static_config(host=_HOST)["entryPoints"][name]["forwardedHeaders"][
+            traefik_static_config()["entryPoints"][name]["forwardedHeaders"][
                 "trustedIPs"
             ]
         )
@@ -116,7 +113,7 @@ def test_the_local_plugin_names_agree() -> None:
     """localPlugins key == the Middleware's plugin key; moduleName == the projected directory
     and prefixes the manifest's `import`; the ConfigMap carries the files the items name."""
     (local_name, local) = next(
-        iter(traefik_static_config(host=_HOST)["experimental"]["localPlugins"].items())
+        iter(traefik_static_config()["experimental"]["localPlugins"].items())
     )
     module = local["moduleName"]
 

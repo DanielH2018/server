@@ -104,7 +104,7 @@
   assumption breaks. Rendered only where `k3s_agent_node_ips` names an agent, as
   the deleted Ansible agent half was: a single-node cluster could never schedule it.
 #}
-{% if k3s_agent_node_ips | default([]) | length > 0 %}
+{% if k3s_agent_node_ips | length > 0 %}
 {% set checks = checks + [{
     'name': 'pull-agent',
     'app': 'registry-verify',
