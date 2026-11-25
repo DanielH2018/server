@@ -837,7 +837,7 @@ data:
       - job_name: etcd
         scrape_interval: 30s
         static_configs:
-          - targets: ['{{ server_ip }}:2381']
+          - targets: ['{{ hosts[k8s_primary_node].server_ip }}:2381']
             labels:
               instance_role: control-plane
 {% endif %}

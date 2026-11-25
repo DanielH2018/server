@@ -43,7 +43,7 @@ def _render(tmp_path: Path, template: str, variables: dict) -> str:
 
 def _tree_render(tmp_path: Path, stubs: dict | None = None, **kwargs) -> str:
     roles, inventory = write_tree(tmp_path, **kwargs)
-    tag = render_tag("widget", stubs or {}, "h1", roles=roles, inventory=inventory)
+    tag = render_tag("widget", stubs or {}, roles=roles, inventory=inventory)
     return tag.files["configmap.yaml"]
 
 

@@ -125,6 +125,9 @@ own rank between `host_vars` and the stub file. Ansible gave them that rank as i
 and no inventory file sets one, so they now resolve as the role defaults they are. A render
 key that does not resolve still fails the render.
 
+**Amended 2026-11-25 (ADR-0042):** a k8s render merges no `host_vars` file, so the third layer
+is gone. `hosts` also carries `render_gid` and `claude_code_triage_enabled`.
+
 A value resolves after the layers merge, so a default that names a variable reads the winning
 layer's value.
 

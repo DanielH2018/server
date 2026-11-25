@@ -43,20 +43,24 @@ the installed readers of step 3. The row refuses a new one. `render_diff_gates.p
 
 ### Step 2: a k8s role names the host it reads
 
+Built first, ahead of step 1, because it touches no approval-listed file.
+
 ```diff
 - supplementalGroups: {{ render_gid }}
 + supplementalGroups: {{ hosts[k8s_primary_node].render_gid }}
 ```
 
 - `render_gid` (jellyfin, tdarr) and `claude_code_triage_enabled` (artifacts) read through
-  `hosts`. Both names join `_HOSTS_KEYS`. The artifacts read keeps no `default()`, so a missing
-  key fails.
-- `k3s_agent_node_ips` moves to the shared layer. The registry-verify template drops its
+  `hosts`, and both names joined `_HOSTS_KEYS`. The artifacts read has no `default()`, so a
+  missing key fails. The etcd scrape job in observability reads `server_ip` the same way.
+- `k3s_agent_node_ips` is in the shared layer. The registry-verify template has no
   `default([])`.
-- `PLANE_HOSTS` and the `plane_hosts` field go.
+- No k8s render takes a host: a role's templates, the renderer and the test helpers all lost
+  the argument.
 
-**Done when** the cluster render, the docs generators and the host packages are byte-identical.
-A clean strict render does not prove it: two of the three keys changed output with no error.
+**Verified** by a cluster render and three host-package renders, all byte-identical. A clean
+strict render does not prove it: two of the three keys changed output with no error. A shipped
+render does not reach a branch that is off, so the whole suite runs too.
 
 ### Step 3: gates and installed readers accept both layouts
 

@@ -168,10 +168,6 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "7946", proto: tcp }
   - { port: "7946", proto: udp }
 
-# Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
-# agent exists; empty means the allow tasks are no-ops.
-k3s_agent_node_ips: []
-
 # k3s's CPU weight inside system.slice, where its siblings (100 each, systemd's default) include
 # the docs-refresh run's pytest and mkdocs. Range 1-10000, and it divides CPU only under
 # contention. etcd and the controllers' leases run in this one process, and a starved etcd costs

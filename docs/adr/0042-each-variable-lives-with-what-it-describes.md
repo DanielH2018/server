@@ -40,7 +40,9 @@ Measured on 2026-11-25, by rendering all 71 tags in placeholder mode without dan
 | `claude_code_triage_enabled` | artifacts | `default(false)` drops a volume, silently |
 | `k3s_agent_node_ips` | registry-verify | `default([])` drops a Job, silently |
 
-No other daniel-box key changes a rendered byte. With those three kept, and 17 host-only keys
+No other daniel-box key changes a byte of a shipped render. A fourth, `server_ip` in
+observability's etcd scrape job, sits behind `k3s_etcd_expose_metrics`, which is off, so no
+shipped render reaches it. Its test found it. With those three kept, and 17 host-only keys
 also removed from `all.yml`, the 612 rendered files are identical to the baseline. The
 host-package renders were not part of this test.
 

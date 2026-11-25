@@ -44,7 +44,7 @@ template:
       runAsUser: {{ puid }}
       runAsGroup: {{ pgid }}
       supplementalGroups:
-        - {{ render_gid }}
+        - {{ hosts[k8s_primary_node].render_gid }}
       seccompProfile:
         type: RuntimeDefault
     containers:
