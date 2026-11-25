@@ -36,7 +36,7 @@ spec:
       # elsewhere, and daniel-server joining the cluster is exactly when a hardcoded one breaks.
       securityContext:
         supplementalGroups:
-          - {{ render_gid }}
+          - {{ hosts[k8s_primary_node].render_gid }}
       # ── the one-time Intel → AMD conversion ───────────────────────────────────────────────
       # The settings are elements in /config/encoding.xml, so the conversion is deterministic.
       #

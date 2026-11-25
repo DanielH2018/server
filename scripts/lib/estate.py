@@ -22,31 +22,22 @@ Typical usage example:
     estate.source("daniel-pi", "has_fwupd")  # "group": only group_vars/all.yml declares it
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
 from lib.container_entry import ContainerEntry
-from lib.inventory_lists import K8S_HOST
 from lib.render_guard import host_files, host_layer, k8s_services, load_yaml
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
 
 __all__ = [
-    "PLANE_HOSTS",
     "REPO_INVENTORY",
     "Estate",
     "Inventory",
     "inventory_layers",
     "role_defaults",
 ]
-
-# The host whose host_vars a plane's templates render with when the caller names none. Every
-# k8s role renders with daniel-box's host_vars, the group_vars `k8s_primary_node`.
-# A setup role runs on several hosts and a Pi compose role on the host that lists it, so
-# neither plane has one host: a setup template renders with the group layer the hosts share,
-# and the compose validator passes each host it renders for.
-PLANE_HOSTS = {"k8s": K8S_HOST}
 
 
 @dataclass(frozen=True)
@@ -56,13 +47,11 @@ class Inventory:
     Attributes:
         all_vars: The group_vars file every host shares.
         host_vars: The directory holding one ``<host>.yml`` per inventory host.
-        plane_hosts: The host each plane renders with when the caller names none.
         services: The k8s service list, ``k8s/services.yml``.
     """
 
     all_vars: Path = ALL_VARS
     host_vars: Path = HOST_VARS
-    plane_hosts: dict[str, str] = field(default_factory=lambda: dict(PLANE_HOSTS))
     services: Path = K8S_SERVICES
 
 
@@ -121,16 +110,10 @@ class Estate:
     def role_vars(self, role_dir: Path, host: str | None = None) -> dict:
         """The values a role's tasks see in a deploy: its defaults under the inventory layers.
 
-        `host` defaults the way `render_context` does: a k8s role takes the k8s plane's host,
-        and a setup role, which runs on several hosts, takes the group layer alone. Reading a
-        role's defaults raw would print the default even where the inventory overrides it.
+        With no `host`, the group layer alone overrides the defaults, as in `render_context`.
+        Reading a role's defaults raw would print the default even where the inventory
+        overrides it.
         """
-        plane = (
-            role_dir.parents[1].name
-            if role_dir.parent.name == "roles"
-            else role_dir.parent.name
-        )
-        host = host or self.inventory.plane_hosts.get(plane)
         return inventory_layers(
             role_defaults(role_dir),
             self.group_vars,
