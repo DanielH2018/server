@@ -60,6 +60,13 @@ _USAGE_RE = re.compile(r"^Usage::\s*$", re.MULTILINE)
 TOP_LEVEL = "(top level)"
 
 
+def _holds(place: Path, name: str) -> bool:
+    """Whether `place` holds `name`, below a subject directory when `place` is a suite."""
+    if place.name == "tests":
+        return any(place.rglob(name))
+    return (place / name).is_file()
+
+
 def _python_docstring(path: Path) -> str | None:
     """The module docstring, or None if the file does not parse."""
     try:
@@ -163,7 +170,7 @@ def build_rows(
         if lib is not None:
             places.append(lib.parent / "tests")
             names.append(f"test_{lib.name.removesuffix('_lib')}_{path.stem}.py")
-        test = next((n for n in names if any((p / n).is_file() for p in places)), "")
+        test = next((n for n in names if any(_holds(p, n) for p in places)), "")
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )

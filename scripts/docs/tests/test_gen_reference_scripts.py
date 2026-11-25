@@ -123,6 +123,13 @@ def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
     assert rows["ci.py"]["tests"] == "test_land_ci.py"
 
 
+def test_a_test_in_a_subject_directory_is_found(tmp_path):
+    _write(tmp_path / "dev" / "fanout_lib" / "brief.py", '"""Summary."""\n')
+    _write(tmp_path / "dev" / "tests" / "fanout" / "test_fanout_brief.py", '"""x"""\n')
+    rows = {r["name"]: r for r in _build(tmp_path)}
+    assert rows["brief.py"]["tests"] == "test_fanout_brief.py"
+
+
 def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
     _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
     _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')

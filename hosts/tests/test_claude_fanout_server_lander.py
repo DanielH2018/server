@@ -2,7 +2,7 @@
 """claude-fanout-server-lander lands finished daniel-server batches' PRs.
 
 The rule that decides a PR is `scripts/dev/fanout_lib/autoland.py`, tested in
-`scripts/dev/tests/test_fanout_autoland.py`. This module pins what the rule cannot see about
+`scripts/dev/tests/fanout_status/test_fanout_autoland.py`. This module pins what the rule cannot see about
 its unit:
 
 1. `KillMode=process`. A detached landing leaves a user-manager service's cgroup only, so the

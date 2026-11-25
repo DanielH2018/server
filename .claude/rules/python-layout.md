@@ -62,6 +62,21 @@ in `files/`, which the role ships), guards over the host packages and their comp
 `tests/repo/test_testpaths_covers_every_test_file.py` enforces
 it.
 
+**A suite is grouped by subject.** A directory holds at most 40 test modules. A larger suite is
+split into subject directories, named for the family its tests share
+(`scripts/dev/tests/fanout/`, `findings/`), and then holds no test module beside them. A new test
+goes in the group for its subject. Four rules keep a group collectable:
+
+- A module keeps its basename when it moves, family prefix included.
+- A helper that several groups import (`_fanout_fakes.py`) stays at the suite's root with a
+  `conftest.py`, because pytest prepends a conftest's directory to `sys.path`. The suite's root
+  is in `[tool.ty.environment] extra-paths`. A helper one group imports moves with it.
+- A test module that imports another test module sits in the same group as it.
+- A group takes no name that a `pythonpath` root holds, such as `lib`, `bridge` or `checks`.
+
+The `test-modules-are-grouped-by-subject` row of `tests/repo/test_census_rows_layout.py` enforces
+the cap and the grouping. Its `allow` names each suite that is still flat.
+
 A role test imports its own role's `files/` modules by bare name: `k8s/conftest.py`
 puts that one directory on `sys.path`. A module shared across roles goes on `pythonpath`. A
 role that ships a `files/*.py` with logic gets a `tests/` directory. A top-level `files/*.py`

@@ -135,7 +135,7 @@ Run these in order on the first turn. `<branch>` is your worktree's branch, whic
     group` prepared with no owner, is adopted with its backlog. So is another branch's
     project when nothing holds that branch. The command refuses a project whose owner is
     live and names the owner: report that to the session above you
-    (`scripts/dev/tests/test_findings_milestone.py::test_start_refuses_a_title_another_branch_owns`).
+    (`scripts/dev/tests/findings/test_findings_milestone.py::test_start_refuses_a_title_another_branch_owns`).
     To hand a project on without closing it, run `milestone disown --worktree <branch>`.
     When `milestone status` shows the project exists with work in it, go to *Resume*.
 
@@ -305,7 +305,7 @@ uv run python scripts/dev/findings.py claims --worktree <branch>
 The first shows whether the lock still carries the project's reason; lock again when it
 does not. `milestone status` prints `issues N open, M closed; PRs N open, M closed`: compare
 the issue pair with `claims` and `next --milestone`, never the PR pair
-(`scripts/dev/tests/test_findings_milestone_cli.py::test_status_counts_the_project_issues_apart_from_its_pull_requests`). `place runs` gives the run ids, and no batch's state: a batch that is running,
+(`scripts/dev/tests/findings/test_findings_milestone_cli.py::test_status_counts_the_project_issues_apart_from_its_pull_requests`). `place runs` gives the run ids, and no batch's state: a batch that is running,
 done or landed reads `standing` there alike (`scripts/dev/fanout_lib/status_view.py:runs_lines`).
 Run `place status <run-id>` once for each run id it lists. That read tells a `running`
 batch from a `parked` one.

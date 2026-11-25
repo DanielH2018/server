@@ -58,7 +58,7 @@ only when all three hold:
   claim in the findings register names, stale claims included.
 
 A holds command that fails keeps every landed branch
-(`scripts/dev/tests/test_held_branches.py::test_main_fails_and_prints_no_branch_when_a_register_is_unread`).
+(`scripts/dev/tests/fanout/test_held_branches.py::test_main_fails_and_prints_no_branch_when_a_register_is_unread`).
 The sweep never deletes a remote branch. To see what a sweep would delete and why, with a
 count of the branches it keeps under each reason, run `--check` with no branch:
 

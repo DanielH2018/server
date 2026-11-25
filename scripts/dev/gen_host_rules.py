@@ -10,7 +10,7 @@ promtool tests load by path. A rule's `service` must be a literal
 (`scripts/validate/alert_conventions.py`), and a node has no workload-service join, so the
 expansion happens here rather than in PromQL. `--check` exits 1 when a committed rule file
 differs from the render; the `gen-host-rules` prek hook and
-`scripts/dev/tests/test_gen_host_rules.py` run it.
+`scripts/dev/tests/repo_tools/test_gen_host_rules.py` run it.
 
 THE HOST TABLE is `observability_expected_hosts` in the role's defaults: each host's scrape `job`
 and its `limit_seconds` for `HostUpdateStale`. A new host is one entry there. Every rule whose
