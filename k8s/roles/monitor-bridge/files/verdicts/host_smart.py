@@ -14,7 +14,6 @@ Decides; does not fetch. Takes its inputs as arguments and reads no module-level
 
 from datetime import datetime, timezone
 
-from bridge.parsing import parse_rfc3339
 from bridge.types import CheckResult
 
 
@@ -45,7 +44,7 @@ def scrutiny_freshness(
             stale.append("%s (no SMART data)" % name)
             members.append("%s stale" % device_label(wwn, dev))
             continue
-        age_h = (now - parse_rfc3339(cdate)).total_seconds() / 3600
+        age_h = (now - datetime.fromisoformat(cdate)).total_seconds() / 3600
         if age_h > max_age_h:
             stale.append("%s (last report %.1fh ago)" % (name, age_h))
             members.append("%s stale" % device_label(wwn, dev))
