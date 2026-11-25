@@ -15,7 +15,7 @@ Renovate sessions export here, and they read untrusted text. A metric they forge
 other name could fire a routed triage alert
 (`hosts/tests/test_claude_triage_alert_inputs.py::test_no_routed_alert_reads_a_series_a_session_can_send_is_clean`).
 
-Flux applies the role (its entry is in `cluster/services.yml`).
+Flux applies the role (its entry is in `k8s/services.yml`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the

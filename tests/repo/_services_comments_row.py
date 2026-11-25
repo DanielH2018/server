@@ -1,11 +1,11 @@
-"""The census row that no `cluster/services.yml` entry carries a description comment.
+"""The census row that no `k8s/services.yml` entry carries a description comment.
 
 `test_census_rows_roles.py`, which imports it into `ROWS`, is at the cap for a test module.
 """
 
 from _row_table import Census, Subject
 
-_SERVICES = "cluster/services.yml"
+_SERVICES = "k8s/services.yml"
 
 
 def _described(subject: Subject) -> list[str]:
@@ -32,7 +32,7 @@ NO_DESCRIBED_SERVICES = Census(
     name="no-services-entry-carries-a-description",
     reason=(
         "A service's description belongs in its role's CLAUDE.md. A comment in "
-        "`cluster/services.yml` states one key's trap, beside that key."
+        "`k8s/services.yml` states one key's trap, beside that key."
     ),
     files=lambda: [_SERVICES],
     offence=_described,

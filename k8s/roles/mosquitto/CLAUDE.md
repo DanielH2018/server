@@ -12,7 +12,7 @@ Zigbee device event crosses on its way to Home Assistant. No web UI, no route â€
 <!-- /generated_from -->
 
 - **Flux applies it.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
   `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,

@@ -3,7 +3,7 @@
 land.sh runs land.py from the checkout it lives in, so the helpers it imports are the same
 release as land.py (`tools.py` has why). That checkout can be a worktree branched hours
 before the merge. Its readers then read the merge commit's layout with older code: a reader
-from before `cluster/services.yml` reads a merge commit as declaring no k8s tags at all. A layout move that leaves the old reader a non-empty
+from before `k8s/services.yml` reads a merge commit as declaring no k8s tags at all. A layout move that leaves the old reader a non-empty
 but wrong answer would pass silently, so `classify.refuse_stale_code` refuses the landing
 before it reads anything at the merge.
 

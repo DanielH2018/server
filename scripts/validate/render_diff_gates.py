@@ -78,7 +78,9 @@ from renderer.renderer_lib.ordering import (
 from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_map
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
-SERVICES = Path("cluster/services.yml")
+SERVICES = Path("k8s/services.yml")
+# Where a base from before the move to `k8s/` holds the list; goes once no open PR has one.
+PRE_MOVE_SERVICES = Path("cluster/services.yml")
 ROLES_DIR = Path("k8s/roles")
 GROUP_VARS = Path("inventory/group_vars/all.yml")
 
@@ -264,10 +266,13 @@ def snapshot(
     Raises:
         RenderFailed: The render exited non-zero.
     """
-    k8s = k8s_services(tree / SERVICES)
+    services = tree / SERVICES
+    if not services.exists():
+        services = tree / PRE_MOVE_SERVICES
+    k8s = k8s_services(services)
     names = {e["name"] for e in k8s}
     roles_dir = tree / ROLES_DIR
-    roles = list(roles) or targets(tree / SERVICES, roles_dir)
+    roles = list(roles) or targets(services, roles_dir)
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
         # DECIDED: both sides run under the PR's interpreter, not each commit's own `uv run
         # --frozen` environment. A dependency bump that changes the render is then invisible

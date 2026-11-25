@@ -22,7 +22,7 @@ See repo-root `CLAUDE.md` for shared conventions, and
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart, about 2 minutes. The

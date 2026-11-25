@@ -15,7 +15,7 @@ on:
       - scripts/lib/**
       - k8s/roles/**
       - inventory/group_vars/**
-      - cluster/services.yml
+      - k8s/services.yml
       - uv.lock
       - pyproject.toml
 

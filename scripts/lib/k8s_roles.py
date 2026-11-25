@@ -758,18 +758,21 @@ def role_defaults(
     return found, problems
 
 
+# Read at a commit from before the move to `k8s/`; goes once no landing reads one.
+PRE_MOVE_SERVICES = "cluster/services.yml"
+
+
 def k8s_tags_in(repo_root: Path, at: str = "") -> set[str]:
     """Every k8s entry's deploy tag, in `repo_root`'s tree or, given `at`, at that commit.
 
-    A commit from before the list moved holds it in the k8s host's host_vars file, under
-    the same `containers_list` key, so that file is read at such a commit.
+    A commit from before the list moved to `k8s/` holds it at `PRE_MOVE_SERVICES`, so that
+    file is read at such a commit.
 
     Raises:
         subprocess.CalledProcessError: `at` holds neither file.
     """
     import tempfile
 
-    from lib.inventory_lists import K8S_HOST, host_vars_file
     from lib.git import git
     from lib.repo_paths import REPO
 
@@ -778,8 +781,7 @@ def k8s_tags_in(repo_root: Path, at: str = "") -> set[str]:
         return k8s_tags(repo_root / rel)
     shown = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root, check=False)
     if shown.returncode != 0:
-        old = host_vars_file(K8S_HOST).relative_to(REPO).as_posix()
-        shown = git("show", f"{at}:{old}", cwd=repo_root)
+        shown = git("show", f"{at}:{PRE_MOVE_SERVICES}", cwd=repo_root)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / rel.name
         path.write_text(shown.stdout)

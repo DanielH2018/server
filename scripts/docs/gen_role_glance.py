@@ -17,7 +17,7 @@ single source of truth, and it loses locality: inject-nested-docs puts a role do
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
 ONE FIELD SET. Every role is a k8s service role (`k8s/roles/<name>/`, every entry of
-`cluster/services.yml`), and its block carries:
+`k8s/services.yml`), and its block carries:
 
 - an **Applied by** line (`catalog_backup.owner_stance`): it names Flux and `promote`, and says
   `land.sh --tags=<tag>` gates the rollout, the tag from `entry_tags`;

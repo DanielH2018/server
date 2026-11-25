@@ -2,7 +2,7 @@
 
 The IngressRoute, Middleware, TLSOption and the rest of upstream Traefik's
 CustomResourceDefinitions (`k8s/roles/traefik-crds/files/upstream/kubernetes-crd-definition-v1.yml`).
-traefik's Kustomization depends on this tag (its `depends_on` in `cluster/services.yml`), and
+traefik's Kustomization depends on this tag (its `depends_on` in `k8s/services.yml`), and
 every routed role reaches the CRDs through its edge to `traefik`
 (`tests/deploy/test_k8s_toposort.py::test_the_derived_traefik_edge_agrees_with_the_render`).
 
@@ -41,4 +41,4 @@ every routed role reaches the CRDs through its edge to `traefik`
 - **`tier: home-edge`**, traefik's tier, keeps the tag out of the lost-node shed set without
   a `NEVER_SHED` entry (`scripts/renderer/template_filters/service_tier.py`).
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml` from its first commit.
+  is in `k8s/services.yml` from its first commit.

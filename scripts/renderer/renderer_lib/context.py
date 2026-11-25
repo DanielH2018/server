@@ -3,7 +3,7 @@
 `render_context` layers role defaults, `group_vars/all.yml` and host_vars in Ansible's
 precedence, and adds `services` and `hosts`. This module adds two things on top:
 
-- `services` is the toposorted view: `cluster/services.yml` sorted with `toposort_containers`,
+- `services` is the toposorted view: `k8s/services.yml` sorted with `toposort_containers`,
   and templates read that order (homepage tiles, scrape jobs).
 - The stub file's variables go over every layer, as `-e @FILE` extra vars do.
 

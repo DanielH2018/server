@@ -16,7 +16,7 @@ conventions.
   manager still tracks it for digest-bump PRs.
 - **Port:** 8080. Stateless RollingUpdate Deployment with a readinessProbe.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   Its digest-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Hostname is single-label** (`bento-pdf`, not `bento-pdf.k8s`) deliberately: the
