@@ -81,7 +81,9 @@ def test_a_role_default_names_its_own_file_through_role_file(tree):
 @pytest.mark.parametrize("plane", ["setup", "k8s"])
 def test_a_render_that_names_no_host_takes_no_hosts_vars(tree, plane):
     # A k8s role reads a host's value through `hosts`, so no host's values merge in unnamed.
-    template, inv = tree({}, group={"port": 1}, hosts={"box": {"port": 2}}, plane=plane)
+    template, inv = tree(
+        {}, group={"port": 1}, hosts={"daniel-box": {"port": 2}}, plane=plane
+    )
     assert rc.render_context(template, inventory=inv)["port"] == 1
 
 
