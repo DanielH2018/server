@@ -98,8 +98,8 @@ flowchart TD
 
 Network segmentation is **not** blanket-enforced: only a few roles define NetworkPolicies
 (`n8n`, `prowlarr`, `registry`) — everything else is reachable pod-to-pod within the
-namespace. Where policies do exist, **ingress** rules are enforced; **egress** rules are
-**not** enforced by this cluster's CNI, so never read an egress policy as a control.
+namespace. Where policies do exist, kube-router enforces **ingress** and **egress** rules. An egress
+rule does not cover the first seconds of a pod's life (ADR-0009).
 
 ## How deploys work
 

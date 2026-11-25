@@ -4,10 +4,7 @@
 # can push or delete images over the ClusterIP, including qbittorrent's and jellyfin's
 # untrusted-input neighbors. This narrows that to the pods that legitimately write here.
 #
-# INGRESS, deliberately — the direction proven enforced on this cluster. Egress policies select
-# pods correctly and block nothing; this
-# repeats the same choice prowlarr's flaresolverr policy and n8n's broker policy already made,
-# and the `isolation` check in templates/verify/ checks it on every roll rather than assuming.
+# INGRESS, as in prowlarr's flaresolverr policy and n8n's broker policy. The `isolation` check in templates/verify/ checks it on every roll rather than assuming.
 #
 # THREE ADMIT RULES, for three different kinds of traffic:
 #

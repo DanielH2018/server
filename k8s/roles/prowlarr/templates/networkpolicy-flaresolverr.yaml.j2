@@ -9,10 +9,7 @@
 # {{ k8s_namespace }} could reach it — including qbittorrent's untrusted payloads and jellyfin —
 # the same argument n8n-broker's policy makes.
 #
-# INGRESS: an Egress policy selects pods correctly on this cluster and blocks nothing.
-# Ingress policies ARE enforced —
-# n8n-broker relies on one and probes it. So this is written in the direction that holds, and
-# the prowlarr-verify Job (templates/verify/job.yaml.j2) checks it on every revision that edits
+# INGRESS: the exposure is who reaches this port. The prowlarr-verify Job (templates/verify/job.yaml.j2) checks it on every revision that edits
 # this policy or flaresolverr's Deployment, rather than trusting the asymmetry.
 #
 # Rendered from the shared macro with literal arguments rather than a `netpol_fences` item on

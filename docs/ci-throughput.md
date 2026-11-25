@@ -1070,7 +1070,7 @@ The decisions, all the operator's:
   keeps every job hosted, because a runner on the host would run a fork's code beside the age
   key, a `gh` token and a cluster node. A runner pod holds none of the three: it has no host
   mount, no ServiceAccount token and no privilege, and it runs one job. Two things stay
-  true. Egress NetworkPolicies are not enforced on this cluster, so a job in a pod can reach
+  true. No egress NetworkPolicy fences the runner pods, so a job in a pod can reach
   the LAN. A container escape would land on a production node. ADR-0032 is the record.
 - **Which credential registers a runner. Decided on 2026-11-13: it stays on daniel-box.** The
   launcher mints a one-job runner configuration with the token the lander uses, and creates the

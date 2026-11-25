@@ -12,6 +12,10 @@ governs: []
 
 Accepted. All five slices deployed and enforcing by 2026-08-20.
 
+Amended on 2026-11-25. This record said egress was not enforced, from one probe on
+2026-08-07. A re-test found that it is, and *Consequences* holds the measurement. The
+decision stands: the baseline is ingress only.
+
 ## Context
 
 Kubernetes admits every pod-to-pod connection by default, and a NetworkPolicy only constrains
@@ -37,10 +41,15 @@ indistinguishable from an outage.
 
 ## Consequences
 
-**Egress is not enforced on this cluster.** Ingress is, so an egress policy reads as
-protection while doing nothing at all. Anything reasoning about outbound restriction must
-probe with an unfenced control rather than trusting the object's existence — this is the most
-dangerous property in this record, because the failure mode is a false sense of coverage.
+**Egress is enforced, except in the first seconds of a pod's life.** The re-test of
+2026-11-25, on k3s v1.37.2+k3s1, ran a pod under deny-all egress and an unfenced control on
+each node. Both dialled a LAN node, a pod, the API Service and the internet for 90 seconds.
+The control connected every time. The fenced pods connected on their first dial, at 0 s, on
+seven of eight rows, and never again. The next dial came about 3 s later, so the gap is
+shorter than that. An egress policy therefore does not stop a pod that dials as it starts.
+The probe of 2026-08-07 dialled once, as it started, on a cluster that ran kube-router
+v2.6.3-k3s1. Anything reasoning about outbound restriction must still probe with an unfenced
+control rather than trusting the object's existence.
 
 **Narrowing an allowlist needs a caller census first.** Two of three narrowings broke callers
 that were inside the CIDR being treated as the attacker. Authelia's `remote_ip` log is the
