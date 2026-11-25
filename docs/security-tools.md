@@ -85,6 +85,8 @@ Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no defa
 | 1-7 | at least one no package explains | DOWN, naming the first three | kept |
 | anything else | not read | DOWN, with AIDE's first error line | kept |
 
+A file under `/etc/aide` that a group or anyone can write also reads DOWN, and no scan runs.
+
 No verdict for a week and 6 hours also pages, through `AideCheckNotReporting`, which means the timer stopped running or the scan never finished.
 
 A difference pages when it falls in one of these and no package explains it:

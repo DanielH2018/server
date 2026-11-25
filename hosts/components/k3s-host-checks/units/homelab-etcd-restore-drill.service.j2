@@ -7,9 +7,10 @@ Wants=network-online.target homelab-secrets.service
 [Service]
 SyslogLevel=notice
 Type=oneshot
-# In place from the checkout, as the docs refresh runs: the checkout is what stays current, and
-# the script reads the repo's gate beside it. --list-only ONLY: the k3s_etcd_restore_drill_cron
+# The script is the package's copy, because the unit runs as root. The gate it calls runs from the
+# checkout as the checkout's owner. --list-only ONLY: the k3s_etcd_restore_drill_cron
 # block in defaults/main.yml says why the full restore must not run on this host.
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh --list-only
+Environment=ETCD_DRILL_CHECKOUT=/home/{{ sys_user }}/server
+ExecStart=/usr/lib/homelab/etcd-restore-drill --list-only
 SyslogIdentifier=etcd-restore-drill

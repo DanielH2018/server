@@ -639,6 +639,15 @@ unexplained_entries() {
 rm -f "$AIDE_DIR/aide.db.new"
 copy_accounts
 line_edit_paths | "$AIDE_ORIGINALS" seed "$ORIGINALS" "$DPKG_DIR/status" 2>&1 | logger -p daemon.notice -t aide-check
+# AIDE reads every file under /etc/aide as root, and its own ownership test covers only the
+# executable ones. A file another user can write would choose what root runs, so no scan starts.
+WRITABLE=$(find "$FS_ROOT/etc/aide" ! -type l -perm /022 2>/dev/null | head -n 3 | paste -sd ' ' -)
+if [[ -n "$WRITABLE" ]]; then
+  STATUS=down
+  MSG="no scan ran, because the AIDE config is group- or world-writable: ${WRITABLE}; read each file, then run chmod go-w on it"
+  report || exit 1
+  exit 0
+fi
 START=$SECONDS
 REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1 8>&-)
 RC=$?

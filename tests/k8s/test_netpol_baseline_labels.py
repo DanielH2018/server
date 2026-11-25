@@ -478,3 +478,20 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
         f"workloads carry BOTH the baseline label and the exemption: {both}\n"
         "Pick one: the baseline fences it, or its own policy does."
     )
+
+
+def test_only_traefik_reaches_the_longhorn_ui() -> None:
+    (policy,) = [
+        doc
+        for role, _tpl, doc in rendered_docs()
+        if role == "longhorn"
+        and doc.get("kind") == "NetworkPolicy"
+        and doc["spec"]["podSelector"].get("matchLabels") == {"app": "longhorn-ui"}
+    ]
+    (rule,) = policy["spec"]["ingress"]
+    (peer,) = rule["from"]
+    assert peer["podSelector"]["matchLabels"] == {"app": "traefik"}
+    assert peer["namespaceSelector"]["matchLabels"] == {
+        "kubernetes.io/metadata.name": "homelab"
+    }
+    assert rule["ports"] == [{"protocol": "TCP", "port": 8000}]
