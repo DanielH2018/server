@@ -86,6 +86,7 @@ wrong is worth more than the record of one that did not.
 | [0039](0039-scripts-is-installed-in-place.md) | scripts/ is installed in place as the one import root, and each tree's own root goes first | Accepted | 2026-11-19 |
 | [0040](0040-dead-names-copied-tests-and-unused-parameters-are-gated.md) | Dead names, copied tests and unused parameters are gated, and blind excepts are not | Accepted | 2026-11-19 |
 | [0041](0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) | The B2 weekly bucket and the R2 etcd snapshots are locked, and the R2 daily tier is not | Accepted | 2026-11-20 |
+| [0042](0042-each-variable-lives-with-what-it-describes.md) | Each variable lives with what it describes, and inventory/ is dissolved | Proposed | 2026-11-25 |
 
 ## The long-form behind a record
 
@@ -97,5 +98,6 @@ archive, because the record states the decision and the document holds the evide
 |---|---|
 | [Longhorn backup tiering](../longhorn-backup-tiering.md) | [ADR-0007](0007-backup-tiering-r2-daily-b2-weekly.md), [ADR-0008](0008-16-mib-longhorn-blocks.md), [ADR-0041](0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md) |
 | [NetworkPolicy default-deny](../networkpolicy-default-deny.md) | [ADR-0009](0009-networkpolicy-default-deny-ingress.md) |
+| [Variable layout migration](../variable-layout-migration.md) | [ADR-0042](0042-each-variable-lives-with-what-it-describes.md) |
 | [Argo and Flux evaluation](../archive/gitops-argo-flux-evaluation.md) | [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md) |
 | [Self-hosted runner spike](../archive/self-hosted-runner-spike.md) | [ADR-0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) |
