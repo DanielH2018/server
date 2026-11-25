@@ -109,7 +109,9 @@ image together. Every step is operator-only.
 1. Suspend `sonarr-snapshot`, then `sonarr`, with the command in step 1 of
    `docs/volume-snapshot-drills.md`, *Branch 1*. On a stateful hold, follow that runbook
    instead of the steps below.
-2. Take the digest8 from the pre-v5 snapshot's name. List the names with
+2. Take the digest8 from the pre-v5 snapshot's name. The move to v5 applied on 2026-11-25
+   (PR #10143) behind `autodeploy-sonarr-978c1de9-config-20261125215041`, so its digest8 is
+   `978c1de9`. List the names with
    `kubectl -n longhorn-system get snapshots.longhorn.io | grep autodeploy-sonarr`. The Job
    keeps the newest three, so three later sonarr revisions prune it.
 3. Revert the volume. Drop `--apply` first to see which snapshot the run names:
