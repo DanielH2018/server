@@ -29,6 +29,8 @@ defaults:
   # rkhunter.conf.local reads `unset`.
   integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
   integrity_scans_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
+  # The hosts that run the t2-egress squid, whose shared-memory segments rkhunter warns about.
+  integrity_scans_squid_hosts: [daniel-box]
 depends:
   - rkhunter
 files:

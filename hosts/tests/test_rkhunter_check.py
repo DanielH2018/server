@@ -24,7 +24,7 @@ import re
 
 from _aide_check_run import LOGGER_STUB, verdict_of
 from _helpers import REPO
-from _host_packages import HOSTS, shipped_text
+from _host_packages import HOSTS, package, shipped_text
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
 from test_aide_check import _textfile
@@ -243,6 +243,17 @@ def test_the_ssh_root_setting_follows_the_main_sshd_config():
     for host, value in expected.items():
         shipped = shipped_text(host, "/etc/rkhunter.conf.local")
         assert f"\nALLOW_SSH_ROOT_USER={value}\n" in shipped, (host, shipped)
+
+
+def test_the_squid_segments_are_allowed_only_where_the_package_ships_squid():
+    """rkhunter reports squid's /dev/shm segments as suspicious on the host that runs it."""
+    for host in HOSTS:
+        ships_squid = "/usr/lib/homelab/t2-egress/t2-squid.conf" in package(host).files
+        allows_squid = (
+            "\nALLOWDEVFILE=/dev/shm/squid-*-cf__queues.shm\n"
+            in shipped_text(host, "/etc/rkhunter.conf.local")
+        )
+        assert allows_squid == ships_squid, host
 
 
 def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):

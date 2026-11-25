@@ -14,7 +14,10 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Held at zero replicas** by `vaultwarden_k8s_replicas` in `defaults/main.yml`, so Flux
   resets any hand scale-up. The claim still binds, because the `longhorn` StorageClass binds
   `Immediate`. To bring it up, raise the count and drop `probe: false` from the
-  `containers_list` entry in the same PR; the ingress probe then expects a 200.
+  `containers_list` entry in the same PR; the ingress probe then expects a 200. Drop
+  `vaultwarden-data` from `k3s_longhorn_restore_drill_empty_ok_pvcs` there too, because a small
+  vault stays under the waiver's size ceiling. ENFORCED:
+  `tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_vaultwarden_is_waived_only_while_it_has_no_replicas`.
 - **The route has no Authelia gate.** The Bitwarden apps and browser extension call the API
   directly and cannot follow Authelia's 302. The route is LAN-only (`public_route: false`), so
   a phone off the LAN reaches it over wg-easy.
