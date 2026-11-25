@@ -1,4 +1,4 @@
-"""The parsed form of `cluster/services.yml`'s `containers_list`, built once at the read.
+"""The parsed form of `k8s/services.yml`'s `containers_list`, built once at the read.
 
 `parse_containers_list` is the one place a malformed entry is caught. `render_guard.k8s_services`
 calls it, and so does `render_context` for the Pi's `compose_services`, which three templates

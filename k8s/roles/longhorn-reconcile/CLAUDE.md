@@ -24,7 +24,7 @@ Deployment write here.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml` and
   `depends_on: [longhorn]`, because its objects live in the `longhorn-system` namespace that
   `longhorn`'s vendored file creates. It is a tag of its own, not part of `longhorn`, because its ConfigMap
   renders from `containers_list`: inside `longhorn`, every claim or tier change would change a

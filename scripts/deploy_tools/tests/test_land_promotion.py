@@ -375,8 +375,8 @@ def _repo_with_services(repo: Path, services: str) -> str:
             check=True,
         ).stdout.strip()
 
-    (repo / "cluster").mkdir()
-    (repo / "cluster" / "services.yml").write_text(services)
+    (repo / "k8s").mkdir()
+    (repo / "k8s" / "services.yml").write_text(services)
     git("init", "-q", "-b", "master")
     git("add", "-A")
     git("commit", "-q", "--no-gpg-sign", "-m", "services")

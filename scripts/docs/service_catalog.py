@@ -2,7 +2,7 @@
 """Generate a single HTML page answering "what runs in this homelab".
 
 THE PROBLEM. ~60 services are declared across two files
-(cluster/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
+(k8s/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
 answer "what runs here, on which host, behind which auth, backed up how" is to read
 through 62 Ansible roles by hand. Every fact already lives in the repo — nothing
 assembles them into one place, so the answer drifts out of date the moment someone
@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         "--services",
         type=Path,
         default=K8S_SERVICES,
-        help="override cluster/services.yml (tests)",
+        help="override k8s/services.yml (tests)",
     )
     parser.add_argument(
         "--k8s-roles",

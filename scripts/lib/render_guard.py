@@ -241,7 +241,7 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
 
 
 def services_file(host_vars: Path) -> Path:
-    """``cluster/services.yml`` in the tree whose ``inventory/host_vars`` is `host_vars`."""
+    """``k8s/services.yml`` in the tree whose ``inventory/host_vars`` is `host_vars`."""
     return host_vars.resolve().parents[1] / K8S_SERVICES.relative_to(REPO)
 
 
@@ -277,7 +277,7 @@ def entry_tags(entry: dict) -> list[str]:
 
 
 def k8s_services_at(ref: str, cwd: Path) -> tuple[ContainerEntry, ...]:
-    """The entries of ``cluster/services.yml`` AT ``ref``, read with git.
+    """The entries of ``k8s/services.yml`` AT ``ref``, read with git.
 
     A PR that adds a role and its service entry together is the case a checkout answers
     wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as one

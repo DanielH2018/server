@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate docs/reference/hosts.md — the three hosts and what each one is.
 
-STATIC PARSING ONLY. Reads inventory/host_vars/*.yml, cluster/services.yml and each
+STATIC PARSING ONLY. Reads inventory/host_vars/*.yml, k8s/services.yml and each
 hosts/<host>/package.yml with yaml.safe_load and plain text parsing, never `ansible` or
 `kubectl`. A fresh worktree has
 no Ansible collections installed, and the inventory contains SOPS lookups that do not

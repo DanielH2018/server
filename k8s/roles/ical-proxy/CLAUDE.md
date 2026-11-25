@@ -19,7 +19,7 @@ calendars, one feed each, for the Homepage calendar widget. See repo-root `CLAUD
 - **Host:** daniel-server, by the preferred node affinity in `k8s/roles/ical-proxy/templates/deployment.yaml.j2`
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
   Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
   Ready. The Deployment is `RollingUpdate` with one replica. The default surge starts the new pod

@@ -56,7 +56,7 @@ _K8S_READERS_NOTE = (
 
 
 def declared_tags() -> set[str]:
-    """Every name that selects a service, read from `cluster/services.yml`."""
+    """Every name that selects a service, read from `k8s/services.yml`."""
     return {tag for entry in k8s_services() for tag in entry_tags(entry)}
 
 

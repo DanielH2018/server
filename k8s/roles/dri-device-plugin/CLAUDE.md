@@ -19,7 +19,7 @@ without either pod running privileged
   property, so every namespace's pods can request it once advertised there.
 - **A DaemonSet**, one pod per node.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **The verify is an alert, not a Job.** The soak reads `K8sExtendedResourceMissing`
   (`verify="true"` in `k8s/roles/observability/files/rules/k8s-workloads.yaml`), which

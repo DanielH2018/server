@@ -37,7 +37,7 @@ because the daemon's `homelab-games` token can change the replica count of the D
   To remove it, drop `deploy-ui` from `components:` in `hosts/daniel-box/package.yml`; the next
   package version stops it, and reconcile deletes its three ufw rules over two runs, because
   the arm deletes at most two in one run.
-- Remove the `deploy-ui` entry from `containers_list` in `cluster/services.yml` and
+- Remove the `deploy-ui` entry from `containers_list` in `k8s/services.yml` and
   deploy, which drops the route (`k8s/roles/deploy-ui/`) and `deploy.local`.
 
 ## In flight

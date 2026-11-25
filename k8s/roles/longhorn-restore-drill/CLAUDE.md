@@ -17,7 +17,7 @@ and the *Mode* bullet below says why.
 - **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml` and
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml` and
   `depends_on: [longhorn]`.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
   The disaster-recovery order waits on `longhorn` at step 6, and nothing creates `homelab`

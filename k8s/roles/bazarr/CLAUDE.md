@@ -17,7 +17,7 @@ shared conventions.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia, media-volume and traefik are flux-owned too,
   so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
@@ -101,6 +101,6 @@ library.
   `k8s/templates/ingressroute-default.yaml.j2`, which this role ships no template for —
   the route's hostname, port, Authelia gate and public opt-out are the `containers_list`
   entry's.
-- **The route is LAN-only.** The entry in `cluster/services.yml` sets `public_route: false`,
+- **The route is LAN-only.** The entry in `k8s/services.yml` sets `public_route: false`,
   so no public name renders whatever `k8s_public_route` says. The operator ruled it on
   2026-11-15 (#8514): WireGuard covers remote use.

@@ -13,7 +13,7 @@ render opens and fails on one under no member.
 HOST_INPUTS = (
     "hosts/",
     "inventory/",
-    "cluster/services.yml",  # every template's `services` (`render_guard.k8s_services`)
+    "k8s/services.yml",  # every template's `services` (`render_guard.k8s_services`)
     "scripts/lib/",
     "scripts/renderer/",
     # They decide the environment `uv run` renders in.

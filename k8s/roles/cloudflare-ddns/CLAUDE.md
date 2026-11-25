@@ -18,7 +18,7 @@ conventions.
   manager.
 - **Secret** (a SOPS key, not a value): `cloudflare_dns_token`.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `RollingUpdate`
   with one replica and no readinessProbe, so the Kustomization's `wait` reads a pod Ready as

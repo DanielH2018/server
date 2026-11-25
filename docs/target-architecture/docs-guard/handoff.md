@@ -121,7 +121,7 @@ The batches named three shapes they could not cite. Each is a candidate change t
 `scripts/lib/facts/citations.py`, and none is decided.
 
 - **A list entry in YAML.** A YAML atom is a dotted key, so it cannot select the
-  `port` of one entry in `cluster/services.yml`. Eight of the owed values have such a
+  `port` of one entry in `k8s/services.yml`. Eight of the owed values have such a
   source.
 - **A root-level file.** A path atom needs a slash, so the root `CLAUDE.md` and
   `renovate.json` cannot be cited.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every `cluster/services.yml` entry must name a role that deploys it.
+"""Every `k8s/services.yml` entry must name a role that deploys it.
 
 AN ENTRY WITH NO ROLE DEPLOYS NOTHING. A k8s entry needs k8s/roles/<name>/. The Pi's
 services are `compose_services` entries, which the `homelab-daniel-pi` package deploys
