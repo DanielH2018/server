@@ -24,7 +24,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 ## Flux applies it
 
 - **Flux applies traefik.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
 - **Its prerequisites and checks.** The `traefik-crds` tag installs the CRDs, and traefik's
   Kustomization depends on it. `rbac.yaml` in this tag's `manifests_files` carries the RBAC.

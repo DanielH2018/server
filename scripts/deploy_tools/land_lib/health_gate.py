@@ -29,7 +29,7 @@ HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
     """The platforms that declare `tag` in the tree whose host_vars are `host_vars`.
 
-    `k8s` for a `cluster/services.yml` entry, `docker` for an entry of the Pi's
+    `k8s` for a `k8s/services.yml` entry, `docker` for an entry of the Pi's
     `compose_services`, and empty for a tag neither declares. A Docker-only tag has nothing on
     the cluster to check, and probing it there first could find a same-named cluster workload
     (loki-homelab's Alloy DaemonSet) and report the Pi's undeployed container healthy.

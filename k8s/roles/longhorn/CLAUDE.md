@@ -14,7 +14,7 @@ A bad apply here detaches volumes under every stateful service while host probes
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`. A rebuilt cluster
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`. A rebuilt cluster
   gets it from the `longhorn` Kustomization at step 6 of `docs/flux-deploy-plane.md`'s
   *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization depends on it and
   creates the backup targets once it reads `Ready`.

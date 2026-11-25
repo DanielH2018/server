@@ -60,7 +60,7 @@ class Family:
 
 # The render's import closure and the inventory it layers in, which every family reads.
 _SHARED = (
-    r"hosts/lib/host_lib\.py|scripts/lib/longhorn_lib/longhorn_backups\.py|cluster/services\.yml"
+    r"hosts/lib/host_lib\.py|scripts/lib/longhorn_lib/longhorn_backups\.py|k8s/services\.yml"
     r"|scripts/renderer/(renderer_lib|template_filters)/[^/]+\.py"
     r"|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\.py"
     r"|scripts/validate/(render_templates|validate_lib/(ok_lines|shipped_render))\.py"

@@ -35,7 +35,7 @@ conventions.
   entry sits above `netpol-baseline` in `containers_list` only because that role must stay
   last.
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Kustomization's `wait` replaces
   the rollout gate, and the restart checksum the renderer stamps on the Deployment replaces

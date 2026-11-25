@@ -19,7 +19,7 @@ conventions.
 - **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
   root-folder paths; `media-data` is the shared claim (mounted, not owned).
 - **Flux applies it.** Its
-  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change
+  `containers_list` entry is in `k8s/services.yml`, so nothing applies it by hand, and a merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its image-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume and traefik
   are flux-owned too, so the Kustomization lists them in `dependsOn`, and Flux applies this tag

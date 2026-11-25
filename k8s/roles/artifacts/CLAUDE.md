@@ -16,7 +16,7 @@ how that sync behaves.
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `RollingUpdate`
   with one replica, so a roll keeps one pod serving. The host directories it mounts are the

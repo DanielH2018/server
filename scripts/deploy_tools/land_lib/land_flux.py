@@ -32,7 +32,7 @@ def k8s_tags_at(primary: Path, ref: str) -> set[str]:
 
     AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. The cluster always declares some k8s service, so
     `set()` means this checkout's reader does not know the layout at `ref`, as a reader from
-    before `cluster/services.yml` existed answered for every commit after it. Read as
+    before `k8s/services.yml` existed answered for every commit after it. Read as
     evidence, it fails every derived tag as matching no k8s entry.
 
     Raises:

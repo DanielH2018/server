@@ -16,7 +16,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
   `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
   Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
