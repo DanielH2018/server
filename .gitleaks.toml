@@ -45,23 +45,15 @@ paths = [
   '''^usr/lib/homelab/secrets/[^/]+\.sops\.yaml$''',
 ]
 
-# secrets/cluster-vars.source records one SHA-256 per cluster key, of that key's public
-# ciphertext in secrets.yml, beside the key's name. `generic-api-key` fires on a high-entropy
-# value next to a suggestive key name, and a line such as `grafana_admin_password <sha>`
-# supplies both halves. The value is a digest of tracked ciphertext, so a hit here is a false
-# positive by construction, and a real secret cannot reach the file — `cluster_vars.py write`
-# writes it, and `cluster_vars.py check` refuses a digest that matches no ciphertext. Scoped to
-# this one rule on this one path, so every other rule still scans it.
+# `generic-api-key` fires on the digest beside a suggestive key name; the value is a digest of
+# tracked ciphertext, so a hit is a false positive by construction.
 [[allowlists]]
 description = "secrets/cluster-vars.source holds ciphertext digests keyed by secret name, never a credential"
 targetRules = ["generic-api-key"]
 paths = ['''^secrets/cluster-vars\.source$''']
 
-# The vendored Kubernetes schemas' provenance file holds digests too: one sha256 per upstream
-# file, keyed by the file's name. Upstream names an API group's file `apis__<group>...`, and
-# `generic-api-key` reads the `api` in that key beside a 64-hex value as a credential. The values
-# are digests of public files from the kubernetes/kubernetes repo, written by
-# `scripts/validate/refresh_vendored_schemas.py`. Scoped to the one rule on the one file name.
+# `generic-api-key` reads the `api` in an `apis__<group>` key beside a 64-hex digest as a
+# credential; the values are digests of public files.
 [[allowlists]]
 description = "Kubernetes schema SOURCE.json holds sha256 digests of public upstream files"
 targetRules = ["generic-api-key"]
