@@ -34,6 +34,7 @@ LOCAL_ONLY = frozenset(
     {
         ".venv",
         ".ruff_cache",
+        ".hypothesis",
         ".ansible",
         "ansible.log",
         ".remember",

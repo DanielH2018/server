@@ -18,6 +18,8 @@ The NTRX "BD Remux 1080p AVC" that shipped a 10.4 s-GOP hevc_qsv re-encode trips
 from itertools import pairwise
 from typing import NamedTuple
 
+from fake_remux_lib.fake_remux_ledger import State
+
 
 # Consumer re-encoder identifiers that appear in a video stream's ENCODER tag. A remux (stream copy)
 # preserves the disc's original tag (usually none), never one of these. Matched case-insensitively as
@@ -257,7 +259,7 @@ def seed_ledger(ledger, fakes, max_concurrent, now):
             "fakeFileId": f["fileId"],
             "fakePath": f.get("path"),
             "evidence": f.get("evidence"),
-            "state": "detected",
+            "state": State.DETECTED,
             "attempts": 0,
             "firstSeen": now,
             "lastAction": now,

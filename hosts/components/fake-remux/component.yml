@@ -29,6 +29,7 @@ files:
   - {src: files/mkv_attachment_repair.py, dst: /usr/lib/homelab/fake-remux/mkv_attachment_repair.py, mode: "0755"}
   - {src: files/mkv_attachment_logic.py, dst: /usr/lib/homelab/fake-remux/mkv_attachment_logic.py}
   - {src: files/fake_remux_lib/fake_remux_scan.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_scan.py}
+  - {src: files/fake_remux_lib/fake_remux_ledger.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_ledger.py}
   - {src: files/fake_remux_lib/fake_remux_logic.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_logic.py}
   - {src: files/fake_remux_lib/fake_remux_replace.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_replace.py}
   - {src: files/fake_remux_lib/fake_remux_replace_logic.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_replace_logic.py}

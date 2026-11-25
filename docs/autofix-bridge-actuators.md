@@ -67,6 +67,11 @@ same config.env. It reads the ledger the scan seeded, interactive-searches Sonar
 replacement, grabs it, waits for the download, ffprobes it the same way the scan does, and
 only deletes the fake and lets Sonarr import **once the replacement is verified genuine**.
 
+Each ledger record is in one `State`, and
+`hosts/components/fake-remux/files/fake_remux_lib/fake_remux_ledger.py:TRANSITIONS` lists the
+moves between them. `move` refuses any other, and a reconcile over a ledger that holds an unknown
+state fails before it calls Sonarr, so the state file pages.
+
 `autofix_fake_remux_policy` renders `/etc/autofix-fake-remux/policy.json`, which picks the
 candidate: denied and preferred release groups, preferred indexers, a depreferenced but not
 banned codec list, and a size band.

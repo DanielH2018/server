@@ -11,6 +11,7 @@ import sys
 # files/ (the install dir on the host): fake_remux_lib's parent.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fake_remux_lib import fake_remux_logic as frl
+from fake_remux_lib.fake_remux_ledger import IN_FLIGHT, State, move
 
 _WRONG_MAP = re.compile(r"wasn.?t requested", re.I)
 _BLOCKED = re.compile(r"blocked till|is disabled|unavailable", re.I)
@@ -115,16 +116,12 @@ def plan_searches(ledger, policy):
     """
     per_tick = int(policy.get("searches_per_tick", 2))
     cap = int(policy.get("max_concurrent_replacements", 5))
-    active = sum(
-        1
-        for r in ledger.values()
-        if r["state"] in ("grabbed", "verifying", "importing")
-    )
+    active = sum(1 for r in ledger.values() if r["state"] in IN_FLIGHT)
     slots = cap - active
     if slots <= 0:
         return []
     detected = sorted(
-        (r for r in ledger.values() if r["state"] == "detected"),
+        (r for r in ledger.values() if r["state"] == State.DETECTED),
         key=lambda r: (r.get("firstSeen", 0), r["episodeId"]),
     )
     return [
@@ -147,15 +144,15 @@ def adopt_in_flight(ledger, queue_by_episode, now):
     out = dict(ledger)
     adopted = 0
     for ep, rec in ledger.items():
-        if rec["state"] != "detected":
+        if rec["state"] != State.DETECTED:
             continue
         item = queue_by_episode.get(str(rec["episodeId"]))
         if item is None:
             continue
-        out = _set(
+        out = move(
             out,
             ep,
-            state="grabbed",
+            State.GRABBED,
             chosen={
                 "guid": None,
                 "indexerId": None,
@@ -177,14 +174,8 @@ def prune_history(ledger, retention_days, now):
     return {
         k: r
         for k, r in ledger.items()
-        if not (r.get("state") == "replaced" and r.get("lastAction", now) < cutoff)
+        if not (r["state"] == State.REPLACED and r.get("lastAction", now) < cutoff)
     }
-
-
-def _set(ledger, ep, **changes):
-    rec = dict(ledger[str(ep)])
-    rec.update(changes)
-    return {**ledger, str(ep): rec}
 
 
 def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
@@ -203,7 +194,7 @@ def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
             }
         )
         actions.append({"type": "import", "episodeId": rec["episodeId"]})
-        return _set(out, ep, state="importing", lastAction=now)
+        return move(out, ep, State.IMPORTING, lastAction=now)
     attempts = rec.get("attempts", 0) + 1
     if item is not None:
         actions.append(
@@ -214,18 +205,18 @@ def _apply_verdict(out, ep, rec, item, probe, policy, now, actions):
             }
         )
     if attempts >= int(policy.get("max_attempts", 3)):
-        return _set(
+        return move(
             out,
             ep,
-            state="held",
+            State.HELD,
             attempts=attempts,
             reason="replacement also fake",
             lastAction=now,
         )
-    return _set(
+    return move(
         out,
         ep,
-        state="detected",
+        State.DETECTED,
         attempts=attempts,
         chosen=None,
         reason="replacement also fake",
@@ -248,7 +239,7 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
     for ep, rec in ledger.items():
         state = rec["state"]
         epk = str(rec["episodeId"])
-        if state == "grabbed":
+        if state == State.GRABBED:
             item = queue_by_episode.get(epk)
             if item is None:  # not in the download client's queue
                 # A just-grabbed download takes ~30-60s to register in Sonarr's queue; within the grab
@@ -263,23 +254,23 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                 if cur is not None and cur != rec["fakeFileId"]:
                     # gone from the queue because Sonarr already imported it (e.g. a higher-tier grab
                     # it auto-upgrades) — the episode has a NEW file: success, not a lost grab.
-                    out = _set(out, ep, state="replaced", lastAction=now)
+                    out = move(out, ep, State.REPLACED, lastAction=now)
                     continue
                 attempts = rec.get("attempts", 0) + 1
                 if attempts >= max_attempts:
-                    out = _set(
+                    out = move(
                         out,
                         ep,
-                        state="held",
+                        State.HELD,
                         attempts=attempts,
                         reason="grab lost",
                         lastAction=now,
                     )
                 else:
-                    out = _set(
+                    out = move(
                         out,
                         ep,
-                        state="detected",
+                        State.DETECTED,
                         attempts=attempts,
                         chosen=None,
                         reason="grab lost",
@@ -288,26 +279,26 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                 continue
             if item.get("sizeleft", 1) > 0:  # still downloading
                 if now - rec.get("lastAction", now) > stall_s:
-                    out = _set(
-                        out, ep, state="held", reason="download stalled", lastAction=now
+                    out = move(
+                        out, ep, State.HELD, reason="download stalled", lastAction=now
                     )
                 continue
             # sizeleft == 0 → fully downloaded → verify (probe supplied by the shell)
             probe = probes.get(epk)
             if probe is None:
-                out = _set(out, ep, state="verifying", lastAction=now)
+                out = move(out, ep, State.VERIFYING, lastAction=now)
                 continue
             out = _apply_verdict(out, ep, rec, item, probe, policy, now, actions)
-        elif state == "verifying":
+        elif state == State.VERIFYING:
             # re-entrant: same logic as the grabbed→verify branch once a probe arrives
             item = queue_by_episode.get(epk)
             probe = probes.get(epk)
             if probe is None:
                 if now - rec.get("lastAction", now) > stall_s:
-                    out = _set(
+                    out = move(
                         out,
                         ep,
-                        state="held",
+                        State.HELD,
                         # the reconciler ffprobes on the HOST (jellyfin can't see /data/torrents), so
                         # this is a host ffprobe failure or an unresolvable download path, not jellyfin
                         reason="probe unavailable (host ffprobe failed / download path missing)",
@@ -315,17 +306,17 @@ def advance(ledger, queue_by_episode, files_by_ep, probes, policy, now):
                     )
                 continue
             out = _apply_verdict(out, ep, rec, item, probe, policy, now, actions)
-        elif state == "importing":
+        elif state == State.IMPORTING:
             cur = files_by_ep.get(str(rec["episodeId"]))
             if cur is not None and cur != rec["fakeFileId"]:
-                out = _set(out, ep, state="replaced", lastAction=now)
+                out = move(out, ep, State.REPLACED, lastAction=now)
             elif now - rec.get("lastAction", now) > float(
                 policy.get("import_timeout_s", 3600)
             ):  # import didn't land within the timeout
-                out = _set(
+                out = move(
                     out,
                     ep,
-                    state="held",
+                    State.HELD,
                     reason="import did not complete",
                     lastAction=now,
                 )
