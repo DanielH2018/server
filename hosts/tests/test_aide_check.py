@@ -340,3 +340,14 @@ def test_the_push_deadline_covers_one_week_and_not_two():
         f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "
         "under two so a second missed run cannot pass unreported"
     )
+
+
+def test_a_writable_aide_config_pushes_down_without_a_scan(tmp_path):
+    conf = tmp_path / "fs" / "etc" / "aide" / "aide.conf.d"
+    conf.mkdir(parents=True)
+    (conf / "10_x").touch()
+    (conf / "10_x").chmod(0o666)
+    code, pushed, _, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0)
+    assert not ran
+    assert pushed[0] == "down" and "writable" in pushed[1], pushed
+    assert code == 0

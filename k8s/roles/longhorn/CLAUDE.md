@@ -80,6 +80,7 @@ A bad apply here detaches volumes under every stateful service while host probes
       an immutable parameter changes.
     - `templates/networkpolicy-metrics.yaml.j2` renders the policy that admits Prometheus to
       the manager's metrics port.
+    - `templates/networkpolicy-ui.yaml.j2` renders the policy that admits only Traefik to the UI.
 - **A DataEngineSpecific Setting's value is a JSON map serialised as a string.**
   `default-replica-count` and both `snapshot-data-integrity` Settings render
   `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the
