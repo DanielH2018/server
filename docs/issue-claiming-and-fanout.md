@@ -901,7 +901,7 @@ Four changes on master carry the tree. Launches are serialised and gated across 
 [#9310](https://github.com/DanielH2018/server/pull/9310)). A batch that another project's
 hold stopped parks (*A parked batch*,
 [#9252](https://github.com/DanielH2018/server/pull/9252)). A change to
-`cluster/services.yml` lands alone (`docs/landing.md`, *Rules that refuse a merge*,
+`k8s/services.yml` lands alone (`docs/landing.md`, *Rules that refuse a merge*,
 [#9167](https://github.com/DanielH2018/server/pull/9167) and
 [#9214](https://github.com/DanielH2018/server/pull/9214)). A milestone holds a project's
 backlog ([#9217](https://github.com/DanielH2018/server/pull/9217)).
@@ -945,7 +945,7 @@ reserves its backlog (*Decisions, with their dates*).
 **Alert noise** was milestone 21, under `claude/coord-alert-noise-d7b708`. Four batches
 closed five issues, and every PR ended `settled`:
 
-- [#9386] closed [#9201] and [#9338]. It changes `cluster/services.yml`, so it landed as a
+- [#9386] closed [#9201] and [#9338]. It changes `k8s/services.yml`, so it landed as a
   serial PR.
 - [#9450] closed [#9054].
 - [#9461] closed [#9045].
@@ -1009,7 +1009,7 @@ live batch has edited, and the gate reads them from each live batch's open PR (*
 at a time, and files held across runs*).
 
 **The serial rule's cost was two landings in a row.** [#9386] and [#9418] both change
-`cluster/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.
+`k8s/services.yml`. `docs/landing.md`, *Rules that refuse a merge*, holds the timings.
 
 **The conflict resume ran once, outside the two projects.**
 [#9421](https://github.com/DanielH2018/server/pull/9421) merged on 2026-11-19 at 23:50

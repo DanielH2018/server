@@ -28,7 +28,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   names the `.local.` host. Making the route public means changing `DOMAIN` too.
 - **Backup:** `vaultwarden-data` is a weekly B2 shard (Monday). Before the vault holds real
   data, consider moving it to the daily R2 tier: that needs a `tier: home-critical` entry with
-  `backup_claims`, per the header of `cluster/services.yml`.
+  `backup_claims`, per the header of `k8s/services.yml`.
 - **Renovate does not automerge the image** (`k8s_autodeploy: false`). Vaultwarden migrates
   its SQLite schema on start, so an upgrade wants an operator watching.
 

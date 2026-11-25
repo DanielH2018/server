@@ -30,7 +30,7 @@ to its web UI and to Subsonic clients.
   index. A failed revision writes the stateful hold, and the operator reverts the claim
   through `docs/volume-snapshot-drills.md`.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. The Kustomization lists its dependencies
   (authelia, traefik, media-volume) in `dependsOn`, and its `wait` replaces the rollout wait.
 

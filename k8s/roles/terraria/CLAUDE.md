@@ -25,7 +25,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   (`k8s/roles/image-builder/CLAUDE.md`). All of this matters because the volume holds
   irreplaceable world data.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes

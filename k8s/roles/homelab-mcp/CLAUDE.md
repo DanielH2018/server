@@ -43,7 +43,7 @@ routed tenant of the retired Docker edge.
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `k8s/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. Its Kustomization's `dependsOn` names no other
   role, because the role renders no route.
 - **The token Secret substitutes from `homelab-cluster-vars`.** `homelab_mcp_token` and

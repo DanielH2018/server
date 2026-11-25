@@ -34,7 +34,7 @@ SERIAL_ROLES = frozenset(
 # DECIDED: every edit to the service list is serial, a field change on one service included.
 # Every tag promotes with the bundle the list declares, and one crashlooping new service fails
 # that whole promotion and sets `DEPLOY_HOLD`.
-SERIAL_PATHS = frozenset({"cluster/services.yml"})
+SERIAL_PATHS = frozenset({"k8s/services.yml"})
 # What a serial PR changes, as the object of "changes" in a refusal.
 SERIAL_WHAT = "a forward-only pin, the flux role, cluster-vars or " + " or ".join(
     sorted(SERIAL_PATHS)

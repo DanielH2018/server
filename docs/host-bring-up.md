@@ -74,7 +74,7 @@ touching SOPS:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
    - `compose_services: []` on a Docker host only, which its host package deploys. A k3s
-     node drops the key, because the k3s services live in `cluster/services.yml` (see the
+     node drops the key, because the k3s services live in `k8s/services.yml` (see the
      repo-root `CLAUDE.md` → "Project Overview").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;

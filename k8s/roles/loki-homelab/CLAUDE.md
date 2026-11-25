@@ -28,7 +28,7 @@ verbatim-prompts store this role's LAN route
   (`k8s/roles/monitor-bridge/files/checks/service.py:with_ha_ban`). A broken apply blinds
   the LogQL check without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
-- **Flux applies it.** Its `containers_list` entry is in `cluster/services.yml`, so nothing
+- **Flux applies it.** Its `containers_list` entry is in `k8s/services.yml`, so nothing
   applies it by hand, and a merged change reaches the cluster when `promote`
   publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`

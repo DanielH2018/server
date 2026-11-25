@@ -36,7 +36,7 @@ neither. Plain `kubectl` needs no `sudo`, because the `ubuntu` kubeconfig reads 
 
 ## What generates what
 
-The reference pages read `containers_list` in `cluster/services.yml`, the Pi's `compose_services`,
+The reference pages read `containers_list` in `k8s/services.yml`, the Pi's `compose_services`,
 the per-role IngressRoute macro calls, the Longhorn backup-tier volume lists, and each role's
 `k8s_autodeploy` declaration. A fact none of those sources carries prints its reason instead of
 a value.

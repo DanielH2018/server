@@ -117,7 +117,7 @@ def test_a_slot_file_that_cannot_be_opened_leaves_the_others_free(tmp_path):
 
 _K8S = ["k8s/roles/sonarr/defaults/main.yml"]
 _SERIAL = ["k8s/roles/longhorn/defaults/main.yml"]
-_SERVICES = ["cluster/services.yml"]
+_SERVICES = ["k8s/services.yml"]
 _DOCS = ["docs/landing.md"]
 # The record of `Landing.changed_paths` reading the PR's file list.
 _FILES = "gh:files,headRefOid"

@@ -96,7 +96,7 @@ Airflow 3 with the KubernetesExecutor, plus one Postgres holding the metadata da
   than that loses days for good.
   `k8s/roles/airflow/tests/test_ha_rollup.py::test_the_backfill_window_matches_the_recorders_purge_setting`
   holds the window to HA's setting. Task pods reach HA through home-assistant's `netpol_from`
-  entry in `cluster/services.yml`.
+  entry in `k8s/services.yml`.
 - **`claude_usage_rollup`** loads `claude.usage_daily`: spend, tokens, sessions, active time,
   lines, commits and PRs, summed by node, entrypoint, model and type, so no session id or
   account reaches the warehouse. Claude Code exports one cumulative counter per session, so

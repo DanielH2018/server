@@ -115,7 +115,7 @@ Both were measured on the 2026-09-10 fan-outs:
   read citations, so an issue that needs a secret and does not cite the file is still yours
   to hold. Hold the second secret issue until the first batch's PR has merged.
 - **A batch that touches a path every tag renders runs alone.** `land.sh` holds this
-  itself for `cluster/services.yml`, where a `containers_list` entry lives: a PR that
+  itself for `k8s/services.yml`, where a `containers_list` entry lives: a PR that
   changes the file lands as a serial PR (`docs/landing.md`, *Rules that refuse a merge*).
   For any other such path the rule is yours. `promote` publishes the whole bundle, so one
   crashlooping service anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports

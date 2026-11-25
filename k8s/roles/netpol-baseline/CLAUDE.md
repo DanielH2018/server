@@ -68,7 +68,7 @@ tighter or looser allow-list than the baseline
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
 - **Flux applies it.** The `containers_list` entry
-  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  is in `k8s/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   `defaults/main.yml` holds the deferred file list.
 - **`templates/verify/` is the probe's Flux form.** The Job runs

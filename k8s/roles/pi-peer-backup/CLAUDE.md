@@ -5,7 +5,7 @@ nightly (`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_schedule
 `k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir`) into a Longhorn PVC
 (`k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_k8s_storage_class`). The Saturday
 weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
-`weekly_backup_claims` in `cluster/services.yml` names the shard.
+`weekly_backup_claims` in `k8s/services.yml` names the shard.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
@@ -16,7 +16,7 @@ weekly shard (weekly-backup-d6) carries it to B2; the pi-peer-backup entry's
 <!-- /generated_from -->
 
 - **Flux applies it.** Its `containers_list` entry is
-  in `cluster/services.yml`, so nothing applies it by hand. A merged change
+  in `k8s/services.yml`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its Kustomization
   renders `decryption`, because the
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.

@@ -93,7 +93,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   sample. Charts are off per browser too, in localStorage; no IaC can pre-enable them.
 
 ## Notable
-- Flux applies the role (its entry is in `cluster/services.yml`).
+- Flux applies the role (its entry is in `k8s/services.yml`).
 - Ships a **negative** self-test: the `headlamp-verify` Job in `templates/verify/` must FAIL to
   reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. The Job runs
   `files/headlamp_verify.py`: traefik's port must answer, as the control, so a failure is

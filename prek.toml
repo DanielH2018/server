@@ -110,7 +110,7 @@ language = "system"
 require_serial = true
 # The `scripts/lib/k8s_*.py` modules are named one by one: a rename makes an alternation fail loudly
 # and a pattern match nothing.
-files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint|k8s_net_rules|k8s_schema|host_specs)\\.py|scripts/validate/(render_templates|render_lib/(compose|k8s|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.j2|k8s/roles/[^/]+/defaults/main\\.yml|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/lib/plain_scalar\\.py|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|host_modules|cli_help|exit_codes|estate|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint|k8s_net_rules|k8s_schema|host_specs)\\.py|scripts/validate/(render_templates|render_lib/(compose|k8s|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.j2|k8s/roles/[^/]+/defaults/main\\.yml|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/lib/plain_scalar\\.py|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|host_modules|cli_help|exit_codes|estate|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 [[repos.hooks]]
 id = "validate-ha-config"
@@ -154,7 +154,7 @@ name = "Validate the alert plane and the Alloy config with promtool, amtool, pin
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|host_modules|cli_help|exit_codes|estate|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|host_modules|cli_help|exit_codes|estate|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -289,7 +289,7 @@ name = "Role At a glance blocks match their sources"
 entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|secrets/secret_rotation\\.yml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|secrets/secret_rotation\\.yml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py)$"
 
 # Fails like a formatter so the author stages the fragment and commits again.
 [[repos.hooks]]
@@ -298,7 +298,7 @@ name = "Docs fragments match their sources"
 entry = "uv run --frozen python scripts/docs/gen_doc_fragments.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|secrets/secret_rotation\\.yml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|secrets/secret_rotation\\.yml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
 # Its own hook, not a mode of `regen-doc-fragments`, so the cron cannot rewrite a doc by mistake.
 [[repos.hooks]]
@@ -311,7 +311,7 @@ files = '''(?x)^(
   \.claude/rules/generated-docs\.md
   | \.claude/skills/renovate-prs/SKILL\.md
   | \.claude/skills/worktree-cleanup/SKILL\.md
-  | cluster/services\.yml
+  | k8s/services\.yml
   | docs/claude-tooling\.md
   | docs/deploying\.md
   | hosts/components/claude-code/CLAUDE\.md
@@ -528,7 +528,7 @@ name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider hosts/tests/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(k8s/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
@@ -558,7 +558,7 @@ name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|renovate\\.json|inventory/.*|k8s/roles/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|renovate\\.json|inventory/.*|k8s/roles/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # `test_cluster_vars_tree.py` stays out: it takes 11-12s because it renders every flux-owned role,
 # and its only repair, `cluster_vars.py write`, is operator-only.
@@ -586,7 +586,7 @@ name = "Alert rules meet the alert conventions"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
 language = "system"
 pass_filenames = false
-files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|k8s/roles/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|k8s/roles/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|k8s/roles/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|k8s/roles/observability/defaults/main\\.yml|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/render_lib/k8s\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The unit-template census: every unit template the validator must find still exists.
 [[repos.hooks]]

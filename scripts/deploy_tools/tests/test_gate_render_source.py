@@ -31,10 +31,8 @@ def _k8s_tools(run):
 def _k8s_inventory(root, tag):
     """Write a checkout whose ONLY service list entry is `tag`."""
     (root / "inventory" / "host_vars").mkdir(parents=True)
-    (root / "cluster").mkdir()
-    (root / "cluster" / "services.yml").write_text(
-        f"containers_list:\n  - name: {tag}\n"
-    )
+    (root / "k8s").mkdir()
+    (root / "k8s" / "services.yml").write_text(f"containers_list:\n  - name: {tag}\n")
 
 
 def test_the_gate_renders_from_the_checkout_it_is_pointed_at(tmp_path):
@@ -80,7 +78,7 @@ def test_the_platform_routing_reads_the_tree_the_probe_renders(tmp_path):
 
     The manifests came from the snapshot while `tag_platforms` read the calling checkout's
     service list, so the two halves of one verdict came from two trees. For a PR that adds a
-    role and its `cluster/services.yml` entry together, the calling tree answers `set()`, which
+    role and its `k8s/services.yml` entry together, the calling tree answers `set()`, which
     falls to the last branch of `check_one` and probes the Pi after a cluster miss.
 
     Driven through the real `tag_platforms`: a stub would assert nothing about which service

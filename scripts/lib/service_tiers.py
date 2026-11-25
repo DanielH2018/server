@@ -28,7 +28,7 @@ def r2_volumes(
     """``k3s_longhorn_r2_volumes`` as the k3s role computes it.
 
     Args:
-        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
+        entries: the service entries to derive from; ``k8s/services.yml``'s when omitted.
         namespace: the namespace for an entry that names none; ``k8s_namespace`` from
             ``group_vars/all.yml`` when omitted.
     """
@@ -40,10 +40,10 @@ def r2_volumes(
 
 
 def shed_set(entries: list[dict] | None = None) -> list[str]:
-    """The k8s services to scale down when one node is lost, in ``cluster/services.yml`` order.
+    """The k8s services to scale down when one node is lost, in ``k8s/services.yml`` order.
 
     Args:
-        entries: the service entries to derive from; ``cluster/services.yml``'s when omitted.
+        entries: the service entries to derive from; ``k8s/services.yml``'s when omitted.
     """
     if entries is None:
         entries = list(k8s_entries().values())
@@ -76,7 +76,7 @@ def resolved_tier_lists(k3s_defaults: dict, entries: list[dict] | None = None) -
             caller has one. Its ``k8s_namespace``, when present, is the namespace the
             expressions derive with.
         entries: The service entries the expressions derive from; the repo's
-            ``cluster/services.yml`` entries when omitted. A caller reading an injected
+            ``k8s/services.yml`` entries when omitted. A caller reading an injected
             inventory passes that inventory's entries, or the derivation reads the repo's.
     """
     resolved = dict(k3s_defaults)

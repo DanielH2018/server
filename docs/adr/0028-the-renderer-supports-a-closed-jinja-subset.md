@@ -130,7 +130,7 @@ layer's value.
 
 `hosts` holds one entry per `host_vars` file, with that host's literal `server_ip`,
 `compose_services`, `claude_agent_ssh_login_enabled` and `ssh_host_ed25519_key`. `services` holds every entry of
-`cluster/services.yml`.
+`k8s/services.yml`.
 
 An undefined variable fails the render and the error names it. `default` is the way to read a
 name that may be absent.

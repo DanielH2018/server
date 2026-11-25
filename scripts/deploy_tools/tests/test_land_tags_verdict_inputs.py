@@ -44,8 +44,8 @@ def two_commit_repo(tmp_path):
     repo = tmp_path / "repo"
     inventory = repo / "inventory" / "host_vars"
     inventory.mkdir(parents=True)
-    (repo / "cluster").mkdir()
-    box = repo / "cluster" / "services.yml"
+    (repo / "k8s").mkdir()
+    box = repo / "k8s" / "services.yml"
     (inventory / "daniel-pi.yml").write_text("containers_list:\n  - name: not-a-host\n")
     init_repo(repo)
     box.write_text("containers_list:\n  - name: sonarr\n")
@@ -70,7 +70,7 @@ def test_the_same_tag_is_not_declared_at_the_earlier_ref(two_commit_repo):
 
 
 def test_a_host_vars_file_is_not_a_source_of_tags_at_a_ref(two_commit_repo):
-    """Only `cluster/services.yml` declares tags; a service list in a host file declares none."""
+    """Only `k8s/services.yml` declares tags; a service list in a host file declares none."""
     repo, _first, second = two_commit_repo
     assert "not-a-host" not in land_tags.service_tags_at(second, repo)
 
