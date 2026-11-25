@@ -36,6 +36,12 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # The dyff release that compares the rendered trees. renovate.json's custom manager reads
+      # this annotation and moves the version and the digest in one PR. The digest is the sha256
+      # of dyff_<version>_linux_amd64.tar.gz.
+      # renovate: datasource=github-release-attachments depName=homeport/dyff
+      DYFF_VERSION: v1.12.0
+      DYFF_SHA256: 50b43017a7474c2216694d0b5387439488a1d3c2b5eefe1674cd0e5c18bc0316
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -44,6 +50,13 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup
+
+      - name: Fetch the pinned dyff and check its sha256
+        uses: $/.github/actions/pinned-tool
+        with:
+          tool: dyff
+          version: ${{ env.DYFF_VERSION }}
+          sha256: ${{ env.DYFF_SHA256 }}
 
       - name: Render the merge base and the head with one commit value
         env:
@@ -69,5 +82,7 @@ jobs:
 
       - name: Print the difference and the head's tree digest
         run: |
-          diff -r "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
+          # dyff compares by structure, so a reordered key prints nothing and a changed field
+          # prints its path. It exits 1 on a difference, which this advisory step ignores.
+          dyff between --omit-header "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
           uv run --frozen python scripts/renderer/shadow_diff.py digest "$RUNNER_TEMP/head-out"

@@ -212,6 +212,11 @@ def test_no_literal_image_lines_in_k8s_templates() -> None:
         ("node", ".github/actions/setup/action.yml", "node-version"),
         ("vale-cli/vale", ".github/workflows/ci.yml", "github-release-attachments"),
         ("goreleaser/nfpm", ".github/workflows/ci.yml", "github-release-attachments"),
+        (
+            "homeport/dyff",
+            ".github/workflows/render-diff.yml",
+            "github-release-attachments",
+        ),
         ("vale-cli/Google", ".vale.ini", "github-releases"),
     ],
 )

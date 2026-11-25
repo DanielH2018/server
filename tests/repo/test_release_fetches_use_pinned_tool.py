@@ -72,6 +72,7 @@ KNOWN_CALLERS = {
     ("ci.yml", "sops_manifest_type_proof", "kind"),
     ("ci.yml", "host_packages_build", "nfpm"),
     ("ci.yml", "hooks", "vale"),
+    ("render-diff.yml", "render-diff", "dyff"),
     ("bootstrap-drill.yml", "drill", "flux"),
     ("bootstrap-drill.yml", "drill", "sops"),
     ("bootstrap-drill.yml", "drill", "kind"),

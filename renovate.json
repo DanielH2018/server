@@ -161,6 +161,18 @@
     },
     {
       "customType": "regex",
+      "description": "The dyff binary the render-diff workflow compares rendered YAML with, pinned by version and sha256 in ONE matchString.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/render-diff\\.yml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=homeport/dyff[ \\t]*\\n[ \\t]+DYFF_VERSION:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+DYFF_SHA256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "homeport/dyff",
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
       "description": "The sops and chezmoi binaries the `homelab-tools` host package ships (H3.11), pinned by version and sha256 per architecture. The `{{depName}}` group puts both architectures in one PR. ENFORCED by scripts/renderer/tests/test_renderer_host_tools.py.",
       "managerFilePatterns": [
         "/(^|/)hosts/packages/homelab-tools/package\\.yml$/",
