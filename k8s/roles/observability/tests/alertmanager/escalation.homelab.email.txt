@@ -13,4 +13,4 @@ Fix the warning SystemdUnitsFailed for daniel-server, which has fired for 48 hou
 Started 2026-11-17 09:00 UTC
 Runbook: https://docs.local.example.com/alert-runbooks/#warningunresolved
 
-Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed
+Karma: https://karma.daniel-hunter.com/?q=alertname%3DSystemdUnitsFailed
