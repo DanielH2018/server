@@ -24,10 +24,8 @@ from secrets_mgmt.rotation_tools import (
 from secrets_mgmt.secrets_lib.registry_model import Entry, Registry, RegistryError
 
 
-# The registry is the single plaintext source of names/tiers/dates. A save/load
-# corruption is SILENT (the next sync/audit reads garbage), so pin the contract:
-# round-trips losslessly, keeps the MANAGED header, and sorts keys deterministically
-# (sort_keys=True keeps the committed file diff-stable as secrets are added).
+# A save/load corruption is SILENT, so pin the contract: lossless round trip, MANAGED header kept,
+# keys sorted for a stable diff.
 def test_registry_round_trips_losslessly(tmp_path):
     reg = Registry(
         {

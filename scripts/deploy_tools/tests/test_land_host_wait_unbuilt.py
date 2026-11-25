@@ -134,8 +134,6 @@ def test_another_host_package_published_at_the_merge_does_not_count_for_the_pi()
 
 
 def test_a_host_past_its_deadline_with_nothing_published_is_not_deferred():
-    # A 12:00 merge on the quarter-hour schedule has its deadline at 12:31, inside the cap,
-    # so the wait polls and ends at the deadline rather than on the first query.
     outcome = _wait(
         _pi(QUARTER_HOUR_DROPIN),
         _fetch([_published("homelab-daniel-pi", BEFORE)]),

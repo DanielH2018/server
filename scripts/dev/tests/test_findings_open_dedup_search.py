@@ -52,8 +52,6 @@ def test_open_searches_for_the_fingerprint_and_never_fetches_the_register(
     (argv,) = _issue_lists(calls)
     assert argv[argv.index("--search") + 1] == _FP
     assert argv[argv.index("--limit") + 1] == str(FINGERPRINT_SEARCH_LIMIT)
-    # `--state all` stays: `plan_open` refuses to reopen a refuted or accepted finding, and
-    # both of those are closed.
     assert argv[argv.index("--state") + 1] == "all"
     assert str(ISSUE_LIST_CAP) not in argv, "open still reads the whole register"
 

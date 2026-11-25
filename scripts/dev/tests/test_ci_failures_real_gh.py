@@ -101,9 +101,6 @@ def test_a_timestamped_failed_line_in_a_run_header_is_not_counted():
     assert ci_failures.failing_modules(lines) == {"a/test_real.py"}
 
 
-# Appended to the fake's source, these replace its functions by name. Real `gh` returned a failed
-# job's whole log labelled UNKNOWN STEP, with passing steps in it, and the jobs endpoint carries
-# each step's own seconds.
 _WHOLE_JOB_LOG = r"""
 def run_log(argv):
     run = RUNS[next(int(a) for a in argv if a.isdigit())]

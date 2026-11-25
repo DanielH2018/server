@@ -37,8 +37,6 @@ from lib.proc_testing import run
 
 pytestmark = pytest.mark.ui
 
-# One_factor, and the same service `test_ui_smoke`'s canary uses: it is the cheapest page on
-# the LAN edge that is unambiguously the app rather than Traefik.
 SERVICE = "homepage"
 
 EMPTY_STATE = {"cookies": [], "origins": []}
@@ -57,8 +55,6 @@ def ui_login(*args) -> subprocess.CompletedProcess:
             "scripts/diagnostics/ui_login.py",
             *args,
         ],
-        # A real Authelia round-trip through a headless browser, behind a nested `uv run`.
-        # Measured well under a minute; the budget is for a cold cache.
         timeout=300,
     )
 
@@ -111,14 +107,11 @@ def test_browser_close_makes_the_next_navigation_re_read_the_state_file(
     from launch would score green whatever `browser_close` did — the state file has to be
     observed DECIDING the outcome before the reload means anything.
     """
-    # The pid goes in the FILENAME, not in the directory: `ui_mcp.sh` derives its private
-    # launch config as `$RUNTIME_DIR/playwright-mcp-private-$(basename "$STATE_PATH").json`,
-    # which `tmp_path`'s uniqueness never reaches. Two concurrent `-m ui -k state_reload`
-    # runs would share that config path and one server would come up pointed at the other
-    # run's state file.
+    # The pid goes in the FILENAME: `ui_mcp.sh` derives its launch config from the state file's
+    # basename, so concurrent runs would share it.
     state = tmp_path / f"session-state-{os.getpid()}.json"
-    # Valid JSON, not an empty file: a malformed state fails the context build, which arrives
-    # as a server error rather than as the portal, and the first assertion never runs.
+    # Valid JSON: a malformed state fails the context build as a server error and the first
+    # assertion never runs.
     state.write_text(json.dumps(EMPTY_STATE))
     monkeypatch.setenv("UI_MCP_STATE_PATH", str(state))
 

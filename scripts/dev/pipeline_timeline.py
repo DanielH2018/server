@@ -110,8 +110,6 @@ WAITS_FILE = (
 REMOTE_REVIEWS = ".local/state/fanout-review/"
 PULL_TIMEOUT_S = 120
 LEDGER_TAG = "landing-annotation"
-# The lander's unit under its packaged name, and the Ansible-era name its older passes logged under,
-# which a window of up to --days still reaches.
 LANDER_UNITS = (
     "homelab-claude-fanout-server-lander.service",
     "claude-fanout-server-lander.service",
@@ -580,7 +578,6 @@ def main(argv: list[str] | None = None) -> int:
             for b in {str(p.get("headRefName")) for p in prs}
             if b in ci
         }
-        # One call per run, each about 1.7s: serial, 240 PRs took 7 minutes (2026-10-18).
         with ThreadPoolExecutor(max_workers=JOB_READERS) as pool:
             ids = sorted(r for r in wanted if r)
             for run_id, times in zip(ids, pool.map(read_job_times, ids), strict=True):

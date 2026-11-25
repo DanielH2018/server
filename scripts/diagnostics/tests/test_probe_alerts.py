@@ -42,11 +42,8 @@ def test_rows_from_loki_handles_empty_and_missing_keys():
     assert core._rows_from_loki({"data": {"result": [{"values": None}]}}) == []
 
 
-# These pin the TRANSPORT, deliberately: assertions on `loki_query_url` output and `plan()` argv
-# sit UPSTREAM of the defect, which was `run_query` building its own URL with no window, so the
-# path inherited Loki's one-hour server-side default while `--dry-run`/`--json` honoured
-# `--since`. Without the explicit window, `--since 3d` returns a 60-minute slice, and an empty
-# slice prints "no logs", which reads as health. So: capture the url `fetch` is called with.
+# These pin the TRANSPORT: assertions on `loki_query_url` or `plan()` argv sit upstream of the
+# defect, `run_query` building its URL with no window. Capture the url `fetch` is called with.
 
 
 class _Seen(list):
@@ -80,8 +77,6 @@ def test_run_query_sends_the_since_window_to_loki(monkeypatch):
     assert metrics.run_query(ns) == 0
     params = _query_params(seen[0])
     assert "start" in params and "end" in params
-    # The span, not merely the presence of the key: a start pinned to the wrong clock or a
-    # window silently clamped to an hour both satisfy a presence check.
     span_s = (int(params["end"][0]) - int(params["start"][0])) / 1e9
     assert abs(span_s - 3 * 86400) < 2
 
@@ -115,8 +110,6 @@ def test_run_query_sends_timeout_only_when_asked(monkeypatch):
 
 
 def test_run_query_sends_the_step_to_loki(monkeypatch):
-    # The formatted path builds its own URL, apart from plan(), so a --step that reached only
-    # plan() would leave the default view at Loki's range/250 step with no warning.
     seen = _capture_fetch(monkeypatch)
     ns = cli_parser._build_parser().parse_args(
         [
@@ -155,8 +148,8 @@ def test_run_query_omits_direction_so_limit_keeps_the_newest_lines(monkeypatch):
 
 
 def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
-    # `metric`'s subparser declares no --since and run_query serves both commands, so a bare
-    # `ns.since` on the shared path raises AttributeError and kills every `probe.py metric`.
+    # `metric`'s subparser has no --since and `run_query` serves both, so a bare `ns.since` would
+    # kill every `probe.py metric`.
     seen = _capture_fetch(monkeypatch)
     ns = cli_parser._build_parser().parse_args(["metric", "up"])
     assert not hasattr(ns, "since")

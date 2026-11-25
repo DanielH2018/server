@@ -103,8 +103,6 @@ def test_a_pinned_row_is_clean():
 
 
 def test_the_real_registry_still_pins_the_secret():
-    # Non-vacuity: the gate reads `secrets/secret_rotation.yml`, and that file must keep
-    # carrying the row this script exists for.
     assert gates.not_pinned(load_registry(gates.REGISTRY)) == []
 
 
@@ -242,8 +240,8 @@ def test_the_runbook_calls_the_script_and_it_runs():
     proc = run(
         ["uv", "run", "python", str(_REPO / script), "pinned-rotation", "--bogus"],
         cwd=_REPO,
-        # A nested `uv run` resolves the dev group before the child starts, which a cold
-        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        # A nested `uv run` resolves the dev group first, which a cold cache makes minutes, longer
+        # than `DEFAULT_TIMEOUT`.
         timeout=300,
     )
     assert proc.returncode == 64, proc.stderr

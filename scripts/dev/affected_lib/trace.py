@@ -20,8 +20,7 @@ import os.path
 import re
 from dataclasses import dataclass, field
 
-# The syscalls the recorder asks strace for. The fork family is traced only so a child
-# inherits its parent's working directory here.
+# The fork family is traced only so a child inherits its parent's working directory.
 SYSCALLS = (
     "open,openat,openat2,stat,lstat,newfstatat,statx,access,faccessat,faccessat2,"
     "readlink,readlinkat,getdents64,execve,execveat,chdir,fchdir,clone,clone3,fork,vfork"

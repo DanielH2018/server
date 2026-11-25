@@ -32,8 +32,6 @@ HOLD_VARIABLE = forge.HOLD_VARIABLE
 WORKFLOW = "promote.yml"
 MASTER_REF = "origin/master"
 
-# `flux push artifact --revision master@sha1:<sha>` writes this annotation on the manifest.
-# `land-wait` reads it off `prod` too, so the name lives in `wait`.
 REVISION_ANNOTATION = wait.REVISION_ANNOTATION
 _REVISION = re.compile(r"master@sha1:([0-9a-f]{40})")
 

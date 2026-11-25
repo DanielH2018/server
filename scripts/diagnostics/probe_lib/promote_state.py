@@ -34,26 +34,20 @@ from deploy_tools import forge
 from lib import kubectl as _kubectl
 from lib.gh import gh
 
-# Each promotion read's timeout. On 2026-10-14, three runs from daniel-box took at most 0.37s
-# for `gh variable get DEPLOY_HOLD`, 0.37s for the GHCR token request plus one manifest GET,
-# and 0.09s for the kubectl read of the OCIRepository. On 2026-10-16 the suspension read of
-# six Flux objects with their managed fields took 0.08s, three times. 5s is over 13 times the
-# slowest, so a timeout means the source is down rather than slow. A timeout downgrades that
-# one line.
+# 5s is over 13x the slowest measured read, so a timeout means the source is down rather than slow;
+# it downgrades that one line.
 PROMOTE_READ_TIMEOUT_S = 5
 
-# `flux push artifact --revision master@sha1:<sha>` writes the commit under this annotation,
-# and source-controller copies it into the OCIRepository's `status.artifact.metadata`.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
 # The Flux kinds an operator suspends: each Kustomization and the root's source.
 SUSPENDABLE_KINDS = "kustomizations.kustomize.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io"
 
-# The annotation a break-glass puts on an object so kustomize-controller skips it, and the value
-# that means "skip". docs/k3s-upgrade.md names it for CoreDNS.
+# A break-glass annotation makes kustomize-controller skip the object; docs/k3s-upgrade.md names it
+# for CoreDNS.
 RECONCILE_ANNOTATION = "kustomize.toolkit.fluxcd.io/reconcile"
 RECONCILE_DISABLED = "disabled"
-# The objects a break-glass runbook tells an operator to annotate, as `kind/name` per namespace.
-# Add a row in the PR that adds the runbook step. These are the named members of the listing.
+# The objects a break-glass runbook tells an operator to annotate; add a row in the PR that adds the
+# step.
 RECONCILE_MEMBERS = {
     "kube-system": ("deployment/coredns", "configmap/coredns", "service/kube-dns"),
     "longhorn-system": (
@@ -229,8 +223,8 @@ def _reconcile_disabled(kubectl=_kubectl.kubectl) -> list[dict]:
             "json",
             timeout=PROMOTE_READ_TIMEOUT_S,
         )
-        # A named member that cannot be read fails the whole read. An absent object is a
-        # problem in its own right, and must not read as "no annotation".
+        # A named member that cannot be read fails the whole read: an absent object must not read as
+        # 'no annotation'.
         if proc.returncode != 0:
             raise RuntimeError(
                 f"kubectl exited {proc.returncode} reading {', '.join(members)} in "

@@ -26,14 +26,9 @@ B = Batch(
     [1],
     "t",
 )
-# Fleet current, fleet cap, plane current, plane cap, live agents, signing key — the shape
-# transport.HOST_READ_COMMAND prints. Roomy on both planes and holding a registered key, so
-# these tests measure status parsing rather than placement or the signing gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
-# `B` runs on the landing host, so a finished batch carries `land.sh`'s verdict as well as
-# the PR url — the `--- verdict` section `_one` greps out of the batch's land log.
 LANDED = "--- verdict\nVERDICT: settled\n"
 DONE = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
@@ -47,10 +42,7 @@ OPENED_BUT_NOT_LANDED = (
 )
 FAILED = "=== b\nActiveState=failed\nResult=exit-code\nExecMainStatus=1\n--- stderr\nError: not logged in\n--- report\n"
 VANISHED = "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=\n--- stderr\n--- report\n"
-# The agent removed its own worktree on exit, taking
-# .fanout/report.json with it, so the unit exited 0 and there is nothing left to read.
-# The blank line between the sections is `_one`'s bare `echo`, so an empty stderr log
-# reads as empty rather than swallowing the next marker.
+# The agent removed its own worktree on exit, so the unit exited 0 with no report.json to read.
 FINISHED_AND_TIDIED = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n"
     "--- stderr\n\n--- report\n"
@@ -78,8 +70,7 @@ DONE_WITH_MULTILINE_RESULT = (
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9.\\nThen filed #2."}\n'
     + LANDED
 )
-# A property whose own value carries a section marker. The `=== ` and `--- ` siblings are
-# already anchored at start-of-line for this shape; the property split was not.
+# A property value carrying a section marker: the property split must anchor at start-of-line.
 DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
     "=== b\nActiveState=inactive\nResult=success\n"
     "Description=fanout --- stderr sink\nExecMainStatus=0\n"
@@ -87,8 +78,6 @@ DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n' + LANDED
 )
 
-# A turn that ended on a progress report exits the process as cleanly as a
-# finished one, and the final text is non-empty either way.
 STOPPED_ON_A_PROGRESS_REPORT = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Tests pass. Next I will open the PR."}\n'
@@ -97,8 +86,8 @@ STOPPED_ON_A_BLOCKER = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Fixed the parser.\\nneeds input: which host owns the apply?"}\n'
 )
-# `RuntimeMaxSec=` expired: systemd stopped the unit, and the claude process it killed wrote
-# no report. The exit status can still read 0 when claude exits cleanly on SIGTERM.
+# Timed out: systemd stopped the unit and the killed process wrote no report; exit status can still
+# read 0.
 TIMED_OUT = (
     "=== b\nActiveState=failed\nResult=timeout\nExecMainStatus=0\n"
     "--- stderr\n\n--- report\n"
@@ -125,8 +114,6 @@ def _launch(tools, tmp_path, *extra):
 
 
 def _brief(run) -> str:
-    # The brief is the stdin of the one launch call, identified by the `cat > ` step in
-    # its combined worktree-add+lock, brief-write, systemd-run chain.
     briefs = [c[2] for c in run.host_calls if "cat > " in c[1]]
     assert len(briefs) == 1
     return briefs[0]
@@ -156,8 +143,6 @@ def test_running_done_and_failed_are_told_apart():
 
 
 def test_a_unit_that_exited_zero_with_no_report_is_not_failed():
-    # The accepting half. Nothing here says the batch failed: the exit code is 0 and the
-    # session never set is_error. Only the forge can settle it, so it gets its own state.
     assert parse_status([B], FINISHED_AND_TIDIED)[0].state == "no-report"
 
 
@@ -166,8 +151,6 @@ def test_a_vanished_unit_with_no_report_is_not_failed_either():
 
 
 def test_a_batch_with_no_block_in_the_reply_stays_failed():
-    # Not the tidied-worktree shape: no block at all means the read itself came back
-    # without this batch, which is a defect in the read rather than a finished agent.
     assert parse_status([B], "=== other\nActiveState=inactive\n")[0].state == "failed"
 
 
@@ -179,8 +162,6 @@ def test_status_line_names_the_branch_it_could_not_reconcile():
 
 
 def test_a_nonzero_exit_stays_failed():
-    # The rejecting half of the pair above: a state split that swallowed this one would
-    # read `no-report` for every crashed batch too.
     assert parse_status([B], FAILED)[0].state == "failed"
 
 
@@ -201,8 +182,6 @@ def test_a_stray_marker_line_inside_stderr_does_not_split_the_block():
 
 
 def test_a_done_shaped_block_whose_result_reports_an_error_is_failed():
-    # The pair: the same unit properties read `done` without is_error, so this asserts the
-    # is_error arm fires rather than that everything reads failed.
     errored = parse_status([B], DONE_SHAPED_BUT_ERRORED)[0]
     assert errored.state == "failed" and errored.is_error
     assert errored.terminal_reason == "max turns reached"
@@ -229,8 +208,6 @@ def test_a_final_text_naming_a_blocker_line_reads_needs_input():
 
 
 def test_a_unit_stopped_by_its_runtime_cap_is_failed_not_tidied_up():
-    # The pair is FINISHED_AND_TIDIED: the same empty report with Result=success reads
-    # `no-report`.
     assert parse_status([B], TIMED_OUT)[0].state == "failed"
     assert parse_status([B], FINISHED_AND_TIDIED)[0].state == "no-report"
 
@@ -286,9 +263,8 @@ def test_cli_launch_reports_no_headroom_when_the_host_is_uncapped(tmp_path):
 
 
 def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_path):
-    # Only the placed host is read, so each half of this is its own run — and its own
-    # manifest root, since batch 1 is still live in the first half's manifest and `launch`
-    # refuses a batch id live in any run under the root it is given.
+    # Each half is its own run with its own manifest root: `launch` refuses a batch id live in any
+    # run under its root.
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)},
         issues=[Issue(1, "t", IssueState.OPEN, body="b", labels=frozenset({"claude"}))],
@@ -349,8 +325,7 @@ def test_cli_status_reports_a_read_timeout_as_exit_75_not_a_traceback(tmp_path, 
 def test_cli_status_ranks_a_failed_batch_over_another_hosts_read_timeout(
     tmp_path, capsys
 ):
-    # 75 is numerically larger than 5, so a `max` over the tiers would report "read again
-    # later" for a run with a failed batch in it.
+    # 75 is numerically larger than 5, so a `max` over the tiers would misreport a failed batch.
     timed_out = Batch(
         "2", "daniel-server", "/w/2", "worktree-fanout-2", "fanout-2", [2], "t"
     )
@@ -410,8 +385,6 @@ def test_cli_status_keeps_a_tidied_up_batch_unresolved_when_no_pr_merged(
 
 
 def test_cli_status_still_exits_5_for_a_batch_that_crashed(tmp_path, capsys):
-    # A merged PR for the branch does not launder a non-zero exit: the reconciliation is
-    # reached only from `no-report`, never from `failed`.
     run = Manifest("20260101T000011Z", "o", [B])
     save(run, root=tmp_path)
     tools, _ = fake_tools(

@@ -195,7 +195,6 @@ def render(tree: Path, out: Path) -> int:
         return 0
     found = specs(tree)
     if not found:
-        # hosts/ exists but the globs matched nothing, so they no longer find the specs.
         print(f"[FAIL] {tree / 'hosts'}: holds no package.yml", file=sys.stderr)
         return 1
     renderer = tree / "scripts" / "renderer" / "homelab_render.py"
@@ -304,8 +303,7 @@ def job_changed(base: str, workflow: Path, jobs: list[str]) -> bool:
     return jobs_differ(before, workflow.read_text(), jobs)
 
 
-# Run with `_tree_env`, so `tree`'s `validate_lib` and renderer are the ones imported. The
-# payload variant's payload is random bytes; an empty one keeps the render the same from run to run.
+# Run with `_tree_env`, so `tree`'s `validate_lib` and renderer are the ones imported.
 _RENDER_FIXTURES = """
 import sys
 from pathlib import Path

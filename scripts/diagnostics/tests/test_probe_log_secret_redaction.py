@@ -86,9 +86,6 @@ def test_format_loki_routes_its_lines_through_the_redaction():
     assert "_handle_signal_show_view" in out
 
 
-# Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
-# as `apikey=<32 hex>`. Loki keeps the lines shipped before the Alloy stage for 744h, so
-# `probe.py loki-query` must redact them on the way out.
 APIKEY = "f" * 32
 
 TORZNAB_RECORD = (
@@ -126,8 +123,6 @@ def test_format_loki_redacts_the_torznab_apikey():
     assert "Torznab" in out
 
 
-# The same Prowlarr download URL, logged by Radarr's grab path, names its key in other cases and
-# lengths than the Torznab line above.
 @pytest.mark.parametrize("param", ["apiKey", "token", "passkey", "api_key"])
 def test_query_param_credential_in_a_log_line_is_flagged(param):
     line = f"Grab failed: http://prowlarr:9696/7/download?{param}=not-hex-1&link=TGluaw"
@@ -189,8 +184,6 @@ def test_json_escaped_ampersand_apikey_is_flagged():
     assert "\\u0026limit=1" in out
 
 
-# Traefik's access log carries the query string in `RequestPath`. The Alloy stages redact new
-# records; the names below are the ones they redact, and `loki-query` prints the older ones.
 @pytest.mark.parametrize("param", ["api_key", "ApiKey", "access_token", "code"])
 def test_access_log_credential_param_is_redacted(param):
     line = f'"RequestPath":"/cb?{param}=notasecret1&x=1","RequestPort":"443"'

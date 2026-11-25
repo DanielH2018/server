@@ -46,9 +46,8 @@ def test_a_first_write_is_clean_under_check_and_decrypts_to_the_values(sops_tree
     assert 'account: "7364519"' in sops_tree.decrypt(number)
 
 
-# The `sops_` names the pinned SOPS writes into a dotenv encrypted to two age recipients under
-# a flat `age:` rule, which is the shape every cluster creation rule has. `_SOPS_METADATA`
-# does not admit `sops_shamir_threshold`, which SOPS writes only under a flag or a key group.
+# `_SOPS_METADATA` does not admit `sops_shamir_threshold`, which SOPS writes only under a flag or
+# key group.
 WRITTEN_BY_SOPS = {
     "sops_age__list_0__map_enc",
     "sops_age__list_0__map_recipient",

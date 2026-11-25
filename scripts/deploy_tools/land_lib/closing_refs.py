@@ -123,18 +123,15 @@ def _close(ln: Landing, number: str) -> None:
     )
 
 
-# GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
-# body, with or without a colon, closes the issue it points at when the PR merges — the
-# surrounding words decide nothing, so "not fixed: #N" closes #N exactly as "Fixes #N" does.
+# A closing keyword anywhere in the body, with or without a colon, closes the issue: "not fixed: #N"
+# closes #N.
 _KEYWORD = r"close[sd]?|fix(?:e[sd])?|resolve[sd]?"
 _CLOSING_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#(\d+)", re.IGNORECASE)
-# One DELIBERATE closing reference with its trailing punctuation, so a second keyword on the
-# same line is read against what is left rather than against the first reference's text.
-# `Closes #12, closes #13` and `Closes #12. Closes #13:` are both ordinary here.
+# One deliberate closing reference with trailing punctuation, so a second keyword on the same line
+# is read against what is left.
 _CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNORECASE)
-# Markdown that carries no meaning in front of a reference: list and blockquote markers,
-# heading hashes, bold/italic runs, and the backticks of a code span — GitHub creates no
-# reference at all inside one.
+# Markdown that carries no meaning before a reference; GitHub creates no reference inside a code
+# span.
 _DECORATION = re.compile(r"^[\s>*_#`~-]+|[\s>*_#`~-]+$")
 _SENTENCE_END = re.compile(r"[.!?]$")
 

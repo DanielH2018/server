@@ -25,81 +25,30 @@ from lib.repo_paths import REPO
 from lib import host_modules  # noqa: F401
 from ci_verdict import WorkflowRun
 
-# A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
-# up to the first pair of colons, is the test file this weight belongs to.
 _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 
-# What an unweighted module may measure on the CI runner before the shard gate annotates it.
-#
-# WHY A CI MEASUREMENT AND NOT A STATIC ARM. A neighbour heuristic sees an
-# unweighted file only where a recorded pole already sits in its directory. A heavy module
-# landing in a quiet directory is invisible to it, and no static proxy separates the two:
-# `def test_` count, byte size and directory mean each fail to separate a heavy module from a
-# light one.
-# Only running the file says what it costs, and CI already runs it.
-#
-# WHY TEN. The table and the report both hold runner seconds, and an unweighted module is packed
-# at its directory's median whatever it costs. Ten measured seconds is the weight the split
-# placed by that guess. A lighter module costs less balance than the hardware two legs draw
-# differs by (`leg_speed`).
+# Only a CI measurement shows a heavy module's cost; below ten runner seconds the error is less than
+# the hardware difference between legs (`leg_speed`).
 RUNNER_HEAVY_SECONDS = 10.0
 
-# How many times its measured runner seconds a RECORDED weight may claim before the shard check
-# annotates it, and the recorded seconds below which nobody cares.
-#
-# WHY AN OVER-RECORDING ARM. The unweighted arm asks "is this file missing from the
-# table". It never asks "is a recorded number still roughly what the file costs", so an entry
-# that has become far too high stands until `--refresh-runner` reads the module off a green
-# master run. A recorded 17.31s for `tests/k8s/test_secret_consumer_census.py` that
-# measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
-# weight for as long as the entry stood — the skew of an unweighted heavy file with the sign
-# flipped.
-#
-# WHY A RATIO AND NOT A DELTA. One leg's hardware runs a shard 0.67x to 1.22x its table
-# (`leg_speed`), and one module can measure 2x apart on two runs of the same code, so anything
-# under about 3x is that variance rather than a stale entry. FIVE leaves room above it.
-#
-# WHY A FLOOR ON THE RECORDED VALUE. The parser's own floor is pytest's 0.005s, so a file
-# recorded at 0.05s and measuring 0.005s is a 10x ratio and pure rounding. The floor is what
-# makes this arm about shard balance rather than about noise: only the files heavy enough for
-# their placement to decide the pole are compared.
-#
-# THE BLIND SPOT. A file whose every test measures under pytest's `--durations-min` contributes
-# no line and cannot be compared at all, so an entry that collapsed to literally nothing is
-# invisible here. An entry that is merely far too high still produces lines, which is the
-# shape that occurs in practice.
+# Ratio 5 sits above the ~3x run-to-run and leg variance; the floor skips entries too small to
+# decide the pole.
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
 
-# How many times its recorded weight a module may measure on the runner before the shard check
-# reads the entry as too LOW. The arm annotates from `UNDER_WEIGHT_WARN_SECONDS` below.
-#
-# WHY A THIRD ARM. The stale arm above catches a recorded number far too high. A module that
-# grew after its weight was recorded is packed as free until `--refresh-runner` reads it again:
-# the skew of an unweighted heavy file, with an entry present.
-#
-# WHY TWENTY. One module can vary 2x between two runs of the same code, and the hardware a leg
-# draws adds its own factor. Twenty clears both. The entries this arm exists for are 34x to
-# 1500x off.
+# A module that grew after its weight was recorded packs as free; 20x clears run-to-run and hardware
+# variance.
 UNDER_WEIGHT_RATIO = 20.0
 
-# Where the under-recorded arm starts ANNOTATING, below the 10s the unweighted arm uses.
-#
-# WHY LOWER. The bar is "no module recorded under 1s totals over 5s", and a module measuring
-# 7.4-7.7s against 0.0-0.01s recorded sits under the 10s bound, so the arm could not see it.
-# That shape is the k8s render charged to its first reader, which `tests/conftest.py` builds
-# outside every timed phase; this band makes the shape visible again if the build ever lands
-# back on a test. Between
-# here and `RUNNER_HEAVY_SECONDS` a 20x ratio needs a weight of 0.25-0.5s or less, so the band
-# annotates only near-free entries.
+# Below the unweighted arm's 10s so entries recorded near-free but measuring 5s or more are
+# annotated.
 UNDER_WEIGHT_WARN_SECONDS = 5.0
 
-# pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
-# Used as the divisor's floor, which cannot then be zero.
+# pytest's `--durations-min`: no measured total is smaller, so it is a divisor floor that cannot be
+# zero.
 _DURATIONS_MIN_SECONDS = 0.005
 
-# What every complaint ends on. A pull request cannot repair a weight: only green master runs
-# write the table.
+# A pull request cannot repair a weight: only green master runs write the table.
 REPAIR = (
     "Nothing to repair in this pull request: the docs-refresh cron's `pytest_shard.py "
     "--refresh-runner` reads the module off green master runs within a day of the merge"
@@ -268,46 +217,19 @@ def durations_complaints(
     return complaints
 
 
-# ── The runner-seconds table the shards are packed on ─────────────────────────────────
-#
-# WHY THE RUNNER'S SECONDS AND NOT A WORKSTATION'S. The runner does not scale a workstation's
-# serial seconds evenly. The middle 90% of the modules a workstation measured at 0.5s or more
-# measure 1.0x to 5.5x that on the runner, with a median of 2.3x, so shards packed at 157-159
-# workstation seconds each measured 327-612s there. Packing on what the runner measures
-# projects every shard at about the same runner seconds.
-#
-# STALENESS IS GRACEFUL. A module this table lacks is packed at the median of its directory's
-# rows (`pytest_shard.packing_seconds`), and an entry for a deleted module
-# is ignored. The docs-refresh cron refreshes it twice a day with `pytest_shard.py
-# --refresh-runner 3`, which downloads every pytest leg's log from the three newest runs that
-# tested a green master tree, and rewrites only the rows that drifted. Each module takes the
-# median of what the logs measured, because one module can measure about 8s on one run and
-# 15.6s on the next.
-# `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
-#
-# EACH LEG'S READINGS ARE SCALED TO ONE REFERENCE RUNNER FIRST, because the hardware a leg draws
-# sets the speed of every module in it. One unchanged shard can run 0.67x its table on one leg
-# and 1.22x on the next, and the six legs of one run can spread 140s to 290s on a split
-# projected flat. That spread is wider than `DRIFT_RATIO`, and every module in a shard shares
-# it, so the medians of several runs move many rows on each refresh, correlated by shard. The
-# leg's own cold `uv sync` bytecode compile measures the same hardware before any test runs.
-# Its seconds per file predicts the leg's factor within about 8%, and scaling by it cuts a
-# module's spread across runs.
+# Packed on runner seconds: the runner measures modules 1.0x to 5.5x a workstation's.
+# Each leg's readings are scaled by its cold bytecode-compile speed (leg hardware varies).
 _COMPILE_LINE = re.compile(r"Bytecode compiled (\d+) files in ([0-9.]+)(ms|s)\b")
-# The cold compile's seconds per file on a leg that measures its modules at their table weight.
-# A fixed constant, so the table's scale does not move with the runs a refresh happens to read.
+# Fixed, so the table's scale does not move with the runs a refresh reads.
 REFERENCE_COMPILE_SECONDS_PER_FILE = 0.00085
-# A compile faster than this per file found its bytecode already built, so it measures no CPU.
-# Cold compiles measured 0.53-1.0 ms per file and warm ones 0.03-0.06 ms.
+# A compile faster than this found its bytecode already built, so it measures no CPU.
 _COLD_COMPILE_FLOOR_SECONDS_PER_FILE = 0.0002
 RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
-# How far apart a module's recorded and measured seconds may sit, either way, before
-# `--refresh-runner` rewrites the entry. A measurement inside it is treated as noise.
+# A measurement within this ratio of the recorded seconds is noise.
 DRIFT_RATIO = 1.5
-# An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
-# measuring 0.05s is 2.5x and changes no shard's balance.
+# An entry within this many seconds of its measurement stays, whatever the ratio.
 DRIFT_FLOOR_SECONDS = 0.5
 
 # A GitHub job log prefixes each line with a timestamp, and pytest colours its report.
@@ -450,18 +372,14 @@ def refresh_runner_weights(
     return moved
 
 
-# Where `--refresh-runner` reads its logs: the trees of the green pushes to master. A push
-# that skipped its legs is read through the pull-request run that tested its tree
-# (`_tested_run`). Any other pull request's run measures modules that may never land, and a
-# merge-queue run repeats a commit master runs again, so neither counts.
+# Logs come from green master pushes; a push that skipped its legs is read through the PR run that
+# tested its tree (`_tested_run`). Other PR runs may measure modules that never land.
 CI_WORKFLOW = "ci.yml"
 CI_BRANCH = "master"
-# Every pytest leg is named `pytest (shard N)` in ci.yml. A prefix rather than a name list, so
-# changing the matrix needs no edit here.
+# A prefix, not a name list, so changing the matrix needs no edit here.
 PYTEST_JOB_PREFIX = "pytest (shard "
-# How many green master runs `fetch_runner_logs` looks behind for the runs that measured their
-# trees. A merge whose diff selects no test module measured nothing, and one landing batch's
-# run stands behind up to four master commits, so the newest few do not always yield three.
+# A merge selecting no test module measured nothing, and one landing batch's run stands behind up to
+# four master commits.
 RUN_WINDOW = 30
 
 
@@ -481,8 +399,8 @@ def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
         for job in json.loads(view.stdout)["jobs"]
         if job["name"].startswith(PYTEST_JOB_PREFIX) and job["conclusion"] == "success"
     }
-    # The flag because ci.yml runs pytest with `--color yes`, and `gh api` refuses a body
-    # carrying escape sequences without it. `_LOG_NOISE` strips the colours.
+    # ci.yml runs pytest with `--color yes`, and `gh api` refuses a body with escape sequences
+    # without the flag.
     return {
         name: gh(
             "api",

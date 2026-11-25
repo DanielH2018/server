@@ -7,9 +7,6 @@ delta review leaves a finding of medium severity or worse (`review_record.surviv
 
 from functools import partial
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.review.batch_run import BatchRun
 from dev.fanout_lib.review.delta_confirm import split_confirmed
@@ -63,8 +60,8 @@ def fix_rounds(
             if left is None:
                 record.remaining = unresolved
             else:
-                # A reported finding is left only if the fix head's file holds the line it
-                # quotes; the rest are carried unverified and hold nothing.
+                # A finding is left only if the fix head's file holds the line it quotes; the rest
+                # are carried unverified.
                 record.remaining, record.unverified = split_confirmed(
                     actionable(left), partial(pipe._read_at, after)
                 )

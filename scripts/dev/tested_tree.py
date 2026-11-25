@@ -71,14 +71,11 @@ from ci_verdict import (
     parse_commit_statuses,
 )
 
-# The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
-# it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
 CONTEXT = "ci/tested-tree"
 
 CREATOR = "github-actions[bot]"
 
-# The variable that carries a batch pull request's body to `record-batch`. A body is free
-# text, so it travels as data and never as part of a command line.
+# A body is free text, so it travels as data and never in a command line.
 BODY_ENV = "BATCH_BODY"
 # The line of that body that names the batch's members, as the landing writes it.
 _MEMBERS = re.compile(r"^Members:((?:[ \t]+#\d+)+)[ \t]*\r?$", re.MULTILINE)
@@ -124,8 +121,8 @@ def tested_run(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
         return "", "the commit or its tree id is unreadable"
     try:
         pulls = get(f"repos/{repo}/commits/{sha}/pulls")
-        # Only a PR that this commit IS the merge of counts. A commit can be listed under a PR
-        # that merely contains it, and that PR's run tested some other tree.
+        # Only a PR this commit IS the merge of counts; a PR that merely contains it tested another
+        # tree.
         heads = [p["head"]["sha"] for p in pulls if p.get("merge_commit_sha") == sha]
         if not heads:
             return "", "no pull request merged as this commit"
@@ -145,8 +142,6 @@ def tested_run(get: Get, repo: str, sha: str, tree: str) -> tuple[str, str]:
         return "", f"the lookup failed: {type(exc).__name__}: {exc}"
 
 
-# The most ancestors `green_base` asks GitHub about. Each costs one request, and a base
-# further back than this selects nearly every module anyway.
 MAX_BASE_WALK = 10
 
 

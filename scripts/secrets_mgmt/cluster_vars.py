@@ -72,12 +72,9 @@ from secrets_mgmt.sops_io import sops_set
 
 Run = Callable[..., subprocess.CompletedProcess]
 
-# The characters C3's value rule refuses in a substituted value. A newline, a double quote, a
-# backslash and a control character make the implicit contract of today's raw embedding
-# explicit. `{{` would open a second Go template action in Authelia's configuration once its
-# template filter parses the whole file. A single `{` passes.
-# An empty value is refused too, because the pinned SOPS writes it into a dotenv as a plain
-# `key=` line, which `check` then fails as plaintext.
+# Refused in a substituted value: newline, double quote, backslash, control character, and `{{`
+# (opens a second Go template action in Authelia's config; one `{` passes). Empty is refused too:
+# SOPS writes it into a dotenv as a plain `key=` line, which `check` fails as plaintext.
 _FORBIDDEN = (
     ("nothing (SOPS leaves an empty dotenv value unencrypted)", lambda v: v == ""),
     ("a newline", lambda v: "\n" in v or "\r" in v),
@@ -93,14 +90,11 @@ _FORBIDDEN = (
 )
 
 
-# R3's hashing parameters, the `m=`, `t=` and `p=` of every stored Authelia digest.
-# `tests/services/test_authelia_argon2_parameters_agree.py` holds them equal to the
-# rendered hashing block in `k8s/roles/authelia/templates/config-secret.yaml.j2`.
+# Held equal to the hashing block in authelia's config-secret.yaml.j2 by
+# test_authelia_argon2_parameters_agree.py.
 ARGON2_PARAMETERS = {"memory": 65536, "iterations": 3, "parallelism": 4}
 
-# R3's PHC pattern: a 16-byte salt is 22 base64 characters and a 32-byte key 43. It is the
-# successor of the authelia deploy's "Fail if a stored Authelia digest is malformed" assert,
-# which stops running once D5 moves authelia to Flux.
+# A 16-byte salt is 22 base64 characters and a 32-byte key 43.
 ARGON2_DIGEST = re.compile(
     r"\$argon2id\$v=19\$m={memory},t={iterations},p={parallelism}".format(
         **ARGON2_PARAMETERS

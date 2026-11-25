@@ -246,8 +246,6 @@ def test_log_with_terminal_escapes_is_read_and_not_echoed(tmp_path):
 
 
 def test_red_run_past_the_search_cap_is_reported(tmp_path):
-    # 1,010 newer runs push the oldest past the cap on one week-wide search. Green on re-run,
-    # it also stays out of a status=failure search, which reads the latest attempt.
     start = datetime(2026, 10, 30, 1, tzinfo=timezone.utc)
     gap = timedelta(days=7) / 1100
     filler = [

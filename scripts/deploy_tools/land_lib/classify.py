@@ -233,9 +233,8 @@ def classify(ln: Landing) -> None:
     paths = [f["path"] for f in files]
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
-    # `--tags` named the services, so the note is left unread: the operator's list wins over
-    # a derivation, and `plane` is what a HAND applies rather than an input to any wait this
-    # landing takes.
+    # `--tags` named the services, so the operator's list wins over a derivation and the note is
+    # left unread.
     declared = None if ln.resolved_tags else _declared_at_merge(ln)
     plane = (
         ""

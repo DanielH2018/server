@@ -43,8 +43,8 @@ from lib.git import git
 # `git remote get-url` in both of GitHub's shapes: scp-style ssh and https.
 _SLUG = re.compile(r"github\.com[:/](?P<slug>[^/\s]+/[^/\s]+?)(?:\.git)?/?$")
 
-# Only `always` lets a direct push through. `pull_requests_only` bypasses the rule when a PR
-# merges, never on a push; `never` and an absent field (an anonymous read) do not bypass.
+# Only `always` lets a direct push through; `pull_requests_only` bypasses on PR merge, never on
+# push.
 BYPASS_ON_PUSH = "always"
 
 
@@ -121,8 +121,8 @@ def read_push_facts(branch, rev, remote):
     pushed = run_git("rev-parse", "--verify", f"{rev}^{{commit}}").stdout.strip()
     fast_forward = True
     if remote_head:
-        # 1 is "not an ancestor"; anything else, an object this checkout never fetched
-        # included, is a read that answered nothing.
+        # 1 is 'not an ancestor'; anything else, such as an object never fetched, is a read that
+        # answered nothing.
         try:
             probe = run_git(
                 "merge-base", "--is-ancestor", remote_head, pushed, ok_codes=(0, 1)
@@ -259,8 +259,8 @@ def run_push_rules(ns) -> int:
         facts = read_push_facts(ns.branch, ns.rev, ns.remote)
         refusing, bypassed = evaluate(rules, rulesets, facts)
         signatures_required = signature_rule_applies(rules, rulesets)
-    # A response of an unexpected shape (not a list, an item that is not a dict) is a read
-    # that answered nothing, never a verdict: exit 1 would read as "a rule refuses".
+    # An unexpected response shape is a read that answered nothing, never a verdict: exit 1 would
+    # read as 'a rule refuses'.
     except (Unreadable, ValueError, TypeError, KeyError, AttributeError) as exc:
         print(f"probe push-rules: could not read: {exc}", file=sys.stderr)
         return PROBE_UNREADABLE

@@ -38,8 +38,7 @@ from lib.longhorn_lib.longhorn_backups import B2_TARGET
 
 LONGHORN_NAMESPACE = "longhorn-system"
 DRAIN = str(_Path(__file__).resolve().parent / "b2_drain.py")
-# In /tmp and not the checkout, where an untracked file parks `homelab-checkout-sync`. The dry run
-# saves its listing here and an --apply within the hour reuses it, so the two steps pay for one.
+# In /tmp, not the checkout: an untracked file parks `homelab-checkout-sync`.
 LISTING_FILE = "/tmp/longhorn-b2-listing.json"
 
 

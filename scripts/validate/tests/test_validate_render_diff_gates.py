@@ -132,7 +132,6 @@ def test_a_shared_template_change_counts_every_importer(
     assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
-# Arms 3 and 4 (D5.1f), the removal gates. bento-pdf is flux-owned in the fixtures.
 NETPOL = "NetworkPolicy/homelab/bento-pdf"
 CLUSTER_ROLE = "ClusterRole//bento-pdf-reader"
 BENTO = {"Deployment/homelab/bento-pdf", NETPOL, CLUSTER_ROLE}

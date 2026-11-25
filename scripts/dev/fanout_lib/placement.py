@@ -18,29 +18,15 @@ from dataclasses import dataclass
 # Do not read a launch refusal on daniel-box as a reservation problem.
 RESERVATION_BYTES = 2_147_483_648
 
-# SIX lines, in this fixed order: user.slice's memory.current and memory.high, then the
-# reading user's user-<uid>.slice memory.current and memory.high, then the count of live
-# `claude` processes for that uid, then the host's commit-signing key. Either memory.high is an integer, or
-# `max` when no drop-in caps it. `pgrep -c` exits 1 on a zero count, which is why the count
-# is read from stdout rather than from an exit status.
-#
-# READ_COMMAND itself emits the first five; transport.HOST_READ_COMMAND appends the signing
-# key. That line rides this same read because the ssh budget (2 reads plus
-# MAX_BATCHES_PER_REMOTE_HOST launches = the 5 `ufw limit ssh` allows per 30s) has no room
-# for a connection of its own. It goes LAST so the numeric fields keep fixed indices and a
-# key line — which carries spaces, and on a misconfigured host many lines — can never be
-# read as one of them.
-#
-# Both slices are read because an agent is throttled by both. A launch starts a transient
-# user service, which systemd places in the launching user's user-<uid>.slice (the login
-# plane, capped by claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
-# claude_code_fleet_memory_high). Reading the fleet alone picks a host whose fleet cap has
-# room while the login-plane cap that actually binds the agent is full (daniel-box's login
-# slice has peaked at 8.58 GB against an 8G cap).
-#
-# The uid is the reading user's own, never a constant. The `claude` agent user (uid 996 on
-# daniel-box) launches into its own slice, and a read pinned to uid 1000 scored the
-# operator's login plane for it.
+# Six lines in fixed order: user.slice memory.current and memory.high, the reading user's
+# user-<uid>.slice memory.current and memory.high, the count of live `claude` processes, then the
+# host's commit-signing key. memory.high is an integer or `max`. `pgrep -c` exits 1 on zero, so the
+# count is read from stdout.
+# The signing key rides this read because the ssh budget has no room for another connection; it goes
+# last because it carries spaces and can span many lines.
+# Both slices are read because an agent is throttled by both: the login-plane cap can be full while
+# the fleet cap has room. The uid is the reading user's own, never a constant: the `claude` agent
+# user launches into its own slice.
 READ_COMMAND = (
     "u=$(id -u); "
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "
@@ -76,14 +62,11 @@ class HostReading:
     plane_cap_bytes: int | None
     plane_current_bytes: int
     live_agents: int
-    # Defaults empty, which `signing.unverified_reason` refuses: a reading built without a
-    # key — a test double, or a future caller that forgets it — must fail the gate closed
-    # rather than pass it for want of a value.
+    # Defaults empty, which `signing.unverified_reason` refuses, so a reading built without a key
+    # fails the gate closed.
     signing_key: str = ""
-    # The unit blocks `transport.read_host` appended to the headroom command for the host's
-    # uncleaned batches, as `unit_state.MARKER` delimits them; empty when none were asked for or
-    # none came back. Raw rather than parsed: reading them is `status.parse_status`'s job, and
-    # this module imports neither it nor the manifest. Never scored here.
+    # Raw unit blocks, as `unit_state.MARKER` delimits them; parsing is `status.parse_status`'s job.
+    # Never scored here.
     unit_states: str = ""
 
 
@@ -165,9 +148,8 @@ def headroom(reading: HostReading, reservation: int = RESERVATION_BYTES) -> int 
 def _describe(
     readings: Sequence[HostReading], used: dict[str, int], reservation: int
 ) -> str:
-    # Names the side the number came from. It is a min() over two caps, so a bare "0.7 GiB
-    # free" against a fleet an operator knows has 5.3 GiB free reads as a broken tool — and
-    # this string is the whole of what an exit 3 tells them.
+    # Names the side the number came from: it is a min() over two caps, and this string is all an
+    # exit 3 tells the operator.
     parts = []
     for r in readings:
         rooms = _headrooms(r, reservation)

@@ -24,8 +24,6 @@ TAG = "peanut"
 PROM_START = 900_000.0
 T1 = 1_000_000.0  # the tag's content first applied
 
-# The C6 label naming the digest of a tag's own rendered content. A revision bump that leaves
-# the tag unchanged keeps it.
 CONTENT_LABEL = "content_digest"
 
 _ON = re.compile(r"and on\(([^)]*)\)")

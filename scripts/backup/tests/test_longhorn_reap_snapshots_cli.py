@@ -40,10 +40,6 @@ def test_snapshots_dry_run_emits_no_delete_call(tmp_path):
 def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_label(
     tmp_path,
 ):
-    # Verified without this check: 3 current-tier snapshots deleted on a dry run. An empty
-    # recurringjobs.longhorn.io list makes every group resolve to "", which the snapshot's own
-    # truncated job label ("daily-backup") never equals -- so the "current, not stranded" skip
-    # never fires and every current-tier snapshot past the newest reads as stranded.
     fixtures = {
         "recurringjobs": [],  # the RecurringJob CRs failed to list, or none exist
         "volumes": [_volume("vol-a", "daily-backup")],
@@ -57,18 +53,11 @@ def test_snapshots_aborts_when_recurringjobs_is_empty_but_a_volume_carries_the_l
     assert proc.returncode == 1
     assert "ABORT" in proc.stderr
     assert "reapable" not in proc.stdout  # never gets far enough to print a verdict
-    # ABORT fires right after reading recurringjobs + volumes; snapshots.longhorn.io is never
-    # read and no delete is ever attempted.
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert not any(tok == "snapshots.longhorn.io" for c in calls for tok in c)
     assert not any("delete" in c for c in calls)
 
 
 def test_snapshots_refuse_when_a_labelled_volume_resolves_to_no_job(tmp_path):
-    # The rejecting half: RecurringJobs list fine, but the group this volume is
-    # labelled with names no job, so its owner resolves to "" and the current-tier test is False
-    # against every snapshot it has. classify_snapshots raises ReapAbort; main() must print the
-    # ABORT line and exit 1 rather than let the traceback out.
     fixtures = {
         "recurringjobs": [
             {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
@@ -82,18 +71,13 @@ def test_snapshots_refuse_when_a_labelled_volume_resolves_to_no_job(tmp_path):
     proc, calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
     assert proc.returncode == 1
     assert "ABORT" in proc.stderr
-    # One prefix, not two: `abort_reason` owns it, so a handler adding its own reads
-    # `ABORT: ABORT: 18 volume(s) ...`. A substring check passes either way, which is why this
-    # counts.
+    # One prefix, not two: a substring check passes with `ABORT: ABORT:`, so count.
     assert proc.stderr.count("ABORT:") == 1, proc.stderr
     assert "Traceback" not in proc.stderr, proc.stderr
     assert not any("delete" in c for c in calls)
 
 
 def test_snapshots_dry_run_completes_while_an_opt_out_volume_exists(tmp_path):
-    # The `no-backup` group has no RecurringJob by design, so a volume in it is not unresolved
-    # ownership and the reaper does not refuse the run. The stray on it is still reaped: the group runs no job, so a
-    # recurring-job snapshot there was made by a job that no longer selects the volume.
     fixtures = {
         "recurringjobs": [
             {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["default"]}}
@@ -131,17 +115,10 @@ def test_snapshots_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
 
 
 def test_snapshots_dry_run_prints_the_age_floor_as_a_bare_integer_day_count(tmp_path):
-    # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
-    # context only ever held one, and printed "younger than 3d" -- not "3.0d", which a
-    # float-typed MIN_AGE_DAYS would print instead.
     one_day_ago = datetime.datetime.fromtimestamp(
         NOW - 86400, tz=datetime.timezone.utc
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     fixtures = {
-        # A resolvable RecurringJob so `abort_reason`'s recurringjob check does not fire; the
-        # "recent" snapshot's own job ("daily-backup") deliberately does not match what the
-        # volume's group resolves to ("some-job"), so it reaches the age floor instead of being
-        # skipped as current.
         "recurringjobs": [
             {"metadata": {"name": "some-job"}, "spec": {"groups": ["some-group"]}}
         ],
@@ -191,9 +168,7 @@ def test_snapshots_apply_emits_exactly_the_delete_argv_the_classifier_chose(
             _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
             _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="weekly-backup"),
         ],
-        # A pod on a DIFFERENT node than this process's hostname, so the purge step finds no
-        # ready manager pod locally and the run reports that rather than hanging on a real
-        # connection — same "no ready backend" branch the module docstring explains.
+        # A pod on a different node, so the purge finds no ready manager pod locally.
         "pods": [
             {
                 "spec": {"nodeName": "not-this-host"},
@@ -221,8 +196,6 @@ def test_snapshots_apply_emits_exactly_the_delete_argv_the_classifier_chose(
             "--timeout=120s",
         ]
     ]
-    # The delete itself succeeded; the run still fails closed because no ready manager pod
-    # was found on this node, so the purge that reclaims the freed blocks never ran.
     assert proc.returncode == 1
     assert "NOT purged" in proc.stderr
 

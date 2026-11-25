@@ -4,8 +4,6 @@ The one part of the page that is hand-kept rather than derived from the inventor
 which is why it sits apart from the views that draw it. It imports nothing.
 """
 
-# Anything unlisted falls into "Other" and stays visible, so a new service shows up as
-# ungrouped instead of silently vanishing from the page.
 SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Edge & identity",

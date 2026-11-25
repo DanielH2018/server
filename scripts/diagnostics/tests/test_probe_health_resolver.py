@@ -17,17 +17,8 @@ from lib.render_context import render_context
 from lib.repo_paths import K8S_ROLES
 from validate.render_lib.k8s import check_template
 
-#
-# The derived corpus. The role -> workload mapping is rendered from the manifests rather than
-# listed, so a role that adds a workload is covered without anyone editing this file. What IS
-# pinned is the two ways the mapping can silently SHRINK: a role dropping out of the
-# multi-workload set, and a role joining the resolves-to-nothing set.
-#
+# The role to workload mapping is derived; what is pinned is the two ways it can silently SHRINK.
 
-# Roles whose manifests declare no Deployment, DaemonSet or StatefulSet, each with what they
-# declare instead. Membership here means `probe.py health <role>` legitimately has nothing to
-# check, which the notifier skips — so a role arriving here by accident is a gate that stopped
-# running.
 _ROLES_WITH_NO_WORKLOAD = {
     "cluster-base": "PriorityClasses, the read-only identity and an inert ConfigMap; no workload",
     "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
@@ -42,9 +33,7 @@ _ROLES_WITH_NO_WORKLOAD = {
     "traefik-crds": "upstream Traefik's CustomResourceDefinitions, vendored; no workload",
 }
 
-# Roles where the tag is NOT the name of every workload to check. Pinned as a LOWER bound: the
-# resolver must still return at least these names. Extra workloads are fine and need no edit
-# here; a name disappearing is a workload that stopped being gated.
+# A LOWER bound: a name disappearing is a workload that stopped being gated.
 _MULTI_WORKLOAD_ROLES = {
     "observability": {
         "grafana",
@@ -70,9 +59,6 @@ _MULTI_WORKLOAD_ROLES = {
     "scrutiny": {"scrutiny-collector", "scrutiny-influxdb", "scrutiny-web"},
 }
 
-# Workloads that do not live in the default namespace. A health read that asks the default
-# namespace for every name cannot reach dri-device-plugin's DaemonSet — the only thing its
-# role deploys — and the gate would skip it.
 _NON_DEFAULT_NAMESPACES = {
     "observability": "observability",
     "dri-device-plugin": "kube-system",
@@ -179,11 +165,8 @@ def test_statefulset_is_resolvable_and_lookupable():
     )
 
 
-#
-# The pod query behind the restart half of the gate. A selector matching NO pods yields
-# restarts=0 and an empty recent-restart list — byte-identical to a genuinely quiet workload —
-# so a wrong selector makes that half silently inert rather than failing.
-#
+# A selector matching NO pods yields restarts=0, identical to a quiet workload, so a wrong selector
+# makes that half silently inert.
 
 
 def _workload(name, selector, template=None):
@@ -353,12 +336,8 @@ def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
     assert ("pihole", "pihole-2") in divergent, divergent
 
 
-#
-# CronJob-only roles. configarr, longhorn-reconcile and pi-peer-backup declare no
-# Deployment/DaemonSet/StatefulSet, only a CronJob, so `probe.py health` would report "declares
-# no rollout-checkable workload", which deploy_lib/detach_notify.py turns into a `skipped`
-# verdict rather than a checked one. format_cronjob_health closes that gap.
-#
+# CronJob-only roles have no rollout-checkable workload, which `detach_notify` treats as `skipped`;
+# format_cronjob_health closes that gap.
 
 _CRONJOB_ONLY_ROLES = frozenset(
     {"configarr", "longhorn-reconcile", "pi-peer-backup", "longhorn-restore-drill"}

@@ -48,8 +48,6 @@
 # Run: scripts/validate/alert_tools.sh [promtool|amtool|pint|lokitool|alloy [arg ...]]
 set -euo pipefail
 
-# `--help` answers before any fetch. The awk prints this file's leading comment block, which
-# is the usage, with the `#` markers stripped.
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0
@@ -58,12 +56,12 @@ fi
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 defaults="$repo/k8s/roles/observability/defaults/main.yml"
 loki_defaults="$repo/k8s/roles/loki-homelab/defaults/main.yml"
-# --path-format=absolute because a main checkout's common dir is otherwise the relative `.git`.
-# Under a git hook GIT_DIR overrides -C, and it names a directory of this same clone.
+# --path-format=absolute because a main checkout's common dir is otherwise the relative `.git`;
+# under a git hook GIT_DIR overrides -C.
 common_dir="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)"
 cache="$common_dir/alert-tools"
-# The fetch directory of the provision in progress. The trap removes it on any exit, so a
-# failed curl or a refused digest leaves nothing behind under the cache.
+# The trap removes the fetch directory on any exit, so a failed curl or refused digest leaves
+# nothing under the cache.
 tmp=""
 trap 'if [[ -n "$tmp" ]]; then rm -rf "$tmp"; fi' EXIT
 
@@ -76,14 +74,8 @@ case "$(uname -m)" in
     ;;
 esac
 
-#######################################
-# Print the release version an image pin in a role's defaults names.
-# Arguments:
-#   The defaults file, and the key in it, such as observability_k8s_prometheus_image.
-# Outputs:
-#   The version without its leading `v` on STDOUT; an error on STDERR. Prometheus's images
-#   tag `vX.Y.Z` and Loki's tag `X.Y.Z`, so the `v` is optional.
-#######################################
+# Prints the release version an image pin names; the `v` is optional because Prometheus tags
+# `vX.Y.Z` and Loki `X.Y.Z`.
 image_version() {
   local line version
   line="$(grep -m1 -E "^$2:" "$1" || true)"
@@ -120,9 +112,8 @@ provision() {
   fi
   mkdir -p "$cache"
   exec 9<"$cache"
-  # -w rather than an indefinite block: a wedged commit with no output is worse than a loud
-  # failure. The holder fetches one tarball, 112 MB for Prometheus v3.15.0, and that fetch
-  # can take about 6 minutes, so the bound sits well above it.
+  # -w rather than an indefinite block; the holder's tarball fetch can take about 6 minutes, so the
+  # bound sits well above it.
   if ! flock -w 1200 9; then
     echo "alert_tools.sh: timed out waiting for the $cache lock" >&2
     return 1
@@ -131,8 +122,8 @@ provision() {
   if [[ "$(cat "$stamp" 2>/dev/null || true)" != "$base" ]]; then
     rm -rf "$dir"
     tmp="$(mktemp -d "$cache/.fetch.XXXXXX")"
-    # The speed bound aborts a connection that stalls below 1 KB/s for a minute, so a hung fetch
-    # cannot block a commit forever. --retry rides out a transient 5xx from the release host.
+    # The speed bound aborts a connection stalling below 1 KB/s for a minute; --retry rides out a
+    # transient 5xx.
     if [[ -n "$kept" && -f "$kept/$base.$ext" && -f "$kept/$sums" ]]; then
       echo "alert_tools.sh: $name $version: using the kept archive in $kept" >&2
       cp "$kept/$base.$ext" "$kept/$sums" "$tmp/"
@@ -150,10 +141,8 @@ provision() {
       mkdir -p "$kept"
       cp "$tmp/$base.$ext" "$tmp/$sums" "$kept/"
     fi
-    # Prometheus's tarballs hold `<base>/promtool`, pint's holds `pint-linux-<arch>` at its
-    # root, and Loki's zip holds `lokitool-linux-<arch>` at its root, so the member is
-    # unpacked into the fetch directory and installed by name. Python's zipfile unpacks the
-    # zip, so the script needs no `unzip` on the host or the runner.
+    # Prometheus's tarballs hold `<base>/promtool`, pint's `pint-linux-<arch>` at the root, Loki's
+    # zip `lokitool-linux-<arch>`; Python's zipfile unpacks the zip so no `unzip` is needed.
     if [[ "$ext" == "zip" ]]; then
       python3 -m zipfile -e "$tmp/$base.$ext" "$tmp"
     else

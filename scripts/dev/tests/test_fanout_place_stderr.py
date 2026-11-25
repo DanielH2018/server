@@ -222,8 +222,6 @@ def test_every_stderr_line_carries_the_prefix(case, tmp_path, capsys, monkeypatc
     tools, argv, expected = case(tmp_path)
     main(argv, tools)
     err = capsys.readouterr().err
-    # The expected messages keep a case honest: a path that printed nothing at all would
-    # otherwise pass the prefix check over an empty stderr.
     for message in expected:
         assert message in err
     assert [ln for ln in err.splitlines() if not ln.startswith(PREFIXES)] == []

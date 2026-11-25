@@ -13,9 +13,6 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
 

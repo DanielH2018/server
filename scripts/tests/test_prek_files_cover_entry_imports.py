@@ -229,9 +229,8 @@ def test_a_regex_matching_the_whole_closure_is_clean():
 
 
 def test_only_a_module_pytest_runs_resolves_a_bare_import_through_pythonpath(tmp_path):
-    # `host_lib` resolves only through the `hosts/lib` pythonpath root. A script prek or cron
-    # runs gets no `pythonpath`, so the same import raises there and must not read as reaching
-    # the module; a test module's must.
+    # `host_lib` resolves only through the `hosts/lib` pythonpath root; a script prek or cron runs
+    # gets none, so the import raises there.
     module = (REPO / "hosts/lib/host_lib.py").resolve()
     script = tmp_path / "cron_job.py"
     script.write_text("import host_lib\n")

@@ -31,8 +31,8 @@ from lib.repo_paths import REPO
 
 STAMP = REPO / "secrets" / "recovery_kit.yml"
 
-# A quarter: the kit also carries the repo bundle that break-glass promotion renders from, and
-# a bundle that predates `prod` cannot serve that runbook.
+# The kit also carries the repo bundle break-glass promotion renders from; a bundle predating `prod`
+# cannot serve that runbook.
 MAX_AGE_DAYS = 90
 
 RECORD_COMMAND = "uv run python scripts/secrets_mgmt/recovery_kit.py record"

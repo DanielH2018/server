@@ -49,8 +49,8 @@ def test_a_failing_command_s_exit_code_survives() -> None:
 
 
 def test_kubeconfig_is_absent_from_the_child_environment() -> None:
-    # The documented second trap: an interactive shell exports KUBECONFIG, cron does not,
-    # so k3s's kubectl silently falls back to a root-owned 0640 file and returns nothing.
+    # An interactive shell exports KUBECONFIG and cron does not; k3s's kubectl then falls back to a
+    # root-owned file and returns nothing.
     result = run("--", "echo [${KUBECONFIG-unset}]")
     assert result.returncode == 0
     assert "[unset]" in result.stdout
@@ -71,8 +71,7 @@ def test_the_child_runs_under_sh_not_the_interactive_shell() -> None:
 
 
 def test_a_shell_builtin_still_runs() -> None:
-    # An `exec "$@"` implementation fails every builtin with a 127 that reads exactly
-    # like the PATH trap. A crontab line is a shell line, so builtins must work.
+    # An `exec "$@"` implementation fails builtins with a 127 that reads like the PATH trap.
     result = run("--", "cd / && echo ok")
     assert result.returncode == 0
     assert "ok" in result.stdout
@@ -85,16 +84,14 @@ def test_expect_output_fails_a_silent_success() -> None:
 
 
 def test_expect_output_passes_a_command_that_produced_output() -> None:
-    # The positive control for the check above. Without this, an --expect-output that
-    # rejected everything would look identical to one that works.
     result = run("--expect-output", "--", "echo found-something")
     assert result.returncode == 0
     assert "found-something" in result.stdout
 
 
 def test_expect_output_does_not_count_stderr_as_output() -> None:
-    # The trap's real signature is a stderr warning plus an EMPTY item list. Counting
-    # that warning as output would pass exactly the case this flag exists to catch.
+    # The trap's signature is a stderr warning plus an empty item list; counting the warning as
+    # output would pass it.
     result = run("--expect-output", "--", "echo warning >&2")
     assert result.returncode == EMPTY_SUCCESS_EXIT
 

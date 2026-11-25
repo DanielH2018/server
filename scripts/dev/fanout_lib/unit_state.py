@@ -12,14 +12,10 @@ whether a unit has stopped.
 
 from collections.abc import Sequence
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.manifest import Batch
 
-# A line of its own between the headroom reply and the unit blocks. It cannot start with
-# `=== `, which opens each batch's block, and no signing-key line begins with `--- `.
+# Cannot start with `=== ` (each batch's block) and no signing-key line begins with `--- `.
 MARKER = "--- unit states"
 
 

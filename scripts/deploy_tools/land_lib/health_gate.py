@@ -21,9 +21,8 @@ from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 from lib import snapshot_uv
 
-# The inventory directory as a path relative to a checkout root. `check_one` reads the
-# inventory from whichever tree the probe renders the manifests from, which is not always this
-# one, so it needs the shape of that path without repo_paths' own root baked in.
+# `check_one` reads the inventory from whichever tree the probe renders from, so it needs the path
+# relative to a checkout root.
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 
@@ -47,9 +46,8 @@ def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
     }
 
 
-# One `probe.py health` run. The alert plane sets the floor: up to 90s waiting for a probe
-# sample newer than the rollout, a 60s re-read of a would-fail verdict, and a second probe
-# wait on that re-read (`probe_lib/health_alerts.py`), on top of the render and kubectl reads.
+# Floor set by the alert plane: up to 90s for a fresh probe sample, a 60s re-read, and a second
+# probe wait, plus render and kubectl reads.
 PROBE_TIMEOUT_S = 300
 
 
@@ -62,8 +60,7 @@ class GateTools:
     """
 
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
-    # Takes the inventory to read as a keyword, because which TREE answers is decided per call
-    # (see `check_one`), not once when the tools are built.
+    # Takes the inventory as a keyword because which tree answers is decided per call.
     tag_platforms: Callable[..., set[str]] = field(
         default=lambda tag, host_vars: tag_platforms(tag, host_vars)
     )
@@ -161,8 +158,7 @@ def check_one(
         except subprocess.TimeoutExpired:
             return 1, f"{tag}: probe.py health timed out after {PROBE_TIMEOUT_S}s"
         if res.returncode == PROBE_UNREADABLE and (res.stderr or "").strip():
-            # stdout holds only the PROBE-VERDICT line here, and the failed read is on stderr.
-            # Its LAST line, because `uv run` can print its own warnings ahead of it.
+            # Take the last stderr line, because `uv run` can print warnings ahead of it.
             return res.returncode, res.stderr.strip().splitlines()[-1]
         out = (res.stdout or res.stderr or "").strip()
         return res.returncode, out.splitlines()[0] if out else ""
@@ -173,10 +169,8 @@ def check_one(
         return "unreadable" if code == PROBE_UNREADABLE else "unhealthy"
 
     if platforms is None:
-        # The SAME tree the probe renders from, not this checkout's inventory: a PR that adds a
-        # Pi service and its compose_services entry together declares the tag only at the commit
-        # that was deployed, and the primary reads `set()` for it -- which falls through to the
-        # last branch below and probes k8s FIRST, where a same-named cluster workload answers.
+        # Use the tree the probe renders from, not this checkout's inventory: a PR adding a Pi
+        # service and its compose_services entry reads `set()` on the primary and probes k8s first.
         platforms = tools.tag_platforms(tag, host_vars=(cwd or REPO) / HOST_VARS_REL)
 
     if platforms == {"docker"}:

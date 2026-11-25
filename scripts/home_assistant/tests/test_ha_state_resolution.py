@@ -153,8 +153,6 @@ def test_referenced_services_collects_literals_skips_templated():
 
 
 def test_service_resolution_flags_unknown_in_any_domain():
-    # notify is NOT a managed entity-domain, but a typo'd notify SERVICE must still be caught
-    # (the documented notify.pixel_watch_3 service_not_found bug).
     config = {
         "automation": [
             {"id": "a", "alias": "A", "action": [{"service": "notify.pixel_watch_3"}]}

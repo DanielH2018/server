@@ -27,9 +27,8 @@ from test_longhorn_reap_logic import _NOW, _lh_volume, _recurringjob, _snapshot
 
 
 def test_snapshot_owner_map_is_clean_for_an_opt_out_group_with_no_recurringjob():
-    # The `no-backup` group deliberately has no RecurringJob CR, so every no-backup volume
-    # resolved to "" and rule 4 refused every run on this cluster while any existed.
-    # The sentinel is the third owner state, and `unresolved_owner_count` must not count it.
+    # The `no-backup` group has no RecurringJob by design; the sentinel is a third owner state that
+    # `unresolved_owner_count` must not count.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"])]
     )
@@ -54,9 +53,6 @@ def test_snapshot_owner_map_is_clean_for_an_opt_out_group_with_no_recurringjob()
 
 
 def test_classify_snapshots_is_flagged_for_a_missing_job_even_beside_an_opt_out_volume():
-    # The floor the opt-out state must not widen: `weekly-backup-d3` names no RecurringJob
-    # because the CR was renamed or deleted, which is still unresolved ownership, and a
-    # no-backup volume in the same map must not make the run look clean.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"])]
     )
@@ -83,9 +79,6 @@ def test_classify_snapshots_is_flagged_for_a_missing_job_even_beside_an_opt_out_
 
 
 def test_a_recurring_job_snapshot_on_an_opt_out_volume_is_reaped_but_its_newest_is_kept():
-    # A no-backup volume's group runs no job, so a recurring-job snapshot on it was made by a
-    # job that no longer selects the volume: stranded by construction. FLOOR 1 still protects
-    # the newest one, which is the volume's only local restore point.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"])]
     )
@@ -107,8 +100,7 @@ TRIM_JOB_LABEL = "recurring-job.longhorn.io/trim"
 
 
 def _trim_volume(name, group_keys):
-    # Sorted key order, as kubectl's JSON emits it: `LonghornVolume.group` keeps the last group
-    # key it meets, so a red half's `trim` sorts after `no-backup` and wins.
+    # Sorted key order, as kubectl emits: `LonghornVolume.group` keeps the last group key it meets.
     labels = dict.fromkeys(sorted(group_keys), "enabled")
     return LonghornVolume.from_item(
         {"metadata": {"name": name, "labels": labels}, "status": {"state": "attached"}}
@@ -116,8 +108,6 @@ def _trim_volume(name, group_keys):
 
 
 def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
-    # The native trim joins a volume by the per-job label, which is no tier (ADR-0029).
-    # The opt-out volume keeps its sentinel, so rule 4 still counts nothing.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
     )
@@ -130,8 +120,6 @@ def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
 
 
 def test_a_trim_group_label_costs_an_opt_out_volume_its_sentinel():
-    # Red half: the group form names `trim`, which the RecurringJob's `groups: []` resolves to
-    # no job, so the volume reads as a renamed job and rule 4 refuses the run.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
     )

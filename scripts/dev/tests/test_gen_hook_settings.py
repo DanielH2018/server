@@ -22,8 +22,6 @@ import pytest
 from dev import gen_hook_settings as g
 from lib.proc_testing import run
 
-# Named members of the live census. A registered `.py` runs through `run-hook.sh`; a library
-# is imported by a sibling or run by one, and is never registered itself.
 KNOWN_REGISTERED = frozenset(
     {
         "auto-mode-bridge.py",
@@ -370,8 +368,6 @@ def test_live_census_names_the_known_members():
     assert KNOWN_REGISTERED <= registered, sorted(KNOWN_REGISTERED - registered)
     assert KNOWN_LIBRARIES <= set(libraries), sorted(KNOWN_LIBRARIES - set(libraries))
     assert registered.isdisjoint(libraries)
-    # Every live hook goes through the one runner, so the interpreter pin and the failure
-    # posture are written once.
     commands = {r.command.split()[0] for r in registrations}
     assert commands == {f"{g.COMMAND_PREFIX}{g.RUNNER}"}, commands
 
@@ -385,8 +381,7 @@ def test_committed_settings_json_is_what_the_generator_renders_now():
 def test_check_goes_red_on_an_undeclared_hook_file(tmp_path: Path, capsys):
     """The red proof the brief asks for: one silent file beside the real ones."""
     hooks = tmp_path / "hooks"
-    # A parallel worker importing a hook writes, then renames, a `.pyc` temp file in
-    # `__pycache__`; copying that directory raced the rename and failed on CI.
+    # A parallel worker's `.pyc` temp rename races a copy of `__pycache__`.
     shutil.copytree(g.HOOKS_DIR, hooks, ignore=shutil.ignore_patterns("__pycache__"))
     (hooks / "orphan.sh").write_text("#!/bin/bash\necho nothing declared\n")
     settings = tmp_path / "settings.json"

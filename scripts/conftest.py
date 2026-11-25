@@ -10,8 +10,6 @@ from lib import kubectl
 
 
 def _fake_k8s_endpoint(hostname):
-    # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
-    # inventory — faked so plan() stays testable without either.
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
 
 
@@ -20,8 +18,6 @@ def fake_k8s_endpoint():
     return _fake_k8s_endpoint
 
 
-# The `scripts/` classification, built once per worker. `classify()` re-reads every cron
-# template, prek hook and workflow; the verdicts are a read-only mapping.
 @pytest.fixture(scope="session")
 def live_verdicts():
     from lib import script_classify as sc

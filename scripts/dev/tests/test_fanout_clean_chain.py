@@ -404,8 +404,7 @@ def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagge
 def test_a_refused_garbled_truncated_or_blind_answer_keeps_the_tree_is_flagged(
     tmp_path, sock
 ):
-    # A socket carries no exit status, so the framing is what tells a finished answer from an
-    # instance that died mid-scan.
+    # A socket carries no exit status, so the framing tells a finished answer from a mid-scan death.
     worktree = tmp_path / "wt"
     worktree.mkdir()
 
@@ -427,8 +426,6 @@ def test_a_socket_nothing_listens_on_keeps_the_tree_is_flagged(tmp_path, sock):
 
 
 def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
-    # A host the apply has not reached. A shell under claude-rc.service's NoNewPrivileges=yes
-    # does not land here: it connects like any other.
     worktree = tmp_path / "wt"
     worktree.mkdir()
 
@@ -441,8 +438,7 @@ def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
 def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(
     tmp_path, sock
 ):
-    # A session that predates its user's group grant: the root scan does not apply yet, so
-    # the chain scans /proc itself rather than keep every tree.
+    # A session predating its group grant: the chain scans /proc itself rather than keep every tree.
     worktree = tmp_path / "wt"
     worktree.mkdir()
     with listening(sock):
@@ -466,8 +462,6 @@ def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(
 def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(
     tmp_path, sock
 ):
-    # The helper escapes the cwd, and the awk compares escaped forms, so the holder of
-    # the oddly named tree is found and an unrelated tree stays free.
     odd = tmp_path / "wt\nx y"
     odd.mkdir()
     plain = tmp_path / "wt"

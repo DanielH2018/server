@@ -38,12 +38,8 @@ from lib import yaml_fast
 from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, kubectl, kubectl_argv
 from lib.repo_paths import SCRIPTS
 
-# kustomize-controller v1.9.6, `internal/controller/kustomization_controller.go`: the
-# `fieldManagers` list it passes as `applyOpts.Cleanup.FieldManagers`. No entry sets
-# `ExactMatch`, so fluxcd/pkg `ssa/patch.go:matchFieldManager` matches each by name PREFIX,
-# and only for the same operation. `kubectl-rollout`, `kubectl-patch` and
-# `kubectl-client-side-apply` all match `kubectl`. The live kustomize-controller passes no
-# `--disallowed-field-manager` and no `--controller-name`, so the list is these four.
+# Cleanup field managers match by name PREFIX and only for the same operation:
+# `kubectl-rollout`, `kubectl-patch` and `kubectl-client-side-apply` all match `kubectl`.
 CLEANUP_MANAGERS = (
     ("kubectl", "Apply"),
     ("kubectl", "Update"),
@@ -51,8 +47,8 @@ CLEANUP_MANAGERS = (
     ("kustomize-controller", "Update"),
 )
 
-# The cleanup removes this annotation by name on every object, and no render carries it, so
-# listing it would add one expected line per object. D5's exit check reads that it is gone.
+# The cleanup removes this annotation on every object and no render carries it, so listing it would
+# add a line per object.
 LAST_APPLIED = "kubectl.kubernetes.io/last-applied-configuration"
 LAST_APPLIED_PATH = (("f", "metadata"), ("f", "annotations"), ("f", LAST_APPLIED))
 
@@ -381,8 +377,8 @@ def census(tag, docs, live_of):
         for path in sorted(stripped, key=format_path):
             lines.append(f"    {format_path(path)}  ({', '.join(stripped[path])})")
         if defaulted:
-            # Listed apart, never dropped: the re-default is inferred, and a field set at
-            # create by admission or a strategy rather than by defaulting is not restored.
+            # Listed apart, never dropped: the re-default is inferred, and an admission-set field is
+            # not restored.
             lines.append(
                 f"    presumed server defaults, inferred and not measured ({len(defaulted)}):"
             )

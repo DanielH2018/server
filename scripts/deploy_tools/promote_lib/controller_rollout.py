@@ -25,8 +25,6 @@ Run: imported only. `uv run pytest scripts/deploy_tools/tests/test_verify_promot
 
 from collections.abc import Iterable
 
-# The Kustomization that deploys kustomize-controller, so its presence in the changed set is
-# what makes the controller's own Deployment a candidate for change.
 STAGE_TAG = "flux"
 # The names whose reconcile the replaced pod was running, besides STAGE_TAG.
 ALSO_REPLACED = frozenset({"soak"})

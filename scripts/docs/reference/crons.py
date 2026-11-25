@@ -31,9 +31,8 @@ from lib.repo_paths import REPO
 
 HOSTS = REPO / "hosts"
 
-# Commands that change durable state somewhere. Deliberately over-broad: a job wrongly
-# flagged as state-changing costs a reader one moment, and one wrongly cleared could cost
-# an incident.
+# Deliberately over-broad: a wrongly flagged job costs a moment, a wrongly cleared one could cost an
+# incident.
 _MUTATING = (
     "git commit",
     "git push",

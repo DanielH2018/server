@@ -9,25 +9,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.sizing import DEFAULT
 from dev.fanout_lib.target import SERVER
 
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
-# Where `retire` moves a run whose every batch is removed. A subdirectory, so the
-# non-recursive `*.json` globs (`all_runs`, the SessionStart banner) never list it.
+# A subdirectory, so the non-recursive `*.json` globs never list a retired run.
 RETIRED = "retired"
-# The manifest key that counts a batch's conflict resumes; `fanout_lib.resume.MAX_RESUMES`
-# bounds it.
 CONFLICT_RESUMES = "conflict_resumes"
-# The manifest key holding the `kept:` line a clean last read for a batch, and how many cleans
-# in a row read it.
 SWEEP_KEPT = "sweep_kept"
-# How many cleans in a row may read the same `kept:` line before the worktree sweep stops
-# running that batch's leg. At the lander's six-hour `CLEAN_INTERVAL_S`, four is one day.
+# How many cleans in a row may read the same `kept:` line before the sweep stops running that
+# batch's leg.
 SWEEP_KEPT_LIMIT = 4
 
 
@@ -46,9 +38,8 @@ class KeptStreak(NamedTuple):
     merged_pr: str | None = None
 
 
-# A value a shell reads as itself wherever a command names it: as a bare word, inside single
-# or double quotes, and inside a systemd `Exec` line. No leading `-`, which ssh and git read
-# as an option.
+# A value a shell reads as itself as a bare word, in quotes, and in a systemd `Exec` line. No
+# leading `-`, which ssh and git read as an option.
 _PLAIN_WORD = re.compile(r"[A-Za-z0-9_+./:@][A-Za-z0-9_+./:@-]*")
 
 

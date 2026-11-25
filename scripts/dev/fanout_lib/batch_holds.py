@@ -18,21 +18,15 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.manifest import MANIFEST_DIR, Batch, all_runs
 from dev.fanout_lib.target import SERVER
 from dev.fanout_lib.transport import run_command
 
-# Measured 2026-10-12 from daniel-box: `systemctl --user is-active` answers in 0.28-0.52s over
-# ssh to daniel-server and in 0.01-0.02s locally. The ssh leg's own ConnectTimeout is 8s, so
-# this bounds a host that accepts the connection and then hangs.
+# Bounds a host that accepts the ssh connection and then hangs; the ssh leg's own ConnectTimeout is
+# 8s.
 IS_ACTIVE_TIMEOUT_S = 10.0
-# `systemctl is-active` states for a unit whose agent is still running or still stopping.
-# Everything else it prints for a finished batch is `inactive` or `failed`; any other word is
-# read as "cannot tell".
+# Any state other than these and `inactive`/`failed` is read as "cannot tell".
 _RUNNING = frozenset({"active", "activating", "reloading", "deactivating"})
 _FINISHED = frozenset({"inactive", "failed"})
 

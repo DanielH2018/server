@@ -151,8 +151,6 @@ def test_the_other_read_only_gh_calls_retry_a_timeout_too(landing, answer, read)
     assert _sleeps(calls) == [5, 15]
 
 
-# The secondary limit's wait is fixed, so these tests need no clock or gh subprocess; the
-# hourly quota's wait until its reset is `lib/tests/test_gh_rate_limit.py`'s.
 RATE_LIMITED = subprocess.CalledProcessError(
     1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
 )

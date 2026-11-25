@@ -29,9 +29,7 @@ from lib.worktrees import Worktree, held_by_readable_process
 
 CREATED_URL = "https://github.com/o/r/issues/42"
 
-# The author metadata `gh` returns on every comment, and which `is_operator_comment` reads.
-# Fixtures stamp it because the claim protocol is FAIL-CLOSED: a comment carrying no author
-# metadata folds into no claim at all, so a bare `{"body": ...}` reads as an unclaimed issue.
+# The claim protocol is fail-closed: a comment with no author metadata folds into no claim.
 OPERATOR = "DanielH2018"
 FOREIGNER = "drive-by-account"
 
@@ -130,8 +128,6 @@ class Calls:
     board: list[tuple[list[int], str | None]] = field(default_factory=list)
     # The (branch, OWNER/NAME) each session-milestone lookup was asked for.
     milestones: list[tuple[str, str]] = field(default_factory=list)
-    # The OWNER/NAME each idle-milestone close was asked for, with the branches the fake
-    # asked `held` about.
     milestone_closes: list[tuple[str, dict[str, bool]]] = field(default_factory=list)
 
     def none(self) -> bool:
@@ -149,47 +145,25 @@ class Fakes:
 
     issues: list[dict] = field(default_factory=list)
     labels: set[str] | None = None
-    # A single issue dict, or a dict keyed by issue number for a test that drives `claim` or
-    # `release` against more than one issue in one `main()` call.
     view: dict | None = None
     # Answers the `pr list` key, for Task 5's `next`.
     prs: list[dict] = field(default_factory=list)
     url: str = CREATED_URL
-    # The claim-staleness read, as `facts(...)` builds it. Left None it ASSERTS rather than
-    # answering "no worktrees, git ok" — that particular answer makes every claim read stale,
-    # so a test that got it by default would pass for a reason it never stated. Same argument
-    # as the unanswered-argv assertion above.
+    # Left None it asserts: the default 'no worktrees, git ok' would make every claim read stale.
     worktree_facts: Callable[[], tuple] | None = None
-    # What the run manifests answer, keyed by (orchestrator branch, repo). Empty by default,
-    # so no test reads the real `~/.claude/fanout`.
     launched: dict[tuple[str, str], set[str]] = field(default_factory=dict)
-    # What the running-batch read answers, `{issue: BatchHold}`, filtered to the issues asked
-    # about. Empty by default, so no test reads a real unit or opens an ssh connection.
     batch_holds: dict[int, BatchHold] = field(default_factory=dict)
-    # Keyed by the `issue create` / `issue close` pair `gh` is called with, the way
-    # `json_errors` is keyed, and CONSUMED on the first match rather than raised every time,
-    # so a later call with the same pair answers normally.
+    # Consumed on the first match, so a later call with the same pair answers normally.
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
-    # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
-    # on, so a test can fail the issue read while the label read still answers.
     json_errors: dict[str, BaseException] = field(default_factory=dict)
     # The register's tracked files. Empty by default, so no test's `paths` depend on
     # what this tree tracks.
     tracked: frozenset[str] = frozenset()
-    # What the board sync answers per issue, `(outcome, detail)`; an issue absent here reads
-    # `unchanged`, so no test reaches the real board.
     board: dict[int, tuple[str, str]] = field(default_factory=dict)
-    # What a `gh api` read answers, keyed by its path without the query string, such as
-    # `repos/o/r/issues`. A failure goes in `json_errors` under `api <that path>`.
-    # A `--paginate --slurp` read answers a list of pages, each a list of rows.
     api: dict[str, list] = field(default_factory=dict)
-    # Each branch's session milestone title, what the milestone lookup answers. A branch
-    # absent here never ran `milestone start`.
     milestone_titles: dict[str, str] = field(default_factory=dict)
     # The paths a live process works in, the /proc snapshot the real hold reader matches.
     held_paths: set[str] = field(default_factory=set)
-    # The branches of the open session milestones the idle-milestone close considers; it
-    # closes each one `held` calls free.
     open_milestones: list[str] = field(default_factory=list)
 
 
@@ -355,8 +329,6 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         if key == "issue view":
             if f.view is None:
                 raise AssertionError(argv)
-            # A single issue dict carries a "number" key; a dict keyed by issue number does
-            # not, so that key tells the two shapes apart without a second field.
             if isinstance(f.view, dict) and "number" not in f.view:
                 try:
                     value = f.view[int(argv[2])]
@@ -365,11 +337,8 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             else:
                 value = f.view
             if isinstance(value, list):
-                # A per-number SEQUENCE: one entry per successive `issue view` call for
-                # this number, sticking on the last once exhausted. `cmd_claim`'s
-                # post-write read-back needs the SECOND read to disagree with the first —
-                # a rival's claim landing between the pre-write check and the read-back —
-                # which a single static view cannot express.
+                # A per-number sequence that sticks on the last entry: the read-back needs a second
+                # read that disagrees with the first.
                 number = int(argv[2])
                 i = view_reads.get(number, 0)
                 view_reads[number] = i + 1
@@ -387,13 +356,10 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
         if error is not None:
             raise error
         if list(argv[:2]) == ["issue", "comment"]:
-            # `cmd_claim` reads the issue back after posting its claim comment, to catch a
-            # race a second worktree won. Reflecting the write here is what makes that
-            # read-back see the comment it just posted, the way real `gh` would.
             body = argv[argv.index("--body") + 1]
             for issue in _issues_named(f, int(argv[2])):
-                # Stamped as the operator's: `gh` posts as the authenticated account, so a
-                # comment this script wrote is one whose claim trailer counts.
+                # Stamped as the operator's: gh posts as the authenticated account, so its claim
+                # trailer counts.
                 issue.setdefault("comments", []).append(operator_comment(body))
         return subprocess.CompletedProcess(list(argv), 0, f"{f.url}\n", "")
 

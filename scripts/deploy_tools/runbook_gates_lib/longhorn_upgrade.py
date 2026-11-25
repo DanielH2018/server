@@ -77,8 +77,6 @@ NAMESPACE_KEY = "k3s_longhorn_restore_drill_namespace"
 # The target the runbook's own block names. Others (`r2`) are checked when armed.
 REQUIRED_TARGETS = (longhorn_backups.B2_TARGET,)
 
-# A volume is settled in exactly these two states; `attaching`, `detaching`, `creating` and
-# `deleting` are all mid-flight.
 SETTLED_STATES = frozenset({"attached", "detached"})
 
 ENGINE_IMAGES_ARGS = (

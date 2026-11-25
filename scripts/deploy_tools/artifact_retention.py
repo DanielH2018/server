@@ -30,15 +30,11 @@ from datetime import datetime, timedelta
 
 PROD_TAG = "prod"
 LAST_GOOD_TAG = "last-good"
-# The revision a failed promotion left as `prod` under a hold without a reset (H1.1b). The
-# in-flight wait reads it, so a cleared hold of that kind does not read as a run in flight.
 HELD_TAG = "held"
-# The revision that took over a verification in flight (D7). `decide` never supersedes the
-# digest it names, so one verification is superseded at most once.
 SUPERSEDING_TAG = "superseding"
 
-# How old a version must be before `prune` may delete it. Every deletion, a signature's
-# included, waits this long, so a version pushed while a run lists the package is never one.
+# Every deletion waits this long, so a version pushed while a run lists the package is never
+# deleted.
 RETENTION_DAYS = 14
 _SHA_TAG = re.compile(r"sha-([0-9a-f]{40})")
 # cosign's referrers fallback tags an index with the signed digest, its colon made a dash.
@@ -155,8 +151,8 @@ def select_prunable(facts: PruneFacts) -> Selection:
     if prod is None:
         return Selection(reason=f"{PROD_TAG} does not exist, so nothing is pruned")
     prod_commit, prod_digest = prod
-    # A listing that missed `prod`'s version, say a page short, would make prod's signatures
-    # look orphaned. The registry's own answer for each tag must appear in the listing.
+    # A listing that missed prod's version would make prod's signatures look orphaned, so the
+    # registry's answer must appear in it.
     for tag, digest in ((PROD_TAG, prod_digest), (LAST_GOOD_TAG, last_good)):
         if digest and not any(v.digest == digest and tag in v.tags for v in versions):
             reason = f"the listing has no version {digest} tagged {tag}"

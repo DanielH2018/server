@@ -83,9 +83,7 @@ class PrReview(TypedDict, total=False):
     commit_id: str
 
 
-# A `PrView` field as a jq expression over the REST pull object, giving the value `gh pr view`
-# gives. REST's `mergeable` is null until GitHub has computed it, which `gh pr view` calls
-# UNKNOWN.
+# REST's `mergeable` is null until GitHub computes it, which `gh pr view` calls UNKNOWN.
 _REST = {
     "headRefOid": ".head.sha",
     "isDraft": ".draft",

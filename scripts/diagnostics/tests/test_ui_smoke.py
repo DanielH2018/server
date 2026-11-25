@@ -41,10 +41,8 @@ pytestmark = pytest.mark.ui
 
 WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 
-# Hardcoded, NOT derived from containers_list: deriving it would silently enlist every new
-# service into a suite CI never runs, so the next person to type `-m ui` inherits failures
-# they did not cause. One service per node placement, plus two that carry their own login.
-# (service, exact page title, path it should land on)
+# Hardcoded, not derived from containers_list: deriving would enlist every new service into a suite
+# CI never runs.
 SERVICES = [
     # DECIDED: homepage's expectation stays `My Awesome Homepage`; do NOT relax it to
     # `Homepage`. `Homepage` is the app's OWN fallback — `initialSettings.title || "Homepage"`
@@ -66,19 +64,13 @@ SERVICES = [
     ("homepage", "My Awesome Homepage", "/"),
     ("sonarr", "Sonarr", "/"),
     ("freshrss", "Login · FreshRSS", "/i/"),
-    # Routed by the `observability` role, whose containers_list entry names Grafana alone.
-    # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
-    # Authelia rule, so reaching it proves ingress → Authelia → backend. It does NOT prove a
-    # dashboard renders — the 19 dead panels in this module's docstring would score green
-    # here, because they are a logged-in page this tier never reaches.
+    # `/login` is Grafana's own page behind one_factor, so it proves ingress, Authelia and backend,
+    # but not that any dashboard renders.
     ("grafana", "Grafana", "/login"),
 ]
 
-# `two_factor` in Authelia's access control, so a one_factor cookie is turned away at the
-# portal (config-secret.yaml.j2). The fixture below mints its own session as `claude-ui`,
-# whose TOTP shared secret is a SOPS value, so these three run unattended. Titles observed
-# through a real two_factor session; code-server carries its own login on top of Authelia,
-# as FreshRSS does.
+# `two_factor` in Authelia turns a one_factor cookie away at the portal.
+# The fixture mints its own `claude-ui` session from a SOPS TOTP secret, so these run unattended.
 TWO_FACTOR_SERVICES = [
     ("longhorn", "Longhorn", "/#/dashboard"),
     ("code-server", "code-server login", "/login"),
@@ -86,16 +78,13 @@ TWO_FACTOR_SERVICES = [
     ("deploy", "Deploy queue", "/"),
 ]
 
-# The panels fill from async `/api/*` fetches after load, so the first read lands on an empty
-# div. Same shape and the same reasoning as `settled_title`: absorb the fetch, not a failure.
+# Panels fill from async `/api/*` fetches, so the first read lands on an empty div.
 _PANEL_ATTEMPTS = 8
 _PANEL_INTERVAL = 0.75
 
 MINT_HINT = "mint one with `uv run python scripts/diagnostics/ui_login.py --two-factor`"
 
 
-# Both budgets absorb a transient, not a slow load. A settled title arrives on the second
-# read, and a resultless evaluate succeeds on its retry.
 _EVALUATE_ATTEMPTS = 3
 _EVALUATE_RETRY_INTERVAL = 0.5
 _TITLE_SETTLE_ATTEMPTS = 4
@@ -135,8 +124,7 @@ class McpClient:
         self._write(
             {"jsonrpc": "2.0", "id": want, "method": method, "params": params or {}}
         )
-        # The server interleaves notifications with replies on one stream, so read until the
-        # id matches rather than trusting the next line to be ours.
+        # The server interleaves notifications with replies, so read until the id matches.
         while True:
             line = self.stdout.readline()
             if not line:
@@ -372,8 +360,8 @@ def two_factor_browser(domain):
     not whether to run.
     """
 
-    # Through `uv run`, not the shebang: ui_login imports core, which uses PEP 758
-    # syntax that Ubuntu's 3.12 /usr/bin/python3 cannot parse.
+    # Through `uv run`, not the shebang: ui_login imports core, which uses PEP 758 syntax Ubuntu's
+    # 3.12 cannot parse.
     def ui_login(*args):
         return run(
             [
@@ -385,8 +373,6 @@ def two_factor_browser(domain):
                 "scripts/diagnostics/ui_login.py",
                 *args,
             ],
-            # A real Authelia round-trip through a headless browser, behind a nested `uv run`.
-            # Measured well under a minute; the budget is for a cold cache.
             timeout=300,
         )
 
@@ -410,9 +396,6 @@ def two_factor_browser(domain):
                 },
             )
         except AssertionError as exc:
-            # The wrapper runs its own check and exits when the session is gone. That is the
-            # same condition as the pre-filter above, so it deserves the same skip rather
-            # than an error about a server that failed to start.
             if "two_factor session" not in str(exc):
                 raise
             pytest.skip(f"the wrapper found no live two_factor session — {MINT_HINT}")

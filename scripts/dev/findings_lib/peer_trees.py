@@ -13,15 +13,10 @@ import shlex
 import subprocess
 from collections.abc import Callable
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.fanout_lib.transport import HOSTS, run_command, this_host
 from lib.worktrees import Worktree, parse_worktree_list
 
-# Measured 2026-11-01 from daniel-server: the list from daniel-box's checkout (216 worktrees)
-# came back in 1.15s over a fresh ssh connection, whose own ConnectTimeout is 8s.
 LIST_TIMEOUT_S = 15.0
 
 

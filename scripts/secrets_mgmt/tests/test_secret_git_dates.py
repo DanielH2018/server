@@ -143,8 +143,8 @@ def test_reencrypt_guard_suppresses_the_reencrypt_but_finds_the_real_earlier_rot
     stable = _stable_keys(9)
     tools = _history_tools(
         [
-            # Whole-file re-encrypt: every one of the 10 shared keys gets a fresh
-            # ciphertext, "rotated" included, even though only "rotated" really changed.
+            # Whole-file re-encrypt: every shared key gets fresh ciphertext, though only "rotated"
+            # changed.
             (
                 "d",
                 "2026-09-09",

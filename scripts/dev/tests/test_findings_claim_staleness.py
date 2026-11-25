@@ -15,8 +15,6 @@ from lib.proc_testing import live_session_lock
 from lib.worktrees import Worktree, memoised_merged
 
 WT = "worktree-issue-1132"
-# Every age_days assertion dates its comments against this instant and hands the same one to
-# `claim_states`, so "5 days" is exactly 5 whatever the wall clock reads.
 NOW = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
 PATH = "/home/ubuntu/server/.claude/worktrees/issue-1132"
 
@@ -71,8 +69,6 @@ def test_claim_is_live_when_its_worktree_exists_and_is_dirty():
 
 
 def test_claim_is_not_stale_when_its_worktree_is_dirty_with_a_dead_owner():
-    # A restart kills the agents, their worktrees keep uncommitted edits, and every session
-    # is resumed in place. Expiring these is the failure this rule prevents.
     dead = _tree(reason="claude session x (pid 999999 start 999999)")
     live, reason = claim_is_live(WT, [dead], dirty=_always, merged=_never)
     assert live is True
@@ -88,9 +84,6 @@ def test_claim_is_stale_when_its_worktree_is_merged_and_clean():
 
 
 def test_claim_is_live_while_a_session_still_holds_the_worktree_lock():
-    # The live-session-lock condition. An orchestrator worktree is clean and at master's
-    # tip, so `merged` says True — only the live lock keeps its claim alive for the
-    # duration of the fan-out it is running.
     alive = _tree(reason=live_session_lock())
     live, reason = claim_is_live(WT, [alive], dirty=_never, merged=_always)
     assert live is True
@@ -287,14 +280,6 @@ def test_an_unlocked_merged_clean_tree_no_process_works_in_is_stale():
     assert "merged, clean, unlocked" in reason
 
 
-# --- the merged read is asked once per worktree, not once per claim ------------------
-#
-# `claim_states` calls `merged(tree)` once per claimed issue, and a fan-out's claims all name
-# ONE orchestrator worktree. For an unmerged branch each call ends in a `gh pr list` network
-# read, so the memo lives with the callable rather than in `classify`, which receives an
-# eagerly-computed bool.
-
-
 def _counting_ask():
     """(ask, calls): an `is_merged` stand-in that records every call it is asked to make."""
     calls: list[tuple[str, str, str]] = []
@@ -335,8 +320,6 @@ def test_two_different_worktrees_each_get_their_own_answer():
     assert calls == [("/repo", "abc", "b1"), ("/repo", "def", "b2")]
 
 
-# Each Unix user's clone lists only its own worktrees, so a claim made from the other
-# clone always read "no worktree" and was reaped while its session worked on.
 AGENT_WT = "worktree-claude+issue-1132"
 
 

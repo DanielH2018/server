@@ -37,13 +37,13 @@ from secrets_mgmt.cluster_vars_check import Expected, ManifestEntry
 
 NAMESPACE = "proof"
 
-# The digits each `stringData` field must decode to. 2**53 + 1 is the smallest integer a
-# float64 cannot hold, so a JSON number detour turns it into ...992.
+# 2**53 + 1 is the smallest integer a float64 cannot hold, so a JSON number detour turns it into
+# ...992.
 VALUES = {"proof_zero_lead": "0123", "proof_long_digits": "9007199254740993"}
 FIELDS = {"zero_lead": "proof_zero_lead", "long_digits": "proof_long_digits"}
 
-# `write` encrypts the cluster dotenv whole when it is absent, and an empty dotenv is not one
-# SOPS writes, so the fixture carries one plain key besides the manifest's two.
+# `write` encrypts the cluster dotenv whole when absent, and SOPS writes no empty dotenv, so the
+# fixture carries one plain key.
 PLAIN = {"proof_plain": "fixture-plain-q4z"}
 
 TEMPLATE = (

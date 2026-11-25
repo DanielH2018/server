@@ -33,9 +33,6 @@ def stub_host(monkeypatch):
         lambda name, cluster: (resolved.append((name, cluster)), "10.0.0.1")[1],
     )
     monkeypatch.setattr(postflight, "secret", lambda name: (f"<{name}>", ""))
-    # check_ha_token reaches HA via core.ha_base(), which decrypts the domain from
-    # SOPS — stub it so no test needs the age key (CI has none). Same for the cluster
-    # prometheus route the checks query since the PG1 scrape port.
     monkeypatch.setattr(postflight.core, "ha_base", lambda: "https://ha.test")
     monkeypatch.setattr(
         postflight.core,

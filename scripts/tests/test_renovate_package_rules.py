@@ -34,7 +34,6 @@ from _renovate_rule_rows import (
     without,
 )
 
-# The Pi's Compose images, as the operator ruled on 2026-10-29 (H5 Open question 1).
 AUTOHEAL = Dep(
     "willfarrell/autoheal", f"{PI_COMPOSE}/autoheal/compose.yaml.j2", "docker"
 )

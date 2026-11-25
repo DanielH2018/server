@@ -138,9 +138,6 @@ def test_structure_is_preserved():
 # --- the wiring: what reaches stdout ----------------------------------------------------
 
 
-# `format_arr_response` is the seam run_arr prints through, so these assert the printed text
-# without stubbing the kubectl / SOPS / curl boundary run_arr crosses to fetch the body.
-
 BODY = json.dumps(NOTIFICATION)
 
 

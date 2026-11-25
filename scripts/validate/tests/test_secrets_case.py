@@ -127,8 +127,6 @@ def test_seal_pi_rebuilds_the_real_pi_package_and_both_variants_with_the_sealed_
         name.startswith("sealed-homelab-host-test-stub-")
         for _, name in cases.added.values()
     )
-    # Every build, at the real build's version, ships the sealed ciphertext for the Compose env
-    # file's keys (H5.7, H5.8), and the Healthchecks.io key (H7.30).
     assert set(built) == {"1.0", "1.0.3", "1.0.4"}
     for directory in built.values():
         shipped = directory / "root/usr/lib/homelab/secrets/daniel-pi.sops.yaml"

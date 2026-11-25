@@ -298,9 +298,8 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "validate_ha_config.py": "gate",
         "grafana_dashboard_uids.py": "gate",
         "smoke_extract.py": "gate",
-        # "scheduled" rather than "gate": the B2 accounting timer (k3s-host-checks) invokes
-        # `probe.py b2-deletions`, and "scheduled" outranks "gate" in _PRECEDENCE. probe.py is
-        # still a gate too (hooks) -- the cron adds a caller, it doesn't drop one.
+        # 'scheduled' outranks 'gate' in _PRECEDENCE; the B2 accounting timer invokes `probe.py
+        # b2-deletions`.
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",

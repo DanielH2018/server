@@ -311,8 +311,6 @@ def test_the_first_bundle_carrying_cluster_vars_expects_its_status():
     )
 
 
-# -- a dependent that was already failing (H1.1i) --------------------------------------------
-
 # A node outage: `longhorn` fails on every revision. `longhorn-backup` and `longhorn-reconcile`
 # depend on `longhorn`, which depends on `cluster-base`. `bento-pdf` and `metallb` stand apart.
 OUTAGE_GRAPH = {
@@ -431,10 +429,6 @@ def test_decide_reads_no_status_when_the_changed_set_holds_no_dependent():
     assert vp.prior_statuses(outage(bento_pdf="b"), OUTAGE_PROD, read) == {}
 
 
-# -- the second document in a tag's file (D4.3) ----------------------------------------------
-
-# bento-pdf's file holding `bento-pdf` and `bento-pdf-deferred`, as the renderer writes a tag
-# that defers files: one `flux/<tag>.yaml`, two documents.
 TWO_DOCUMENTS = bundle_files(
     digests(bento_pdf="b", sonarr="s"),
     **{

@@ -17,35 +17,27 @@ from lib import yaml_fast
 from lib.k8s_lookups import k8s_lookup_map
 
 
-# The two planes a consumer lives on. A k8s role is applied by Flux from the cluster file
-# (`FLUX_PATH`). A host package carries the value in its host's SOPS file, which only the
-# operator's `host_secrets.py sync` rewrites.
+# A k8s role is applied by Flux from the cluster file; a host package carries the value in its
+# host's SOPS file, rewritten only by the operator's `host_secrets.py sync`.
 K8S_PLANE = "k8s"
 HOST_PLANE = "host"
 
-# The host packages (H5.7). A file under `hosts/components/<component>/` that names a secret
-# makes every host package listing that component a consumer, on the host plane.
+# A file under `hosts/components/<component>/` naming a secret makes every host package listing that
+# component a consumer.
 _COMPONENTS = os.path.join("hosts", "components")
-# Directories whose hits are not consumers. `collections/` is vendored third-party; the
-# registry and secrets file name every secret by definition, so including them would make
-# every census non-empty and the check vacuous.
+# `collections/` is vendored third-party; the registry and secrets file name every secret, so
+# counting them would make the check vacuous.
 _CENSUS_SKIP = ("collections",)
-# The manifests role's standalone-value guard map names about 150 keys and renders none of
-# them: the guard reads each value at deploy time and writes nothing, so a rotation owes the
-# `manifests` role no redeploy.
+# The guard map names about 150 keys and renders none: the guard writes nothing, so a rotation owes
+# `manifests` no redeploy.
 _CENSUS_SKIP_FILES = {
     "secrets.yml",
     "secret_rotation.yml",
     "standalone_secret_keys.json",
 }
 
-# Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md
-# names secrets it explains without rendering any of them, so counting docs makes the census
-# claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
-# help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles.
-#
-# Checked in the direction that matters before making the change: excluding docs creates ZERO
-# new phantom tags, so no real consumer is only discoverable through prose.
+# Markdown is excluded: a role's CLAUDE.md names secrets without rendering them, so counting docs
+# would send the operator to redeploy a role holding no copy.
 _CENSUS_SKIP_SUFFIXES = (".md",)
 
 
@@ -83,13 +75,12 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
                 ) as handle:
                     text = handle.read()
             except OSError:
-                # A file this process cannot read is not evidence of absence, but it is also
-                # not something a census can act on. Skipping is right; failing the whole
-                # census on one unreadable file would make the tool useless in a worktree.
+                # A file this process cannot read is skipped; failing the census on one would make
+                # the tool useless in a worktree.
                 continue
             corpus.append((text, role, K8S_PLANE))
-            # A k8s role that `lookup()`s this file from another role renders what it holds,
-            # so it is a consumer too.
+            # A k8s role that `lookup()`s this file from another role renders what it holds, so it
+            # is a consumer too.
             rel = os.path.relpath(os.path.join(dirpath, filename), repo)
             for reader in sorted(lookups.get(rel, ())):
                 corpus.append((text, reader, K8S_PLANE))
@@ -158,10 +149,9 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     return found
 
 
-# What reaches a consumer Flux applies (D3.4, d3-secrets.md, *Rotating a value read by both
-# planes*). Flux substitutes the value from the cluster file, which only the operator's
-# `write` regenerates, because it decrypts. Landing the PR then waits on `cluster-vars` and
-# every Kustomization that depends on it. Backticked for the reason `consumer_commands` gives.
+# Flux substitutes the value from the cluster file, which only the operator's `write`
+# regenerates; landing waits on `cluster-vars` and its dependents. Backticked for the reason
+# `consumer_commands` gives.
 FLUX_PATH = (
     "%s is a k8s entry, so Flux applies it from the cluster file: the operator runs "
     "`uv run python scripts/secrets_mgmt/cluster_vars.py write` (operator-only), commits it "
@@ -178,13 +168,9 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     consumers = tree_consumers(name, repo=repo)
     k8s_roles = sorted(r for r, plane in consumers.items() if plane == K8S_PLANE)
     host_packages = sorted(r for r, plane in consumers.items() if plane == HOST_PLANE)
-    # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by a cron, and
-    # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
-    # text invokes it — so a bare `scripts/secrets_mgmt/host_secrets.py ...` literal here would
-    # reclassify that script as cron-driven in the generated reference. That resolver already
-    # draws the distinction this needs (`_invoked_in`, reference/scripts.py:102): a line
-    # carrying a backtick is prose CITING a command rather than running one, which is exactly
-    # what these strings are. Quoting them says so in the one way the tree can read.
+    # BACKTICKS ARE LOAD-BEARING: `reference/scripts.py` classifies a script as scheduled when a
+    # scheduled script's text invokes it, and a line with a backtick reads as prose citing a
+    # command, so a bare literal here would reclassify it as cron-driven.
     commands = []
     for host in host_packages:
         commands.append(

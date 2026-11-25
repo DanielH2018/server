@@ -35,9 +35,6 @@
 # Run: scripts/validate/vale.sh [file ...]
 set -euo pipefail
 
-# `--help` answers from any environment, ahead of the sync below, which needs the `vale`
-# binary that a CI pytest shard does not install. The awk prints this
-# file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
   exit 0
@@ -56,14 +53,14 @@ fi
 if [ "$(cat "$stamp" 2>/dev/null || true)" != "$want" ]; then
   mkdir -p "$styles"
   exec 9<"$styles"
-  # -w rather than an indefinite block: this runs on every doc-touching commit, and a wedged
-  # commit with no output is worse than a loud failure. The sync it waits on takes under a second.
+  # -w rather than an indefinite block: this runs on every doc-touching commit, and the sync it
+  # waits on takes under a second.
   if ! flock -w 60 9; then
     echo "vale.sh: timed out waiting for the styles/ sync lock" >&2
     exit 1
   fi
-  # Re-read under the lock: the waiters were all racing on the same missing package, and by
-  # the time they get the lock the winner has fetched it.
+  # Re-read under the lock: waiters race on the same missing package, and the winner has fetched it
+  # by the time they get the lock.
   if [ "$(cat "$stamp" 2>/dev/null || true)" != "$want" ]; then
     rm -rf "$styles/Google"
     (cd "$repo" && vale sync)

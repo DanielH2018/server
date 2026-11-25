@@ -19,8 +19,6 @@ from dev.fanout_lib.place import main
 from dev.fanout_lib.unit_state import MARKER
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
-# Roomy on both planes and holding a registered key, so a refusal here comes from a gate
-# rather than from placement or the signing gate.
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 CLAIMED = [
     Issue(1, "one", IssueState.OPEN, body="body one", labels=frozenset({"claude"})),
@@ -191,8 +189,6 @@ def test_a_unit_state_that_cannot_be_read_counts_as_running(tmp_path, capsys):
     )
     for reply in replies:
         _uncleaned(tmp_path, remote, count=6)
-        # Two new batches: the 5 or 6 live ones plus 2 exceed the cap of 6, and would not if
-        # an unreadable state counted as stopped.
         code, _ = _launch_pinned(tmp_path, remote, reply, batches=("1", "2"))
         assert code == 3
         assert "live batch(es)" in capsys.readouterr().err

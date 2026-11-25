@@ -99,8 +99,6 @@ def test_an_empty_tsdb_sentinel_is_not_read_as_a_span(monkeypatch, capsys):
 
 
 def test_the_span_probe_goes_through_the_query_path(monkeypatch):
-    # The prometheus IngressRoute admits `/api/v1/query` and `/api/v1/targets` only, so a
-    # probe reaching for `/api/v1/status/tsdb` would 404 in production and pass here.
     seen = _fake_prometheus(monkeypatch)
     ns = cli_parser._build_parser().parse_args(["metric", "count_over_time(up[30d])"])
     metrics.run_query(ns)

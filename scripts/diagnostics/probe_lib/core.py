@@ -24,8 +24,6 @@ from lib.inventory_lists import LANDING_HOST, PI_HOST
 from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
 
-# The URL builders live in obs_api, which homelab-mcp's image also carries. Re-exported
-# here so every `core.prom_query_url(...)` call site and test keeps its spelling.
 from diagnostics.probe_lib.obs_api import (  # noqa: F401
     loki_labels_url,
     loki_query_url,
@@ -36,8 +34,7 @@ from diagnostics.probe_lib.obs_api import (  # noqa: F401
 
 DEFAULT_TIMEOUT = 10
 
-# Local time for every window this tool prints. The homelab is in one timezone and
-# the operator reads these next to `journalctl`, so UTC would mean translating.
+# Local time: the operator reads these windows next to `journalctl`.
 _CHICAGO = ZoneInfo("America/Chicago")
 
 
@@ -159,9 +156,8 @@ def observability_loki_ip():
     )
 
 
-# The two Loki stores and what each holds. A `{service_name="claude-code"}` query against
-# the first store returns an empty result that reads as "the OTEL stream is gone" while the
-# lines sit in the second.
+# A `{service_name="claude-code"}` query against the wrong store returns an empty result that looks
+# like a lost stream.
 LOKI_STORES = ("homelab", "observability")
 LOKI_STORE_HELP = (
     "which Loki to ask: `homelab` (loki-homelab: pod, syslog and monitor-bridge logs) or "
@@ -169,9 +165,8 @@ LOKI_STORE_HELP = (
     "there and nowhere else)"
 )
 
-# The one stream selector whose store is never in doubt. Matches `service_name="claude-code"`
-# and `=~"claude-code"` with any spacing; a regex wider than the literal name is left alone,
-# since loki-homelab carries a `service_name` label of its own (k8s workload names).
+# A regex wider than the literal name is left alone: loki-homelab has its own `service_name`
+# label.
 _CLAUDE_CODE_SELECTOR_RE = re.compile(r'service_name\s*=~?\s*"claude-code"')
 
 
@@ -393,9 +388,8 @@ def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
     argv[-1:-1] = ["-o", "-", "-w", "\n%{http_code}"]
     if config_body:
         argv[-1:-1] = ["--config", "-"]
-    # `--max-time` bounds curl's own transfer; the subprocess timeout is the backstop for a
-    # curl that never gets that far (a wedged DNS resolver, a stalled TLS handshake). Either
-    # way the caller reads a transport failure rather than hanging.
+    # `--max-time` bounds the transfer; the subprocess timeout backstops a curl that never starts
+    # (wedged DNS, stalled TLS).
     try:
         out = subprocess.run(
             argv,
@@ -410,8 +404,8 @@ def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
         return 0, out.stderr.strip()
     body, _, code = out.stdout.rpartition("\n")
     if code and not code.isdigit():
-        # `-w` always appends digits, so output without them is not curl's (a stub's or a
-        # wrapper's). Read it as a failed transfer rather than raise out of the caller.
+        # `-w` always appends digits, so output without them is not curl's; read it as a failed
+        # transfer.
         return 0, f"curl output ended in {code[:80]!r}, not an HTTP status"
     return int(code or 0), body
 
@@ -507,34 +501,16 @@ def sops_extract(key_name):
     return out.stdout.strip()
 
 
-# --- log-secret redaction -------------------------------------------------------------------
-#
-# Home Assistant writes the Google Cast system user's `refresh_token` in plaintext into its own
-# log whenever a cast fails in `_handle_signal_show_view`: the record formats the `cast_show_view`
-# signal args, which carry the token. That record reaches HA's `system_log` and `/api/error_log`,
-# so `probe.py ha get error_log` prints a live HA API credential into whatever reads its stdout.
-#
-# Redaction happens HERE rather than upstream because probe.py cannot fix HA's logger. The Alloy
-# stage in `k8s/roles/loki-homelab` keeps the token out of Loki; this keeps it out of THIS tool's
-# output, including for the records Loki already holds until its 744h retention expires.
-#
-# Only the token is replaced, never the surrounding record: `docs/platform.md` tells the operator
-# to query `|= "_handle_signal_show_view"` to catch a timed-out cast, and a redaction that ate the
-# marker would break the one detection query that still works.
-#
-# `{32,}` is a floor, not the token's length (64 hex), so a longer token still matches while
-# `'refresh_token': None` does not.
+# Redact only the token: `docs/platform.md` queries `|= "_handle_signal_show_view"`.
+# `{32,}` is a floor, not the token's length.
 _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 
-# Sonarr and Radarr log a failed Torznab call with its full URL, which carries Prowlarr's API key
-# as `apikey=<32 hex>`. The Alloy stage strips it from new records; `loki-query` prints
-# the older ones through here. It needs no separator before `apikey`, because `loki-query --json`
-# filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
+# Torznab failures log Prowlarr's `apikey=`; no separator is required because `--json` filters a raw
+# body where `&` may be `\u0026`.
 _APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)
 
-# Flux's Discord webhook token, a Home Assistant webhook id in Traefik's access lines, and
-# PeaNUT's session secret. The Alloy stages strip them from new records; these cover the older
-# ones `loki-query` prints. Each class stops at a JSON string's end, for the `--json` raw body.
+# Covers older records the Alloy stages did not strip; each class stops at a JSON string's end for
+# `--json`.
 _LOG_TOKEN_RES = (
     re.compile(r"(discord(?:app)?\.com/api/webhooks/[0-9]+/)[A-Za-z0-9_-]{20,}"),
     re.compile(r"(/api/webhook/)[0-9A-Za-z_-]{16,}"),
@@ -543,8 +519,6 @@ _LOG_TOKEN_RES = (
 
 REDACTED = "<redacted>"
 
-# Matched as lowercase substrings against a credential-bearing name: an *arr field or key name,
-# or a URL query parameter's name once `_` and `-` are stripped from it.
 SECRET_NAME_PARTS = (
     "apikey",
     "password",
@@ -557,16 +531,11 @@ SECRET_NAME_PARTS = (
     "auth",
 )
 
-# Query parameter names that carry a credential but contain none of SECRET_NAME_PARTS. Indexer
-# and tracker URLs use them (`key=`, `rsskey=`, `torrent_pass=`). Matched whole, not as
-# substrings, so `sortKey=date` in an *arr API URL still prints. `code` is an OAuth
-# authorization code.
+# Matched whole, not as substrings, so `sortKey=date` still prints; `code` is an OAuth authorization
+# code.
 _SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass", "code"})
 
-# Subsonic credentials: user, token, salt and password. They are redacted under `/rest/` only,
-# because a bare `p=` is pagination on other paths. The Alloy stages in `k8s/roles/loki-homelab`
-# redact the same names for new records; test_alloy_redacts_access_log_query_credentials.py
-# fails when the two sets differ.
+# Subsonic names redact under `/rest/` only: a bare `p=` is pagination on other paths.
 SUBSONIC_REST_PARAMS = ("u", "t", "s", "p")
 
 # A URL query parameter inside any text: `?apikey=…`, `&token=…`, or the JSON-escaped
@@ -574,16 +543,14 @@ SUBSONIC_REST_PARAMS = ("u", "t", "s", "p")
 # never runs past the end of its string.
 _QUERY_PARAM_RE = re.compile(r"([?&;]|u0026)([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
 
-# The same parameter inside a percent-encoded URL nested in another URL's value:
-# `link=https%3A%2F%2Fhost%2Fdl%3Fid%3D1%26apikey%3DKEY`. `%3F`/`%26`/`%3B` separate and `%3D`
-# assigns, in either hex case; the value stops at the next encoded separator or `%23`.
+# `%3F`/`%26`/`%3B` separate and `%3D` assigns, in either hex case; the value stops at the next
+# encoded separator or `%23`.
 _ENCODED_QUERY_PARAM_RE = re.compile(
     r"(%3F|%26|%3B)([^=&#?;%\s\"'\\]+)(%3D)((?:(?!%26|%3B|%23)[^&#;\s\"'\\])*)",
     re.IGNORECASE,
 )
 
-# A Subsonic parameter under a `/rest/` path. The path may not continue a longer one
-# (`/api/rest/…`), and the `u0026` alternative covers a JSON-escaped `&`.
+# The path may not continue a longer one (`/api/rest/…`); `u0026` covers a JSON-escaped `&`.
 _SUBSONIC_PARAM_RES = tuple(
     re.compile(rf"((?<![A-Za-z_.~%-])/rest/[^\"\s]*(?:[?&]|u0026){name}=)[^&\"\s\\]+")
     for name in SUBSONIC_REST_PARAMS

@@ -14,13 +14,10 @@ from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported
 
 DEFAULT_OUTPUT = Path.home() / ".claude" / "artifacts" / "homelab-infra-map.html"
 
-# Every inventory host, sorted. HOST_PLANE and HOST_ROLE below state what each
-# one is, and test_every_inventory_host_has_a_plane_and_a_role holds them to this list.
 HOSTS = host_names()
 
-# What each host actually is. Stated rather than inferred from the services it lists:
-# daniel-server lists none, so inference would fall through to "docker", ssh it for a
-# binary that is not there, and render a healthy k3s agent as an unreachable Docker box.
+# Stated, not inferred: daniel-server lists no services, so inference would fall to 'docker' and
+# render a healthy k3s agent as unreachable.
 HOST_PLANE = {
     "daniel-box": "k8s",
     "daniel-server": "k8s",
@@ -34,9 +31,7 @@ HOST_ROLE = {
     "daniel-pi": "Docker · LAN-only",
 }
 
-# How long the rendered page waits before reloading itself, in seconds. Matches
-# the refresh cron's 15-minute period (initial_setup's `infra-map` task) — a
-# shorter reload would imply the data is fresher than it is.
+# Matches the 15-minute refresh period: a shorter reload would imply fresher data.
 PAGE_REFRESH_SECONDS = 900
 
 # Live-collection timeouts. Short on purpose: an unattended run must not hang.
@@ -49,10 +44,8 @@ _CONTAINER_NAME = re.compile(
 
 _MANIFEST_KIND = re.compile(r"^kind:\s*([A-Za-z]+)\s*$", re.MULTILINE)
 
-# `observability` is one declared entry that expands to the whole observability
-# namespace (collector + loki + prometheus + tempo + grafana). Nothing else in
-# the inventory owns a namespace, so an explicit entry beats deriving it by
-# rendering the role's Jinja namespace manifest.
+# One declared entry expands to the whole observability namespace; nothing else in the inventory
+# owns a namespace.
 NAMESPACE_OWNERS = {"observability": "k8s_observability_namespace"}
 
 _JINJA_VAR = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")

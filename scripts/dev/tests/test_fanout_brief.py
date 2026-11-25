@@ -41,8 +41,8 @@ def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
     assert "land.sh" in box and "--detach" in box and "&& cc-wait land <n>" in box
     assert "--await-verdict" not in box
     assert "--log-dir" in box and ".fanout" in box and "$CLAUDE_JOB_DIR" not in box
-    # `cc-wait land` finds the landing's log only in the directory land.sh wrote it to, so both
-    # halves must name the same --log-dir; without it every read fails and the wait exits 2.
+    # `cc-wait land` finds the log only in the directory land.sh wrote it, so both halves need the
+    # same --log-dir.
     dirs = re.search(
         r'--log-dir "([^"]+)" && cc-wait land <n> --log-dir "([^"]+)"', box
     )

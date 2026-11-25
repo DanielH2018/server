@@ -19,11 +19,6 @@ from diagnostics.probe_lib import subcommands
 from diagnostics.probe_lib.cli_parser import _build_parser
 from lib.cli_registry import Registry, package_entry_points
 
-# The probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
-# helpers, not a subcommand backend). Every one of probe.py's subcommands maps to one of
-# these (several subcommands share a module, e.g. "targets"/"pi" both back onto
-# pi_plane.py) or to none (the streaming,
-# plan()-driven subcommands like `loki-labels`/`cert`).
 EXPECTED_MODULES = frozenset(
     {
         "alerts",
@@ -121,9 +116,6 @@ def test_only_routed_subcommands_with_a_callable_lack_the_handler_flag():
     assert unflagged == subcommands.ROUTED_IN_MAIN
 
 
-# The invocations of each `ROUTED_IN_MAIN` subcommand that must stream through `plan()` rather
-# than reach the registry callable. `health` is absent: `main()` answers every `health`
-# invocation before the `handlers` lookup, so its flag cannot change where it goes.
 _STREAMING_INVOCATIONS = [
     ["--dry-run", "metric", "up", "--json"],
     ["--dry-run", "metric", "up"],
@@ -136,10 +128,6 @@ _STREAMING_INVOCATIONS = [
 def test_a_routed_subcommand_streams_when_its_callable_does_not_apply(
     argv, monkeypatch, capsys
 ):
-    # Every registry callable raises, so a dispatch that reaches one fails here rather than
-    # printing a plausible answer. Dropping a name from ROUTED_IN_MAIN flags it "handler",
-    # which sends these invocations to the callable. The stubs cover every entry, not just
-    # ROUTED_IN_MAIN, so editing that set cannot also shrink what this test guards.
     for entry in subcommands.REGISTRY:
         if entry.func is None:
             continue

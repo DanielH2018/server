@@ -24,14 +24,10 @@ from lib.git_testing import git_out, init_repo
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import tools
 
-# THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here, as
-# a RENAME does for its old tag. A deleted role is indistinguishable from the reader dropping
-# an entry, so an explicit list is the only honest signal. An entry lasts one PR: once the
-# retiring commit is HEAD, the tag is gone from both sides and the line can go.
-#
-# Empty is the resting state, and it stays hand-written. Deriving it as `at_head - in_tree`
-# would make the census assert `lost <= lost`, which no dropped entry can fail. A test that
-# every entry is still declared at HEAD would fail the retiring PR on its own push.
+# A retired role is DELETED and the same PR names its tag here, as a RENAME does for its old tag; an
+# entry lasts one PR.
+# Keep it hand-written: deriving it as `at_head - in_tree` would make the census assert `lost <=
+# lost`.
 RETIRED_TAGS: frozenset[str] = frozenset()
 
 

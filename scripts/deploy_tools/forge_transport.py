@@ -135,8 +135,7 @@ def _error_codes(response: Response) -> set[str]:
 
 # Discord refuses a message longer than this many characters.
 DISCORD_MAX = 2000
-# The longest `retry_after` a 429 may ask for and still get its one retry. Discord limits a
-# webhook to about five requests in two seconds, so a post of several messages can meet one.
+# Longest `retry_after` a 429 may ask for and still get one retry.
 DISCORD_RETRY_MAX_S = 10.0
 
 # Sends one POST: the URL, the body and the headers. `urllib_post`, or the tests' fake.

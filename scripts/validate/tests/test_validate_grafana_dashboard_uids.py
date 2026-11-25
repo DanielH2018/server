@@ -59,11 +59,8 @@ def test_every_duplicated_uid_is_reported_not_just_the_first():
     assert len(errors) == 2
 
 
-# Hand-assigned, stable uids the dashboards tree must still contain. Named members rather than
-# a count: `validate` and `dashboard_uids` both find their subject by glob, so a renamed or
-# moved dashboards directory makes every real-tree assertion below pass over zero boards, and a
-# count only says that a number moved. Add to this set when a board's uid becomes load-bearing
-# elsewhere; do not shrink it to make a failure go away.
+# Named members rather than a count: a renamed dashboards directory makes every real-tree assertion
+# pass over zero boards. Do not shrink the set to make a failure go away.
 REQUIRED_DASHBOARD_UIDS = frozenset(
     {
         "claude-code-otel",

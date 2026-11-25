@@ -14,8 +14,7 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-# The statuses `decide` recorded on `prod`'s commit, at the handoff's root beside `prod/` and
-# `target/`, so `read_handoff` never reads it as a bundle file.
+# Beside `prod/` and `target/`, so `read_handoff` never reads it as a bundle file.
 RECORDED_FILE = "prod-statuses.json"
 # The files `verify` reads from each bundle. Nothing else is handed on.
 _HANDOFF_FILE = re.compile(r"digests\.json|flux/[a-z0-9][a-z0-9.-]*\.yaml")

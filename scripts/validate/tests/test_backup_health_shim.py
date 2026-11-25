@@ -158,10 +158,9 @@ def _run_rendered_shim(
     curl_calls.touch()
 
     script = rendered
-    # The shared check library is stubbed: the real file is absent on a CI runner, and its
-    # textfile cases are in hosts/tests/test_k3s_cron_textfiles.py. The stub records the
-    # success flag (the second argument) as the run's verdict. boot_grace_active is a shell
-    # FUNCTION bash resolves at call time, so the stub shadows the real one.
+    # The shared check library is stubbed: the real file is absent on a CI runner. The stub records
+    # the success flag as the verdict; boot_grace_active is a shell FUNCTION, so the stub shadows
+    # it.
     check_lib = tmp_path / "homelab-check-lib.sh"
     check_lib.write_text(
         "boot_grace_active() { return 1; }\n"
@@ -187,8 +186,8 @@ def _run_rendered_shim(
 
 
 def _assert_pings_carry_only_the_fixture_key(curl_calls: list[str]) -> None:
-    # Deliberately no URL in the failure message: a missed credential replacement means
-    # these lines hold the REAL healthchecks key.
+    # Deliberately no URL in the failure message: a missed credential replacement means these lines
+    # hold the REAL healthchecks key.
     assert len(curl_calls) == 1, f"expected the one hc-ping call, got {len(curl_calls)}"
     assert all(FAKE_HC_PING_KEY in call for call in curl_calls), (
         "a healthchecks ping did not carry the fixture key: the credential replacement "

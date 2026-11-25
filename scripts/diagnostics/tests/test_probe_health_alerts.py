@@ -209,8 +209,6 @@ def test_a_flux_tag_alert_after_its_kustomization_revision_is_flagged():
     ("labels", "on"),
     [
         ({"revision": "master@sha1:aaaa", "content_digest": "x"}, "on(content_digest)"),
-        # A Kustomization stamped without the label, or a kube-state-metrics that does not export
-        # the label: matching on it would match every sample in the lookback.
         ({"revision": "master@sha1:aaaa"}, "on(revision)"),
     ],
 )
@@ -355,9 +353,6 @@ def test_a_quiet_alert_plane_on_a_no_workload_role_exits_the_skip_code(capsys):
 
 # --- The Deployment path, and a failed read ----------------------------------------------
 
-# peanut is `owner: flux` and has a route, so run_health reads no release record from this
-# host and the flux reference comes from the fake. The fixture role replaces its templates
-# with one vendored Deployment, as test_probe_health_vendored.py does.
 _FLUX_TAG = "peanut"
 _READY = APPLIED + 120
 

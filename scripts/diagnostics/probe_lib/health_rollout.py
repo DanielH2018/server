@@ -12,12 +12,8 @@ Read that paragraph before rewording anything below.
 
 from datetime import datetime, timezone
 
-# A container that crashlooped this recently is not healthy, however ready it reads right now.
-# Ansible's post-rollout gate soaks for 60s (k8s_rollout_stabilise_seconds) watching the restart
-# COUNT, because a pod that crashes and recovers within a second passes every readiness-derived
-# field. probe.py takes ONE sample instead of
-# soaking, so it reads the same signal from the other end: how long ago the last restart was.
-# Wider than the Ansible window, since a single sample can land anywhere in a crash cycle.
+# The probe takes one sample, so it reads how long ago the last restart was; wider than the 60s
+# Ansible soak since a sample can land anywhere in a crash cycle.
 RECENT_RESTART_SECONDS = 180
 
 
@@ -101,16 +97,11 @@ def format_k8s_health(deploy, pods, service, now):
 
     meta, status = deploy.get("metadata") or {}, deploy.get("status") or {}
     desired, updated, ready, available = _rollout_counts(deploy)
-    # A spec edit bumps metadata.generation immediately; status.observedGeneration only catches
-    # up once the controller has acted. Comparing them is what distinguishes "rolled out" from
-    # "the controller has not looked at my change yet" — the old ReplicaSet satisfies every
-    # replica count in the meantime.
+    # A spec edit bumps generation at once; observedGeneration lags until the controller acts, and
+    # the old ReplicaSet satisfies every count meanwhile.
     stale = status.get("observedGeneration", 0) < meta.get("generation", 0)
-    # Under RollingUpdate with maxSurge >= 1, a surviving old pod can supply every ready and
-    # available replica while the new pod supplies `updated`, so the three counts all equal
-    # `desired` mid-rollout. Only `status.replicas` counts old and new pods together;
-    # `kubectl rollout status` refuses on the same comparison. Kubernetes omits a zero count, so
-    # an absent field reads as 0. A DaemonSet's counts are per node and carry no such field.
+    # Under maxSurge >= 1 an old pod can make ready, available and updated all equal desired;
+    # only `status.replicas` counts old and new together. An absent count reads 0.
     old_pods = 0
     if deploy.get("kind") != "DaemonSet":
         old_pods = max(status.get("replicas", 0) - updated, 0)
@@ -135,10 +126,8 @@ def format_k8s_health(deploy, pods, service, now):
             )
             age = seconds_since(finished, now)
             where = f"{pod_name}/{cs.get('name', '?')}"
-            # A restart whose time cannot be read counts as RECENT. Treating "unknown" as "long
-            # ago" would fail open — the one direction a gate must never fail — and this branch
-            # is reachable whenever kubectl's timestamp format shifts under us (every finishedAt
-            # in this cluster is second-precision UTC today; fractional seconds parse as None).
+            # An unreadable restart time counts as RECENT: reading unknown as long ago would fail
+            # open.
             if age is None:
                 recent.append(f"{where} restarted at an unreadable time ({finished!r})")
             elif age < RECENT_RESTART_SECONDS:

@@ -27,8 +27,6 @@ PROBE = "scripts/diagnostics/probe.py"
 VERDICT_LINE = re.compile(r"^PROBE-VERDICT: (\S+) \((.+)\)$")
 PI_SERVICE = "wg-easy"
 
-# The verdict subcommands the issue names, plus every one whose help already states an exit
-# code. `ha` reaches its verdict through the `verify-automations` subcommand.
 VERDICT_SUBCOMMANDS = (
     ("monitors",),
     ("targets",),

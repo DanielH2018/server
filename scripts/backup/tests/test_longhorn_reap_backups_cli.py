@@ -40,8 +40,6 @@ def test_backups_dry_run_emits_no_delete_call(tmp_path):
 
 
 def test_backups_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
-    # Each candidate/orphaned row prints "NAME VOL CREATED JOB"; dropping the last two columns
-    # would silently hide what an operator reads to decide whether a stray is safe to delete.
     fixtures = {
         "volumes": [_volume("vol-a", "daily-backup")],
         "backups": [
@@ -60,9 +58,8 @@ def test_backups_dry_run_prints_all_four_columns_for_a_reapable_row(tmp_path):
 
 
 def test_backups_dry_run_refuses_when_readonly_kubeconfig_is_unset(tmp_path):
-    # An unset LONGHORN_REAP_READONLY_KUBECONFIG must not silently fall through to whatever
-    # KUBECONFIG the caller's shell already has -- run as root (the shim's --apply path), that
-    # would be the admin kubeconfig, letting a plain dry run read through write credentials.
+    # An unset readonly kubeconfig must not fall through to the caller's KUBECONFIG, which as root
+    # is the admin one.
     proc, calls = _run(
         BACKUPS_ENTRY, [], {"volumes": []}, tmp_path, readonly_kubeconfig_set=False
     )
@@ -72,9 +69,6 @@ def test_backups_dry_run_refuses_when_readonly_kubeconfig_is_unset(tmp_path):
 
 
 def test_backups_apply_without_admin_kubeconfig_refuses_and_deletes_nothing(tmp_path):
-    # The entry point checks the real /etc/rancher/k3s/k3s.yaml, unreadable in this sandbox —
-    # so --apply must refuse before making any kubectl call at all, the same floor
-    # resolve_kubeconfig's unit test proves in isolation.
     fixtures = {"volumes": [], "backups": []}
     proc, calls = _run(BACKUPS_ENTRY, ["--apply"], fixtures, tmp_path)
     assert proc.returncode == 1
@@ -97,8 +91,6 @@ def test_backups_abort_on_unresolvable_ownership_makes_no_delete_call(tmp_path):
     assert proc.returncode == 1
     assert "ABORT" in proc.stderr
     assert not any("delete" in c for c in calls)
-    # abort before reading backups
-    # Exact match, not `in`: see tests/repo/test_census_rows_python.py (row `no-host-shaped-membership-literal`)
     assert not any(tok == "backups.longhorn.io" for c in calls for tok in c)
 
 
@@ -132,9 +124,8 @@ def test_backups_apply_emits_exactly_the_delete_argv_the_classifier_chose(tmp_pa
 
 
 def test_backups_apply_stops_at_the_first_failed_delete(tmp_path):
-    # Bash's loop `exit 1`-ed the whole script on the first failed delete; a Python version
-    # that printed "stopping" but kept going into the rest of the bucket (or the next one)
-    # would delete under a kubeconfig or cluster state that had just proven unreliable.
+    # A failed delete must stop the whole run, not continue into the rest of the bucket or the next
+    # one.
     fixtures = {
         "volumes": [_volume("vol-a", "weekly-backup-d3")],
         "backups": [
@@ -162,13 +153,9 @@ def test_backups_apply_stops_at_the_first_failed_delete(tmp_path):
 
 
 def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path):
-    # A backup whose volume no longer exists must be reaped only under
-    # --apply-deleted-volumes, never under a bare --apply.
     fixtures = {
-        # A live volume alongside the deleted one. An empty volume list is the separate case
-        # classify_backups refuses outright: it means the volume read returned nothing,
-        # not that every volume was deleted, and orphaning the whole backup set on it deletes
-        # the entire B2 set under this very flag.
+        # An empty volume list means the volume read returned nothing, not that every volume was
+        # deleted.
         "volumes": [_volume("live-vol", "daily-backup")],
         "backups": [
             _backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")
@@ -204,11 +191,8 @@ def test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket(tmp_path
 
 
 def test_backups_apply_deleted_volumes_refuses_on_an_empty_volume_list(tmp_path):
-    # The rejecting half of the test above. A volume read that succeeds with zero items
-    # -- wrong namespace, a context with no Longhorn, an RBAC that lists nothing rather than
-    # erroring -- makes EVERY labelled backup fail `vol in existing_volumes` and land in the
-    # orphaned bucket, so this flag would delete the whole B2 set. classify_backups raises
-    # ReapAbort; main() must turn that into the ABORT line and exit 1, not a traceback.
+    # A volume read with zero items would orphan every labelled backup; main() must print ABORT and
+    # exit 1, not a traceback.
     fixtures = {
         "volumes": [],
         "backups": [
@@ -230,9 +214,7 @@ def test_backups_apply_deleted_volumes_refuses_on_an_empty_volume_list(tmp_path)
 
 
 def test_backups_apply_deleted_volumes_never_runs_after_a_failed_apply(tmp_path):
-    # Both flags given at once: if the stray bucket fails, the orphaned bucket must never be
-    # touched. Bash's single `exit 1` on the first failed delete made this true by construction;
-    # a Python `rc = _delete_bucket(...) or rc` for EACH bucket independently would not.
+    # If the stray bucket fails, the orphaned bucket must never be touched.
     fixtures = {
         "volumes": [_volume("vol-a", "daily-backup")],
         "backups": [
@@ -297,9 +279,6 @@ def test_backups_apply_deletes_when_the_candidate_count_equals_the_cap(tmp_path)
 
 
 def test_backups_apply_refuses_when_the_candidate_count_exceeds_the_cap(tmp_path):
-    # The rejecting half. Each deletion measured ~520 Class C against a 2,500/day free tier, so
-    # an unbounded --apply exhausts the cap mid-run and the 403s that follow read as missing
-    # backups. Refusing BEFORE the first delete is what keeps the run from ending part-done.
     proc, calls = _run(
         BACKUPS_ENTRY,
         ["--apply", "--max-deletions=2"],
@@ -313,8 +292,6 @@ def test_backups_apply_refuses_when_the_candidate_count_exceeds_the_cap(tmp_path
 
 
 def test_backups_cap_counts_both_buckets_together(tmp_path):
-    # 3 strays + 1 orphan is 4 deletions, over a cap of 3 that --apply alone would satisfy.
-    # The Class C cost is per deletion, so which bucket a deletion came from does not matter.
     proc, calls = _run(
         BACKUPS_ENTRY,
         ["--apply", "--apply-deleted-volumes", "--max-deletions", "3"],

@@ -20,9 +20,6 @@ import functools
 import json
 import sys
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 # DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
 from lib.exit_codes import FINDINGS_BAD_ARGS
@@ -76,10 +73,6 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
 
     Returns 0 when every issue was taken, 3 when any was refused.
     """
-    # Hoisted out of the loop: `args.worktree` does not vary across the batch, so the guard
-    # below needs the read once, and the reap path further down reuses the same tuple. A
-    # lazy read would skip several git calls per registered worktree on a batch where
-    # nothing was blocked, but the guard needs them on every batch anyway.
     facts = tools.worktree_facts()
     trees, dirty, merged, ok = facts
     if ok:
@@ -105,9 +98,8 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     milestone = tools.attach_milestone(
         args.worktree, tools.owner_name, dry_run=args.dry_run
     )
-    # One running-batch read for the whole batch, taken on the first stale claim. Asked per
-    # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
-    # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
+    # One batch read on the first stale claim: one ssh per issue trips `ufw limit ssh` on the sixth
+    # in 30s.
     batch_holds = functools.cache(lambda: tools.batch_holds(args.numbers))
     peer_trees = functools.cache(tools.peer_trees)
     refused = False
@@ -118,9 +110,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
         ).get(number)
         # A stale claim on a reserved issue stands: reaping it would free nothing here.
         if another_claim_blocks(issue, args.worktree) and not reserved_by:
-            # Same fail-safe direction `cmd_reap` takes: a transient git error must not read
-            # as "every worktree is gone". The claim blocks, as it did before this path
-            # existed, and `plan_claim` refuses it below. The warning was said once, above.
+            # Fail-safe like `cmd_reap`: a transient git error must not read as every worktree gone.
             stale = (
                 stale_holder(
                     issue,
@@ -148,8 +138,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 )
                 print(f"#{number} reaped stale claim by `{holder}` — {why}")
                 if args.dry_run:
-                    # The release was printed, not posted, so a re-read still shows the old
-                    # claim and `plan_claim` would refuse something that will really succeed.
+                    # The release was only printed, so a re-read still shows the old claim.
                     print(f"#{number} would be claimed by `{args.worktree}`")
                     continue
                 # Re-read so `plan_claim` sees the release comment just posted.
@@ -173,8 +162,6 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             print(f"#{number} already claimed by `{args.worktree}`")
             continue
         if already_mine:
-            # A reclaim planning something files the issue under the milestone a failed
-            # edit left it out of. No comment is posted, so there is no race to read back.
             run(plans, args.dry_run, tools)
             print(
                 f"#{number} already claimed by `{args.worktree}`; "
@@ -185,14 +172,11 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
         if args.dry_run:
             print(f"#{number} would be claimed by `{args.worktree}`")
             continue
-        # Read back. Two sessions can both post a claim comment; the FIRST one holds it,
-        # and without this the loser prints success and starts work on someone else's issue.
+        # Read back: two sessions can both post a claim, and the first one holds it.
         winner = _load_issue(number, tools).holder
         if winner is None:
-            # NOT a race. The comment was posted and the read-back found nothing holding the
-            # issue at all, so the READ is what failed — an unparseable trailer, or a
-            # comment past gh's 100-comment page cap. Reporting that as `lost the race to
-            # \`None\`` told the operator they lost to a rival that does not exist.
+            # Not a race: no holder in the read-back means the read failed (bad trailer, or past
+            # gh's 100-comment cap).
             print(
                 f"#{number} claim posted, but the read-back found no claim at all — the "
                 "trailer did not parse, or the comment is past gh's comment page cap"
@@ -212,8 +196,6 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     if bool(args.numbers) == args.all:
         sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
         return FINDINGS_BAD_ARGS
-    # `--all` is the bulk way out of `claims --worktree`: an orchestrator's claims
-    # sit under a branch that stays live, so `reap` never clears them.
     if args.all:
         pairs = [
             (i.number, i)
@@ -337,8 +319,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         verb = "would be released" if args.dry_run else "released"
         print(f"#{s.number} {verb} — {s.reason}")
         reaped += 1
-    # On stdout, not stderr: the weekly sweep's journal is where a lasting ssh failure has
-    # to show, and a reader of a reap that exits 0 looks at stdout.
+    # Stdout, not stderr: the weekly sweep's journal must show a lasting ssh failure.
     unread = [s.number for s in states if s.reason == PEER_UNREADABLE]
     if unread:
         print(

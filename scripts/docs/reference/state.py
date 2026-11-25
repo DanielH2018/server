@@ -245,8 +245,6 @@ def _timer_cadence(unit: str) -> float:
     raise ValueError(f"no host package ships {unit}")
 
 
-# name, reader, cadence (minutes) -- built once at call time so tests can import the
-# individual reader functions above without paying for a live git/yaml read at import time.
 def _loops(tools: Tools = DEFAULT_TOOLS) -> list[tuple[str, LoopRun, float | None]]:
     longhorn_default = _k3s_default_var(
         "k3s_longhorn_restore_drill_cron", DRILL_DEFAULTS

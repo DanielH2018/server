@@ -54,8 +54,6 @@ def _export(tmp_path, issues, capsys, cap=export_cli.ISSUE_LIST_CAP):
 
 
 def test_every_issue_on_a_window_boundary_is_exported_once(tmp_path, capsys):
-    # The oldest issue, the first and last day of a week-long window, and an issue filed
-    # late on export day, after midnight UTC by the local clock's reckoning.
     issues = [
         _issue(1, "2026-09-01T00:00:01Z"),
         _issue(2, "2026-09-06T23:59:59Z"),
@@ -79,7 +77,6 @@ def test_a_window_at_the_cap_is_split_until_each_half_comes_back_whole(
     assert [i["number"] for i in json.loads(out.read_text())["issues"]] == list(
         range(1, 8)
     )
-    # The first window, 2026-08-31..09-06, holds six issues, so it was read and split.
     assert "created:2026-08-31..2026-09-06" in searches
     assert "created:2026-08-31..2026-09-03" in searches
 

@@ -27,8 +27,6 @@ import tempfile
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 from pathlib import Path as _Path
 
 
@@ -42,8 +40,6 @@ from dev.findings_lib.gh_calls import (
 from dev.findings_lib.issue_model import PR_REPO, comment_cap_warning
 from lib.json_types import as_object_list
 
-# The first window's width. Measured 2026-10-09: 1410 issues over 39 days, the busiest
-# stretch 340 in 9 days, so a week is well under the cap. A busier week only costs a split.
 WINDOW_DAYS = 7
 
 

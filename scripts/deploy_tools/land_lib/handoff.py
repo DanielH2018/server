@@ -34,8 +34,7 @@ from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP
 
 # The unit's StateDirectory parent: `<unit>@.service` writes `/var/lib/<unit>/<pr>.verdict`.
 STATE_ROOT = _Path("/var/lib")
-# Every exit code land.sh documents, the set cc-wait's `land` source maps to a state. The unit
-# can record others (a signal, flock giving up on its lock), which are reported as 1.
+# The unit can record other codes (a signal, flock giving up), which are reported as 1.
 LAND_CODES = frozenset({0, 1, 64, 75})
 # Above the unit's TimeoutStartSec, so systemd ends a stuck landing before this stops waiting.
 START_TIMEOUT_S = 20 * 3600
@@ -149,8 +148,8 @@ def land_through_unit(
     print(
         f"== handing PR #{pr} to {instance}, which lands it as the operator", flush=True
     )
-    # One second early, because `--since` takes whole seconds and a phase line written in
-    # the start's own second must not be missed.
+    # One second early: `--since` takes whole seconds, and a phase line in the start's own second
+    # must not be missed.
     since = wall_clock() - 1
     try:
         with _relaying_phases(follow, instance, since):

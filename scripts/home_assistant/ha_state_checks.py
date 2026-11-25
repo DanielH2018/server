@@ -53,9 +53,8 @@ from home_assistant.ha_state_model import (
     render_state_md,
 )
 
-# Domains the resolution check is responsible for (entity references we author + control). Other
-# domains (notify, persistent_notification, tts, media_player, device_tracker, weather, zone, sun,
-# person, sensor) come from integrations and are only checked if present in `known`.
+# Domains the check is responsible for; others come from integrations and are checked only if
+# present in `known`.
 _MANAGED_DOMAINS = (
     "input_boolean",
     "input_number",
@@ -70,7 +69,7 @@ _MANAGED_DOMAINS = (
 )
 
 # An automation's entity id is its alias slug, not its `id:`, so its literals are also read out of
-# template bodies; other domains' template references stay out of scope.
+# template bodies.
 _TEMPLATE_AUTOMATION_REF = re.compile(
     r"\b(?:states|is_state|is_state_attr|state_attr)\(\s*['\"](automation\.[a-z0-9_]+)['\"]"
 )
@@ -169,10 +168,8 @@ def service_resolution_errors(config: dict, known_services: set[str]) -> list[st
     return errs
 
 
-# Valid `reason` vocabulary per actuator mediator. Declared here (NOT regex-derived from
-# light_decision's Jinja / bedroom_fan_set's choose:) — a drifted constant fails SAFE (a newly
-# added valid reason false-fails loudly until added here), never silently passes. Mirror any
-# change to lighting.jinja's light_decision / files/scripts/fan.yaml's bedroom_fan_set.
+# Declared, not regex-derived: a drifted constant fails SAFE (a newly valid reason false-fails
+# loudly). Mirror changes to lighting.jinja's light_decision and fan.yaml's bedroom_fan_set.
 MEDIATOR_REASONS = {
     "script.bedroom_lights_set": {
         "presence",

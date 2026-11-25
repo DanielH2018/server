@@ -21,8 +21,7 @@ from _renovate import _REPO, expected_deps, workflow_env_pins
 
 WORKFLOW = ".github/workflows/promote.yml"
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
-# census and passing. Each value counts the jobs whose fetch reads the file's one pin, inline
-# or through .github/actions/pinned-tool.
+# census.
 COSIGN_PINS = {
     WORKFLOW: 2,
     ".github/workflows/prune-artifacts.yml": 1,

@@ -67,8 +67,7 @@ from lib.repo_paths import REPO
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())
 _INI = _PYPROJECT["tool"]["pytest"]["ini_options"]
 PYTHONPATH_DIRS = [(REPO / p).resolve() for p in _INI["pythonpath"]]
-# `k8s/roles/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
-# literally, it named a directory that does not exist and kept every role test out of the census.
+# `k8s/roles/*/tests` is a glob, which pytest expands and `REPO / p` does not.
 TESTPATH_DIRS = [d.resolve() for p in _INI["testpaths"] for d in REPO.glob(p)]
 
 # The conftest that puts a role's own `files/` on sys.path for that role's tests.

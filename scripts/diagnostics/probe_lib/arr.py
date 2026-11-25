@@ -6,26 +6,16 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 import json
 
 
-# `core.<name>` for anything the tests monkeypatch — binding those into this module's
-# globals with a `from core import ...` would take a snapshot the patch never reaches.
+# Use `core.<name>` for anything tests monkeypatch: a `from core import` binds a snapshot the patch
+# never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import config_get, ha_curl_argv
 from diagnostics.probe_lib.health_docker import resolve_service_ip
 
 from lib.kubectl import DEFAULT_CLUSTER
 
-# Sonarr/Radarr speak /api/v3, Prowlarr and Lidarr /api/v1. The X-Api-Key comes from SOPS
-# and is fed to curl via stdin (arr_curl_config), never argv — same guard as ha.
-#
-# NB this deliberately does NOT go through k8s_endpoint (Traefik + Authelia), unlike
-# scrutiny/prometheus/loki. Sonarr has no Authelia access_control bypass rule for its /api/*
-# paths (scrutiny does — config-secret.yaml.j2), so a Traefik-routed GET 302s to the Authelia
-# login page instead of reaching sonarr. The apps' own configarr/janitorr configs
-# (config.yml.j2, application.yml.j2) hit `http://sonarr:8989` directly — the in-cluster
-# Service DNS name — for the same reason. arr_url() therefore keeps an ip:port shape, with
-# the IP resolved from the Service's ClusterIP (resolve_arr_ip: a Service's ClusterIP does
-# not change across pod restarts/redeploys).
-# lidarr mirrors ARR_PORTS / ARR_API_VERSIONS in k8s/roles/arr-notification/files/seed_arr_notification.py.
+# Not via k8s_endpoint: Sonarr has no Authelia bypass for /api/*, so a Traefik GET 302s to login.
+# Mirrors ARR_PORTS / ARR_API_VERSIONS in arr-notification's seed_arr_notification.py.
 ARR_PORTS = {"sonarr": 8989, "radarr": 7878, "prowlarr": 9696, "lidarr": 8686}
 ARR_API_VERSION = {"sonarr": "v3", "radarr": "v3", "prowlarr": "v1", "lidarr": "v1"}
 
@@ -71,20 +61,8 @@ def resolve_arr_ip(app, cluster=DEFAULT_CLUSTER):
     return resolve_service_ip(app, cluster)
 
 
-# --- credential redaction -------------------------------------------------------------
-#
-# `arr <app> notification|downloadclient|indexer|importlist` returns objects whose
-# `fields[]` carry live credentials — a Discord webhook URL, the qBittorrent password, an
-# indexer API key. The subcommand is read-only against the app, which says nothing about
-# what it does to the transcript it prints into: `arr sonarr notification` would put the
-# `arr_discord_webhook_url` value into an agent transcript, and an exposed value has to be
-# rotated.
-#
-# Two signals decide, because neither is sufficient alone. The *arr API labels a field's
-# `privacy` as `apiKey` / `password` / `userName`, but the Discord `webHookUrl` field is
-# labelled `normal` and so is invisible to `privacy`. The name list is the backstop: a
-# credential-bearing field is redacted as soon as it is NAMED like one, without waiting for
-# upstream to relabel it.
+# `fields[]` carry live credentials; redact on `privacy` and on the field name, since Discord's
+# `webHookUrl` is labelled `normal`.
 ARR_SENSITIVE_PRIVACY = frozenset({"apiKey", "password", "userName"})
 
 # Matched as lowercase substrings against a field's `name`, or against a plain dict key.
@@ -119,8 +97,7 @@ def redact_arr_payload(obj):
         return core.redact_query_params(obj)
     if not isinstance(obj, dict):
         return obj
-    # An *arr `fields[]` entry: {"name": "webHookUrl", "value": …, "privacy": "normal"}.
-    # Its own `name` is the label, so the key-name walk below would never see it.
+    # A `fields[]` entry's own `name` is the label, so the key-name walk below would never see it.
     if "name" in obj and "value" in obj:
         sensitive = obj.get("privacy") in ARR_SENSITIVE_PRIVACY or _name_is_sensitive(
             obj["name"]

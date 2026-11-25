@@ -38,8 +38,6 @@ class Recorder:
         return answer
 
     def tools(self) -> publish_pr.PublishTools:
-        # **kw absorbs the `timeout=` the ls-remote pre-flight passes; the stub never blocks,
-        # so the value is nothing to record.
         return publish_pr.PublishTools(
             git=lambda *a, **kw: self._run("git", *a),
             gh=lambda *a, **kw: self._run("gh", *a),

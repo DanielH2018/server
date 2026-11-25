@@ -23,8 +23,6 @@ GONE_WT = "worktree-issue-6841"
 
 
 def test_reap_holds_a_claim_whose_worktree_the_peer_host_registers(monkeypatch, capsys):
-    # Unset, both branches read as the running user's own, which is the operator-on-both-hosts
-    # case the issue describes rather than the other-clone case the staleness tests hold.
     monkeypatch.delenv("CLAUDE_WORKTREE_PREFIX", raising=False)
     assert PEER_FIELD in {f.name for f in dataclasses.fields(FindingsTools)}, (
         f"FindingsTools has no `{PEER_FIELD}` field, so `reap` judges a claim only against "

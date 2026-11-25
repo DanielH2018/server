@@ -50,9 +50,6 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-
 
 from dev.findings_lib.issue_model import Issue
 
@@ -65,8 +62,6 @@ REASONS = (
 )
 # Rulings the lander repeats until the batch's coordinator acts. Not gauge labels.
 COORDINATOR_REASONS = ("head-moved", "ci-gate", "review-incomplete")
-# Each pattern matches the text `autoland.problems` returns for that reason. The test that
-# pins this table feeds `problems` a record for every reason, so a rewording fails there.
 _PROBLEM_REASONS = (
     (
         re.compile(r"^it changes the lander's own surface|at the listing cap$"),

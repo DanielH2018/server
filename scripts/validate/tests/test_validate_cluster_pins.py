@@ -282,7 +282,6 @@ def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):
     )
 
 
-# ── k3s_version: a decrease needs the acknowledgement key (H6.3c) ───────────────────────────
 OLD_K3S, LOWER_K3S = "v1.37.1+k3s1", "v1.37.0+k3s1"
 
 

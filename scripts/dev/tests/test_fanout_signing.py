@@ -15,9 +15,6 @@ from dev.fanout_lib.signing import (
 )
 from lib.git_testing import scrubbed_env
 
-# daniel-server's real signing key. Used here as a syntactically real key the gate accepts
-# when the registered set holds it — nothing in the gate compares against a constant, so
-# rotating it breaks no test.
 SERVER_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINLm/Wigk9BPb5s+SAPzJFnOzOhyKEWcBf3WbeCqfndo"
 )

@@ -74,13 +74,10 @@ CI_REPO = "DanielH2018/server"
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
-# A push event GitHub never delivered leaves the SHA with no check suite from Actions, for
-# good: such a SHA reads `total_count: 0` long after its neighbours went green. A freshly pushed SHA also has none for its first seconds, so
-# the wait reads the absence as a dropped push only once it has waited this long.
+# A freshly pushed SHA has no check suite for its first seconds; read the absence as a dropped push
+# only after this long.
 DROPPED_PUSH_GRACE_S = 180
 
-# How many descendants one poll asks GitHub about, nearest first. Every one is a check-runs
-# request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
 # The most polls an anonymous wait makes, whatever its budget. Anonymous reads share
@@ -93,10 +90,8 @@ ANONYMOUS_MAX_POLLS = 15
 ANONYMOUS_INTERVAL_S = 90
 
 
-# The cause a pending line names for a head whose gate runs all skipped, or failed only because
-# their run was cancelled. Only a draft PR's run skips the `prek` gate (ci.yml's
-# `draft != true`), and a re-run replays that run's draft event, so it skips again.
-# `land_lib/merge.py` reads the phrase to act on it.
+# Only a draft PR's run skips the `prek` gate, and a re-run replays the draft event.
+# `land_lib/merge.py` reads this phrase.
 DRAFT_SKIPPED = (
     "every CI run on it skipped the gate because the PR was a draft, or was cancelled"
 )
@@ -237,10 +232,8 @@ def verdict_for(
 
 
 def _fetch_tip() -> str:
-    # This runs from the primary checkout (land.sh cd's there) and takes no git-tree lock,
-    # so it can run while the 10-min timer is mid-tick. Safe: a fetch appends objects and
-    # moves a remote-tracking ref under git's own per-ref lock. It touches neither HEAD nor
-    # the working tree, which is what the git-tree lock exists to guard.
+    # Runs from the primary checkout without the git-tree lock: a fetch touches neither HEAD nor the
+    # working tree.
     git_stdout("fetch", "-q", "origin", "master")
     return git_stdout("rev-parse", "origin/master")
 
@@ -579,17 +572,12 @@ def wait(
     dropped = False
     while True:
         try:
-            # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
-            # dropped-push check both want it while no required run exists, and reading it twice
-            # made each such poll cost 3 requests rather than 2.
+            # One check-suites read per SHA per poll.
             suites_this_poll = _read_once(fetch_suites)
             try:
                 runs = fetch(target)
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
                 runs = []
-            # `runs` is bound as a default rather than closed over: verdict_for calls this
-            # synchronously within the iteration, so late binding is harmless today, but a
-            # future caller that deferred the call would silently read the next poll's runs.
             verdict = verdict_for(
                 target, lambda _s, _runs=runs: _runs, None, suites_this_poll
             )
@@ -654,11 +642,7 @@ def wait(
                             f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
                             f"{nearest[:8]} is its nearest descendant with a verdict)"
                         )
-                    # A later commit may still go green and stand in for the merge commit,
-                    # which is the usual shape at merge time: the fix's CI is running.
                     if now >= deadline and _is_run_less(unsettled, fetch, fetch_suites):
-                        # Only the tip is left, and GitHub never ran CI for it either: no re-run
-                        # converges until something runs CI on it.
                         return CI_UNPROVEN, (
                             f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
                             f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "

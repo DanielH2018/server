@@ -116,24 +116,15 @@ def local_repo_roots(source: str, module: Path, repo: Path = REPO) -> list[str]:
     return found
 
 
-# How a test gets at a shell template's text. `read_bytes` and `open` count: the rule is about
-# reading the file, not about the decoding. `glob("*.sh.j2")` is the roster spelling of the same
-# thing — a module that enumerates the templates itself is one that will read them next.
+# `glob("*.sh.j2")` is the roster spelling of reading: a module enumerating the templates will read
+# them next.
 _READ_METHODS = frozenset({"read_text", "read_bytes", "open"})
 _GLOB_METHODS = frozenset({"glob", "rglob"})
 
-# Functions that hand back template PATHS off the real tree, by their terminal name. A read
-# through one is a source read even though no `*.sh.j2` literal appears anywhere in the module.
-# The terminal name is what matches, so `sv.discover_templates`, a bare
-# `discover_templates` and any alias of either are the same hit.
-#
-# `discover_templates` is three functions (`validate.render_lib.shell`, `.setup_plane`,
-# `.units`), each over a different file set. Matching the bare name over-matches the
-# setup and unit planes deliberately: a test that reads through those gets an exemption with its
-# reason, which is cheaper than teaching the matcher which module an alias came from.
-#
-# `validate.jinja_bash_collisions.templates` is deliberately NOT here: the collision it looks
-# for (`${#x}` meeting Jinja) is a property of the source that a render cannot answer.
+# Matches the terminal name, so `discover_templates` (three functions) over-matches deliberately;
+# a test reading through them gets an exemption with its reason.
+# `validate.jinja_bash_collisions.templates` is NOT here: `${#x}` meeting Jinja is a property of the
+# source that a render cannot answer.
 _TEMPLATE_RESOLVERS = frozenset({"discover_templates"})
 _KEY_METHODS = frozenset({"items", "keys"})
 

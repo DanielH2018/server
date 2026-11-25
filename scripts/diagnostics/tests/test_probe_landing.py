@@ -254,8 +254,8 @@ def test_a_claim_no_worktree_works_is_listed_with_its_reason():
 
 
 def test_deploy_ui_url_is_the_host_vars_server_ip_not_the_hostname(tmp_path):
-    # deploy-ui binds `server_ip` only, so a hostname that resolves to loopback on the
-    # daniel-box itself (Debian's 127.0.1.1 line) is refused there.
+    # deploy-ui binds `server_ip` only, so a hostname resolving to loopback (Debian's 127.0.1.1) is
+    # refused.
     host_vars = tmp_path / "box.yml"
     host_vars.write_text("server_ip: 192.0.2.7\nhas_gitops: true\n")
     assert landing.deploy_ui_url(host_vars) == "http://192.0.2.7:8790"

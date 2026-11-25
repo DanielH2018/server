@@ -60,9 +60,6 @@ def test_an_unknown_subcommand_exits_64_and_names_both_reapers(tmp_path):
 
 
 def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
-    # Root's `python3` is the distro interpreter, not the pinned one this run uses, so the
-    # re-run hint names the interpreter and the script by absolute path rather than leaving
-    # sudo to resolve either.
     proc, calls = _run(BACKUPS_ENTRY, ["--apply"], {"volumes": []}, tmp_path)
     assert proc.returncode != 0
     assert (
@@ -76,9 +73,7 @@ def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
 
 
 def test_backups_aborts_cleanly_when_the_volume_list_body_is_null(tmp_path):
-    # A well-formed but non-object body (`kubectl` emitting a bare `null`) must not reach
-    # `.get("items", [])` and raise AttributeError -- a traceback where every other unreadable
-    # read here prints ABORT. See longhorn_reap_lib/logic.py:parse_kubectl_json_items.
+    # A bare `null` body must print ABORT, not raise AttributeError.
     proc, calls = _run(
         BACKUPS_ENTRY, [], {"volumes": []}, tmp_path, null_kinds=["volumes"]
     )
@@ -129,8 +124,6 @@ def test_snapshots_aborts_cleanly_when_the_snapshot_list_body_is_null(tmp_path):
 
 
 def test_snapshots_purge_warns_cleanly_when_the_pod_list_body_is_null(tmp_path):
-    # The pods read is inside _purge, WARNING-prefixed rather than ABORT-prefixed -- a
-    # different call site than the other three, so it gets its own case.
     fixtures = {
         "recurringjobs": [
             {"metadata": {"name": "daily-backup"}, "spec": {"groups": ["daily-backup"]}}
@@ -162,9 +155,7 @@ def test_snapshots_purge_warns_cleanly_when_the_pod_list_body_is_null(tmp_path):
 
 
 def test_snapshots_aborts_cleanly_on_a_non_integral_min_age_days(tmp_path):
-    # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml, but a host_vars
-    # override or a typo could set a non-integral value; `int(os.environ.get(...))` at module
-    # scope must not raise before main() can print a named ABORT.
+    # A non-integral env value must not raise at module scope before main() prints a named ABORT.
     proc, calls = _run(
         SNAPSHOTS_ENTRY,
         [],

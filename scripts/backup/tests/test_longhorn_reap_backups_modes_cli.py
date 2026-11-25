@@ -111,8 +111,6 @@ def test_migrated_chain_apply_deletes_exactly_the_stranded_chain(tmp_path):
 
 
 def test_migrated_chain_floor_refuses_in_a_dry_run_too(tmp_path):
-    # The floor has to hold in a dry run, or the dry run reads as "this is safe to apply" for a
-    # claim whose replacement has no recovery point of its own yet.
     proc, calls = _run(
         BACKUPS_ENTRY,
         ["--mode", "migrated-chain", "--claim", "sonarr-config"],
@@ -184,9 +182,6 @@ def test_seeds_claim_narrows_the_apply_to_one_pvc(tmp_path):
 
 
 def test_seeds_apply_refuses_over_the_deletion_cap(tmp_path):
-    # The cap is one number for all three modes, calibrated on the strays mode's ~520 Class C
-    # per deletion. A seeds sweep over it refuses before the first delete, the same as a strays
-    # sweep does, and the operator re-decides against `probe.py b2-budget`.
     proc, calls = _run(
         BACKUPS_ENTRY,
         ["--mode", "seeds", "--apply", "--max-deletions", "1"],

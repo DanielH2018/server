@@ -42,8 +42,8 @@ def _env_without_pythonpath() -> dict:
 
 @pytest.mark.parametrize("func", ["classify", "due_date"])
 def test_each_library_imports_when_run_directly_from_another_directory(func, tmp_path):
-    # A directly-run file gets only its own directory on sys.path, so a library one level
-    # deeper than before needs its own bootstrap to reach `secrets_mgmt` and `lib`.
+    # A directly-run file gets only its own directory on sys.path, so a library one level deeper
+    # needs its own bootstrap.
     path = _lib_file_defining(func)
     assert path is not None, f"no secrets_lib module defines {func}()"
     proc = subprocess.run(

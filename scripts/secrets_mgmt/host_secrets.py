@@ -224,8 +224,8 @@ def sync(root: Path, host: str, run=subprocess.run) -> int:
         text = yaml.safe_dump({k: values[k] for k in named}, default_flow_style=False)
         ciphertext = encrypt(tree, text, target, run)
     except (SopsFailed, ValueError) as exc:
-        # SopsFailed names the file, never what sops printed. A ValueError from the JSON
-        # parse could quote the decrypted text, so only its type is printed.
+        # SopsFailed names the file, never what sops printed; a ValueError could quote the decrypted
+        # text, so only its type is printed.
         print(
             f"sync: {exc if isinstance(exc, SopsFailed) else type(exc).__name__}",
             file=sys.stderr,

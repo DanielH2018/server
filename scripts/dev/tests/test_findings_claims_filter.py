@@ -31,8 +31,6 @@ def test_claims_worktree_keeps_its_own_rows_and_counts_the_rest(capsys):
 
 
 def test_claims_worktree_includes_the_batch_branches_its_runs_launched(capsys):
-    # A dotfiles batch is claimed under its own branch, not the orchestrator's, so only the
-    # manifest ties it back. The read is keyed by the aimed register.
     issues = [_held(7, "worktree-fanout-7"), _held(8, "worktree-fanout-8")]
     tools, calls = build_tools(
         Fakes(

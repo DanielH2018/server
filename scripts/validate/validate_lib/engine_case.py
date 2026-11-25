@@ -244,8 +244,8 @@ def _body(cases, c: Container) -> str:
     companions = companion_debs(build_root / "companions")
     for deb in (held_deb, offered_deb, *companions):
         shutil.copy(deb, cases.work / "debs" / deb.name)
-    # The other pinned packages sit at their pins, so pending reads 1 only while docker-ce
-    # is off its pin.
+    # The other pinned packages sit at their pins, so pending reads 1 only while docker-ce is off
+    # its pin.
     local = " ".join(f"/srv/debs/{deb.name}" for deb in (held_deb, *companions))
     c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {local}")
     names = " ".join(deb.name.split("_", 1)[0] for deb in companions)
@@ -260,8 +260,8 @@ def _body(cases, c: Container) -> str:
     c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
     # Joins the reconcile the postinst queued, so the updater's own cannot merge into it.
     c.ok("systemctl start homelab-reconcile.service")
-    # A newer Pi build makes the updater run apt-get install with B on offer; the common
-    # path would install nothing and never put the hold in front of apt.
+    # A newer Pi build makes the updater run apt-get install with B on offer; the common path would
+    # install nothing and never put the hold in front of apt.
     served = [cases.debs[label] for label in (*labels, "pi-dropin")]
     publish(cases.work / "repo", [*served, offered_deb])
     c.sh(f"systemctl start {UPDATER_UNIT}")
@@ -277,8 +277,8 @@ def _body(cases, c: Container) -> str:
     red_deb = cases.work / "debs" / f"engine-red-{red.name}"
     shutil.copy(red, red_deb)
     publish(cases.work / "repo", [*served, offered_deb, red_deb])
-    # The homelab source alone, so a failed mirror fetch fails the case rather than reading
-    # as a refusal.
+    # The homelab source alone, so a failed mirror fetch fails the case rather than reading as a
+    # refusal.
     c.ok(f"apt-get update {HOMELAB_APT}")
     offered = deb_version(offered_deb)
     install = (
@@ -286,8 +286,8 @@ def _body(cases, c: Container) -> str:
         f" homelab-{HOST}"
     )
 
-    # With the hold: the plan leaves docker-ce at A, and the install is refused in terms that
-    # name the engine, so the hold is what stopped it and not some other Depends.
+    # With the hold: the plan leaves docker-ce at A, and the refusal names the engine, so the hold
+    # stopped it and not some other Depends.
     expect_on_hold(c)
     plan = c.sh(f"apt-get install -s --no-install-recommends homelab-{HOST}")
     planned = planned_version(plan.stdout, ENGINE)
@@ -306,9 +306,8 @@ def _body(cases, c: Container) -> str:
     )
     expect_on_hold(c)
 
-    # Without the hold, the same install moves the engine onto the pin. This is the red half:
-    # it fails the case if B is not the indexed candidate, and it shows pending following the
-    # version, so the green half's `pending 1` is not a constant.
+    # Without the hold the install moves the engine onto the pin: the red half, which fails if B is
+    # not the indexed candidate and shows pending following the version.
     c.ok(f"apt-mark unhold {ENGINE}")
     free = c.sh(install)
     freed = _engine(c)

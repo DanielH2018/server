@@ -129,12 +129,11 @@ def _promotion(
     target_bundle = target_bundle or _pull(reads, digest, f"sha-{target}")
     if prod_bundle is None and prod_digest is not None:
         prod_bundle = _pull(reads, prod_digest, "prod's bundle")
-    # The bundle and commit T's changed set is taken against: `prod`'s, or `last-good`'s when
-    # T supersedes, whose verification then covers P's changes too.
+    # T's changed set is taken against `prod`'s bundle, or `last-good`'s when T supersedes.
     against, against_commit = (
         (last_good_bundle, lower) if supersedes else (prod_bundle, prod)
     )
-    # After every other read, so no wait separates the clock from the move (D5.2b2).
+    # Runs after every other read, so no wait separates the clock from the move.
     if why := reboot_window.deferral(
         reads.reboot,
         lambda: verify.expected_set(target_bundle, against).timeout_s,

@@ -26,8 +26,6 @@ CONTEXT = "homelab/promote-verdict"
 MOVE = f"flux tag artifact {REPO_URL}@{DIGEST} --tag last-good"
 HOLD = f"gh variable set DEPLOY_HOLD --body {COMMIT} unverified -R DanielH2018/server"
 
-# Logs `gh <argv>`, fails when the argv contains FAKE_GH_FAIL, prints FAKE_HOLD for `variable
-# get`, and answers `api ... --jq <filter>` with FAKE_STATUSES run through that filter.
 FAKE_GH = r"""#!/usr/bin/env bash
 echo "gh $*" >> "$CALLS"
 if [ -n "${FAKE_GH_FAIL:-}" ] && [[ "$*" == *"$FAKE_GH_FAIL"* ]]; then

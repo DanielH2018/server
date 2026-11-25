@@ -86,10 +86,9 @@ def master_paths_since(ln: Landing, head: str) -> list[str]:
     Dies when the read fails: an unknown base is an unknown test result, and the cost is one
     landing to re-run.
     """
-    # Only the base moves: a PR pushed after master moved was tested against that newer master,
-    # so the merge base alone would update a branch CI had already tested in full. The tested base is the master commit
-    # in the checkout log's `Merge <head> into <base>`; when it cannot be read the merge base
-    # stands, which costs one CI run at worst.
+    # Only the base moves: a PR pushed after master moved was tested against that newer master. The
+    # tested base is from the checkout log's `Merge <head> into <base>`; if unreadable the merge
+    # base stands.
     base = ln.tools.tested_base(head) or head
     url = f"repos/{{owner}}/{{repo}}/compare/{base}...{BRANCH}"
 

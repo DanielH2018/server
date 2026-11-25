@@ -396,9 +396,6 @@ def test_a_status_with_no_update_time_reads_as_none_once_bounded(world):
     assert world.clients().github.statuses(t) == {"flux/homelab": "success"}
 
 
-# -- the record of prod's statuses (H1.1i) ---------------------------------------------------
-
-
 def _outage(cluster_base: str) -> dict[str, bytes]:
     """`longhorn` depending on `cluster-base`, whose footprint is `cluster_base`."""
     longhorn = tag_kustomization("longhorn", substitutes=False, timeout="10m")

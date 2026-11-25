@@ -26,8 +26,6 @@ CONTENT = "2ca4de5ca3037532ff2e1c787780516d6c6d5a4d0e8a4953d677c9ad1c171a2f"
 CURRENT = CONTENT[:8]
 EARLIER = "7fabd86c"
 NS = "longhorn-system"
-# The renderer's two stamps, `bundle.py:CONTENT_DIGEST` and `cronjob_gate.py:ROLE_DIGEST8`,
-# spelled out so a typo in the probe's own copies fails here.
 CONTENT_DIGEST = "homelab/content-digest"
 ROLE_DIGEST8 = "homelab/role-digest8"
 # The read `homelab-readonly` makes of Kustomization `longhorn-reconcile`.
