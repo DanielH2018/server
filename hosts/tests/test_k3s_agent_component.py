@@ -183,7 +183,11 @@ def test_the_shells_name_the_kubeconfig_as_they_do_on_the_server(package):
     server = host_mode.render_host("daniel-box")
 
     def zshenv(node) -> list[dict]:
-        return [e for e in node.lines if e["path"] == "/etc/zsh/zshenv"]
+        return [
+            e
+            for e in node.lines
+            if e.get("marker") == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
+        ]
 
     assert zshenv(package) == zshenv(server) != []
     profile = "/etc/profile.d/k3s-kubeconfig.sh"
