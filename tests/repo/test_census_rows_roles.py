@@ -19,6 +19,7 @@ from _host_script_row import HOST_SCRIPT_WRITES
 from _role_files_rows import DASHBOARDS_IN_EXPORTER_FORM, ROLE_PYTHON_HAS_TESTS
 from _row_table import Census, Subject, check, proof_problems, tracked
 from _secrets_config_rows import SECRETS_CONFIG_ROWS
+from _services_comments_row import NO_DESCRIBED_SERVICES
 from _template_macro_rows import TEMPLATE_MACRO_ROWS
 
 
@@ -406,6 +407,7 @@ ROWS = (
     *SECRETS_CONFIG_ROWS,
     *DEFAULTS_AND_INVENTORY_ROWS,
     *TEMPLATE_MACRO_ROWS,
+    NO_DESCRIBED_SERVICES,
 )
 
 _IDS = [row.name for row in ROWS]
