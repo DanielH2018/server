@@ -41,18 +41,21 @@ NON_VACUITY = re.compile(
 def _glob_using_test_files() -> list[str]:
     """The scope measured clean when the rule shipped: repo/, scripts/tests/, scripts/*/tests/.
 
+    Each pathspec's `*` crosses `/`, so a suite's subject directories are in scope.
+
     A crude version over the other `tests/` directories flagged half their globbers,
     most of them `tmp_path` fixtures; telling those apart needs a person reading each file.
     """
     files = tracked(
-        "tests/repo/test_*.py",
-        "scripts/tests/test_*.py",
-        "scripts/*/tests/test_*.py",
+        "tests/repo/*test_*.py",
+        "scripts/tests/*test_*.py",
+        "scripts/*/tests/*test_*.py",
     )
     return [
         rel
         for rel in files
-        if rel.count("/") <= 3 and GLOB_CALL.search(Subject(rel).text)
+        if rel.rsplit("/", 1)[-1].startswith("test_")
+        and GLOB_CALL.search(Subject(rel).text)
     ]
 
 

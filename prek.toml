@@ -13,8 +13,7 @@
 # `stages` on a Renovate bump. ENFORCED: the `every-remote-prek-hook-pins-the-commit-stage` row in tests/repo/_config_rows.py
 default_stages = ["pre-commit"]
 
-# `prek install` writes a shim per type listed here. Without `commit-msg` in the list, the
-# reject-robot-emoji hook below never runs.
+# Without `commit-msg` in the list, the reject-robot-emoji hook never runs.
 default_install_hook_types = ["pre-commit", "commit-msg"]
 
 # Standard cleanup hooks
@@ -25,8 +24,7 @@ rev = "v6.0.0"
 [[repos.hooks]]
 id = "trailing-whitespace"
 stages = ["pre-commit"]
-# A vendored upstream manifest under a role's files/upstream/ is pinned byte for byte to a
-# sha256 (scripts/dev/vendor_manifest.py), so no fixer may rewrite it.
+# A vendored upstream manifest is pinned byte for byte to a sha256, so no fixer may rewrite it.
 exclude = "^k8s/roles/[^/]+/files/upstream/"
 
 [[repos.hooks]]
@@ -37,11 +35,8 @@ exclude = "^k8s/roles/[^/]+/files/upstream/"
 [[repos.hooks]]
 id = "check-yaml"
 stages = ["pre-commit"]
-# Flux's vendored install is a multi-document stream, which this hook refuses without
-# --allow-multiple-documents. Allowing that repo-wide would pass a stray `---` in every other
-# file, so the one stream is excluded instead: the k8s family of validate-render-templates parses its
-# render, and tests/k8s/test_flux_role.py reads it.
-# An upstream file under files/upstream/ is such a stream too, and its own pin covers it.
+# Allowing multiple documents repo-wide would pass a stray `---` in every other file, so the one
+# stream is excluded.
 exclude = "^k8s/roles/(flux/files/gotk-components\\.yaml$|[^/]+/files/upstream/)"
 
 [[repos.hooks]]
@@ -51,8 +46,6 @@ id = "check-json"
 stages = ["pre-commit"]
 
 [[repos.hooks]]
-# prek.toml and pyproject.toml configure every other gate; a TOML syntax error in either
-# fails those gates with a parser traceback rather than a pointer at the line.
 id = "check-toml"
 stages = ["pre-commit"]
 
@@ -113,26 +106,12 @@ id = "validate-render-templates"
 name = "Validate rendered compose, shell, unit, host component and k8s manifest templates"
 entry = "uv run --frozen python scripts/validate/render_templates.py"
 language = "system"
-# The entry point runs only the families whose `files` pattern in its FAMILIES table matches a
-# passed file. Serial, so a full sweep is one invocation and not one per argv batch.
+# Serial, so a full sweep is one invocation and not one per argv batch.
 require_serial = true
-# The union of the families' patterns: every file under hosts/, because the units family
-# renders every host package and a package unit may be a static file; every `.j2` under a k8s
-# role and each role's defaults, which the k8s family renders; the vendored schemas it checks
-# the render against; the inventory the renders layer in; secret_rotation.yml, the plaintext
-# census of SOPS names (never values) the setup family allows; and the render's import closure.
-#
-# The `scripts/lib/k8s_*.py` modules are named one by one rather than matched by a `k8s_.*`
-# pattern: a rename makes an alternation fail loudly and a pattern match nothing.
-#
-# CI's sweep sets RENDER_TEMPLATES_SKIP=k8s, because its pytest job runs that family over the
-# same tree (.github/workflows/ci.yml).
+# The `scripts/lib/k8s_*.py` modules are named one by one: a rename makes an alternation fail loudly
+# and a pattern match nothing.
 files = "^(hosts/.*|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render|shell_lint|k8s_net_rules|k8s_schema|host_specs)\\.py|scripts/validate/(render_templates|render_lib/(compose|k8s|setup_plane|shell|units))\\.py|k8s/templates/[^/]+\\.yml\\.j2|k8s/roles/.*\\.j2|k8s/roles/[^/]+/defaults/main\\.yml|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/lib/plain_scalar\\.py|inventory/(host_vars/[^/]+|group_vars/all)\\.yml|secrets/secret_rotation\\.yml|scripts/lib/(container_entry|inventory_lists|guard_jinja_env|host_modules|cli_help|exit_codes|estate|git|jinja_comments|k8s_conditions|k8s_context|k8s_lookups|k8s_objects|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
-# Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
-# duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
-# Jinja. Catches authoring errors before a deploy recreates the container. Schema validation
-# (hass --script check_config) is intentionally out of scope.
 [[repos.hooks]]
 id = "validate-ha-config"
 name = "Validate Home Assistant config"
@@ -141,9 +120,6 @@ language = "system"
 pass_filenames = false
 files = "^(k8s/roles/home-assistant/(templates/config|files)/.*|scripts/home_assistant/validate_ha_config\\.py|scripts/diagnostics/probe_lib/(core|ha|obs_api)\\.py|scripts/home_assistant/(ha_state_checks|ha_state_model)\\.py|scripts/lib/(inventory_lists|cli_help|exit_codes|repo_paths|yaml_fast)\\.py)$"
 
-# Validate that every provisioned Grafana dashboard's datasource references resolve to a
-# datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
-# silent "No data" / stale-uid class (e.g. a lingering hand-imported uid) before deploy.
 [[repos.hooks]]
 id = "validate-grafana-dashboards"
 name = "Validate Grafana dashboard datasource uids"
@@ -193,14 +169,10 @@ name = "Flag bash ${#var} length expansions in Jinja templates"
 entry = "uv run --frozen python scripts/validate/jinja_bash_collisions.py"
 language = "system"
 pass_filenames = false
-# Every template in the tree, plus the scanner itself. No inventory or defaults file is in
-# scope: this reads template text and renders nothing, so no variable can change its verdict.
+# This reads template text and renders nothing, so no inventory or defaults file is in scope.
 files = "^(k8s/.*\\.j2|scripts/validate/jinja_bash_collisions\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
-# Fail when a root-level file exists that `.gitignore`'s `/*` hides from git. Such a file
-# stages nothing and lands nothing through a green CI and a clean merge. A
-# hidden file is by definition never staged, so no `files` pattern can trigger this: it runs
-# on every commit, and on a clean CI checkout it finds nothing to report.
+# A hidden file is never staged, so no `files` pattern can trigger this: it runs on every commit.
 [[repos.hooks]]
 id = "validate-root-ignored-files"
 name = "Root-level files hidden by .gitignore's deny-all"
@@ -260,36 +232,18 @@ entry = "uv run --frozen zizmor --no-progress --no-online-audits"
 language = "system"
 files = "^\\.github/(workflows/[^/]+|actions/[^/]+/action)\\.ya?ml$"
 
-# Gate that the secret-rotation registry (secrets/secret_rotation.yml) stays in sync with the
-# encrypted secrets.yml — fails the commit if a secret was added/removed without running
-# `secret_rotation.py sync`. Read-only: reads plaintext key NAMES only, never decrypts a value
-# (no age key needed), so it's CI-safe. Catches the drift at commit time instead of a day later,
-# when the daily audit's `SecretRotationAuditFailed` alert fires.
+# Read-only: reads plaintext key NAMES only, never decrypts a value, so it is CI-safe.
 [[repos.hooks]]
 id = "secret-rotation-registry-sync"
 name = "Secret-rotation registry in sync with secrets.yml"
 entry = "uv run --frozen python scripts/secrets_mgmt/secret_rotation.py audit --check"
 language = "system"
 pass_filenames = false
-# The whole `scripts/secrets_mgmt/` tree, not `secret_rotation.py` alone: `load_registry`,
-# `sops_names` and every other process boundary the gate depends on moved into
-# `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
-# The rest is the import closure of `audit --check`: `consumers` reaches `k8s_lookups`.
+# The whole `scripts/secrets_mgmt/` tree, because a per-file list goes stale on the next split; the
+# rest is the import closure of `audit --check`.
 files = "^(secrets/secrets\\.yml|secrets/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|scripts/lib/(cli_help|exit_codes|git|k8s_lookups|repo_paths|yaml_fast)\\.py)$"
 
-# The cluster's SOPS files (target slice D3): the cluster file
-# secrets/cluster-vars.sops.env, the manifests under secrets/cluster-manifests/ and
-# the freshness evidence secrets/cluster-vars.source. Only `cluster_vars.py write`
-# writes them, so this runs the checks that need no render or key: every value is ciphertext,
-# a file whose content moved also moved its MAC and lastmodified lines since HEAD, each file
-# is encrypted to its own creation rule, and .source matches secrets.yml's ciphertext. A
-# plaintext value or a hand edit then fails here rather than after a push. CI's full `check`
-# is the backstop for a commit made without hooks, which is how the rotation cron commits.
-# While no cluster file exists the hook checks nothing and passes.
-# `files` is the cluster paths plus the entry's import closure, which
-# scripts/tests/test_prek_files_cover_entry_imports.py derives and holds this regex to. The
-# closure reaches the renderer through `write` and the full `check`, which this hook never
-# runs, but a change there must still rerun the hook rather than merge with it skipped.
+# Only `cluster_vars.py write` writes these files, so the hook runs checks needing no render or key.
 [[repos.hooks]]
 id = "cluster-vars-ciphertext"
 name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
@@ -337,19 +291,7 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|secrets/secret_rotation\\.yml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py)$"
 
-# Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
-# one of its tunables, and fails like a formatter so the author stages the fragment and commits
-# again. It sits above `static-ratchet-tests`, which runs
-# test_every_committed_fragment_matches_what_the_generator_writes_now, so that test reads the
-# rewritten fragment.
-#
-# `files` is every input the generator reads: role defaults and templates (the auto-deploy
-# coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
-# the template filter, `secrets/secret_rotation.yml`, and the
-# Python under scripts/ that reads or renders a fragment. The fragments themselves match too,
-# so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
-# cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
-# into that directory before the cron commits, so there it writes nothing and exits 0.
+# Fails like a formatter so the author stages the fragment and commits again.
 [[repos.hooks]]
 id = "regen-doc-fragments"
 name = "Docs fragments match their sources"
@@ -358,18 +300,7 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|(k8s|inventory)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|secrets/secret_rotation\\.yml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
-# Rewrites a value a doc states in a sentence, in the commit that moves the value, and fails
-# like a formatter so the author reads the sentence, stages the doc and commits again. The
-# rows are `VALUES` in scripts/docs/doc_values.py. A fragment is a whole generated table; this
-# is one number inside hand-written prose.
-#
-# `files` is each row's doc and source, and the Python the script imports.
-# tests/repo/test_doc_values_hook.py holds the pattern against the rows. No row names a path the
-# docs-refresh cron stages, so the hook stays out of the cron's commit: a doc rewritten there
-# would be left unstaged, and one unstaged file parks homelab-checkout-sync.
-#
-# It is its own hook, not a mode of `regen-doc-fragments`, because the cron also runs the
-# fragment generator, and a second entry point cannot rewrite a doc from the cron by mistake.
+# Its own hook, not a mode of `regen-doc-fragments`, so the cron cannot rewrite a doc by mistake.
 [[repos.hooks]]
 id = "regen-doc-values"
 name = "Stated values in docs match the tree"
@@ -474,8 +405,8 @@ name = "Ratchet allowlist entries match their files"
 entry = "uv run --frozen python scripts/dev/tighten_ratchets.py --tighten"
 language = "system"
 pass_filenames = false
-# Any Python file can be the one that shrank, and the lists themselves so a hand edit that
-# raises an entry is pulled back down in the commit that writes it.
+# Any Python file can be the one that shrank, and the lists too, so a hand edit that raises an entry
+# is pulled back down.
 files = "(\\.py|^tests/repo/(module_length|monkeypatch|copied_tests)_allowlist\\.txt)$"
 
 # Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
@@ -496,9 +427,7 @@ entry = "uv run --frozen python scripts/dev/fact_status.py lint --changed-since 
 language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$|^\\.claude/(rules|agents)/[^/]+\\.md$|^\\.claude/skills/.+/SKILL\\.md$|^(?!.*\\.md$)"
-# The non-Markdown paths the docs-refresh and eval-run crons commit. Neither cron can edit a
-# CLAUDE.md, so a finding there would only park its publish, which the docs-refresh contract's
-# next-run review says to check before a hook gains one of its staged paths.
+# Neither cron can edit a CLAUDE.md, so a finding there would only park its publish.
 exclude = "^(docs/assets/generated/|evals/history\\.json$)"
 
 # Static test modules that turn more PRs red than any other test the author's own code did not
@@ -547,18 +476,8 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_runner_weights\\.json$|^tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^(k8s|inventory|secrets|tests)/.*\\.(ya?ml|j2|ini)$|^k8s/roles/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
-# The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
-# the git and subprocess rows and the render-and-path rows. They were the slowest two in the
-# hook above, and under `--dist loadscope` the slowest module bounds a hook. Their census reads only the tracked modules
-# `is_pytest_only` accepts under a test root, so the gate is those paths (a `test_*.py`, a
-# `conftest.py`, anything under a `tests/` directory), the import closure the two modules
-# reach through scripts/lib and tests, and pyproject.toml and uv.lock. A commit that
-# touches only non-test `.py` outside scripts/lib/ skips both. prek.toml is in the gate
-# because test_census_rows_test_modules.py reads this hook's own `files`.
-#
-# A commit that matches both gates pays both, because prek runs hooks one after another. Only
-# a commit that skips this gate gains; parsing each test module once across the census rows is
-# the lever left for the rest.
+# The census reads only tracked modules `is_pytest_only` accepts under a test root, so the gate is
+# those paths plus the import closure.
 [[repos.hooks]]
 id = "static-ratchet-tests-test-modules"
 name = "Census rows over the pytest-only modules (git, subprocess, render and path helpers)"
@@ -585,9 +504,7 @@ files = "^((scripts|k8s|\\.claude/hooks|evals|hosts/components|hosts/lib)/(.*/)?
 # CI skips all of them on both `prek run` steps, as it skips the hook above, because its
 # `pytest` job runs the same files. To commit past one, `SKIP=<its id> git commit`.
 
-# Six walks of the tracked Python, so any `.py` can change their verdict. test_exit_codes
-# also reads every scripts/*.sh exit contract, and test_prek_files_cover_entry_imports
-# reads prek.toml itself.
+# Any `.py` can change their verdict; test_exit_codes also reads every scripts/*.sh exit contract.
 [[repos.hooks]]
 id = "static-ratchet-tests-python"
 name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards)"
@@ -613,9 +530,6 @@ language = "system"
 pass_filenames = false
 files = "^(k8s/services\\.yml|\\.github/workflows/promote\\.yml|inventory/.*|k8s/roles/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent|gh-quota)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
-# render reaches scripts/validate/render_lib/k8s.py and its validate_lib through pytest's
-# `pythonpath`.
 [[repos.hooks]]
 id = "static-ratchet-tests-checksum"
 name = "Documented checksum annotations exist in the manifests"
@@ -624,9 +538,6 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/roles/.*|CLAUDE\\.md|k8s/templates/.*|tests/(_[^/]+|render_share|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
-# templates through scripts/lib, scripts/validate, the template filters and the renderer that
-# `validate_lib/host_specs.py` loads specs through, which it reaches through pytest's `pythonpath`.
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"
 name = "Shell entry points answer --help"
@@ -649,18 +560,10 @@ language = "system"
 pass_filenames = false
 files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|k8s/services\\.yml|renovate\\.json|inventory/.*|k8s/roles/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# More rules that failed PR CI: the eval cases' CLAUDE.md quotes, the Landings board, the
-# alert conventions and the unit-template census. Each failed branches that changed an input
-# the hook below names, and none ran before CI. Two of them run one node rather than the
-# module: the alert module's promtool cases and the unit module's systemd-analyze cases are
-# slow, where the convention node and the census node, the ones that failed, are fast.
-#
-# `test_cluster_vars_tree.py` stays out. It takes 11-12s because it renders every flux-owned role, so its gate would be every k8s template,
-# and its only repair is `cluster_vars.py write`, which is operator-only: catching it at commit
-# saves no round trip an agent can act on.
+# `test_cluster_vars_tree.py` stays out: it takes 11-12s because it renders every flux-owned role,
+# and its only repair, `cluster_vars.py write`, is operator-only.
 
-# The eval cases' CLAUDE.md quotes, Pi roles and cited role paths. Any role path counts,
-# because a case may cite a file under any role, and deleting or renaming it fails the case.
+# Any role path counts, because a case may cite a file under any role.
 [[repos.hooks]]
 id = "static-ratchet-tests-evals"
 name = "Eval cases quote the live CLAUDE.md and cite live role paths"
@@ -710,10 +613,8 @@ language = "system"
 pass_filenames = false
 files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
-# observability's host-checks and hosts rule groups are rendered from files/rule-tables/ and the
-# host table, observability_expected_hosts (scripts/dev/gen_host_rules.py). `--check` fails on a
-# rule file edited by hand, a table edit committed without its render, and an inventory host the
-# host table does not list. Run the generator without `--check` and commit what it writes.
+# `--check` fails on a rule file edited by hand, a table edit committed without its render, and an
+# inventory host the table does not list.
 [[repos.hooks]]
 id = "gen-host-rules"
 name = "The host rule groups match their tables"
@@ -722,20 +623,8 @@ language = "system"
 pass_filenames = false
 files = "^(k8s/roles/observability/(files/rule-tables/.*|files/rules/(host-checks|hosts)\\.yaml|defaults/main\\.yml)|hosts/[^/]+/package\\.yml|inventory/host_vars/[^/]+\\.yml|scripts/dev/gen_host_rules\\.py|scripts/lib/(cli_help|exit_codes|inventory_lists|repo_paths|yaml_fast)\\.py)$"
 
-# Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
-# syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]). ruff is pinned in uv.lock (lint group) so the gate is
-# reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
-#
-# `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below
-# does: a commit that only enables a rule in [tool.ruff.lint] changes what every .py must
-# satisfy, and with `\.py$` alone a commit-time run would skip ruff entirely.
-#
-# uv.lock is here for the same reason one step further out: `uv run --frozen` runs the ruff
-# pinned in the lock, so a lock-file maintenance PR decides which ruff version gates every
-# .py in the tree. A release that tightens a rule would otherwise pass the PR and turn master
-# red on its first full sweep. A CI pull request run sweeps every hook over the whole tree, so
-# the PR run catches the same escape regardless of `files`; `files` still decides what a
-# commit-time run checks.
+# `files` names pyproject.toml and uv.lock too: a commit that only enables a rule changes what every
+# .py must satisfy, and `uv run --frozen` runs the ruff pinned in the lock.
 [[repos.hooks]]
 id = "ruff"
 name = "Lint first-party Python (ruff)"
@@ -744,11 +633,7 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
-# Enforce `ruff format` on first-party Python (config in pyproject.toml [tool.ruff], same
-# extend-exclude as the linter). --check fails the commit
-# on an unformatted file instead of rewriting it, so a stray editor save can't sneak past CI.
-# `files` covers pyproject.toml and uv.lock for the reasons given on `ruff` above — the
-# formatter's output moves with the pinned version just as the linter's ruleset does.
+# `--check` fails the commit on an unformatted file instead of rewriting it.
 [[repos.hooks]]
 id = "ruff-format"
 name = "Format first-party Python (ruff format)"
@@ -757,24 +642,8 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
-# Type-check first-party Python, for the bugs ruff cannot see: it reads one file at a time, so a
-# value that crosses a function boundary as the wrong type is invisible to it.
-#
-# WHAT THIS GATE ACTUALLY CATCHES, since a check is worth exactly its true coverage. It catches a
-# `str | None` reaching a `-> str` RETURN and reaching a CALL ARGUMENT, an argument whose
-# container type is merely invariant-incompatible (a `frozenset` for a `set`, a `dict[str, str]`
-# for a `dict[str, str | None]`), an unnarrowed regex match subscripted, a non-iterable iterated,
-# an override whose signature does not match its base, and a submodule reached through a parent
-# import. No file is exempt from `invalid-argument-type`.
-#
-# It also catches an attribute read off an unnarrowed Optional, a wrongly typed assignment and
-# an operator applied to a union: pyproject [tool.ty.rules] sets those rules to error.
-#
-# `pass_filenames = false` because ty resolves imports across the whole project, and a per-file
-# run would report first-party imports as unresolved. `files` covers the config as well as the
-# code: a commit that only edits [tool.ty.rules] or bumps the pin changes what the gate checks,
-# and would otherwise run no ty at all locally (CI's --all-files sweep is the only backstop).
-# Same pattern as the uv.lock hook above.
+# ruff reads one file at a time, so a value crossing a function boundary as the wrong type is
+# invisible to it.
 [[repos.hooks]]
 id = "ty"
 name = "Type-check first-party Python (ty)"
@@ -783,9 +652,7 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
-# A name is dead only against every caller in the tree, so this runs over the whole project
-# like ty above. [tool.vulture] in pyproject.toml holds the roots and the names a framework,
-# a guard or an unread script calls.
+# A name is dead only against every caller in the tree, so this runs over the whole project.
 [[repos.hooks]]
 id = "vulture"
 name = "No Python name that nothing uses (vulture)"
@@ -856,30 +723,8 @@ language = "system"
 # generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out.
 files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md|docs/assets/generated/fragments/[^/]+\\.md)$"
 
-# Build the docs site the way the cron does, and fail on anything --strict rejects.
-#
-# WHY THIS EXISTS. Generators emit fragments that hand-written pages transclude
-# with `--8<--` (scripts/docs/gen_doc_fragments.py). The fragment tests hold the wiring in
-# both directions — every include names a fragment, every fragment is included — but neither
-# they nor any other gate ever BUILDS the site. So a broken include, a nav entry pointing at
-# a deleted page, or a dead internal link reaches master and is caught only by the
-# docs-refresh cron, which does not fail loudly: it logs, rebuilds without regenerating, and
-# keeps serving the previous site. The page then reads as though its table were simply
-# missing.
-#
-# `files` is deliberately wide — anything the build reads. A fragment lives under
-# docs/assets/generated/, which no other docs hook touches, and mkdocs.yml itself changes the
-# nav. uv.lock is in it because `--frozen` makes the lock decide which mkdocs and which plugins
-# build the site, so a lock bump that moves one is a build change. The build takes ~4s,
-# so running it on every lock bump costs less than finding the break on master.
-# pass_filenames = false because mkdocs takes a config, not a file list.
-#
-# The site directory is left in the checkout on purpose and MUST stay ignored. `.gitignore:2`
-# denies every root path (`/*`), so `.mkdocs-strict-check/` is covered without an entry of its
-# own — which matters more than it looks: the docs-refresh cron commits with these hooks
-# running, and `homelab-checkout-sync` reads `git status --porcelain`, where a single UNTRACKED
-# file parks the primary checkout. A build directory anywhere git can see would do exactly that.
-# Anything that moves this path out from under the root deny needs its own ignore entry first.
+# A broken include, a nav entry pointing at a deleted page or a dead link is otherwise caught only
+# by the docs-refresh cron.
 [[repos.hooks]]
 id = "mkdocs-strict"
 name = "Build the docs site (mkdocs --strict)"

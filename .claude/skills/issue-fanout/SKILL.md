@@ -110,7 +110,7 @@ Both were measured on the 2026-09-10 fan-outs:
   in another run with no override, because
   `scripts/dev/fanout_lib/launch_gates.py:excusable` rules the file out of
   `--allow-shared-file`
-  (`scripts/dev/tests/test_fanout_launch_gates.py::test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds`).
+  (`scripts/dev/tests/fanout/test_fanout_launch_gates.py::test_allow_shared_file_cannot_excuse_the_sops_file_another_run_holds`).
   Do not pass `--allow-shared-file` for the file within one launch either. The gates
   read citations, so an issue that needs a secret and does not cite the file is still yours
   to hold. Hold the second secret issue until the first batch's PR has merged.
@@ -162,9 +162,9 @@ approved the grouping, here or through such a brief.
 Run `launch` (step 3) from the orchestrator's own worktree. It reads that worktree's branch
 from HEAD and claims each batch's issues under it, one claim per issue, after
 every placement gate has passed and before that batch's agent starts
-(`scripts/dev/tests/test_fanout_claim.py::test_launch_claims_each_issue_under_head_before_its_batch_starts`). It refuses a detached
+(`scripts/dev/tests/fanout/test_fanout_claim.py::test_launch_claims_each_issue_under_head_before_its_batch_starts`). It refuses a detached
 HEAD or `master` before reading any host, because neither names a worktree a claim can live
-under (`scripts/dev/tests/test_fanout_claim.py::test_a_detached_head_or_the_base_branch_is_refused_before_any_call`).
+under (`scripts/dev/tests/fanout/test_fanout_claim.py::test_a_detached_head_or_the_base_branch_is_refused_before_any_call`).
 
 **Why the orchestrator's name, not the agent's.** A fanned-out agent cannot own a worktree the
 orchestrator names — `EnterWorktree` with `name:` is refused from a subagent with a cwd
@@ -178,18 +178,18 @@ If the orchestrator's session dies, its worktree reads stale, but its claims do 
 `claim` and `reap` hold any claim on an issue that a still-running batch in a run manifest names.
 They ask the batch's host with `systemctl --user is-active`, and a host they cannot read holds
 the claim as "cannot tell" (#4601, `scripts/dev/fanout_lib/batch_holds.py:running_batch_holds`,
-`scripts/dev/tests/test_findings_claim_batch_holds.py::test_reap_leaves_a_claim_a_running_batch_holds_is_held`).
+`scripts/dev/tests/findings/test_findings_claim_batch_holds.py::test_reap_leaves_a_claim_a_running_batch_holds_is_held`).
 Once the batch's unit has finished, the claim reads stale again.
 
 A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
 race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
 refused …`. The batch is renamed from the issues it kept
-(`scripts/dev/tests/test_fanout_claim.py::test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept`), and a batch that
+(`scripts/dev/tests/fanout/test_fanout_claim.py::test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept`), and a batch that
 kept none is not launched. `launch` then exits 7 (`scripts/lib/exit_codes.py:FANOUT_PLACE_PARTLY_LAUNCHED`),
 because the other batches started; it exits 3 only when every claim was refused and nothing
-launched (`scripts/dev/tests/test_fanout_claim.py::test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest`). Name
+launched (`scripts/dev/tests/fanout/test_fanout_claim.py::test_a_batch_with_no_claimed_issue_launches_nothing_and_writes_no_manifest`). Name
 every dropped issue out loud. A batch whose launch fails releases the claims it took
-(`scripts/dev/tests/test_fanout_claim.py::test_a_failed_launch_releases_the_claims_it_took`).
+(`scripts/dev/tests/fanout/test_fanout_claim.py::test_a_failed_launch_releases_the_claims_it_took`).
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
 in the report. That line also carries the run id and each batch's host and rung, as
@@ -673,7 +673,7 @@ branch holds and the claims of every batch branch its `launch` runs started, and
 rather than listing them (`scripts/dev/findings_lib/claim_cli.py:cmd_claims`). Without
 `--worktree`, `claims` counts the live claims and lists only the stale ones; `--all` lists every
 claim
-(`scripts/dev/tests/test_findings_listing_defaults.py::test_claims_counts_the_live_ones_and_lists_the_stale_ones`):
+(`scripts/dev/tests/findings/test_findings_listing_defaults.py::test_claims_counts_the_live_ones_and_lists_the_stale_ones`):
 
 ```bash
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>
@@ -687,11 +687,11 @@ uv run python scripts/dev/fanout.py place abandon <run-id> <batch>
 ```
 
 `abandon` removes the batch's tree and branch and releases its claims
-(`scripts/dev/tests/test_fanout_abandon.py::test_abandon_records_the_removal_and_releases_under_the_orchestrator`),
+(`scripts/dev/tests/fanout/test_fanout_abandon.py::test_abandon_records_the_removal_and_releases_under_the_orchestrator`),
 and `stop` releases the claims of every batch it stops (`scripts/dev/fanout_lib/abandon.py:cmd_stop`). Run `claims --worktree` again afterwards: it lists nothing a
 finished or abandoned batch held. A claim under the orchestrator's branch stays live for as
 long as that worktree exists, so `reap` never clears one this step leaves behind
-(`scripts/dev/tests/test_findings_claim_cli.py::test_reap_releases_a_stale_claim_and_leaves_a_live_one`).
+(`scripts/dev/tests/findings/test_findings_claim_cli.py::test_reap_releases_a_stale_claim_and_leaves_a_live_one`).
 
 **Collect every `MANUAL APPLY PENDING` heading.** An agent whose landing ended
 `needs-manual-apply` or `blocked` filed the pending apply as its own issue (step 3). Carry
