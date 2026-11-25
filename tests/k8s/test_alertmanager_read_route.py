@@ -6,6 +6,7 @@ the whole control: a dropped `Method(GET)` would let any LAN host POST a silence
 every page, and a missing node address makes `probe.py` 404 from one node's shell.
 
 Karma can create silences too, behind the `authelia` chain on both its LAN and public names.
+The deploy UI starts landings and takes the same two-name shape.
 
 Run: uv run pytest tests/k8s/test_alertmanager_read_route.py
 """
@@ -76,3 +77,22 @@ def test_karma_names_authelia_on_both_its_lan_and_public_routes():
         assert "authelia" in [m["name"] for m in route["middlewares"]], (
             f"{name} reaches the silence UI without Authelia"
         )
+
+
+def test_deploy_ui_names_authelia_on_both_its_lan_and_public_routes():
+    entry = {
+        "name": "deploy-ui",
+        "hostname": "deploy",
+        "port": 8790,
+        "use_authelia": True,
+    }
+    template = K8S / "deploy-ui" / "templates" / "ingressroute.yaml.j2"
+    ctx = _role_context(
+        "deploy-ui", domain="example.com", k8s_public_route=True, container_item=entry
+    )
+    docs = [d for d in yaml_fast.safe_load_all(_render(template, **ctx)) if d]
+    matches = {d["metadata"]["name"]: d["spec"]["routes"][0] for d in docs}
+    assert set(matches) == {"deploy-ui", "deploy-ui-public"}, matches
+    assert matches["deploy-ui-public"]["match"] == "Host(`deploy.example.com`)"
+    for name, route in matches.items():
+        assert "authelia" in [m["name"] for m in route["middlewares"]], name

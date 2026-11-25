@@ -5,7 +5,7 @@ reached through a selector-less Service whose EndpointSlice names `k8s_node_clie
 repo's first Traefik→host route. Two facts follow:
 
 - `probe.py health deploy-ui` finds no workload and skips. The verification is the page
-  loading at `deploy.local.<domain>` behind two-factor.
+  loading at `deploy.local.<domain>` and `deploy.<domain>` behind two-factor.
 - The route works only while ufw on daniel-box admits the port from the cluster
   (the `ufw:` rules in `hosts/components/deploy-ui/component.yml`). A 504 from Traefik with
   the unit active is that rule, not the daemon.
@@ -13,7 +13,7 @@ repo's first Traefik→host route. Two facts follow:
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote`; `land.sh --tags=deploy-ui` gates the rollout
-- **Route:** `deploy.local.<domain>` (LAN only), Authelia two_factor
+- **Route:** `deploy.<domain>` · `deploy.local.<domain>`, Authelia two_factor
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 

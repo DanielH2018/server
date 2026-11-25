@@ -110,7 +110,7 @@ def test_an_escalation_pages_discord_and_email():
 
 def test_an_escalation_links_karma_filtered_to_the_warning_it_escalates():
     domain = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
-    link = f"Karma: https://karma.local.{domain}/?q=alertname%3DSystemdUnitsFailed\n"
+    link = f"Karma: https://karma.{domain}/?q=alertname%3DSystemdUnitsFailed\n"
     renders = K8S_ROLES / "observability" / "tests" / "alertmanager"
     for body in ("message", "email"):
         assert link in (renders / f"escalation.homelab.{body}.txt").read_text(), body

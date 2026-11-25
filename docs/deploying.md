@@ -136,7 +136,7 @@ healthchecks-config retirement (#3499) left its B2 backups behind this way (#351
 
 ## The deploy queue page
 
-`deploy.local.<domain>` (Authelia two-factor) shows landings in flight with the locks each
+`deploy.<domain>` or `deploy.local.<domain>` (Authelia two-factor) shows landings in flight with the locks each
 holds, recently finished landings, and open PRs. Each button runs the command you would type:
 land runs `land.sh --pr <n> --since <sha>`, and cancel SIGTERMs a listed landing. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under

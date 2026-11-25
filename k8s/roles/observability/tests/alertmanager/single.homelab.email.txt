@@ -3,4 +3,4 @@ homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes. Read `jour
 Started 2026-10-24 14:03 UTC
 Runbook: https://docs.local.example.com/host-packages/
 
-Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DHostReconcileFailed&q=service%3Ddaniel-server
+Karma: https://karma.daniel-hunter.com/?q=alertname%3DHostReconcileFailed&q=service%3Ddaniel-server
