@@ -1,12 +1,12 @@
 {
   "generated_from": "scripts/docs/reference/critical_memory.py",
   "p95_mib": {
-    "flux-system/kustomize-controller/manager": 176,
+    "flux-system/kustomize-controller/manager": 160,
     "flux-system/notification-controller/manager": 64,
     "flux-system/source-controller/manager": 64,
     "homelab/authelia-redis/redis": 32,
     "homelab/authelia/authelia": 144,
-    "homelab/authelia/crowdsec-agent": 80,
+    "homelab/authelia/crowdsec-agent": 64,
     "homelab/authelia/crowdsec-config-install": 16,
     "homelab/authelia/wait-for-redis": 16,
     "homelab/crowdsec-node-agent/crowdsec-agent": 192,

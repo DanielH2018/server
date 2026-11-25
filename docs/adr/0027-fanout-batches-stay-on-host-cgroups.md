@@ -13,6 +13,10 @@ governs:
 
 Accepted. The operator chose this path on 2026-10-31.
 
+Amended on 2026-11-25. The egress reason in *Decision* does not hold: a re-test found egress
+enforced ([ADR-0009](0009-networkpolicy-default-deny-ingress.md)). The other reasons do, and
+the decision stands.
+
 ## Context
 
 A fan-out batch is a headless `claude -p` session in a transient `systemd-run --user` unit,

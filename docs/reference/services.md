@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-24 18:17 UTC
-generated_sha: 9c261ef05
+generated_at: 2026-11-25 18:17 UTC
+generated_sha: 9a60147e9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -34,7 +34,7 @@ generated_sha: 9c261ef05
 | configarr | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | coredns | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | crowdsec | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (listed in k3s_longhorn_nobackup_volumes) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
-| deploy-ui | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
+| deploy-ui | <span class="fqdn" data-host="deploy">deploy.&lt;domain&gt;</span> · <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | docs | <span class="fqdn" data-host="docs">docs.&lt;domain&gt;</span> · <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | dri-device-plugin | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
 | flux | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote`; `land.sh` gates the rollout |
