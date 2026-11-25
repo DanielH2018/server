@@ -58,7 +58,7 @@ Started <t:{{ .StartsAt.Unix }}:R>
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
 
 {{ end -}}
-{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
+{{ if .Alerts.Firing }}Karma: https://karma.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
 
 {{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}**Resolved ({{ len .Alerts.Resolved }})**
@@ -89,7 +89,7 @@ Started {{ .StartsAt.UTC.Format "2006-01-02 15:04 MST" }}
 {{ if and .Alerts.Firing $shared }}{{ $shared }}
 
 {{ end -}}
-{{ if .Alerts.Firing }}Karma: https://karma.local.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
+{{ if .Alerts.Firing }}Karma: https://karma.daniel-hunter.com/?q=alertname%3D{{ or .CommonLabels.escalated_from .CommonLabels.alertname }}{{ with index .CommonLabels (or (and .CommonLabels.escalated_from "escalated_service") "service") }}&q=service%3D{{ . }}{{ end }}
 
 {{ end -}}
 {{ if .Alerts.Resolved }}{{ if $mixed }}RESOLVED ({{ len .Alerts.Resolved }})

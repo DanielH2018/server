@@ -9,7 +9,7 @@ sonarr-config has fewer healthy replicas than it asks for. Read `kubectl -n long
 Started 2026-10-24 14:05 UTC
 Runbook: https://docs.local.example.com/longhorn-disaster-recovery/
 
-Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DLonghornVolumeDegraded&q=service%3Dlonghorn
+Karma: https://karma.daniel-hunter.com/?q=alertname%3DLonghornVolumeDegraded&q=service%3Dlonghorn
 
 RESOLVED (1)
 

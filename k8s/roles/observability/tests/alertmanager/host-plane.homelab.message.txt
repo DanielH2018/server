@@ -10,4 +10,4 @@ Started <t:1794713400:R>
 rkhunter-check.sh on daniel-server ended with status=down. Read /var/log/rkhunter.log and `journalctl -t rkhunter-check` on daniel-server.
 Started <t:1794713400:R>
 
-Karma: https://karma.local.daniel-hunter.com/?q=alertname%3DRkhunterScanFailed
+Karma: https://karma.daniel-hunter.com/?q=alertname%3DRkhunterScanFailed

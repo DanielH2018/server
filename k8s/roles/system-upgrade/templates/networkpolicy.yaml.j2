@@ -1,6 +1,6 @@
 # Default-deny ingress for the namespace (ADR-0009, from this namespace's first commit). No
 # caller connects into `system-upgrade`: the controller and the Plan Jobs call the API server,
-# and nothing calls them. Egress stays open, because the cluster does not enforce egress.
+# and nothing calls them. Egress stays open: this policy declares no egress rule.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

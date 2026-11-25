@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-24 18:17 UTC
-generated_sha: 9c261ef05
+generated_at: 2026-11-25 18:17 UTC
+generated_sha: 9a60147e9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,7 +18,7 @@ generated_sha: 9c261ef05
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
 
 
-11 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
+10 route(s) are LAN-only, and the rest answer on both names. The absent Host rule is what keeps a LAN-only route off the internet, not DNS — the Cloudflare wildcard resolves any name.
 
 
 ## Routes
@@ -32,7 +32,7 @@ generated_sha: 9c261ef05
 | bento-pdf | daniel-box | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | code-server | daniel-box | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | crowdsec | daniel-box | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
-| deploy-ui | daniel-box | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
+| deploy-ui | daniel-box | <span class="fqdn" data-host="deploy">deploy.&lt;domain&gt;</span> · <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | docs | daniel-box | <span class="fqdn" data-host="docs">docs.&lt;domain&gt;</span> · <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | freshrss | daniel-box | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | headlamp | daniel-box | <span class="fqdn" data-host="headlamp">headlamp.&lt;domain&gt;</span> · <span class="fqdn" data-host="headlamp.local">headlamp.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

@@ -14,7 +14,7 @@ Run: uv run pytest tests/longhorn/test_longhorn_restore_drill_empty_waiver.py
 
 from pathlib import Path
 
-from _helpers import load_yaml
+from _helpers import K8S_ROLES, load_yaml
 from _restore_drill import DRILL_DEFAULTS, harness
 
 # n8n-files' own recorded actualSize, the reading the ceiling was derived from.
@@ -60,3 +60,12 @@ def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> No
     # second as "this volume restores", both off a run that brought back nothing.
     assert "last-success" not in run.cm
     assert f"success.{pvc}" not in run.cm
+
+
+def test_vaultwarden_is_waived_only_while_it_has_no_replicas() -> None:
+    """A vault small enough to stay under the ceiling would pass an empty restore unnoticed."""
+    declared = load_yaml(DRILL_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
+    replicas = load_yaml(K8S_ROLES / "vaultwarden" / "defaults" / "main.yml")[
+        "vaultwarden_k8s_replicas"
+    ]
+    assert replicas == 0 or "vaultwarden-data" not in declared

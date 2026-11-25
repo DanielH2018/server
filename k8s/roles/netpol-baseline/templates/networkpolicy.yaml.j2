@@ -3,8 +3,8 @@
 # NetworkPolicy constrains only the pods it SELECTS, so this is the object that makes every other
 # policy in the repo mean something.
 #
-# INGRESS ONLY. An Egress policy selects pods correctly on this cluster and blocks nothing, so
-# writing one would read like a control in the repo and do nothing in the cluster.
+# INGRESS ONLY. It fences no outbound call. An egress rule here would be enforced, so every pod
+# it selects would lose DNS unless the rule admits CoreDNS.
 #
 # Kubelet probe traffic needs no rule here: flaresolverr admits :8191 only from prowlarr yet is
 # probed on that port and runs 1/1, and headlamp corroborates it.

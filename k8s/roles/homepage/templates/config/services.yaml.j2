@@ -83,9 +83,9 @@
             # /icons/, not the CDN: dashboard-icons has no entry for it. The 48px frame of
             # karma's own ui/public/favicon.ico.
             icon: /icons/karma.png
-            # Karma is the alert UI. `lan=True`: its route matches no public name, because it
-            # can silence every alert.
-            href: {{ services | homepage_href('karma', domain, lan=True) }}
+            # Karma is the alert UI. It links the public name; the authelia role's `karma.<domain>`
+            # rules admit `group:admins` only, so a non-admin is denied there.
+            href: {{ services | homepage_href('karma', domain) }}
             description: Alerts
             # The alert plane at a glance, read from Prometheus's ALERTS series. Critical and
             # Warning count what pages: they drop shadow="true", paged_by="homelab-alert" and
@@ -429,10 +429,9 @@
         - Deploy:
             id: calendar-tool-deploy
             icon: mdi-rocket-launch-#fb923c
-            # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
-            # starts landings with land.sh, so it is behind Authelia on a name with no public route
-            # (hosts/components/deploy-ui/).
-            href: {{ services | homepage_href('deploy-ui', domain, lan=true) }}
+            # The queue page starts landings with land.sh, so Authelia two_factor gates both its
+            # names (hosts/components/deploy-ui/).
+            href: {{ services | homepage_href('deploy-ui', domain) }}
             description: Deploy queue
         - Artifacts:
             id: calendar-tool-artifacts
