@@ -131,11 +131,11 @@ The change reaches the cluster when its PR merges and `promote` publishes it (Co
      verify-automations` — exit 0 = every automation in `files/automations/*.yaml` is present in
      the live instance and not `unavailable`. A non-zero exit lists the dropped/errored ids
      (a schema error HA silently skipped at load;
-     `scripts/diagnostics/tests/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`).
+     `scripts/diagnostics/tests/probe_workloads/test_probe_ha.py::test_automation_load_errors_flags_missing_and_unavailable`).
    - **Assert every referenced entity still EXISTS**: `uv run python scripts/diagnostics/probe.py ha
      verify-entities` — it diffs `state/external_entities.yml` against live HA and exits non-zero
      on anything that vanished
-     (`scripts/diagnostics/tests/test_probe_ha.py::test_vanished_snapshot_entities_reports_only_absent_ids`).
+     (`scripts/diagnostics/tests/probe_workloads/test_probe_ha.py::test_vanished_snapshot_entities_reports_only_absent_ids`).
      Run it every deploy, not only when you touched entities. Nothing
      else in this repo can see a disappearance: `validate_ha_config.py` resolves references against
      that snapshot (`scripts/home_assistant/ha_state_checks.py:resolution_errors`), so a name that
@@ -166,7 +166,7 @@ REST API with the `claude_ha_token` (`scripts/diagnostics/probe_lib/ha.py:ha_tok
 - **Did an automation load / fire?** `probe.py ha automation <id-or-alias>` → on/off +
   `last_triggered`. It accepts the automation's `id`, its alias-slug or the full
   `automation.<slug>`
-  (`scripts/diagnostics/tests/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`).
+  (`scripts/diagnostics/tests/probe_workloads/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`).
   A non-zero exit + "not found" means it did NOT load (`scripts/diagnostics/probe_lib/ha.py:run_ha`).
 - **Why did it run but no-op?** `probe.py ha why <id-or-alias>` pulls the live per-condition
   trace. Traces are in-memory and wiped on every HA restart, and an automation whose trigger
@@ -188,7 +188,7 @@ with `kubectl -n homelab get pods -l app=home-assistant` and the pod logs.
 1. **alias-slug ≠ id.** An automation's `entity_id` is derived from its **alias** (slugified) at
    first creation, NOT its `id`. So `id: bedroom_fan_temperature` lives at
    `automation.bedroom_fan_temperature_control`. `probe.py ha automation` handles this
-   (`scripts/diagnostics/tests/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`); if you
+   (`scripts/diagnostics/tests/probe_workloads/test_probe_ha.py::test_match_automation_by_id_when_alias_differs`); if you
    ever read `/api/states` or the recorder directly, match by the alias-slug or `attributes.id`.
 2. **The recorder DB goes stale after a restart.** Rows can predate the restart. Discriminate
    live vs stale by comparing a row's `last_updated_ts` against the pod's start time

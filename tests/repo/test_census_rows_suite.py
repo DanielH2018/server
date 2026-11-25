@@ -118,7 +118,9 @@ ROWS = (
             ),
         ),
         min_matches=10,
-        must_find=frozenset({"scripts/diagnostics/tests/test_probe_boundaries.py"}),
+        must_find=frozenset(
+            {"scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py"}
+        ),
     ),
     Census(
         name="role-tree-walks-use-role-dirs",

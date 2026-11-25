@@ -129,7 +129,7 @@ pair `..._is_clean` / `..._is_flagged`.
 A guard that globs for its files returns an EMPTY set once they are renamed or moved, and an
 `all(...)` over nothing passes. Assert non-vacuity against a frozenset of names the census must
 contain, so the failure names the member that went missing. `KNOWN_CONSUMERS` in
-`scripts/diagnostics/tests/test_probe_boundaries.py` is the worked example.
+`scripts/diagnostics/tests/probe_cli/test_probe_boundaries.py` is the worked example.
 
 ## A check that reaches over a network measures its transport first
 
