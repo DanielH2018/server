@@ -431,25 +431,36 @@ accounts_verdict() {
     }' "$AIDE_DIR/accounts/$name" "$FS_ROOT/etc/group" "$FS_ROOT$1"
 }
 
-# Prints the md5 of the file $1 without the one block the host package's lines arm declares for
-# it, or nothing when no single block edit names it, or when the file does not hold that block
+# Prints the md5 of the file $1 without the blocks the host package's lines arm declares for it,
+# or nothing when no block edit names it, or when the file does not hold each of those blocks
 # exactly once between its markers. The arm writes BEGIN, the block less its trailing newlines,
-# then END, each on its own line.
+# then END, each on its own line. The records reach awk split on RS and US, which no block holds.
 unblocked_digest() {
-  local edit digest
-  edit=$(jq -ec --arg p "$1" '[.lines.edits[] | select(.path == $p and .block != null)]
-    | if length == 1 then .[0] else error("not one block edit") end' "$FS_ROOT$HOST_MANIFEST" 2>/dev/null) || return 0
-  digest=$(MARKER=$(jq -r .marker <<<"$edit") BLOCK=$(jq -r .block <<<"$edit") awk '
+  local edits digest
+  edits=$(jq -er --arg p "$1" '[.lines.edits[] | select(.path == $p and .block != null)
+    | .marker + "\u001f" + .block] | if length > 0 then join("\u001e") else error("no block edit") end' \
+    "$FS_ROOT$HOST_MANIFEST" 2>/dev/null) || return 0
+  digest=$(EDITS=$edits awk '
     BEGIN {
-      b = ENVIRON["MARKER"]; sub(/\{mark\}/, "BEGIN", b)
-      e = ENVIRON["MARKER"]; sub(/\{mark\}/, "END", e)
-      want = ENVIRON["BLOCK"]; sub(/\n+$/, "", want)
+      blocks = split(ENVIRON["EDITS"], edit, "\036")
+      for (i = 1; i <= blocks; i++) {
+        split(edit[i], field, "\037")
+        b = field[1]; sub(/\{mark\}/, "BEGIN", b); begin_of[b] = i
+        e = field[1]; sub(/\{mark\}/, "END", e); end_of[e] = i
+        want[i] = field[2]; sub(/\n+$/, "", want[i])
+      }
     }
-    $0 == b { begins++; inside = 1; n = 0; body = ""; next }
-    $0 == e { ends++; if (!inside) bad = 1; inside = 0; next }
+    $0 in begin_of { if (inside) bad = 1; inside = begin_of[$0]; begins[inside]++; n = 0; body = ""; next }
+    $0 in end_of {
+      if (!inside || end_of[$0] != inside || body != want[inside]) bad = 1
+      ends[end_of[$0]]++; inside = 0; next
+    }
     inside { body = (n++ ? body "\n" : "") $0; next }
     { print }
-    END { if (bad || inside || begins != 1 || ends != 1 || body != want) exit 1 }' "$FS_ROOT$1" \
+    END {
+      for (i = 1; i <= blocks; i++) if (begins[i] != 1 || ends[i] != 1) bad = 1
+      if (bad || inside) exit 1
+    }' "$FS_ROOT$1" \
     | md5sum) || return 0
   echo "${digest%% *}"
 }

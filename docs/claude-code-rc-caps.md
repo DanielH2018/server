@@ -221,7 +221,9 @@ cannot carry, so the value reaches the fleet by four paths:
   operator starts. The operator is the only zsh user on either host, and the operator's own
   profile belongs to the dotfiles repo. zsh reads `zshenv` for a command passed to
   `ssh host cmd` too. The desktop app starts its remote server that way. Only a login shell
-  reads `zprofile`, so a block there left every desktop session at sshd's 0.
+  reads `zprofile`, so a block there left every desktop session at sshd's 0. The component
+  declares a comment-only block in `zprofile`, because the lines arm never removes the block
+  the hosts already hold.
 
 The bias is small. The kernel's badness score adds `adj * totalpages / 1000` to a process's
 RSS, so 1000 against a burstable pod's 999 is worth about 30 MiB on these hosts. A pod
@@ -274,7 +276,8 @@ come from Prometheus, and the pressure and fault rows are two-minute rates:
 - **The worker cap does not reach these sessions.** `PYTEST_XDIST_AUTO_NUM_WORKERS` is unset in
   an `ssh host cmd` shell, and `pytest -n 8` sets its own count anyway.
 
-The operator decides what keeps k3s in memory
+The OOM bias alone cannot keep k3s running. The first exit came 92 seconds before the first OOM
+kill. The operator decides what keeps k3s in memory
 ([#10126](https://github.com/DanielH2018/server/issues/10126)). A lower fleet cap, `MemoryMin` and
 systemd-oomd each contradict a ruling above. `MemorySwapMax=0` on k3s has none, but it takes k3s's
 last outlet for reclaim, which is the trade the *No `MemoryMin`* bullet rejects.

@@ -191,7 +191,8 @@ pod. A slice cannot carry `OOMScoreAdjust=`, so the two fleet units set it, a
 `user@<uid>.service`, and the agent's login profile writes it to `/proc/self/oom_score_adj`.
 A `lines:` block in `/etc/zsh/zshenv` writes it for every zsh of the operator's, which is why
 the component depends on `zsh`. `zprofile` would miss the desktop app's sessions: they start
-from `ssh host cmd`, which is no login shell.
+from `ssh host cmd`, which is no login shell. Keep the comment-only `zprofile` block declared:
+the lines arm never removes a block, and aide-check explains only a declared one.
 That drop-in must not be named `50-homelab.conf`: reconcile restarts a unit whose
 `50-homelab.conf` changes, and restarting a user manager ends that user's sessions.
 ENFORCED: `hosts/tests/test_claude_fleet_slice_cap.py`.

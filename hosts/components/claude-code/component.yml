@@ -311,3 +311,9 @@ lines:
     marker: "# {mark} homelab claude-code — fleet oom_score_adj"
     block: |
       echo {{ claude_code_fleet_oom_score_adjust }} 2>/dev/null > /proc/self/oom_score_adj
+  # The arm never removes a block, so dropping this entry leaves the hosts' installed block in
+  # place, undeclared: aide-check cannot explain it, and it writes the score it last held.
+  - path: /etc/zsh/zprofile
+    marker: "# {mark} homelab claude-code — fleet oom_score_adj"
+    block: |
+      # /etc/zsh/zshenv writes the score.

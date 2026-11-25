@@ -295,8 +295,11 @@ def test_every_zsh_of_the_operator_raises_the_oom_score_of_what_it_starts(
     from renderer.renderer_lib import host as host_mode
 
     package = host_mode.render_host(host)
-    (edit,) = [e for e in package.lines if "oom_score_adj" in e.get("marker", "")]
-    assert edit["path"] == "/etc/zsh/zshenv"
+    (edit,) = [
+        e
+        for e in package.lines
+        if e["path"] == "/etc/zsh/zshenv" and "oom_score_adj" in e["marker"]
+    ]
     # The arm would create a missing /etc/zsh 0700, so zsh has to install the file first.
     assert "zsh" in package.depends
     zshenv = tmp_path / "zshenv"
@@ -318,3 +321,16 @@ def test_every_zsh_of_the_operator_raises_the_oom_score_of_what_it_starts(
             "process cannot lower, so the write would change nothing to observe"
         )
     assert after > BURSTABLE_POD_MAX_OOM_SCORE_ADJ
+
+
+@pytest.mark.parametrize("host", ["daniel-server", "daniel-box"])
+def test_the_installed_zprofile_block_stays_declared_and_runs_nothing(
+    host: str,
+) -> None:
+    """An undeclared block stays in the file, where it outlives a change of the score."""
+    from renderer.renderer_lib import host as host_mode
+
+    package = host_mode.render_host(host)
+    (edit,) = [e for e in package.lines if e["path"] == "/etc/zsh/zprofile"]
+    assert edit["marker"] == "# {mark} homelab claude-code — fleet oom_score_adj"
+    assert all(line.startswith("#") for line in edit["block"].splitlines())
