@@ -200,6 +200,7 @@ nav:
       - "ADR-0039 scripts/ is installed in place": adr/0039-scripts-is-installed-in-place.md
       - "ADR-0040 Dead names, copied tests and unused parameters are gated": adr/0040-dead-names-copied-tests-and-unused-parameters-are-gated.md
       - "ADR-0041 The B2 weekly bucket and the R2 etcd snapshots are locked": adr/0041-b2-weekly-and-r2-etcd-snapshots-are-locked.md
+      - "ADR-0042 Each variable lives with what it describes": adr/0042-each-variable-lives-with-what-it-describes.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -211,6 +212,7 @@ nav:
           # the answers each deploy settled by observation, and slice 5's four decisions govern
           # how the baseline selects pods — live content, not archive material.
           - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
+          - "Variable layout migration (ADR-0042)": variable-layout-migration.md
           - "Argo and Flux evaluation (ADR-0010)": archive/gitops-argo-flux-evaluation.md
   # Seven groups, ordered day-to-day first and recovery last. An upgrade is both a driving and
   # a recovery procedure, so the upgrades sit with recovery, where a reader looking for "how do
