@@ -2491,7 +2491,7 @@ tests:
               severity: warning
               service: daniel-box
             exp_annotations:
-              summary: 'daniel-box: a new package config copy (*.ucf-dist) has waited more than a day.'
+              summary: 'daniel-box: a new package config copy (*-dist) has waited more than a day.'
               description: >-
                 An upgrade kept a locally edited config file and left the package's new version
                 beside it. Run `journalctl -t ucf-dist` on daniel-box for the paths, then merge
@@ -2525,7 +2525,7 @@ tests:
               summary: 'daniel-box: the pending-config check has stopped reporting.'
               description: >-
                 No ucf-dist verdict newer than 10800s reached Prometheus from daniel-box, so
-                nothing is counting its pending *.ucf-dist copies. Read `systemctl status
+                nothing is counting its pending *.ucf-dist and *.dpkg-dist copies. Read `systemctl status
                 homelab-ucf-dist.timer` and `journalctl -t ucf-dist` on daniel-box, then
                 /var/lib/node-exporter-textfile/ucf-dist.prom.
   # SystemdUnitsNotReporting's absent arm: daniel-box's file reports for 5 minutes and is gone,

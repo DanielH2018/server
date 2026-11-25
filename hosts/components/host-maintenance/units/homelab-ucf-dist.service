@@ -1,6 +1,6 @@
 # Shipped by the host package's host-maintenance component. Started by homelab-ucf-dist.timer.
 [Unit]
-Description=Count the pending *.ucf-dist copies under /etc and write the ucf-dist textfile verdict
+Description=Count the pending *.ucf-dist and *.dpkg-dist copies under /etc and write the ucf-dist textfile verdict
 
 [Service]
 Type=oneshot

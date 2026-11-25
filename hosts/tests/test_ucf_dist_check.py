@@ -1,7 +1,7 @@
-"""Every host reports the *.ucf-dist copies an upgrade left pending under /etc.
+"""Every host reports the *.ucf-dist and *.dpkg-dist copies an upgrade left pending under /etc.
 
-ucf keeps a locally edited config file across an upgrade and leaves the package's new version
-beside it as *.ucf-dist. `ucf-dist-check.sh` in the host-maintenance component counts them
+ucf and dpkg keep a locally edited config file across an upgrade and leave the package's new
+version beside it as *.ucf-dist or *.dpkg-dist. `ucf-dist-check.sh` in the host-maintenance component counts them
 every hour, and three properties hold:
 
 THE VERDICT IS THE COUNT OF COPIES OLDER THAN A DAY, aged by ctime. Only a find that cannot
@@ -75,7 +75,7 @@ def deadline() -> int:
 
 
 def test_an_etc_with_no_dist_copy_writes_success_1(tmp_path):
-    _plant(tmp_path, "ssh/sshd_config", "nfs.conf.dpkg-dist")
+    _plant(tmp_path, "ssh/sshd_config", "ca-certificates.conf.dpkg-old")
     code, _, series = _run(tmp_path, clock_offset_s=2 * DAY)
     assert (code, series["homelab_check_success"]) == (0, "1")
     assert series["homelab_ucf_dist_pending_files"] == "0"
@@ -83,11 +83,26 @@ def test_an_etc_with_no_dist_copy_writes_success_1(tmp_path):
 
 
 def test_a_dist_copy_older_than_a_day_writes_success_0_naming_it(tmp_path):
-    _plant(tmp_path, "ssh/sshd_config.ucf-dist", "aide/aide.conf.d/31_aide_x.ucf-dist")
+    _plant(tmp_path, "ssh/sshd_config.ucf-dist", "login.defs.dpkg-dist")
     code, out, series = _run(tmp_path, clock_offset_s=DAY + 60)
     assert (code, series["homelab_check_success"]) == (0, "0")
     assert series["homelab_ucf_dist_pending_files"] == "2"
     assert f"{tmp_path}/etc/ssh/sshd_config.ucf-dist" in out
+    assert f"{tmp_path}/etc/login.defs.dpkg-dist" in out
+
+
+def test_only_dpkg_copies_from_before_the_cutoff_are_passed_over(tmp_path):
+    [since] = re.findall(r"^DPKG_SINCE=(\d+)$", SCRIPT.read_text(), re.M)
+    before, at = int(since) - 1, int(since)
+    fake_bin(
+        tmp_path / "bin",
+        find=f"echo {before}.5 /etc/old.dpkg-dist\n"
+        f"echo {before}.5 /etc/old.ucf-dist\n"
+        f"echo {at}.5 /etc/new.dpkg-dist\n",
+    )
+    _, out, series = _run(tmp_path, clock_offset_s=2 * DAY)
+    assert series["homelab_ucf_dist_pending_files"] == "2"
+    assert "/etc/old.dpkg-dist" not in out
 
 
 def test_a_dist_copy_younger_than_a_day_is_not_pending(tmp_path):

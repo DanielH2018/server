@@ -331,19 +331,21 @@ alert fires once per failed unit.
 
 ### `UcfDistPending`
 
-A warning. The host's `ucf-dist` check found a `*.ucf-dist` file under `/etc` that has
-waited more than a day. `ucf` writes one when an upgrade brings a new version of a config file
-that carries a local edit: it keeps the installed file and leaves the package's version
-beside it. A program whose packaged snippets need the new version fails until someone merges
-it, as AIDE 0.19 did with its `PidFile` group.
+A warning. The host's `ucf-dist` check found a `*.ucf-dist` or `*.dpkg-dist` file under
+`/etc` that has waited more than a day. `ucf` writes the first and `dpkg` the second when an
+upgrade brings a new version of a config file that carries a local edit: each keeps the
+installed file and leaves the package's version beside it. A program whose packaged
+snippets need the new version fails until someone merges it, as AIDE 0.19 did with its `PidFile` group.
 
 - Run `journalctl -t ucf-dist` on the host to read the pending paths, or
-  `find /etc -name '*.ucf-dist'`.
-- For each one, run `diff <file> <file>.ucf-dist`. When the installed file carries no local
+  `find /etc -name '*.ucf-dist' -o -name '*.dpkg-dist'`. The check passes over a `*.dpkg-dist`
+  whose `ctime` predates `DPKG_SINCE` in `ucf-dist-check.sh`.
+- For each one, run `diff <file> <copy>`. When the installed file carries no local
   edit, replace it with the dist copy. Otherwise merge the new defaults into the installed
   file by hand. Then delete the dist copy.
 - A file the repo also manages, such as one the reconcile lines arm edits, keeps those edits
-  only if the merge keeps them; the next reconcile reapplies its managed lines.
+  only if the merge keeps them; the next reconcile reapplies its managed lines. Check that the
+  new version still reads the setting the repo edits, and change the repo when it does not.
 - The next hourly check resolves the alert. To check at once, run
   `sudo systemctl start homelab-ucf-dist.service`.
 
